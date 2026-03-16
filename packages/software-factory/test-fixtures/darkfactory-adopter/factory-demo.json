@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "factoryName": "DarkFactory Test Fixture",
+      "description": "Read-only fixture realm for validating public tracker-module rendering from an adopter realm."
+    },
+    "relationships": {
+      "activeProjects.0": {
+        "links": {
+          "self": "./project-demo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/software-factory/darkfactory",
+        "name": "DarkFactory"
+      }
+    }
+  }
+}

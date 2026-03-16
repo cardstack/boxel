@@ -2,18 +2,21 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { startFactoryGlobalContext } from '../harness.ts';
+import { startFactorySupportServices } from '../harness.ts';
 import {
   defaultSupportMetadataFile,
   sharedRuntimeDir,
 } from '../runtime-metadata.ts';
 
-let realmDir = resolve(process.cwd(), process.argv[2] ?? 'demo-realm');
+let realmDir = resolve(
+  process.cwd(),
+  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+);
 let metadataFile =
   process.env.SOFTWARE_FACTORY_METADATA_FILE ?? defaultSupportMetadataFile;
 
 try {
-  let support = await startFactoryGlobalContext({ realmDir });
+  let support = await startFactorySupportServices();
 
   let payload = {
     realmDir,

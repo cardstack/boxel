@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "projectCode": "DFX",
+      "projectName": "DarkFactory Adoption Harness",
+      "projectStatus": "active",
+      "objective": "Prove the public software-factory tracker module can be adopted by an external realm.",
+      "scope": "## Scope\n\n- Render a project\n- Render a ticket\n- Render a knowledge article\n- Verify the project ticket query resolves",
+      "technicalContext": "The fixture realm adopts cards from the public `darkfactory` module URL and runs inside the software-factory Playwright harness.",
+      "successCriteria": "- [x] Public module resolves\n- [x] Adopter instances render\n- [x] Query-backed tickets section shows the linked ticket",
+      "risks": "- Public URL remapping could break module resolution\n- Ticket query may fail if canonical card refs drift"
+    },
+    "relationships": {
+      "knowledgeBase.0": {
+        "links": {
+          "self": "./knowledge-article-demo"
+        }
+      },
+      "teamAgents.0": {
+        "links": {
+          "self": "./agent-demo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4201/software-factory/darkfactory",
+        "name": "Project"
+      }
+    }
+  }
+}

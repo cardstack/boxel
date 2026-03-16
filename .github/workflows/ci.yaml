@@ -29,6 +29,7 @@ jobs:
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
+      software-factory: ${{ steps.filter.outputs.software-factory }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       # Force all tests to run when on ci-bisect* branches
@@ -96,6 +97,15 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
+            software-factory:
+              - *shared
+              - 'packages/base/**'
+              - 'packages/boxel-icons/**'
+              - 'packages/host/**'
+              - 'packages/matrix/**'
+              - 'packages/postgres/**'
+              - 'packages/realm-server/**'
+              - 'packages/software-factory/**'
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
@@ -111,7 +121,7 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.software-factory == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
 
   ai-bot-test:
@@ -630,6 +640,49 @@ jobs:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
           retention-days: 30
+
+  software-factory-test:
+    name: Software Factory Tests
+    needs: [change-check, test-web-assets]
+    if: needs.change-check.outputs.software-factory == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: software-factory-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install
+        working-directory: packages/software-factory
+      - name: Serve host dist (test assets)
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve:dist &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+      - name: Run Playwright tests
+        run: pnpm test:playwright
+        working-directory: packages/software-factory
+      - name: Upload Playwright traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: software-factory-playwright-traces
+          path: packages/software-factory/test-results/**/trace.zip
+          retention-days: 30
+          if-no-files-found: ignore
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package

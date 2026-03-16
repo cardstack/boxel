@@ -87,6 +87,10 @@ const workspaceRoot = resolve(packageRoot, '..', '..');
 const realmServerDir = resolve(packageRoot, '..', 'realm-server');
 const baseRealmDir = resolve(packageRoot, '..', 'base');
 const skillsRealmDir = resolve(packageRoot, '..', 'skills-realm', 'contents');
+const sourceRealmDir = resolve(
+  packageRoot,
+  process.env.SOFTWARE_FACTORY_SOURCE_REALM_DIR ?? 'realm',
+);
 const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
 const prepareTestPgScript = resolve(
   realmServerDir,
@@ -106,9 +110,16 @@ const DEFAULT_REALM_URL = new URL(
   process.env.SOFTWARE_FACTORY_REALM_URL ??
     `http://localhost:${REALM_SERVER_PORT}/test/`,
 );
+const LOCAL_SOFTWARE_FACTORY_SOURCE_URL = new URL(
+  `http://localhost:${REALM_SERVER_PORT}/software-factory/`,
+);
+const PUBLIC_SOFTWARE_FACTORY_SOURCE_URL = new URL(
+  process.env.SOFTWARE_FACTORY_PUBLIC_SOURCE_URL ??
+    'http://localhost:4201/software-factory/',
+);
 const DEFAULT_REALM_DIR = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'demo-realm',
+  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 const DEFAULT_HOST_URL = process.env.HOST_URL ?? 'http://localhost:4200/';
 const DEFAULT_ICONS_URL = process.env.ICONS_URL ?? 'http://localhost:4206/';
@@ -810,6 +821,8 @@ async function startIsolatedRealmStack({
     `--toUrl=${realmURL.href}`,
     '--fromUrl=https://cardstack.com/base/',
     `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+    `--fromUrl=${PUBLIC_SOFTWARE_FACTORY_SOURCE_URL.href}`,
+    `--toUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
   ];
   if (INCLUDE_SKILLS) {
     workerArgs.push(
@@ -843,6 +856,10 @@ async function startIsolatedRealmStack({
     `--path=${baseRealmDir}`,
     '--fromUrl=https://cardstack.com/base/',
     `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+    '--username=software_factory_realm',
+    `--path=${sourceRealmDir}`,
+    `--fromUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
+    `--toUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
   ];
   if (INCLUDE_SKILLS) {
     serverArgs.splice(
@@ -965,7 +982,7 @@ async function buildTemplateDatabase({
   await dropDatabase(builderDatabaseName);
 }
 
-async function startFactorySupportServices(): Promise<{
+export async function startFactorySupportServices(): Promise<{
   context: FactorySupportContext;
   stop(): Promise<void>;
 }> {

@@ -4,8 +4,11 @@ import { resolve } from 'node:path';
 import { fetchRealmCardJson } from '../harness.ts';
 import { readSupportContext } from '../runtime-metadata.ts';
 
-let realmDir = resolve(process.cwd(), process.argv[2] ?? 'demo-realm');
-let cardPath = process.argv[3] ?? 'person-1';
+let realmDir = resolve(
+  process.cwd(),
+  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+);
+let cardPath = process.argv[3] ?? 'project-demo';
 
 if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
   let supportContext = readSupportContext();

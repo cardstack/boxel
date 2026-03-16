@@ -25,10 +25,25 @@ export type FactoryRealmFixtures = {
   authedPage: Page;
 };
 
+type FactoryRealmOptions = {
+  realmDir: string;
+};
+
 const packageRoot = resolve(process.cwd());
 const defaultRealmDir = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'demo-realm',
+  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
+);
+const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
+const publicSoftwareFactoryPrefix =
+  process.env.SOFTWARE_FACTORY_PUBLIC_SOURCE_URL ??
+  'http://localhost:4201/software-factory/';
+const localBasePrefix = `http://localhost:${realmPort}/base/`;
+const localSoftwareFactoryPrefix = `http://localhost:${realmPort}/software-factory/`;
+const localSkillsPrefix = `http://localhost:${realmPort}/skills/`;
+const testSourceRealmDir = resolve(
+  packageRoot,
+  'test-fixtures/public-software-factory-source',
 );
 
 function appendLog(buffer: string, chunk: string): string {
@@ -90,6 +105,7 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
     env: {
       ...process.env,
       SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
       ...(supportMetadata?.context
         ? {
             SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
@@ -181,25 +197,32 @@ async function setRealmRedirects(page: Page) {
   await registerRealmRedirect(
     page,
     'http://localhost:4201/base/',
-    'http://localhost:4205/base/',
+    localBasePrefix,
+  );
+  await registerRealmRedirect(
+    page,
+    publicSoftwareFactoryPrefix,
+    localSoftwareFactoryPrefix,
   );
   if (process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1') {
     await registerRealmRedirect(
       page,
       'http://localhost:4201/skills/',
-      'http://localhost:4205/skills/',
+      localSkillsPrefix,
     );
   }
 }
 
-export const test = base.extend<FactoryRealmFixtures>({
+export const test = base.extend<FactoryRealmFixtures, FactoryRealmOptions>({
+  realmDir: [defaultRealmDir, { option: true }],
+
   page: async ({ page }, use) => {
     await setRealmRedirects(page);
     await use(page);
   },
 
-  realm: async ({ browserName: _browserName }, use) => {
-    let realm = await startRealmProcess();
+  realm: async ({ browserName: _browserName, realmDir }, use) => {
+    let realm = await startRealmProcess(realmDir);
 
     try {
       await use(realm);

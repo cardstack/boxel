@@ -16,6 +16,24 @@ This document covers:
 - what is currently missing
 - the minimum implementation needed in `experiment_1`
 
+## Realm Roles
+
+The software factory uses three different realm roles that should stay distinct:
+
+- source realm
+  - `packages/software-factory/realm`
+  - publishes shared modules, source cards, briefs, templates, and other driver content
+- target realm
+  - the user-specified realm passed to `factory:go`
+  - receives the generated `Project`, `Ticket`, `KnowledgeArticle`, tests, and implementation artifacts
+- fixture realm
+  - disposable test input used only for verification
+  - may adopt from the public source realm but should not be treated as user output
+
+Normal factory output should land in the target realm, not in `packages/software-factory/realm`.
+
+If we intentionally include output-like examples in the source realm, they should be clearly labeled as examples and live in an obviously non-canonical location such as `SampleOutput/` or `Examples/`.
+
 ## Current State
 
 `experiment_1` already has useful primitives:
@@ -89,7 +107,7 @@ Required behavior:
 Required behavior:
 
 - resolve the target realm URL from `.boxel-sync.json` or CLI arguments
-- ensure the target realm has the tracker module available
+- ensure the target realm can resolve the tracker module from the shared source realm, or explicitly install a local copy if that is the chosen bootstrap strategy
 - ensure the target realm has a visible entry surface such as `cards-grid.json`
 
 Minimum requirement:
@@ -104,6 +122,10 @@ Required behavior:
 - create or update one or more `KnowledgeArticle` cards
 - create starter `Ticket` cards
 - mark exactly one starter ticket as `in_progress`
+
+Artifact location rule:
+
+- these generated artifacts belong in the target realm selected by the user, not in the source realm that publishes the shared software-factory modules
 
 Rules:
 
@@ -133,6 +155,12 @@ Default verification policy:
 - if project tests already exist, use `test:realm`
 - if no tests exist yet, create the smallest meaningful verification surface
 - for early Boxel card work, successful rendering of a concrete instance in the host app is a valid first verification step
+
+Implementation note:
+
+- the Playwright harness in `packages/software-factory` can also be reused to generate and run automated card-rendering tests for artifacts created by the factory
+- this is useful when the factory needs a real browser-level verification path for generated cards
+- it is not necessarily the most efficient default for every ticket, so the first verification move should still prefer the smallest verification surface that proves the change
 
 The flow must not stall just because full test infrastructure does not yet exist.
 
@@ -226,7 +254,7 @@ Responsibilities:
 - parse args
 - fetch the brief
 - resolve target realm path and URL
-- ensure tracker files exist in target realm
+- ensure the target realm can consume the shared tracker module without confusing source content with generated output
 - bootstrap or reconcile project artifacts
 - pick the next ticket
 - invoke the implementation loop
@@ -365,23 +393,24 @@ It does not need to complete an entire multi-ticket product in version one.
 
 Files to add:
 
-- `packages/software-factory/experiment_1/scripts/factory-go.mjs`
-- `packages/software-factory/experiment_1/scripts/lib/factory-bootstrap.mjs`
-- `packages/software-factory/experiment_1/scripts/lib/factory-target-realm.mjs`
-- `packages/software-factory/experiment_1/scripts/lib/factory-brief.mjs`
-- `packages/software-factory/experiment_1/scripts/lib/factory-loop.mjs`
+- `packages/software-factory/scripts/factory-go.mjs`
+- `packages/software-factory/scripts/lib/factory-bootstrap.mjs`
+- `packages/software-factory/scripts/lib/factory-target-realm.mjs`
+- `packages/software-factory/scripts/lib/factory-brief.mjs`
+- `packages/software-factory/scripts/lib/factory-loop.mjs`
 
 Files to update:
 
-- `packages/software-factory/experiment_1/package.json`
+- `packages/software-factory/package.json`
   - add `factory:go`
-- `packages/software-factory/experiment_1/AGENTS.md`
+- `packages/software-factory/AGENTS.md`
   - document the new one-shot flow
 
 Optional later additions:
 
-- `packages/software-factory/experiment_1/tests/factory-go.spec.mjs`
+- `packages/software-factory/tests/factory-go.spec.mjs`
   - verifies bootstrap behavior
+- generated card-test creation that reuses the existing `packages/software-factory` Playwright machinery when browser-level verification is warranted
 
 ## Suggested Output Contract
 

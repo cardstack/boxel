@@ -5,7 +5,10 @@ import { resolve } from 'node:path';
 
 import { startFactoryRealmServer } from '../harness.ts';
 
-let realmDir = resolve(process.cwd(), process.argv[2] ?? 'demo-realm');
+let realmDir = resolve(
+  process.cwd(),
+  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+);
 
 if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
   let supportContext = readSupportContext();
@@ -24,7 +27,7 @@ try {
     realmDir,
     realmURL: runtime.realmURL.href,
     databaseName: runtime.databaseName,
-    sampleCardURL: runtime.cardURL('person-1'),
+    sampleCardURL: runtime.cardURL('project-demo'),
     ownerBearerToken: runtime.createBearerToken(),
   };
 

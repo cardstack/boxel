@@ -14,10 +14,21 @@ import {
 } from './src/runtime-metadata.ts';
 
 const packageRoot = resolve(fileURLToPath(new URL('.', import.meta.url)));
-const realmDir = resolve(
+const configuredRealmDir = resolve(
   packageRoot,
-  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'demo-realm',
+  process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
+const fallbackRealmDir = resolve(
+  packageRoot,
+  'test-fixtures/darkfactory-adopter',
+);
+const testSourceRealmDir = resolve(
+  packageRoot,
+  'test-fixtures/public-software-factory-source',
+);
+const realmDir = existsSync(configuredRealmDir)
+  ? configuredRealmDir
+  : fallbackRealmDir;
 
 function appendLog(buffer: string, chunk: string): string {
   let combined = `${buffer}${chunk}`;
@@ -64,6 +75,7 @@ export default async function globalSetup() {
       ...process.env,
       SOFTWARE_FACTORY_METADATA_FILE: defaultSupportMetadataFile,
       SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: defaultSupportMetadataFile,
+      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
     },
   });
 

@@ -20,13 +20,13 @@ with `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
 ## Commands
 
 - `pnpm cache:prepare`
-  - Builds or reuses the cached template database for `demo-realm/`
+  - Builds or reuses the cached template database for `test-fixtures/darkfactory-adopter/`
 - `pnpm serve:support`
   - Starts shared support services and prepares a reusable runtime context in the background
 - `pnpm serve:realm`
   - Starts the isolated realm server on `http://localhost:4205/test/`
 - `pnpm smoke:realm`
-  - Boots the isolated realm server, fetches `person-1` as card JSON, and exits
+  - Boots the isolated realm server, fetches `project-demo` as card JSON, and exits
 - `pnpm test:playwright`
   - Runs the browser tests against a fresh per-test realm server cloned from the cached template
 
@@ -40,8 +40,8 @@ pnpm smoke:realm ./my-realm Person/example-card
 
 ## Layout
 
-- `demo-realm/`
-  - Example card definitions and instances
+- `test-fixtures/darkfactory-adopter/`
+  - Disposable adopter fixture realm used by the Playwright tests
 - `src/harness.ts`
   - Cached template DB creation and isolated realm server startup
 - `tests/`

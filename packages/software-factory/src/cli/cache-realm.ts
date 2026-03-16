@@ -4,7 +4,10 @@ import { resolve } from 'node:path';
 
 import { ensureFactoryRealmTemplate } from '../harness.ts';
 
-let realmDir = resolve(process.cwd(), process.argv[2] ?? 'demo-realm');
+let realmDir = resolve(
+  process.cwd(),
+  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+);
 try {
   let template = await ensureFactoryRealmTemplate({ realmDir });
   let payload = {

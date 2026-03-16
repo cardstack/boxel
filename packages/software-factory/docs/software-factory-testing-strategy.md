@@ -14,6 +14,22 @@ This document applies to:
 - the public `DarkFactory` module in `packages/software-factory/realm`
 - the `factory:go` orchestration work in `packages/software-factory/experiment_1`
 
+## Realm Roles
+
+The testing strategy assumes three separate realm roles:
+
+- source realm
+  - `packages/software-factory/realm`
+  - publishes shared modules, briefs, templates, and other software-factory inputs
+- target realm
+  - the user-selected realm where the factory writes generated tickets, knowledge articles, tests, and implementation artifacts
+- fixture realm
+  - disposable test data used to verify source-realm publishing and target-realm behavior
+
+Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm.
+
+If the source realm includes output-like examples, they should be clearly labeled as samples rather than mixed into the canonical published tracker surface.
+
 ## Core Principle
 
 Do not treat the agent loop as a single black box.
@@ -59,6 +75,15 @@ Coverage should include:
 - any card queries or embedded relations used by the tracker UI
 
 These tests should be deterministic and should not involve the agent loop.
+
+Fixture policy for this layer:
+
+- treat `packages/software-factory/realm` as the published source realm, not as mutable test state
+- keep test-only card instances in fixture realms dedicated to testing
+- have fixture realms adopt from the public `darkfactory` module URL instead of copying the tracker module
+- run browser tests against disposable per-test runtime clones of those fixture realms so mutations can be torn down safely
+
+If the public realm includes demo instances, they are there for manual exploration, smoke checks, and as-shipped examples of the published module. They should not be the primary place where tests create or mutate state, and any output-like examples should be clearly separated as sample output.
 
 ## Layer 2: Deterministic Orchestration Tests
 
@@ -156,6 +181,11 @@ Use:
 - focused card rendering tests
 - cross-realm adoption integration tests
 
+Notes:
+
+- assertions should prove that external fixture realms can resolve cards from the public module URL
+- tests should mutate only disposable fixture realms, never the published `packages/software-factory/realm`
+
 ### `factory:go` Entry Point
 
 Use:
@@ -182,6 +212,11 @@ Use:
 - temporary-realm integration tests
 - rerun/idempotency tests
 
+Notes:
+
+- assert generated artifacts in a temporary or user-style target realm
+- do not treat the published source realm as the destination for factory output
+
 ### Verification Policy
 
 Use:
@@ -205,6 +240,7 @@ Use:
 These are the highest-value early tests:
 
 1. public `DarkFactory` module resolves from an adopter realm
+   - use a dedicated fixture realm, not the published realm itself, for any mutable test setup
 2. brief normalization handles the sticky-note wiki card
 3. target realm bootstrap creates required surfaces in a temp realm
 4. artifact bootstrap creates one project and one `in_progress` ticket
