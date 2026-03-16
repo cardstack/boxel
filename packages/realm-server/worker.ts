@@ -123,7 +123,7 @@ let autoMigrate = migrateDB || undefined;
   }
 
   function reportProgress(event: IndexingProgressEvent) {
-    if (process.send) {
+    if (!ECS_CONTAINER_METADATA_URI && process.send) {
       process.send(`progress|${JSON.stringify(event)}`);
     }
   }
