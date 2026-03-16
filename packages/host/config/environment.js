@@ -8,8 +8,10 @@ const DEFAULT_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024; // 5MB
 
 let sqlSchema = fs.readFileSync(getLatestSchemaFile(), 'utf8');
 
-// Environment-mode: when BOXEL_ENVIRONMENT is set, derive default URLs from Traefik hostnames
-function environmentSlug() {
+// Environment-mode: when BOXEL_ENVIRONMENT is set, derive default URLs from Traefik hostnames.
+// ENV_SLUG is set by mise's env-vars.sh; fall back to computing it for non-mise contexts.
+function getEnvSlug() {
+  if (process.env.ENV_SLUG) return process.env.ENV_SLUG;
   let raw = process.env.BOXEL_ENVIRONMENT || '';
   return raw
     .toLowerCase()
@@ -32,7 +34,7 @@ function environmentDefaults() {
       openRouterRealmURL: 'http://localhost:4201/openrouter/',
     };
   }
-  let slug = environmentSlug();
+  let slug = getEnvSlug();
   let realmHost = `realm-server.${slug}.localhost`;
   return {
     realmServerURL: `http://${realmHost}/`,
