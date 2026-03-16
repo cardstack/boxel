@@ -111,7 +111,7 @@ const prepareTestPgScript = resolve(
   'prepare-test-pg.sh',
 );
 
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 const REALM_SERVER_PORT = Number(
   process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205,
 );
@@ -126,7 +126,7 @@ const DEFAULT_REALM_URL = new URL(
     `http://localhost:${REALM_SERVER_PORT}/test/`,
 );
 const LOCAL_SOFTWARE_FACTORY_SOURCE_URL = new URL(
-  `http://localhost:${REALM_SERVER_PORT}/public-software-factory-source/`,
+  `http://localhost:${REALM_SERVER_PORT}/software-factory/`,
 );
 const DEFAULT_REALM_DIR = resolve(
   packageRoot,
@@ -648,6 +648,58 @@ async function seedRealmPermissions(
     throw error;
   } finally {
     await client.end();
+  }
+}
+
+async function resetRealmState(
+  databaseName: string,
+  realmURL: URL,
+): Promise<void> {
+  let client = new PgClient(pgAdminConnectionConfig(databaseName));
+  try {
+    await client.connect();
+    await client.query('BEGIN');
+
+    await client.query(`DELETE FROM modules WHERE resolved_realm_url = $1`, [
+      realmURL.href,
+    ]);
+    await client.query(`DELETE FROM boxel_index WHERE realm_url = $1`, [
+      realmURL.href,
+    ]);
+    await client.query(`DELETE FROM boxel_index_working WHERE realm_url = $1`, [
+      realmURL.href,
+    ]);
+    await client.query(`DELETE FROM realm_versions WHERE realm_url = $1`, [
+      realmURL.href,
+    ]);
+    await client.query(`DELETE FROM realm_file_meta WHERE realm_url = $1`, [
+      realmURL.href,
+    ]);
+    await client.query(
+      `DELETE FROM published_realms
+       WHERE source_realm_url = $1 OR published_realm_url = $1`,
+      [realmURL.href],
+    );
+
+    await client.query('COMMIT');
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // best effort cleanup
+    }
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+async function resetMountedRealmState(
+  databaseName: string,
+  realmURLs: URL[],
+): Promise<void> {
+  for (let realmURL of realmURLs) {
+    await resetRealmState(databaseName, realmURL);
   }
 }
 
@@ -1186,6 +1238,10 @@ async function buildTemplateDatabase({
     );
   }
 
+  await resetMountedRealmState(builderDatabaseName, [
+    realmURL,
+    LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+  ]);
   await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
   await seedRealmPermissions(
     builderDatabaseName,
@@ -1384,6 +1440,9 @@ export async function startFactoryRealmServer(
   try {
     await dropDatabase(databaseName);
     await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
+    await resetMountedRealmState(databaseName, [
+      LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+    ]);
     await seedRealmPermissions(
       databaseName,
       LOCAL_SOFTWARE_FACTORY_SOURCE_URL,

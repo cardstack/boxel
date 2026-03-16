@@ -25,7 +25,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4205/public-software-factory-source/darkfactory",
+        "module": "http://localhost:4205/software-factory/darkfactory",
         "name": "Project"
       }
     }

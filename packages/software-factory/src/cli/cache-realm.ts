@@ -1,5 +1,5 @@
-import { writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
 import {
   ensureFactoryRealmTemplate,
@@ -30,6 +30,9 @@ try {
     cacheHit: template.cacheHit,
   };
   if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
+    mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {
+      recursive: true,
+    });
     writeFileSync(
       process.env.SOFTWARE_FACTORY_METADATA_FILE,
       JSON.stringify(payload, null, 2),
