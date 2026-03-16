@@ -253,9 +253,6 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return `This message has been processing for a long time (more than ${STREAMING_TIMEOUT_MINUTES} minutes), possibly due to a delay in response time, or due to a system error.`; // Will show a "Wait longer" and "Retry" button
     }
-    if (this.attachedCardCollection?.cardErrors.length === 0) {
-      return undefined;
-    }
     return undefined;
   }
 }
