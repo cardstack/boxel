@@ -26,6 +26,12 @@ export class IndexingEventSink {
   /** Max history entries to keep */
   #maxHistory = 50;
 
+  /** Tracks unique completed files per realm to avoid duplicates */
+  #completedFilesSets = new Map<string, Set<string>>();
+
+  /** Max completed files to keep per realm for UI/display purposes */
+  #maxCompletedFilesPerRealm = 1000;
+
   handleEvent(event: IndexingProgressEvent): void {
     switch (event.type) {
       case 'indexing-started': {
@@ -41,6 +47,8 @@ export class IndexingEventSink {
           startedAt: Date.now(),
           lastUpdatedAt: Date.now(),
         });
+        // Initialize tracking of unique completed files for this realm
+        this.#completedFilesSets.set(event.realmURL, new Set());
         break;
       }
       case 'file-visited': {
@@ -50,7 +58,25 @@ export class IndexingEventSink {
             event.filesCompleted ?? state.filesCompleted + 1;
           state.totalFiles = event.totalFiles ?? state.totalFiles;
           if (event.url) {
-            state.completedFiles.push(event.url);
+            // Ensure we track unique completed files and bound memory usage
+            let completedSet = this.#completedFilesSets.get(event.realmURL);
+            if (!completedSet) {
+              // Seed the set from any existing completedFiles array
+              completedSet = new Set(state.completedFiles);
+              this.#completedFilesSets.set(event.realmURL, completedSet);
+            }
+            if (!completedSet.has(event.url)) {
+              completedSet.add(event.url);
+              state.completedFiles.push(event.url);
+              // Keep only the most recent N completed files for this realm
+              if (state.completedFiles.length > this.#maxCompletedFilesPerRealm) {
+                const excess = state.completedFiles.length - this.#maxCompletedFilesPerRealm;
+                const removed = state.completedFiles.splice(0, excess);
+                for (let url of removed) {
+                  completedSet.delete(url);
+                }
+              }
+            }
           }
           state.lastUpdatedAt = Date.now();
         }
@@ -67,7 +93,9 @@ export class IndexingEventSink {
             this.#history.length = this.#maxHistory;
           }
         }
+        // Clean up per-realm tracking structures
         this.#active.delete(event.realmURL);
+        this.#completedFilesSets.delete(event.realmURL);
         break;
       }
     }
