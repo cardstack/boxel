@@ -941,7 +941,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (14)',
+        'Any Type (13)',
         'select-all shows count of all realm types',
       );
 
@@ -1002,7 +1002,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (14)',
+        'Any Type (13)',
         'select-all shows count of all realm types',
       );
 

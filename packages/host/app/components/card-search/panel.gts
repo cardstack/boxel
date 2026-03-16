@@ -106,7 +106,6 @@ export default class SearchPanel extends Component<Signature> {
   @tracked private _typeSearchKey = '';
   @tracked private _typePageNumber = 0;
   @tracked private _typeSummariesData: TypeSummaryItem[] = [];
-  @tracked private _typeSummariesTotal = 0;
   @tracked private _isLoadingTypes = false;
   @tracked private _isLoadingMoreTypes = false;
   @tracked private _hasMoreTypes = false;
@@ -217,7 +216,6 @@ export default class SearchPanel extends Component<Signature> {
           this._typeSummariesData = result.data;
         }
 
-        this._typeSummariesTotal = result.meta.page.total;
         this._hasMoreTypes =
           this._typeSummariesData.length < result.meta.page.total;
         this._isLoadingTypes = false;
@@ -227,7 +225,6 @@ export default class SearchPanel extends Component<Signature> {
         if (!isDestroyed(this) && !isDestroying(this)) {
           if (!append) {
             this._typeSummariesData = [];
-            this._typeSummariesTotal = 0;
           }
           this._hasMoreTypes = false;
           this._isLoadingTypes = false;
@@ -406,7 +403,7 @@ export default class SearchPanel extends Component<Signature> {
         hasMoreTypes=this._hasMoreTypes
         isLoadingTypes=this._isLoadingTypes
         isLoadingMoreTypes=this._isLoadingMoreTypes
-        typesTotalCount=this._typeSummariesTotal
+        typesTotalCount=this.typeFilter.options.length
       )
       (component
         SearchContent
