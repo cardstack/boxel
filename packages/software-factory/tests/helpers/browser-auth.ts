@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import type { BrowserContext, Page } from '@playwright/test';
 
+import { readSupportContext } from '../../src/runtime-metadata.js';
+
 type BrowserAuth = {
   access_token: string;
   user_id: string;
@@ -20,8 +22,18 @@ type BoxelProfile = {
   password: string;
 };
 
+type SupportContext = {
+  matrixURL?: string;
+};
+
+function getSupportMatrixURL(): string | undefined {
+  let context = readSupportContext() as SupportContext | undefined;
+  return context?.matrixURL;
+}
+
 const defaultMatrixUrl = ensureTrailingSlash(
   process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_URL ??
+    getSupportMatrixURL() ??
     process.env.MATRIX_URL ??
     'http://localhost:8008/',
 );

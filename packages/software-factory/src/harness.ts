@@ -12,11 +12,12 @@ import { join, relative, resolve } from 'node:path';
 
 import type { StdioOptions } from 'node:child_process';
 
-import * as fsExtra from 'fs-extra';
-import * as jwt from 'jsonwebtoken';
+import fsExtra from 'fs-extra';
+import jwt from 'jsonwebtoken';
 import { Client as PgClient } from 'pg';
 
 type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
+const { copySync, ensureDirSync } = fsExtra;
 
 type RealmPermissions = Record<string, RealmAction[]>;
 
@@ -141,8 +142,6 @@ const DEFAULT_MATRIX_SERVER_USERNAME =
 const DEFAULT_MATRIX_BROWSER_USERNAME =
   process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_USERNAME ??
   'software-factory-browser';
-const DEFAULT_BROWSER_MATRIX_URL =
-  process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_URL ?? 'http://localhost:8008/';
 const INCLUDE_SKILLS = process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1';
 const DEFAULT_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
@@ -366,6 +365,13 @@ async function loadSynapseModule() {
       stopExisting?: boolean,
     ) => Promise<SynapseInstance>;
     synapseStop: (id: string) => Promise<void>;
+  };
+}
+
+async function loadMatrixEnvironmentConfigModule() {
+  let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
+  return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
+    getSynapseURL: () => string;
   };
 }
 
@@ -765,7 +771,7 @@ async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
 }
 
 function copyRealmFixture(realmDir: string, destination: string): void {
-  fsExtra.copySync(realmDir, destination, {
+  copySync(realmDir, destination, {
     preserveTimestamps: true,
     filter(src) {
       let relativePath = relative(realmDir, src).replace(/\\/g, '/');
@@ -791,7 +797,7 @@ async function startIsolatedRealmStack({
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
-  fsExtra.ensureDirSync(testRealmDir);
+  ensureDirSync(testRealmDir);
   copyRealmFixture(realmDir, testRealmDir);
 
   let env = {
@@ -994,6 +1000,7 @@ export async function startFactorySupportServices(): Promise<{
   let icons = await ensureIconsReady();
   cleanupStaleSynapseContainers();
   let { synapseStart, synapseStop } = await loadSynapseModule();
+  let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
   let { startPrerenderServer } = await loadIsolatedRealmServerModule();
 
   let synapse = await synapseStart(
@@ -1002,8 +1009,7 @@ export async function startFactorySupportServices(): Promise<{
   );
   await ensureSupportUsers(synapse);
   let prerender = await startPrerenderServer();
-  let matrixURL =
-    process.env.SOFTWARE_FACTORY_MATRIX_URL ?? DEFAULT_BROWSER_MATRIX_URL;
+  let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
 
   return {
     context: {
@@ -1127,6 +1133,7 @@ export async function startFactoryRealmServer(
   let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
   let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
   let templateDatabaseName = options.templateDatabaseName;
+  let databaseName = runtimeDatabaseName();
 
   let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
   let context = options.context ?? parseFactoryContext();
@@ -1152,18 +1159,40 @@ export async function startFactoryRealmServer(
         ).templateDatabaseName;
   }
 
-  let databaseName = runtimeDatabaseName();
-  await dropDatabase(databaseName);
-  await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
+  let stack: RunningFactoryStack;
+  try {
+    await dropDatabase(databaseName);
+    await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
 
-  let stack = await startIsolatedRealmStack({
-    realmDir,
-    realmURL,
-    databaseName,
-    context,
-    migrateDB: false,
-    fullIndexOnStartup: false,
-  });
+    stack = await startIsolatedRealmStack({
+      realmDir,
+      realmURL,
+      databaseName,
+      context,
+      migrateDB: false,
+      fullIndexOnStartup: false,
+    });
+  } catch (error) {
+    let cleanupError: unknown;
+
+    try {
+      await dropDatabase(databaseName);
+    } catch (cleanupFailure) {
+      cleanupError ??= cleanupFailure;
+    }
+
+    try {
+      await ownedGlobalContext?.stop();
+    } catch (cleanupFailure) {
+      cleanupError ??= cleanupFailure;
+    }
+
+    if (cleanupError) {
+      throw cleanupError;
+    }
+
+    throw error;
+  }
 
   return {
     realmDir,
