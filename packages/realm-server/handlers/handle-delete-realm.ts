@@ -12,6 +12,7 @@ import {
   type PublishedRealmTable,
   update,
 } from '@cardstack/runtime-common';
+import { pathExistsSync, removeSync } from 'fs-extra';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import {
@@ -148,23 +149,27 @@ export default function handleDeleteRealm({
             ensureTrailingSlash(realm.url) ===
             ensureTrailingSlash(publishedRealm.published_realm_url),
         );
-        if (!mountedPublishedRealm) {
-          throw new Error(
-            `No realm instance found for published realm ${publishedRealm.published_realm_url}`,
-          );
-        }
-
         let publishedRealmPath = join(
           realmsRootPath,
           PUBLISHED_DIRECTORY_NAME,
           publishedRealm.id,
         );
-        destroyMountedRealm({
-          realm: mountedPublishedRealm,
-          realmPath: publishedRealmPath,
-          realms,
-          virtualNetwork,
-        });
+        if (mountedPublishedRealm) {
+          destroyMountedRealm({
+            realm: mountedPublishedRealm,
+            realmPath: publishedRealmPath,
+            realms,
+            virtualNetwork,
+          });
+        } else {
+          try {
+            if (pathExistsSync(publishedRealmPath)) {
+              removeSync(publishedRealmPath);
+            }
+          } catch (error) {
+            Sentry.captureException(error);
+          }
+        }
         await removeRealmPermissions(
           dbAdapter,
           new URL(publishedRealm.published_realm_url),

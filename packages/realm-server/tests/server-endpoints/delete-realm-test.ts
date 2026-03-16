@@ -7,6 +7,7 @@ import {
   asExpressions,
   insert,
   insertPermissions,
+  PUBLISHED_DIRECTORY_NAME,
   query,
 } from '@cardstack/runtime-common';
 
@@ -566,6 +567,108 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
         (realm) => realm.url === publishedRealmURL,
       ),
       'published realm is unmounted',
+    );
+  });
+
+  test('DELETE /_delete-realm still deletes a realm when a published copy is no longer mounted', async function (assert) {
+    let owner = `mango-${uuidv4()}`;
+    let ownerUserId = `@${owner}:localhost`;
+    let realmURL = await createRealmFor(ownerUserId);
+    let publishedRealmURL = `http://${owner}.localhost:4445/published-${uuidv4()}/`;
+
+    await insertUser(
+      context.dbAdapter,
+      ownerUserId,
+      'cus_delete_realm_unmounted',
+      'mango@example.com',
+    );
+
+    let publishResponse = await context.request2
+      .post('/_publish-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: ownerUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(
+        JSON.stringify({
+          sourceRealmURL: realmURL,
+          publishedRealmURL,
+        }),
+      );
+
+    assert.strictEqual(publishResponse.status, 201, 'published realm created');
+    let publishedRealmId = publishResponse.body.data.id as string;
+    let publishedRealmPath = join(
+      context.dir.name,
+      'realm_server_2',
+      PUBLISHED_DIRECTORY_NAME,
+      publishedRealmId,
+    );
+    assert.true(existsSync(publishedRealmPath), 'published realm directory exists');
+
+    let mountedPublishedRealm = context.testRealmServer2.testingOnlyRealms.find(
+      (realm) => realm.url === publishedRealmURL,
+    );
+    assert.ok(mountedPublishedRealm, 'published realm is mounted');
+    context.virtualNetwork.unmount(mountedPublishedRealm.handle);
+
+    let mountedRealms = (
+      context.testRealmServer2 as unknown as { realms: { url: string }[] }
+    ).realms;
+    let publishedRealmIndex = mountedRealms.findIndex(
+      (realm) => realm.url === publishedRealmURL,
+    );
+    assert.notStrictEqual(
+      publishedRealmIndex,
+      -1,
+      'published realm is present in server realm list',
+    );
+    mountedRealms.splice(publishedRealmIndex, 1);
+
+    let deleteResponse = await context.request2
+      .delete('/_delete-realm')
+      .set('Accept', 'application/vnd.api+json')
+      .set('Content-Type', 'application/json')
+      .set(
+        'Authorization',
+        `Bearer ${createRealmServerJWT(
+          { user: ownerUserId, sessionRoom: 'session-room-test' },
+          realmSecretSeed,
+        )}`,
+      )
+      .send(
+        JSON.stringify({
+          data: {
+            type: 'realm',
+            id: realmURL,
+          },
+        }),
+      );
+
+    assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    assert.false(
+      existsSync(publishedRealmPath),
+      'published realm directory is removed even when unmounted',
+    );
+
+    let remainingPublishedRows = await context.dbAdapter.execute(
+      `SELECT * FROM published_realms WHERE source_realm_url = '${realmURL}'`,
+    );
+    assert.strictEqual(
+      remainingPublishedRows.length,
+      0,
+      'published realm records are removed',
+    );
+    assert.notOk(
+      context.testRealmServer2.testingOnlyRealms.find(
+        (realm) => realm.url === realmURL,
+      ),
+      'source realm is unmounted',
     );
   });
 
