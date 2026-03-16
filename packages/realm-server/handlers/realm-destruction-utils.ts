@@ -5,7 +5,7 @@ import type {
 } from '@cardstack/runtime-common';
 import { ensureTrailingSlash, param, query } from '@cardstack/runtime-common';
 import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
-import { join } from 'path';
+import { join, relative } from 'path';
 
 export function collectAllFilePaths(realmPath: string): string[] {
   let allPaths: string[] = [];
@@ -28,7 +28,7 @@ export function collectAllFilePaths(realmPath: string): string[] {
       if (entry.isDirectory()) {
         traverseDirectory(fullPath, basePath);
       } else {
-        let relativePath = fullPath.replace(basePath, '').replace(/^[/\\]/, '');
+        let relativePath = relative(basePath, fullPath).replace(/\\/g, '/');
         if (relativePath) {
           allPaths.push(relativePath);
         }
