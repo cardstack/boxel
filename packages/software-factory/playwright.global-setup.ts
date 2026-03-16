@@ -35,6 +35,40 @@ function appendLog(buffer: string, chunk: string): string {
   return combined.length > 20_000 ? combined.slice(-20_000) : combined;
 }
 
+async function waitForCommand(
+  child: ReturnType<typeof spawn>,
+  getLogs: () => string,
+  timeoutMs = 300_000,
+): Promise<void> {
+  let exit = new Promise<void>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new Error(`command exited with code ${code ?? 'null'}\n${getLogs()}`),
+        );
+      }
+    });
+  });
+
+  await Promise.race([
+    exit,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              `timed out waiting for setup command to finish\n${getLogs()}`,
+            ),
+          ),
+        timeoutMs,
+      ),
+    ),
+  ]);
+}
+
 async function waitForMetadataFile<T>(
   metadataFile: string,
   child: ReturnType<typeof spawn>,
@@ -90,6 +124,26 @@ export default async function globalSetup() {
     realmDir: string;
     context: Record<string, unknown>;
   }>(defaultSupportMetadataFile, child, () => logs);
+
+  let cacheLogs = '';
+  let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
+    cwd: packageRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      SOFTWARE_FACTORY_CONTEXT: JSON.stringify(payload.context),
+      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
+    },
+  });
+
+  cacheChild.stdout?.on('data', (chunk) => {
+    cacheLogs = appendLog(cacheLogs, String(chunk));
+  });
+  cacheChild.stderr?.on('data', (chunk) => {
+    cacheLogs = appendLog(cacheLogs, String(chunk));
+  });
+
+  await waitForCommand(cacheChild, () => cacheLogs);
 
   writeFileSync(
     defaultSupportMetadataFile,
