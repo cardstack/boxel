@@ -177,34 +177,37 @@ export class IndexRunner {
       totalFiles: invalidations.length,
       files: invalidations.map((u) => u.href),
     });
-    let filesCompleted = 0;
-    for (let invalidation of invalidations) {
-      await current.tryToVisit(invalidation);
-      filesCompleted++;
+    try {
+      let filesCompleted = 0;
+      for (let invalidation of invalidations) {
+        await current.tryToVisit(invalidation);
+        filesCompleted++;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: invalidation.href,
+          filesCompleted,
+          totalFiles: invalidations.length,
+        });
+      }
+      current.#perfLog.debug(
+        `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
+      );
+      let finalizeStart = Date.now();
+      let { totalIndexEntries } = await current.batch.done();
+      current.#perfLog.debug(
+        `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
+      );
+      current.stats.totalIndexEntries = totalIndexEntries;
+    } finally {
       current.#onProgress?.({
-        type: 'file-visited',
+        type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
-        url: invalidation.href,
-        filesCompleted,
-        totalFiles: invalidations.length,
+        stats: current.stats,
       });
     }
-    current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
-    );
-    let finalizeStart = Date.now();
-    let { totalIndexEntries } = await current.batch.done();
-    current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
-    );
-    current.stats.totalIndexEntries = totalIndexEntries;
-    current.#onProgress?.({
-      type: 'indexing-finished',
-      realmURL: current.realmURL.href,
-      jobId: current.#jobInfo.jobId,
-      stats: current.stats,
-    });
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
     );
@@ -279,35 +282,38 @@ export class IndexRunner {
       totalFiles: invalidations.length,
       files: invalidations.map((u) => u.href),
     });
-    let filesCompleted = 0;
-    for (let invalidation of invalidations) {
-      if (
-        operations.get(invalidation.href) === 'delete' &&
-        hrefs.includes(invalidation.href)
-      ) {
-        // file is deleted, there is nothing to visit
-      } else {
-        await current.tryToVisit(invalidation);
+    try {
+      let filesCompleted = 0;
+      for (let invalidation of invalidations) {
+        if (
+          operations.get(invalidation.href) === 'delete' &&
+          hrefs.includes(invalidation.href)
+        ) {
+          // file is deleted, there is nothing to visit
+        } else {
+          await current.tryToVisit(invalidation);
+        }
+        filesCompleted++;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: invalidation.href,
+          filesCompleted,
+          totalFiles: invalidations.length,
+        });
       }
-      filesCompleted++;
+
+      let { totalIndexEntries } = await current.batch.done();
+      current.stats.totalIndexEntries = totalIndexEntries;
+    } finally {
       current.#onProgress?.({
-        type: 'file-visited',
+        type: 'indexing-finished',
         realmURL: current.realmURL.href,
         jobId: current.#jobInfo.jobId,
-        url: invalidation.href,
-        filesCompleted,
-        totalFiles: invalidations.length,
+        stats: current.stats,
       });
     }
-
-    let { totalIndexEntries } = await current.batch.done();
-    current.stats.totalIndexEntries = totalIndexEntries;
-    current.#onProgress?.({
-      type: 'indexing-finished',
-      realmURL: current.realmURL.href,
-      jobId: current.#jobInfo.jobId,
-      stats: current.stats,
-    });
 
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed incremental indexing for ${urls.map((u) => u.href).join()} in ${
