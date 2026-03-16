@@ -73,6 +73,14 @@
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 - run `pnpm lint` in this directory to lint changes made to this package
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
+- the host tests report this error:
+  ```
+  Missing symlinked npm packages: 
+  Package: @cardstack/local-types
+    * Specified: workspace:*
+    * Symlinked: (not available)
+  ```
+  This is a red herring. Just ignore this error.
 
 #### Iterating on host tests with the Chrome MCP server
 

@@ -502,6 +502,7 @@ export default class MatrixService extends Service {
       // only so tests and app reloads do not accidentally wipe durable state.
       clearLocalStorage(window.localStorage);
       this.reset.resetAll();
+      this.loaderService.resetSessionBoundary('logout');
       this.unbindEventListeners();
       await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the

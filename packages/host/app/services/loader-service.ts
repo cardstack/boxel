@@ -47,11 +47,16 @@ export default class LoaderService extends Service {
   }
 
   public resetState() {
-    // this clears the fetch cache in between logins, the idea being that we
-    // don't want to leak modules from private realms between sessions.
-    clearFetchCache();
-    clearInjectedScopedCSS();
-    clearKnownFileMetaUrls();
+    this.clearSessionCaches();
+  }
+
+  public resetSessionBoundary(reason?: string) {
+    this.resetTime = undefined;
+    log.debug(`resetting loader for session boundary (${reason ?? ''})`);
+    this.clearSessionCaches();
+    this.loader = this.loader
+      ? Loader.cloneLoader(this.loader)
+      : this.makeInstance();
   }
 
   public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
@@ -112,6 +117,14 @@ export default class LoaderService extends Service {
     let fetch = fetcher(this.network.fetch, middlewareStack);
     let loader = new Loader(fetch, this.network.resolveImport);
     return loader;
+  }
+
+  private clearSessionCaches() {
+    // This clears cached module fetches and scoped styles at session/test
+    // boundaries so private realm assets do not leak across owners.
+    clearFetchCache();
+    clearInjectedScopedCSS();
+    clearKnownFileMetaUrls();
   }
 }
 
