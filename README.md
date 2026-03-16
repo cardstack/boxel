@@ -45,6 +45,51 @@ Both catalogs are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_C
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
+## mise Tasks
+
+Development services are managed as [mise](https://mise.jdx.dev/) file-based tasks. The `pnpm start:*` commands in `packages/realm-server/package.json` are shims that call `mise run` under the hood, so either form works:
+
+```bash
+# These are equivalent:
+pnpm start:all                          # shim in package.json
+mise run dev                            # direct mise task
+
+pnpm start:development                  # shim
+mise run services:realm-server          # direct
+```
+
+### Task layout
+
+```
+mise-tasks/
+  lib/env-vars.sh              # Shared env computation (sourced by .mise.toml)
+  infra/
+    ensure-traefik             # Ensure Traefik is running (env mode only)
+    ensure-pg                  # Wait for PostgreSQL to be ready
+    ensure-db                  # Ensure per-environment database exists
+    ensure-synapse             # Ensure Synapse + user registration
+    wait-for-prerender         # Wait for prerender server
+  services/
+    realm-server               # Full development realm server
+    realm-server-base          # Base realm only (for matrix tests)
+    worker, worker-base,       # Worker managers
+      worker-test
+    prerender, prerender-mgr   # Prerender server + manager
+    icons                      # Boxel icons HTTP server
+    ai-bot                     # AI bot
+    bot-runner                 # Bot runner
+  dev                          # Full dev stack (realm server + workers + test realms)
+  dev-all                      # Host app + full dev stack (single command)
+  dev-minimal                  # Dev stack without optional realms
+  dev-without-matrix           # Dev stack (expects Matrix already running)
+  test-services-host           # Services for host test suite
+  test-services-matrix         # Services for matrix test suite
+```
+
+All tasks automatically receive environment variables from `mise-tasks/lib/env-vars.sh` (service URLs, ports, database names, paths). In environment mode (`BOXEL_ENVIRONMENT` set), these point to Traefik hostnames with dynamic ports. In standard mode, they use fixed localhost ports.
+
+To list all available tasks: `mise tasks ls`
+
 ## Running the Host App
 
 There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production, or have staging or production as the backing infrastructure.
@@ -73,6 +118,14 @@ In order to run the ember-cli hosted app:
 2. `pnpm start` in the host/ workspace to serve the ember app.
 3. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
+Alternatively, you can run everything with a single command from the repo root:
+
+```bash
+mise run dev-all
+```
+
+This starts the host app first, waits for it to be ready, then starts the realm server and all supporting services.
+
 The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
@@ -94,7 +147,7 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `start:all`
 
-Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `start:all`:
+Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` (or `mise run dev`) which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `pnpm start:skip-optional-realms` (or `mise run dev-minimal`) skips experiments, catalog, homepage, and submission realms. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `start:all`:
 
 | Port  | Description                                                                                   | Running `start:all` | Running `start:base` |
 | ----- | --------------------------------------------------------------------------------------------- | ------------------- | -------------------- |
@@ -108,15 +161,15 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅                  | 🚫                   |
 | :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅                  | 🚫                   |
 | :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅                  | 🚫                   |
-| :4221 | Prerender server                                                                              | 🚫                  | 🚫                   |
-| :4222 | Prerender manager                                                                             | 🚫                  | 🚫                   |
+| :4221 | Prerender server                                                                              | ✅                  | 🚫                   |
+| :4222 | Prerender manager                                                                             | ✅                  | 🚫                   |
 | :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                                                   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                                                         | ✅                  | 🚫                   |
 
 #### Using `start:development`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers which are normally started in `start:all`.
+You can also use `start:development` (or `mise run services:realm-server`) if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` (or `mise run services:worker`) in order to start the workers which are normally started in `start:all`.
 
 ### Card Pre-rendering
 
@@ -138,7 +191,7 @@ From `packages/realm-server`:
 
 - `pnpm start:prerender-dev` (defaults to port 4221)
 
-First start the pre-rendering manager. Then start the prerender server. (TBD: incorporate into start:all)
+First start the pre-rendering manager. Then start the prerender server. Both are automatically started as part of `pnpm start:all` (`mise run dev`).
 
 #### Pre-rendering Environment variables
 
@@ -467,42 +520,56 @@ If the isolated realm server fails to get stopped you may see an error about por
 
 ## Environment mode: parallel environments
 
-“Environment mode” lets us run multiple Boxel environments simultaneously. This is experimental and opt-in via a `BOXEL_ENVIRONMENT` environment variable.
+“Environment mode” lets multiple Boxel environments run simultaneously on the same machine. It is opt-in via the `BOXEL_ENVIRONMENT` environment variable. When set, all services use dynamic ports and register with a Traefik reverse proxy so each environment gets its own `*.localhost` hostnames.
+
+All environment configuration is centralized in `mise-tasks/lib/env-vars.sh`, which is automatically sourced by every mise task. The slug computation used for hostnames and database names lives in `scripts/env-slug.sh`.
 
 Here’s an example using Git worktrees and a `parallel` environment name:
 
 ```bash
 git worktree add ../parallel
-ln -s "$(pwd)/packages/boxel-icons/dist" ../parallel/packages/boxel-icons/dist # skip freshly building boxel-icons, which is quite slow
+ln -s “$(pwd)/packages/boxel-icons/dist” ../parallel/packages/boxel-icons/dist # skip freshly building boxel-icons, which is quite slow
 cd ../parallel
 
 pnpm install
 ```
 
-In a tab for the UI:
+Start everything with a single command:
 
 ```bash
+BOXEL_ENVIRONMENT=parallel mise run dev-all
+```
+
+Or start services in separate tabs:
+
+```bash
+# Tab 1: host app
 BOXEL_ENVIRONMENT=parallel pnpm --filter @cardstack/host start
-```
 
-In a tab for the realm server, skipping building the catalog since it takes a long time to index:
-
-```bash
+# Tab 2: realm server (skip catalog for faster startup)
 BOXEL_ENVIRONMENT=parallel SKIP_CATALOG=true pnpm --filter @cardstack/realm-server start:all
-```
 
-Optionally, for the AI bot:
-
-```bash
+# Tab 3 (optional): AI bot
 BOXEL_ENVIRONMENT=parallel OPENROUTER_API_KEY=your_api_key pnpm --filter @cardstack/ai-bot start:development
 ```
 
+In environment mode, services are available at:
+
+| Service       | Hostname                                  |
+| ------------- | ----------------------------------------- |
+| Host app      | `http://host.<slug>.localhost`            |
+| Realm server  | `http://realm-server.<slug>.localhost`    |
+| Matrix        | `http://matrix.<slug>.localhost`          |
+| Icons         | `http://icons.<slug>.localhost`           |
+
+Where `<slug>` is the lowercased, sanitized form of `BOXEL_ENVIRONMENT` (e.g., `feature/my-branch` becomes `feature-my-branch`).
+
 ### Utility script
 
-Run this script to terminate any dangling processes:
+Run this script to terminate any dangling processes for an environment:
 
 ```
-./scripts/stop-branch.sh
+./scripts/stop-branch.sh [environment-name]
 ```
 
 It also has a `--drop-db` flag if you need to start over, and `--dry-run` to see what processes would be terminated.
