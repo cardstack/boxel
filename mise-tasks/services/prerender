@@ -6,7 +6,7 @@
 if [ -n "$ENV_MODE" ]; then
   DEFAULT_HOST_URL="${HOST_URL}"
 else
-  DEFAULT_HOST_URL="http://localhost:4200"
+  DEFAULT_HOST_URL="${HOST_URL:-http://localhost:4200}"
 fi
 
 NODE_ENV=development \
