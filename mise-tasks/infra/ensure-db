@@ -8,7 +8,7 @@
 DB_SUFFIX="${1:-$ENV_SLUG}"
 DB_NAME="boxel_${DB_SUFFIX}"
 
-echo "Ensuring database '${DB_NAME}' exists..."
+echo "Ensuring database '${DB_NAME}' exists…"
 
 if docker exec boxel-pg psql -U postgres -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
   echo "Database '${DB_NAME}' already exists."

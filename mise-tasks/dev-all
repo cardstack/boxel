@@ -18,7 +18,7 @@ cleanup_host() {
 }
 trap cleanup_host EXIT INT TERM
 
-echo "Waiting for host app at ${HOST_URL}..."
+echo "Waiting for host app at ${HOST_URL}…"
 until [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; do sleep 2; done
 echo "Host app is ready."
 

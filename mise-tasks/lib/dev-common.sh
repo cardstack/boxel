@@ -29,11 +29,11 @@ NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PA
 # In environment mode, bootstrap infra before starting services
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
   ./scripts/start-pg.sh
-  echo "Waiting for Postgres to accept connections..."
+  echo "Waiting for Postgres to accept connections…"
   until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
   REPO_ROOT="$(cd "../.." && pwd)"
   "$REPO_ROOT/scripts/ensure-branch-db.sh"
-  echo "Running database migrations..."
+  echo "Running database migrations…"
   pnpm migrate
   ./scripts/start-matrix.sh
 fi
