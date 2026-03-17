@@ -18,8 +18,24 @@ cleanup_host() {
 }
 trap cleanup_host EXIT INT TERM
 
-echo "Waiting for host app at ${HOST_URL}…"
-until [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; do sleep 2; done
+HOST_TIMEOUT=120
+ELAPSED=0
+echo "Waiting for host app at ${HOST_URL} (timeout: ${HOST_TIMEOUT}s)…"
+while true; do
+  if ! kill -0 "$HOST_PID" 2>/dev/null; then
+    echo "ERROR: Host app process died." >&2
+    exit 1
+  fi
+  if [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
+    break
+  fi
+  sleep 2
+  ELAPSED=$((ELAPSED + 2))
+  if [ "$ELAPSED" -ge "$HOST_TIMEOUT" ]; then
+    echo "ERROR: Host app did not become ready within ${HOST_TIMEOUT}s." >&2
+    exit 1
+  fi
+done
 echo "Host app is ready."
 
 WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
