@@ -89,6 +89,8 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
+const FULL_INDEX_ON_STARTUP =
+  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP !== 'false';
 
 let {
   port,
@@ -240,7 +242,7 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartup=${FULL_INDEX_ON_STARTUP}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 
@@ -323,7 +325,7 @@ const getIndexHTML = async () => {
         ),
       },
       {
-        fullIndexOnStartup: true,
+        ...(FULL_INDEX_ON_STARTUP ? { fullIndexOnStartup: true as const } : {}),
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),
@@ -388,24 +390,27 @@ const getIndexHTML = async () => {
       registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }
   });
+  let stopRealmServer = (notifyParent = false) => {
+    let stopPort =
+      (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+    console.log(`stopping realm server on port ${stopPort}...`);
+    if (isEnvironmentMode()) {
+      deregisterEnvironment();
+    }
+    httpServer.closeAllConnections();
+    httpServer.close(() => {
+      queue.destroy(); // warning this is async
+      dbAdapter.close(); // warning this is async
+      console.log(`realm server on port ${stopPort} has stopped`);
+      if (notifyParent && process.send) {
+        process.send('stopped');
+      }
+      process.exit(0);
+    });
+  };
   process.on('message', (message) => {
     if (message === 'stop') {
-      let stopPort =
-        (httpServer.address() as import('net').AddressInfo | null)?.port ??
-        port;
-      console.log(`stopping realm server on port ${stopPort}...`);
-      if (isEnvironmentMode()) {
-        deregisterEnvironment();
-      }
-      httpServer.closeAllConnections();
-      httpServer.close(() => {
-        queue.destroy(); // warning this is async
-        dbAdapter.close(); // warning this is async
-        console.log(`realm server on port ${stopPort} has stopped`);
-        if (process.send) {
-          process.send('stopped');
-        }
-      });
+      stopRealmServer(true);
     } else if (message === 'kill') {
       console.log(`Ending server process...`);
       process.exit(0);
@@ -436,6 +441,10 @@ const getIndexHTML = async () => {
           }
         });
     }
+  });
+  process.on('disconnect', () => {
+    console.log(`realm server IPC disconnected, shutting down...`);
+    stopRealmServer(false);
   });
 
   await server.start();

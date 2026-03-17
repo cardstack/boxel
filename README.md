@@ -165,6 +165,12 @@ Instead of running `mise run services:realm-server-base`, you can alternatively 
 
 You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. This will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
 
+#### Indexing dashboard
+
+In development, you can visit an indexing dashboard at [`http://localhost:4210/_indexing-dashboard`](http://localhost:4210/_indexing-dashboard) to view the status of all active indexing jobs across all workers.
+
+In environment mode, this is at `http://worker.environment-name.localhost/_indexing-dashboard`.
+
 ### Card Pre-rendering
 
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.

@@ -8,6 +8,7 @@ import {
   IndexWriter,
   registerCardReferencePrefix,
   type StatusArgs,
+  type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -121,6 +122,12 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  function reportProgress(event: IndexingProgressEvent) {
+    if (!ECS_CONTAINER_METADATA_URI && process.send) {
+      process.send(`progress|${JSON.stringify(event)}`);
+    }
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let worker = new Worker({
@@ -130,6 +137,7 @@ let autoMigrate = migrateDB || undefined;
     matrixURL: new URL(matrixURL),
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
+    reportProgress,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
@@ -158,6 +166,7 @@ let autoMigrate = migrateDB || undefined;
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  process.on('disconnect', shutdown);
   process.on('message', (message) => {
     if (message === 'stop') {
       shutdown(); // warning this is async

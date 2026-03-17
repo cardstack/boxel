@@ -1,10 +1,14 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "lib": ["es2020"],
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": false,
+    "useDefineForClassFields": false,
     "noImplicitAny": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
@@ -15,10 +19,30 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noEmit": true,
+    "baseUrl": ".",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
+    "paths": {
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "@cardstack/boxel-ui/helpers": ["../boxel-ui/addon/src/helpers"],
+      "@cardstack/boxel-ui/helpers/*": ["../boxel-ui/addon/src/helpers/*"],
+      "@cardstack/boxel-icons": ["../boxel-icons/src"],
+      "@cardstack/boxel-icons/*": ["../boxel-icons/src/icons/*"]
+    },
     "types": ["@cardstack/local-types", "node"]
   },
-  "include": ["./src/**/*.ts"]
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"]
+  },
+  "include": [
+    "./src/**/*",
+    "./realm/**/*",
+    "./playwright.config.ts",
+    "./playwright.global-setup.ts",
+    "./playwright.global-teardown.ts"
+  ],
+  "exclude": ["./test-fixtures/**", "./tests/**"]
 }

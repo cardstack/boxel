@@ -129,7 +129,11 @@ export async function synapseStart(
     opts?.template ?? 'test',
     opts?.dataDir,
   );
-  let containerName = opts?.containerName || (isEnvironmentMode() ? getSynapseContainerName() : path.basename(synCfg.configDir));
+  let containerName =
+    opts?.containerName ||
+    (isEnvironmentMode()
+      ? getSynapseContainerName()
+      : path.basename(synCfg.configDir));
   console.log(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
@@ -381,7 +385,13 @@ export interface UpdateUserOptions {
 export async function updateUser(
   adminAccessToken: string,
   userId: string,
-  { password, displayname, avatar_url, emailAddresses, matrixURL }: UpdateUserOptions,
+  {
+    password,
+    displayname,
+    avatar_url,
+    emailAddresses,
+    matrixURL,
+  }: UpdateUserOptions,
 ) {
   let url = matrixURL
     ? `${matrixURL}/_synapse/admin/v2/users/${userId}`
@@ -506,14 +516,11 @@ export async function getRoomMembers(roomId: string, accessToken: string) {
 }
 
 export async function sync(accessToken: string) {
-  let response = await fetch(
-    `${getSynapseURL()}/_matrix/client/v3/sync`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+  let response = await fetch(`${getSynapseURL()}/_matrix/client/v3/sync`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
     },
-  );
+  });
   return await response.json();
 }
 
