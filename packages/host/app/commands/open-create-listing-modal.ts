@@ -24,7 +24,7 @@ export default class OpenCreateListingModalCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingCreateInput,
   ): Promise<undefined> {
-    this.operatorModeStateService.openCreateListingModal({
+    this.operatorModeStateService.showCreateListingModal({
       codeRef: input.codeRef,
       targetRealm: input.targetRealm,
       openCardId: input.openCardId,

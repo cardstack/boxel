@@ -74,6 +74,13 @@ export interface CreateListingModalRequest {
   openCardId?: string;
 }
 
+export interface OperatorModeToast {
+  message: string;
+  status?: 'loading' | 'success' | 'error';
+  ctaLabel?: string;
+  ctaAction?: () => void;
+}
+
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
@@ -149,6 +156,7 @@ export default class OperatorModeStateService extends Service {
 
   @tracked profileSettingsOpen = false;
   @tracked createListingModalRequest?: CreateListingModalRequest;
+  @tracked toast?: OperatorModeToast;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -217,12 +225,20 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   };
 
-  openCreateListingModal = (request: CreateListingModalRequest) => {
+  showCreateListingModal = (request: CreateListingModalRequest) => {
     this.createListingModalRequest = request;
   };
 
-  closeCreateListingModal = () => {
+  dismissCreateListingModal = () => {
     this.createListingModalRequest = undefined;
+  };
+
+  showToast = (toast: OperatorModeToast) => {
+    this.toast = toast;
+  };
+
+  dismissToast = () => {
+    this.toast = undefined;
   };
 
   setNewFileDropdownOpen = () => {
@@ -256,6 +272,7 @@ export default class OperatorModeStateService extends Service {
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
     this.createListingModalRequest = undefined;
+    this.toast = undefined;
     window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }

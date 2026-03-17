@@ -155,7 +155,7 @@ export function getDefaultCardMenuItems(
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
     menuItems.push({
-      label: `Create Listing with AI`,
+      label: `Create Listing`,
       action: async () => {
         const codeRef = resolveAdoptsFrom(card);
         if (!codeRef) {

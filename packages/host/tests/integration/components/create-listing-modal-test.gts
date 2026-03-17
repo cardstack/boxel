@@ -32,7 +32,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
       },
     );
 
-    ctx.operatorModeStateService.openCreateListingModal({
+    ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
     });
@@ -52,7 +52,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
       },
     );
 
-    ctx.operatorModeStateService.openCreateListingModal({
+    ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
     });
@@ -71,7 +71,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
       },
     );
 
-    ctx.operatorModeStateService.openCreateListingModal({
+    ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
     });
@@ -94,7 +94,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
       },
     );
 
-    ctx.operatorModeStateService.openCreateListingModal({
+    ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
       openCardId,
@@ -116,7 +116,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
       },
     );
 
-    ctx.operatorModeStateService.openCreateListingModal({
+    ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
     });
@@ -136,7 +136,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     // Provide an incomplete codeRef (missing 'module') so the create task
     // fails synchronously with a descriptive error message.
-    ctx.operatorModeStateService.openCreateListingModal({
+    ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { name: 'Pet' } as any,
       targetRealm: testRealmURL,
     });

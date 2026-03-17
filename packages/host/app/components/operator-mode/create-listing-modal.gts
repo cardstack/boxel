@@ -1,28 +1,33 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import {
-  BoxelSelect,
   Button,
   FieldContainer,
+  GridContainer,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   isResolvedCodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
 import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -30,16 +35,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-type SourceOption = {
-  id: string | null; // null = card definition, string = instance id
-  label: string;
-  detail: string;
-};
-
-function fileNameFromUrl(url: string, ext: string): string {
-  return `${url.split('/').pop() ?? url}${ext}`;
-}
 
 interface Signature {
   Args: {};
@@ -50,9 +45,7 @@ export default class CreateListingModal extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
-  @tracked private errorMessage?: string;
-  @tracked private _userSelectedKey?: string;
-  @tracked private _userSelectedValue: string | null = null;
+  @tracked private selectedExampleIds: Set<string> = new Set();
 
   private instancesSearch = getSearch<CardDef>(this, getOwner(this)!, () =>
     this.codeRef ? { filter: { type: this.codeRef } } : undefined,
@@ -64,28 +57,58 @@ export default class CreateListingModal extends Component<Signature> {
       throw new Error('Cannot create listing without a modal request');
     }
 
-    this.errorMessage = undefined;
+    let codeRef = this.codeRef;
+    if (!codeRef) {
+      throw new Error('Cannot create listing without a resolved code ref');
+    }
+
+    let targetRealm = request.targetRealm;
+    let selectedIds = this.effectiveSelectedExampleIds;
+    let openCardId =
+      selectedIds.size > 0
+        ? [...selectedIds][0]
+        : request.openCardId;
+    let title = this.codeRefTitle;
+
+    this.operatorModeStateService.dismissCreateListingModal();
+    this.operatorModeStateService.showToast({
+      status: 'loading',
+      message: `Creating listing for ${title}...`,
+    });
 
     try {
-      let codeRef = this.codeRef;
-      if (!codeRef) {
-        throw new Error('Cannot create listing without a resolved code ref');
-      }
-      await new ListingCreateCommand(
+      let result = await new ListingCreateCommand(
         this.commandService.commandContext,
       ).execute({
         codeRef,
-        targetRealm: request.targetRealm,
-        openCardId: this.activeOpenCardId ?? undefined,
+        targetRealm,
+        openCardId,
       });
-      // Only close if the request hasn't been replaced by a newer one while
-      // the task was running (e.g. user dismissed and reopened for a different card).
-      if (this.request === request) {
-        this.operatorModeStateService.closeCreateListingModal();
-      }
+      let cardUrl = result?.listing?.id;
+      this.operatorModeStateService.showToast({
+        status: 'success',
+        message: `${title} listing created successfully`,
+        ctaLabel: cardUrl ? 'View Listing' : undefined,
+        ctaAction: cardUrl
+          ? async () => {
+              this.operatorModeStateService.dismissToast();
+              if (this.operatorModeStateService.workspaceChooserOpened) {
+                this.operatorModeStateService.closeWorkspaceChooser();
+              }
+              await this.operatorModeStateService.updateCodePath(
+                new URL(cardUrl + '.json'),
+                'preview',
+              );
+              this.operatorModeStateService.updateSubmode(Submodes.Code);
+            }
+          : undefined,
+      });
     } catch (error) {
-      this.errorMessage =
-        error instanceof Error ? error.message : 'Failed to create listing';
+      this.operatorModeStateService.showToast({
+        status: 'error',
+        message:
+          error instanceof Error ? error.message : 'Failed to create listing',
+      });
     }
   });
 
@@ -110,84 +133,50 @@ export default class CreateListingModal extends Component<Signature> {
     return codeRef && isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
-  private get definitionLabel() {
-    let module = this.codeRef?.module;
-    return module
-      ? fileNameFromUrl(module, '.gts')
-      : (this.codeRef?.name ?? 'Unknown');
+  private get codeRefTitle(): string {
+    return this.codeRef?.name ?? 'Unknown';
   }
 
-  private get requestKey(): string | undefined {
-    let codeRef = this.codeRef;
-    return codeRef
-      ? `${codeRef.module}::${codeRef.name}::${this.request?.openCardId ?? ''}`
-      : undefined;
+  private get codeRefId(): string {
+    return this.request?.openCardId ?? this.codeRef?.module ?? '';
   }
 
-  private get activeOpenCardId(): string | null {
-    if (
-      this._userSelectedKey !== undefined &&
-      this._userSelectedKey === this.requestKey
-    ) {
-      return this._userSelectedValue;
+  private get instances(): CardDef[] {
+    return this.instancesSearch.instances;
+  }
+
+  private get hasInstances(): boolean {
+    return this.instances.length > 0;
+  }
+
+  private get effectiveSelectedExampleIds(): Set<string> {
+    if (this.selectedExampleIds.size > 0) {
+      return this.selectedExampleIds;
     }
-    return this.request?.openCardId ?? null;
+    let openCardId = this.request?.openCardId;
+    return openCardId ? new Set([openCardId]) : new Set();
   }
 
-  @cached
-  private get definitionOption(): SourceOption {
-    return {
-      id: null,
-      label: this.definitionLabel,
-      detail: 'Card Definition',
-    };
-  }
-
-  @cached
-  private get allOptions(): SourceOption[] {
-    const instanceOptions: SourceOption[] = this.instancesSearch.instances.map(
-      (instance) => ({
-        id: instance.id,
-        label: fileNameFromUrl(instance.id, '.json'),
-        detail: 'Instance',
-      }),
-    );
-    // If opened from a specific instance (openCardId), ensure it appears in
-    // the list immediately — before the async search finishes loading — so
-    // the select shows it as pre-selected on first render.
-    const openCardId = this.request?.openCardId;
-    if (openCardId && !instanceOptions.some((o) => o.id === openCardId)) {
-      instanceOptions.unshift({
-        id: openCardId,
-        label: fileNameFromUrl(openCardId, '.json'),
-        detail: 'Instance',
-      });
+  @action private onSelectExample(instance: CardDef) {
+    let id = instance.id;
+    let next = new Set(this.selectedExampleIds.size > 0
+      ? this.selectedExampleIds
+      : this.effectiveSelectedExampleIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
     }
-    return [this.definitionOption, ...instanceOptions];
+    this.selectedExampleIds = next;
   }
 
-  private get selectedOption(): SourceOption {
-    return (
-      this.allOptions.find((opt) => opt.id === this.activeOpenCardId) ??
-      this.definitionOption
-    );
-  }
-
-  private get isCreateRunning() {
-    return this.createListing.isRunning;
-  }
+  private isSelected = (instance: CardDef): boolean => {
+    return this.effectiveSelectedExampleIds.has(instance.id);
+  };
 
   @action private onClose() {
-    this.errorMessage = undefined;
-    this._userSelectedKey = undefined;
-    this._userSelectedValue = null;
-    this.operatorModeStateService.closeCreateListingModal();
-  }
-
-  @action private onSelectChange(option: SourceOption) {
-    this.errorMessage = undefined;
-    this._userSelectedKey = this.requestKey;
-    this._userSelectedValue = option.id;
+    this.selectedExampleIds = new Set();
+    this.operatorModeStateService.dismissCreateListingModal();
   }
 
   <template>
@@ -202,6 +191,10 @@ export default class CreateListingModal extends Component<Signature> {
         data-test-create-listing-modal
       >
         <:content>
+          <p class='description'>
+            You need a listing to share your code with others and publish to
+            catalogs.
+          </p>
           <FieldContainer @label='Create In' @tag='label' class='field'>
             <div
               class='field-contents realm-value'
@@ -214,42 +207,42 @@ export default class CreateListingModal extends Component<Signature> {
             </div>
           </FieldContainer>
 
-          <FieldContainer @label='Source' @tag='div' class='field'>
-            <BoxelSelect
-              class='source-select'
-              @options={{this.allOptions}}
-              @selected={{this.selectedOption}}
-              @onChange={{this.onSelectChange}}
-              @disabled={{this.isCreateRunning}}
-              @renderInPlace={{true}}
-              data-test-create-listing-source-select
-              as |option|
-            >
-              <div
-                class='source-option-item'
-                data-test-create-listing-definition-option={{unless
-                  option.id
-                  'true'
-                }}
-                data-test-create-listing-instance-option={{option.id}}
-              >
-                <span
-                  class='option-label'
-                  data-test-create-listing-display-name={{unless
-                    option.id
-                    'true'
-                  }}
-                >{{option.label}}</span>
-                <span class='option-detail'>{{option.detail}}</span>
-              </div>
-            </BoxelSelect>
+          <FieldContainer @label='CodeRef' @tag='label' class='field'>
+            <div class='field-contents' data-test-create-listing-coderef>
+              <SelectedTypePill
+                @title={{this.codeRefTitle}}
+                @id={{this.codeRefId}}
+              />
+            </div>
           </FieldContainer>
 
-          {{#if this.errorMessage}}
-            <p class='error' data-test-create-listing-error>
-              {{this.errorMessage}}
-            </p>
+          {{#if this.hasInstances}}
+            <FieldContainer @label='Example' @tag='div' class='field'>
+              <GridContainer
+                class='examples-grid'
+                data-test-create-listing-examples
+              >
+                {{#each this.instances as |instance|}}
+                  <button
+                    type='button'
+                    class={{cn
+                      'example-card'
+                      selected=(this.isSelected instance)
+                    }}
+                    {{on 'click' (fn this.onSelectExample instance)}}
+                    data-test-create-listing-example={{instance.id}}
+                  >
+                    <CardRenderer
+                      @card={{instance}}
+                      @format='fitted'
+                      @displayContainer={{false}}
+                    />
+                  </button>
+                {{/each}}
+              </GridContainer>
+            </FieldContainer>
           {{/if}}
+
         </:content>
         <:footer>
           <div class='footer-buttons'>
@@ -264,8 +257,6 @@ export default class CreateListingModal extends Component<Signature> {
             <Button
               @kind='primary'
               @size='tall'
-              @loading={{this.isCreateRunning}}
-              @disabled={{this.isCreateRunning}}
               {{on 'click' (perform this.createListing)}}
               {{onKeyMod 'Enter'}}
               data-test-create-listing-confirm-button
@@ -291,6 +282,11 @@ export default class CreateListingModal extends Component<Signature> {
       }
       :deep(.create-listing) {
         height: 30rem;
+      }
+      .description {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-500);
+        margin: 0 0 var(--boxel-sp-sm);
       }
       .field + .field {
         margin-top: var(--boxel-sp-sm);
@@ -320,34 +316,29 @@ export default class CreateListingModal extends Component<Signature> {
       .realm-icon {
         --boxel-realm-icon-size: 1rem;
       }
-      .source-select {
+      .examples-grid {
         width: 100%;
-      }
-      .source-option-item {
-        display: flex;
-        align-items: center;
         gap: var(--boxel-sp-xs);
-        width: 100%;
       }
-      .option-label {
-        font: 600 var(--boxel-font-sm);
-        flex: 1;
+      .example-card {
+        all: unset;
+        cursor: pointer;
+        border: 1px solid var(--boxel-300);
+        border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+        height: 60px;
+        box-sizing: border-box;
       }
-      .option-detail {
-        font: var(--boxel-font-xs);
-        color: var(--boxel-500);
-        white-space: nowrap;
+      .example-card:hover {
+        box-shadow: var(--boxel-box-shadow);
+      }
+      .example-card.selected {
+        border: 2px solid var(--boxel-dark);
       }
       .footer-buttons {
         display: flex;
         margin-left: auto;
         gap: var(--horizontal-gap);
-      }
-      .error {
-        color: var(--boxel-danger);
-        font: 500 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        margin: var(--boxel-sp) 0 0;
       }
     </style>
   </template>

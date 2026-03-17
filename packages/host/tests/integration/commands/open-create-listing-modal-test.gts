@@ -92,7 +92,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     );
   });
 
-  test('closeCreateListingModal clears the request', async function (assert) {
+  test('dismissCreateListingModal clears the request', async function (assert) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -114,12 +114,12 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
       'request is set after execute',
     );
 
-    operatorModeStateService.closeCreateListingModal();
+    operatorModeStateService.dismissCreateListingModal();
 
     assert.strictEqual(
       operatorModeStateService.createListingModalRequest,
       undefined,
-      'request is cleared after closeCreateListingModal',
+      'request is cleared after dismissCreateListingModal',
     );
   });
 });
