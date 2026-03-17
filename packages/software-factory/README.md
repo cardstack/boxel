@@ -13,8 +13,7 @@ should be written in `.ts`, not `.mjs`.
 
 Editor/type support for `.gts` files is provided through `glint` via this
 package's `tsconfig.json`, matching the realm-package pattern used elsewhere in
-the repo. Package linting still uses `tsc` for the package TypeScript
-entrypoints and tests.
+the repo. Package linting currently runs `glint`, `eslint`, and `prettier`.
 
 - Docker running
 - Host app assets available at `http://localhost:4200/`

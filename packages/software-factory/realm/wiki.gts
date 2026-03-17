@@ -183,7 +183,9 @@ export class Wiki extends CardDef {
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Wiki) {
-      return this.cardInfo?.name ?? this.cardInfo?.name ?? 'Untitled Page';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : 'Untitled Page';
     },
   });
 

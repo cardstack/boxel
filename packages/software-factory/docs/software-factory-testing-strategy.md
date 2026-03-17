@@ -25,7 +25,7 @@ Rules:
 - do not add new `.mjs` files in this package
 - package scripts should be executable through typed TypeScript entrypoints, with typechecking included in package linting
 - `.gts` files should follow the repo-standard Glint setup through `tsconfig.json`
-- package linting should continue to use `tsc` for the package TypeScript entrypoints and tests
+- package linting currently uses `glint`, `eslint`, and `prettier`
 
 ## Realm Roles
 

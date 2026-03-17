@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const packageRoot = resolve(new URL('..', import.meta.url).pathname);
+const packageRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 type TestRunnerOptions = {
   nodeOnly: boolean;
