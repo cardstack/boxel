@@ -8,11 +8,13 @@ import { module, test } from 'qunit';
 import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
 
 import {
+  createJWT,
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
   setupRealmCacheTeardown,
   setupUserSubscription,
+  testRealmSecretSeed,
   visitOperatorMode,
 } from '../helpers';
 import { setupBaseRealm } from '../helpers/base-realm';
@@ -108,6 +110,10 @@ export class Person extends CardDef {}
     });
   });
 
+  hooks.afterEach(function () {
+    window.localStorage.removeItem(SessionLocalStorageKey);
+  });
+
   test('delete workspace is enabled only for a workspace created by the current user', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
 
@@ -132,8 +138,28 @@ export class Person extends CardDef {}
     window.localStorage.setItem(
       SessionLocalStorageKey,
       JSON.stringify({
-        [ownedRealmURL]: 'owned-token',
-        [sharedRealmURL]: 'shared-token',
+        [ownedRealmURL]: createJWT(
+          {
+            user: '@testuser:localhost',
+            realm: ownedRealmURL,
+            sessionRoom: 'owned-session-room',
+            realmServerURL: new URL(ownedRealmURL).origin,
+            permissions: ['read', 'write', 'realm-owner'],
+          },
+          '1 hour',
+          testRealmSecretSeed,
+        ),
+        [sharedRealmURL]: createJWT(
+          {
+            user: '@testuser:localhost',
+            realm: sharedRealmURL,
+            sessionRoom: 'shared-session-room',
+            realmServerURL: new URL(sharedRealmURL).origin,
+            permissions: ['read', 'write'],
+          },
+          '1 hour',
+          testRealmSecretSeed,
+        ),
       }),
     );
 
