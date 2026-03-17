@@ -23,6 +23,9 @@ jobs:
   check-if-requires-preview:
     name: Check if a preview deploy is required
     runs-on: ubuntu-latest
+    concurrency:
+      group: check-if-requires-preview-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     outputs:
       boxel-host-files-changed: ${{ steps.boxel-host-files-that-changed.outputs.any_changed }}
     steps:
