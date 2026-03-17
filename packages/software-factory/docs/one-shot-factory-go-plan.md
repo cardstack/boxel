@@ -243,6 +243,19 @@ npm run factory:go -- \
   --mode implement
 ```
 
+CLI parameters for the first version:
+
+- `--brief-url`
+  - Required. Absolute URL for the brief card that drives the one-shot flow.
+- `--target-realm-path`
+  - Required. Local filesystem path to the realm where generated artifacts should land.
+- `--target-realm-url`
+  - Optional. Explicit realm URL when path-based inference is not enough.
+- `--mode`
+  - Optional. `bootstrap`, `implement`, or `resume`. Default should be `implement`.
+- `--help`
+  - Optional. Prints command usage and exits without running the flow.
+
 ## Proposed Implementation Pieces
 
 ### A. `scripts/factory-go.mjs`

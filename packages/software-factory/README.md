@@ -31,6 +31,12 @@ startup do not require a separate external realm server on `http://localhost:420
   - Starts the isolated realm server on `http://localhost:4205/test/`
 - `pnpm smoke:realm`
   - Boots the isolated realm server, fetches `project-demo` as card JSON, and exits
+- `pnpm factory:go -- --brief-url <url> --target-realm-path <path>`
+  - Validates one-shot factory inputs and prints a machine-readable run summary
+- `pnpm test`
+  - Runs package tests from `tests/*.test.ts` and `tests/*.spec.ts`
+- `pnpm test:node`
+  - Runs only Node-side `tests/*.test.ts`
 - `pnpm test:playwright`
   - Runs the browser tests against a fresh per-test realm server cloned from the cached template
 
@@ -42,6 +48,31 @@ pnpm serve:realm ./my-realm
 pnpm smoke:realm ./my-realm Person/example-card
 ```
 
+## `factory:go`
+
+Usage:
+
+```bash
+pnpm factory:go -- \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm-path /path/to/target-realm \
+  [--target-realm-url http://localhost:4201/hassan/personal/] \
+  [--mode implement]
+```
+
+Parameters:
+
+- `--brief-url`
+  - Required. Absolute URL for the source brief card the factory should use as input.
+- `--target-realm-path`
+  - Required. Local filesystem path to the Boxel realm where the factory should write output.
+- `--target-realm-url`
+  - Optional. Absolute URL for that target realm when it is already known and should be included in the execution summary.
+- `--mode`
+  - Optional. One of `bootstrap`, `implement`, or `resume`. Defaults to `implement`.
+- `--help`
+  - Optional. Prints the command usage and exits.
+
 ## Layout
 
 - `test-fixtures/darkfactory-adopter/`
@@ -49,7 +80,9 @@ pnpm smoke:realm ./my-realm Person/example-card
 - `src/harness.ts`
   - Cached template DB creation and isolated realm server startup
 - `tests/`
-  - Playwright fixtures and browser specs
+  - Package test home for top-level `*.test.ts` and `*.spec.ts`
+- `tests/helpers/`
+  - Shared test helpers only, not standalone test files
 
 ## Notes
 

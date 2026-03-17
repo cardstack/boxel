@@ -43,6 +43,21 @@ Instead, split testing into layers:
 
 The more logic we can move into deterministic code, the less fragile the overall system becomes.
 
+## Test Location Rule
+
+All package tests should live under `packages/software-factory/tests/`.
+
+Use these conventions:
+
+- `tests/*.test.ts`
+  - Node-side deterministic tests such as CLI, parsing, and orchestration logic
+- `tests/*.spec.ts`
+  - Playwright/browser tests
+- `tests/helpers/`
+  - shared helpers only, not standalone test files
+
+Do not add package tests under `src/`.
+
 ## What We Are Actually Testing
 
 We are not trying to prove that a model "thinks well."
@@ -69,7 +84,7 @@ Test the `DarkFactory` cards like normal Boxel artifacts:
 
 Coverage should include:
 
-- public resolution from `http://localhost:4201/software-factory/darkfactory`
+- public resolution from the published `darkfactory` module as served by the isolated software-factory test harness
 - rendering of the shared tracker cards
 - cross-realm adoption by an external realm
 - any card queries or embedded relations used by the tracker UI
@@ -100,6 +115,12 @@ Focus areas:
 - resume and idempotency behavior
 
 These should be covered with unit tests and focused integration tests.
+
+Hermetic requirement for this layer:
+
+- deterministic `factory:go` tests must not depend on an ambient realm server on `http://localhost:4201/`
+- when a test only needs an absolute URL shape, use a synthetic URL such as `https://briefs.example.test/...`
+- when a test needs a live realm, use the isolated software-factory harness rather than external local infrastructure
 
 Examples:
 
@@ -192,6 +213,10 @@ Use:
 
 - unit tests for CLI argument parsing
 - integration tests for command startup and summary output
+
+Location:
+
+- keep these tests as top-level `packages/software-factory/tests/*.test.ts`, not under `src/`
 
 ### Brief Normalization
 
