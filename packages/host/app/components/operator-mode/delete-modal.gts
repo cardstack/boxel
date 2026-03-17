@@ -18,6 +18,7 @@ interface Signature {
     isDeleteRunning?: boolean;
     error?: string;
     size?: 'x-small' | 'small' | 'medium' | 'large' | 'full-screen';
+    containerClass?: string;
   };
   Blocks: {
     default: [];
@@ -35,7 +36,7 @@ let component: TemplateOnlyComponent<Signature> = <template>
     @onClose={{@onCancel}}
     style={{cssVar boxel-modal-offset-top='40vh'}}
   >
-    <section class='delete'>
+    <section class='delete {{@containerClass}}'>
       <div class='content' data-test-delete-msg>
         {{#if (has-block 'content')}}
           {{yield to='content'}}

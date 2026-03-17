@@ -118,25 +118,36 @@ export default class Workspace extends Component<Signature> {
           @onConfirm={{this.confirmDeleteWorkspace}}
           @isDeleteRunning={{this.deleteWorkspaceTask.isRunning}}
           @error={{this.deleteError}}
-          @size='small'
+          @size='medium'
+          @containerClass='workspace-delete-dialog'
         >
           <:content>
             <div class='workspace-delete-copy'>
               <header class='workspace-delete-header'>
-                <p class='workspace-delete-eyebrow'>Delete workspace</p>
-                <p class='workspace-delete-title'>{{this.name}}</p>
+                <p class='workspace-delete-title'>Delete Workspace</p>
               </header>
 
-              {{#if this.loadDeleteSummaryTask.isRunning}}
-                <p class='workspace-delete-summary-card'>
-                  Checking what will be removed from this workspace...
-                </p>
-              {{else if this.deleteSummaryText}}
-                <p class='workspace-delete-summary-card'>
-                  Contains
-                  {{this.deleteSummaryText}}.
-                </p>
-              {{/if}}
+              <section class='workspace-delete-summary-card'>
+                <div class='workspace-delete-summary-row'>
+                  <RealmIcon
+                    class='workspace-delete-summary-icon'
+                    @realmInfo={{this.realmInfo}}
+                  />
+                  <div class='workspace-delete-summary-body'>
+                    <p class='workspace-delete-summary-name'>{{this.name}}</p>
+                    {{#if this.loadDeleteSummaryTask.isRunning}}
+                      <p class='workspace-delete-summary-text'>
+                        Checking what will be removed from this workspace...
+                      </p>
+                    {{else if this.deleteSummaryText}}
+                      <p class='workspace-delete-summary-text'>
+                        Contains
+                        {{this.deleteSummaryText}}
+                      </p>
+                    {{/if}}
+                  </div>
+                </div>
+              </section>
 
               <div class='workspace-delete-danger-panel'>
                 <p class='workspace-delete-warning'>
@@ -282,70 +293,101 @@ export default class Workspace extends Component<Signature> {
       .workspace-delete-copy {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp);
-        max-width: 31rem;
-        margin: 0 auto;
+        gap: var(--boxel-sp-lg);
+        margin: 0;
         text-align: left;
       }
       .workspace-delete-copy p {
         margin: 0;
       }
       .workspace-delete-header {
-        padding-bottom: var(--boxel-sp-xs);
-        border-bottom: 1px solid rgb(0 0 0 / 10%);
-      }
-      .workspace-delete-eyebrow {
-        color: var(--boxel-danger);
-        font: 700 var(--boxel-font-xs);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        padding: 0;
       }
       .workspace-delete-title {
         color: var(--boxel-dark);
-        font: 700 var(--boxel-font-lg);
+        font-weight: 700;
+        font-size: 1.75rem;
+        line-height: 1;
+        font-family: var(--boxel-font-family);
+        letter-spacing: -0.025em;
       }
       .workspace-delete-summary-card {
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
         color: var(--boxel-dark);
-        background: rgb(0 0 0 / 4%);
-        border: 1px solid rgb(0 0 0 / 8%);
-        border-radius: 0.75rem;
-        font: 600 var(--boxel-font-sm);
+        background: var(--boxel-50);
+        border: var(--boxel-border-card);
+        border-radius: var(--boxel-border-radius-xxl);
+      }
+      .workspace-delete-summary-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .workspace-delete-summary-icon {
+        flex-shrink: 0;
+        --boxel-realm-icon-size: var(--boxel-icon-lg);
+        --boxel-realm-icon-border-radius: 999px;
+        box-shadow: 0 0 0 2px rgb(255 255 255 / 90%);
+      }
+      .workspace-delete-summary-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-6xs);
+      }
+      .workspace-delete-summary-name {
+        color: var(--boxel-dark);
+        font-weight: 700;
+        font-size: 1.125rem;
+        line-height: 1.15;
+        font-family: var(--boxel-font-family);
+        letter-spacing: -0.02em;
+      }
+      .workspace-delete-summary-text {
+        color: var(--boxel-450);
+        font-weight: 400;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-family: var(--boxel-font-family);
       }
       .workspace-delete-danger-panel {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        background: rgb(255 80 80 / 6%);
-        border: 1px solid rgb(255 80 80 / 16%);
-        border-radius: 0.9rem;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+        background: rgb(255 90 90 / 9%);
+        border: 1px solid rgb(255 90 90 / 18%);
+        border-radius: var(--boxel-border-radius-xxl);
       }
       .workspace-delete-warning {
-        color: var(--boxel-700);
-        font: 500 var(--boxel-font-sm);
-        line-height: 1.4;
-      }
-      .workspace-delete-warning--strong {
         color: var(--boxel-dark);
         font-weight: 600;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-family: var(--boxel-font-family);
+      }
+      .workspace-delete-warning--strong {
+        font-weight: 700;
+        font-size: var(--boxel-font-size);
+        line-height: var(--boxel-line-height);
       }
       .workspace-delete-published {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-xs);
-        background: rgb(255 255 255 / 88%);
-        border-radius: 0.7rem;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
+        background: var(--boxel-light);
+        border-radius: var(--boxel-border-radius-xl);
       }
       .workspace-delete-published-title {
         color: var(--boxel-dark);
-        font: 700 var(--boxel-font-xs);
-        letter-spacing: 0.02em;
+        font-weight: 700;
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.25;
+        font-family: var(--boxel-font-family);
       }
       .workspace-delete-published-list {
         margin: 0;
-        padding-left: 1rem;
+        padding-left: var(--boxel-sp);
         text-align: left;
       }
       .workspace-delete-published-list li + li {
@@ -353,11 +395,18 @@ export default class Workspace extends Component<Signature> {
       }
       .workspace-delete-published-list a {
         color: var(--boxel-blue);
-        font: 500 var(--boxel-font-xs);
-        line-height: 1.4;
+        font-weight: 600;
+        font-size: var(--boxel-font-size-sm);
+        line-height: var(--boxel-line-height-sm);
+        font-family: var(--boxel-font-family);
         word-break: break-all;
         text-decoration-thickness: 1px;
         text-underline-offset: 0.12em;
+      }
+      :global(.workspace-delete-dialog) {
+        background-color: var(--boxel-light-100);
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-lg);
+        border-radius: var(--boxel-border-radius-xxl);
       }
     </style>
   </template>
