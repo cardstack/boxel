@@ -1,6 +1,15 @@
 #!/bin/sh
-#MISE description="Wait for PostgreSQL to be ready"
+#MISE description="Ensure PostgreSQL is running and ready"
 
+# Start the container if needed (same logic as start-pg.sh)
+if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
+  echo "Starting new boxel-pg container on port ${PGPORT:-5435}..."
+  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 >/dev/null
+else
+  docker start boxel-pg >/dev/null 2>&1 || true
+fi
+
+# Wait for readiness
 COUNT=0
 MAX_ATTEMPTS=10
 
