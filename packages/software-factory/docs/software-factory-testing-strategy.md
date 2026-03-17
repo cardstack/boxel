@@ -12,7 +12,20 @@ Define a practical testing strategy for the software-factory work so that:
 This document applies to:
 
 - the public `DarkFactory` module in `packages/software-factory/realm`
-- the `factory:go` orchestration work in `packages/software-factory/experiment_1`
+- the `factory:go` orchestration work in `packages/software-factory/`
+
+## TypeScript Policy
+
+`packages/software-factory/` is a 100% TypeScript workspace.
+
+Rules:
+
+- new package scripts should be `.ts`
+- new package tests should be `.ts`
+- do not add new `.mjs` files in this package
+- package scripts should be executable through typed TypeScript entrypoints, with typechecking included in package linting
+- `.gts` files should follow the repo-standard Glint setup through `tsconfig.json`
+- package linting should continue to use `tsc` for the package TypeScript entrypoints and tests
 
 ## Realm Roles
 

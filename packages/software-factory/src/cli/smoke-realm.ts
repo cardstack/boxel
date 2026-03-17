@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 
-import { fetchRealmCardJson } from '../harness.ts';
-import { readSupportContext } from '../runtime-metadata.ts';
+import { fetchRealmCardJson } from '../harness';
+import { readSupportContext } from '../runtime-metadata';
 
 let realmDir = resolve(
   process.cwd(),

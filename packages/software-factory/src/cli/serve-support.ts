@@ -1,8 +1,8 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { startFactorySupportServices } from '../harness.ts';
-import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata.ts';
+import { startFactorySupportServices } from '../harness';
+import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata';
 
 let realmDir = resolve(
   process.cwd(),

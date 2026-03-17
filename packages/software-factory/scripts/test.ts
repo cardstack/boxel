@@ -3,8 +3,14 @@ import { resolve } from 'node:path';
 
 const packageRoot = resolve(new URL('..', import.meta.url).pathname);
 
-function parseArgs(argv) {
-  let options = {
+type TestRunnerOptions = {
+  nodeOnly: boolean;
+  playwrightOnly: boolean;
+  headed: boolean;
+};
+
+function parseArgs(argv: string[]): TestRunnerOptions {
+  let options: TestRunnerOptions = {
     nodeOnly: false,
     playwrightOnly: false,
     headed: false,
@@ -33,8 +39,8 @@ function parseArgs(argv) {
   return options;
 }
 
-async function runCommand(command) {
-  await new Promise((resolvePromise, reject) => {
+async function runCommand(command: string): Promise<void> {
+  await new Promise<void>((resolvePromise, reject) => {
     let child = spawn(command, {
       cwd: packageRoot,
       shell: true,
@@ -58,7 +64,7 @@ async function runCommand(command) {
   });
 }
 
-async function main() {
+async function main(): Promise<void> {
   let options = parseArgs(process.argv.slice(2));
   let shouldRunNode = !options.playwrightOnly;
   let shouldRunPlaywright = !options.nodeOnly;
@@ -74,7 +80,8 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
+main().catch((error: unknown) => {
+  let message = error instanceof Error ? error.message : String(error);
+  console.error(message);
   process.exit(1);
 });

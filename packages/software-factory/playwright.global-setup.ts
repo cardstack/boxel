@@ -6,7 +6,7 @@ import {
   sharedRuntimeDir,
   writeSupportMetadata,
   getSupportMetadataFile,
-} from './src/runtime-metadata.ts';
+} from './src/runtime-metadata';
 
 const packageRoot = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const configuredRealmDir = resolve(

@@ -1,14 +1,12 @@
 {
   "compilerOptions": {
     "target": "es2020",
-    "allowImportingTsExtensions": true,
     "allowJs": true,
-    "module": "NodeNext",
-    "moduleResolution": "nodenext",
+    "module": "es2022",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": false,
-    "useDefineForClassFields": false,
+    "lib": ["es2022", "dom", "dom.iterable"],
     "noImplicitAny": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
@@ -18,13 +16,16 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
+    "noEmitOnError": false,
     "noEmit": true,
+    "inlineSourceMap": true,
+    "inlineSources": true,
     "baseUrl": ".",
-    "esModuleInterop": true,
     "skipLibCheck": true,
     "strict": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
       "@cardstack/boxel-ui/helpers": ["../boxel-ui/addon/src/helpers"],
@@ -38,11 +39,13 @@
     "environment": ["ember-loose", "ember-template-imports"]
   },
   "include": [
+    "../base/types/**/*.d.ts",
+    "./scripts/**/*.ts",
     "./src/**/*",
-    "./realm/**/*",
+    "./tests/**/*",
     "./playwright.config.ts",
     "./playwright.global-setup.ts",
     "./playwright.global-teardown.ts"
   ],
-  "exclude": ["./test-fixtures/**", "./tests/**"]
+  "exclude": ["./test-fixtures/**", "./realm/**/*"]
 }

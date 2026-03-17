@@ -4,7 +4,7 @@ import {
   getFactoryEntrypointUsage,
   parseFactoryEntrypointArgs,
   wantsFactoryEntrypointHelp,
-} from '../factory-entrypoint.js';
+} from '../factory-entrypoint';
 
 try {
   if (wantsFactoryEntrypointHelp(process.argv.slice(2))) {

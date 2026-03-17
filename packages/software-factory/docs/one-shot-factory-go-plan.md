@@ -38,13 +38,13 @@ If we intentionally include output-like examples in the source realm, they shoul
 
 `experiment_1` already has useful primitives:
 
-- `scripts/boxel-session.mjs`
+- `scripts/boxel-session.ts`
   - gets browser-local auth/session payloads
-- `scripts/boxel-search.mjs`
+- `scripts/boxel-search.ts`
   - searches a realm via `_search`
-- `scripts/pick-ticket.mjs`
+- `scripts/pick-ticket.ts`
   - finds candidate tickets
-- `scripts/run-realm-tests.mjs`
+- `scripts/run-realm-tests.ts`
   - runs realm-hosted Playwright tests against a scratch realm
 - `realms/guidance-tasks/darkfactory-schema.gts`
   - defines `Project`, `Ticket`, `KnowledgeArticle`, `AgentProfile`
@@ -231,7 +231,7 @@ The first version should support:
 Add a script:
 
 ```json
-"factory:go": "node scripts/factory-go.mjs"
+"factory:go": "ts-node --esm --transpileOnly scripts/factory-go.ts"
 ```
 
 Expected usage:
@@ -258,7 +258,7 @@ CLI parameters for the first version:
 
 ## Proposed Implementation Pieces
 
-### A. `scripts/factory-go.mjs`
+### A. `scripts/factory-go.ts`
 
 This should be the top-level orchestrator.
 
@@ -275,7 +275,7 @@ Responsibilities:
 
 This file should stay thin and delegate to helpers.
 
-### B. `scripts/lib/factory-bootstrap.mjs`
+### B. `scripts/lib/factory-bootstrap.ts`
 
 New helper module for creating or updating:
 
@@ -300,7 +300,7 @@ For the first version, hard-code the bootstrap pattern:
 
 That is enough for a thin MVP flow.
 
-### C. `scripts/lib/factory-target-realm.mjs`
+### C. `scripts/lib/factory-target-realm.ts`
 
 New helper module for target realm preparation.
 
@@ -313,7 +313,7 @@ Responsibilities:
 
 This isolates the realm bootstrapping concern from the orchestration logic.
 
-### D. `scripts/lib/factory-brief.mjs`
+### D. `scripts/lib/factory-brief.ts`
 
 New helper module for brief intake.
 
@@ -331,7 +331,7 @@ Responsibilities:
 
 For version one, the `isVague` check can be heuristic and simple.
 
-### E. `scripts/lib/factory-loop.mjs`
+### E. `scripts/lib/factory-loop.ts`
 
 New helper module for the first execution loop.
 
@@ -406,11 +406,11 @@ It does not need to complete an entire multi-ticket product in version one.
 
 Files to add:
 
-- `packages/software-factory/scripts/factory-go.mjs`
-- `packages/software-factory/scripts/lib/factory-bootstrap.mjs`
-- `packages/software-factory/scripts/lib/factory-target-realm.mjs`
-- `packages/software-factory/scripts/lib/factory-brief.mjs`
-- `packages/software-factory/scripts/lib/factory-loop.mjs`
+- `packages/software-factory/scripts/factory-go.ts`
+- `packages/software-factory/scripts/lib/factory-bootstrap.ts`
+- `packages/software-factory/scripts/lib/factory-target-realm.ts`
+- `packages/software-factory/scripts/lib/factory-brief.ts`
+- `packages/software-factory/scripts/lib/factory-loop.ts`
 
 Files to update:
 
@@ -421,7 +421,7 @@ Files to update:
 
 Optional later additions:
 
-- `packages/software-factory/tests/factory-go.spec.mjs`
+- `packages/software-factory/tests/factory-go.spec.ts`
   - verifies bootstrap behavior
 - generated card-test creation that reuses the existing `packages/software-factory` Playwright machinery when browser-level verification is warranted
 

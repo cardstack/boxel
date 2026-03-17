@@ -1,8 +1,8 @@
-import { readSupportContext } from '../runtime-metadata.ts';
+import { readSupportContext } from '../runtime-metadata';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { startFactoryRealmServer } from '../harness.ts';
+import { startFactoryRealmServer } from '../harness';
 
 let realmDir = resolve(
   process.cwd(),

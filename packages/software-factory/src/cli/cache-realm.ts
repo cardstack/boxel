@@ -4,8 +4,8 @@ import { dirname, resolve } from 'node:path';
 import {
   ensureFactoryRealmTemplate,
   type FactoryRealmOptions,
-} from '../harness.ts';
-import { readSupportContext } from '../runtime-metadata.ts';
+} from '../harness';
+import { readSupportContext } from '../runtime-metadata';
 
 let realmDir = resolve(
   process.cwd(),

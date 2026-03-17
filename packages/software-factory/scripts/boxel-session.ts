@@ -5,16 +5,17 @@ import {
   matrixLogin,
   parseArgs,
   printJson,
-} from './lib/boxel.mjs';
+} from './lib/boxel';
 
 let args = parseArgs(process.argv.slice(2));
 let matrixAuth = await matrixLogin();
 let realmTokens = await getAccessibleRealmTokens(matrixAuth);
-let requestedRealms = args.realm
-  ? Array.isArray(args.realm)
-    ? args.realm
-    : [args.realm]
-  : [];
+let requestedRealms =
+  typeof args.realm === 'string'
+    ? [args.realm]
+    : Array.isArray(args.realm)
+      ? args.realm
+      : [];
 let session = buildBrowserSession(realmTokens, requestedRealms);
 
 printJson({

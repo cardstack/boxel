@@ -6,11 +6,8 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
-import { defaultSupportMetadataFile } from '../src/runtime-metadata.js';
-import {
-  buildBrowserState,
-  installBrowserState,
-} from './helpers/browser-auth.js';
+import { defaultSupportMetadataFile } from '../src/runtime-metadata';
+import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
 type StartedFactoryRealm = {
   realmDir: string;

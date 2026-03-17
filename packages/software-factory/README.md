@@ -8,6 +8,14 @@ shell.
 
 ## Prerequisites
 
+This package is TypeScript-only. New scripts, tests, and package utilities
+should be written in `.ts`, not `.mjs`.
+
+Editor/type support for `.gts` files is provided through `glint` via this
+package's `tsconfig.json`, matching the realm-package pattern used elsewhere in
+the repo. Package linting still uses `tsc` for the package TypeScript
+entrypoints and tests.
+
 - Docker running
 - Host app assets available at `http://localhost:4200/`
   - use `cd packages/host && pnpm serve:dist`
@@ -39,6 +47,14 @@ startup do not require a separate external realm server on `http://localhost:420
   - Runs only Node-side `tests/*.test.ts`
 - `pnpm test:playwright`
   - Runs the browser tests against a fresh per-test realm server cloned from the cached template
+- `pnpm test:realm -- --realm-path ./realms/<project-realm>`
+  - Runs realm-hosted Playwright specs via the typed realm test runner
+- `pnpm boxel:session`
+  - Prints browser session/auth payloads for the active Boxel profile
+- `pnpm boxel:search -- --realm <realm-url> ...`
+  - Runs a typed `_search` query against a realm
+- `pnpm boxel:pick-ticket -- --realm <realm-url> ...`
+  - Finds candidate tracker tickets in a target realm
 
 All commands accept an optional realm directory argument:
 

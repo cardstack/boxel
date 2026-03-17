@@ -10,7 +10,7 @@ import {
   getFactoryEntrypointUsage,
   parseFactoryEntrypointArgs,
   wantsFactoryEntrypointHelp,
-} from '../src/factory-entrypoint.js';
+} from '../src/factory-entrypoint';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';

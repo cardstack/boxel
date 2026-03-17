@@ -74,7 +74,7 @@ export class AgentProfile extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: AgentProfile) {
-      return this.cardInfo?.title ?? this.agentId ?? 'Unnamed Agent';
+      return this.cardTitle ?? this.agentId ?? 'Unnamed Agent';
     },
   });
 }
@@ -91,7 +91,7 @@ export class KnowledgeArticle extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: KnowledgeArticle) {
-      return this.cardInfo?.title ?? this.articleTitle ?? 'Untitled Article';
+      return this.cardTitle ?? this.articleTitle ?? 'Untitled Article';
     },
   });
 }
@@ -118,7 +118,7 @@ export class Ticket extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Ticket) {
-      return this.cardInfo?.title ?? this.summary ?? 'Untitled Ticket';
+      return this.cardTitle ?? this.summary ?? 'Untitled Ticket';
     },
   });
 }
@@ -153,7 +153,7 @@ export class Project extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
-      return this.cardInfo?.title ?? this.projectName ?? 'Untitled Project';
+      return this.cardTitle ?? this.projectName ?? 'Untitled Project';
     },
   });
 }
@@ -167,7 +167,7 @@ export class DarkFactory extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: DarkFactory) {
-      return this.cardInfo?.title ?? this.factoryName ?? 'Dark Factory';
+      return this.cardTitle ?? this.factoryName ?? 'Dark Factory';
     },
   });
 }
