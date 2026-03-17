@@ -55,34 +55,74 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export REALMS_ROOT="./realms/${ENV_SLUG}"
   export REALMS_TEST_ROOT="./realms/${ENV_SLUG}_test"
 else
+  # Capture previous ENV_MODE before resetting it, so we can detect transitions
+  _PREV_ENV_MODE="${ENV_MODE:-}"
   export ENV_SLUG=""
   export ENV_MODE=""
 
-  # Service URLs — use :- so production/staging env vars are not clobbered
-  export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
-  export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
-  export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
-  export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
-  export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
-  export PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
-  export PRERENDER_MGR_URL="${PRERENDER_MGR_URL:-http://localhost:4222}"
-  export ICONS_URL="${ICONS_URL:-http://localhost:4206}"
-  export HOST_URL="${HOST_URL:-http://localhost:4200}"
+  if [ "$_PREV_ENV_MODE" = true ]; then
+    # Transitioning from env mode to standard mode in the same shell:
+    # reset derived variables to standard defaults to avoid stale env-mode values.
 
-  # Database
-  export PGDATABASE="${PGDATABASE:-boxel}"
-  export PGDATABASE_TEST="${PGDATABASE_TEST:-boxel_test}"
+    # Service URLs
+    export REALM_BASE_URL="http://localhost:4201"
+    export REALM_TEST_URL="http://localhost:4202"
+    export MATRIX_URL_VAL="http://localhost:8008"
+    export WORKER_MGR_URL="http://localhost:4210"
+    export WORKER_TEST_MGR_URL="http://localhost:4211"
+    export PRERENDER_URL="http://localhost:4221"
+    export PRERENDER_MGR_URL="http://localhost:4222"
+    export ICONS_URL="http://localhost:4206"
+    export HOST_URL="http://localhost:4200"
 
-  # Ports (fixed in standard mode)
-  export REALM_PORT="${REALM_PORT:-4201}"
-  export TEST_PORT="${TEST_PORT:-4202}"
-  export WORKER_PORT="${WORKER_PORT:-4210}"
-  export WORKER_TEST_PORT="${WORKER_TEST_PORT:-4211}"
-  export PRERENDER_PORT="${PRERENDER_PORT:-4221}"
-  export PRERENDER_MGR_PORT="${PRERENDER_MGR_PORT:-4222}"
-  export ICONS_PORT="${ICONS_PORT:-4206}"
+    # Database
+    export PGDATABASE="boxel"
+    export PGDATABASE_TEST="boxel_test"
 
-  # Paths
-  export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
-  export REALMS_TEST_ROOT="${REALMS_TEST_ROOT:-./realms/localhost_4202}"
+    # Ports (fixed in standard mode)
+    export REALM_PORT=4201
+    export TEST_PORT=4202
+    export WORKER_PORT=4210
+    export WORKER_TEST_PORT=4211
+    export PRERENDER_PORT=4221
+    export PRERENDER_MGR_PORT=4222
+    export ICONS_PORT=4206
+
+    # Paths
+    export REALMS_ROOT="./realms/localhost_4201"
+    export REALMS_TEST_ROOT="./realms/localhost_4202"
+  else
+    # Fresh standard mode or non-env-mode shell:
+    # use :- so production/staging env vars are not clobbered.
+
+    # Service URLs — use :- so production/staging env vars are not clobbered
+    export REALM_BASE_URL="${REALM_BASE_URL:-http://localhost:4201}"
+    export REALM_TEST_URL="${REALM_TEST_URL:-http://localhost:4202}"
+    export MATRIX_URL_VAL="${MATRIX_URL_VAL:-http://localhost:8008}"
+    export WORKER_MGR_URL="${WORKER_MGR_URL:-http://localhost:4210}"
+    export WORKER_TEST_MGR_URL="${WORKER_TEST_MGR_URL:-http://localhost:4211}"
+    export PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
+    export PRERENDER_MGR_URL="${PRERENDER_MGR_URL:-http://localhost:4222}"
+    export ICONS_URL="${ICONS_URL:-http://localhost:4206}"
+    export HOST_URL="${HOST_URL:-http://localhost:4200}"
+
+    # Database
+    export PGDATABASE="${PGDATABASE:-boxel}"
+    export PGDATABASE_TEST="${PGDATABASE_TEST:-boxel_test}"
+
+    # Ports (fixed in standard mode)
+    export REALM_PORT="${REALM_PORT:-4201}"
+    export TEST_PORT="${TEST_PORT:-4202}"
+    export WORKER_PORT="${WORKER_PORT:-4210}"
+    export WORKER_TEST_PORT="${WORKER_TEST_PORT:-4211}"
+    export PRERENDER_PORT="${PRERENDER_PORT:-4221}"
+    export PRERENDER_MGR_PORT="${PRERENDER_MGR_PORT:-4222}"
+    export ICONS_PORT="${ICONS_PORT:-4206}"
+
+    # Paths
+    export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
+    export REALMS_TEST_ROOT="${REALMS_TEST_ROOT:-./realms/localhost_4202}"
+  fi
+
+  unset _PREV_ENV_MODE
 fi
