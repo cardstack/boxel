@@ -1,7 +1,4 @@
 #!/bin/sh
 #MISE description="Stop all services for an environment and clean up"
-#MISE usage='arg "[environment]" help="Environment name (defaults to BOXEL_ENVIRONMENT or current git branch)"'
-#MISE usage='flag "--drop-db" help="Also drop the per-environment databases"'
-#MISE usage='flag "--dry-run" help="Preview what would be killed without taking action"'
 
 exec "$MISE_PROJECT_DIR/scripts/stop-environment.sh" "$@"
