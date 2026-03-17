@@ -6,40 +6,7 @@
 # MISE dir is packages/realm-server, so ../.. is repo root
 PATH="$(pwd)/../../node_modules/.bin:$(pwd)/node_modules/.bin:$PATH"
 
-READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-
-# Phase 1 readiness URLs (realm server + services)
-BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
-SKILLS_READY="http-get://${REALM_BASE_URL#http://}/skills/${READY_PATH}"
-REALM_URLS="${BASE_REALM_READY}|${SKILLS_READY}"
-
-if [ -z "${SKIP_CATALOG:-}" ]; then
-  REALM_URLS="${REALM_URLS}|http-get://${REALM_BASE_URL#http://}/catalog/${READY_PATH}"
-fi
-if [ -z "${SKIP_BOXEL_HOMEPAGE:-}" ]; then
-  REALM_URLS="${REALM_URLS}|http-get://${REALM_BASE_URL#http://}/boxel-homepage/${READY_PATH}"
-fi
-if [ -z "${SKIP_EXPERIMENTS:-}" ]; then
-  REALM_URLS="${REALM_URLS}|http-get://${REALM_BASE_URL#http://}/experiments/${READY_PATH}"
-fi
-REALM_URLS="${REALM_URLS}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}"
-
-REALM_URLS="${REALM_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}"
-
-# Phase 2 readiness URL (test realms)
-NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
-
-# In environment mode, bootstrap infra before starting services
-if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  ./scripts/start-pg.sh
-  echo "Waiting for Postgres to accept connections..."
-  until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
-  REPO_ROOT="$(cd "../.." && pwd)"
-  "$REPO_ROOT/scripts/ensure-branch-db.sh"
-  echo "Running database migrations..."
-  pnpm migrate
-  ./scripts/start-matrix.sh
-fi
+. "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
 # Start host app in background and wait for it before launching the rest.
 # start-server-and-test v1.x only supports 2 server phases (5 args), so we
@@ -57,7 +24,7 @@ echo "Host app is ready."
 
 WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
-  "$REALM_URLS" \
+  "$PHASE1_URLS" \
   'run-p -ln start:worker-test start:test-realms' \
   "$NODE_TEST_REALM_READY" \
   'wait'
