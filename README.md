@@ -78,6 +78,7 @@ mise-tasks/
   dev-without-matrix           # Dev stack (expects Matrix already running)
   test-services-host           # Services for host test suite
   test-services-matrix         # Services for matrix test suite
+  stop-environment                  # Stop all services for an environment
 ```
 
 All tasks automatically receive environment variables from `mise-tasks/lib/env-vars.sh` (service URLs, ports, database names, paths). In environment mode (`BOXEL_ENVIRONMENT` set), these point to Traefik hostnames with dynamic ports. In standard mode, they use fixed localhost ports.
@@ -559,12 +560,12 @@ In environment mode, services are available at:
 
 Where `<slug>` is the lowercased, sanitized form of `BOXEL_ENVIRONMENT` (e.g., `feature/my-branch` becomes `feature-my-branch`).
 
-### Utility script
+### Utility: stop an environment
 
-Run this script to terminate any dangling processes for an environment:
+Terminate all processes for an environment and clean up Traefik configs:
 
 ```
-./scripts/stop-branch.sh [environment-name]
+mise run stop-environment [environment-name]
 ```
 
 It also has a `--drop-db` flag if you need to start over, and `--dry-run` to see what processes would be terminated.

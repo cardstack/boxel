@@ -2,7 +2,7 @@
 # Stop all processes for a given environment and clean up Traefik configs.
 #
 # Usage:
-#   ./scripts/stop-branch.sh [environment-name]
+#   mise run stop-environment [environment-name]
 #
 # If no environment is given, uses $BOXEL_ENVIRONMENT or the current git branch.
 # Pass --drop-db to also drop the per-environment databases.
@@ -67,7 +67,7 @@ fi
 ROOT_PIDS=$(ps ax -o pid,command 2>/dev/null \
   | grep -E "($MATCH_PATTERN)" \
   | grep -v "grep" \
-  | grep -v "stop-branch" \
+  | grep -v "stop-environment" \
   | grep -v "shell-snapshots" `# exclude Claude Code shell wrappers` \
   | awk '{print $1}' \
   | sort -u)
