@@ -33,12 +33,9 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-type ListingType = 'card' | 'app' | 'skill' | 'theme' | 'field';
+type ListingType = 'card' | 'field';
 const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
-  app: 'AppListing',
-  skill: 'SkillListing',
-  theme: 'ThemeListing',
   field: 'FieldListing',
 };
 
@@ -177,66 +174,12 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async guessListingType(
     codeRef: ResolvedCodeRef,
   ): Promise<ListingType> {
-    if (this.isTheme(codeRef)) {
-      return 'theme';
-    }
     if (await this.isFieldCodeRef(codeRef)) {
       return 'field';
     }
-    try {
-      const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-      const systemPrompt =
-        'Respond ONLY with one token: card, app, skill, or theme. No JSON, no punctuation.';
-      const userPrompt = 'What is the listingType?';
-      const result = await oneShot.execute({
-        codeRef,
-        systemPrompt,
-        userPrompt,
-        llmModel: 'openai/gpt-4.1-nano',
-      });
-      const maybeType = parseResponseToSingleWord(result.output, true);
-      if (
-        maybeType === 'app' ||
-        maybeType === 'skill' ||
-        maybeType === 'theme'
-      ) {
-        return maybeType;
-      }
-      return 'card';
-    } catch {
-      return 'card';
-    }
+    return 'card';
   }
 
-  private isTheme(codeRef: ResolvedCodeRef): boolean {
-    const codeRefModule = codeRef?.module?.toLowerCase();
-    const codeRefName = codeRef?.name?.toLowerCase();
-    const knownBaseModules = [
-      'https://cardstack.com/base/structured-theme',
-      'https://cardstack.com/base/style-reference',
-      'https://cardstack.com/base/brand-guide',
-    ];
-    if (
-      codeRefModule &&
-      knownBaseModules.some((base) => codeRefModule.includes(base))
-    ) {
-      return true;
-    }
-    if (codeRefName) {
-      const normalizedName = codeRefName
-        .split('')
-        .filter((char) => char !== '-' && char !== '_' && char !== ' ')
-        .join('');
-      if (
-        ['theme', 'structuredtheme', 'stylereference', 'brandguide'].includes(
-          normalizedName,
-        )
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   private async isFieldCodeRef(codeRef: ResolvedCodeRef): Promise<boolean> {
     try {
@@ -568,14 +511,3 @@ function parseResponseToString(
   return firstLine.slice(0, maxLength);
 }
 
-function parseResponseToSingleWord(
-  response?: string,
-  lowerCase: boolean = false,
-): string | undefined {
-  const str = parseResponseToString(response, 50)?.trim();
-  if (!str) return undefined;
-  let token = str.split(/\s+/)[0].replace(/[^A-Za-z0-9_-]/g, '');
-  if (!token) return undefined;
-  if (lowerCase) token = token.toLowerCase();
-  return token;
-}
