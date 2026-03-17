@@ -202,20 +202,18 @@ export class CreateListingPRHandler {
       eventContent.input && typeof eventContent.input === 'object'
         ? (eventContent.input as Record<string, unknown>)
         : {};
-    let listingDescription =
-      typeof input.listingDescription === 'string'
-        ? input.listingDescription.trim()
-        : typeof input.description === 'string'
-          ? input.description.trim()
-          : '';
+    let listingSummary =
+      typeof input.listingSummary === 'string'
+        ? input.listingSummary.trim()
+        : '';
     let files = await getContentsFromRealm(runCommandResult?.cardResultString);
-    let descriptionValue = listingDescription || '_No description provided_';
 
     return [
       '## Summary',
-      '',
+       ...(listingSummary
+        ? [listingSummary, '', '---']
+        : []),
       `- Listing Name: ${context.listingDisplayName}`,
-      `- Listing Description: ${descriptionValue}`,
       `- Room ID: \`${context.roomId}\``,
       `- User ID: \`${runAs}\``,
       `- Number of Files: ${files.files.length}`,
