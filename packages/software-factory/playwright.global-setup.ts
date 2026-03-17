@@ -1,14 +1,13 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   sharedRuntimeDir,
   writeSupportMetadata,
   getSupportMetadataFile,
 } from './src/runtime-metadata';
 
-const packageRoot = resolve(fileURLToPath(new URL('.', import.meta.url)));
+const packageRoot = resolve(__dirname);
 const configuredRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',

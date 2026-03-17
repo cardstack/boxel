@@ -34,6 +34,18 @@ Normal factory output should land in the target realm, not in `packages/software
 
 If we intentionally include output-like examples in the source realm, they should be clearly labeled as examples and live in an obviously non-canonical location such as `SampleOutput/` or `Examples/`.
 
+## Package Boundary Rule
+
+Implementation inside `packages/software-factory/` must not use relative imports that cross into another workspace package, for example `../../../realm-server/...`.
+
+If `software-factory` needs a small utility that currently lives in another package, one of these should happen instead:
+
+- copy the tiny module locally when the behavior is package-specific and intentionally duplicated
+- move the shared code into an explicit shared package or shared module location
+- consume it through a stable package entrypoint rather than a cross-package relative path
+
+Do not couple `software-factory` runtime code to another package's private file layout.
+
 ## Current State
 
 `experiment_1` already has useful primitives:

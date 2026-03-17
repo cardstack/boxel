@@ -4,19 +4,19 @@ import { resolve } from 'node:path';
 
 import { startFactoryRealmServer } from '../harness';
 
-let realmDir = resolve(
-  process.cwd(),
-  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
-);
+async function main(): Promise<void> {
+  let realmDir = resolve(
+    process.cwd(),
+    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+  );
 
-if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
-  let supportContext = readSupportContext();
-  if (supportContext) {
-    process.env.SOFTWARE_FACTORY_CONTEXT = JSON.stringify(supportContext);
+  if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
+    let supportContext = readSupportContext();
+    if (supportContext) {
+      process.env.SOFTWARE_FACTORY_CONTEXT = JSON.stringify(supportContext);
+    }
   }
-}
 
-try {
   let runtime = await startFactoryRealmServer({
     realmDir,
     templateDatabaseName: process.env.SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME,
@@ -44,9 +44,11 @@ try {
     process.exit(0);
   };
 
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-} catch (error) {
+  process.on('SIGINT', () => void stop());
+  process.on('SIGTERM', () => void stop());
+}
+
+main().catch((error: unknown) => {
   console.error(error);
   process.exit(1);
-}
+});

@@ -69,6 +69,14 @@ Use these conventions:
 - `tests/helpers/`
   - shared helpers only, not standalone test files
 
+For Playwright specs, the fixture module should expose the realm-server
+isolation mode explicitly:
+
+- `test.use({ realmServerMode: 'shared' })`
+  - default for read-only specs that can reuse one realm server within the spec
+- `test.use({ realmServerMode: 'isolated' })`
+  - use for mutable specs that need a fresh realm server per test
+
 Do not add package tests under `src/`.
 
 ## What We Are Actually Testing

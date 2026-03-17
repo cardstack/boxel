@@ -1,8 +1,7 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const packageRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const packageRoot = resolve(__dirname, '..');
 
 type TestRunnerOptions = {
   nodeOnly: boolean;
@@ -71,7 +70,9 @@ async function main(): Promise<void> {
   let shouldRunPlaywright = !options.nodeOnly;
 
   if (shouldRunNode) {
-    await runCommand('pnpm exec tsx --test tests/*.test.ts');
+    await runCommand(
+      'NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts',
+    );
   }
 
   if (shouldRunPlaywright) {

@@ -9,6 +9,7 @@ const adopterRealmDir = resolve(
 );
 
 test.use({ realmDir: adopterRealmDir });
+test.use({ realmServerMode: 'shared' });
 
 test('renders a project adopted from the public DarkFactory module', async ({
   authedPage,
