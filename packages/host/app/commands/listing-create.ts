@@ -180,7 +180,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
     return 'card';
   }
 
-
   private async isFieldCodeRef(codeRef: ResolvedCodeRef): Promise<boolean> {
     try {
       const cardDef = await loadCardDef(codeRef, {
@@ -510,4 +509,3 @@ function parseResponseToString(
   if (!firstLine) return undefined;
   return firstLine.slice(0, maxLength);
 }
-
