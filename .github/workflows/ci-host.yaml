@@ -214,6 +214,9 @@ jobs:
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
     if: always()
+    concurrency:
+      group: host-merge-reports-and-publish-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
 
