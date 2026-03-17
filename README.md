@@ -524,7 +524,7 @@ Here’s an example using Git worktrees and a `parallel` environment name:
 
 ```bash
 git worktree add ../parallel
-ln -s “$(pwd)/packages/boxel-icons/dist” ../parallel/packages/boxel-icons/dist # skip freshly building boxel-icons, which is quite slow
+ln -s "$(pwd)/packages/boxel-icons/dist" ../parallel/packages/boxel-icons/dist # skip freshly building boxel-icons, which is quite slow
 cd ../parallel
 
 pnpm install
