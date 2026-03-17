@@ -189,6 +189,10 @@ class RealmResource {
     return !!this.claims?.permissions?.includes('write');
   }
 
+  get isRealmOwner() {
+    return !!this.claims?.permissions?.includes('realm-owner');
+  }
+
   private loggingIn: Promise<void> | undefined;
 
   async login(): Promise<void> {
@@ -855,6 +859,10 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  isRealmOwner = (url: string): boolean => {
+    return this.knownRealm(url)?.isRealmOwner ?? false;
   };
 
   url = (url: string): string | undefined => {

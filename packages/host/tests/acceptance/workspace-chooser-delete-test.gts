@@ -24,6 +24,8 @@ import { setupApplicationTest } from '../helpers/setup';
 
 const ownedRealmURL = 'http://test-realm/testuser/owned-workspace/';
 const sharedRealmURL = 'http://test-realm/otheruser/shared-workspace/';
+const delegatedOwnerRealmURL =
+  'http://test-realm/otheruser/delegated-owner-workspace/';
 
 module('Acceptance | workspace-chooser-delete', function (hooks) {
   setupApplicationTest(hooks);
@@ -32,7 +34,7 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
-    activeRealms: [ownedRealmURL, sharedRealmURL],
+    activeRealms: [ownedRealmURL, sharedRealmURL, delegatedOwnerRealmURL],
   });
 
   setupBaseRealm(hooks);
@@ -108,13 +110,40 @@ export class Person extends CardDef {}
         },
       },
     });
+
+    await setupAcceptanceTestRealm({
+      realmURL: delegatedOwnerRealmURL,
+      mockMatrixUtils,
+      permissions: {
+        '@testuser:localhost': ['read', 'write', 'realm-owner'],
+        '@otheruser:localhost': ['read', 'write', 'realm-owner'],
+      },
+      contents: {
+        '.realm.json': {
+          name: 'Delegated Owner Workspace',
+          backgroundURL: null,
+          iconURL: null,
+        },
+        'index.json': {
+          data: {
+            type: 'card',
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/cards-grid',
+                name: 'CardsGrid',
+              },
+            },
+          },
+        },
+      },
+    });
   });
 
   hooks.afterEach(function () {
     window.localStorage.removeItem(SessionLocalStorageKey);
   });
 
-  test('delete workspace is enabled only for a workspace created by the current user', async function (assert) {
+  test('delete workspace is enabled only for a workspace the current user owns', async function (assert) {
     await visitOperatorMode({ workspaceChooserOpened: true });
 
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
@@ -126,9 +155,16 @@ export class Person extends CardDef {}
     assert
       .dom('[data-test-boxel-menu-item-text="Delete workspace"]')
       .hasAttribute('disabled');
+
+    await click(
+      `[data-test-workspace-menu-trigger="${delegatedOwnerRealmURL}"]`,
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete workspace"]')
+      .doesNotHaveAttribute('disabled');
   });
 
-  test('can delete a workspace created by the current user from the chooser', async function (assert) {
+  test('can delete a workspace the current user owns from the chooser', async function (assert) {
     await visitOperatorMode({
       workspaceChooserOpened: true,
       stacks: [[{ id: `${ownedRealmURL}index`, format: 'isolated' }]],

@@ -473,22 +473,8 @@ export default class Workspace extends Component<Signature> {
     };
   }
 
-  private get createdByCurrentUser() {
-    let currentUserName = this.matrixService.userName;
-    if (!currentUserName) {
-      return false;
-    }
-    let segments = new URL(this.args.realmURL).pathname
-      .split('/')
-      .filter(Boolean);
-    if (segments.length < 2) {
-      return false;
-    }
-    return segments[segments.length - 2] === currentUserName;
-  }
-
   private get canDeleteWorkspace() {
-    return this.createdByCurrentUser && this.realm.canWrite(this.args.realmURL);
+    return this.realm.isRealmOwner(this.args.realmURL);
   }
 
   private get deleteWorkspaceDisabled() {
