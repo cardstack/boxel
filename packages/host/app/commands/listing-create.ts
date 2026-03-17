@@ -33,10 +33,9 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 
-type ListingType = 'card' | 'app' | 'skill' | 'theme' | 'field';
+type ListingType = 'card' | 'skill' | 'theme' | 'field';
 const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
-  app: 'AppListing',
   skill: 'SkillListing',
   theme: 'ThemeListing',
   field: 'FieldListing',
@@ -186,7 +185,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     try {
       const oneShot = new OneShotLlmRequestCommand(this.commandContext);
       const systemPrompt =
-        'Respond ONLY with one token: card, app, skill, or theme. No JSON, no punctuation.';
+        'Respond ONLY with one token: card, skill, or theme. No JSON, no punctuation.';
       const userPrompt = 'What is the listingType?';
       const result = await oneShot.execute({
         codeRef,
@@ -196,7 +195,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
       });
       const maybeType = parseResponseToSingleWord(result.output, true);
       if (
-        maybeType === 'app' ||
         maybeType === 'skill' ||
         maybeType === 'theme'
       ) {
