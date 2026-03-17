@@ -301,15 +301,15 @@ export default class Workspace extends Component<Signature> {
         margin: 0;
       }
       .workspace-delete-header {
-        padding: 0;
+        padding-bottom: var(--boxel-sp);
       }
       .workspace-delete-title {
         color: var(--boxel-dark);
-        font-weight: 700;
-        font-size: 1.75rem;
-        line-height: 1;
+        font-weight: 600;
+        font-size: var(--boxel-font-size-xl);
+        line-height: 1.1;
         font-family: var(--boxel-font-family);
-        letter-spacing: -0.025em;
+        letter-spacing: -0.02em;
       }
       .workspace-delete-summary-card {
         padding: var(--boxel-sp) var(--boxel-sp-lg);
@@ -405,7 +405,7 @@ export default class Workspace extends Component<Signature> {
       }
       :global(.workspace-delete-dialog) {
         background-color: var(--boxel-light-100);
-        padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-lg);
+        padding: var(--boxel-sp-2xl) var(--boxel-sp-2xl) var(--boxel-sp-xl);
         border-radius: var(--boxel-border-radius-xxl);
       }
     </style>
