@@ -21,6 +21,9 @@ jobs:
   check-if-requires-preview:
     name: Check if a preview deploy is required
     runs-on: ubuntu-latest
+    concurrency:
+      group: check-if-requires-ui-preview-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     outputs:
       boxel-ui-files-changed: ${{ steps.boxel-ui-files-that-changed.outputs.any_changed }}
     steps:
@@ -40,7 +43,9 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-ui-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-ui-preview-staging-${{ github.head_ref || github.run_id }}
+    concurrency:
+      group: deploy-ui-preview-staging-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - name: Configure AWS credentials
