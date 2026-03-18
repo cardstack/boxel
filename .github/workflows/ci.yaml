@@ -556,8 +556,7 @@ jobs:
         id: artifact_name
         if: ${{ !cancelled() }}
         run: |
-          export SAFE_ARTIFACT_NAME=shard-${{ matrix.shardIndex }}
-          echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=shard_${{ matrix.shardIndex }}" >> "$GITHUB_OUTPUT"
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
