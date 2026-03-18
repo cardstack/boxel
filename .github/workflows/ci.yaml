@@ -391,9 +391,12 @@ jobs:
     needs:
       - change-check
       - matrix-client-test
-    # always() makes it run even if a matrix-client-test shard fails
-    if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true')
+    # !cancelled() makes it run even if a matrix-client-test shard fails, but still respects cancellation
+    if: ${{ !cancelled() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: matrix-client-merge-reports-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
 
     permissions:
       id-token: write
