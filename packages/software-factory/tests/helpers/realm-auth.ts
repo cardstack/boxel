@@ -22,12 +22,15 @@ export interface RealmAuthTestServers {
 
 export async function startServers(
   options: {
+    password?: string;
     sessionToken?: string;
     username?: string;
   } = {},
 ): Promise<RealmAuthTestServers> {
+  let username = options.username ?? 'software-factory-browser';
   let matrixServer = await startMatrixStubServer(
-    options.username ?? 'software-factory-browser',
+    username,
+    options.password ?? browserPassword(username),
   );
   let realmServer = await startPrivateRealmStubServer({
     sessionToken: options.sessionToken ?? buildRealmSessionJwt(),
@@ -43,7 +46,10 @@ export async function startServers(
   };
 }
 
-async function startMatrixStubServer(username: string): Promise<StubServer> {
+async function startMatrixStubServer(
+  username: string,
+  password: string,
+): Promise<StubServer> {
   let userId = `@${username}:localhost`;
   let openIdPath = `/_matrix/client/v3/user/${encodeURIComponent(
     userId,
@@ -56,11 +62,33 @@ async function startMatrixStubServer(username: string): Promise<StubServer> {
       request.method === 'POST' &&
       request.url === '/_matrix/client/v3/login'
     ) {
-      respondJson(response, {
-        access_token: 'matrix-access-token',
-        device_id: 'device-id',
-        user_id: userId,
-      });
+      void (async () => {
+        let body = await readRequestBody(request);
+        let parsedBody = JSON.parse(body) as {
+          identifier?: { user?: string };
+          password?: string;
+        };
+
+        if (
+          parsedBody.identifier?.user !== username ||
+          parsedBody.password !== password
+        ) {
+          response.writeHead(401, { 'content-type': 'application/json' });
+          response.end(
+            JSON.stringify({
+              errcode: 'M_FORBIDDEN',
+              error: 'Invalid matrix credentials',
+            }),
+          );
+          return;
+        }
+
+        respondJson(response, {
+          access_token: 'matrix-access-token',
+          device_id: 'device-id',
+          user_id: userId,
+        });
+      })();
       return;
     }
 

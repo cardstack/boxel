@@ -144,6 +144,15 @@ module('factory-entrypoint', function () {
     assert.true(/--target-realm-url <url>/.test(usage));
     assert.true(/--mode <mode>/.test(usage));
     assert.true(/--help/.test(usage));
+    assert.true(/For public briefs, no auth setup is needed./.test(usage));
+    assert.true(
+      /MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD \+ REALM_SERVER_URL/.test(
+        usage,
+      ),
+    );
+    assert.true(
+      /MATRIX_URL \+ REALM_SERVER_URL \+ REALM_SECRET_SEED/.test(usage),
+    );
   });
 
   test('runFactoryEntrypoint loads and includes normalized brief data', async function (assert) {

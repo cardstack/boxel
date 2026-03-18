@@ -8,6 +8,7 @@ import {
   type ActiveBoxelProfile,
 } from '../src/realm-auth';
 import { FactoryBriefError, loadFactoryBrief } from '../src/factory-brief';
+import { matrixLogin } from '../scripts/lib/boxel';
 import {
   browserPassword,
   buildRealmSessionJwt,
@@ -222,6 +223,72 @@ module('realm-auth', function () {
         'Private brief content for testing realm auth.',
       );
       assert.deepEqual(brief.tags, ['private', 'brief']);
+    } finally {
+      await servers.stop();
+    }
+  });
+
+  test('createBoxelRealmFetch uses MATRIX_USERNAME and MATRIX_PASSWORD env auth for a private brief', async function (assert) {
+    let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
+    let originalHome = process.env.HOME;
+    let originalMatrixUrl = process.env.MATRIX_URL;
+    let originalMatrixUsername = process.env.MATRIX_USERNAME;
+    let originalMatrixPassword = process.env.MATRIX_PASSWORD;
+    let originalRealmServerUrl = process.env.REALM_SERVER_URL;
+    let originalRealmSecretSeed = process.env.REALM_SECRET_SEED;
+    let username = 'software-factory-browser';
+    let password = browserPassword(username);
+    let servers = await startServers({ username, password });
+    let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
+
+    try {
+      process.env.HOME = tempHome;
+      process.env.MATRIX_URL = servers.matrixServer.url;
+      process.env.MATRIX_USERNAME = username;
+      process.env.MATRIX_PASSWORD = password;
+      delete process.env.REALM_SERVER_URL;
+      delete process.env.REALM_SECRET_SEED;
+
+      let brief = await loadFactoryBrief(briefUrl, {
+        fetch: createBoxelRealmFetch(briefUrl),
+      });
+
+      assert.strictEqual(brief.title, 'Private Brief');
+      assert.strictEqual(
+        brief.contentSummary,
+        'Private brief content for testing realm auth.',
+      );
+    } finally {
+      process.env.HOME = originalHome;
+      process.env.MATRIX_URL = originalMatrixUrl;
+      process.env.MATRIX_USERNAME = originalMatrixUsername;
+      process.env.MATRIX_PASSWORD = originalMatrixPassword;
+      process.env.REALM_SERVER_URL = originalRealmServerUrl;
+      process.env.REALM_SECRET_SEED = originalRealmSecretSeed;
+      await servers.stop();
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test('matrixLogin rejects when MATRIX_USERNAME and MATRIX_PASSWORD are invalid', async function (assert) {
+    let username = 'software-factory-browser';
+    let servers = await startServers({ username });
+
+    try {
+      await assert.rejects(
+        matrixLogin({
+          profileId: null,
+          username,
+          matrixUrl: servers.matrixServer.url,
+          realmServerUrl: servers.realmServer.origin,
+          password: 'wrong-password',
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message.includes(
+            `Matrix login failed: 401 {"errcode":"M_FORBIDDEN","error":"Invalid matrix credentials"}`,
+          ),
+      );
     } finally {
       await servers.stop();
     }

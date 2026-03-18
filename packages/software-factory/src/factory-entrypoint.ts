@@ -69,10 +69,19 @@ export function getFactoryEntrypointUsage(): string {
     '  --target-realm-path <path>  Local filesystem path to the target realm',
     '',
     'Options:',
-    '  --auth-token <token>        Optional Authorization header override for fetching the brief',
+    '  --auth-token <token>        Optional explicit Authorization header override',
     '  --target-realm-url <url>    Absolute URL for the target realm when known',
     '  --mode <mode>               One of: bootstrap, implement, resume',
     '  --help                      Show this usage information',
+    '',
+    'Auth:',
+    '  For public briefs, no auth setup is needed.',
+    '  For private briefs, factory:go can authenticate without --auth-token via:',
+    '    1. the active Boxel profile, or',
+    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD + REALM_SERVER_URL, or',
+    '    3. MATRIX_URL + REALM_SERVER_URL + REALM_SECRET_SEED',
+    '  Use --auth-token only when you already have an Authorization header value',
+    '  and want to override the automatic auth resolution.',
   ].join('\n');
 }
 

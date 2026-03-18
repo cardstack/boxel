@@ -83,7 +83,7 @@ Parameters:
   - The command fetches card source JSON from this URL and includes normalized brief metadata in the summary.
 - `--auth-token`
   - Optional. Explicit `Authorization` header value to use when fetching the brief.
-  - When omitted, `factory:go` will try to resolve realm auth from the active Boxel profile for matching realm-server URLs.
+  - This is an override. You usually do not need it unless you already have a token and want to force that exact header value.
 - `--target-realm-path`
   - Required. Local filesystem path to the Boxel realm where the factory should write output.
 - `--target-realm-url`
@@ -93,18 +93,58 @@ Parameters:
 - `--help`
   - Optional. Prints the command usage and exits.
 
-Getting an auth token:
+Auth for fetching private briefs:
 
-- If the brief lives on a private realm and you want to pass the token explicitly, first ask the package session helper for the realm token:
+- If the brief is in a public realm, you do not need any auth setup.
+- If the brief is in a private realm, `factory:go` can usually authenticate without `--auth-token`. It will try these sources in order:
+  - the active Boxel profile in `~/.boxel-cli/profiles.json`
+  - `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD`, and `REALM_SERVER_URL`
+  - `MATRIX_URL`, `REALM_SERVER_URL`, and `REALM_SECRET_SEED`
+- When using `REALM_SECRET_SEED`, `factory:go` can derive the realm username from the brief URL when `MATRIX_USERNAME` is not set.
+
+Private brief with explicit Matrix username/password env:
 
 ```bash
-pnpm boxel:session -- --realm http://localhost:4201/software-factory/
+export MATRIX_URL=http://localhost:8008/
+export MATRIX_USERNAME=factory
+read -s MATRIX_PASSWORD'?Matrix password: '
+export MATRIX_PASSWORD
+export REALM_SERVER_URL=http://localhost:4201/
+
+pnpm factory:go -- \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm-path /path/to/target-realm
 ```
 
-- The command prints JSON with a `boxelSession` object keyed by realm URL. Extract the token for the brief's realm and pass it through `--auth-token`:
+Private brief with `REALM_SECRET_SEED` instead of username/password:
 
 ```bash
-AUTH_TOKEN="$(pnpm --silent boxel:session -- --realm http://localhost:4201/software-factory/ | jq -r '.boxelSession[\"http://localhost:4201/software-factory/\"]')"
+export MATRIX_URL=http://localhost:8008/
+export REALM_SERVER_URL=http://localhost:4201/
+read -s REALM_SECRET_SEED'?Realm secret seed: '
+export REALM_SECRET_SEED
+
+pnpm factory:go -- \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm-path /path/to/target-realm
+```
+
+Getting an auth token explicitly:
+
+- Only use this when you specifically want to pass `--auth-token`. `factory:go` itself does not require this if one of the auth sources above is already configured.
+- `pnpm boxel:session` can authenticate from the active Boxel profile or from `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD`, and `REALM_SERVER_URL`.
+- `pnpm boxel:session` does not require `--realm`. Passing `--realm` only narrows the returned `boxelSession` object to specific realms.
+
+Example:
+
+```bash
+export MATRIX_URL=http://localhost:8008/
+export MATRIX_USERNAME=factory
+read -s MATRIX_PASSWORD'?Matrix password: '
+export MATRIX_PASSWORD
+export REALM_SERVER_URL=http://localhost:4201/
+
+AUTH_TOKEN="$(pnpm --silent boxel:session | jq -r '.boxelSession[\"http://localhost:4201/software-factory/\"]')"
 
 pnpm factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
@@ -112,8 +152,7 @@ pnpm factory:go -- \
   --target-realm-path /path/to/target-realm
 ```
 
-- When the brief is in a public realm, you do not need this flag.
-- When the brief is in a private realm, pass the exact `Authorization` header value returned by `pnpm boxel:session`.
+- When you do use `--auth-token`, pass the exact `Authorization` header value returned by `pnpm boxel:session`.
 
 ## Layout
 
