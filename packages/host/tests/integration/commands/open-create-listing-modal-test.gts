@@ -36,7 +36,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     );
   });
 
-  test('stores modal request in operator mode state', async function (assert) {
+  test('stores modal payload in operator mode state', async function (assert) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -63,7 +63,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     });
   });
 
-  test('stores modal request without openCardIds', async function (assert) {
+  test('stores modal payload without openCardIds', async function (assert) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -79,20 +79,20 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
       targetRealm: testRealmURL,
     } as never);
 
-    let request = operatorModeStateService.createListingModalPayload;
-    assert.deepEqual(request?.codeRef, {
+    let payload = operatorModeStateService.createListingModalPayload;
+    assert.deepEqual(payload?.codeRef, {
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
-    assert.strictEqual(request?.targetRealm, testRealmURL);
-    assert.strictEqual(
-      request?.openCardIds,
-      undefined,
-      'openCardIds is absent from state',
+    assert.strictEqual(payload?.targetRealm, testRealmURL);
+    assert.deepEqual(
+      payload?.openCardIds,
+      [],
+      'openCardIds is empty when not provided',
     );
   });
 
-  test('dismissCreateListingModal clears the request', async function (assert) {
+  test('dismissCreateListingModal clears the payload', async function (assert) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -111,7 +111,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
 
     assert.ok(
       operatorModeStateService.createListingModalPayload,
-      'request is set after execute',
+      'payload is set after execute',
     );
 
     operatorModeStateService.dismissCreateListingModal();
@@ -119,7 +119,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     assert.strictEqual(
       operatorModeStateService.createListingModalPayload,
       undefined,
-      'request is cleared after dismissCreateListingModal',
+      'payload is cleared after dismissCreateListingModal',
     );
   });
 });

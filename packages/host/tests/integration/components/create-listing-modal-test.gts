@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
@@ -15,17 +15,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
   let noop = () => {};
 
-  test('modal is hidden by default', async function (assert) {
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-
-    assert.dom('[data-test-create-listing-modal]').doesNotExist();
-  });
-
-  test('modal renders when request is set', async function (assert) {
+  test('modal renders when payload is set', async function (assert) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
@@ -81,7 +71,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
     assert.dom('[data-test-create-listing-coderef]').includesText('Pet');
   });
 
-  test('cancel button closes modal', async function (assert) {
+  test('shows example instances for a card type', async function (assert) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
@@ -94,28 +84,14 @@ module('Integration | components | create-listing-modal', function (hooks) {
     });
 
     await waitFor('[data-test-create-listing-modal]');
-    await click('[data-test-create-listing-cancel-button]');
+    await waitFor('[data-test-examples-container]');
 
-    assert.dom('[data-test-create-listing-modal]').doesNotExist();
-  });
-
-  test('shows create button', async function (assert) {
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template><OperatorMode @onClose={{noop}} /></template>
-      },
-    );
-
-    ctx.operatorModeStateService.showCreateListingModal({
-      codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
-      targetRealm: testRealmURL,
-    });
-
-    await waitFor('[data-test-create-listing-modal]');
-
+    assert.dom('[data-test-examples-container]').exists();
     assert
-      .dom('[data-test-create-listing-confirm-button]')
-      .includesText('Create');
-    assert.dom('[data-test-create-listing-confirm-button]').isNotDisabled();
+      .dom(`[data-test-create-listing-example="${testRealmURL}Pet/mango"]`)
+      .exists('shows the Pet instance as an example');
+    assert
+      .dom(`[data-test-card-catalog-item-selected="true"]`)
+      .exists('example is auto-selected');
   });
 });
