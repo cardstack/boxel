@@ -30,6 +30,7 @@
   "devDependencies": {
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/local-types": "workspace:*",
+    "@cardstack/logger": "^0.2.1",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@glint/core": "1.3.0",

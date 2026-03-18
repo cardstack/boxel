@@ -9,6 +9,7 @@ export default defineConfig({
   testDir: './tests',
   testMatch: ['**/*.spec.ts'],
   fullyParallel: false,
+  reporter: process.env.CI ? [['list']] : undefined,
   workers: 1,
   timeout: 60_000,
   expect: {

@@ -144,6 +144,7 @@ export class Project extends CardDef {
     query: {
       filter: {
         on: {
+          // @ts-ignore this is not a CJS file, import.meta is allowed
           module: new URL('./darkfactory', import.meta.url).href,
           name: 'Ticket',
         },
