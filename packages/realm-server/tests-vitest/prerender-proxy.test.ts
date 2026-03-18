@@ -29,11 +29,16 @@ describe("prerender-proxy-test.ts", function () {
         }
         function makePrerenderer() {
             let renderCalls: Array<{
-                kind: 'card' | 'module' | 'file-extract' | 'file-render';
+                kind: 'card' | 'module' | 'file-extract' | 'file-render' | 'command';
                 args: {
-                    realm: string;
-                    url: string;
+                    affinityType?: 'realm' | 'user';
+                    affinityValue?: string;
+                    realm?: string;
+                    userId?: string;
+                    url?: string;
                     auth: string;
+                    command?: string;
+                    commandInput?: Record<string, unknown> | null;
                     renderOptions?: RenderRouteOptions;
                 };
             }> = [];
@@ -86,6 +91,13 @@ describe("prerender-proxy-test.ts", function () {
                         embeddedHTML: null,
                         fittedHTML: null,
                         iconHTML: null,
+                    };
+                },
+                async runCommand(args) {
+                    renderCalls.push({ kind: 'command', args });
+                    return {
+                        status: 'ready',
+                        cardResultString: null,
                     };
                 },
             };
@@ -145,6 +157,8 @@ describe("prerender-proxy-test.ts", function () {
             expect(renderCalls.length).toEqual(1);
             expect(renderCalls[0]?.kind).toBe('card');
             expect(renderCalls[0]?.args).toEqual({
+                affinityType: 'realm',
+                affinityValue: realm,
                 realm,
                 url: cardURL,
                 auth: renderCalls[0]?.args.auth,

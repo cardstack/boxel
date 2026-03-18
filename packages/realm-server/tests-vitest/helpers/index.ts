@@ -7,7 +7,7 @@ import {
   copySync,
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { createHash } from 'crypto';
 import type {
   LooseSingleCardDocument,
@@ -72,9 +72,42 @@ import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+  serviceURL,
+} from '../../lib/dev-service-registry';
 
-const testRealmURL = new URL('http://127.0.0.1:4444/');
+/**
+ * In environment mode we shift test ports by a deterministic offset derived
+ * from the environment slug so that parallel environments never collide.
+ */
+function environmentPortOffset(): number {
+  if (!isEnvironmentMode()) {
+    return 0;
+  }
+  let slug = getEnvironmentSlug();
+  let hash = 0;
+  for (let i = 0; i < slug.length; i++) {
+    hash = ((hash << 5) - hash + slug.charCodeAt(i)) | 0;
+  }
+  // offset in range [1000, 9000) — keeps ports well within valid range
+  return 1000 + (Math.abs(hash) % 8000);
+}
+
+/** Return a test port, shifted by a per-environment offset when needed. */
+export function testPort(basePort: number): number {
+  return basePort + environmentPortOffset();
+}
+
+const testRealmURL = new URL(`http://127.0.0.1:${testPort(4444)}/`);
 const testRealmHref = testRealmURL.href;
+
+/** Build the default test-realm URL with an optional sub-path. */
+export function testRealmURLFor(path: string): URL {
+  return new URL(path, testRealmURL);
+}
+
 const migratedTestDatabaseTemplate = 'boxel_migrated_template';
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
@@ -146,11 +179,14 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = 'http://localhost:4201/base';
-export const matrixURL = new URL('http://localhost:8008');
+export const localBaseRealm = isEnvironmentMode()
+  ? `${serviceURL('realm-server')}/base`
+  : 'http://localhost:4201/base';
+export const matrixURL = new URL(
+  isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
+);
 const testPrerenderHost = '127.0.0.1';
-const testPrerenderPort = 4460;
-const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
+const testPrerenderPort = testPort(4460);
 
 export const testRealmInfo = {
   name: 'Test Realm',
@@ -172,8 +208,22 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
-export const matrixRegistrationSecret: string =
-  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+
+function getMatrixRegistrationSecret(): string {
+  let secret =
+    getSynapseConfig()?.registration_shared_secret ??
+    process.env.MATRIX_REGISTRATION_SHARED_SECRET;
+
+  if (!secret) {
+    throw new Error(
+      'Missing Matrix registration shared secret. Start Synapse first or set MATRIX_REGISTRATION_SHARED_SECRET.',
+    );
+  }
+
+  return secret;
+}
+
+export const matrixRegistrationSecret = getMatrixRegistrationSecret();
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
@@ -184,30 +234,6 @@ const trackedPrerenderers = new Set<TestPrerenderer>();
 const trackedDbAdapters = new Set<PgAdapter>();
 const trackedQueuePublishers = new Set<QueuePublisher>();
 const trackedQueueRunners = new Set<QueueRunner>();
-const realmSetupDebug = process.env.VITEST_REALM_SETUP_DEBUG === '1';
-
-function logRealmSetup(message: string) {
-  if (!realmSetupDebug) {
-    return;
-  }
-  console.log(`[realm-setup ${new Date().toISOString()}] ${message}`);
-}
-
-async function timeRealmSetup<T>(
-  label: string,
-  task: () => Promise<T>,
-): Promise<T> {
-  let start = Date.now();
-  logRealmSetup(`start ${label}`);
-  try {
-    let result = await task();
-    logRealmSetup(`done ${label} in ${Date.now() - start}ms`);
-    return result;
-  } catch (error) {
-    logRealmSetup(`failed ${label} after ${Date.now() - start}ms`);
-    throw error;
-  }
-}
 
 export function cleanWhiteSpace(text: string) {
   return text
@@ -446,28 +472,31 @@ export async function destroyTrackedQueueRunners(): Promise<void> {
 }
 
 async function waitForQueueIdle(
-  dbAdapter: PgAdapter,
+  databaseName: string,
   timeout = 30000,
 ): Promise<void> {
-  let lastLogAt = 0;
   await waitUntil(
     async () => {
-      let [{ count: unfulfilledJobs }] = (await dbAdapter.execute(
-        `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
-      )) as { count: number }[];
-      let [{ count: activeReservations }] = (await dbAdapter.execute(
-        `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
-      )) as { count: number }[];
-      if (realmSetupDebug) {
-        let now = Date.now();
-        if (now - lastLogAt >= 1000) {
-          lastLogAt = now;
-          logRealmSetup(
-            `queue state unfulfilled=${unfulfilledJobs} activeReservations=${activeReservations}`,
-          );
-        }
+      let client = new PgClient({
+        ...pgAdminConnectionConfig(),
+        database: databaseName,
+      });
+      try {
+        await client.connect();
+        let {
+          rows: [{ count: unfulfilledJobs }],
+        } = await client.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+        );
+        let {
+          rows: [{ count: activeReservations }],
+        } = await client.query<{ count: number }>(
+          `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
+        );
+        return unfulfilledJobs === 0 && activeReservations === 0;
+      } finally {
+        await client.end();
       }
-      return unfulfilledJobs === 0 && activeReservations === 0;
     },
     {
       timeout,
@@ -478,7 +507,6 @@ async function waitForQueueIdle(
 }
 
 interface CachedPermissionedRealmTemplateEntry {
-  refs: number;
   ready: Promise<void>;
 }
 
@@ -530,55 +558,16 @@ function prerendererCacheKeyPart(prerenderer?: Prerenderer): string | null {
   return `injected:${id}`;
 }
 
-async function assertPrerenderDependenciesReady(): Promise<void> {
-  let checks = [
-    {
-      name: 'host standby route',
-      url: 'http://localhost:4200/standby',
-    },
-    {
-      name: 'base realm',
-      url: 'http://localhost:4201/base/card-api',
-    },
-    {
-      name: 'icons server',
-      url: 'http://localhost:4206/@cardstack/boxel-icons/v1/icons/palette.js',
-    },
-  ];
-
-  let failures: string[] = [];
-
-  for (let check of checks) {
-    try {
-      let response = await fetch(check.url);
-      if (!response.ok) {
-        failures.push(`${check.name} (${check.url}) returned HTTP ${response.status}`);
-      }
-    } catch (error: any) {
-      failures.push(`${check.name} (${check.url}) is unavailable: ${error?.message ?? error}`);
-    }
-  }
-
-  if (failures.length > 0) {
-    throw new Error(
-      `Prerender dependencies are not ready:\n${failures.join('\n')}\n` +
-        `Start required services (for example: base realm + icons + host) before running endpoint Vitest suites.`,
-    );
-  }
-}
+const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
 
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {
-    logRealmSetup(`prerender server already listening at ${testPrerenderURL}`);
     return testPrerenderURL;
   }
   if (prerenderServerStart) {
-    logRealmSetup(`waiting for existing prerender server start`);
     await prerenderServerStart;
     return testPrerenderURL;
   }
-  await assertPrerenderDependenciesReady();
-  logRealmSetup(`starting prerender server at ${testPrerenderURL}`);
   let server = createPrerenderHttpServer({
     silent: Boolean(process.env.SILENT_PRERENDERER),
     maxPages: 1,
@@ -604,7 +593,6 @@ async function startTestPrerenderServer(): Promise<string> {
     });
   });
   await prerenderServerStart;
-  logRealmSetup(`prerender server listening at ${testPrerenderURL}`);
   return testPrerenderURL;
 }
 
@@ -729,7 +717,9 @@ export function setupDB(
 }
 
 export async function getIndexHTML() {
-  let url = process.env.HOST_URL ?? 'http://localhost:4200/';
+  let url =
+    process.env.HOST_URL ??
+    (isEnvironmentMode() ? serviceURL('host') : 'http://localhost:4200/');
   let request = await fetch(url);
   return await request.text();
 }
@@ -778,10 +768,12 @@ export async function createRealm({
   }
 
   for (let [filename, contents] of Object.entries(fileSystem)) {
+    let path = join(dir, filename);
+    ensureDirSync(dirname(path));
     if (typeof contents === 'string') {
-      writeFileSync(join(dir, filename), contents);
+      writeFileSync(path, contents);
     } else {
-      writeJSONSync(join(dir, filename), contents);
+      writeJSONSync(path, contents);
     }
   }
 
@@ -879,9 +871,7 @@ export async function runTestRealmServer({
   };
   prerenderer?: Prerenderer;
 }) {
-  logRealmSetup(`runTestRealmServer setup for ${realmURL.href}`);
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
-  logRealmSetup(`runTestRealmServer got prerenderer for ${realmURL.href}`);
   let definitionLookup = new CachingDefinitionLookup(
     dbAdapter,
     prerenderer,
@@ -900,30 +890,23 @@ export async function runTestRealmServer({
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
   });
-  await timeRealmSetup(`worker.run(${realmURL.href})`, async () => await worker.run());
-  let { realm: testRealm, adapter: testRealmAdapter } = await timeRealmSetup(
-    `createRealm(${realmURL.href})`,
-    async () =>
-      await createRealm({
-        dir: testRealmDir,
-        fileSystem,
-        realmURL: realmURL.href,
-        permissions,
-        virtualNetwork,
-        matrixConfig,
-        publisher,
-        dbAdapter,
-        enableFileWatcher,
-        definitionLookup,
-        cardSizeLimitBytes,
-        fileSizeLimitBytes,
-      }),
-  );
+  await worker.run();
+  let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
+    dir: testRealmDir,
+    fileSystem,
+    realmURL: realmURL.href,
+    permissions,
+    virtualNetwork,
+    matrixConfig,
+    publisher,
+    dbAdapter,
+    enableFileWatcher,
+    definitionLookup,
+    cardSizeLimitBytes,
+    fileSizeLimitBytes,
+  });
 
-  await timeRealmSetup(
-    `testRealm.logInToMatrix(${realmURL.href})`,
-    async () => await testRealm.logInToMatrix(),
-  );
+  await testRealm.logInToMatrix();
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
@@ -951,14 +934,9 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
   });
-  logRealmSetup(`starting RealmServer.listen(${realmURL.port})`);
   let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
   trackServer(testRealmHttpServer);
-  await timeRealmSetup(
-    `testRealmServer.start(${realmURL.href})`,
-    async () => await testRealmServer.start(),
-  );
-  logRealmSetup(`runTestRealmServer ready for ${realmURL.href}`);
+  await testRealmServer.start();
   return {
     testRealmDir,
     testRealm,
@@ -966,6 +944,7 @@ export async function runTestRealmServer({
     testRealmHttpServer,
     testRealmAdapter,
     matrixClient,
+    virtualNetwork,
   };
 }
 
@@ -1196,10 +1175,15 @@ export function setupPermissionedRealms(
       runner: QueueRunner,
     ) => {
       _dbAdapter = dbAdapter;
-      ({ realms } = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
-        realms: realmsArg,
-        prerenderer,
-      }));
+      ({ realms } = await startPermissionedRealmsFixture(
+        dbAdapter,
+        publisher,
+        runner,
+        {
+          realms: realmsArg,
+          prerenderer,
+        },
+      ));
       onRealmSetup?.({
         dbAdapter: _dbAdapter!,
         realms,
@@ -1255,7 +1239,7 @@ export async function insertPlan(
   creditsIncluded: number,
   stripePlanId: string,
 ): Promise<Plan> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     name,
     monthly_price: monthlyPrice,
     credits_included: creditsIncluded,
@@ -1340,7 +1324,7 @@ export async function insertJob(
     priority?: number;
   },
 ): Promise<Record<string, any>> {
-  let { valueExpressions, nameExpressions: nameExpressions } = asExpressions({
+  let { valueExpressions, nameExpressions } = asExpressions({
     job_type: params.job_type,
     args: params.args ?? {},
     concurrency_group: params.concurrency_group ?? null,
@@ -1531,10 +1515,8 @@ async function startPermissionedRealmFixture(
   request: SuperTest<Test>;
   dir: DirResult;
 }> {
-  let fixtureStart = Date.now();
   let resolvedRealmURL = realmURL ?? testRealmURL;
   let dir = dirSync();
-  logRealmSetup(`starting permissioned fixture for ${resolvedRealmURL.href}`);
 
   let testRealmDir;
 
@@ -1573,32 +1555,24 @@ async function startPermissionedRealmFixture(
 
   let virtualNetwork = createVirtualNetwork();
 
-  let testRealmServer = await timeRealmSetup(
-    `runTestRealmServer(${resolvedRealmURL.href})`,
-    async () =>
-      await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: resolvedRealmURL,
-        permissions,
-        dbAdapter,
-        runner,
-        publisher,
-        matrixURL,
-        fileSystem,
-        enableFileWatcher: subscribeToRealmEvents,
-        cardSizeLimitBytes,
-        fileSizeLimitBytes,
-        prerenderer,
-      }),
-  );
+  let testRealmServer = await runTestRealmServer({
+    virtualNetwork,
+    testRealmDir,
+    realmsRootPath: join(dir.name, 'realm_server_1'),
+    realmURL: resolvedRealmURL,
+    permissions,
+    dbAdapter,
+    runner,
+    publisher,
+    matrixURL,
+    fileSystem,
+    enableFileWatcher: subscribeToRealmEvents,
+    cardSizeLimitBytes,
+    fileSizeLimitBytes,
+    prerenderer,
+  });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
-
-  logRealmSetup(
-    `permissioned fixture ready for ${resolvedRealmURL.href} in ${Date.now() - fixtureStart}ms`,
-  );
 
   return {
     testRealmServer,
@@ -1608,14 +1582,43 @@ async function startPermissionedRealmFixture(
 }
 
 async function teardownPermissionedRealmFixture(
-  testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>,
+  testRealmServer?: Awaited<ReturnType<typeof runTestRealmServer>>,
 ): Promise<void> {
-  testRealmServer.testRealm.unsubscribe();
-  if (!testRealmServer.matrixClient.isLoggedIn()) {
-    await testRealmServer.matrixClient.login();
+  if (!testRealmServer) {
+    return;
   }
-  await closeServer(testRealmServer.testRealmHttpServer);
-  resetCatalogRealms();
+
+  let cleanupError: unknown;
+
+  try {
+    testRealmServer.testRealm.unsubscribe();
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    if (!testRealmServer.matrixClient.isLoggedIn()) {
+      await testRealmServer.matrixClient.login();
+    }
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    await closeServer(testRealmServer.testRealmHttpServer);
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  try {
+    resetCatalogRealms();
+  } catch (error) {
+    cleanupError ??= error;
+  }
+
+  if (cleanupError) {
+    throw cleanupError;
+  }
 }
 
 export function setupPermissionedRealm(
@@ -1638,12 +1641,16 @@ export function setupPermissionedRealm(
     fileSystem?: Record<string, string | LooseSingleCardDocument>;
     onRealmSetup?: (args: {
       dbAdapter: PgAdapter;
+      publisher: QueuePublisher;
+      runner: QueueRunner;
+      testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
       testRealm: Realm;
       testRealmPath: string;
       testRealmHttpServer: Server;
       testRealmAdapter: RealmAdapter;
       request: SuperTest<Test>;
       dir: DirResult;
+      virtualNetwork: VirtualNetwork;
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
@@ -1684,10 +1691,14 @@ export function setupPermissionedRealm(
 
       onRealmSetup?.({
         dbAdapter,
+        publisher,
+        runner,
+        testRealmServer,
         testRealm: testRealmServer.testRealm,
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,
         testRealmAdapter: testRealmServer.testRealmAdapter,
+        virtualNetwork: testRealmServer.virtualNetwork,
         request,
         dir,
       });
@@ -1702,9 +1713,7 @@ export function setupPermissionedRealm(
 type SetupPermissionedRealmCachedOptions = Omit<
   Parameters<typeof setupPermissionedRealm>[1],
   'dbTemplateDatabase'
-> & {
-  useTemplateCache?: boolean;
-};
+>;
 
 function permissionedRealmTemplateCacheKey(
   options: SetupPermissionedRealmCachedOptions,
@@ -1728,8 +1737,6 @@ async function buildPermissionedRealmTemplate(
   cacheKey: string,
   options: SetupPermissionedRealmCachedOptions,
 ): Promise<void> {
-  let buildStart = Date.now();
-  logRealmSetup(`building permissioned realm template ${cacheKey.slice(0, 12)}`);
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
   let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
 
@@ -1740,24 +1747,14 @@ async function buildPermissionedRealmTemplate(
     | Awaited<ReturnType<typeof startPermissionedRealmFixture>>
     | undefined;
 
-  await timeRealmSetup(
-    `drop template db ${templateDatabaseName}`,
-    async () => await dropDatabase(templateDatabaseName),
-  );
-  await timeRealmSetup(
-    `drop builder db ${builderDatabaseName}`,
-    async () => await dropDatabase(builderDatabaseName),
-  );
+  await dropDatabase(templateDatabaseName);
+  await dropDatabase(builderDatabaseName);
 
   try {
-    dbAdapter = await timeRealmSetup(
-      `createTestPgAdapter(${builderDatabaseName})`,
-      async () =>
-        await createTestPgAdapter({
-          databaseName: builderDatabaseName,
-          templateDatabase: migratedTestDatabaseTemplate,
-        }),
-    );
+    dbAdapter = await createTestPgAdapter({
+      databaseName: builderDatabaseName,
+      templateDatabase: migratedTestDatabaseTemplate,
+    });
     publisher = new PgQueuePublisher(dbAdapter);
     runner = new PgQueueRunner({
       adapter: dbAdapter,
@@ -1780,36 +1777,18 @@ async function buildPermissionedRealmTemplate(
       },
     );
 
-    await timeRealmSetup(`waitForQueueIdle(${builderDatabaseName})`, async () =>
-      await waitForQueueIdle(dbAdapter),
-    );
-    await timeRealmSetup(
-      `teardownPermissionedRealmFixture(${builderDatabaseName})`,
-      async () => await teardownPermissionedRealmFixture(fixture.testRealmServer),
-    );
+    await waitForQueueIdle(builderDatabaseName);
+    await teardownPermissionedRealmFixture(fixture.testRealmServer);
     fixture = undefined;
 
-    await timeRealmSetup(`destroy publisher(${builderDatabaseName})`, async () =>
-      await publisher.destroy(),
-    );
+    await publisher.destroy();
     publisher = undefined;
-    await timeRealmSetup(`destroy runner(${builderDatabaseName})`, async () =>
-      await runner.destroy(),
-    );
+    await runner.destroy();
     runner = undefined;
-    await timeRealmSetup(`close dbAdapter(${builderDatabaseName})`, async () =>
-      await dbAdapter.close(),
-    );
+    await dbAdapter.close();
     dbAdapter = undefined;
 
-    await timeRealmSetup(
-      `createTemplateSnapshot(${builderDatabaseName} -> ${templateDatabaseName})`,
-      async () =>
-        await createTemplateSnapshot(builderDatabaseName, templateDatabaseName),
-    );
-    logRealmSetup(
-      `built permissioned realm template ${cacheKey.slice(0, 12)} in ${Date.now() - buildStart}ms`,
-    );
+    await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
   } finally {
     if (fixture) {
       try {
@@ -1854,19 +1833,11 @@ async function acquirePermissionedRealmTemplate(
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
   let existing = permissionedRealmTemplateCache.get(cacheKey);
   if (existing) {
-    existing.refs++;
-    logRealmSetup(
-      `permissioned realm template cache hit ${cacheKey.slice(0, 12)} refs=${existing.refs}`,
-    );
     await existing.ready;
     return { cacheKey, templateDatabaseName };
   }
-  logRealmSetup(
-    `permissioned realm template cache miss ${cacheKey.slice(0, 12)}`,
-  );
 
   let entry: CachedPermissionedRealmTemplateEntry = {
-    refs: 1,
     ready: Promise.resolve(),
   };
   entry.ready = buildPermissionedRealmTemplate(cacheKey, options).catch(
@@ -1885,63 +1856,28 @@ async function acquirePermissionedRealmTemplate(
   return { cacheKey, templateDatabaseName };
 }
 
-async function releasePermissionedRealmTemplate(
-  cacheKey: string,
-): Promise<void> {
-  let entry = permissionedRealmTemplateCache.get(cacheKey);
-  if (!entry) {
-    return;
-  }
-  entry.refs--;
-}
-
 export function setupPermissionedRealmCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmCachedOptions,
 ) {
-  let { useTemplateCache = true, ...setupOptions } = options;
-  if (!useTemplateCache) {
-    return setupPermissionedRealm(hooks, setupOptions);
-  }
-
   let acquiredTemplateDatabase: string | undefined;
-  let acquiredCacheKey: string | undefined;
 
   hooks.before(async function () {
-    logRealmSetup(`setupPermissionedRealmCached before hook begin`);
-    let { cacheKey, templateDatabaseName } =
-      await acquirePermissionedRealmTemplate(setupOptions);
-    acquiredCacheKey = cacheKey;
+    let { templateDatabaseName } =
+      await acquirePermissionedRealmTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
-    logRealmSetup(
-      `setupPermissionedRealmCached before hook ready cacheKey=${cacheKey.slice(0, 12)} db=${templateDatabaseName}`,
-    );
   });
 
   setupPermissionedRealm(hooks, {
-    ...setupOptions,
+    ...options,
     dbTemplateDatabase: () => acquiredTemplateDatabase,
-  });
-
-  hooks.after(async function () {
-    if (acquiredCacheKey) {
-      let cacheKey = acquiredCacheKey;
-      acquiredCacheKey = undefined;
-      acquiredTemplateDatabase = undefined;
-      await releasePermissionedRealmTemplate(cacheKey);
-      logRealmSetup(
-        `setupPermissionedRealmCached released cacheKey=${cacheKey.slice(0, 12)}`,
-      );
-    }
   });
 }
 
 type SetupPermissionedRealmsCachedOptions = Omit<
   Parameters<typeof setupPermissionedRealms>[1],
   'dbTemplateDatabase'
-> & {
-  useTemplateCache?: boolean;
-};
+>;
 
 function permissionedRealmsTemplateCacheKey(
   options: SetupPermissionedRealmsCachedOptions,
@@ -1964,7 +1900,9 @@ async function buildPermissionedRealmsTemplate(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
-  let fixture: Awaited<ReturnType<typeof startPermissionedRealmsFixture>> | undefined;
+  let fixture:
+    | Awaited<ReturnType<typeof startPermissionedRealmsFixture>>
+    | undefined;
 
   await dropDatabase(templateDatabaseName);
   await dropDatabase(builderDatabaseName);
@@ -1980,12 +1918,17 @@ async function buildPermissionedRealmsTemplate(
       workerId: 'template-worker',
     });
 
-    fixture = await startPermissionedRealmsFixture(dbAdapter, publisher, runner, {
-      realms: options.realms,
-      prerenderer: options.prerenderer,
-    });
+    fixture = await startPermissionedRealmsFixture(
+      dbAdapter,
+      publisher,
+      runner,
+      {
+        realms: options.realms,
+        prerenderer: options.prerenderer,
+      },
+    );
 
-    await waitForQueueIdle(dbAdapter);
+    await waitForQueueIdle(builderDatabaseName);
     await teardownPermissionedRealmsFixture(fixture.realms);
     fixture = undefined;
 
@@ -2041,13 +1984,11 @@ async function acquirePermissionedRealmsTemplate(
   let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
   let existing = permissionedRealmTemplateCache.get(cacheKey);
   if (existing) {
-    existing.refs++;
     await existing.ready;
     return { cacheKey, templateDatabaseName };
   }
 
   let entry: CachedPermissionedRealmTemplateEntry = {
-    refs: 1,
     ready: Promise.resolve(),
   };
   entry.ready = buildPermissionedRealmsTemplate(cacheKey, options).catch(
@@ -2070,33 +2011,17 @@ export function setupPermissionedRealmsCached(
   hooks: NestedHooks,
   options: SetupPermissionedRealmsCachedOptions,
 ) {
-  let { useTemplateCache = true, ...setupOptions } = options;
-  if (!useTemplateCache) {
-    return setupPermissionedRealms(hooks, setupOptions);
-  }
-
   let acquiredTemplateDatabase: string | undefined;
-  let acquiredCacheKey: string | undefined;
 
   hooks.before(async function () {
-    let { cacheKey, templateDatabaseName } =
-      await acquirePermissionedRealmsTemplate(setupOptions);
-    acquiredCacheKey = cacheKey;
+    let { templateDatabaseName } =
+      await acquirePermissionedRealmsTemplate(options);
     acquiredTemplateDatabase = templateDatabaseName;
   });
 
   setupPermissionedRealms(hooks, {
-    ...setupOptions,
+    ...options,
     dbTemplateDatabase: () => acquiredTemplateDatabase,
-  });
-
-  hooks.after(async function () {
-    if (acquiredCacheKey) {
-      let cacheKey = acquiredCacheKey;
-      acquiredCacheKey = undefined;
-      acquiredTemplateDatabase = undefined;
-      await releasePermissionedRealmTemplate(cacheKey);
-    }
   });
 }
 
