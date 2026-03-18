@@ -1,6 +1,7 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
 import {
   ensureTrailingSlash,
+  fetchUserPermissions,
   param,
   query,
   separatedByCommas,
@@ -39,4 +40,27 @@ export function buildReadableRealms(
     readableRealms.add(realmURL);
   }
   return readableRealms;
+}
+
+export async function getPublicReadableRealms(
+  dbAdapter: DBAdapter,
+  realmList: string[],
+): Promise<Set<string>> {
+  let publicPermissions = await fetchUserPermissions(dbAdapter, {
+    userId: '*',
+    onlyOwnRealms: false,
+  });
+
+  let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
+  let publicReadable = buildReadableRealms(
+    publicPermissions,
+    publishedRealmURLs,
+  );
+
+  let normalizedRealmList = realmList.map((realmURL) =>
+    ensureTrailingSlash(realmURL),
+  );
+  return new Set(
+    normalizedRealmList.filter((realmURL) => publicReadable.has(realmURL)),
+  );
 }

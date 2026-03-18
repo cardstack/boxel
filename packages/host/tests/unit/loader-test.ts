@@ -23,7 +23,6 @@ module('Unit | loader', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   let loader: Loader;
-
   setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function (this: RenderingTestContext) {

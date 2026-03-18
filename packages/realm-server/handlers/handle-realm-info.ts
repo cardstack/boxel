@@ -1,18 +1,10 @@
 import type Koa from 'koa';
 import type { DBAdapter, RealmInfo } from '@cardstack/runtime-common';
-import {
-  ensureTrailingSlash,
-  fetchUserPermissions,
-  logger,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 
 import { setContextResponse } from '../middleware';
 import { getMultiRealmAuthorization } from '../middleware/multi-realm-authorization';
-import {
-  buildReadableRealms,
-  getPublishedRealmURLs,
-} from '../utils/realm-readability';
+import { getPublicReadableRealms } from '../utils/realm-readability';
 
 const log = logger('realm-server');
 
@@ -56,27 +48,4 @@ export default function handleRealmInfo({
       new Response(JSON.stringify({ data }, null, 2), { headers }),
     );
   };
-}
-
-async function getPublicReadableRealms(
-  dbAdapter: DBAdapter,
-  realmList: string[],
-): Promise<Set<string>> {
-  let publicPermissions = await fetchUserPermissions(dbAdapter, {
-    userId: '*',
-    onlyOwnRealms: false,
-  });
-
-  let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
-  let publicReadable = buildReadableRealms(
-    publicPermissions,
-    publishedRealmURLs,
-  );
-
-  let normalizedRealmList = realmList.map((realmURL) =>
-    ensureTrailingSlash(realmURL),
-  );
-  return new Set(
-    normalizedRealmList.filter((realmURL) => publicReadable.has(realmURL)),
-  );
 }

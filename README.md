@@ -30,6 +30,19 @@ For a quickstart, see [here](./QUICKSTART.md)
 
 `packages/skills-realm` is a realm that hosts AI skills. Skills are maintained in the [boxel-skills](https://github.com/cardstack/boxel-skills) repository and cloned locally for development. See the [Skills Realm README](./packages/skills-realm/README.md) for setup and development workflows.
 
+### Catalog Realms
+
+There are two catalog realms running side by side:
+
+| Realm                  | Source                                                                                  | URL path             | Purpose                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Catalog** (monorepo) | `packages/catalog-realm`                                                                | `/catalog/`          | The existing catalog that ships from this monorepo. Currently used in production.                             |
+| **External Catalog**   | `packages/catalog` (clones [boxel-catalog](https://github.com/cardstack/boxel-catalog)) | `/external-catalog/` | A separate catalog maintained in its own repository. This is the future replacement for the monorepo catalog. |
+
+**Why two?** Switching between monorepo and external catalog sources used to require rebuilding the host app and reindexing. By running both catalogs simultaneously, we can test the external repo catalog in staging and production alongside the existing one, without disrupting the current experience. The external catalog is gated behind a localStorage flag (`boxel:externalCatalog`) so it can be toggled on for testing without affecting other users.
+
+Both catalogs are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_CATALOG=true` skips setup and startup for both.
+
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
 ## Running the Host App
@@ -58,7 +71,7 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm start` in the host/ workspace to serve the ember app.
-4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
+3. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
 The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
@@ -105,9 +118,11 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers which are normally started in `start:all`.
 
-Optional environment variables for `start:development`:
+#### Indexing dashboard
 
-- `USE_EXTERNAL_CATALOG=1` to load `/catalog` from `packages/catalog/contents` (cloned from the `boxel-catalog` repo).
+In development, you can visit an indexing dashboard at [`http://localhost:4210/_indexing-dashboard`](http://localhost:4210/_indexing-dashboard) to view the status of all active indexing jobs across all workers.
+
+In environment mode, this is at `http://worker.environment-name.localhost/_indexing-dashboard`.
 
 ### Card Pre-rendering
 

@@ -30,6 +30,7 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
+      "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "*": ["types/*"]
     },
     "types": ["@cardstack/local-types"]
@@ -41,6 +42,7 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../catalog-realm/**/*",
+    "../openrouter-realm/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

@@ -25,7 +25,7 @@ module('create-listing-pr handler', () => {
       input: {
         roomId: '!abc123:localhost',
         listingName: 'My Listing',
-        listingDescription: 'Example listing',
+        listingSummary: 'My listing Summary',
       },
     };
 
@@ -95,6 +95,10 @@ module('create-listing-pr handler', () => {
       openedCall.params.body?.toString().includes('Submission Card'),
       'summary body omits submission card URL when not provided',
     );
+    assert.true(
+      openedCall.params.body?.toString().includes('My listing Summary\n\n---'),
+      'summary body includes listing summary followed by divider',
+    );
   });
 
   test('includes submission card URL as a markdown link when provided', async (assert) => {
@@ -116,7 +120,7 @@ module('create-listing-pr handler', () => {
       input: {
         roomId: '!abc123:localhost',
         listingName: 'My Listing',
-        listingDescription: 'Example listing',
+        listingSummary: 'My listing Summary',
       },
     };
 
