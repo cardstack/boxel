@@ -23,84 +23,84 @@ jobs:
       - uses: ./.github/actions/init
 
       - name: Lint Boxel Icons
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-icons
       - name: Build Boxel Icons
         # To faciliate linting of projects that depend on Boxel Icons
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run build
         working-directory: packages/boxel-icons
       - name: Lint Boxel UI
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-ui/addon
       - name: Build Boxel UI
         # To faciliate linting of projects that depend on Boxel UI
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run build
         working-directory: packages/boxel-ui/addon
       - name: Lint Boxel UI Test App
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/boxel-ui/test-app
       - name: Lint Host
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/host
       - name: Lint Matrix
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/matrix
       - name: Lint Realm Server
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/realm-server
       - name: Lint Runtime Common
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/runtime-common
       - name: Lint Billing
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/billing
       - name: Lint Postgres
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/postgres
       - name: Lint Base Realm
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/base
       - name: Lint Catalog Realm
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/catalog-realm
       - name: Lint Experiments Realm
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/experiments-realm
       - name: Lint Software Factory
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/software-factory
       - name: Lint Boxel Tools VS Code extension
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/vscode-boxel-tools
       - name: Lint ESLint Plugin
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/eslint-plugin-boxel
       - name: Lint AI Bot
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/ai-bot
       - name: Lint Bot Runner
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/bot-runner
       - name: Lint Workspace Sync CLI
-        if: always()
+        if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/workspace-sync-cli
