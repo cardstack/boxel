@@ -607,13 +607,13 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
 
     assert.notOk(
-      context.testRealmServer2.testingOnlyRealms.find(
+      context.testRealmServer.testingOnlyRealms.find(
         (realm) => realm.url === realmURL,
       ),
       'source realm is unmounted',
     );
     assert.notOk(
-      context.testRealmServer2.testingOnlyRealms.find(
+      context.testRealmServer.testingOnlyRealms.find(
         (realm) => realm.url === publishedRealmURL,
       ),
       'published realm is unmounted',
@@ -664,7 +664,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'published realm directory exists',
     );
 
-    let mountedPublishedRealm = context.testRealmServer2.testingOnlyRealms.find(
+    let mountedPublishedRealm = context.testRealmServer.testingOnlyRealms.find(
       (realm) => realm.url === publishedRealmURL,
     );
     if (!mountedPublishedRealm) {
@@ -673,7 +673,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     context.virtualNetwork.unmount(mountedPublishedRealm.handle);
 
     let mountedRealms = (
-      context.testRealmServer2 as unknown as { realms: { url: string }[] }
+      context.testRealmServer as unknown as { realms: { url: string }[] }
     ).realms;
     let publishedRealmIndex = mountedRealms.findIndex(
       (realm) => realm.url === publishedRealmURL,
@@ -720,7 +720,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'published realm records are removed',
     );
     assert.notOk(
-      context.testRealmServer2.testingOnlyRealms.find(
+      context.testRealmServer.testingOnlyRealms.find(
         (realm) => realm.url === realmURL,
       ),
       'source realm is unmounted',
