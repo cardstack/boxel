@@ -642,7 +642,7 @@ export class Listing extends CardDef {
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super
       [getMenuItems](params)
-      .filter((item) => item.label?.toLowerCase() !== 'create listing with ai');
+      .filter((item) => item.label?.toLowerCase() !== 'create listing');
     if (params.menuContext === 'interact') {
       const extra = this.getGenerateExampleMenuItem(params);
       if (extra) {
