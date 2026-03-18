@@ -546,7 +546,7 @@ jobs:
           wait_for_url "synapse" "http://localhost:8008"
           wait_for_url "smtp4dev" "http://localhost:5001"
       - name: realm server test suite
-        run: pnpm test -- --shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm test --shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/realm-server
       - name: Print realm server logs
         if: ${{ !cancelled() }}
