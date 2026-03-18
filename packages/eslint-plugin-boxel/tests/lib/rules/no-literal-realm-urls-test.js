@@ -28,9 +28,23 @@ ruleTester.run('no-literal-realm-urls', rule, {
     {
       code: 'let id = `@cardstack/catalog/${name}`;',
     },
+    // .localhost but not a catalog path
+    {
+      code: `let url = 'http://realm-server.linty.localhost/other/foo';`,
+    },
+    // .localhost with catalog path but not realm-server host
+    {
+      code: `let url = 'http://boxel.linty.localhost/catalog/foo';`,
+    },
+    // localhost without subdomain doesn't match the pattern (matched by exact URL instead, but not /other/)
+    {
+      code: `let url = 'http://localhost:4201/other/foo';`,
+    },
   ],
 
   invalid: [
+    // --- Exact URL matches ---
+
     // localhost catalog URL in a string literal
     {
       code: `let id = 'http://localhost:4201/catalog/PersonCard';`,
@@ -79,7 +93,35 @@ ruleTester.run('no-literal-realm-urls', rule, {
       output: `let base = '@cardstack/catalog/';`,
       errors: [{ messageId: 'noLiteralRealmUrl' }],
     },
-    // Custom realm mappings via options
+
+    // --- Pattern-based matches (environment-mode *.localhost) ---
+
+    // Environment mode with subdomain
+    {
+      code: `let id = 'http://realm-server.linty.localhost/catalog/PersonCard';`,
+      output: `let id = '@cardstack/catalog/PersonCard';`,
+      errors: [{ messageId: 'noLiteralRealmUrl' }],
+    },
+    // Environment mode with port
+    {
+      code: `let id = 'http://realm-server.linty.localhost:4201/catalog/PersonCard';`,
+      output: `let id = '@cardstack/catalog/PersonCard';`,
+      errors: [{ messageId: 'noLiteralRealmUrl' }],
+    },
+    // Environment mode with https
+    {
+      code: `let id = 'https://realm-server.foo.localhost/catalog/deep/path/Card';`,
+      output: `let id = '@cardstack/catalog/deep/path/Card';`,
+      errors: [{ messageId: 'noLiteralRealmUrl' }],
+    },
+    // Environment mode — just the base URL
+    {
+      code: `let base = 'http://realm-server.linty.localhost/catalog/';`,
+      output: `let base = '@cardstack/catalog/';`,
+      errors: [{ messageId: 'noLiteralRealmUrl' }],
+    },
+
+    // --- Custom realm mappings via options ---
     {
       code: `let id = 'https://cardstack.com/base/card-api';`,
       output: `let id = '@cardstack/base/card-api';`,
