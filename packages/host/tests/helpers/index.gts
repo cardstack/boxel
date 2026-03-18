@@ -346,8 +346,8 @@ export interface CardDocFiles {
 }
 
 export interface TestContextWithSave extends TestContext {
-  onSave(subscriber: CardSaveSubscriber): void;
-  unregisterOnSave(): void;
+  onSave: (subscriber: CardSaveSubscriber) => void;
+  unregisterOnSave: () => void;
 }
 
 export async function capturePrerenderResult(
