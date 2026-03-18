@@ -25,9 +25,12 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
-import { isRegisteredPrefix, cardIdToURL } from './card-reference-resolver';
+import {
+  isRegisteredPrefix,
+  cardIdToURL,
+  resolveCardReference,
+} from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
-import { unresolveCardReference } from './card-reference-resolver';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
@@ -38,11 +41,20 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
 });
 
 function canonicalURL(url: string, relativeTo?: string): string {
+  // Resolve registered prefix identifiers (e.g. @cardstack/catalog/foo)
+  // to real URLs so that realm-membership checks and DB lookups work.
+  if (isRegisteredPrefix(url)) {
+    try {
+      return resolveCardReference(url, undefined);
+    } catch (_e) {
+      // fall through to normal URL handling
+    }
+  }
   try {
     let parsed = new URL(url, relativeTo);
     parsed.search = '';
     parsed.hash = '';
-    return unresolveCardReference(parsed.href);
+    return parsed.href;
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;
@@ -56,7 +68,7 @@ function normalizeExecutableURL(url: string): string {
   try {
     return trimExecutableExtension(new URL(url)).href;
   } catch (_e) {
-    // Handle non-URL identifiers like @cardstack/catalog/foo.gts
+    // Fallback for non-URL identifiers
     return url.replace(/\.(gts|ts|js|gjs)$/, '');
   }
 }
@@ -772,11 +784,6 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   private normalizeDependencyForLookup(dep: string, relativeTo: URL): string {
     let canonical = canonicalURL(dep, relativeTo.href);
-    // For registered prefix deps (e.g. @cardstack/catalog/foo.gts),
-    // trim executable extensions without URL parsing
-    if (isRegisteredPrefix(canonical)) {
-      return canonical.replace(/\.(gts|ts|js|gjs)$/, '');
-    }
     try {
       let url = new URL(canonical);
       if (hasExecutableExtension(url.href)) {
