@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["career-hr", "resume"],
+      "content": "## Overview\n\nThe Resume card gives the workspace a structured home for structured resume with sections (experience, education, skills) and export formatting.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nResume acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Contact]]** -- Resume often needs a person-level reference for ownership, communication, or accountability.\n- **[[Organization]]** -- Resume frequently sits inside an account, company, or team-level relationship context.\n- **[[Task]]** -- Resume often creates follow-up work or is itself tracked through task execution.\n- **[[Workflow Playbook]]** -- Resume can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Document]]** -- Resume can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Interview Feedback]]** -- Interview Feedback can provide adjacent context, downstream output, or grouped navigation around Resume.\n\n## Example Use Cases\n\n- **System of record:** Teams create Resume as the structured home for structured resume with sections (experience, education, skills) and export formatting and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Resume when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Resume stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Resume",
+        "notes": null,
+        "summary": "Structured resume with sections (experience, education, skills) and export formatting.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

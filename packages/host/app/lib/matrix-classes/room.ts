@@ -65,6 +65,12 @@ export default class Room {
     return memberIds.filter((id) => id !== undefined) as string[];
   }
 
+  hasActiveMember(userId: string): boolean {
+    let memberEvent = this._roomState?.events.get('m.room.member')?.get(userId);
+    let membership = memberEvent?.event.content?.membership;
+    return membership === 'join' || membership === 'invite';
+  }
+
   notifyRoomStateUpdated(rs: MatrixSDK.RoomState) {
     this._roomState = rs; // this is usually the same object, but some internal state has changed. This assignment kicks off reactivity.
   }
@@ -97,11 +103,19 @@ export default class Room {
     };
   }
 
-  get activeLLM() {
+  get activeLLMEventContent(): ActiveLLMEvent['content'] | undefined {
     let event = this._roomState?.events
       .get(APP_BOXEL_ACTIVE_LLM)
       ?.get('')?.event;
-    return (event as ActiveLLMEvent)?.content.model;
+    return (event as ActiveLLMEvent)?.content;
+  }
+
+  get activeLLM() {
+    return this.activeLLMEventContent?.model;
+  }
+
+  get activeInputModalities(): string[] | undefined {
+    return this.activeLLMEventContent?.inputModalities;
   }
 
   get activeLLMMode(): LLMMode {

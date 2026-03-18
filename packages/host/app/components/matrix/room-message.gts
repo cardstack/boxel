@@ -3,7 +3,7 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -19,7 +19,6 @@ import {
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -49,6 +48,10 @@ interface Signature {
       element: HTMLElement;
       scrollTo: Element['scrollIntoView'];
     }) => void;
+    unregisterScroller?: (args: {
+      index: number;
+      element: HTMLElement;
+    }) => void;
   };
 }
 
@@ -58,27 +61,24 @@ export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
-  @tracked private attachedCardCollection:
-    | ReturnType<getCardCollection>
-    | undefined;
   @tracked private timeoutCheckTimestamp = Date.now();
   @tracked private waitStartTimestamp: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-
     this.checkStreamingTimeout.perform();
   }
 
-  private makeCardResources = () => {
-    this.attachedCardCollection = this.getCardCollection(
+  private get message() {
+    return this.args.roomResource.messages[this.args.index];
+  }
+
+  @cached
+  private get attachedCardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(
       this,
       () => this.message.attachedCardIds ?? [],
     );
-  };
-
-  private get message() {
-    return this.args.roomResource.messages[this.args.index];
   }
 
   private checkStreamingTimeout = task(async () => {
@@ -167,7 +167,6 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   <template>
-    {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
       it is problematic to ensure the last message sticks to the bottom of the screen.
@@ -188,6 +187,7 @@ export default class RoomMessage extends Component<Signature> {
         @isLastAssistantMessage={{this.isLastAssistantMessage}}
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
+        @unregisterScroller={{@unregisterScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         {{! @glint-ignore }}
         @profileAvatar={{component

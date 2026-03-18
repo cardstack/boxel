@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["projects-productivity", "calendar", "event"],
+      "content": "## Overview\n\nThe Calendar Event card gives the workspace a structured home for scheduled event with start/end time, location, attendees, recurrence rules, and reminders.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nCalendar Event is designed to participate in active workflows. Its state, relationships, and outputs need to remain inspectable so that agents and humans can collaborate on the same object without losing context.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Task]]** -- Calendar Event often creates follow-up work or is itself tracked through task execution.\n- **[[Project]]** -- Calendar Event can be grouped under a larger initiative so its work stays visible in context.\n- **[[Kanban Board]]** -- Calendar Event can be surfaced in board views when teams need a visual operational workflow.\n- **[[Workflow Playbook]]** -- Calendar Event can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Trigger]]** -- Changes to Calendar Event can fire automation, and automation can also create or update Calendar Event.\n- **[[Case]]** -- Case can provide adjacent context, downstream output, or grouped navigation around Calendar Event.\n\n## Example Use Cases\n\n- **System of record:** Teams create Calendar Event as the structured home for scheduled event with start/end time, location, attendees, recurrence rules, and reminders and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Calendar Event when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Calendar Event stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Calendar Event",
+        "notes": null,
+        "summary": "Scheduled event with start/end time, location, attendees, recurrence rules, and reminders.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "module": "../system-card/model-configuration",
+        "name": "ModelConfiguration"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "purpose": "debug",
+      "cardInfo": {
+        "notes": null,
+        "name": "",
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "reasoningEffort": "medium"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "openRouterModel": {
+        "links": {
+          "self": "@cardstack/openrouter/OpenRouterModel/openai-gpt-5-codex"
+        }
+      }
+    }
+  }
+}

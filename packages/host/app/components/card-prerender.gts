@@ -107,7 +107,11 @@ export default class CardPrerender extends Component {
         'boxel-render-error',
         this.#handleRenderErrorEvent,
       );
+      this.localIndexer.teardown(this.#prerendererDelegate);
       this.#cardTypeTracker.clear();
+      this.#moduleTypesCache = new WeakMap() as ModuleTypesCache;
+      this.#moduleLastStoreResetKey = undefined;
+      this.#currentContext = undefined;
       this.#moduleAuthGuard.unregister();
     });
   }

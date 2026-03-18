@@ -25,7 +25,7 @@ module('create-listing-pr handler', () => {
       input: {
         roomId: '!abc123:localhost',
         listingName: 'My Listing',
-        listingDescription: 'Example listing',
+        listingSummary: 'My listing Summary',
       },
     };
 
@@ -71,6 +71,67 @@ module('create-listing-pr handler', () => {
       openedCall.params.body?.toString().includes('- Number of Files: 2'),
       'summary body includes file count',
     );
+    assert.false(
+      openedCall.params.body?.toString().includes('Submission Card'),
+      'summary body omits submission card URL when not provided',
+    );
+    assert.true(
+      openedCall.params.body?.toString().includes('My listing Summary\n\n---'),
+      'summary body includes listing summary followed by divider',
+    );
+  });
 
+  test('includes submission card URL as a markdown link when provided', async (assert) => {
+    let opened: { params: unknown }[] = [];
+    let githubClient: GitHubClient = {
+      openPullRequest: async (params) => {
+        opened.push({ params });
+        return { number: 2, html_url: 'https://example.com/pr/2' };
+      },
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+    };
+
+    let eventContent: BotTriggerEventContent = {
+      type: 'pr-listing-create',
+      realm: 'http://localhost:4201/test/',
+      userId: '@alice:localhost',
+      input: {
+        roomId: '!abc123:localhost',
+        listingName: 'My Listing',
+        listingSummary: 'My listing Summary',
+      },
+    };
+
+    let submissionCardUrl =
+      'http://localhost:4201/submissions/SubmissionCard/abc-123';
+
+    let handler = new CreateListingPRHandler(githubClient);
+    await handler.openCreateListingPR(
+      eventContent,
+      '@alice:localhost',
+      {
+        status: 'ready',
+        cardResultString: JSON.stringify({
+          data: {
+            id: submissionCardUrl,
+            attributes: {
+              allFileContents: [
+                { filename: 'catalog/Listing/listing.json', contents: '{}' },
+              ],
+            },
+          },
+        }),
+      },
+      submissionCardUrl,
+    );
+
+    assert.strictEqual(opened.length, 1, 'opens exactly one PR');
+    let body = (opened[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
+    assert.true(
+      body.includes(`[${submissionCardUrl}](${submissionCardUrl})`),
+      'summary body includes submission card URL as a markdown link',
+    );
   });
 });

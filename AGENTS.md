@@ -2,9 +2,26 @@
 
 ## Tooling prerequisites
 
-- We pin the toolchain with Volta (`.volta`), using the versions of Node.js and pnpm specified in package.json. Install Volta and set `VOLTA_FEATURE_PNPM=1` so pnpm is managed automatically—avoid global installs outside Volta.
+- We pin the toolchain with [mise](https://mise.jdx.dev/) (`.mise.toml`), which manages Node.js and pnpm versions. Run `mise install` from the repo root to get the correct versions—avoid global installs outside mise.
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
+
+## GitHub Actions failure triage helper
+
+- Use `pnpm ci:failures -- ...` to quickly summarize failed jobs and extract actionable test failures from GitHub Actions logs.
+- This command requires GitHub CLI (`gh`) to be installed and authenticated.
+- Common usage:
+  - `pnpm ci:failures -- --run <run-id-or-url>`
+  - `pnpm ci:failures -- --pr <pr-number-or-url>`
+  - `pnpm ci:failures -- --branch <branch-name>`
+- Useful flags:
+  - `--repo <owner/repo>` to target a specific repository
+  - `--workflow <name>` to focus on a specific workflow (for example `CI Host`)
+  - `--max-lines <n>` to limit extracted failure lines
+  - `--context-lines <n>` to include surrounding stack/assertion context for each failure
+  - `--no-progress` to suppress progress updates if you only want final output
+  - `--json` for machine-readable output
+  - `--fail-on-findings` to exit non-zero when failed jobs are found
 
 ## Testing instructions by package
 
@@ -56,6 +73,14 @@
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 - run `pnpm lint` in this directory to lint changes made to this package
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
+- the host tests report this error:
+  ```
+  Missing symlinked npm packages: 
+  Package: @cardstack/local-types
+    * Specified: workspace:*
+    * Symlinked: (not available)
+  ```
+  This is a red herring. Just ignore this error.
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -114,6 +139,11 @@
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+
+## Production-safe selectors
+
+- `data-test-*` attributes are stripped from production builds. Never use them for runtime behavior or styling in app code.
+- For production hooks, use classes or non-test `data-*` attributes (for example `data-path`, `data-kind`) and keep `data-test-*` only for tests.
 
 ## `.gts` file gotcha: regex literals can break content-tag
 

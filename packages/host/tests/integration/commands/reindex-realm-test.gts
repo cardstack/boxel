@@ -1,8 +1,10 @@
 import { getOwner } from '@ember/owner';
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import ReindexRealmCommand from '@cardstack/host/commands/reindex-realm';
 import RealmService from '@cardstack/host/services/realm';
@@ -80,8 +82,14 @@ module('Integration | commands | reindex-realm', function (hooks) {
   test('calls realm endpoint with expected auth header', async function (assert) {
     let commandService = getService('command-service');
     let realmServer = getService('realm-server');
+    let realmService = getService('realm') as RealmService;
     let command = new ReindexRealmCommand(commandService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
+
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'realm is not indexing before the command runs',
+    );
 
     let result = await command.execute({
       realmUrl: realmURL,
@@ -118,11 +126,34 @@ module('Integration | commands | reindex-realm', function (hooks) {
       `Bearer ${realmServer.token}`,
       'authorization header does not use realm-server session token',
     );
+    assert.true(
+      realmService.info(realmURL).isIndexing,
+      'command starts the realm indexing animation immediately',
+    );
+
+    mockMatrixUtils.simulateRemoteMessage(
+      mockMatrixUtils.getRoomIdForRealmAndUser(realmURL, '@testuser:localhost'),
+      testRealmInfo.realmUserId!,
+      {
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [],
+        realmURL,
+      },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
+    );
+    await settled();
+
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'incremental realm event stops the indexing animation',
+    );
   });
 
   test('throws when reindex endpoint returns non-204', async function (assert) {
     let commandService = getService('command-service');
     let realmServer = getService('realm-server');
+    let realmService = getService('realm') as RealmService;
     let command = new ReindexRealmCommand(commandService.commandContext);
     let realmURL = new URL('test/', realmServer.url).href;
     responseStatus = 500;
@@ -134,6 +165,44 @@ module('Integration | commands | reindex-realm', function (hooks) {
       }),
       /Reindex realm failed: 500 - boom/,
       'propagates non-204 failure as an error',
+    );
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'failed reindex restores the pre-command animation state',
+    );
+  });
+
+  test('full realm event also stops the indexing animation for no-op reindex', async function (assert) {
+    let commandService = getService('command-service');
+    let realmServer = getService('realm-server');
+    let realmService = getService('realm') as RealmService;
+    let command = new ReindexRealmCommand(commandService.commandContext);
+    let realmURL = new URL('test/', realmServer.url).href;
+
+    await command.execute({
+      realmUrl: realmURL,
+    });
+
+    assert.true(
+      realmService.info(realmURL).isIndexing,
+      'command starts the realm indexing animation',
+    );
+
+    mockMatrixUtils.simulateRemoteMessage(
+      mockMatrixUtils.getRoomIdForRealmAndUser(realmURL, '@testuser:localhost'),
+      testRealmInfo.realmUserId!,
+      {
+        eventName: 'index',
+        indexType: 'full',
+        realmURL,
+      },
+      { type: APP_BOXEL_REALM_EVENT_TYPE },
+    );
+    await settled();
+
+    assert.false(
+      realmService.info(realmURL).isIndexing,
+      'full realm event stops the indexing animation when no incremental event arrives',
     );
   });
 

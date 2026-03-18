@@ -72,10 +72,42 @@ import { createRemotePrerenderer } from '../../prerender/remote-prerenderer';
 import { createPrerenderHttpServer } from '../../prerender/prerender-app';
 import { buildCreatePrerenderAuth } from '../../prerender/auth';
 import { Client as PgClient } from 'pg';
-import { isEnvironmentMode, serviceURL } from '../../lib/dev-service-registry';
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+  serviceURL,
+} from '../../lib/dev-service-registry';
 
-const testRealmURL = new URL('http://127.0.0.1:4444/');
+/**
+ * In environment mode we shift test ports by a deterministic offset derived
+ * from the environment slug so that parallel environments never collide.
+ */
+function environmentPortOffset(): number {
+  if (!isEnvironmentMode()) {
+    return 0;
+  }
+  let slug = getEnvironmentSlug();
+  let hash = 0;
+  for (let i = 0; i < slug.length; i++) {
+    hash = ((hash << 5) - hash + slug.charCodeAt(i)) | 0;
+  }
+  // offset in range [1000, 9000) — keeps ports well within valid range
+  return 1000 + (Math.abs(hash) % 8000);
+}
+
+/** Return a test port, shifted by a per-environment offset when needed. */
+export function testPort(basePort: number): number {
+  return basePort + environmentPortOffset();
+}
+
+const testRealmURL = new URL(`http://127.0.0.1:${testPort(4444)}/`);
 const testRealmHref = testRealmURL.href;
+
+/** Build the default test-realm URL with an optional sub-path. */
+export function testRealmURLFor(path: string): URL {
+  return new URL(path, testRealmURL);
+}
+
 const migratedTestDatabaseTemplate = 'boxel_migrated_template';
 
 export const testRealmServerMatrixUsername = 'node-test_realm-server';
@@ -147,11 +179,14 @@ export async function waitUntil<T>(
 }
 
 export const testRealm = 'http://test-realm/';
-export const localBaseRealm = 'http://localhost:4201/base';
-export const matrixURL = new URL('http://localhost:8008');
+export const localBaseRealm = isEnvironmentMode()
+  ? `${serviceURL('realm-server')}/base`
+  : 'http://localhost:4201/base';
+export const matrixURL = new URL(
+  isEnvironmentMode() ? serviceURL('matrix') : 'http://localhost:8008',
+);
 const testPrerenderHost = '127.0.0.1';
-const testPrerenderPort = 4460;
-const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
+const testPrerenderPort = testPort(4460);
 
 export const testRealmInfo = {
   name: 'Test Realm',
@@ -173,8 +208,22 @@ export const realmServerTestMatrix: MatrixConfig = {
 export const realmServerSecretSeed = "mum's the word";
 export const realmSecretSeed = `shhh! it's a secret`;
 export const grafanaSecret = `shhh! it's a secret`;
-export const matrixRegistrationSecret: string =
-  getSynapseConfig()!.registration_shared_secret; // as long as synapse has been started at least once, this will always exist
+
+function getMatrixRegistrationSecret(): string {
+  let secret =
+    getSynapseConfig()?.registration_shared_secret ??
+    process.env.MATRIX_REGISTRATION_SHARED_SECRET;
+
+  if (!secret) {
+    throw new Error(
+      'Missing Matrix registration shared secret. Start Synapse first or set MATRIX_REGISTRATION_SHARED_SECRET.',
+    );
+  }
+
+  return secret;
+}
+
+export const matrixRegistrationSecret = getMatrixRegistrationSecret();
 export const testCreatePrerenderAuth =
   buildCreatePrerenderAuth(realmSecretSeed);
 
@@ -508,6 +557,8 @@ function prerendererCacheKeyPart(prerenderer?: Prerenderer): string | null {
   }
   return `injected:${id}`;
 }
+
+const testPrerenderURL = `http://${testPrerenderHost}:${testPrerenderPort}`;
 
 async function startTestPrerenderServer(): Promise<string> {
   if (prerenderServer?.listening) {

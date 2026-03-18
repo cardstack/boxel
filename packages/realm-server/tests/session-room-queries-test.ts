@@ -3,6 +3,8 @@ import { basename } from 'path';
 import type { PgAdapter } from '@cardstack/postgres';
 import { insertPermissions } from '@cardstack/runtime-common';
 import {
+  clearSessionRoom,
+  fetchSessionRoom,
   fetchRealmSessionRooms,
   upsertSessionRoom,
 } from '@cardstack/runtime-common/db-queries/session-room-queries';
@@ -381,6 +383,72 @@ module(basename(__filename), function () {
         result['@bob:localhost'],
         '!room-bob:localhost',
         'bob is included via world-readable access',
+      );
+    });
+  });
+
+  module('clearSessionRoom', function (hooks) {
+    let dbAdapter: PgAdapter;
+
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter) => {
+        dbAdapter = _dbAdapter;
+      },
+    });
+
+    test('clears the stored session room when it matches', async function (assert) {
+      await insertUser(
+        dbAdapter,
+        '@alice:localhost',
+        'cus_alice',
+        'alice@example.com',
+      );
+      await upsertSessionRoom(
+        dbAdapter,
+        '@alice:localhost',
+        '!room-alice:localhost',
+      );
+
+      let cleared = await clearSessionRoom(
+        dbAdapter,
+        '@alice:localhost',
+        '!room-alice:localhost',
+      );
+
+      assert.true(cleared, 'reports that the room was cleared');
+      let remainingRoom = await fetchSessionRoom(dbAdapter, '@alice:localhost');
+      assert.strictEqual(
+        remainingRoom,
+        null,
+        'stored session room is removed from the user record',
+      );
+    });
+
+    test('does not clear the stored session room when the room id does not match', async function (assert) {
+      await insertUser(
+        dbAdapter,
+        '@alice:localhost',
+        'cus_alice',
+        'alice@example.com',
+      );
+      await upsertSessionRoom(
+        dbAdapter,
+        '@alice:localhost',
+        '!room-alice:localhost',
+      );
+
+      let cleared = await clearSessionRoom(
+        dbAdapter,
+        '@alice:localhost',
+        '!different-room:localhost',
+      );
+
+      assert.false(cleared, 'reports that nothing was cleared');
+      let remainingRoom = await fetchSessionRoom(dbAdapter, '@alice:localhost');
+      assert.strictEqual(
+        remainingRoom,
+        '!room-alice:localhost',
+        'stored session room is left untouched',
       );
     });
   });

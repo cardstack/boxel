@@ -2347,7 +2347,7 @@ export class Realm {
 
       let createdAt = await this.getCreatedTime(handle.path);
       let defaultHeaders: Record<string, string> = {
-        'content-type': 'text/plain; charset=utf-8',
+        'content-type': inferContentType(handle.path),
         ...(createdAt != null
           ? { 'x-created': formatRFC7231(createdAt * 1000) }
           : {}),

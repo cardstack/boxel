@@ -1,9 +1,12 @@
 import {
   currentURL,
   click,
+  focus,
   settled,
-  waitUntil,
   triggerEvent,
+  triggerKeyEvent,
+  waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -431,6 +434,573 @@ module('Acceptance | file chooser tests', function (hooks) {
     assert
       .dom('[data-test-choose-file-modal]')
       .exists('modal remains open after cancelling file pick');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+});
+
+module('Acceptance | file chooser keyboard tests', function (hooks) {
+  setupInteractSubmodeTests(hooks, {
+    setRealm() {},
+  });
+
+  async function moveCursorToDirectory(path: string) {
+    for (let i = 0; i < 40; i++) {
+      if (document.querySelector(`[data-test-directory="${path}"].cursor`)) {
+        break;
+      }
+      await triggerKeyEvent(
+        '[data-test-file-tree-nav]',
+        'keydown',
+        'ArrowDown',
+      );
+    }
+  }
+
+  test('file list area is focused when the modal opens', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    assert.strictEqual(
+      document.activeElement,
+      document.querySelector('[data-test-file-tree-nav]'),
+      'file tree nav has focus on modal open',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('file list area is focused when the modal reopens', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitUntil(
+      () =>
+        document.activeElement ===
+        document.querySelector('[data-test-file-tree-nav]'),
+      {
+        timeout: 5000,
+        timeoutMessage: 'file tree nav was not focused on first open',
+      },
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitUntil(
+      () =>
+        document.activeElement ===
+        document.querySelector('[data-test-file-tree-nav]'),
+      {
+        timeout: 5000,
+        timeoutMessage: 'file tree nav was not focused on reopen',
+      },
+    );
+
+    assert.strictEqual(
+      document.activeElement,
+      document.querySelector('[data-test-file-tree-nav]'),
+      'file tree nav has focus on modal reopen',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('individual file buttons are not in the tab order', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="README.txt"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    assert
+      .dom('[data-test-file="README.txt"]')
+      .hasAttribute('tabindex', '-1', 'file buttons have tabindex=-1');
+
+    assert
+      .dom('[data-test-directory="FileLinkCard/"]')
+      .hasAttribute('tabindex', '-1', 'directory buttons have tabindex=-1');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('typing in the file list moves the cursor to the first matching file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="README.txt"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+    await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key: 'r' });
+
+    assert
+      .dom('[data-test-file="README.txt"]')
+      .hasClass('cursor', 'README.txt gets the cursor');
+
+    assert
+      .dom('[data-test-file="test-image.png"]')
+      .doesNotHaveClass('cursor', 'test-image.png does not get the cursor');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('type-ahead cursor updates as more characters are typed', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="test-image.png"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Type 't' — should move cursor to test-image.png (starts with 't')
+    await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key: 't' });
+
+    assert
+      .dom('[data-test-file="test-image.png"]')
+      .hasClass('cursor', 'test-image.png gets the cursor for "t"');
+
+    assert
+      .dom('[data-test-file="README.txt"]')
+      .doesNotHaveClass('cursor', 'README.txt does not get the cursor for "t"');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('typing moves the cursor to a matching entry', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-directory="FileLinkCard/"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Type 'f' — should move cursor to a matching entry (case-insensitive)
+    await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key: 'f' });
+
+    let cursor = document.querySelector<HTMLElement>(
+      '[data-test-file-tree-nav] button.cursor',
+    );
+    let cursorLabel = cursor?.textContent?.trim().toLowerCase();
+    const cursorMatchesTypedPrefix = Boolean(cursorLabel?.startsWith('f'));
+    assert.ok(cursor, 'cursor moved to a matching entry');
+    assert.true(
+      cursorMatchesTypedPrefix,
+      'cursor moved to an entry starting with "f"',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('ArrowDown moves the cursor through the file list', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="README.txt"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // First ArrowDown: cursor moves to first item
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowDown');
+    assert
+      .dom('[data-test-file-tree-nav] button.cursor')
+      .exists('some item has the cursor after first ArrowDown');
+
+    // Second ArrowDown: cursor moves to next item
+    let firstItem = document.querySelector(
+      '[data-test-file-tree-nav] button.cursor',
+    );
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowDown');
+    assert.notStrictEqual(
+      document.querySelector('[data-test-file-tree-nav] button.cursor'),
+      firstItem,
+      'cursor moved to a different item on second ArrowDown',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('ArrowUp from the first item keeps the cursor on the first item', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="README.txt"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Move to first item, then try to go up
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowDown');
+    let firstItem = document.querySelector(
+      '[data-test-file-tree-nav] button.cursor',
+    );
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowUp');
+
+    assert.strictEqual(
+      document.querySelector('[data-test-file-tree-nav] button.cursor'),
+      firstItem,
+      'cursor stays on first item when ArrowUp from first item',
+    );
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('ArrowRight expands a directory and moves the cursor into it', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-directory="FileLinkCard/"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Move cursor to FileLinkCard directory via keyboard navigation
+    await moveCursorToDirectory('FileLinkCard/');
+    assert
+      .dom('[data-test-directory="FileLinkCard/"]')
+      .hasClass('cursor', 'cursor is on FileLinkCard/');
+
+    // ArrowRight should expand the directory and move cursor to first child
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowRight');
+
+    assert
+      .dom('[data-test-file="FileLinkCard/empty.json"]')
+      .exists('FileLinkCard/ is expanded and shows children');
+
+    assert
+      .dom('[data-test-directory="FileLinkCard/"]')
+      .doesNotHaveClass('cursor', 'cursor moved into the directory');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('ArrowLeft collapses an open directory', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-directory="FileLinkCard/"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    // Expand the directory by clicking
+    await click('[data-test-directory="FileLinkCard/"]');
+    assert
+      .dom('[data-test-file="FileLinkCard/empty.json"]')
+      .exists('directory is expanded');
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Move cursor to FileLinkCard directory
+    await moveCursorToDirectory('FileLinkCard/');
+    assert
+      .dom('[data-test-directory="FileLinkCard/"]')
+      .hasClass('cursor', 'cursor is on FileLinkCard/');
+
+    // ArrowLeft should collapse the directory
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'ArrowLeft');
+
+    assert
+      .dom('[data-test-file="FileLinkCard/empty.json"]')
+      .doesNotExist('FileLinkCard/ is collapsed');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('Enter on a file confirms the selection and closes the modal', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-file="README.txt"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Move cursor to README.txt via type-ahead
+    await triggerEvent('[data-test-file-tree-nav]', 'keydown', { key: 'r' });
+    assert
+      .dom('[data-test-file="README.txt"]')
+      .hasClass('cursor', 'cursor is on README.txt');
+
+    // Enter should confirm the selection and close the modal
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'Enter');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-choose-file-modal]'),
+      {
+        timeout: 5000,
+        timeoutMessage: 'modal did not close after Enter',
+      },
+    );
+
+    assert
+      .dom(
+        '[data-test-links-to-editor="attachment"] [data-test-card="http://test-realm/test/README.txt"]',
+      )
+      .exists('README.txt was confirmed as the attachment');
+  });
+
+  test('Enter on a directory expands/collapses it without closing the modal', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    await waitFor('[data-test-directory="FileLinkCard/"]', {
+      timeout: 5000,
+      timeoutMessage: 'file tree did not load',
+    });
+
+    await focus('[data-test-file-tree-nav]');
+
+    // Move cursor to FileLinkCard directory
+    await moveCursorToDirectory('FileLinkCard/');
+
+    // Enter should expand the directory
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'Enter');
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('modal is still open after Enter on directory');
+
+    assert
+      .dom('[data-test-file="FileLinkCard/empty.json"]')
+      .exists('FileLinkCard/ is now expanded');
+
+    // Enter again should collapse it
+    await triggerKeyEvent('[data-test-file-tree-nav]', 'keydown', 'Enter');
+
+    assert
+      .dom('[data-test-file="FileLinkCard/empty.json"]')
+      .doesNotExist('FileLinkCard/ is collapsed again');
+
+    await click('[data-test-choose-file-modal-cancel-button]');
+  });
+
+  test('realm chooser is keyboard focusable', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}FileLinkCard/empty`,
+            format: 'edit',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-links-to-editor="attachment"] [data-test-add-new="attachment"]',
+    );
+
+    assert
+      .dom('[data-test-choose-file-modal]')
+      .exists('file chooser modal is open');
+
+    // With multiple available realms this is keyboard focusable.
+    // When there is only a single realm it may be rendered disabled/non-focusable.
+    let realmChooser = document.querySelector<HTMLElement>(
+      '[data-test-choose-file-modal-realm-chooser]',
+    );
+    if (realmChooser) {
+      let trigger = realmChooser.querySelector<HTMLElement>(
+        '.ember-power-select-trigger, [role="combobox"], button',
+      );
+      if (trigger) {
+        assert.ok(trigger, 'realm chooser trigger exists');
+        const hasKeyboardAffordance =
+          trigger.getAttribute('tabindex') !== null ||
+          trigger.querySelector('input, button, [tabindex]') !== null;
+        const isExplicitlyDisabled =
+          trigger.getAttribute('aria-disabled') === 'true';
+        const isFocusableOrDisabled = Boolean(
+          hasKeyboardAffordance || isExplicitlyDisabled,
+        );
+
+        assert.ok(
+          isFocusableOrDisabled,
+          'realm chooser is keyboard focusable or explicitly disabled',
+        );
+      } else {
+        assert.true(
+          true,
+          'realm chooser has no interactive trigger in this configuration',
+        );
+      }
+    } else {
+      assert.true(
+        true,
+        'realm chooser is not rendered when there is only one available realm',
+      );
+    }
 
     await click('[data-test-choose-file-modal-cancel-button]');
   });

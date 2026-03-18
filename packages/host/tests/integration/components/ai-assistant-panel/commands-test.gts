@@ -210,6 +210,20 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
               commands: [
                 {
                   codeRef: {
+                    name: 'SearchCardsByTypeAndTitleCommand',
+                    module: '@cardstack/boxel-host/commands/search-cards',
+                  },
+                  requiresApproval: false,
+                },
+                {
+                  codeRef: {
+                    name: 'SearchCardsByQueryCommand',
+                    module: '@cardstack/boxel-host/commands/search-cards',
+                  },
+                  requiresApproval: false,
+                },
+                {
+                  codeRef: {
                     name: 'default',
                     module:
                       '@cardstack/boxel-host/commands/read-file-for-ai-assistant',

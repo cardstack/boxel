@@ -46,6 +46,27 @@ export async function upsertSessionRoom(
 }
 
 /**
+ * Clears the stored session room id for the given matrix user if it still
+ * matches the provided room id. Returns true when a row was updated.
+ */
+export async function clearSessionRoom(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+  roomId: string,
+) {
+  let rows = await query(dbAdapter, [
+    'UPDATE users SET session_room_id = NULL',
+    'WHERE matrix_user_id =',
+    param(matrixUserId),
+    'AND session_room_id =',
+    param(roomId),
+    'RETURNING id',
+  ]);
+
+  return rows.length > 0;
+}
+
+/**
  * Returns a mapping of matrix user id to session room id for all known sessions
  * that should be notified about changes to the given realm.
  *
