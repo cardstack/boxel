@@ -1163,6 +1163,7 @@ module(basename(__filename), function () {
               assert,
               getMessagesSince,
               realm: testRealmHref,
+              timeout: 5000,
             },
           );
           let id = incrementalEventContent.invalidations[0].split('/').pop()!;

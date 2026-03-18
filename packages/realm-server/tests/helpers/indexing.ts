@@ -15,22 +15,27 @@ interface IncrementalIndexEventTestContext {
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>;
   realm: string;
   type?: string;
+  timeout?: number;
 }
 
 export async function waitForIncrementalIndexEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
+  timeout = 5000,
 ) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
+  await waitUntil(
+    async () => {
+      let matrixMessages = await getMessagesSince(since);
 
-    return matrixMessages.some(
-      (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-        m.content.eventName === 'index' &&
-        m.content.indexType === 'incremental',
-    );
-  });
+      return matrixMessages.some(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
+    },
+    { timeout },
+  );
 }
 
 export async function expectIncrementalIndexEvent(
@@ -38,7 +43,7 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm, type } = opts;
+  let { assert, getMessagesSince, realm, type, timeout } = opts;
 
   type = type ?? 'CardDef';
 
@@ -48,7 +53,7 @@ export async function expectIncrementalIndexEvent(
   if (!hasExtension && !endsWithSlash) {
     throw new Error('Invalid file path');
   }
-  await waitForIncrementalIndexEvent(getMessagesSince, since);
+  await waitForIncrementalIndexEvent(getMessagesSince, since, timeout);
 
   let messages = await getMessagesSince(since);
   let incrementalIndexInitiationEventContent = findRealmEvent(
