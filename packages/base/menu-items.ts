@@ -167,7 +167,7 @@ export function getDefaultCardMenuItems(
         }
         await new OpenCreateListingModalCommand(params.commandContext).execute({
           codeRef,
-          openCardId: cardId,
+          openCardIds: [cardId],
           targetRealm,
         });
       },
