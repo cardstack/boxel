@@ -350,16 +350,6 @@ Responsibilities:
 
 For version one, this helper can stay deterministic and data-oriented. Later AI stages should combine the structured brief fields with a stable prompt template rather than embedding a fully rendered prompt into `factory:go` output.
 
-### D1. `src/prompts/brief-judgment.ts`
-
-Dedicated prompt template module for brief judgment.
-
-Responsibilities:
-
-- hold the reusable runtime prompt instructions for thin-MVP vs broader-first-pass decisions
-- keep prompt wording out of the brief-normalization helper
-- let later AI boundaries combine brief-specific context with one shared template instead of repeating an inline string
-
 ### E. `scripts/lib/factory-loop.ts`
 
 New helper module for the first execution loop.
