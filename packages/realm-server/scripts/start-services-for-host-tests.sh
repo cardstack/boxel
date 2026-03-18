@@ -34,7 +34,10 @@ for item in $KEEP_FOLDERS; do
   fi
 done
 # Explicitly keep some files needed for the tests
-KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json"
+# skill-set.gts, skill-plus.gts, skill-reference.gts are needed because the
+# skills realm's skill instances adopt from @cardstack/catalog/skill-set and
+# @cardstack/catalog/skill-plus which are defined in these files.
+KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json skill-set.gts skill-plus.gts skill-reference.gts"
 for item in $KEEP_FILES; do
   if [ -f "$CATALOG_SRC_PATH/$item" ]; then
     cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/$item"
@@ -48,14 +51,17 @@ export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
 # Make host-test startup logs focus on indexing progress rather than per-request noise.
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
-SKIP_CATALOG="${SKIP_CATALOG:-}"
+# Always start the catalog with the trimmed content above. The skills realm
+# depends on @cardstack/catalog/skill-set and @cardstack/catalog/skill-plus
+# modules, so the catalog realm must be running for skills to index correctly.
+# The trimmed catalog is small enough to index quickly.
+#
 # There is a race condition starting up the servers that setting up the
 # submission realm triggers which triggers the start-development.sh script to
 # SIGTERM. currently we don't need the submission realm for host tests to
 # skipping that. but this issue needs to be fixed.
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
-  SKIP_CATALOG="$SKIP_CATALOG" \
   SKIP_BOXEL_HOMEPAGE=true \
   SKIP_SUBMISSION=true \
   CATALOG_REALM_PATH="$CATALOG_TEMP_PATH" \
