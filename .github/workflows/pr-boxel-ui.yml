@@ -69,7 +69,7 @@ jobs:
     name: Update preview comment
     needs:
       - deploy-ui-preview-staging
-    if: ${{ always() && needs.deploy-ui-preview-staging.result == 'success' }}
+    if: ${{ !cancelled() && needs.deploy-ui-preview-staging.result == 'success' }}
     uses: ./.github/workflows/preview-comment.yml
     with:
       pr-number: ${{ github.event.pull_request.number }}
