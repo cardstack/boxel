@@ -164,11 +164,8 @@ module('factory-entrypoint', function () {
             'Bearer brief-token',
           );
 
-          return {
-            ok: true,
-            status: 200,
-            statusText: 'OK',
-            json: async () => ({
+          return new Response(
+            JSON.stringify({
               data: {
                 attributes: {
                   content:
@@ -182,7 +179,13 @@ module('factory-entrypoint', function () {
                 },
               },
             }),
-          };
+            {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+              },
+            },
+          );
         },
       },
     );
