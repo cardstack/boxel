@@ -2,11 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs as parseNodeArgs } from 'node:util';
 
-import {
-  loadFactoryBrief,
-  type FactoryBrief,
-  type FactoryBriefFetch,
-} from './factory-brief';
+import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { createBoxelRealmFetch } from './realm-auth';
 
 const allowedModes = ['bootstrap', 'implement', 'resume'] as const;
@@ -48,12 +44,12 @@ export interface FactoryEntrypointSummary {
 }
 
 export interface RunFactoryEntrypointDependencies {
-  fetch?: FactoryBriefFetch;
+  fetch?: typeof globalThis.fetch;
   createBriefFetch?: (
     briefUrl: string,
     authToken: string | null,
-    fetch?: FactoryBriefFetch,
-  ) => FactoryBriefFetch;
+    fetch?: typeof globalThis.fetch,
+  ) => typeof globalThis.fetch;
 }
 
 export class FactoryEntrypointUsageError extends Error {
@@ -168,8 +164,8 @@ export async function runFactoryEntrypoint(
 function createFactoryBriefFetch(
   briefUrl: string,
   authToken: string | null,
-  fetch?: FactoryBriefFetch,
-): FactoryBriefFetch {
+  fetch?: typeof globalThis.fetch,
+): typeof globalThis.fetch {
   return createBoxelRealmFetch(briefUrl, {
     authorization: authToken ?? undefined,
     fetch,

@@ -1,3 +1,6 @@
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { module, test } from 'qunit';
 
 import {
@@ -221,6 +224,67 @@ module('realm-auth', function () {
       assert.deepEqual(brief.tags, ['private', 'brief']);
     } finally {
       await servers.stop();
+    }
+  });
+
+  test('createBoxelRealmFetch derives env credentials from REALM_SECRET_SEED when MATRIX_PASSWORD is absent', async function (assert) {
+    let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
+    let originalHome = process.env.HOME;
+    let originalMatrixUrl = process.env.MATRIX_URL;
+    let originalMatrixUsername = process.env.MATRIX_USERNAME;
+    let originalMatrixPassword = process.env.MATRIX_PASSWORD;
+    let originalRealmServerUrl = process.env.REALM_SERVER_URL;
+    let originalRealmSecretSeed = process.env.REALM_SECRET_SEED;
+    let servers = await startServers({ username: 'private_realm' });
+    let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
+
+    try {
+      process.env.HOME = tempHome;
+      process.env.MATRIX_URL = servers.matrixServer.url;
+      delete process.env.MATRIX_USERNAME;
+      delete process.env.MATRIX_PASSWORD;
+      delete process.env.REALM_SERVER_URL;
+      process.env.REALM_SECRET_SEED = "shhh! it's a secret";
+
+      let brief = await loadFactoryBrief(briefUrl, {
+        fetch: createBoxelRealmFetch(briefUrl),
+      });
+
+      assert.strictEqual(brief.title, 'Private Brief');
+    } finally {
+      process.env.HOME = originalHome;
+      process.env.MATRIX_URL = originalMatrixUrl;
+      process.env.MATRIX_USERNAME = originalMatrixUsername;
+      process.env.MATRIX_PASSWORD = originalMatrixPassword;
+      process.env.REALM_SERVER_URL = originalRealmServerUrl;
+      process.env.REALM_SECRET_SEED = originalRealmSecretSeed;
+      await servers.stop();
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test('createBoxelRealmFetch throws a clear error when profiles.json is invalid', function (assert) {
+    let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
+    let originalHome = process.env.HOME;
+    let profilesDir = join(tempHome, '.boxel-cli');
+    mkdirSync(profilesDir, { recursive: true });
+    writeFileSync(join(profilesDir, 'profiles.json'), '{not-json');
+
+    try {
+      process.env.HOME = tempHome;
+
+      assert.throws(
+        () =>
+          createBoxelRealmFetch(
+            'http://127.0.0.1:4011/private/Wiki/brief-card',
+          ),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message.includes('Failed to parse Boxel profiles config at'),
+      );
+    } finally {
+      process.env.HOME = originalHome;
+      rmSync(tempHome, { recursive: true, force: true });
     }
   });
 });

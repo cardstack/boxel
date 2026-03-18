@@ -21,11 +21,16 @@ export interface RealmAuthTestServers {
 }
 
 export async function startServers(
-  sessionToken = buildRealmSessionJwt(),
+  options: {
+    sessionToken?: string;
+    username?: string;
+  } = {},
 ): Promise<RealmAuthTestServers> {
-  let matrixServer = await startMatrixStubServer();
+  let matrixServer = await startMatrixStubServer(
+    options.username ?? 'software-factory-browser',
+  );
   let realmServer = await startPrivateRealmStubServer({
-    sessionToken,
+    sessionToken: options.sessionToken ?? buildRealmSessionJwt(),
   });
 
   return {
@@ -38,7 +43,12 @@ export async function startServers(
   };
 }
 
-async function startMatrixStubServer(): Promise<StubServer> {
+async function startMatrixStubServer(username: string): Promise<StubServer> {
+  let userId = `@${username}:localhost`;
+  let openIdPath = `/_matrix/client/v3/user/${encodeURIComponent(
+    userId,
+  )}/openid/request_token`;
+
   // This is a live HTTP matrix stub, not a mocked fetch callback, so
   // createBoxelRealmFetch exercises the real login + OpenID request flow.
   let server = createServer((request, response) => {
@@ -49,16 +59,12 @@ async function startMatrixStubServer(): Promise<StubServer> {
       respondJson(response, {
         access_token: 'matrix-access-token',
         device_id: 'device-id',
-        user_id: '@software-factory-browser:localhost',
+        user_id: userId,
       });
       return;
     }
 
-    if (
-      request.method === 'POST' &&
-      request.url ===
-        '/_matrix/client/v3/user/%40software-factory-browser%3Alocalhost/openid/request_token'
-    ) {
+    if (request.method === 'POST' && request.url === openIdPath) {
       respondJson(response, {
         access_token: 'openid-token',
         expires_in: 300,

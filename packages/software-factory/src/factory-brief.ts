@@ -15,24 +15,6 @@ export interface FactoryBrief {
   tags: string[];
 }
 
-export interface FactoryBriefFetchRequestInit {
-  headers?: Record<string, string>;
-}
-
-export interface FactoryBriefFetchResponse {
-  ok: boolean;
-  status: number;
-  statusText: string;
-  json(): Promise<unknown>;
-}
-
-export interface FactoryBriefFetch {
-  (
-    input: string | URL,
-    init?: FactoryBriefFetchRequestInit,
-  ): Promise<FactoryBriefFetchResponse>;
-}
-
 interface BoxelBriefCardInfo {
   name?: string | null;
   summary?: string | null;
@@ -42,12 +24,14 @@ interface FactoryBriefCardAttributes {
   title?: string | null;
   name?: string | null;
   content?: string | null;
+  summary?: string | null;
+  description?: string | null;
   tags?: Array<string | null> | null;
   cardInfo?: BoxelBriefCardInfo | null;
 }
 
 interface FactoryBriefLoadOptions {
-  fetch?: FactoryBriefFetch;
+  fetch?: typeof globalThis.fetch;
   authorization?: string;
 }
 
@@ -117,8 +101,17 @@ export function normalizeFactoryBrief(
     valueAsTrimmedString(attributes.name),
   ]);
   let title = explicitTitle ?? inferTitleFromUrl(sourceUrl);
-  let summary = valueAsTrimmedString(cardInfo.summary);
-  let content = valueAsTrimmedString(attributes.content) ?? '';
+  let summary = firstNonEmptyString([
+    valueAsTrimmedString(cardInfo.summary),
+    valueAsTrimmedString(attributes.summary),
+    valueAsTrimmedString(attributes.description),
+  ]);
+  let content =
+    firstNonEmptyString([
+      valueAsTrimmedString(attributes.content),
+      valueAsTrimmedString(attributes.description),
+      valueAsTrimmedString(attributes.summary),
+    ]) ?? '';
   let tags = normalizeTags(attributes.tags);
   let contentSummary = buildContentSummary(summary, content, title);
 
@@ -264,6 +257,8 @@ function parseFactoryBriefCardAttributes(
     title: parseOptionalString(attributes.title),
     name: parseOptionalString(attributes.name),
     content: parseOptionalString(attributes.content),
+    summary: parseOptionalString(attributes.summary),
+    description: parseOptionalString(attributes.description),
     tags: parseOptionalStringArray(attributes.tags),
     cardInfo: parseBriefCardInfo(attributes.cardInfo),
   };

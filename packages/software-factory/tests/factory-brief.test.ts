@@ -12,6 +12,15 @@ import {
 const stickyNoteFixture = JSON.parse(
   readFileSync(resolve(__dirname, '../realm/Wiki/sticky-note.json'), 'utf8'),
 ) as unknown;
+const darkfactoryTicketFixture = JSON.parse(
+  readFileSync(
+    resolve(
+      __dirname,
+      '../test-fixtures/darkfactory-adopter/Ticket/ticket-001.json',
+    ),
+    'utf8',
+  ),
+) as unknown;
 
 module('factory-brief', function () {
   test('normalizeFactoryBrief extracts a stable shape from the sticky-note wiki card', function (assert) {
@@ -48,6 +57,22 @@ module('factory-brief', function () {
       'Capture tasks on a simple board.',
     );
     assert.deepEqual(brief.tags, []);
+  });
+
+  test('normalizeFactoryBrief falls back to summary and description text when content is absent', function (assert) {
+    let sourceUrl =
+      'https://briefs.example.test/darkfactory-adopter/Ticket/ticket-001';
+    let brief = normalizeFactoryBrief(darkfactoryTicketFixture, sourceUrl);
+
+    assert.strictEqual(brief.title, 'Ticket 001');
+    assert.strictEqual(
+      brief.content,
+      'Render tracker cards from an adopter realm using the public software-factory module URL.',
+    );
+    assert.strictEqual(
+      brief.contentSummary,
+      'Verify public DarkFactory adoption',
+    );
   });
 
   test('normalizeFactoryBrief rejects malformed payloads', function (assert) {

@@ -71,7 +71,7 @@ Usage:
 pnpm factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm-path /path/to/target-realm \
-  [--auth-token "Bearer <jwt>"] \
+  [--auth-token "<authorization-header-value>"] \
   [--target-realm-url http://localhost:4201/hassan/personal/] \
   [--mode implement]
 ```
@@ -113,7 +113,7 @@ pnpm factory:go -- \
 ```
 
 - When the brief is in a public realm, you do not need this flag.
-- When the brief is in a private realm, pass `--auth-token` with a realm token that can read that brief.
+- When the brief is in a private realm, pass the exact `Authorization` header value returned by `pnpm boxel:session`.
 
 ## Layout
 
