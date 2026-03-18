@@ -3,7 +3,12 @@ import type {
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { ensureTrailingSlash, param, query } from '@cardstack/runtime-common';
+import {
+  cancelRunningJobsInConcurrencyGroup,
+  ensureTrailingSlash,
+  param,
+  query,
+} from '@cardstack/runtime-common';
 import { pathExistsSync, readdirSync, removeSync } from 'fs-extra';
 import { join, relative } from 'path';
 
@@ -134,6 +139,8 @@ export async function removeRealmDatabaseArtifacts(args: {
   realmURL: string;
 }) {
   let { dbAdapter, realmURL } = args;
+  await cancelRunningJobsInConcurrencyGroup(dbAdapter, `indexing:${realmURL}`);
+
   let pendingJobs = (await query(dbAdapter, [
     `SELECT id FROM jobs WHERE concurrency_group =`,
     param(`indexing:${realmURL}`),

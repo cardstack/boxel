@@ -235,11 +235,11 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       );
     }
 
-    let pendingSourceJob = await insertJob(context.dbAdapter, {
+    let runningSourceJob = await insertJob(context.dbAdapter, {
       job_type: 'from-scratch-index',
       concurrency_group: `indexing:${realmURL}`,
     });
-    let pendingPublishedJob = await insertJob(context.dbAdapter, {
+    let runningPublishedJob = await insertJob(context.dbAdapter, {
       job_type: 'from-scratch-index',
       concurrency_group: `indexing:${publishedRealmURL}`,
     });
@@ -249,10 +249,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     });
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
-      VALUES (${pendingSourceJob.id}, NOW() + INTERVAL '5 minutes', 'worker-source')`);
+      VALUES (${runningSourceJob.id}, NOW() + INTERVAL '5 minutes', 'worker-source')`);
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
-      VALUES (${pendingPublishedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-published')`);
+      VALUES (${runningPublishedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-published')`);
     await context.dbAdapter.execute(`INSERT INTO job_reservations
       (job_id, locked_until, worker_id)
       VALUES (${unrelatedJob.id}, NOW() + INTERVAL '5 minutes', 'worker-unrelated')`);
@@ -532,24 +532,65 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'unrelated pending jobs remain',
     );
 
+    let [sourceJobAfterDelete] = await context.dbAdapter.execute(
+      `SELECT status, result, finished_at FROM jobs WHERE id = ${runningSourceJob.id}`,
+    );
+    let [publishedJobAfterDelete] = await context.dbAdapter.execute(
+      `SELECT status, result, finished_at FROM jobs WHERE id = ${runningPublishedJob.id}`,
+    );
+    assert.strictEqual(
+      sourceJobAfterDelete.status,
+      'rejected',
+      'running source realm job is canceled before cleanup',
+    );
+    assert.deepEqual(
+      sourceJobAfterDelete.result,
+      {
+        status: 418,
+        message: 'User initiated job cancellation',
+      },
+      'source realm running job gets the cancellation result',
+    );
+    assert.ok(
+      sourceJobAfterDelete.finished_at,
+      'source realm running job is marked finished',
+    );
+    assert.strictEqual(
+      publishedJobAfterDelete.status,
+      'rejected',
+      'running published realm job is canceled before cleanup',
+    );
+    assert.deepEqual(
+      publishedJobAfterDelete.result,
+      {
+        status: 418,
+        message: 'User initiated job cancellation',
+      },
+      'published realm running job gets the cancellation result',
+    );
+    assert.ok(
+      publishedJobAfterDelete.finished_at,
+      'published realm running job is marked finished',
+    );
+
     let sourceReservations = await context.dbAdapter.execute(
-      `SELECT * FROM job_reservations WHERE job_id = ${pendingSourceJob.id}`,
+      `SELECT * FROM job_reservations WHERE job_id = ${runningSourceJob.id} AND completed_at IS NULL`,
     );
     let publishedReservations = await context.dbAdapter.execute(
-      `SELECT * FROM job_reservations WHERE job_id = ${pendingPublishedJob.id}`,
+      `SELECT * FROM job_reservations WHERE job_id = ${runningPublishedJob.id} AND completed_at IS NULL`,
     );
     let unrelatedReservations = await context.dbAdapter.execute(
-      `SELECT * FROM job_reservations WHERE job_id = ${unrelatedJob.id}`,
+      `SELECT * FROM job_reservations WHERE job_id = ${unrelatedJob.id} AND completed_at IS NULL`,
     );
     assert.strictEqual(
       sourceReservations.length,
       0,
-      'source realm job reservations are removed',
+      'source realm running job reservations are completed',
     );
     assert.strictEqual(
       publishedReservations.length,
       0,
-      'published realm job reservations are removed',
+      'published realm running job reservations are completed',
     );
     assert.strictEqual(
       unrelatedReservations.length,
