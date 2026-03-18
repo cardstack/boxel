@@ -2729,11 +2729,16 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-create-listing-modal]')
       .exists('confirmation modal appears after clicking Create Listing');
+
+    await waitFor('[data-test-create-listing-examples]');
+    assert
+      .dom('[data-test-select-all]')
+      .isChecked('select all checkbox is checked');
     assert
       .dom(
-        `.ember-power-select-trigger [data-test-create-listing-instance-option]`,
+        '[data-test-create-listing-examples] [data-test-card-catalog-item-selected="true"]',
       )
-      .exists('instance option is pre-selected in the source dropdown');
+      .exists({ count: 2 }, 'all instances are pre-selected');
   });
 
   test('cancel button in Create Listing modal closes the modal', async function (assert) {
