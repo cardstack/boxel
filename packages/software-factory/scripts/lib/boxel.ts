@@ -1,22 +1,99 @@
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
-const PROFILES_FILE = path.join(os.homedir(), '.boxel-cli', 'profiles.json');
+const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');
 
-function ensureTrailingSlash(url) {
+type BoxelStoredProfile = {
+  matrixUrl: string;
+  realmServerUrl: string;
+  password: string;
+};
+
+type BoxelProfilesConfig = {
+  profiles: Record<string, BoxelStoredProfile>;
+  activeProfile: string | null;
+};
+
+export type ActiveBoxelProfile = {
+  profileId: string | null;
+  username: string;
+  matrixUrl: string;
+  realmServerUrl: string;
+  password: string;
+};
+
+type MatrixLoginResponse = {
+  access_token: string;
+  device_id: string;
+  user_id: string;
+};
+
+type OpenIdToken = Record<string, unknown>;
+
+export type MatrixAuth = {
+  accessToken: string;
+  deviceId: string;
+  userId: string;
+  homeServer: string;
+  credentials: ActiveBoxelProfile;
+};
+
+export type RealmTokens = Record<string, string>;
+
+export type BrowserAuth = {
+  access_token: string;
+  user_id: string;
+  device_id: string;
+  home_server: string;
+};
+
+export type SearchSort = {
+  by: string;
+  direction: string;
+  on?: {
+    module: string;
+    name: string;
+  };
+};
+
+export type SearchQuery = {
+  filter?: Record<string, unknown>;
+  sort?: SearchSort[];
+  page?: {
+    size?: number;
+    number?: number;
+  };
+};
+
+export type SearchResultCard = {
+  id: string;
+  attributes?: Record<string, unknown>;
+  relationships?: Record<string, unknown>;
+};
+
+export type SearchResultDocument = {
+  data?: SearchResultCard[];
+} & Record<string, unknown>;
+
+export type ParsedArgValue = string | boolean | string[];
+export type ParsedArgs = Record<string, ParsedArgValue | undefined> & {
+  _: string[];
+};
+
+function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
-function parseProfilesConfig() {
-  if (!fs.existsSync(PROFILES_FILE)) {
+function parseProfilesConfig(): BoxelProfilesConfig {
+  if (!existsSync(PROFILES_FILE)) {
     return { profiles: {}, activeProfile: null };
   }
 
-  return JSON.parse(fs.readFileSync(PROFILES_FILE, 'utf8'));
+  return JSON.parse(readFileSync(PROFILES_FILE, 'utf8')) as BoxelProfilesConfig;
 }
 
-export function getActiveProfile() {
+export function getActiveProfile(): ActiveBoxelProfile {
   let config = parseProfilesConfig();
   let activeProfileId = config.activeProfile;
   if (activeProfileId && config.profiles[activeProfileId]) {
@@ -49,7 +126,9 @@ export function getActiveProfile() {
   };
 }
 
-export async function matrixLogin(credentials = getActiveProfile()) {
+export async function matrixLogin(
+  credentials: ActiveBoxelProfile = getActiveProfile(),
+): Promise<MatrixAuth> {
   let response = await fetch(
     new URL('_matrix/client/v3/login', credentials.matrixUrl),
     {
@@ -68,7 +147,7 @@ export async function matrixLogin(credentials = getActiveProfile()) {
     },
   );
 
-  let json = await response.json();
+  let json = (await response.json()) as MatrixLoginResponse;
   if (!response.ok) {
     throw new Error(
       `Matrix login failed: ${response.status} ${JSON.stringify(json)}`,
@@ -84,7 +163,9 @@ export async function matrixLogin(credentials = getActiveProfile()) {
   };
 }
 
-export async function getOpenIdToken(matrixAuth) {
+export async function getOpenIdToken(
+  matrixAuth: MatrixAuth,
+): Promise<OpenIdToken> {
   let response = await fetch(
     new URL(
       `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/openid/request_token`,
@@ -105,10 +186,12 @@ export async function getOpenIdToken(matrixAuth) {
     throw new Error(`OpenID token request failed: ${response.status} ${text}`);
   }
 
-  return response.json();
+  return (await response.json()) as OpenIdToken;
 }
 
-export async function getRealmServerToken(matrixAuth) {
+export async function getRealmServerToken(
+  matrixAuth: MatrixAuth,
+): Promise<string> {
   let openIdToken = await getOpenIdToken(matrixAuth);
   let response = await fetch(
     new URL('_server-session', matrixAuth.credentials.realmServerUrl),
@@ -138,7 +221,9 @@ export async function getRealmServerToken(matrixAuth) {
   return token;
 }
 
-export async function getAccessibleRealmTokens(matrixAuth) {
+export async function getAccessibleRealmTokens(
+  matrixAuth: MatrixAuth,
+): Promise<RealmTokens> {
   let serverToken = await getRealmServerToken(matrixAuth);
   let response = await fetch(
     new URL('_realm-auth', matrixAuth.credentials.realmServerUrl),
@@ -157,10 +242,10 @@ export async function getAccessibleRealmTokens(matrixAuth) {
     throw new Error(`Realm auth lookup failed: ${response.status} ${text}`);
   }
 
-  return response.json();
+  return (await response.json()) as RealmTokens;
 }
 
-export function buildBrowserAuth(matrixAuth) {
+export function buildBrowserAuth(matrixAuth: MatrixAuth): BrowserAuth {
   return {
     access_token: matrixAuth.accessToken,
     user_id: matrixAuth.userId,
@@ -169,12 +254,15 @@ export function buildBrowserAuth(matrixAuth) {
   };
 }
 
-export function buildBrowserSession(realmTokens, realmUrls) {
-  if (!realmUrls || realmUrls.length === 0) {
+export function buildBrowserSession(
+  realmTokens: RealmTokens,
+  realmUrls: string[],
+): RealmTokens {
+  if (realmUrls.length === 0) {
     return realmTokens;
   }
 
-  let result = {};
+  let result: RealmTokens = {};
   for (let realmUrl of realmUrls) {
     let normalized = ensureTrailingSlash(realmUrl);
     if (realmTokens[normalized]) {
@@ -184,17 +272,21 @@ export function buildBrowserSession(realmTokens, realmUrls) {
   return result;
 }
 
-export async function searchRealm({ realmUrl, jwt, query }) {
+export async function searchRealm(input: {
+  realmUrl: string;
+  jwt?: string;
+  query: SearchQuery;
+}): Promise<SearchResultDocument> {
   let response = await fetch(
-    new URL('./_search', ensureTrailingSlash(realmUrl)),
+    new URL('./_search', ensureTrailingSlash(input.realmUrl)),
     {
       method: 'QUERY',
       headers: {
         Accept: 'application/vnd.card+json',
         'Content-Type': 'application/json',
-        ...(jwt ? { Authorization: jwt } : {}),
+        ...(input.jwt ? { Authorization: input.jwt } : {}),
       },
-      body: JSON.stringify(query),
+      body: JSON.stringify(input.query),
     },
   );
 
@@ -203,48 +295,53 @@ export async function searchRealm({ realmUrl, jwt, query }) {
     throw new Error(`Search failed: ${response.status} ${text}`);
   }
 
-  return response.json();
+  return (await response.json()) as SearchResultDocument;
 }
 
-export function parseArgs(argv) {
-  let args = { _: [] };
+export function parseArgs(argv: string[]): ParsedArgs {
+  let args: ParsedArgs = { _: [] };
 
-  for (let i = 0; i < argv.length; i++) {
-    let token = argv[i];
+  for (let index = 0; index < argv.length; index++) {
+    let token = argv[index];
     if (!token.startsWith('--')) {
       args._.push(token);
       continue;
     }
 
     let key = token.slice(2);
-    let next = argv[i + 1];
+    let next = argv[index + 1];
     if (!next || next.startsWith('--')) {
       args[key] = true;
       continue;
     }
 
-    if (args[key] === undefined) {
+    let existingValue = args[key];
+    if (existingValue === undefined) {
       args[key] = next;
-    } else if (Array.isArray(args[key])) {
-      args[key].push(next);
+    } else if (Array.isArray(existingValue)) {
+      existingValue.push(next);
+    } else if (typeof existingValue === 'string') {
+      args[key] = [existingValue, next];
     } else {
-      args[key] = [args[key], next];
+      args[key] = next;
     }
-    i++;
+    index++;
   }
 
   return args;
 }
 
-export function forceArray(value) {
+export function forceArray<T>(value: T | T[] | undefined): T[] {
   if (value === undefined) {
     return [];
   }
   return Array.isArray(value) ? value : [value];
 }
 
-export function fieldPairs(values) {
-  let result = {};
+export function fieldPairs(
+  values: string | string[] | undefined,
+): Record<string, string> {
+  let result: Record<string, string> = {};
   for (let entry of forceArray(values)) {
     let index = entry.indexOf('=');
     if (index === -1) {
@@ -257,6 +354,6 @@ export function fieldPairs(values) {
   return result;
 }
 
-export function printJson(value) {
+export function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }

@@ -21,6 +21,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       }
 
       setupPermissionedRealmCached(hooks, {
+        fileSystem: {},
         permissions: {
           '*': ['read', 'write'],
         },

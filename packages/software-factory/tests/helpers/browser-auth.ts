@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { BrowserContext, Page } from '@playwright/test';
 
-import { readSupportContext } from '../../src/runtime-metadata.js';
+import { readSupportContext } from '../../src/runtime-metadata';
 
 type BrowserAuth = {
   access_token: string;
@@ -218,7 +218,7 @@ export async function installBrowserState(
   target: InitScriptTarget,
   state: FactoryBrowserState,
 ) {
-  await target.addInitScript((payload) => {
+  await target.addInitScript((payload: FactoryBrowserState) => {
     window.localStorage.clear();
     window.localStorage.setItem('auth', JSON.stringify(payload.auth));
     window.localStorage.setItem(

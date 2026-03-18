@@ -6,11 +6,8 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
-import { defaultSupportMetadataFile } from '../src/runtime-metadata.js';
-import {
-  buildBrowserState,
-  installBrowserState,
-} from './helpers/browser-auth.js';
+import { defaultSupportMetadataFile } from '../src/runtime-metadata';
+import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
 type StartedFactoryRealm = {
   realmDir: string;
@@ -22,14 +19,25 @@ type StartedFactoryRealm = {
 };
 
 export type FactoryRealmFixtures = {
-  realm: StartedFactoryRealm;
   realmURL: URL;
   cardURL: (path: string) => string;
   authedPage: Page;
 };
 
+export type RealmServerMode = 'shared' | 'isolated';
+
 type FactoryRealmOptions = {
   realmDir: string;
+  realmServerMode: RealmServerMode;
+};
+
+type FactoryRealmInternalFixtures = {
+  realm: StartedFactoryRealm;
+};
+
+type SharedRealmHandle = {
+  realm: StartedFactoryRealm;
+  refCount: number;
 };
 
 const packageRoot = resolve(process.cwd());
@@ -44,6 +52,7 @@ const testSourceRealmDir = resolve(
   packageRoot,
   'test-fixtures/public-software-factory-source',
 );
+const sharedRealms = new Map<string, Promise<SharedRealmHandle>>();
 
 function appendLog(buffer: string, chunk: string): string {
   let combined = `${buffer}${chunk}`;
@@ -187,6 +196,47 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   } satisfies StartedFactoryRealm;
 }
 
+function sharedRealmKey(
+  workerIndex: number,
+  testFile: string,
+  realmDir: string,
+) {
+  return `${workerIndex}:${testFile}:${realmDir}`;
+}
+
+async function acquireSharedRealm(
+  key: string,
+  realmDir: string,
+): Promise<StartedFactoryRealm> {
+  let existing = sharedRealms.get(key);
+  if (!existing) {
+    existing = startRealmProcess(realmDir).then((realm) => ({
+      realm,
+      refCount: 0,
+    }));
+    sharedRealms.set(key, existing);
+  }
+
+  let handle = await existing;
+  handle.refCount += 1;
+  return handle.realm;
+}
+
+async function releaseSharedRealm(key: string): Promise<void> {
+  let entry = sharedRealms.get(key);
+  if (!entry) {
+    return;
+  }
+
+  let handle = await entry;
+  handle.refCount -= 1;
+
+  if (handle.refCount <= 0) {
+    sharedRealms.delete(key);
+    await handle.realm.stop();
+  }
+}
+
 async function registerRealmRedirect(
   page: Page,
   fromPrefix: string,
@@ -214,17 +264,34 @@ async function setRealmRedirects(page: Page) {
   }
 }
 
-export const test = base.extend<FactoryRealmFixtures, FactoryRealmOptions>({
-  realmDir: [defaultRealmDir, { option: true, scope: 'worker' }],
+export const test = base.extend<
+  FactoryRealmFixtures & FactoryRealmOptions & FactoryRealmInternalFixtures
+>({
+  realmDir: [defaultRealmDir, { option: true }],
+  realmServerMode: ['shared', { option: true }],
 
   page: async ({ page }, use) => {
     await setRealmRedirects(page);
     await use(page);
   },
 
-  realm: async ({ browserName: _browserName, realmDir }, use) => {
-    let realm = await startRealmProcess(realmDir);
+  realm: async (
+    { browserName: _browserName, realmDir, realmServerMode },
+    use,
+    testInfo,
+  ) => {
+    if (realmServerMode === 'shared') {
+      let key = sharedRealmKey(testInfo.workerIndex, testInfo.file, realmDir);
+      let realm = await acquireSharedRealm(key, realmDir);
+      try {
+        await use(realm);
+      } finally {
+        await releaseSharedRealm(key);
+      }
+      return;
+    }
 
+    let realm = await startRealmProcess(realmDir);
     try {
       await use(realm);
     } finally {

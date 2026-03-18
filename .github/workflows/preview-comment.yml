@@ -20,6 +20,9 @@ permissions:
 jobs:
   publish-preview-comment:
     runs-on: ubuntu-latest
+    concurrency:
+      group: publish-preview-comment-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
       - name: Gather preview links
         id: gather
