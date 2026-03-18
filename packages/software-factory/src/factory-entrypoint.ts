@@ -196,7 +196,7 @@ export function buildFactoryEntrypointSummary(
     {
       name: 'normalized-brief',
       status: 'ok',
-      detail: 'prepared-ai-judgment-prompt',
+      detail: 'prepared-brief-data',
     },
     {
       name: 'resolved-target-realm-path',

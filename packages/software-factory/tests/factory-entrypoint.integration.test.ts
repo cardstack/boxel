@@ -17,7 +17,8 @@ interface FactoryEntrypointIntegrationSummary {
   brief: {
     url: string;
     title: string;
-    aiJudgmentPrompt: string;
+    contentSummary: string;
+    tags: string[];
   };
   targetRealm: {
     path: string;
@@ -90,8 +91,15 @@ module('factory-entrypoint integration', function () {
       assert.strictEqual(summary.mode, 'resume');
       assert.strictEqual(summary.brief.url, briefUrl);
       assert.strictEqual(summary.brief.title, 'Sticky Note');
-      assert.true(summary.brief.aiJudgmentPrompt.includes('thin MVP'));
-      assert.true(summary.brief.aiJudgmentPrompt.includes('review ticket'));
+      assert.strictEqual(
+        summary.brief.contentSummary,
+        'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
+      );
+      assert.deepEqual(summary.brief.tags, [
+        'documents-content',
+        'sticky',
+        'note',
+      ]);
       assert.strictEqual(summary.targetRealm.path, targetRealmPath);
       assert.true(summary.targetRealm.exists);
       assert.deepEqual(summary.result, {

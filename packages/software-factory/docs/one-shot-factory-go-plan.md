@@ -345,10 +345,10 @@ Responsibilities:
   - summary
   - content
   - source URL
-  - AI judgment prompt for thin-MVP vs broader-first-pass planning
-  - AI judgment prompt instructions for clarification and review follow-up tickets
+  - structured fields that a later AI stage can use for thin-MVP vs broader-first-pass planning
+  - enough context for later clarification and review follow-up ticket decisions
 
-For version one, this helper can stay deterministic by generating a stable prompt template rather than trying to compute vagueness heuristically in code.
+For version one, this helper can stay deterministic and data-oriented. Later AI stages should combine the structured brief fields with a stable prompt template rather than embedding a fully rendered prompt into `factory:go` output.
 
 ### D1. `src/prompts/brief-judgment.ts`
 
@@ -358,7 +358,7 @@ Responsibilities:
 
 - hold the reusable runtime prompt instructions for thin-MVP vs broader-first-pass decisions
 - keep prompt wording out of the brief-normalization helper
-- let the brief helper inject brief-specific context into one shared template instead of repeating an inline string
+- let later AI boundaries combine brief-specific context with one shared template instead of repeating an inline string
 
 ### E. `scripts/lib/factory-loop.ts`
 
@@ -463,7 +463,8 @@ Optional later additions:
   "brief": {
     "url": "http://localhost:4201/software-factory/Wiki/sticky-note",
     "title": "Sticky Note",
-    "aiJudgmentPrompt": "Review this factory brief and decide whether to default to a thin MVP..."
+    "contentSummary": "Colorful, short-form note designed for spatial arrangement on boards and artboards.",
+    "tags": ["documents-content", "sticky", "note"]
   },
   "targetRealm": {
     "path": "/.../personal",

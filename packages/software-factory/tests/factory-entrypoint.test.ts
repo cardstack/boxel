@@ -12,7 +12,6 @@ import {
   wantsFactoryEntrypointHelp,
 } from '../src/factory-entrypoint';
 import type { FactoryBrief } from '../src/factory-brief';
-import { renderFactoryBriefJudgmentPrompt } from '../src/prompts/brief-judgment';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
@@ -25,15 +24,6 @@ const normalizedBrief: FactoryBrief = {
   contentSummary:
     'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
   tags: ['documents-content', 'sticky', 'note'],
-  aiJudgmentPrompt: renderFactoryBriefJudgmentPrompt({
-    title: 'Sticky Note',
-    sourceUrl: briefUrl,
-    content:
-      'Structured note content with enough context to describe the first MVP.',
-    contentSummary:
-      'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
-    tags: ['documents-content', 'sticky', 'note'],
-  }),
 };
 
 module('factory-entrypoint', function () {
@@ -115,7 +105,11 @@ module('factory-entrypoint', function () {
     assert.strictEqual(summary.mode, 'bootstrap');
     assert.strictEqual(summary.brief.url, briefUrl);
     assert.strictEqual(summary.brief.title, 'Sticky Note');
-    assert.true(summary.brief.aiJudgmentPrompt.includes('thin MVP'));
+    assert.deepEqual(summary.brief.tags, [
+      'documents-content',
+      'sticky',
+      'note',
+    ]);
     assert.strictEqual(summary.targetRealm.path, targetRealmPath);
     assert.true(summary.targetRealm.exists);
     assert.strictEqual(summary.targetRealm.url, targetRealmUrl);
@@ -195,7 +189,10 @@ module('factory-entrypoint', function () {
 
     assert.strictEqual(summary.brief.title, 'Sticky Note');
     assert.strictEqual(summary.brief.sourceUrl, briefUrl);
-    assert.true(summary.brief.aiJudgmentPrompt.includes('thin MVP'));
-    assert.true(summary.brief.aiJudgmentPrompt.includes('clarification'));
+    assert.strictEqual(
+      summary.brief.contentSummary,
+      'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
+    );
+    assert.true(summary.brief.content.includes('structured drafting'));
   });
 });

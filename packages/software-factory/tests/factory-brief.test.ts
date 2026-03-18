@@ -26,32 +26,6 @@ module('factory-brief', function () {
       'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
     );
     assert.deepEqual(brief.tags, ['documents-content', 'sticky', 'note']);
-    assert.true(brief.aiJudgmentPrompt.includes('Sticky Note'));
-    assert.true(brief.aiJudgmentPrompt.includes(sourceUrl));
-    assert.true(brief.aiJudgmentPrompt.includes('thin MVP'));
-  });
-
-  test('normalizeFactoryBrief prepares an AI judgment prompt for clarification and review follow-up', function (assert) {
-    let brief = normalizeFactoryBrief(
-      {
-        data: {
-          attributes: {
-            cardInfo: {
-              name: 'Idea Board',
-              summary: 'Maybe a tool for notes.',
-            },
-            content:
-              'Build something for notes and maybe tasks or other stuff. Keep it flexible and figure out the details later.',
-            tags: ['notes'],
-          },
-        },
-      },
-      'https://briefs.example.test/software-factory/Wiki/idea-board',
-    );
-
-    assert.true(brief.aiJudgmentPrompt.includes('Idea Board'));
-    assert.true(brief.aiJudgmentPrompt.includes('clarification tickets'));
-    assert.true(brief.aiJudgmentPrompt.includes('review ticket'));
   });
 
   test('normalizeFactoryBrief falls back when card fields are missing', function (assert) {
@@ -74,9 +48,6 @@ module('factory-brief', function () {
       'Capture tasks on a simple board.',
     );
     assert.deepEqual(brief.tags, []);
-    assert.true(
-      brief.aiJudgmentPrompt.includes('Capture tasks on a simple board.'),
-    );
   });
 
   test('normalizeFactoryBrief rejects malformed payloads', function (assert) {
@@ -94,7 +65,7 @@ module('factory-brief', function () {
   });
 
   test('loadFactoryBrief passes an explicit authorization header when fetching and normalizing a brief', async function (assert) {
-    assert.expect(5);
+    assert.expect(4);
 
     let server = createServer((request, response) => {
       assert.strictEqual(request.url, '/software-factory/Wiki/sticky-note');
@@ -122,7 +93,6 @@ module('factory-brief', function () {
       );
 
       assert.strictEqual(brief.title, 'Sticky Note');
-      assert.true(brief.aiJudgmentPrompt.includes('thin MVP'));
     } finally {
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),

@@ -1,7 +1,5 @@
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { renderFactoryBriefJudgmentPrompt } from './prompts/brief-judgment';
-
 const markdownLinkPattern = /\[([^\]]+)\]\([^)]+\)/g;
 const wikiLinkPattern = /\[\[([^[\]]+)\]\]/g;
 const markdownHeadingReplacePattern = /^\s*#{1,6}\s+/gm;
@@ -15,7 +13,6 @@ export interface FactoryBrief {
   content: string;
   contentSummary: string;
   tags: string[];
-  aiJudgmentPrompt: string;
 }
 
 export interface FactoryBriefFetchRequestInit {
@@ -131,13 +128,6 @@ export function normalizeFactoryBrief(
     content,
     contentSummary,
     tags,
-    aiJudgmentPrompt: renderFactoryBriefJudgmentPrompt({
-      title,
-      sourceUrl,
-      contentSummary,
-      content,
-      tags,
-    }),
   };
 }
 
