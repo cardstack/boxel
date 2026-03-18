@@ -242,16 +242,9 @@ module('command runner', () => {
           realm: 'http://localhost:4201/submissions/',
           prNumber: 1,
           prUrl: 'https://example/pr/1',
-          prTitle: 'Add My Listing listing',
-          branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing',
-          prSummary: `## Summary
-
-- Listing Name: My Listing
-- Listing Description: Example listing
-- Room ID: \`!abc123:localhost\`
-- User ID: \`@alice:localhost\`
-- Number of Files: 1
-- Submission Card: [${submissionCardUrl}](${submissionCardUrl})`,
+          prTitle: 'Add My Listing Name listing',
+          branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing-name',
+          prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Submission Card: [${submissionCardUrl}](${submissionCardUrl})`,
           submittedBy: '@alice:localhost',
         },
       },

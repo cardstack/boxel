@@ -164,8 +164,8 @@ export class CommandRunner {
     eventContent: BotTriggerEventContent;
     result: RunCommandResponse;
   }): Promise<{
-    prResult: CreatedListingPRResult | undefined;
-    submissionCardUrl: string | undefined;
+    prResult: CreatedListingPRResult | null;
+    submissionCardUrl: string | null;
   }> {
     let submissionCardUrl = getSubmissionCardUrl(result.cardResultString);
     await this.createListingPRHandler.ensureCreateListingBranch(eventContent);
