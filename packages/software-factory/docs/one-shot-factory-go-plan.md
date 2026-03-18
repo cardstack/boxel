@@ -111,8 +111,8 @@ Required behavior:
 
 - fetch the brief card JSON
 - normalize the brief into a concise internal representation
-- detect whether the brief is vague
-- if vague, automatically bias toward a thin MVP
+- prepare a prompt for the AI to decide whether to default to a thin MVP
+- prepare a prompt for the AI to create clarification or review tickets when the brief needs more guidance
 
 ### Phase 2: Target Realm Preparation
 
@@ -243,8 +243,14 @@ The first version should support:
 Add a script:
 
 ```json
-"factory:go": "ts-node --esm --transpileOnly scripts/factory-go.ts"
+"factory:go": "ts-node --transpileOnly src/cli/factory-entrypoint.ts"
 ```
+
+For software-factory CLI entrypoints, favor `ts-node --transpileOnly` over `tsx`.
+
+- it matches the execution model already used by `realm-server`
+- it avoids the decorator/runtime incompatibilities we hit when `tsx` imports `runtime-common` auth code
+- it keeps package CLI entrypoints aligned with the `runtime-common` auth infrastructure instead of forcing parallel implementations
 
 Expected usage:
 
@@ -333,15 +339,26 @@ Responsibilities:
 
 - fetch a brief card by URL
 - extract useful fields from card JSON
-- normalize vague briefs into a simple planning shape
+- normalize the brief into a concise planning input
 - emit metadata like:
   - title
   - summary
   - content
   - source URL
-  - ambiguity score or `isVague` flag
+  - AI judgment prompt for thin-MVP vs broader-first-pass planning
+  - AI judgment prompt instructions for clarification and review follow-up tickets
 
-For version one, the `isVague` check can be heuristic and simple.
+For version one, this helper can stay deterministic by generating a stable prompt template rather than trying to compute vagueness heuristically in code.
+
+### D1. `src/prompts/brief-judgment.ts`
+
+Dedicated prompt template module for brief judgment.
+
+Responsibilities:
+
+- hold the reusable runtime prompt instructions for thin-MVP vs broader-first-pass decisions
+- keep prompt wording out of the brief-normalization helper
+- let the brief helper inject brief-specific context into one shared template instead of repeating an inline string
 
 ### E. `scripts/lib/factory-loop.ts`
 
@@ -446,7 +463,7 @@ Optional later additions:
   "brief": {
     "url": "http://localhost:4201/software-factory/Wiki/sticky-note",
     "title": "Sticky Note",
-    "isVague": true
+    "aiJudgmentPrompt": "Review this factory brief and decide whether to default to a thin MVP..."
   },
   "targetRealm": {
     "path": "/.../personal",
@@ -472,6 +489,12 @@ Optional later additions:
 
 This keeps the process inspectable and resumable.
 
+Brief intake should not assume public realm access.
+
+- `factory:go` should fetch the brief with `Accept: application/vnd.card+source`
+- when the brief URL is on the active Boxel realm-server origin, the CLI should try to resolve a realm JWT from the active Boxel profile before fetching
+- the CLI should also allow an explicit brief auth override for cases where the caller already has an `Authorization` header value to use
+
 ## Acceptance Criteria For The First `factory:go`
 
 - a user can point to a brief URL and a target realm path
@@ -479,7 +502,7 @@ This keeps the process inspectable and resumable.
 - exactly one ticket becomes active
 - rerunning does not create duplicate starter artifacts
 - the flow can proceed directly into implementation work
-- the system prefers a thin MVP when the brief is vague
+- the brief normalization output gives the AI enough context to choose thin-MVP vs broader-first-pass planning and request clarification or review tickets when needed
 
 ## Recommended Delivery Order
 

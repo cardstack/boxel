@@ -39,7 +39,7 @@ startup do not require a separate external realm server on `http://localhost:420
 - `pnpm smoke:realm`
   - Boots the isolated realm server, fetches `project-demo` as card JSON, and exits
 - `pnpm factory:go -- --brief-url <url> --target-realm-path <path>`
-  - Validates one-shot factory inputs and prints a machine-readable run summary
+  - Fetches and normalizes a brief, validates one-shot inputs, and prints a machine-readable run summary
 - `pnpm test`
   - Runs package tests from `tests/*.test.ts` and `tests/*.spec.ts`
 - `pnpm test:node`
@@ -71,6 +71,7 @@ Usage:
 pnpm factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm-path /path/to/target-realm \
+  [--auth-token "Bearer <jwt>"] \
   [--target-realm-url http://localhost:4201/hassan/personal/] \
   [--mode implement]
 ```
@@ -79,6 +80,10 @@ Parameters:
 
 - `--brief-url`
   - Required. Absolute URL for the source brief card the factory should use as input.
+  - The command fetches card source JSON from this URL and includes normalized brief metadata in the summary.
+- `--auth-token`
+  - Optional. Explicit `Authorization` header value to use when fetching the brief.
+  - When omitted, `factory:go` will try to resolve realm auth from the active Boxel profile for matching realm-server URLs.
 - `--target-realm-path`
   - Required. Local filesystem path to the Boxel realm where the factory should write output.
 - `--target-realm-url`
@@ -87,6 +92,28 @@ Parameters:
   - Optional. One of `bootstrap`, `implement`, or `resume`. Defaults to `implement`.
 - `--help`
   - Optional. Prints the command usage and exits.
+
+Getting an auth token:
+
+- If the brief lives on a private realm and you want to pass the token explicitly, first ask the package session helper for the realm token:
+
+```bash
+pnpm boxel:session -- --realm http://localhost:4201/software-factory/
+```
+
+- The command prints JSON with a `boxelSession` object keyed by realm URL. Extract the token for the brief's realm and pass it through `--auth-token`:
+
+```bash
+AUTH_TOKEN="$(pnpm --silent boxel:session -- --realm http://localhost:4201/software-factory/ | jq -r '.boxelSession[\"http://localhost:4201/software-factory/\"]')"
+
+pnpm factory:go -- \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --auth-token "$AUTH_TOKEN" \
+  --target-realm-path /path/to/target-realm
+```
+
+- When the brief is in a public realm, you do not need this flag.
+- When the brief is in a private realm, pass `--auth-token` with a realm token that can read that brief.
 
 ## Layout
 

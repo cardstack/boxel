@@ -2,29 +2,39 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs as parseNodeArgs } from 'node:util';
 
+import {
+  loadFactoryBrief,
+  type FactoryBrief,
+  type FactoryBriefFetch,
+} from './factory-brief';
+import { createBoxelRealmFetch } from './realm-auth';
+
 const allowedModes = ['bootstrap', 'implement', 'resume'] as const;
 
 export type FactoryEntrypointMode = (typeof allowedModes)[number];
 
-export type FactoryEntrypointOptions = {
+export interface FactoryEntrypointOptions {
   briefUrl: string;
+  authToken: string | null;
   targetRealmPath: string;
   targetRealmUrl: string | null;
   mode: FactoryEntrypointMode;
-};
+}
 
-export type FactoryEntrypointAction = {
+export interface FactoryEntrypointAction {
   name: string;
   status: 'ok';
   detail: string;
-};
+}
 
-export type FactoryEntrypointSummary = {
+export interface FactoryEntrypointBriefSummary extends FactoryBrief {
+  url: string;
+}
+
+export interface FactoryEntrypointSummary {
   command: 'factory:go';
   mode: FactoryEntrypointMode;
-  brief: {
-    url: string;
-  };
+  brief: FactoryEntrypointBriefSummary;
   targetRealm: {
     path: string;
     url: string | null;
@@ -35,7 +45,16 @@ export type FactoryEntrypointSummary = {
     status: 'ready';
     nextStep: string;
   };
-};
+}
+
+export interface RunFactoryEntrypointDependencies {
+  fetch?: FactoryBriefFetch;
+  createBriefFetch?: (
+    briefUrl: string,
+    authToken: string | null,
+    fetch?: FactoryBriefFetch,
+  ) => FactoryBriefFetch;
+}
 
 export class FactoryEntrypointUsageError extends Error {
   constructor(message: string) {
@@ -54,6 +73,7 @@ export function getFactoryEntrypointUsage(): string {
     '  --target-realm-path <path>  Local filesystem path to the target realm',
     '',
     'Options:',
+    '  --auth-token <token>        Optional Authorization header override for fetching the brief',
     '  --target-realm-url <url>    Absolute URL for the target realm when known',
     '  --mode <mode>               One of: bootstrap, implement, resume',
     '  --help                      Show this usage information',
@@ -73,6 +93,9 @@ export function parseFactoryEntrypointArgs(
       strict: true,
       options: {
         'brief-url': {
+          type: 'string',
+        },
+        'auth-token': {
           type: 'string',
         },
         'target-realm-path': {
@@ -101,6 +124,7 @@ export function parseFactoryEntrypointArgs(
   }
 
   let briefUrl = requireStringValue(parsed.values['brief-url'], '--brief-url');
+  let authToken = optionalStringValue(parsed.values['auth-token']);
   let targetRealmPath = requireStringValue(
     parsed.values['target-realm-path'],
     '--target-realm-path',
@@ -110,6 +134,7 @@ export function parseFactoryEntrypointArgs(
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
+    authToken: authToken ?? null,
     targetRealmPath,
     targetRealmUrl: targetRealmUrl
       ? normalizeUrl(targetRealmUrl, '--target-realm-url')
@@ -123,8 +148,37 @@ export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
   return normalizedArgv.includes('--help');
 }
 
+export async function runFactoryEntrypoint(
+  options: FactoryEntrypointOptions,
+  dependencies?: RunFactoryEntrypointDependencies,
+): Promise<FactoryEntrypointSummary> {
+  let fetchImpl = (dependencies?.createBriefFetch ?? createFactoryBriefFetch)(
+    options.briefUrl,
+    options.authToken,
+    dependencies?.fetch,
+  );
+
+  let brief = await loadFactoryBrief(options.briefUrl, {
+    fetch: fetchImpl,
+  });
+
+  return buildFactoryEntrypointSummary(options, brief);
+}
+
+function createFactoryBriefFetch(
+  briefUrl: string,
+  authToken: string | null,
+  fetch?: FactoryBriefFetch,
+): FactoryBriefFetch {
+  return createBoxelRealmFetch(briefUrl, {
+    authorization: authToken ?? undefined,
+    fetch,
+  });
+}
+
 export function buildFactoryEntrypointSummary(
   options: FactoryEntrypointOptions,
+  brief: FactoryBrief,
 ): FactoryEntrypointSummary {
   let resolvedTargetRealmPath = resolve(process.cwd(), options.targetRealmPath);
   let targetRealmExists = existsSync(resolvedTargetRealmPath);
@@ -133,6 +187,16 @@ export function buildFactoryEntrypointSummary(
       name: 'validated-inputs',
       status: 'ok',
       detail: 'accepted required CLI inputs',
+    },
+    {
+      name: 'fetched-brief',
+      status: 'ok',
+      detail: brief.sourceUrl,
+    },
+    {
+      name: 'normalized-brief',
+      status: 'ok',
+      detail: 'prepared-ai-judgment-prompt',
     },
     {
       name: 'resolved-target-realm-path',
@@ -153,7 +217,8 @@ export function buildFactoryEntrypointSummary(
     command: 'factory:go',
     mode: options.mode,
     brief: {
-      url: options.briefUrl,
+      ...brief,
+      url: brief.sourceUrl,
     },
     targetRealm: {
       path: resolvedTargetRealmPath,
