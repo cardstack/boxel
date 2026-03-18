@@ -543,7 +543,6 @@ jobs:
           }
 
           wait_for_url "base realm" "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
-          wait_for_url "node-test realm" "http://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
           wait_for_url "synapse" "http://localhost:8008"
           wait_for_url "smtp4dev" "http://localhost:5001"
       - name: realm server test suite
