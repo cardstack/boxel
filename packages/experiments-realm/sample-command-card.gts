@@ -21,8 +21,7 @@ import GlimmerComponent from '@glimmer/component';
 import { module, test } from 'qunit';
 
 import { getService } from '@universal-ember/test-support';
-import { baseRealm } from '@cardstack/runtime-common';
-import type StoreService from '@cardstack/host/services/store';
+import { baseRealm, type Store } from '@cardstack/runtime-common';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -33,12 +32,12 @@ import {
   withCachedRealmSetup,
   type TestContextWithSave,
 } from '@cardstack/host/tests/helpers';
+import { TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 import { setupMockMatrix } from '@cardstack/host/tests/helpers/mock-matrix';
 import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
-import type { TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
 
 class CreateCardButton extends GlimmerComponent {
-  @service declare store: StoreService;
+  @service declare store: Store;
 
   createCard = async () => {
     await this.store.add(new SampleCommandCard({ title: 'Hello from live-test' }));
