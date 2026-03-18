@@ -33,6 +33,11 @@ DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
 START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
+# Always register the catalog URL mapping. The skills realm depends on
+# @cardstack/catalog/skill-set and @cardstack/catalog/skill-plus modules,
+# so the worker needs this mapping to index skills even when SKIP_CATALOG is set
+# (start-development.sh always serves at least a minimal catalog).
+START_CATALOG_MAPPING=true
 START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
 
 NODE_ENV=development \
@@ -59,8 +64,8 @@ NODE_ENV=development \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
   ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
   \
-  ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
-  ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
+  ${START_CATALOG_MAPPING:+--fromUrl='@cardstack/catalog/'} \
+  ${START_CATALOG_MAPPING:+--toUrl="${CATALOG_REALM_URL}"} \
   \
   --fromUrl="${REALM_BASE_URL}/skills/" \
   --toUrl="${REALM_BASE_URL}/skills/" \

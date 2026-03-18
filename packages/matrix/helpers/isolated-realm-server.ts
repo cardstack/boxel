@@ -272,6 +272,14 @@ export async function startServer({
     `--toUrl='http://localhost:4205/test/'`,
   ];
   workerArgs = workerArgs.concat([
+    `--fromUrl='@cardstack/catalog/'`,
+    `--toUrl='http://localhost:4205/catalog/'`,
+  ]);
+  workerArgs = workerArgs.concat([
+    `--fromUrl='http://localhost:4205/skills/'`,
+    `--toUrl='http://localhost:4205/skills/'`,
+  ]);
+  workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4205/base/'`,
   ]);
