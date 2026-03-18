@@ -339,7 +339,7 @@ jobs:
         deploy-realm-server,
         post-deploy-realm-server,
       ]
-    if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() }}
+    if: github.event_name == 'workflow_dispatch' && always()
     runs-on: ubuntu-latest
     steps:
       - name: Set deployment status
