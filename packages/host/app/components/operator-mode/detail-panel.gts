@@ -34,6 +34,8 @@ import {
   isFileDef,
   isBaseDef,
   isCardErrorJSONAPI,
+  isListingDef,
+  isListingInstance,
   internalKeyFor,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
@@ -255,12 +257,13 @@ export default class DetailPanel extends Component<Signature> {
           ]
         : []),
       ...(this.realm.canWrite(this.args.readyFile.url) &&
-      this.args.selectedDeclaration?.exportName
+      this.args.selectedDeclaration?.exportName &&
+      !isListingDef(this.args.selectedDeclaration?.cardOrField)
         ? [
             {
               label: 'Create Listing',
               icon: Package,
-              handler: this.createListingWithAI,
+              handler: this.createListing,
             },
           ]
         : []),
@@ -298,13 +301,18 @@ export default class DetailPanel extends Component<Signature> {
         icon: Copy,
         handler: this.duplicateInstance,
       },
-      ...(this.realm.canWrite(this.args.readyFile.url)
+      ...(this.realm.canWrite(this.args.readyFile.url) &&
+      !isListingInstance(this.args.cardInstance)
         ? [
             {
               label: 'Create Listing',
               icon: Package,
-              handler: this.createListingWithAI,
+              handler: this.createListing,
             },
+          ]
+        : []),
+      ...(this.realm.canWrite(this.args.readyFile.url)
+        ? [
             {
               label: 'Delete',
               icon: IconTrash,
@@ -420,7 +428,7 @@ export default class DetailPanel extends Component<Signature> {
     this.args.openSearch(`carddef:${refURL}`);
   }
 
-  @action private async createListingWithAI() {
+  @action private async createListing() {
     const command = new OpenCreateListingModalCommand(
       this.commandService.commandContext,
     );
@@ -429,19 +437,24 @@ export default class DetailPanel extends Component<Signature> {
       throw new Error('targetRealm is required to create listing');
     }
     if (this.isCardInstance) {
-      const openCardId = this.args.cardInstance?.id;
+      const openCardIds = this.args.cardInstance?.id
+        ? [this.args.cardInstance.id]
+        : [];
       const codeRef = this.cardInstanceType?.type
         ? getResolvedCodeRefFromType(this.cardInstanceType.type)
         : undefined;
       if (!codeRef) {
         throw new Error('Cannot create listing: card type not yet loaded');
       }
-      await command.execute({ openCardId, codeRef, targetRealm });
+      await command.execute({ openCardIds, codeRef, targetRealm });
     } else {
       const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      const openCardIds = this.args.cardInstance?.id
+        ? [this.args.cardInstance.id]
+        : [];
       await command.execute({
         codeRef,
-        openCardId: this.args.cardInstance?.id,
+        openCardIds,
         targetRealm,
       });
     }

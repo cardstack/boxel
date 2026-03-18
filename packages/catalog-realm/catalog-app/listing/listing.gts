@@ -564,6 +564,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#6638ff';
+  static isListingDef = true;
 
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);

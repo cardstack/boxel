@@ -129,6 +129,14 @@ export function isFileDef(def: any): def is typeof FileDef {
   return isBaseDef(def) && 'isFileDef' in def;
 }
 
+export function isListingDef(def: any): boolean {
+  return isCardDef(def) && 'isListingDef' in def;
+}
+
+export function isListingInstance(card: any): boolean {
+  return isListingDef(card?.constructor);
+}
+
 export function isFieldInstance<T extends FieldDef>(
   fieldInstance: any,
 ): fieldInstance is T {
