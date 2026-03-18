@@ -1,11 +1,14 @@
 import { click, fillIn } from '@ember/test-helpers';
 
+import { getService } from '@universal-ember/test-support';
+
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { dasherize } from '@cardstack/boxel-ui/helpers';
 
-import { Deferred } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import {
   percySnapshot,
@@ -93,6 +96,37 @@ const ROOT_STYLE_ATTRS = Object.entries(ROOT_CSS_VARS)
   .map(([key, val]) => [`--${dasherize(key)}`, val].join(': '))
   .join('; ');
 
+const DARK_GOLD_THEME_VARS = {
+  primary: '#ffd700',
+  primaryForeground: '#0a0f23',
+  border: '#3a4073',
+  background: '#1a1f3a',
+  spacing: '0.3rem',
+};
+
+const OCEAN_BLUE_THEME_VARS = {
+  primary: '#0058A3',
+  primaryForeground: '#FFFFFF',
+  border: '#003B6F',
+  background: '#E3F2FD',
+  spacing: '0.25rem',
+};
+
+const FOREST_GREEN_THEME_VARS = {
+  primary: '#2e7d32',
+  primaryForeground: '#FFFFFF',
+  border: '#1b5e20',
+  background: '#E8F5E9',
+  spacing: '0.25rem',
+};
+
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 const SOFT_POP_VARS = `:root {
   --background: oklch(0.9789 0.0082 121.6272);
   --foreground: oklch(0 0 0);
@@ -172,11 +206,42 @@ module('Acceptance | theme-card-test', function (hooks) {
     setupUserSubscription();
     setupAuthEndpoints();
 
+    let loader = getService('loader-service').loader;
+    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let booleanMod: typeof import('https://cardstack.com/base/boolean');
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    booleanMod = await loader.import(`${baseRealm.url}boolean`);
+
+    let { field, contains, CardDef, Component } = cardApi;
+    let { default: BooleanField } = booleanMod;
+
+    class CheckboxCard extends CardDef {
+      static displayName = 'Checkbox Card';
+      @field isChecked = contains(BooleanField);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2>Checkbox Card</h2>
+          <BoxelInput
+            @type='checkbox'
+            @value={{true}}
+            data-test-checkbox-checked
+          />
+          <BoxelInput
+            @type='checkbox'
+            @value={{false}}
+            data-test-checkbox-unchecked
+          />
+        </template>
+      };
+    }
+
     await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'checkbox-card.gts': { CheckboxCard },
           '.realm.json': {
             name: 'Theme Playground',
           },
@@ -266,6 +331,138 @@ module('Acceptance | theme-card-test', function (hooks) {
                 cardInfo: {
                   name: 'Soft Pop',
                   summary: 'A theme with soft color pops',
+                },
+              },
+            },
+          },
+          'dark-gold-theme.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: 'https://cardstack.com/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  name: 'Dark Gold',
+                },
+                rootVariables: DARK_GOLD_THEME_VARS,
+                typography: {
+                  body: { fontSize: '18px' },
+                },
+              },
+            },
+          },
+          'ocean-blue-theme.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: 'https://cardstack.com/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  name: 'Ocean Blue',
+                },
+                rootVariables: OCEAN_BLUE_THEME_VARS,
+                typography: {
+                  body: { fontSize: '14px' },
+                },
+              },
+            },
+          },
+          'forest-green-theme.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'default',
+                  module: 'https://cardstack.com/base/structured-theme',
+                },
+              },
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  name: 'Forest Green',
+                },
+                rootVariables: FOREST_GREEN_THEME_VARS,
+                typography: {
+                  body: { fontSize: '16px' },
+                },
+              },
+            },
+          },
+          'checkbox-dark-gold.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'CheckboxCard',
+                  module: `${testRealmURL}checkbox-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                isChecked: true,
+                cardInfo: {
+                  name: 'Dark Gold Checkbox',
+                },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: `${testRealmURL}dark-gold-theme`,
+                  },
+                },
+              },
+            },
+          },
+          'checkbox-ocean-blue.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'CheckboxCard',
+                  module: `${testRealmURL}checkbox-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                isChecked: true,
+                cardInfo: {
+                  name: 'Ocean Blue Checkbox',
+                },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: `${testRealmURL}ocean-blue-theme`,
+                  },
+                },
+              },
+            },
+          },
+          'checkbox-forest-green.json': {
+            data: {
+              meta: {
+                adoptsFrom: {
+                  name: 'CheckboxCard',
+                  module: `${testRealmURL}checkbox-card`,
+                },
+              },
+              type: 'card',
+              attributes: {
+                isChecked: true,
+                cardInfo: {
+                  name: 'Forest Green Checkbox',
+                },
+              },
+              relationships: {
+                'cardInfo.theme': {
+                  links: {
+                    self: `${testRealmURL}forest-green-theme`,
+                  },
                 },
               },
             },
@@ -586,6 +783,227 @@ module('Acceptance | theme-card-test', function (hooks) {
         .dom('[data-test-var-value="accent"]')
         .containsText('/* not set */');
       assert.dom('[data-test-css-field]').containsText('/* No CSS defined */');
+    });
+  });
+
+  module('themed-checkbox', () => {
+    test('dark gold theme applies correct checkbox styles', async function (assert) {
+      let cardId = `${testRealmURL}checkbox-dark-gold`;
+      await visitOperatorMode({
+        stacks: [[{ id: cardId, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(`[data-test-card="${cardId}"]`)
+        .hasClass('boxel-card-container--themed');
+
+      let container = document.querySelector<HTMLElement>(
+        `[data-test-card="${cardId}"]`,
+      );
+      assert.ok(container, 'themed card container is present');
+
+      let styleAttr = container?.getAttribute('style') ?? '';
+      assert.ok(
+        styleAttr.includes('--primary: #ffd700'),
+        'inline style includes --primary',
+      );
+      assert.ok(
+        styleAttr.includes('--border: #3a4073'),
+        'inline style includes --border',
+      );
+      assert.ok(
+        styleAttr.includes('--background: #1a1f3a'),
+        'inline style includes --background',
+      );
+      assert.ok(
+        styleAttr.includes('--theme-body-font-size: 18px'),
+        'inline style includes --theme-body-font-size',
+      );
+
+      assert
+        .dom('[data-test-checkbox-checked]')
+        .exists('checked checkbox renders');
+      assert
+        .dom('[data-test-checkbox-unchecked]')
+        .exists('unchecked checkbox renders');
+
+      let checkedEl = document.querySelector<HTMLElement>(
+        '[data-test-checkbox-checked]',
+      );
+      let uncheckedEl = document.querySelector<HTMLElement>(
+        '[data-test-checkbox-unchecked]',
+      );
+
+      assert.strictEqual(
+        window
+          .getComputedStyle(checkedEl!)
+          .getPropertyValue('background-color'),
+        hexToRgb('#ffd700'),
+        'checked checkbox background-color matches --primary',
+      );
+      assert.strictEqual(
+        window.getComputedStyle(uncheckedEl!).getPropertyValue('border-color'),
+        hexToRgb('#3a4073'),
+        'unchecked checkbox border-color matches --border',
+      );
+      assert.strictEqual(
+        window
+          .getComputedStyle(uncheckedEl!)
+          .getPropertyValue('background-color'),
+        hexToRgb('#1a1f3a'),
+        'unchecked checkbox background-color matches --background',
+      );
+      assert.strictEqual(
+        window.getComputedStyle(checkedEl!).getPropertyValue('width'),
+        '18px',
+        'checkbox size matches --theme-body-font-size',
+      );
+    });
+
+    test('ocean blue theme applies correct checkbox styles', async function (assert) {
+      let cardId = `${testRealmURL}checkbox-ocean-blue`;
+      await visitOperatorMode({
+        stacks: [[{ id: cardId, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(`[data-test-card="${cardId}"]`)
+        .hasClass('boxel-card-container--themed');
+
+      let container = document.querySelector<HTMLElement>(
+        `[data-test-card="${cardId}"]`,
+      );
+      assert.ok(container, 'themed card container is present');
+
+      let styleAttr = container?.getAttribute('style') ?? '';
+      assert.ok(
+        styleAttr.includes('--primary: #0058A3'),
+        'inline style includes --primary',
+      );
+      assert.ok(
+        styleAttr.includes('--border: #003B6F'),
+        'inline style includes --border',
+      );
+      assert.ok(
+        styleAttr.includes('--background: #E3F2FD'),
+        'inline style includes --background',
+      );
+      assert.ok(
+        styleAttr.includes('--theme-body-font-size: 14px'),
+        'inline style includes --theme-body-font-size',
+      );
+
+      assert
+        .dom('[data-test-checkbox-checked]')
+        .exists('checked checkbox renders');
+      assert
+        .dom('[data-test-checkbox-unchecked]')
+        .exists('unchecked checkbox renders');
+
+      let checkedEl = document.querySelector<HTMLElement>(
+        '[data-test-checkbox-checked]',
+      );
+      let uncheckedEl = document.querySelector<HTMLElement>(
+        '[data-test-checkbox-unchecked]',
+      );
+
+      assert.strictEqual(
+        window
+          .getComputedStyle(checkedEl!)
+          .getPropertyValue('background-color'),
+        hexToRgb('#0058A3'),
+        'checked checkbox background-color matches --primary',
+      );
+      assert.strictEqual(
+        window.getComputedStyle(uncheckedEl!).getPropertyValue('border-color'),
+        hexToRgb('#003B6F'),
+        'unchecked checkbox border-color matches --border',
+      );
+      assert.strictEqual(
+        window
+          .getComputedStyle(uncheckedEl!)
+          .getPropertyValue('background-color'),
+        hexToRgb('#E3F2FD'),
+        'unchecked checkbox background-color matches --background',
+      );
+      assert.strictEqual(
+        window.getComputedStyle(checkedEl!).getPropertyValue('width'),
+        '14px',
+        'checkbox size matches --theme-body-font-size',
+      );
+    });
+
+    test('forest green theme applies correct checkbox styles', async function (assert) {
+      let cardId = `${testRealmURL}checkbox-forest-green`;
+      await visitOperatorMode({
+        stacks: [[{ id: cardId, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(`[data-test-card="${cardId}"]`)
+        .hasClass('boxel-card-container--themed');
+
+      let container = document.querySelector<HTMLElement>(
+        `[data-test-card="${cardId}"]`,
+      );
+      assert.ok(container, 'themed card container is present');
+
+      let styleAttr = container?.getAttribute('style') ?? '';
+      assert.ok(
+        styleAttr.includes('--primary: #2e7d32'),
+        'inline style includes --primary',
+      );
+      assert.ok(
+        styleAttr.includes('--border: #1b5e20'),
+        'inline style includes --border',
+      );
+      assert.ok(
+        styleAttr.includes('--background: #E8F5E9'),
+        'inline style includes --background',
+      );
+      assert.ok(
+        styleAttr.includes('--theme-body-font-size: 16px'),
+        'inline style includes --theme-body-font-size',
+      );
+
+      assert
+        .dom('[data-test-checkbox-checked]')
+        .exists('checked checkbox renders');
+      assert
+        .dom('[data-test-checkbox-unchecked]')
+        .exists('unchecked checkbox renders');
+
+      let checkedEl = document.querySelector<HTMLElement>(
+        '[data-test-checkbox-checked]',
+      );
+      let uncheckedEl = document.querySelector<HTMLElement>(
+        '[data-test-checkbox-unchecked]',
+      );
+
+      assert.strictEqual(
+        window
+          .getComputedStyle(checkedEl!)
+          .getPropertyValue('background-color'),
+        hexToRgb('#2e7d32'),
+        'checked checkbox background-color matches --primary',
+      );
+      assert.strictEqual(
+        window.getComputedStyle(uncheckedEl!).getPropertyValue('border-color'),
+        hexToRgb('#1b5e20'),
+        'unchecked checkbox border-color matches --border',
+      );
+      assert.strictEqual(
+        window
+          .getComputedStyle(uncheckedEl!)
+          .getPropertyValue('background-color'),
+        hexToRgb('#E8F5E9'),
+        'unchecked checkbox background-color matches --background',
+      );
+      assert.strictEqual(
+        window.getComputedStyle(checkedEl!).getPropertyValue('width'),
+        '16px',
+        'checkbox size matches --theme-body-font-size',
+      );
     });
   });
 });

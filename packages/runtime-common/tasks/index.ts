@@ -8,7 +8,7 @@ import type {
   RealmPermissions,
   DefinitionLookup,
 } from '../index';
-import type { JobInfo } from '../worker';
+import type { JobInfo, IndexingProgressEvent } from '../worker';
 export * from './lint';
 export * from './full-reindex';
 export * from './daily-credit-grant';
@@ -30,6 +30,7 @@ export interface TaskArgs {
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
+  reportProgress?(event: IndexingProgressEvent): void;
 }
 
 export type Task<T, K> = (

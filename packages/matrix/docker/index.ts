@@ -2,11 +2,7 @@ import * as os from 'os';
 import * as childProcess from 'child_process';
 import * as fse from 'fs-extra';
 
-function dockerPull(
-  image: string,
-  retries = 3,
-  delayMs = 5000,
-): Promise<void> {
+function dockerPull(image: string, retries = 3, delayMs = 5000): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let attempt = 0;
     function tryPull() {
@@ -151,8 +147,8 @@ export async function dockerLogs(args: {
       .once('close', resolve);
   });
 
-  if (args.stdoutFile) await fse.close(<number>stdoutFile);
-  if (args.stderrFile) await fse.close(<number>stderrFile);
+  if (args.stdoutFile) await fse.close(stdoutFile as number);
+  if (args.stderrFile) await fse.close(stderrFile as number);
 }
 
 export function dockerStop(args: { containerId: string }): Promise<void> {
