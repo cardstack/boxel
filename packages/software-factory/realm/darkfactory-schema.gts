@@ -74,7 +74,9 @@ export class AgentProfile extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: AgentProfile) {
-      return this.cardInfo?.title ?? this.agentId ?? 'Unnamed Agent';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : (this.agentId ?? 'Unnamed Agent');
     },
   });
 }
@@ -91,7 +93,9 @@ export class KnowledgeArticle extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: KnowledgeArticle) {
-      return this.cardInfo?.title ?? this.articleTitle ?? 'Untitled Article';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : (this.articleTitle ?? 'Untitled Article');
     },
   });
 }
@@ -118,7 +122,9 @@ export class Ticket extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Ticket) {
-      return this.cardInfo?.title ?? this.summary ?? 'Untitled Ticket';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : (this.summary ?? 'Untitled Ticket');
     },
   });
 }
@@ -138,6 +144,7 @@ export class Project extends CardDef {
     query: {
       filter: {
         on: {
+          // @ts-ignore this is not a CJS file, import.meta is allowed
           module: new URL('./darkfactory', import.meta.url).href,
           name: 'Ticket',
         },
@@ -153,7 +160,9 @@ export class Project extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
-      return this.cardInfo?.title ?? this.projectName ?? 'Untitled Project';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : (this.projectName ?? 'Untitled Project');
     },
   });
 }
@@ -167,7 +176,9 @@ export class DarkFactory extends CardDef {
 
   @field title = contains(StringField, {
     computeVia: function (this: DarkFactory) {
-      return this.cardInfo?.title ?? this.factoryName ?? 'Dark Factory';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : (this.factoryName ?? 'Dark Factory');
     },
   });
 }

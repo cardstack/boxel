@@ -4,20 +4,20 @@ import { dirname, resolve } from 'node:path';
 import {
   ensureFactoryRealmTemplate,
   type FactoryRealmOptions,
-} from '../harness.ts';
-import { readSupportContext } from '../runtime-metadata.ts';
+} from '../harness';
+import { readSupportContext } from '../runtime-metadata';
 
-let realmDir = resolve(
-  process.cwd(),
-  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
-);
-let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
+async function main(): Promise<void> {
+  let realmDir = resolve(
+    process.cwd(),
+    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+  );
+  let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
 
-let supportContext: FactoryRealmOptions['context'] = serializedSupportContext
-  ? (JSON.parse(serializedSupportContext) as FactoryRealmOptions['context'])
-  : (readSupportContext() as FactoryRealmOptions['context']);
+  let supportContext: FactoryRealmOptions['context'] = serializedSupportContext
+    ? (JSON.parse(serializedSupportContext) as FactoryRealmOptions['context'])
+    : (readSupportContext() as FactoryRealmOptions['context']);
 
-try {
   let template = await ensureFactoryRealmTemplate({
     realmDir,
     context: supportContext,
@@ -39,8 +39,9 @@ try {
     );
   }
   console.log(JSON.stringify(payload, null, 2));
-  process.exit(0);
-} catch (error) {
+}
+
+main().catch((error: unknown) => {
   console.error(error);
   process.exit(1);
-}
+});

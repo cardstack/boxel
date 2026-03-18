@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { expect, test } from './fixtures.js';
+import { expect, test } from './fixtures';
 
 const adopterRealmDir = resolve(
   process.cwd(),
@@ -9,6 +9,7 @@ const adopterRealmDir = resolve(
 );
 
 test.use({ realmDir: adopterRealmDir });
+test.use({ realmServerMode: 'shared' });
 
 test('renders a project adopted from the public DarkFactory module', async ({
   authedPage,

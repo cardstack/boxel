@@ -1,15 +1,15 @@
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { startFactorySupportServices } from '../harness.ts';
-import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata.ts';
+import { startFactorySupportServices } from '../harness';
+import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata';
 
-let realmDir = resolve(
-  process.cwd(),
-  process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
-);
+async function main(): Promise<void> {
+  let realmDir = resolve(
+    process.cwd(),
+    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+  );
 
-try {
   let support = await startFactorySupportServices();
 
   let payload = {
@@ -27,9 +27,11 @@ try {
     process.exit(0);
   };
 
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-} catch (error) {
+  process.on('SIGINT', () => void stop());
+  process.on('SIGTERM', () => void stop());
+}
+
+main().catch((error: unknown) => {
   console.error(error);
   process.exit(1);
-}
+});

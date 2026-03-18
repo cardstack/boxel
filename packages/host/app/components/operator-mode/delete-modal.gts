@@ -17,8 +17,11 @@ interface Signature {
     onCancel: () => void;
     isDeleteRunning?: boolean;
     error?: string;
+    size?: 'x-small' | 'small' | 'medium' | 'large' | 'full-screen';
+    containerClass?: string;
   };
   Blocks: {
+    default: [];
     content: [];
   };
 }
@@ -28,15 +31,19 @@ let component: TemplateOnlyComponent<Signature> = <template>
     data-test-delete-modal-container
     data-test-delete-modal={{@itemToDelete.id}}
     @layer='urgent'
-    @size='x-small'
+    @size={{if @size @size 'x-small'}}
     @isOpen={{true}}
     @onClose={{@onCancel}}
     style={{cssVar boxel-modal-offset-top='40vh'}}
   >
-    <section class='delete'>
-      <p class='content' data-test-delete-msg>
-        {{yield to='content'}}
-      </p>
+    <section class='delete {{@containerClass}}'>
+      <div class='content' data-test-delete-msg>
+        {{#if (has-block 'content')}}
+          {{yield to='content'}}
+        {{else}}
+          {{yield}}
+        {{/if}}
+      </div>
       <p class='content disclaimer'>This action is not reversible.</p>
       <footer class='buttons'>
         {{#if @isDeleteRunning}}
@@ -74,9 +81,9 @@ let component: TemplateOnlyComponent<Signature> = <template>
       margin: 0;
       font: 500 var(--boxel-font);
       letter-spacing: var(--boxel-lsp-xs);
+      line-height: 1.4;
       text-align: center;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      white-space: normal;
     }
     .content + .content {
       margin-top: var(--boxel-sp-xs);
