@@ -50,20 +50,20 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardId: `${testRealmURL}Pet/mango`,
+      openCardIds: [`${testRealmURL}Pet/mango`],
     } as never);
 
-    assert.deepEqual(operatorModeStateService.createListingModalRequest, {
+    assert.deepEqual(operatorModeStateService.createListingModalPayload, {
       codeRef: {
         module: `${testRealmURL}pet`,
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardId: `${testRealmURL}Pet/mango`,
+      openCardIds: [`${testRealmURL}Pet/mango`],
     });
   });
 
-  test('stores modal request without openCardId', async function (assert) {
+  test('stores modal request without openCardIds', async function (assert) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
@@ -79,16 +79,16 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
       targetRealm: testRealmURL,
     } as never);
 
-    let request = operatorModeStateService.createListingModalRequest;
+    let request = operatorModeStateService.createListingModalPayload;
     assert.deepEqual(request?.codeRef, {
       module: `${testRealmURL}pet`,
       name: 'Pet',
     });
     assert.strictEqual(request?.targetRealm, testRealmURL);
     assert.strictEqual(
-      request?.openCardId,
+      request?.openCardIds,
       undefined,
-      'openCardId is absent from state',
+      'openCardIds is absent from state',
     );
   });
 
@@ -106,18 +106,18 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
         name: 'Pet',
       },
       targetRealm: testRealmURL,
-      openCardId: `${testRealmURL}Pet/mango`,
+      openCardIds: [`${testRealmURL}Pet/mango`],
     } as never);
 
     assert.ok(
-      operatorModeStateService.createListingModalRequest,
+      operatorModeStateService.createListingModalPayload,
       'request is set after execute',
     );
 
     operatorModeStateService.dismissCreateListingModal();
 
     assert.strictEqual(
-      operatorModeStateService.createListingModalRequest,
+      operatorModeStateService.createListingModalPayload,
       undefined,
       'request is cleared after dismissCreateListingModal',
     );
