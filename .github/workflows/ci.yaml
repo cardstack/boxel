@@ -518,8 +518,36 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
+      - name: Wait for realm servers to be ready
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          wait_for_url() {
+            local name="$1"
+            local url="$2"
+            local max_attempts="${3:-180}"
+
+            for ((attempt=1; attempt<=max_attempts; attempt++)); do
+              if curl --silent --show-error --fail --output /dev/null "$url"; then
+                echo "$name is ready"
+                return 0
+              fi
+
+              echo "Waiting for $name ($attempt/$max_attempts): $url"
+              sleep 5
+            done
+
+            echo "Timed out waiting for $name: $url" >&2
+            return 1
+          }
+
+          wait_for_url "base realm" "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+          wait_for_url "node-test realm" "http://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+          wait_for_url "synapse" "http://localhost:8008"
+          wait_for_url "smtp4dev" "http://localhost:5001"
       - name: realm server test suite
-        run: pnpm test:wait-for-servers -- --shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm test -- --shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/realm-server
       - name: Print realm server logs
         if: ${{ !cancelled() }}
