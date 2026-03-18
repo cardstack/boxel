@@ -20,7 +20,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
 
   async function createRealmFor(ownerUserId: string) {
     let endpoint = `delete-me-${uuidv4()}`;
-    let response = await context.request2
+    let response = await context.request
       .post('/_create-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
@@ -110,7 +110,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'mango@example.com',
     );
 
-    let publishResponse = await context.request2
+    let publishResponse = await context.request
       .post('/_publish-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
@@ -277,7 +277,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
     );
 
-    let deleteResponse = await context.request2
+    let deleteResponse = await context.request
       .delete('/_delete-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
@@ -633,7 +633,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       'mango@example.com',
     );
 
-    let publishResponse = await context.request2
+    let publishResponse = await context.request
       .post('/_publish-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
@@ -685,7 +685,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     );
     mountedRealms.splice(publishedRealmIndex, 1);
 
-    let deleteResponse = await context.request2
+    let deleteResponse = await context.request
       .delete('/_delete-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
@@ -736,7 +736,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       [ownerUserId]: ['read', 'write', 'realm-owner'],
     });
 
-    let response = await context.request2
+    let response = await context.request
       .delete('/_delete-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
@@ -768,7 +768,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
   test('DELETE /_delete-realm rejects an invalid realm URL', async function (assert) {
     let ownerUserId = `@mango-${uuidv4()}:localhost`;
 
-    let response = await context.request2
+    let response = await context.request
       .delete('/_delete-realm')
       .set('Accept', 'application/vnd.api+json')
       .set('Content-Type', 'application/json')
