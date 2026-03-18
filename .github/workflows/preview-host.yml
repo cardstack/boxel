@@ -23,6 +23,9 @@ jobs:
   check-if-requires-preview:
     name: Check if a preview deploy is required
     runs-on: ubuntu-latest
+    concurrency:
+      group: check-if-requires-preview-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     outputs:
       boxel-host-files-changed: ${{ steps.boxel-host-files-that-changed.outputs.any_changed }}
     steps:
@@ -47,7 +50,9 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-host-preview-staging-${{ github.head_ref || github.run_id }}
+    concurrency:
+      group: deploy-host-preview-staging-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Configure AWS credentials
@@ -76,7 +81,9 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-host-preview-production-${{ github.head_ref || github.run_id }}
+    concurrency:
+      group: deploy-host-preview-production-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Configure AWS credentials
@@ -103,7 +110,7 @@ jobs:
     needs:
       - deploy-host-preview-staging
       - deploy-host-preview-production
-    if: ${{ always() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
+    if: ${{ !cancelled() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
     uses: ./.github/workflows/preview-comment.yml
     with:
       pr-number: ${{ github.event.pull_request.number }}
