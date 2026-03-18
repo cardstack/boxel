@@ -10,7 +10,6 @@ import {
   fetchRealmPermissions,
   PUBLISHED_DIRECTORY_NAME,
 } from '@cardstack/runtime-common';
-import { readdirSync, removeSync } from 'fs-extra';
 import { join } from 'path';
 import * as Sentry from '@sentry/node';
 import {
@@ -23,37 +22,9 @@ import {
 } from '../middleware';
 import type { CreateRoutesArgs } from '../routes';
 import type { RealmServerTokenClaim } from '../utils/jwt';
+import { removeMountedRealm } from './realm-destruction-utils';
 
 const log = logger('handle-unpublish');
-
-function collectAllFilePaths(realmPath: string): string[] {
-  let allPaths: string[] = [];
-
-  function traverseDirectory(currentPath: string, basePath: string) {
-    try {
-      let entries = readdirSync(currentPath, { withFileTypes: true });
-
-      for (let entry of entries) {
-        let fullPath = join(currentPath, entry.name);
-
-        if (entry.isDirectory()) {
-          traverseDirectory(fullPath, basePath);
-        } else {
-          // Calculate relative path from the original realm root
-          let relativePath = fullPath.replace(basePath, '').replace(/^\//, '');
-          if (relativePath) {
-            allPaths.push(relativePath);
-          }
-        }
-      }
-    } catch (e) {
-      log.warn(`Failed to traverse realm directory ${currentPath}: ${e}`);
-    }
-  }
-
-  traverseDirectory(realmPath, realmPath);
-  return allPaths;
-}
 
 export default function handleUnpublishRealm({
   dbAdapter,
@@ -143,19 +114,12 @@ export default function handleUnpublishRealm({
         PUBLISHED_DIRECTORY_NAME,
         publishedRealmInfo.id,
       );
-      let allFilePaths = collectAllFilePaths(publishedRealmPath);
-
-      if (allFilePaths.length > 0) {
-        await existingPublishedRealm.deleteAll(allFilePaths);
-      }
-      removeSync(publishedRealmPath);
-
-      virtualNetwork.unmount(existingPublishedRealm.handle);
-
-      let index = realms.findIndex((r) => r.url === publishedRealmURL);
-      if (index !== -1) {
-        realms.splice(index, 1);
-      }
+      await removeMountedRealm({
+        realm: existingPublishedRealm,
+        realmPath: publishedRealmPath,
+        realms,
+        virtualNetwork,
+      });
 
       await query(dbAdapter, [
         `DELETE FROM published_realms WHERE published_realm_url =`,

@@ -12,6 +12,7 @@ import Router from '@koa/router';
 import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session';
 import handleCreateRealmRequest from './handlers/handle-create-realm';
+import handleDeleteRealm from './handlers/handle-delete-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
@@ -130,6 +131,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed),
     handleCreateRealmRequest(args),
+  );
+  router.delete(
+    '/_delete-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
