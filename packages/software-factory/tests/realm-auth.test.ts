@@ -4,6 +4,13 @@ import {
   createBoxelRealmFetch,
   type ActiveBoxelProfile,
 } from '../src/realm-auth';
+import { FactoryBriefError, loadFactoryBrief } from '../src/factory-brief';
+import {
+  browserPassword,
+  buildRealmSessionJwt,
+  jsonResponse,
+  startServers,
+} from './helpers/realm-auth';
 
 const matrixServerUrl = 'http://matrix.example.test/';
 const realmServerUrl = 'http://realm-server.example.test/';
@@ -47,7 +54,7 @@ module('realm-auth', function () {
     assert.true(fetchWasCalled);
   });
 
-  test('createBoxelRealmFetch reauthenticates with runtime-common auth middleware for matching realm-server urls', async function (assert) {
+  test('createBoxelRealmFetch retries a matching realm request with a refreshed session after a 401', async function (assert) {
     let calls: Array<{ url: string; authorization: string | null }> = [];
     let originalFetch = globalThis.fetch;
 
@@ -157,7 +164,7 @@ module('realm-auth', function () {
     ]);
   });
 
-  test('createBoxelRealmFetch skips runtime-common auth wiring for non-matching origins', async function (assert) {
+  test('createBoxelRealmFetch leaves fetch unchanged for non-matching origins', async function (assert) {
     let fetchWasCalled = false;
 
     let fetchImpl = createBoxelRealmFetch(
@@ -179,20 +186,41 @@ module('realm-auth', function () {
     await fetchImpl('http://127.0.0.1:4011/private/Wiki/brief-card');
     assert.true(fetchWasCalled);
   });
-});
 
-function buildRealmSessionJwt(): string {
-  return `header.${Buffer.from(
-    JSON.stringify({ sessionRoom: '' }),
-    'utf8',
-  ).toString('base64')}.signature`;
-}
+  test('createBoxelRealmFetch can fetch a brief from a private realm', async function (assert) {
+    let servers = await startServers();
+    let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
 
-function jsonResponse(value: unknown): Response {
-  return new Response(JSON.stringify(value), {
-    status: 200,
-    headers: {
-      'content-type': 'application/json',
-    },
+    try {
+      await assert.rejects(
+        loadFactoryBrief(briefUrl),
+        (error: unknown) =>
+          error instanceof FactoryBriefError &&
+          /HTTP 401 Unauthorized/.test(error.message),
+      );
+
+      let authedFetch = createBoxelRealmFetch(briefUrl, {
+        profile: {
+          profileId: null,
+          username: 'software-factory-browser',
+          matrixUrl: servers.matrixServer.url,
+          realmServerUrl: servers.realmServer.origin,
+          password: browserPassword('software-factory-browser'),
+        },
+      });
+
+      let brief = await loadFactoryBrief(briefUrl, {
+        fetch: authedFetch,
+      });
+
+      assert.strictEqual(brief.title, 'Private Brief');
+      assert.strictEqual(
+        brief.contentSummary,
+        'Private brief content for testing realm auth.',
+      );
+      assert.deepEqual(brief.tags, ['private', 'brief']);
+    } finally {
+      await servers.stop();
+    }
   });
-}
+});
