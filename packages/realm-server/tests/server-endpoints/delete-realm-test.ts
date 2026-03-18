@@ -300,7 +300,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
     assert.false(
       existsSync(
-        join(context.dir.name, 'realm_server_2', realmPath[0]!, realmPath[1]!),
+        join(context.dir.name, 'realm_server_1', realmPath[0]!, realmPath[1]!),
       ),
       'source realm directory was removed after realm deletion',
     );
@@ -308,7 +308,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       existsSync(
         join(
           context.dir.name,
-          'realm_server_2',
+          'realm_server_1',
           '_published',
           publishedRealmId,
         ),
@@ -655,7 +655,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
     let publishedRealmId = publishResponse.body.data.id as string;
     let publishedRealmPath = join(
       context.dir.name,
-      'realm_server_2',
+      'realm_server_1',
       PUBLISHED_DIRECTORY_NAME,
       publishedRealmId,
     );
