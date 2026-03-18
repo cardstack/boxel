@@ -11,7 +11,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let context = setupServerEndpointsTest(hooks);
 
     test('returns 404 for unknown webhook path', async function (assert) {
-      let response = await context.request2
+      let response = await context.request
         .post('/_webhooks/whk_nonexistent')
         .set('Content-Type', 'application/json')
         .send(JSON.stringify({ event: 'test' }));
@@ -28,7 +28,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -56,7 +56,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       let payload = JSON.stringify({ event: 'push', ref: 'refs/heads/main' });
 
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Hub-Signature-256', 'sha256=invalidsignature')
@@ -74,7 +74,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -108,7 +108,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .update(payload, 'utf8')
           .digest('hex');
 
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Hub-Signature-256', signature)
@@ -131,7 +131,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -166,7 +166,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         .update(payload, 'utf8')
         .digest('base64');
 
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Shopify-Hmac-SHA256', signature)
@@ -207,7 +207,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       let payload = JSON.stringify({ event: 'test' });
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_webhooks/whk_noheader')
         .set('Content-Type', 'application/json')
         .send(payload);
@@ -228,7 +228,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let createResponse = await context.request2
+      let createResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -263,7 +263,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .digest('hex');
 
       // No Authorization header set - this should still work
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Hub-Signature-256', signature)
@@ -287,7 +287,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
 
       // Create webhook
-      let createWebhookResponse = await context.request2
+      let createWebhookResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -317,7 +317,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         createWebhookResponse.body.data.attributes.signingSecret;
 
       // Register webhook command
-      await context.request2
+      await context.request
         .post('/_webhook-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -350,7 +350,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .update(payload, 'utf8')
           .digest('hex');
 
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Hub-Signature-256', signature)
@@ -380,7 +380,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
 
       // Create webhook
-      let createWebhookResponse = await context.request2
+      let createWebhookResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -410,7 +410,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         createWebhookResponse.body.data.attributes.signingSecret;
 
       // Register command filtered to 'push' events only
-      await context.request2
+      await context.request
         .post('/_webhook-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -443,7 +443,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .update(payload, 'utf8')
           .digest('hex');
 
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Hub-Signature-256', signature)
@@ -472,7 +472,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         realmSecretSeed,
       )}`;
 
-      let createWebhookResponse = await context.request2
+      let createWebhookResponse = await context.request
         .post('/_incoming-webhooks')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -496,7 +496,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         createWebhookResponse.body.data.attributes.signingSecret;
 
       // Register command with roomId and realm in filter
-      await context.request2
+      await context.request
         .post('/_webhook-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -531,7 +531,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           .update(payload, 'utf8')
           .digest('hex');
 
-      let response = await context.request2
+      let response = await context.request
         .post(`/_webhooks/${webhookPath}`)
         .set('Content-Type', 'application/json')
         .set('X-Hub-Signature-256', signature)

@@ -183,7 +183,9 @@ export class Wiki extends CardDef {
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Wiki) {
-      return this.cardInfo?.name ?? this.cardInfo?.title ?? 'Untitled Page';
+      return this.cardInfo.name?.trim()?.length
+        ? this.cardInfo.name
+        : 'Untitled Page';
     },
   });
 
@@ -653,7 +655,7 @@ export class Wiki extends CardDef {
           return title === wikiName.toLowerCase();
         });
         if (match) {
-          this.args.viewCard(match, 'isolated');
+          this.args.viewCard?.(match, 'isolated');
           return;
         }
       }
@@ -672,7 +674,7 @@ export class Wiki extends CardDef {
           const targetUrl = new URL(
             `${cardUrl.origin}${basePath}/Wiki/${wikiSlug}`,
           );
-          this.args.viewCard(targetUrl, 'isolated');
+          this.args.viewCard?.(targetUrl, 'isolated');
         }
       } catch (e) {
         // ignore navigation errors
@@ -727,7 +729,7 @@ export class Wiki extends CardDef {
     };
 
     viewRelatedPage = (page: Wiki) => {
-      this.args.viewCard(page, 'isolated');
+      this.args.viewCard?.(page, 'isolated');
     };
 
     get markdownHeaders() {

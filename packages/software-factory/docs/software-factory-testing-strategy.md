@@ -12,7 +12,20 @@ Define a practical testing strategy for the software-factory work so that:
 This document applies to:
 
 - the public `DarkFactory` module in `packages/software-factory/realm`
-- the `factory:go` orchestration work in `packages/software-factory/experiment_1`
+- the `factory:go` orchestration work in `packages/software-factory/`
+
+## TypeScript Policy
+
+`packages/software-factory/` is a 100% TypeScript workspace.
+
+Rules:
+
+- new package scripts should be `.ts`
+- new package tests should be `.ts`
+- do not add new `.mjs` files in this package
+- package scripts should be executable through typed TypeScript entrypoints, with typechecking included in package linting
+- `.gts` files should follow the repo-standard Glint setup through `tsconfig.json`
+- package linting currently uses `glint`, `eslint`, and `prettier`
 
 ## Realm Roles
 
@@ -43,6 +56,29 @@ Instead, split testing into layers:
 
 The more logic we can move into deterministic code, the less fragile the overall system becomes.
 
+## Test Location Rule
+
+All package tests should live under `packages/software-factory/tests/`.
+
+Use these conventions:
+
+- `tests/*.test.ts`
+  - Node-side deterministic tests such as CLI, parsing, and orchestration logic
+- `tests/*.spec.ts`
+  - Playwright/browser tests
+- `tests/helpers/`
+  - shared helpers only, not standalone test files
+
+For Playwright specs, the fixture module should expose the realm-server
+isolation mode explicitly:
+
+- `test.use({ realmServerMode: 'shared' })`
+  - default for read-only specs that can reuse one realm server within the spec
+- `test.use({ realmServerMode: 'isolated' })`
+  - use for mutable specs that need a fresh realm server per test
+
+Do not add package tests under `src/`.
+
 ## What We Are Actually Testing
 
 We are not trying to prove that a model "thinks well."
@@ -69,7 +105,7 @@ Test the `DarkFactory` cards like normal Boxel artifacts:
 
 Coverage should include:
 
-- public resolution from `http://localhost:4201/software-factory/darkfactory`
+- public resolution from the published `darkfactory` module as served by the isolated software-factory test harness
 - rendering of the shared tracker cards
 - cross-realm adoption by an external realm
 - any card queries or embedded relations used by the tracker UI
@@ -100,6 +136,18 @@ Focus areas:
 - resume and idempotency behavior
 
 These should be covered with unit tests and focused integration tests.
+
+Hermetic requirement for this layer:
+
+- deterministic `factory:go` tests must not depend on an ambient realm server on `http://localhost:4201/`
+- when a test only needs an absolute URL shape, use a synthetic URL such as `https://briefs.example.test/...`
+- when a test needs a live realm, use the isolated software-factory harness rather than external local infrastructure
+
+Debugging note:
+
+- if tests fail or behave oddly in CI but not locally, first check whether a supposedly hermetic test is accidentally leaking and relying on an external local server or other ambient infrastructure
+- a common smell is a test that passes only when `localhost:4201` or another developer-run service happens to be up
+- verify hermetic assumptions by stopping ambient local services and rerunning the affected tests against only the software-factory harness
 
 Examples:
 
@@ -192,6 +240,10 @@ Use:
 
 - unit tests for CLI argument parsing
 - integration tests for command startup and summary output
+
+Location:
+
+- keep these tests as top-level `packages/software-factory/tests/*.test.ts`, not under `src/`
 
 ### Brief Normalization
 
