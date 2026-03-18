@@ -189,9 +189,9 @@ module('command runner', () => {
         userId: '@alice:localhost',
         input: {
           roomId: '!abc123:localhost',
-          listingName: 'My Listing',
-          listingDescription: 'Example listing',
-        },
+          listingName: 'My Listing Name',
+          listingSummary: 'My listing Summary'
+        },  
       },
       'bot-registration-2',
     );
