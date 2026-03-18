@@ -24,6 +24,7 @@ import {
 
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
 import ItemButton from '@cardstack/host/components/card-search/item-button';
+import type { NewCardArgs } from '@cardstack/host/components/card-search/utils';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
@@ -131,7 +132,7 @@ export default class CreateListingModal extends Component<Signature> {
   }
 
   private get instances(): CardDef[] {
-    return this.instancesSearch.instances;
+    return this.instancesSearch.instances as CardDef[];
   }
 
   private get hasInstances(): boolean {
@@ -155,7 +156,10 @@ export default class CreateListingModal extends Component<Signature> {
     );
   }
 
-  @action private onSelectExample(selection: string) {
+  @action private onSelectExample(selection: string | NewCardArgs) {
+    if (typeof selection !== 'string') {
+      return;
+    }
     // First manual toggle: start from "all selected" state
     let current =
       this.selectedExampleIds ?? new Set(this.instances.map((i) => i.id));

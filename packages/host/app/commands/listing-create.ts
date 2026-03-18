@@ -112,7 +112,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingCreateInput,
   ): Promise<BaseCommandModule.ListingCreateResult> {
-    const cardAPI = await this.loadCardAPI();
     let { openCardIds, codeRef, targetRealm } = input;
 
     if (!codeRef) {
@@ -402,8 +401,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
       await Promise.all(
         openCardIds.map(async (openCardId) => {
           try {
-            const instance =
-              await this.store.get<CardAPI.CardDef>(openCardId);
+            const instance = await this.store.get<CardAPI.CardDef>(openCardId);
             if (isCardInstance(instance)) {
               addCard(instance as CardAPI.CardDef);
             } else {
