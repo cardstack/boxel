@@ -1,14 +1,30 @@
 {
   "mcpServers": {
+    "ember-mcp": {
+      "type": "stdio",
+      "command": "mise",
+      "args": ["exec", "--", "npx", "-y", "ember-mcp"]
+    },
+    "chrome-devtools": {
+      "type": "stdio",
+      "command": "mise",
+      "args": ["exec", "--", "npx", "-y", "chrome-devtools-mcp@latest"]
+    },
     "linear": {
       "type": "http",
       "url": "https://mcp.linear.app/mcp"
     },
-    "chrome-devtools": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_PAT_TOKEN}"
+      }
+    },
+    "playwright": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["chrome-devtools-mcp@latest"],
-      "env": {}
+      "command": "mise",
+      "args": ["exec", "--", "npx", "-y", "@playwright/mcp@latest"]
     }
   }
 }
