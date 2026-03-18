@@ -1,4 +1,9 @@
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
+import {
+  CardDef,
+  field,
+  contains,
+  Component,
+} from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
 export class SampleCommandCard extends CardDef {
@@ -40,7 +45,9 @@ class CreateCardButton extends GlimmerComponent {
   @service declare store: Store;
 
   createCard = async () => {
-    await this.store.add(new SampleCommandCard({ title: 'Hello from live-test' }));
+    await this.store.add(
+      new SampleCommandCard({ title: 'Hello from live-test' }),
+    );
   };
 
   <template>
@@ -54,7 +61,9 @@ module('Experiments | SampleCommandCard', function (hooks) {
   setupOnSave(hooks);
   setupRealmCacheTeardown(hooks);
   setupCardLogs(hooks, async () =>
-    (getService('loader-service') as any).loader.import(`${baseRealm.url}card-api`),
+    (getService('loader-service') as any).loader.import(
+      `${baseRealm.url}card-api`,
+    ),
   );
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -77,29 +86,25 @@ module('Experiments | SampleCommandCard', function (hooks) {
     ));
   });
 
-  test('clicking Create Card writes a new card to the realm', async function (
-    this: TestContextWithSave,
-    assert,
-  ) {
-      assert.expect(3);
+  test('clicking Create Card writes a new card to the realm', async function (this: TestContextWithSave, assert) {
+    assert.expect(3);
 
-      let savedUrl: URL | undefined;
-      this.onSave((url, doc) => {
-        savedUrl = url;
-        assert.strictEqual(
-          (doc as any).data.attributes.title,
-          'Hello from live-test',
-          'saved doc has correct title',
-        );
-      });
+    let savedUrl: URL | undefined;
+    this.onSave((url, doc) => {
+      savedUrl = url;
+      assert.strictEqual(
+        (doc as any).data.attributes.title,
+        'Hello from live-test',
+        'saved doc has correct title',
+      );
+    });
 
-      await render(<template><CreateCardButton /></template>);
-      await click('button');
+    await render(<template><CreateCardButton /></template>);
+    await click('button');
 
-      assert.ok(savedUrl, 'card was saved to realm');
-      let relativePath = `${savedUrl!.href.substring(testRealmURL.length)}.json`;
-      let file = await testRealmAdapter.openFile(relativePath);
-      assert.ok(file, 'card JSON file exists in the realm adapter');
-    },
-  );
+    assert.ok(savedUrl, 'card was saved to realm');
+    let relativePath = `${savedUrl!.href.substring(testRealmURL.length)}.json`;
+    let file = await testRealmAdapter.openFile(relativePath);
+    assert.ok(file, 'card JSON file exists in the realm adapter');
+  });
 });
