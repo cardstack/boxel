@@ -78,6 +78,8 @@ jobs:
       - name: Start realm servers
         run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
         working-directory: packages/realm-server
+        env:
+          SKIP_CATALOG: true
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix

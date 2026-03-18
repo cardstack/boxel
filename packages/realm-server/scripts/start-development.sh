@@ -33,10 +33,24 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
-START_CATALOG=true
-if [ "${SKIP_CATALOG:-}" = "true" ]; then
-  START_CATALOG=""
+# Always start the catalog realm. The skills realm depends on
+# @cardstack/catalog/skill-set and @cardstack/catalog/skill-plus modules.
+# When SKIP_CATALOG is set, build a minimal catalog with only the files needed
+# by the skills realm so it indexes quickly.
+if [ "${SKIP_CATALOG:-}" = "true" ] && [ "${CATALOG_REALM_PATH:-}" = "" ]; then
+  CATALOG_REALM_PATH="$(mktemp -d "${TMPDIR:-/tmp}/catalog-realm.minimal.XXXXXX")"
+  CATALOG_SRC="../catalog-realm"
+  for f in .realm.json package.json tsconfig.json; do
+    [ -e "$CATALOG_SRC/$f" ] && cp -a "$CATALOG_SRC/$f" "$CATALOG_REALM_PATH/"
+  done
+  for f in skill-set.gts skill-plus.gts skill-reference.gts; do
+    [ -f "$CATALOG_SRC/$f" ] && cp -a "$CATALOG_SRC/$f" "$CATALOG_REALM_PATH/"
+  done
+  if [ -d "$CATALOG_SRC/Theme" ]; then
+    cp -a "$CATALOG_SRC/Theme" "$CATALOG_REALM_PATH/"
+  fi
 fi
+START_CATALOG=true
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 

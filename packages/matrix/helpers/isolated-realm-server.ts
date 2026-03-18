@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import { resolve, join } from 'path';
 // @ts-expect-error no types
 import { dirSync, setGracefulCleanup } from 'tmp';
-import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
+import { ensureDirSync, copySync, readFileSync, existsSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from '../docker/synapse';
@@ -17,6 +17,33 @@ const skillsRealmDir = resolve(
   join(__dirname, '..', '..', 'skills-realm', 'contents'),
 );
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
+const catalogRealmSrc = resolve(join(__dirname, '..', '..', 'catalog-realm'));
+
+// Build a minimal catalog realm with only the files needed by the skills realm.
+// Skills adopt from @cardstack/catalog/skill-set and @cardstack/catalog/skill-plus,
+// and link to @cardstack/catalog/Theme/cardstack.
+function buildMinimalCatalog(): string {
+  let tmpDir = dirSync({ unsafeCleanup: true }).name;
+  let configFiles = ['.realm.json', 'package.json', 'tsconfig.json'];
+  for (let f of configFiles) {
+    let src = join(catalogRealmSrc, f);
+    if (existsSync(src)) {
+      copySync(src, join(tmpDir, f));
+    }
+  }
+  let skillFiles = ['skill-set.gts', 'skill-plus.gts', 'skill-reference.gts'];
+  for (let f of skillFiles) {
+    let src = join(catalogRealmSrc, f);
+    if (existsSync(src)) {
+      copySync(src, join(tmpDir, f));
+    }
+  }
+  let themeDir = join(catalogRealmSrc, 'Theme');
+  if (existsSync(themeDir)) {
+    copySync(themeDir, join(tmpDir, 'Theme'));
+  }
+  return tmpDir;
+}
 const matrixDir = resolve(join(__dirname, '..'));
 export const appURL = 'http://localhost:4205/test';
 
@@ -279,6 +306,13 @@ export async function startServer({
     `--fromUrl='http://localhost:4205/test/'`,
     `--toUrl='http://localhost:4205/test/'`,
   ];
+  let minimalCatalogDir = buildMinimalCatalog();
+  serverArgs = serverArgs.concat([
+    `--username='catalog_realm'`,
+    `--path='${minimalCatalogDir}'`,
+    `--fromUrl='@cardstack/catalog/'`,
+    `--toUrl='http://localhost:4205/catalog/'`,
+  ]);
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
