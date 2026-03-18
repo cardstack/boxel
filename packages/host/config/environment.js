@@ -26,7 +26,6 @@ function environmentDefaults() {
       realmHost: 'localhost:4201',
       iconsURL: 'http://localhost:4206',
       baseRealmURL: 'http://localhost:4201/base/',
-      // eslint-disable-next-line @cardstack/boxel/no-literal-realm-urls
       catalogRealmURL: 'http://localhost:4201/catalog/',
       externalCatalogRealmURL: 'http://localhost:4201/external-catalog/',
       skillsRealmURL: 'http://localhost:4201/skills/',
