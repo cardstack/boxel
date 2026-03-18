@@ -241,9 +241,6 @@
       }
     ]
   },
-  "volta": {
-    "extends": "../../package.json"
-  },
   "scripts": {
     "vscode:prepublish": "pnpm run compile",
     "vscode:package": "pnpm vsce package --no-dependencies",

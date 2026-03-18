@@ -66,4 +66,54 @@ module('Integration | commands | set-user-system-card', function (hooks) {
       id: systemCardId,
     });
   });
+
+  test('clears system card account data when cardId is empty', async function (assert) {
+    let commandService = getService('command-service');
+    let command = new SetUserSystemCardCommand(commandService.commandContext);
+
+    // First set a system card
+    let systemCardId = `${testRealmURL}SystemCard/default`;
+    await command.execute({
+      cardId: systemCardId,
+    });
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: systemCardId },
+      'system card is set',
+    );
+
+    // Clear it with empty cardId
+    await command.execute({
+      cardId: '',
+    });
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: undefined },
+      'system card is cleared with empty string',
+    );
+  });
+
+  test('clears system card account data when cardId is omitted', async function (assert) {
+    let commandService = getService('command-service');
+    let command = new SetUserSystemCardCommand(commandService.commandContext);
+
+    // First set a system card
+    let systemCardId = `${testRealmURL}SystemCard/default`;
+    await command.execute({
+      cardId: systemCardId,
+    });
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: systemCardId },
+      'system card is set',
+    );
+
+    // Clear it by omitting cardId
+    await command.execute({});
+    assert.deepEqual(
+      mockMatrixUtils.getSystemCardAccountData(),
+      { id: undefined },
+      'system card is cleared when cardId is omitted',
+    );
+  });
 });

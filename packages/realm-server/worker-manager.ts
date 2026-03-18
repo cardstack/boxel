@@ -11,6 +11,7 @@ import {
   isUrlLike,
   type Expression,
   type StatusArgs,
+  type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -22,18 +23,17 @@ import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
-import type { CronJob } from 'cron';
-import { enqueueDailyCreditGrant } from './scripts/daily-credit-grant';
-import {
-  DAILY_CREDIT_GRANT_CRON_TZ,
-  createDailyCreditGrantCronJob,
-  parseLowCreditThreshold,
-} from './lib/daily-credit-grant-config';
+import { startCronJobs, stopCronJobs } from './lib/cron-scheduler';
 import {
   isEnvironmentMode,
   registerService,
   deregisterService,
 } from './lib/dev-service-registry';
+import { IndexingEventSink } from './indexing-event-sink';
+import {
+  renderIndexingDashboard,
+  type PendingJob,
+} from './handlers/handle-indexing-dashboard';
 
 /* About the Worker Manager
  *
@@ -122,7 +122,13 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
-let dailyCreditGrantJob: CronJob | undefined;
+function isIndexingDashboardEnabled(): boolean {
+  return !ECS_CONTAINER_METADATA_URI;
+}
+
+let eventSink: IndexingEventSink | undefined = isIndexingDashboardEnabled()
+  ? new IndexingEventSink()
+  : undefined;
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -149,6 +155,53 @@ if (port != null) {
     ctxt.body = JSON.stringify(result);
     ctxt.status = isReady ? 200 : 503;
   });
+  if (eventSink) {
+    let getPendingJobs = async (): Promise<PendingJob[]> => {
+      let rows = (await query([
+        `SELECT j.id, j.job_type, j.args, j.priority, j.created_at`,
+        `FROM jobs j`,
+        `WHERE j.status = 'unfulfilled'`,
+        `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
+        `AND NOT EXISTS (`,
+        `  SELECT 1 FROM job_reservations jr`,
+        `  WHERE jr.job_id = j.id AND jr.completed_at IS NULL`,
+        `)`,
+        `ORDER BY j.created_at ASC`,
+      ])) as {
+        id: string;
+        job_type: string;
+        args: { realmURL?: string };
+        priority: number;
+        created_at: string;
+      }[];
+      return rows.map((r) => ({
+        jobId: Number(r.id),
+        jobType: r.job_type,
+        realmURL: r.args?.realmURL ?? 'unknown',
+        priority: r.priority,
+        createdAt: r.created_at,
+      }));
+    };
+
+    router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
+      ctxt.set('Content-Type', 'text/html; charset=utf-8');
+      let pending = await getPendingJobs();
+      ctxt.body = renderIndexingDashboard({
+        ...eventSink.getSnapshot(),
+        pending,
+      });
+      ctxt.status = 200;
+    });
+    router.get('/_indexing-status', async (ctxt: Koa.Context) => {
+      ctxt.set('Content-Type', 'application/json');
+      let pending = await getPendingJobs();
+      ctxt.body = JSON.stringify({
+        ...eventSink.getSnapshot(),
+        pending,
+      });
+      ctxt.status = 200;
+    });
+  }
 
   webServer
     .use(router.routes())
@@ -192,10 +245,7 @@ const shutdown = (onShutdown?: () => void) => {
     deregisterService(serviceName);
   }
 
-  if (dailyCreditGrantJob) {
-    log.info('Stopping daily-credit-grant cron job...');
-    dailyCreditGrantJob.stop();
-  }
+  stopCronJobs();
 
   // Stop all workers
   if (workers.length > 0) {
@@ -221,6 +271,10 @@ const shutdown = (onShutdown?: () => void) => {
 
 process.on('SIGINT', () => shutdown());
 process.on('SIGTERM', () => shutdown());
+process.on('disconnect', () => {
+  log.info(`Parent IPC disconnected, shutting down worker manager...`);
+  shutdown();
+});
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
@@ -285,7 +339,7 @@ let adapter: PgAdapter;
   }
   isReady = true;
   log.info('All workers have been started');
-  dailyCreditGrantJob = startDailyCreditGrantCron();
+  startCronJobs();
 })().catch((e: any) => {
   Sentry.captureException(e);
   log.error(
@@ -539,6 +593,18 @@ async function startWorker(
             currentState = undefined;
             (worker as any).__boxelIndexState = undefined;
           }
+        } else if (
+          eventSink &&
+          typeof message === 'string' &&
+          message.startsWith('progress|')
+        ) {
+          try {
+            let payload = message.substring('progress|'.length);
+            let progressEvent = JSON.parse(payload) as IndexingProgressEvent;
+            eventSink.handleEvent(progressEvent);
+          } catch (e) {
+            log.error(`Failed to parse progress event: ${e}`);
+          }
         }
       });
     }),
@@ -554,30 +620,6 @@ async function startWorker(
 
 async function query(expression: Expression) {
   return await _query(adapter, expression);
-}
-
-function startDailyCreditGrantCron() {
-  let lowCreditThreshold = parseLowCreditThreshold();
-  let job = createDailyCreditGrantCronJob(
-    async () => {
-      try {
-        await enqueueDailyCreditGrant({
-          lowCreditThreshold,
-          priority: 4,
-        });
-      } catch (error) {
-        Sentry.captureException(error);
-        log.error('daily-credit-grant cron failed to enqueue job', error);
-      }
-    },
-    { runOnInit: true },
-  );
-
-  job.start();
-  log.info(
-    `daily-credit-grant cron scheduled for 3:00am ${DAILY_CREDIT_GRANT_CRON_TZ}`,
-  );
-  return job;
 }
 
 interface IndexState {

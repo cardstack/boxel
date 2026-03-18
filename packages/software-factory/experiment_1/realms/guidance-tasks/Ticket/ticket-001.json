@@ -1,0 +1,59 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Ticket",
+        "module": "../darkfactory"
+      },
+      "_touched": 1773327322050
+    },
+    "type": "card",
+    "attributes": {
+      "status": "done",
+      "summary": "Build core card schema for dark factory task tracking",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "priority": "critical",
+      "ticketId": "DFX-001",
+      "createdAt": "2026-03-12T10:00:00.000Z",
+      "updatedAt": "2026-03-12T10:30:00.000Z",
+      "agentNotes": "## Agent Notes\n\n**Status:** COMPLETED\n\nImplemented full schema in `darkfactory.gts`. Key decisions:\n- Used `linksToMany` for all cross-card relationships\n- Enum fields for status, priority, type\n- Tabbed UI pattern for ticket isolation format\n- Dashboard with status grid and progress bar on Project isolated view\n- `concat` helper used for dynamic inline styles",
+      "ticketType": "feature",
+      "actualHours": 3,
+      "description": "## Description\n\nDesign and implement the foundational CardDef schema for the Dark Factory platform. This includes:\n\n- `AgentProfile` - Agent identity and capabilities\n- `KnowledgeArticle` - Project knowledge base\n- `Ticket` - Work item tracking\n- `Project` - Top-level project with dashboard\n- `DarkFactory` - Workspace index card\n\n## Notes\nAll cards must support isolated, embedded, and fitted formats for full Boxel compatibility.",
+      "estimatedHours": 4,
+      "acceptanceCriteria": "- [x] All card definitions compile without errors\n- [x] Each card has isolated, embedded, and fitted formats\n- [x] Tickets can link to related tickets and knowledge articles\n- [x] Project dashboard shows live ticket status counts\n- [x] Dark factory theme applied consistently"
+    },
+    "relationships": {
+      "assignedAgent": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://app.boxel.ai/catalog/Theme/cardstack"
+        }
+      },
+      "project": {
+        "links": {
+          "self": "../Project/demo-project"
+        }
+      },
+      "relatedTickets": {
+        "links": {
+          "self": null
+        }
+      },
+      "relatedKnowledge": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import type { SafeString } from '@ember/template';
 
@@ -10,6 +11,8 @@ import type {
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
+
+import type { ArgsFor } from 'ember-modifier';
 
 interface Meta {
   cardId?: string;
@@ -30,61 +33,109 @@ export interface RenderedCardForOverlayActions {
 
 export default class ElementTracker {
   elements: { element: HTMLElement; meta: Meta }[] = new TrackedArray();
+  readonly trackElement: typeof Modifier<{ Args: { Named: Meta } }>;
 
-  get trackElement(): typeof Modifier<{ Args: { Named: Meta } }> {
+  constructor() {
     const tracker = this;
-    let observers = new Map<HTMLElement, MutationObserver>();
-    return class TrackElement extends Modifier<{ Args: { Named: Meta } }> {
+
+    this.trackElement = class TrackElement extends Modifier<{
+      Args: { Named: Meta };
+    }> {
+      private element: HTMLElement | undefined;
+      private meta: Meta | undefined;
+      private observer: MutationObserver | undefined;
+      private isDestroyed = false;
+
+      constructor(owner: Owner, args: ArgsFor<{ Args: { Named: Meta } }>) {
+        super(owner, args);
+        registerDestructor(this, () => {
+          this.isDestroyed = true;
+          this.teardown();
+        });
+      }
+
       modify(element: HTMLElement, _pos: unknown, meta: Meta) {
         if (!('card' in meta) && !('cardId' in meta)) {
           throw new Error(
             'ElementTracker: meta.card or meta.cardId is required',
           );
         }
-        // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
+
+        this.element = element;
+        this.meta = { ...meta };
+
+        // Without scheduling this after render, this produces the
+        // "attempted to update value, but it had already been used previously
+        // in the same computation" type error.
         schedule('afterRender', () => {
-          let updateTracker = () => {
-            let found = tracker.elements.find((e) => e.element === element);
-            if (found) {
-              tracker.elements.splice(tracker.elements.indexOf(found), 1, {
-                element,
-                meta: { ...meta },
-              });
-            } else {
-              tracker.elements.push({
-                element,
-                meta: { ...meta },
-              });
-            }
-          };
-          updateTracker();
-
-          // This observer is currently used to track the activity of dragging an item
-          // within the linksToMany field for reordering purposes.
-          let parentElement = element.parentElement;
-          if (
-            parentElement &&
-            Array.from(parentElement.classList).includes('sortable-item')
-          ) {
-            let observer = new MutationObserver(updateTracker);
-            observer.observe(element.parentElement!, {
-              attributes: true,
-              attributeFilter: ['class'],
-              childList: true,
-              subtree: true,
-              characterData: true,
-            });
-            observers.set(element, observer);
+          if (this.isDestroyed || !this.element || !this.meta) {
+            return;
           }
-        });
 
-        registerDestructor(this, () => {
-          let found = tracker.elements.find((e) => e.element === element);
+          this.updateTracker(tracker);
+          this.syncObserver();
+        });
+      }
+
+      private updateTracker(tracker: ElementTracker) {
+        if (!this.element || !this.meta) {
+          return;
+        }
+
+        let found = tracker.elements.find(
+          (entry) => entry.element === this.element,
+        );
+        if (found) {
+          tracker.elements.splice(tracker.elements.indexOf(found), 1, {
+            element: this.element,
+            meta: this.meta,
+          });
+        } else {
+          tracker.elements.push({
+            element: this.element,
+            meta: this.meta,
+          });
+        }
+      }
+
+      private syncObserver() {
+        this.observer?.disconnect();
+        this.observer = undefined;
+
+        let parentElement = this.element?.parentElement;
+        if (
+          parentElement &&
+          Array.from(parentElement.classList).includes('sortable-item')
+        ) {
+          let observer = new MutationObserver(() =>
+            this.updateTracker(tracker),
+          );
+          observer.observe(parentElement, {
+            attributes: true,
+            attributeFilter: ['class'],
+            childList: true,
+            subtree: true,
+            characterData: true,
+          });
+          this.observer = observer;
+        }
+      }
+
+      private teardown() {
+        this.observer?.disconnect();
+        this.observer = undefined;
+
+        if (this.element) {
+          let found = tracker.elements.find(
+            (entry) => entry.element === this.element,
+          );
           if (found) {
             tracker.elements.splice(tracker.elements.indexOf(found), 1);
           }
-          Array.from(observers.values()).forEach((v) => v.disconnect());
-        });
+        }
+
+        this.element = undefined;
+        this.meta = undefined;
       }
     };
   }

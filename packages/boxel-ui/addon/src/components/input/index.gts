@@ -8,6 +8,7 @@ import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
 import { and, bool, eq, not } from '../../helpers/truth-helpers.ts';
+import CheckMark from '../../icons/check-mark.gts';
 import FailureBordered from '../../icons/failure-bordered.gts';
 import IconSearch from '../../icons/icon-search.gts';
 import LoadingIndicator from '../../icons/loading-indicator.gts';
@@ -75,7 +76,7 @@ export interface Signature {
     size?: 'large' | 'default';
     state?: InputValidationState;
     type?: InputType;
-    value: string | number | null | undefined;
+    value: string | number | boolean | null | undefined;
   };
   Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
@@ -93,6 +94,14 @@ export default class BoxelInput extends Component<Signature> {
 
   get isSearch() {
     return this.args.type === 'search';
+  }
+
+  private get isCheckbox() {
+    return this.args.type === 'checkbox';
+  }
+
+  private get onInputPath() {
+    return this.isCheckbox ? 'target.checked' : 'target.value';
   }
 
   private get type() {
@@ -141,6 +150,7 @@ export default class BoxelInput extends Component<Signature> {
         'input-container'
         has-validation=this.hasValidation
         is-multiline=this.isMultiline
+        is-checkbox=this.isCheckbox
       }}
     >
       {{#if (and (not @required) @optional)}}
@@ -159,7 +169,7 @@ export default class BoxelInput extends Component<Signature> {
           }}
           id={{this.id}}
           type={{this.type}}
-          value={{@value}}
+          value={{unless this.isCheckbox @value}}
           checked={{if (and (eq @type 'checkbox') (bool @value)) @value}}
           placeholder={{@placeholder}}
           min={{@min}}
@@ -182,13 +192,16 @@ export default class BoxelInput extends Component<Signature> {
           data-test-boxel-input
           data-test-boxel-input-id={{@id}}
           data-test-boxel-input-validation-state={{if @disabled false @state}}
-          {{on 'input' (pick 'target.value' (optional @onInput))}}
+          {{on 'input' (pick this.onInputPath (optional @onInput))}}
           {{on 'blur' (optional @onBlur)}}
           {{on 'keypress' (optional @onKeyPress)}}
           {{on 'focus' (optional @onFocus)}}
           {{on 'change' (optional @onChange)}}
           ...attributes
         />
+        {{#if (and this.isCheckbox (bool @value))}}
+          <CheckMark class='checkbox-checkmark-icon' />
+        {{/if}}
         {{#if this.isSearch}}
           <div
             class={{cn
@@ -431,6 +444,109 @@ export default class BoxelInput extends Component<Signature> {
           .validation-icon-loading {
             animation: var(--boxel-infinite-spin-animation);
           }
+        }
+
+        /* Checkbox type */
+        .input-container.is-checkbox {
+          --checkbox-size: var(
+            --boxel-checkbox-size,
+            var(--boxel-body-font-size)
+          );
+          --checkbox-border-radius: var(--boxel-checkbox-border-radius, 3px);
+          --checkbox-border-color: var(
+            --boxel-checkbox-border-color,
+            var(--border, var(--boxel-400))
+          );
+          --checkbox-background: var(
+            --boxel-checkbox-background-color,
+            var(--background, transparent)
+          );
+          --checkbox-checked-background: var(
+            --boxel-checkbox-checked-background-color,
+            var(--primary, var(--boxel-highlight))
+          );
+          --checkbox-checked-border-color: var(
+            --boxel-checkbox-checked-border-color,
+            var(--primary, var(--boxel-dark))
+          );
+          --checkbox-checkmark-color: var(
+            --boxel-checkbox-checkmark-color,
+            var(--primary-foreground, #333)
+          );
+          --checkbox-padding: var(
+            --boxel-checkbox-padding,
+            var(--spacing, 2px)
+          );
+
+          display: inline-grid;
+          grid-template-columns: auto;
+          grid-template-areas: 'input';
+          width: auto;
+          align-items: center;
+          justify-items: center;
+          position: relative;
+        }
+
+        .input-container.is-checkbox .optional,
+        .input-container.is-checkbox .error-message,
+        .input-container.is-checkbox .helper-text,
+        .input-container.is-checkbox .search-icon-container,
+        .input-container.is-checkbox .validation-icon-container {
+          display: none;
+        }
+
+        .checkbox-checkmark-icon {
+          grid-area: input;
+          pointer-events: none;
+          width: calc(var(--checkbox-size) * 0.8);
+          height: calc(var(--checkbox-size) * 0.8);
+          --icon-color: var(--checkbox-checkmark-color);
+        }
+
+        .boxel-input[type='checkbox'] {
+          grid-area: input;
+          appearance: none;
+          /* stylelint-disable-next-line property-no-vendor-prefix */
+          -webkit-appearance: none;
+          box-sizing: border-box;
+          width: var(--checkbox-size);
+          height: var(--checkbox-size);
+          min-height: unset;
+          padding: 0;
+          margin: 0;
+          border: 1px solid var(--checkbox-border-color);
+          border-radius: var(--checkbox-border-radius);
+          background-color: var(--checkbox-background);
+          box-shadow: none;
+          cursor: pointer;
+          transition:
+            background-color var(--boxel-transition),
+            border-color var(--boxel-transition);
+          flex-shrink: 0;
+        }
+
+        .boxel-input[type='checkbox']:checked {
+          background-color: var(--checkbox-checked-background);
+          border-color: var(--checkbox-checked-border-color);
+        }
+
+        .boxel-input[type='checkbox']:focus-visible {
+          outline: 2px solid var(--ring, var(--boxel-highlight));
+          outline-offset: 2px;
+          border-color: var(--checkbox-border-color);
+        }
+
+        .boxel-input[type='checkbox']:hover:not(:disabled):not(:checked) {
+          border-color: var(--boxel-dark);
+        }
+
+        .boxel-input[type='checkbox']:hover:not(:disabled):checked {
+          border-color: var(--checkbox-checked-border-color);
+        }
+
+        .boxel-input[type='checkbox']:disabled {
+          opacity: 0.5;
+          cursor: default;
         }
       }
     </style>

@@ -9,13 +9,10 @@ import type {
 import type { Server } from 'http';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
-import {
-  setupPermissionedRealmCached,
-  testRealmURL as baseTestRealmURL,
-} from '../helpers';
+import { setupPermissionedRealmCached, testPort } from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-export const testRealmURL = new URL('/test/', baseTestRealmURL);
+export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
 
 export type ServerEndpointsTestContext = {
   testRealm: Realm;

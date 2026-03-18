@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["home-personal", "lease"],
+      "content": "## Overview\n\nThe Lease card gives the workspace a structured home for rental lease: property, tenant, landlord, term, rent amount, and terms.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nLease acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Calendar]]** -- Calendar can provide adjacent context, downstream output, or grouped navigation around Lease.\n- **[[Task]]** -- Lease often creates follow-up work or is itself tracked through task execution.\n- **[[Alert]]** -- Alert can provide adjacent context, downstream output, or grouped navigation around Lease.\n- **[[Workflow Playbook]]** -- Lease can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Document]]** -- Lease can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Recipe]]** -- Recipe can provide adjacent context, downstream output, or grouped navigation around Lease.\n\n## Example Use Cases\n\n- **System of record:** Teams create Lease as the structured home for rental lease: property, tenant, landlord, term, rent amount, and terms and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Lease when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Lease stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Lease",
+        "notes": null,
+        "summary": "Rental lease: property, tenant, landlord, term, rent amount, and terms.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

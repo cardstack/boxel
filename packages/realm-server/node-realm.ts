@@ -10,6 +10,7 @@ import {
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
+  clearSessionRoom,
   fetchRealmSessionRooms,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -42,6 +43,40 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import { createJWT, verifyJWT } from './jwt';
 
 const realmEventsLog = logger('realm:events');
+
+function parseMatrixSendEventError(error: unknown): {
+  status?: number;
+  errcode?: string;
+  error?: string;
+} | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  let match = error.message.match(/status (\d+) - (\{.*\})$/);
+  if (!match) {
+    return null;
+  }
+
+  let [, status, body] = match;
+  try {
+    return {
+      status: Number(status),
+      ...(JSON.parse(body) as { errcode?: string; error?: string }),
+    };
+  } catch (_err) {
+    return { status: Number(status) };
+  }
+}
+
+function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
+  let details = parseMatrixSendEventError(error);
+  return Boolean(
+    details?.status === 403 &&
+    details?.errcode === 'M_FORBIDDEN' &&
+    details?.error?.includes(`not in room ${roomId}`),
+  );
+}
 
 export class NodeAdapter implements RealmAdapter {
   constructor(
@@ -282,6 +317,26 @@ export class NodeAdapter implements RealmAdapter {
           eventWithRealmURL,
         );
       } catch (e) {
+        if (isRealmServerNotInRoomError(e, roomId)) {
+          try {
+            let cleared = await clearSessionRoom(dbAdapter, userId, roomId);
+            realmEventsLog.warn(
+              `Skipping stale session room ${roomId} for user ${userId}; realm server is no longer in the room`,
+              { cleared, realmUrl },
+            );
+          } catch (cleanupError) {
+            realmEventsLog.error(
+              `Failed to clear stale session room ${roomId} for user ${userId}`,
+              cleanupError,
+            );
+            realmEventsLog.error(
+              `Unable to send event in room ${roomId} for user ${userId}`,
+              event,
+              e,
+            );
+          }
+          continue;
+        }
         realmEventsLog.error(
           `Unable to send event in room ${roomId} for user ${userId}`,
           event,

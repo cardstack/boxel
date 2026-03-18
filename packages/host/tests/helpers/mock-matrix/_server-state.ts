@@ -29,7 +29,7 @@ export class ServerState {
   }
 
   onEvent(callback: (event: IEvent) => void) {
-    this.addListener(callback);
+    return this.addListener(callback);
   }
 
   get rooms(): { id: string }[] {
@@ -38,10 +38,20 @@ export class ServerState {
 
   addListener(callback: (event: IEvent) => void) {
     this.#listeners.push(callback);
+    return () => {
+      this.#listeners = this.#listeners.filter(
+        (listener) => listener !== callback,
+      );
+    };
   }
 
   onSlidingSyncEvent(callback: (roomId: string, roomName?: string) => void) {
     this.#slidingSyncListeners.push(callback);
+    return () => {
+      this.#slidingSyncListeners = this.#slidingSyncListeners.filter(
+        (listener) => listener !== callback,
+      );
+    };
   }
 
   createRoom(

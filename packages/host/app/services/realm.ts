@@ -11,7 +11,13 @@ import { isTesting } from '@embroider/macros';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
+import {
+  didCancel,
+  dropTask,
+  task,
+  restartableTask,
+  rawTimeout,
+} from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
@@ -229,13 +235,11 @@ class RealmResource {
             return;
           }
           let data = event as IndexRealmEventContent;
-          if (data.indexType === 'full') {
-            return;
-          }
           switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;
+            case 'full':
             case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
@@ -283,7 +287,17 @@ class RealmResource {
       // share the work if there are multiple requests to get the info for a realm
       this.fetchingInfo = this.fetchInfoTask.perform();
     }
-    await this.fetchingInfo;
+    try {
+      await this.fetchingInfo;
+    } catch (error) {
+      // Realm info loading is best-effort during teardown. When the app/test is
+      // already being destroyed, callers cannot do anything useful with a
+      // cancellation, and surfacing it as a global failure makes normal
+      // component unmounts look like test regressions.
+      if (!didCancel(error)) {
+        throw error;
+      }
+    }
   }
 
   private fetchInfoTask = dropTask(async () => {
@@ -674,6 +688,11 @@ export default class RealmService extends Service {
 
   resetState() {
     this.logout();
+    this._realms = new Map();
+    this.currentKnownRealms = new TrackedSet();
+    this.reauthentications.clear();
+    this.bulkInfoPromise = undefined;
+    this.identifyRealmTracker++;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -1011,59 +1030,92 @@ export default class RealmService extends Service {
     );
   }
 
+  private beginIndexingAnimation(resource: RealmResource): boolean {
+    let wasIndexing = resource.info?.isIndexing ?? false;
+    if (resource.info) {
+      resource.info.isIndexing = true;
+    }
+    return wasIndexing;
+  }
+
+  private restoreIndexingAnimation(
+    resource: RealmResource,
+    wasIndexing: boolean,
+  ) {
+    if (resource.info) {
+      resource.info.isIndexing = wasIndexing;
+    }
+  }
+
   async reindex(realmURL: string): Promise<void> {
     let normalizedRealmURL = ensureTrailingSlash(realmURL);
     let resource = this.getOrCreateRealmResource(normalizedRealmURL);
     await resource.login();
+    await resource.fetchInfo();
+    let wasIndexing = this.beginIndexingAnimation(resource);
 
-    let headers = new Headers({
-      Accept: SupportedMimeType.JSON,
-    });
-    if (resource.token) {
-      headers.set('Authorization', `Bearer ${resource.token}`);
+    try {
+      let headers = new Headers({
+        Accept: SupportedMimeType.JSON,
+      });
+      if (resource.token) {
+        headers.set('Authorization', `Bearer ${resource.token}`);
+      }
+
+      let response = await this.network.fetch(`${normalizedRealmURL}_reindex`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (response.status === 204) {
+        return;
+      }
+
+      let errorText = await response.text();
+      throw new Error(
+        `Reindex realm failed: ${response.status} - ${errorText}`,
+      );
+    } catch (error) {
+      this.restoreIndexingAnimation(resource, wasIndexing);
+      throw error;
     }
-
-    let response = await this.network.fetch(`${normalizedRealmURL}_reindex`, {
-      method: 'POST',
-      headers,
-    });
-
-    if (response.status === 204) {
-      return;
-    }
-
-    let errorText = await response.text();
-    throw new Error(`Reindex realm failed: ${response.status} - ${errorText}`);
   }
 
   async fullReindex(realmURL: string): Promise<void> {
     let normalizedRealmURL = ensureTrailingSlash(realmURL);
     let resource = this.getOrCreateRealmResource(normalizedRealmURL);
     await resource.login();
+    await resource.fetchInfo();
+    let wasIndexing = this.beginIndexingAnimation(resource);
 
-    let headers = new Headers({
-      Accept: SupportedMimeType.JSON,
-    });
-    if (resource.token) {
-      headers.set('Authorization', `Bearer ${resource.token}`);
+    try {
+      let headers = new Headers({
+        Accept: SupportedMimeType.JSON,
+      });
+      if (resource.token) {
+        headers.set('Authorization', `Bearer ${resource.token}`);
+      }
+
+      let response = await this.network.fetch(
+        `${normalizedRealmURL}_full-reindex`,
+        {
+          method: 'POST',
+          headers,
+        },
+      );
+
+      if (response.status === 204) {
+        return;
+      }
+
+      let errorText = await response.text();
+      throw new Error(
+        `Full reindex realm failed: ${response.status} - ${errorText}`,
+      );
+    } catch (error) {
+      this.restoreIndexingAnimation(resource, wasIndexing);
+      throw error;
     }
-
-    let response = await this.network.fetch(
-      `${normalizedRealmURL}_full-reindex`,
-      {
-        method: 'POST',
-        headers,
-      },
-    );
-
-    if (response.status === 204) {
-      return;
-    }
-
-    let errorText = await response.text();
-    throw new Error(
-      `Full reindex realm failed: ${response.status} - ${errorText}`,
-    );
   }
 
   async invalidateUrls(realmURL: string, urls: string[]): Promise<void> {

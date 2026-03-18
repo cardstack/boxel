@@ -154,7 +154,13 @@ export default class Monaco extends Modifier<Signature> {
 
     registerDestructor(this, () => {
       this.onDispose?.();
-      this.editor!.dispose();
+      let model = this.model;
+      this.model = undefined;
+      let editor = this.editor;
+      this.editor = undefined;
+      if (editor) {
+        this.disposeEditorAfterInitialLayout(editor, model);
+      }
     });
 
     this.model = this.editor.getModel()!;
@@ -208,4 +214,20 @@ export default class Monaco extends Modifier<Signature> {
       }
     },
   );
+
+  private disposeEditorAfterInitialLayout(
+    editor: MonacoSDK.editor.IStandaloneCodeEditor,
+    model: MonacoSDK.editor.ITextModel | undefined,
+  ) {
+    // Monaco can still be instantiating editor contributions in the same turn
+    // that Glimmer tears the modifier down. Disposing on the next paint avoids
+    // tearing down the instantiation service mid-bootstrap without introducing
+    // an arbitrary timer.
+    requestAnimationFrame(() => {
+      editor.dispose();
+      if (model && !model.isDisposed() && !model.isAttachedToEditor()) {
+        model.dispose();
+      }
+    });
+  }
 }

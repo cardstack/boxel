@@ -236,6 +236,7 @@ registerQueueJobDefinition({
 const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   log,
   reportStatus,
+  reportProgress,
   dbAdapter,
   matrixURL,
   indexWriter,
@@ -268,6 +269,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       definitionLookup,
       jobInfo,
       reportStatus,
+      onProgress: reportProgress,
       auth,
       fetch: _fetch,
       prerenderer,
@@ -292,6 +294,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
 const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   log,
   reportStatus,
+  reportProgress,
   dbAdapter,
   matrixURL,
   indexWriter,
@@ -325,6 +328,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       definitionLookup,
       jobInfo,
       reportStatus,
+      onProgress: reportProgress,
       auth,
       fetch: _fetch,
       prerenderer,

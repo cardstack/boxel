@@ -1,0 +1,25 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "articleTitle": "Agent Onboarding",
+      "articleType": "onboarding",
+      "content": "# Agent Onboarding\n\nUse the project card for scope, the ticket card for execution, and update notes as you go.",
+      "tags": ["onboarding", "tracker", "tests"],
+      "updatedAt": "2026-03-16T12:00:00.000Z"
+    },
+    "relationships": {
+      "lastUpdatedBy": {
+        "links": {
+          "self": "../AgentProfile/demo-agent"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4205/software-factory/darkfactory",
+        "name": "KnowledgeArticle"
+      }
+    }
+  }
+}

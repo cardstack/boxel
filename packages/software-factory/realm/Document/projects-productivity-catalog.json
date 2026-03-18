@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Projects & Productivity Card Catalog\n\nCondensed stubs for Projects & Productivity card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Task\n**Priority:** P0\n\n- **Core idea:** Actionable work item with sub-tasks, assignee, due date, priority, and status. The fundamental unit of project work.\n\n---\n\n### Project\n**Priority:** P0\n\n- **Core idea:** Container for tasks, milestones, and team members with timeline, status, and progress tracking.\n\n---\n\n### Kanban Board\n**Priority:** P1\n\n- **Core idea:** Visual board with configurable columns (stages) displaying cards. Drag-and-drop workflow visualization.\n\n---\n\n### Checklist\n**Priority:** P1\n\n- **Core idea:** Simple ordered list of check items. Lighter weight than a playbook - no agent tracking, just checkboxes.\n\n---\n\n### Process Card\n**Priority:** P2\n\n- **Core idea:** Documents a repeatable process with steps, owners, SLAs, and metrics. Reference documentation, not execution tracking (that's Playbook).\n\n---\n\n### Calendar Event\n**Priority:** P1\n\n- **Core idea:** Scheduled event with start/end time, location, attendees, recurrence rules, and reminders.\n\n---\n\n### Case\n**Priority:** P1\n\n- **Core idea:** Support/service case (replaces \"Ticket\"). Has severity, status, assignee, SLA tracking, and conversation thread.\n",
+      "cardInfo": {
+        "name": "Projects & Productivity Card Catalog",
+        "notes": null,
+        "title": "Projects & Productivity Card Catalog",
+        "summary": "Condensed stubs for Projects & Productivity card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

@@ -990,13 +990,14 @@ module('Acceptance | interact submode tests', function (hooks) {
       const inputSelector =
         '[data-test-contains-many="names"] [data-test-item="0"] input';
 
-      messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+      const unsubscribe = messageService.subscribe(testRealmURL, (e) => {
         if (
           e.eventName === 'index' &&
           e.indexType === 'incremental-index-initiation'
         ) {
           return; // ignore the index initiation event
         }
+        unsubscribe();
         receivedEventDeferred.fulfill();
       });
 
@@ -1067,21 +1068,19 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       const waitForIndexEvent = () => {
         const receivedEventDeferred = new Deferred<void>();
-        const callbacks = messageService.listenerCallbacks.get(testRealmURL)!;
-        const callback = (e: RealmEventContent) => {
-          if (
-            e.eventName === 'index' &&
-            e.indexType === 'incremental-index-initiation'
-          ) {
-            return; // ignore the index initiation event
-          }
-          const index = callbacks.indexOf(callback);
-          if (index !== -1) {
-            callbacks.splice(index, 1);
-          }
-          receivedEventDeferred.fulfill();
-        };
-        callbacks.push(callback);
+        const unsubscribe = messageService.subscribe(
+          testRealmURL,
+          (e: RealmEventContent) => {
+            if (
+              e.eventName === 'index' &&
+              e.indexType === 'incremental-index-initiation'
+            ) {
+              return; // ignore the index initiation event
+            }
+            unsubscribe();
+            receivedEventDeferred.fulfill();
+          },
+        );
         return receivedEventDeferred;
       };
 

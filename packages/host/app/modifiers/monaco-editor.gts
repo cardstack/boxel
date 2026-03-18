@@ -40,6 +40,7 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
   private monacoState: {
     editor: _MonacoSDK.editor.IStandaloneCodeEditor;
   } | null = null;
+  private hasDestructor = false;
   private waiterManager = createMonacoWaiterManager();
   modify(
     element: HTMLElement,
@@ -154,10 +155,32 @@ export default class MonacoEditorModifier extends Modifier<MonacoEditorSignature
       }
     }
 
-    registerDestructor(this, () => {
-      let editor = this.monacoState?.editor;
-      if (editor) {
-        editor.dispose();
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => {
+        let editor = this.monacoState?.editor;
+        let model = editor?.getModel();
+        if (editor) {
+          this.disposeEditorAfterInitialLayout(editor, model);
+        }
+        this.monacoState = null;
+      });
+    }
+  }
+
+  private disposeEditorAfterInitialLayout(
+    editor: _MonacoSDK.editor.IStandaloneCodeEditor,
+    model: _MonacoSDK.editor.ITextModel | null | undefined,
+  ) {
+    // Monaco contribution setup can continue past initial layout into the next
+    // paint. When a streaming code block is immediately replaced by a diff
+    // block, disposing in the same render turn can race that bootstrap and
+    // throw "InstantiationService has been disposed". We therefore teardown on
+    // the next paint instead of using a fixed sleep.
+    requestAnimationFrame(() => {
+      editor.dispose();
+      if (model && !model.isDisposed() && !model.isAttachedToEditor()) {
+        model.dispose();
       }
     });
   }
