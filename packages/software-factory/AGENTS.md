@@ -79,7 +79,7 @@ Bias toward:
 - Explore search and query options in the tracker and workspace data model before creating new structures
 - Project tests should live in Boxel realms when they are part of the product's persistent memory
 - Preferred convention:
-  - realm-local Playwright specs live under `tests/**/*.spec.mjs`
+  - realm-local Playwright specs live under `tests/**/*.spec.ts`
   - files copied into disposable verification realms live under `tests/fixtures/**`
   - fixture contents are copied to the scratch realm root preserving paths, so `tests/fixtures/DeliveryBrief/example.json` becomes `DeliveryBrief/example.json` in the scratch realm
 - Run realm-hosted tests with:

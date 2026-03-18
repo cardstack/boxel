@@ -34,17 +34,29 @@ Normal factory output should land in the target realm, not in `packages/software
 
 If we intentionally include output-like examples in the source realm, they should be clearly labeled as examples and live in an obviously non-canonical location such as `SampleOutput/` or `Examples/`.
 
+## Package Boundary Rule
+
+Implementation inside `packages/software-factory/` must not use relative imports that cross into another workspace package, for example `../../../realm-server/...`.
+
+If `software-factory` needs a small utility that currently lives in another package, one of these should happen instead:
+
+- copy the tiny module locally when the behavior is package-specific and intentionally duplicated
+- move the shared code into an explicit shared package or shared module location
+- consume it through a stable package entrypoint rather than a cross-package relative path
+
+Do not couple `software-factory` runtime code to another package's private file layout.
+
 ## Current State
 
 `experiment_1` already has useful primitives:
 
-- `scripts/boxel-session.mjs`
+- `scripts/boxel-session.ts`
   - gets browser-local auth/session payloads
-- `scripts/boxel-search.mjs`
+- `scripts/boxel-search.ts`
   - searches a realm via `_search`
-- `scripts/pick-ticket.mjs`
+- `scripts/pick-ticket.ts`
   - finds candidate tickets
-- `scripts/run-realm-tests.mjs`
+- `scripts/run-realm-tests.ts`
   - runs realm-hosted Playwright tests against a scratch realm
 - `realms/guidance-tasks/darkfactory-schema.gts`
   - defines `Project`, `Ticket`, `KnowledgeArticle`, `AgentProfile`
@@ -231,7 +243,7 @@ The first version should support:
 Add a script:
 
 ```json
-"factory:go": "node scripts/factory-go.mjs"
+"factory:go": "ts-node --esm --transpileOnly scripts/factory-go.ts"
 ```
 
 Expected usage:
@@ -243,9 +255,22 @@ npm run factory:go -- \
   --mode implement
 ```
 
+CLI parameters for the first version:
+
+- `--brief-url`
+  - Required. Absolute URL for the brief card that drives the one-shot flow.
+- `--target-realm-path`
+  - Required. Local filesystem path to the realm where generated artifacts should land.
+- `--target-realm-url`
+  - Optional. Explicit realm URL when path-based inference is not enough.
+- `--mode`
+  - Optional. `bootstrap`, `implement`, or `resume`. Default should be `implement`.
+- `--help`
+  - Optional. Prints command usage and exits without running the flow.
+
 ## Proposed Implementation Pieces
 
-### A. `scripts/factory-go.mjs`
+### A. `scripts/factory-go.ts`
 
 This should be the top-level orchestrator.
 
@@ -262,7 +287,7 @@ Responsibilities:
 
 This file should stay thin and delegate to helpers.
 
-### B. `scripts/lib/factory-bootstrap.mjs`
+### B. `scripts/lib/factory-bootstrap.ts`
 
 New helper module for creating or updating:
 
@@ -287,7 +312,7 @@ For the first version, hard-code the bootstrap pattern:
 
 That is enough for a thin MVP flow.
 
-### C. `scripts/lib/factory-target-realm.mjs`
+### C. `scripts/lib/factory-target-realm.ts`
 
 New helper module for target realm preparation.
 
@@ -300,7 +325,7 @@ Responsibilities:
 
 This isolates the realm bootstrapping concern from the orchestration logic.
 
-### D. `scripts/lib/factory-brief.mjs`
+### D. `scripts/lib/factory-brief.ts`
 
 New helper module for brief intake.
 
@@ -318,7 +343,7 @@ Responsibilities:
 
 For version one, the `isVague` check can be heuristic and simple.
 
-### E. `scripts/lib/factory-loop.mjs`
+### E. `scripts/lib/factory-loop.ts`
 
 New helper module for the first execution loop.
 
@@ -393,11 +418,11 @@ It does not need to complete an entire multi-ticket product in version one.
 
 Files to add:
 
-- `packages/software-factory/scripts/factory-go.mjs`
-- `packages/software-factory/scripts/lib/factory-bootstrap.mjs`
-- `packages/software-factory/scripts/lib/factory-target-realm.mjs`
-- `packages/software-factory/scripts/lib/factory-brief.mjs`
-- `packages/software-factory/scripts/lib/factory-loop.mjs`
+- `packages/software-factory/scripts/factory-go.ts`
+- `packages/software-factory/scripts/lib/factory-bootstrap.ts`
+- `packages/software-factory/scripts/lib/factory-target-realm.ts`
+- `packages/software-factory/scripts/lib/factory-brief.ts`
+- `packages/software-factory/scripts/lib/factory-loop.ts`
 
 Files to update:
 
@@ -408,7 +433,7 @@ Files to update:
 
 Optional later additions:
 
-- `packages/software-factory/tests/factory-go.spec.mjs`
+- `packages/software-factory/tests/factory-go.spec.ts`
   - verifies bootstrap behavior
 - generated card-test creation that reuses the existing `packages/software-factory` Playwright machinery when browser-level verification is warranted
 
