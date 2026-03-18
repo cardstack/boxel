@@ -667,6 +667,9 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/software-factory
+      - name: Run Node tests
+        run: pnpm test:node
+        working-directory: packages/software-factory
       - name: Serve host dist (test assets)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:

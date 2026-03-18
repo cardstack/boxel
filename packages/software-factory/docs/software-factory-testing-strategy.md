@@ -143,6 +143,12 @@ Hermetic requirement for this layer:
 - when a test only needs an absolute URL shape, use a synthetic URL such as `https://briefs.example.test/...`
 - when a test needs a live realm, use the isolated software-factory harness rather than external local infrastructure
 
+Debugging note:
+
+- if tests fail or behave oddly in CI but not locally, first check whether a supposedly hermetic test is accidentally leaking and relying on an external local server or other ambient infrastructure
+- a common smell is a test that passes only when `localhost:4201` or another developer-run service happens to be up
+- verify hermetic assumptions by stopping ambient local services and rerunning the affected tests against only the software-factory harness
+
 Examples:
 
 - a public wiki card becomes a normalized brief object
