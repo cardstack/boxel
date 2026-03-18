@@ -235,7 +235,6 @@ module('realm-auth', function () {
     let originalMatrixUsername = process.env.MATRIX_USERNAME;
     let originalMatrixPassword = process.env.MATRIX_PASSWORD;
     let originalRealmServerUrl = process.env.REALM_SERVER_URL;
-    let originalRealmSecretSeed = process.env.REALM_SECRET_SEED;
     let username = 'software-factory-browser';
     let password = browserPassword(username);
     let servers = await startServers({ username, password });
@@ -247,7 +246,6 @@ module('realm-auth', function () {
       process.env.MATRIX_USERNAME = username;
       process.env.MATRIX_PASSWORD = password;
       delete process.env.REALM_SERVER_URL;
-      delete process.env.REALM_SECRET_SEED;
 
       let brief = await loadFactoryBrief(briefUrl, {
         fetch: createBoxelRealmFetch(briefUrl),
@@ -264,7 +262,6 @@ module('realm-auth', function () {
       process.env.MATRIX_USERNAME = originalMatrixUsername;
       process.env.MATRIX_PASSWORD = originalMatrixPassword;
       process.env.REALM_SERVER_URL = originalRealmServerUrl;
-      process.env.REALM_SECRET_SEED = originalRealmSecretSeed;
       await servers.stop();
       rmSync(tempHome, { recursive: true, force: true });
     }
@@ -291,42 +288,6 @@ module('realm-auth', function () {
       );
     } finally {
       await servers.stop();
-    }
-  });
-
-  test('createBoxelRealmFetch derives env credentials from REALM_SECRET_SEED when MATRIX_PASSWORD is absent', async function (assert) {
-    let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
-    let originalHome = process.env.HOME;
-    let originalMatrixUrl = process.env.MATRIX_URL;
-    let originalMatrixUsername = process.env.MATRIX_USERNAME;
-    let originalMatrixPassword = process.env.MATRIX_PASSWORD;
-    let originalRealmServerUrl = process.env.REALM_SERVER_URL;
-    let originalRealmSecretSeed = process.env.REALM_SECRET_SEED;
-    let servers = await startServers({ username: 'private_realm' });
-    let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
-
-    try {
-      process.env.HOME = tempHome;
-      process.env.MATRIX_URL = servers.matrixServer.url;
-      delete process.env.MATRIX_USERNAME;
-      delete process.env.MATRIX_PASSWORD;
-      delete process.env.REALM_SERVER_URL;
-      process.env.REALM_SECRET_SEED = "shhh! it's a secret";
-
-      let brief = await loadFactoryBrief(briefUrl, {
-        fetch: createBoxelRealmFetch(briefUrl),
-      });
-
-      assert.strictEqual(brief.title, 'Private Brief');
-    } finally {
-      process.env.HOME = originalHome;
-      process.env.MATRIX_URL = originalMatrixUrl;
-      process.env.MATRIX_USERNAME = originalMatrixUsername;
-      process.env.MATRIX_PASSWORD = originalMatrixPassword;
-      process.env.REALM_SERVER_URL = originalRealmServerUrl;
-      process.env.REALM_SECRET_SEED = originalRealmSecretSeed;
-      await servers.stop();
-      rmSync(tempHome, { recursive: true, force: true });
     }
   });
 

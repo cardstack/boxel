@@ -1,11 +1,14 @@
-import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { authorizationMiddleware } from '@cardstack/runtime-common/authorization-middleware';
 import { fetcher } from '@cardstack/runtime-common/fetcher';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import {
+  getMatrixUsername,
+  MatrixClient,
+} from '@cardstack/runtime-common/matrix-client';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { RealmAuthDataSource } from '@cardstack/runtime-common/realm-auth-data-source';
 
 interface BoxelStoredProfile {
@@ -83,7 +86,7 @@ function getOptionalActiveProfile(
 
     return {
       profileId: config.activeProfile,
-      username: config.activeProfile.replace(/^@/, '').replace(/:.*$/, ''),
+      username: getMatrixUsername(config.activeProfile),
       matrixUrl: normalizeProfileUrl(profile.matrixUrl, 'matrixUrl'),
       realmServerUrl: normalizeProfileUrl(
         profile.realmServerUrl,
@@ -144,10 +147,6 @@ function withAuthorization(
   };
 }
 
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
 function getProfilesFile(): string {
   return join(homedir(), '.boxel-cli', 'profiles.json');
 }
@@ -167,7 +166,6 @@ function buildEnvProfile(resourceUrl: string): ActiveBoxelProfile | undefined {
   let username = normalizeOptionalString(process.env.MATRIX_USERNAME);
   let password = normalizeOptionalString(process.env.MATRIX_PASSWORD);
   let realmServerUrl = normalizeOptionalString(process.env.REALM_SERVER_URL);
-  let realmSecretSeed = normalizeOptionalString(process.env.REALM_SECRET_SEED);
 
   if (!matrixUrl) {
     return undefined;
@@ -178,21 +176,13 @@ function buildEnvProfile(resourceUrl: string): ActiveBoxelProfile | undefined {
     ? normalizeProfileUrl(realmServerUrl, 'REALM_SERVER_URL')
     : normalizeProfileUrl(new URL('/', resourceUrl).href, 'resourceUrl origin');
 
-  if (!username && realmSecretSeed) {
-    username = deriveRealmUsernameFromResourceUrl(resourceUrl);
-  }
-
-  if (!password && username && realmSecretSeed) {
-    password = derivePasswordFromSeed(username, realmSecretSeed);
-  }
-
   if (!username || !password) {
     return undefined;
   }
 
   return {
     profileId: null,
-    username,
+    username: getMatrixUsername(username),
     matrixUrl: normalizedMatrixUrl,
     realmServerUrl: normalizedRealmServerUrl,
     password,
@@ -221,41 +211,4 @@ function sharesOrigin(left: string, right: string): boolean {
       }`,
     );
   }
-}
-
-function deriveRealmUsernameFromResourceUrl(resourceUrl: string): string {
-  let url: URL;
-
-  try {
-    url = new URL(resourceUrl);
-  } catch {
-    throw new Error(
-      `Cannot derive MATRIX_USERNAME from resource URL "${resourceUrl}". Set MATRIX_USERNAME explicitly or use a valid brief URL.`,
-    );
-  }
-
-  let segments = url.pathname.split('/').filter(Boolean);
-
-  if (segments.length === 0) {
-    throw new Error(
-      `Cannot derive MATRIX_USERNAME from resource URL "${resourceUrl}". Set MATRIX_USERNAME explicitly.`,
-    );
-  }
-
-  if (segments[0] === 'published' && segments[1]) {
-    return `realm/published_${segments[1]}`;
-  }
-
-  if (segments.length >= 4) {
-    return `realm/${segments[0]}_${segments[1]}`;
-  }
-
-  return `${segments[0]}_realm`;
-}
-
-function derivePasswordFromSeed(username: string, seed: string): string {
-  return createHash('sha256')
-    .update(username.replace(/^@/, '').replace(/:.*$/, ''))
-    .update(seed)
-    .digest('hex');
 }
