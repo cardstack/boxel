@@ -31,7 +31,6 @@ import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
-import Toast from '@cardstack/host/components/toast';
 
 import config from '@cardstack/host/config/environment';
 
@@ -454,18 +453,6 @@ export default class SubmodeLayout extends Component<Signature> {
               @onCardSelect={{this.handleCardSelectFromSearch}}
               @onInputInsertion={{this.storeSearchElement}}
             />
-          {{/if}}
-          {{#if this.operatorModeStateService.toast}}
-            <Toast
-              @isVisible={{true}}
-              @onDismiss={{this.operatorModeStateService.dismissToast}}
-              @status={{this.operatorModeStateService.toast.status}}
-              @ctaLabel={{this.operatorModeStateService.toast.ctaLabel}}
-              @onCtaClick={{this.operatorModeStateService.toast.ctaAction}}
-              data-test-toast
-            >
-              {{this.operatorModeStateService.toast.message}}
-            </Toast>
           {{/if}}
           <AiAssistantToast
             @hide={{this.aiAssistantPanelService.isOpen}}

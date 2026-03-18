@@ -389,7 +389,7 @@ export class CreateListingPRRequestInput extends CardDef {
 }
 
 export class ListingCreateInput extends CardDef {
-  @field openCardId = contains(StringField);
+  @field openCardIds = containsMany(StringField);
   @field codeRef = contains(CodeRefField);
   @field targetRealm = contains(RealmField);
 }

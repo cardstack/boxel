@@ -27,7 +27,7 @@ export default class OpenCreateListingModalCommand extends HostBaseCommand<
     this.operatorModeStateService.showCreateListingModal({
       codeRef: input.codeRef,
       targetRealm: input.targetRealm,
-      openCardId: input.openCardId,
+      openCardIds: input.openCardIds,
     });
   }
 }
