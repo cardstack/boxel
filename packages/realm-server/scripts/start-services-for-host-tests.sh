@@ -37,7 +37,14 @@ done
 # skill-set.gts, skill-plus.gts, skill-reference.gts are needed because the
 # skills realm's skill instances adopt from @cardstack/catalog/skill-set and
 # @cardstack/catalog/skill-plus which are defined in these files.
+# The Theme directory is needed because skills link to @cardstack/catalog/Theme/cardstack.
 KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json skill-set.gts skill-plus.gts skill-reference.gts"
+KEEP_SKILL_FOLDERS="Theme"
+for item in $KEEP_SKILL_FOLDERS; do
+  if [ -d "$CATALOG_SRC_PATH/$item" ]; then
+    cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/"
+  fi
+done
 for item in $KEEP_FILES; do
   if [ -f "$CATALOG_SRC_PATH/$item" ]; then
     cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/$item"
