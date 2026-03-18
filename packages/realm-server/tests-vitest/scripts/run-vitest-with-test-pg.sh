@@ -19,4 +19,4 @@ NODE_NO_WARNINGS=1 \
 PGPORT=55436 \
 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret \
 STRIPE_API_KEY=stripe-api-key \
-vitest run --silent $@
+vitest run $@
