@@ -90,8 +90,7 @@
     "yargs": "catalog:"
   },
   "scripts": {
-    "test": "./tests/scripts/run-qunit-with-test-pg.sh",
-    "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
+    "test": "./tests-vitest/scripts/run-vitest-with-test-pg.sh",
     "test:vitest": "./tests/scripts/prepare-test-pg.sh && LOG_LEVELS=\"*=error,prerenderer-chrome=silent,pg-adapter=warn,realm:requests=warn${LOG_LEVELS:+,}${LOG_LEVELS}\" NODE_NO_WARNINGS=1 PGPORT=55436 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret STRIPE_API_KEY=stripe-api-key vitest run --config vitest.config.mjs",
     "test:vitest:watch": "vitest --config vitest.config.mjs",
     "test:vitest:sanitize-head-html": "vitest run --config vitest.config.mjs tests-vitest/sanitize-head-html.test.ts",
