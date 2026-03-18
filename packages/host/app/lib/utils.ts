@@ -155,18 +155,17 @@ export const catalogRealm = ENV.resolvedCatalogRealmURL
 export const skillsRealm = new RealmPaths(new URL(ENV.resolvedSkillsRealmURL));
 
 /**
- * Safely constructs a URL to a skill card in the skills realm.
- * Uses the URL constructor to handle path joining safely.
+ * Safely constructs a universal @cardstack/skills/ reference to a skill card.
  *
  * @param skillId - The ID of the skill (e.g., 'boxel-environment', 'catalog-listing')
- * @returns The complete URL to the skill card
+ * @returns The universal skill card reference
  *
  * @example
- * skillCardURL('catalog-listing')   // 'http://localhost:4201/skills/Skill/catalog-listing'
+ * skillCardURL('catalog-listing')   // '@cardstack/skills/Skill/catalog-listing'
  */
 export function skillCardURL(skillId: string): string {
-  return skillsRealm.fileURL(`Skill/${skillId}`).href;
+  return `@cardstack/skills/Skill/${skillId}`;
 }
 
-export const devSkillId = skillsRealm.fileURL(devSkillLocalPath).href;
-export const envSkillId = skillsRealm.fileURL(envSkillLocalPath).href;
+export const devSkillId = `@cardstack/skills/${devSkillLocalPath}`;
+export const envSkillId = `@cardstack/skills/${envSkillLocalPath}`;

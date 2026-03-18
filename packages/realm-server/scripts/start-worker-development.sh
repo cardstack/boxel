@@ -62,7 +62,7 @@ NODE_ENV=development \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  --fromUrl="${REALM_BASE_URL}/skills/" \
+  --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
   ${START_CATALOG:+--fromUrl="${EXTERNAL_CATALOG_REALM_URL}"} \

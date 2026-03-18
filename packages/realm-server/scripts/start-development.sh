@@ -127,7 +127,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   \
   --path='../skills-realm/contents' \
   --username='skills_realm' \
-  --fromUrl="${REALM_BASE_URL}/skills/" \
+  --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/" \
   \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \

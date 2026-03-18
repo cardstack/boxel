@@ -277,7 +277,7 @@ export async function startServer({
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
-    `--fromUrl='http://localhost:4205/skills/'`,
+    `--fromUrl='@cardstack/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
