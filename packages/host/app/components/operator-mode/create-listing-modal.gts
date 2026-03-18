@@ -63,13 +63,10 @@ export default class CreateListingModal extends Component<Signature> {
     }
 
     let targetRealm = payload.targetRealm;
-    // null means all selected → use all instance IDs
     let openCardIds =
       this.selectedExampleIds === null
         ? this.instances.map((i) => i.id)
-        : this.selectedExampleIds.size > 0
-          ? [...this.selectedExampleIds]
-          : (payload.openCardIds ?? []);
+        : [...this.selectedExampleIds];
 
     let result = await new ListingCreateCommand(
       this.commandService.commandContext,
@@ -99,6 +96,7 @@ export default class CreateListingModal extends Component<Signature> {
       await backgroundWork;
     }
 
+    this.selectedExampleIds = null;
     this.operatorModeStateService.dismissCreateListingModal();
   });
 
