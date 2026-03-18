@@ -76,7 +76,7 @@ function mirrorChildOutput(
     let prefixed = prefixChunk('child', text);
     if (prefixed) {
       for (let line of prefixed.split('\n')) {
-        log.warn(line);
+        log.debug(line);
       }
     }
   });
@@ -153,7 +153,7 @@ export default async function globalSetup() {
   mkdirSync(sharedRuntimeDir, { recursive: true });
   let metadataFile = getSupportMetadataFile();
 
-  setupLog.info(`starting serve:support for realm ${realmDir}`);
+  supportLog.debug(`starting serve:support for realm ${realmDir}`);
   let logs = '';
   let child = spawn('pnpm', ['serve:support', realmDir], {
     cwd: packageRoot,
@@ -180,7 +180,7 @@ export default async function globalSetup() {
     realmDir: string;
     context: Record<string, unknown>;
   }>(metadataFile, child, () => logs);
-  setupLog.info(
+  supportLog.info(
     `serve:support ready in ${((Date.now() - supportStartedAt) / 1000).toFixed(
       1,
     )}s`,
@@ -188,6 +188,9 @@ export default async function globalSetup() {
 
   let cacheLogs = '';
   let cacheMetadataFile = resolve(sharedRuntimeDir, 'cache.json');
+  setupLog.warn(
+    'starting cache:prepare; this can take a while on cold startup or in CI',
+  );
   setupLog.info(`starting cache:prepare for realm ${realmDir}`);
   let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
     cwd: packageRoot,
