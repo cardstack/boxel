@@ -32,7 +32,12 @@ export function onTimelineEvent({
   githubClient,
   startTime,
 }: TimelineHandlerOptions) {
-  let commandRunner = new CommandRunner(dbAdapter, queuePublisher, githubClient);
+  let commandRunner = new CommandRunner(
+    authUserId,
+    dbAdapter,
+    queuePublisher,
+    githubClient,
+  );
   return async function handleTimelineEvent(
     event: MatrixEvent,
     room: Room | undefined,

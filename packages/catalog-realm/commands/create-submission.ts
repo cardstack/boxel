@@ -7,6 +7,7 @@ import {
   logger,
   planInstanceInstall,
   planModuleInstall,
+  toBranchName,
   type ListingPathResolver,
   type LooseSingleCardDocument,
   type Relationship,
@@ -111,10 +112,12 @@ export default class CreateSubmissionCommand extends Command<
     if (!listing.name) {
       throw new Error('Missing listing.name for CreateSubmission');
     }
+    let branchName = toBranchName(roomId, listing.name);
 
     let submission = new SubmissionCard({
       listing,
       roomId,
+      branchName,
       allFileContents: filesWithContent.map(
         (file) =>
           new FileContentField({
