@@ -111,7 +111,12 @@ function renderHistoryRow(state: RealmIndexingState): string {
 }
 
 function renderPendingRow(job: PendingJob): string {
-  let createdAt = new Date(job.createdAt);
+  // The DB column is `timestamp` (without tz) but stores UTC values.
+  // Append 'Z' so Date parses it as UTC rather than local time.
+  let isoString = job.createdAt.endsWith('Z')
+    ? job.createdAt
+    : job.createdAt + 'Z';
+  let createdAt = new Date(isoString);
   return `
     <tr>
       <td>${job.jobId}</td>
