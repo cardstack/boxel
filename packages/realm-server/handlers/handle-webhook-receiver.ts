@@ -165,7 +165,7 @@ export default function handleWebhookReceiverRequest({
         new Response(
           JSON.stringify({
             status: 'error',
-            message: `All ${matchedCommands} matched commands failed to enqueue`,
+            message: `All ${matchedCommands} matched commands failed to process`,
           }),
           {
             status: 500,
