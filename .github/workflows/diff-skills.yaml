@@ -2,6 +2,13 @@ name: Diff Skills
 
 on:
   pull_request:
+    paths:
+      - 'packages/base/cards/skill*.json'
+      - 'packages/base/Skill/**/*.json'
+      - 'packages/catalog-realm/**/Skill/**/*.json'
+      - 'packages/experiments-realm/**/Skill*/**/*.json'
+      - 'packages/skills-realm/**/*.json'
+      - 'packages/software-factory/realm/**/*skill*.json'
 
 permissions:
   contents: read
