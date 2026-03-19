@@ -19,6 +19,7 @@ import {
   baseFileRef,
   CardError,
   cardIdToURL,
+  isRegisteredPrefix,
   hasExecutableExtension,
   isCardError,
   isCardInstance,
@@ -1416,7 +1417,7 @@ export default class StoreService extends Service implements StoreInterface {
         deferred?.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T;
       }
-      if (isLocalId(id)) {
+      if (isLocalId(id) && !isRegisteredPrefix(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
         let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
@@ -1426,7 +1427,9 @@ export default class StoreService extends Service implements StoreInterface {
         }
         id = remoteId;
       }
-      let url = id; // after this point we know we are dealing with a remote id, e.g. url
+      // Resolve registered prefix IDs (e.g. @cardstack/skills/...) to actual
+      // URLs so they can be used for fetching.
+      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
@@ -1546,10 +1549,10 @@ export default class StoreService extends Service implements StoreInterface {
         deferred.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T | CardErrorJSONAPI;
       }
-      if (isLocalId(id)) {
+      if (isLocalId(id) && !isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
-      let url = id;
+      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
       let fileMetaDoc: SingleFileMetaDocument | CardError;
       if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
         fileMetaDoc = await this.extractFileMetaDirectly(url);

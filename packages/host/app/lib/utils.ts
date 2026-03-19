@@ -155,7 +155,7 @@ export const catalogRealm = ENV.resolvedCatalogRealmURL
 export const skillsRealm = new RealmPaths(new URL(ENV.resolvedSkillsRealmURL));
 
 /**
- * Safely constructs a universal @cardstack/skills/ reference to a skill card.
+ * Constructs a universal @cardstack/skills/ reference to a skill card.
  *
  * @param skillId - The ID of the skill (e.g., 'boxel-environment', 'catalog-listing')
  * @returns The universal skill card reference
