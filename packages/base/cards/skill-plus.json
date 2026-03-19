@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Skill Plus",
+      "cardDescription": "A card with instructions to teach a skill to the AI bot",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/skill-plus",
+        "name": "SkillPlus"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

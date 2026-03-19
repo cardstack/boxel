@@ -96,7 +96,7 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
 
       .card:hover {
         cursor: pointer;
-        border: 1px solid var(--boxel-purple);
+        border: 1px solid var(--primary, var(--boxel-purple));
       }
 
       .cards :deep(.field-component-card.fitted-format) {
