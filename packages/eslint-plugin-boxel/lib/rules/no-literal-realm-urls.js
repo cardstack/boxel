@@ -81,7 +81,7 @@ module.exports = {
       description:
         'Disallow environment-specific realm URLs in code; use portable prefixes like @cardstack/catalog/ instead',
       category: 'Best Practices',
-      recommended: true,
+      recommended: false,
     },
     fixable: 'code',
     schema: [
