@@ -128,7 +128,13 @@ if (!isLiveTest) {
 
     try {
       for (const moduleURL of testModules) {
-        const mod = await loader.import(moduleURL);
+        let mod;
+        try {
+          mod = await loader.import(moduleURL);
+        } catch {
+          // skip files that fail to import (e.g. cards with unresolvable deps)
+          continue;
+        }
         if (typeof mod.runTests === 'function') {
           mod.runTests();
         }

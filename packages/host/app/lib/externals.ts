@@ -83,13 +83,27 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
+  virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
   virtualNetwork.shimModule('@ember/component', emberComponent);
   virtualNetwork.shimModule(
     '@ember/component/template-only',
     emberComponentTemplateOnly,
   );
-
+  virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
+  virtualNetwork.shimModule('@ember/helper', emberHelper);
+  virtualNetwork.shimModule('@ember/modifier', emberModifier);
+  virtualNetwork.shimModule('@ember/object', emberObject);
+  virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
+  virtualNetwork.shimModule('@ember/service', emberService);
+  virtualNetwork.shimModule('@ember/template', emberTemplate);
+  virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
+  virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
+  virtualNetwork.shimModule('@cardstack/view-transitions', viewTransitions);
+  virtualNetwork.shimModule('awesome-phonenumber', awesomePhoneNumber);
+  virtualNetwork.shimModule('date-fns', dateFns);
   virtualNetwork.shimModule('ember-animated', emberAnimated);
+  virtualNetwork.shimModule('ember-animated/easings/cosine', eaEasingsCosine);
+  virtualNetwork.shimModule('ember-animated/easings/linear', eaEasingsLinear);
   virtualNetwork.shimModule(
     'ember-animated/motions/adjust-color',
     eaMotionsAdjustColor,
@@ -115,8 +129,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('ember-animated/motions/opacity', eaMotionsOpacity);
   virtualNetwork.shimModule('ember-animated/motions/resize', eaMotionsResize);
   virtualNetwork.shimModule('ember-animated/motions/scale', eaMotionsScale);
-  virtualNetwork.shimModule('ember-animated/easings/cosine', eaEasingsCosine);
-  virtualNetwork.shimModule('ember-animated/easings/linear', eaEasingsLinear);
   virtualNetwork.shimModule(
     'ember-animated/transitions/fade',
     eaTransitionsFade,
@@ -125,35 +137,17 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     'ember-animated/transitions/move-over',
     eaTransitionsMoveOver,
   );
-
-  virtualNetwork.shimModule('@cardstack/view-transitions', viewTransitions);
-
-  virtualNetwork.shimModule('ember-css-url', cssUrl);
-  virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
-  virtualNetwork.shimModule('@ember/template', emberTemplate);
-  virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
-  virtualNetwork.shimModule('@ember/object', emberObject);
-  virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
-  virtualNetwork.shimModule('@ember/service', emberService);
-  virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
-  virtualNetwork.shimModule(
-    '@universal-ember/test-support',
-    universalEmberTestSupport,
-  );
-  virtualNetwork.shimModule('@ember/helper', emberHelper);
-  virtualNetwork.shimModule('@ember/modifier', emberModifier);
-  virtualNetwork.shimModule(
-    'ember-modify-based-class-resource',
-    emberModifyClassBasedResource,
-  );
-  virtualNetwork.shimModule('ember-resources', emberResources);
   virtualNetwork.shimModule('ember-concurrency', emberConcurrency);
   virtualNetwork.shimModule(
     'ember-concurrency/-private/async-arrow-runtime',
     emberConcurrencyAsyncArrowRuntime,
   );
-
+  virtualNetwork.shimModule('ember-css-url', cssUrl);
   virtualNetwork.shimModule('ember-modifier', emberModifier2);
+  virtualNetwork.shimModule(
+    'ember-modify-based-class-resource',
+    emberModifyClassBasedResource,
+  );
   virtualNetwork.shimModule(
     'ember-provide-consume-context',
     emberProvideConsumeContext,
@@ -166,32 +160,42 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     'ember-provide-consume-context/components/context-provider',
     emberProvideConsumeContextContextProvider,
   );
-  virtualNetwork.shimModule('flat', flat);
-  virtualNetwork.shimModule('lodash', lodash);
-  virtualNetwork.shimModule('tracked-built-ins', tracked);
-  virtualNetwork.shimModule('date-fns', dateFns);
-  virtualNetwork.shimModule('@ember/destroyable', emberDestroyable);
-  virtualNetwork.shimModule('rsvp', rsvp);
-  virtualNetwork.shimAsyncModule({
-    id: 'ethers',
-    resolve: () => import('ethers'),
-  });
+  virtualNetwork.shimModule('ember-resources', emberResources);
   virtualNetwork.shimModule('ember-source/types', { default: class {} });
   virtualNetwork.shimModule('ember-source/types/preview', {
     default: class {},
   });
-  virtualNetwork.shimModule('super-fast-md5', superFastMD5);
+  virtualNetwork.shimModule('flat', flat);
+  virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
+  virtualNetwork.shimModule('rsvp', rsvp);
+  virtualNetwork.shimModule('super-fast-md5', superFastMD5);
+  virtualNetwork.shimModule('tracked-built-ins', tracked);
+  virtualNetwork.shimAsyncModule({
+    id: 'ethers',
+    resolve: () => import('ethers'),
+  });
   virtualNetwork.shimAsyncModule({
     id: 'uuid',
     resolve: () => import('uuid'),
   });
-  virtualNetwork.shimModule('awesome-phonenumber', awesomePhoneNumber);
 
-  // Test-only modules so realm cards that colocate tests (importing from
-  // @cardstack/host/tests/helpers etc.) can resolve in environments where the
-  // host test modules are present. When missing, we throw on access so the
-  // error is visible instead of silently hiding it.
+  shimModulesForLiveTests(virtualNetwork);
+
+  // Some realm modules use host-only types or helpers. Provide a safe shim so
+  // imports resolve even when the host module isn't present in the build.
+  virtualNetwork.shimModule('@cardstack/host/services/store', {
+    default: class {},
+  });
+
+  shimHostCommands(virtualNetwork);
+}
+
+// Shims host test helper modules into the virtual network so realm cards that
+// colocate tests can import from @cardstack/host/tests/helpers etc. When a
+// module isn't present in the build, a proxy throws on access so the error is
+// visible rather than silently hidden.
+export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
   const missingShim = (moduleId: string) =>
     new Proxy(
       {},
@@ -221,12 +225,4 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     hostTestHelpersAdapter ??
       missingShim('@cardstack/host/tests/helpers/adapter'),
   );
-
-  // Some realm modules use host-only types or helpers. Provide a safe shim so
-  // imports resolve even when the host module isn't present in the build.
-  virtualNetwork.shimModule('@cardstack/host/services/store', {
-    default: class {},
-  });
-
-  shimHostCommands(virtualNetwork);
 }
