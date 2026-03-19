@@ -128,12 +128,13 @@ module('factory-target-realm', function (hooks) {
 
     globalThis.fetch = (async (input, init) => {
       let request = new Request(input, init);
+      let response: Response;
 
       if (
         request.url === 'https://matrix.example.test/_matrix/client/v3/login'
       ) {
         assert.strictEqual(request.headers.get('Authorization'), null);
-        return new Response(
+        response = new Response(
           JSON.stringify({
             access_token: 'matrix-access-token',
             device_id: 'device-id',
@@ -146,9 +147,7 @@ module('factory-target-realm', function (hooks) {
             },
           },
         );
-      }
-
-      if (
+      } else if (
         request.url ===
         'https://matrix.example.test/_matrix/client/v3/user/%40hassan%3Alocalhost/openid/request_token'
       ) {
@@ -156,7 +155,7 @@ module('factory-target-realm', function (hooks) {
           request.headers.get('Authorization'),
           'Bearer matrix-access-token',
         );
-        return new Response(
+        response = new Response(
           JSON.stringify({
             access_token: 'openid-token',
             expires_in: 300,
@@ -170,20 +169,18 @@ module('factory-target-realm', function (hooks) {
             },
           },
         );
-      }
-
-      if (request.url === 'https://realms.example.test/_server-session') {
+      } else if (
+        request.url === 'https://realms.example.test/_server-session'
+      ) {
         assert.strictEqual(request.headers.get('Authorization'), null);
-        return new Response('{}', {
+        response = new Response('{}', {
           status: 200,
           headers: {
             'content-type': 'application/json',
             Authorization: 'Bearer realm-server-token',
           },
         });
-      }
-
-      if (request.url === 'https://realms.example.test/_create-realm') {
+      } else if (request.url === 'https://realms.example.test/_create-realm') {
         assert.strictEqual(
           request.headers.get('Authorization'),
           'Bearer realm-server-token',
@@ -197,16 +194,17 @@ module('factory-target-realm', function (hooks) {
             },
           },
         });
-
-        return new Response('{}', {
+        response = new Response('{}', {
           status: 201,
           headers: {
             'content-type': 'application/json',
           },
         });
+      } else {
+        throw new Error(`Unexpected url: ${request.url}`);
       }
 
-      throw new Error(`Unexpected url: ${request.url}`);
+      return response;
     }) as typeof globalThis.fetch;
 
     let result = await bootstrapFactoryTargetRealm(resolution);
