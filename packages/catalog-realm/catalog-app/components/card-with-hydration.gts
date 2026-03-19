@@ -77,7 +77,7 @@ export class CardWithHydration extends GlimmerComponent<CardWithHydrationSignatu
 
       .card:hover {
         cursor: pointer;
-        outline: 1px solid var(--boxel-purple);
+        outline: 1px solid var(--primary, var(--boxel-purple));
       }
 
       .instance-error {
