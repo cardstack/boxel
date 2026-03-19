@@ -31,6 +31,7 @@ import {
   installDelayedRuntimeRealmSearchPatch,
   installRealmServerAssertOwnRealmServerBypassPatch,
   installSearchRequestObserverPatch,
+  installThrottledRAFPatch,
 } from './helpers/prerender-page-patches';
 
 class TestSemaphore {
@@ -5213,4 +5214,222 @@ module(basename(__filename), function () {
       }
     });
   });
+
+  module(
+    'prerender - card with many nested linksTo renders promptly',
+    function (hooks) {
+      let parentRealmURL = 'http://127.0.0.1:4470/test/';
+      let childRealmURL = 'http://127.0.0.1:4471/test/';
+      let prerenderServerURL = new URL(parentRealmURL).origin;
+      let testUserId = '@user1:localhost';
+      let permissions: RealmPermissions = {};
+      let prerenderer: Prerenderer;
+      let auth = () => testCreatePrerenderAuth(testUserId, permissions);
+
+      hooks.before(async () => {
+        prerenderer = getPrerendererForTesting({
+          maxPages: 2,
+          serverURL: prerenderServerURL,
+        });
+      });
+
+      hooks.after(async () => {
+        await prerenderer.stop();
+      });
+
+      hooks.afterEach(async () => {
+        await Promise.all([
+          prerenderer.disposeAffinity({
+            affinityType: 'realm',
+            affinityValue: parentRealmURL,
+          }),
+          prerenderer.disposeAffinity({
+            affinityType: 'realm',
+            affinityValue: childRealmURL,
+          }),
+        ]);
+      });
+
+      // Build a file system that mirrors the SystemCard scenario:
+      // ParentCard --linksToMany--> ChildConfig --linksTo--> GrandchildDetail
+      // where there are many ChildConfig instances each linking to a different
+      // GrandchildDetail in a separate realm.
+      let childCount = 10;
+
+      let childRealmFileSystem: Record<string, any> = {
+        'detail.gts': `
+          import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          export class Detail extends CardDef {
+            static displayName = 'Detail';
+            @field info = contains(StringField);
+            static isolated = class extends Component<typeof this> {
+              <template><span data-test-detail>{{@model.info}}</span></template>
+            };
+            static fitted = class extends Component<typeof this> {
+              <template><span data-test-detail-fitted>{{@model.info}}</span></template>
+            };
+          }
+        `,
+      };
+
+      for (let i = 0; i < childCount; i++) {
+        childRealmFileSystem[`Detail/detail-${i}.json`] = {
+          data: {
+            attributes: { info: `Detail ${i}` },
+            meta: {
+              adoptsFrom: { module: '../detail', name: 'Detail' },
+            },
+          },
+        };
+      }
+
+      let parentRealmFileSystem: Record<string, any> = {
+        'child-config.gts': `
+          import { CardDef, field, contains, linksTo, Component } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          import { Detail } from '${childRealmURL}detail';
+          export class ChildConfig extends CardDef {
+            static displayName = 'Child Config';
+            @field detail = linksTo(Detail);
+            @field derivedInfo = contains(StringField, {
+              computeVia: function () {
+                try { return this.detail?.info ?? null; } catch(e) { return null; }
+              },
+            });
+            static isolated = class extends Component<typeof this> {
+              <template><div data-test-child><@fields.detail /><span>{{@model.derivedInfo}}</span></div></template>
+            };
+            static fitted = class extends Component<typeof this> {
+              <template><span data-test-child-fitted>{{@model.derivedInfo}}</span></template>
+            };
+          }
+        `,
+        'parent-card.gts': `
+          import { CardDef, field, linksToMany, Component } from 'https://cardstack.com/base/card-api';
+          import { ChildConfig } from './child-config';
+          export class ParentCard extends CardDef {
+            static displayName = 'Parent Card';
+            @field children = linksToMany(ChildConfig);
+            static isolated = class extends Component<typeof this> {
+              <template>
+                <div data-test-parent>
+                  <@fields.children />
+                </div>
+              </template>
+            };
+          }
+        `,
+      };
+
+      // Create ChildConfig instances that each link to a Detail in the child realm
+      for (let i = 0; i < childCount; i++) {
+        parentRealmFileSystem[`ChildConfig/child-${i}.json`] = {
+          data: {
+            relationships: {
+              detail: {
+                links: { self: `${childRealmURL}Detail/detail-${i}` },
+              },
+            },
+            meta: {
+              adoptsFrom: { module: '../child-config', name: 'ChildConfig' },
+            },
+          },
+        };
+      }
+
+      // Create the parent card that links to all children
+      let childRelationships: Record<string, any> = {};
+      for (let i = 0; i < childCount; i++) {
+        childRelationships[`children.${i}`] = {
+          links: { self: `./ChildConfig/child-${i}` },
+        };
+      }
+      parentRealmFileSystem['parent.json'] = {
+        data: {
+          relationships: childRelationships,
+          meta: {
+            adoptsFrom: { module: './parent-card', name: 'ParentCard' },
+          },
+        },
+      };
+
+      setupPermissionedRealmsCached(hooks, {
+        mode: 'before',
+        realms: [
+          {
+            realmURL: childRealmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: childRealmFileSystem,
+          },
+          {
+            realmURL: parentRealmURL,
+            permissions: {
+              '*': ['read'],
+              [testUserId]: ['read', 'write', 'realm-owner'],
+            },
+            fileSystem: parentRealmFileSystem,
+          },
+        ],
+        onRealmSetup() {
+          permissions = {
+            [parentRealmURL]: ['read', 'write', 'realm-owner'],
+            [childRealmURL]: ['read', 'write', 'realm-owner'],
+          };
+        },
+      });
+
+      test(`card with ${childCount} linksToMany each with linksTo in another realm prerenders without timeout`, async function (assert) {
+        // Simulate background-tab RAF throttling: each requestAnimationFrame
+        // callback is delayed by 2 seconds. Without the fix (which uses
+        // setTimeout(0) instead of RAF in prerender context), the 20-pass
+        // stability loop would take 20 × 2s = 40s and hit our 15s timeout.
+        // With the fix, RAF is bypassed entirely and the render completes fast.
+        // Throttle RAF by 1.5s per frame. Without the fix the 20-pass
+        // stability loop would need 20 × 1.5 = 30s just for the loop,
+        // pushing the total well past the 45s timeout below. With the
+        // fix the loop bypasses RAF entirely so total time stays low.
+        let rafPatch = installThrottledRAFPatch(1_500);
+        try {
+          let cardURL = `${parentRealmURL}parent`;
+
+          let startMs = Date.now();
+          let result = await prerenderer.prerenderCard({
+            affinityType: 'realm',
+            affinityValue: parentRealmURL,
+            realm: parentRealmURL,
+            url: cardURL,
+            auth: auth(),
+            opts: { timeoutMs: 45_000 },
+          });
+          let elapsedMs = Date.now() - startMs;
+
+          assert.false(result.pool.timedOut, 'prerender did not time out');
+          assert.notOk(
+            result.response.error,
+            `prerender did not produce an error${result.response.error ? ': ' + JSON.stringify(result.response.error.error?.message ?? result.response.error) : ''}`,
+          );
+
+          // With 1.5s RAF throttle the unpatched stability loop alone
+          // would need ≥30s. Completing under 30s proves RAF was bypassed.
+          assert.true(
+            elapsedMs < 30_000,
+            `prerender completed in ${elapsedMs}ms (expected < 30s with RAF bypassed)`,
+          );
+
+          // Verify the rendered HTML includes content from the nested linked cards
+          let html = result.response.isolatedHTML ?? '';
+          assert.ok(
+            html.includes('data-test-parent'),
+            'rendered HTML contains the parent card',
+          );
+        } finally {
+          rafPatch.restore();
+        }
+      });
+    },
+  );
 });
