@@ -11,3 +11,6 @@ jobs:
   diff-skills:
     uses: cardstack/gh-actions/.github/workflows/diff-skills.yml@main
     secrets: inherit
+    concurrency:
+      group: diff-skills-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true

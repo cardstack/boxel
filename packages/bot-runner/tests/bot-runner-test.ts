@@ -311,8 +311,8 @@ module('timeline handler', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      1,
-      'enqueues run-command job for pr-listing-create',
+      3,
+      'enqueues submission, PR-card, and submission patch run-command jobs for pr-listing-create',
     );
     assert.strictEqual(
       createdBranches.length,

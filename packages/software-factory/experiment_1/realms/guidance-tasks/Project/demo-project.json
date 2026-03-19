@@ -1,0 +1,47 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Project",
+        "module": "../darkfactory"
+      },
+      "_touched": 1773327316874
+    },
+    "type": "card",
+    "attributes": {
+      "risks": "- **Demo timeline:**  Very tight - scope must be controlled\n- **Agent context loss:** Mitigate with rich knowledge base\n- **Scope creep:** New features deferred to Phase 2",
+      "scope": "## Scope\n\n### In Scope\n- Agent task assignment and tracking\n- Project knowledge base management\n- Ticket lifecycle management (backlog → done)\n- Agent onboarding via knowledge articles\n- Human-readable dashboard\n\n### Out of Scope\n- External CI/CD integration (Phase 2)\n- Agent spawning/orchestration engine (Phase 2)\n- Real-time agent communication (Phase 2)\n\n### Constraints\n- Must be demonstrable by demo deadline\n- All data must be structured for agent consumption\n- Knowledge must be transferable between agent sessions",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "deadline": "2026-03-20",
+      "createdAt": "2026-03-12T10:00:00.000Z",
+      "objective": "Build and demonstrate a fully operational agent-driven software factory platform capable of autonomous project management, ticket resolution, and knowledge accumulation.",
+      "projectCode": "DFX-001",
+      "projectName": "Dark Factory Platform",
+      "projectStatus": "active",
+      "successCriteria": "- [ ] Agent can be assigned a ticket and complete it autonomously\n- [ ] Knowledge articles accessible and useful to new agents\n- [ ] Human can see project health at a glance on dashboard\n- [ ] Tickets can navigate to related knowledge and tickets\n- [ ] Project scope is clear and discoverable",
+      "technicalContext": "## Technical Context\n\n### Stack\n- **Platform:** Boxel (card-based data system)\n- **Agent Interface:** AI assistant with tool access\n- **Storage:** Boxel realm (JSON:API)\n\n### Key Concepts\n- **Tickets** track discrete work items with status, priority, and agent assignment\n- **Knowledge Articles** store durable context for incoming agents\n- **Agent Notes** on tickets preserve decision trail\n- **Linked entities** allow navigation between related work\n\n### Agent Workflow\n1. Agent opens assigned ticket\n2. Agent reads description + acceptance criteria\n3. Agent reviews linked knowledge articles\n4. Agent documents findings in Agent Notes\n5. Agent links related tickets\n6. Agent updates status and marks done"
+    },
+    "relationships": {
+      "teamAgents": {
+        "links": {
+          "self": null
+        }
+      },
+      "knowledgeBase.0": {
+        "links": {
+          "self": "../KnowledgeArticle/agent-onboarding"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://app.boxel.ai/catalog/Theme/cardstack"
+        }
+      }
+    }
+  }
+}

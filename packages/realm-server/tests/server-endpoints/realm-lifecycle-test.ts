@@ -1,6 +1,8 @@
 import { module, test } from 'qunit';
 import { basename, join } from 'path';
 import { existsSync, readJSONSync } from 'fs-extra';
+import supertest from 'supertest';
+import type { Test, SuperTest } from 'supertest';
 import { v4 as uuidv4 } from 'uuid';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
@@ -14,11 +16,15 @@ import { cardSrc } from '@cardstack/runtime-common/etc/test-fixtures';
 import {
   closeServer,
   createJWT,
+  matrixURL,
   realmSecretSeed,
+  runTestRealmServer,
+  setupPermissionedRealmCached,
   testRealmInfo,
+  testRealmURL as rootTestRealmURL,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -33,7 +39,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = '@mango:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -65,7 +71,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           {
             data: {
               type: 'realm',
-              id: `${testRealm2URL.origin}/${owner}/${endpoint}/`,
+              id: `${testRealmURL.origin}/${owner}/${endpoint}/`,
               attributes: {
                 ...testRealmInfo,
                 endpoint,
@@ -80,7 +86,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let realmPath = join(
           context.dir.name,
-          'realm_server_2',
+          'realm_server_1',
           owner,
           endpoint,
         );
@@ -119,12 +125,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         });
 
         let id: string;
-        let realm = context.testRealmServer2.testingOnlyRealms.find(
+        let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === json.data.id,
         )!;
         {
           // owner can create an instance
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${endpoint}/`)
             .send({
               data: {
@@ -155,7 +161,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         {
           // owner can get an instance
-          let response = await context.request2
+          let response = await context.request
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(
@@ -178,7 +184,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         {
           // owner can search in the realm
-          let response = await context.request2
+          let response = await context.request
             .post(`${new URL(realm.url).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
@@ -210,7 +216,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'mango';
         let ownerUserId = '@mango:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -235,12 +241,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         let realmURL = response.body.data.id;
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
-        let realm = context.testRealmServer2.testingOnlyRealms.find(
+        let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === realmURL,
         )!;
 
         {
-          let response = await context.request2
+          let response = await context.request
             .post(`${new URL(realmURL).pathname}_search`)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
@@ -256,7 +262,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
           assert.strictEqual(response.status, 403, 'HTTP 403 status');
 
-          response = await context.request2
+          response = await context.request
             .post(`/${owner}/${endpoint}/`)
             .send({
               data: {
@@ -285,7 +291,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let ownerUserId = '@mango:localhost';
         let realmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -315,11 +321,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }
 
         let id: string;
-        let realm = context.testRealmServer2.testingOnlyRealms.find(
+        let realm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === realmURL,
         )!;
         {
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${endpoint}/`)
             .send({
               data: {
@@ -350,27 +356,45 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let jobsBeforeRestart =
           await context.dbAdapter.execute('select * from jobs');
 
-        // Stop and restart the server
-        context.testRealmServer2.testingOnlyUnmountRealms();
-        await closeServer(context.testRealmHttpServer2);
-        await context.startRealmServer();
-        await context.testRealmServer2.start();
+        context.testRealmServer.testingOnlyUnmountRealms();
+        await closeServer(context.testRealmHttpServer);
 
-        let jobsAfterRestart =
-          await context.dbAdapter.execute('select * from jobs');
-        assert.strictEqual(
-          jobsBeforeRestart.length,
-          jobsAfterRestart.length,
-          'no new indexing jobs were created on boot for the created realm',
-        );
+        let restartedServer = await runTestRealmServer({
+          virtualNetwork: context.virtualNetwork,
+          testRealmDir: context.testRealmDir,
+          realmsRootPath: join(context.dir.name, 'realm_server_1'),
+          realmURL: testRealmURL,
+          permissions: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          dbAdapter: context.dbAdapter,
+          publisher: context.publisher,
+          runner: context.runner,
+          matrixURL,
+        });
 
-        {
-          let response = await context.request2
+        try {
+          let jobsAfterRestart =
+            await context.dbAdapter.execute('select * from jobs');
+          assert.strictEqual(
+            jobsBeforeRestart.length,
+            jobsAfterRestart.length,
+            'no new indexing jobs were created on boot for the created realm',
+          );
+
+          let restartedRealm =
+            restartedServer.testRealmServer.testingOnlyRealms.find(
+              (r) => r.url === realmURL,
+            );
+          assert.ok(restartedRealm, 'realm is mounted after restart');
+          let restartedRequest = supertest(restartedServer.testRealmHttpServer);
+          let response = await restartedRequest
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(
               'Authorization',
-              `Bearer ${createJWT(realm, ownerUserId, [
+              `Bearer ${createJWT(restartedRealm!, ownerUserId, [
                 'read',
                 'write',
                 'realm-owner',
@@ -384,12 +408,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'Test Card',
             'instance data is correct',
           );
+        } finally {
+          restartedServer.testRealmServer.testingOnlyUnmountRealms();
+          await closeServer(restartedServer.testRealmHttpServer);
         }
       });
 
       test('POST /_create-realm without JWT', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -415,7 +442,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('POST /_create-realm with invalid JWT', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -437,7 +464,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('POST /_create-realm with invalid JSON', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -458,7 +485,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('POST /_create-realm with bad JSON-API', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -483,7 +510,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('POST /_create-realm without a realm endpoint', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -514,7 +541,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('POST /_create-realm without a realm name', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -543,43 +570,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
-        let response = await context.request
-          .post('/_create-realm')
-          .set('Accept', 'application/vnd.api+json')
-          .set('Content-Type', 'application/json')
-          .set(
-            'Authorization',
-            `Bearer ${createRealmServerJWT(
-              { user: '@mango:localhost', sessionRoom: 'session-room-test' },
-              realmSecretSeed,
-            )}`,
-          )
-          .send(
-            JSON.stringify({
-              data: {
-                type: 'realm',
-                attributes: {
-                  endpoint: 'mango-realm',
-                  name: 'Test Realm',
-                },
-              },
-            }),
-          );
-        assert.strictEqual(response.status, 400, 'HTTP 400 status');
-        let error = response.body.errors[0];
-        assert.ok(
-          error.match(
-            /a realm is already mounted at the origin of this server/,
-          ),
-          'error message is correct',
-        );
-      });
-
       test('cannot create a new realm that collides with an existing realm', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let ownerUserId = '@mango:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_create-realm')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/json')
@@ -603,7 +597,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
         assert.strictEqual(response.status, 201, 'HTTP 201 status');
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -637,7 +631,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       test('cannot create a realm with invalid characters in endpoint', async function (assert) {
         let ownerUserId = '@mango:localhost';
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -667,7 +661,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           );
         }
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -704,7 +698,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let providerEndpoint = `test-realm-provider-${uuidv4()}`;
         let providerRealmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -732,12 +726,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 201, 'HTTP 201 status');
           providerRealmURL = response.body.data.id;
         }
-        let providerRealm = context.testRealmServer2.testingOnlyRealms.find(
+        let providerRealm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === providerRealmURL,
         )!;
         {
           // create a card def
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${providerEndpoint}/test-card.gts`)
             .set('Accept', 'application/vnd.card+source')
             .set(
@@ -755,7 +749,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let consumerEndpoint = `test-realm-consumer-${uuidv4()}`;
         let consumerRealmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -784,13 +778,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           consumerRealmURL = response.body.data.id;
         }
 
-        let consumerRealm = context.testRealmServer2.testingOnlyRealms.find(
+        let consumerRealm = context.testRealmServer.testingOnlyRealms.find(
           (r) => r.url === consumerRealmURL,
         )!;
         let id: string;
         {
           // create an instance using card def in different private realm
-          let response = await context.request2
+          let response = await context.request
             .post(`/${owner}/${consumerEndpoint}/`)
             .send({
               data: {
@@ -823,7 +817,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         {
           // get the instance
-          let response = await context.request2
+          let response = await context.request
             .get(new URL(id).pathname)
             .set('Accept', 'application/vnd.card+json')
             .set(
@@ -843,6 +837,58 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             'instance data is correct',
           );
         }
+      });
+    },
+  );
+
+  module(
+    'Realm creation when a realm is mounted at server origin',
+    function (hooks) {
+      let request!: SuperTest<Test>;
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL: rootTestRealmURL,
+        permissions: {
+          '*': ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
+        },
+        onRealmSetup(args) {
+          request = args.request;
+        },
+      });
+
+      test('cannot create a realm on a realm server that has a realm mounted at the origin', async function (assert) {
+        let response = await request
+          .post('/_create-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: '@mango:localhost', sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                attributes: {
+                  endpoint: 'mango-realm',
+                  name: 'Test Realm',
+                },
+              },
+            }),
+          );
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let error = response.body.errors[0];
+        assert.ok(
+          error.match(
+            /a realm is already mounted at the origin of this server/,
+          ),
+          'error message is correct',
+        );
       });
     },
   );
