@@ -16,7 +16,7 @@ const DEFAULT_REALM_MAPPINGS = [
       'https://app.boxel.ai/catalog/',
     ],
     // Catches environment-mode URLs like http://realm-server.linty.localhost/catalog/
-    patterns: ['https?://realm-server\\.[^.]+\\.localhost[^/]*/catalog/'],
+    patterns: ['https?://realm-server\\.[^.]+\\.localhost(:\\d+)?/catalog/'],
   },
   // Future entries:
   // {
