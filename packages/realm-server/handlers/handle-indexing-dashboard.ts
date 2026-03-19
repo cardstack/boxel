@@ -4,7 +4,7 @@ export interface PendingJob {
   jobId: number;
   jobType: string;
   realmURL: string;
-  createdAt: string;
+  createdAt: number; // UTC epoch millis
   priority: number;
 }
 
@@ -111,19 +111,13 @@ function renderHistoryRow(state: RealmIndexingState): string {
 }
 
 function renderPendingRow(job: PendingJob): string {
-  // The DB column is `timestamp` (without tz) but stores UTC values.
-  // Append 'Z' so Date parses it as UTC rather than local time.
-  let isoString = job.createdAt.endsWith('Z')
-    ? job.createdAt
-    : job.createdAt + 'Z';
-  let createdAt = new Date(isoString);
   return `
     <tr>
       <td>${job.jobId}</td>
       <td>${escapeHtml(job.jobType)}</td>
       <td class="realm-url-cell" title="${escapeHtml(job.realmURL)}">${escapeHtml(job.realmURL)}</td>
       <td>${job.priority}</td>
-      <td>${timeSince(createdAt.getTime())}</td>
+      <td>${timeSince(job.createdAt)}</td>
     </tr>`;
 }
 
