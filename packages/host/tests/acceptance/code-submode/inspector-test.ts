@@ -2732,13 +2732,15 @@ export class ExportedCard extends ExportedCardParent {
 
     await waitFor('[data-test-create-listing-examples]');
     assert
-      .dom('[data-test-select-all]')
-      .isChecked('select all checkbox is checked');
+      .dom(
+        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
+      )
+      .exists({ count: 1 }, 'the opened instance is pre-selected');
     assert
       .dom(
-        '[data-test-create-listing-examples] [data-test-card-catalog-item-selected="true"]',
+        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
       )
-      .exists({ count: 2 }, 'all instances are pre-selected');
+      .containsText('Mango', 'mango instance is pre-selected');
   });
 
   test('cancel button in Create Listing modal closes the modal', async function (assert) {
