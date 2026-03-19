@@ -22,6 +22,7 @@ import {
   isPdfContentType,
   isAudioContentType,
   isVideoContentType,
+  isTextBasedContentType,
   requiredModality,
 } from './modality';
 import type {
@@ -92,8 +93,9 @@ function getLog() {
  *    is shown as metadata only (the later version wins).
  *
  * 3. **MIME type handling** (see `modality.ts` for classification):
- *    - Text-based types (text/*, application/vnd.card+json) → content
- *      downloaded and displayed with line numbers.
+ *    - Text-based types (text/*, application/vnd.card+json,
+ *      application/vnd.card+source) → content downloaded and displayed
+ *      with line numbers.
  *    - Supported images (PNG, JPEG, WEBP, GIF) → native `image_url`
  *      content parts.
  *    - PDF (application/pdf) → native `file` content parts with base64
@@ -119,14 +121,6 @@ function getLog() {
  */
 
 // ── MIME / category helpers ──────────────────────────────────────────
-
-function isTextBasedContentType(contentType?: string): boolean {
-  if (!contentType) return false;
-  if (contentType.includes('text/')) return true;
-  if (contentType.includes('application/vnd.card+json')) return true;
-  if (contentType.includes('application/vnd.card+source')) return true;
-  return false;
-}
 
 const AUDIO_MIME_TO_FORMAT: Record<string, string> = {
   'audio/wav': 'wav',
