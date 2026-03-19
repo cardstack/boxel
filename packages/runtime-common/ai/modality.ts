@@ -48,14 +48,15 @@ export function modalityLabel(modality: Modality): string {
   return MODALITY_LABELS[modality];
 }
 
-// Matches the server-side isTextBasedContentType in prompt.ts — files with
-// these types get their full content downloaded and sent as text.
+// Canonical check shared by prompt construction (server-side) and the UI
+// (client-side). Files matching these types get their full content downloaded
+// and sent as text in the AI prompt.
 export function isTextBasedContentType(contentType?: string): boolean {
-  return (
-    !!contentType &&
-    (contentType.includes('text/') ||
-      contentType.includes('application/vnd.card+json'))
-  );
+  if (!contentType) return false;
+  if (contentType.includes('text/')) return true;
+  if (contentType.includes('json')) return true; // application/json, application/vnd.card+json, etc.
+  if (contentType.includes('application/vnd.card+source')) return true; // .gts card definitions
+  return false;
 }
 
 export {

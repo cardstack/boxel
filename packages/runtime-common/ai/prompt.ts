@@ -121,11 +121,11 @@ function getLog() {
 // ── MIME / category helpers ──────────────────────────────────────────
 
 function isTextBasedContentType(contentType?: string): boolean {
-  return (
-    !!contentType &&
-    (contentType.includes('text/') ||
-      contentType.includes('application/vnd.card+json'))
-  );
+  if (!contentType) return false;
+  if (contentType.includes('text/')) return true;
+  if (contentType.includes('json')) return true;
+  if (contentType.includes('application/vnd.card+source')) return true;
+  return false;
 }
 
 const AUDIO_MIME_TO_FORMAT: Record<string, string> = {
