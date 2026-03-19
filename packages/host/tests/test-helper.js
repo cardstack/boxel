@@ -7,21 +7,28 @@ import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/hel
 import start from 'ember-exam/test-support/start';
 import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
+import './live-test';
 
-QUnit.dump.maxDepth = 20;
+const isLiveTest = new URL(window.location.href).pathname.endsWith(
+  '/live-test.html',
+);
 
-useTestWaiters(TestWaiters);
-setApplication(Application.create(config.APP));
+if (!isLiveTest) {
+  QUnit.dump.maxDepth = 20;
 
-setup(QUnit.assert);
-setupOperatorModeParametersMatchAssertion(QUnit.assert);
+  useTestWaiters(TestWaiters);
+  setApplication(Application.create(config.APP));
 
-const urlParams = new URLSearchParams(window.location.search);
-const isParallelExamRun =
-  urlParams.has('browser') || urlParams.has('partition');
+  setup(QUnit.assert);
+  setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
-if (isParallelExamRun) {
-  QUnit.config.failOnZeroTests = false;
+  const urlParams = new URLSearchParams(window.location.search);
+  const isParallelExamRun =
+    urlParams.has('browser') || urlParams.has('partition');
+
+  if (isParallelExamRun) {
+    QUnit.config.failOnZeroTests = false;
+  }
+
+  start();
 }
-
-start();

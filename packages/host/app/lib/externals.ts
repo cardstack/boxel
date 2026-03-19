@@ -5,6 +5,9 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
+import * as emberService from '@ember/service';
+import * as emberTestHelpers from '@ember/test-helpers';
+import * as universalEmberTestSupport from '@universal-ember/test-support';
 import * as emberTemplate from '@ember/template';
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
@@ -52,9 +55,25 @@ import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
+import * as hostTestHelpers from '@cardstack/host/tests/helpers';
+import * as hostTestHelpersAdapter from '@cardstack/host/tests/helpers/adapter';
+import * as hostTestHelpersMockMatrix from '@cardstack/host/tests/helpers/mock-matrix';
+import * as hostTestHelpersSetup from '@cardstack/host/tests/helpers/setup';
+
 import { shimHostCommands } from '../commands';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
+  // Always shim qunit. In test environments, use window.QUnit so realm-loaded
+  // test modules register on the same instance the runner will execute. In
+  // non-test environments (code mode, card rendering), use a no-op stub so
+  // realm cards that colocate test imports don't fail to load — the no-op
+  // module() means test callbacks are never invoked outside of test runs.
+  const windowQUnit = (globalThis as any).QUnit;
+  virtualNetwork.shimModule(
+    'qunit',
+    windowQUnit || { module: () => {}, test: () => {}, config: {} },
+  );
+
   virtualNetwork.shimModule('@cardstack/runtime-common', runtime);
   virtualNetwork.shimModule(
     '@cardstack/boxel-ui/components',
@@ -115,6 +134,9 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
   virtualNetwork.shimModule('@ember/object', emberObject);
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
+  virtualNetwork.shimModule('@ember/service', emberService);
+  virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
+  virtualNetwork.shimModule('@universal-ember/test-support', universalEmberTestSupport);
   virtualNetwork.shimModule('@ember/helper', emberHelper);
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
   virtualNetwork.shimModule(
@@ -162,5 +184,46 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     resolve: () => import('uuid'),
   });
   virtualNetwork.shimModule('awesome-phonenumber', awesomePhoneNumber);
+
+  // Test-only modules so realm cards that colocate tests (importing from
+  // @cardstack/host/tests/helpers etc.) can resolve in environments where the
+  // host test modules are present. When missing, we throw on access so the
+  // error is visible instead of silently hiding it.
+  const missingShim = (moduleId: string) =>
+    new Proxy(
+      {},
+      {
+        get: () => {
+          throw new Error(
+            `Missing shim for ${moduleId}. This module is not available in the current environment.`,
+          );
+        },
+      },
+    );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers',
+    hostTestHelpers ?? missingShim('@cardstack/host/tests/helpers'),
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/mock-matrix',
+    hostTestHelpersMockMatrix ??
+      missingShim('@cardstack/host/tests/helpers/mock-matrix'),
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/setup',
+    hostTestHelpersSetup ?? missingShim('@cardstack/host/tests/helpers/setup'),
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/adapter',
+    hostTestHelpersAdapter ??
+      missingShim('@cardstack/host/tests/helpers/adapter'),
+  );
+
+  // Some realm modules use host-only types or helpers. Provide a safe shim so
+  // imports resolve even when the host module isn't present in the build.
+  virtualNetwork.shimModule('@cardstack/host/services/store', {
+    default: class {},
+  });
+
   shimHostCommands(virtualNetwork);
 }

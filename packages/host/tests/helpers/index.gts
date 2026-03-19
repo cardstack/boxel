@@ -63,11 +63,15 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
-import { testRealmServerMatrixUsername } from './mock-matrix';
+import {
+  testRealmServerMatrixUsername,
+  setupMockMatrix,
+} from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
 import { createJWT, testRealmSecretSeed } from './test-auth';
 import { getTestRealmRegistry } from './test-realm-registry';
+import { setupRenderingTest } from './setup';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
@@ -1497,6 +1501,27 @@ export function setupCardLogs(
     let api = await apiThunk();
     await api.flushLogs();
   });
+}
+
+export function setupCardTest(hooks: NestedHooks): {
+  mockMatrixUtils: MockUtils;
+} {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
+  setupCardLogs(hooks, async () =>
+    (getService('loader-service') as any).loader.import(
+      `${baseRealm.url}card-api`,
+    ),
+  );
+  return {
+    mockMatrixUtils: setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    }),
+  };
 }
 
 export function delay(delayAmountMs: number): Promise<void> {

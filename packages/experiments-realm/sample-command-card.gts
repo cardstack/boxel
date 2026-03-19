@@ -21,25 +21,19 @@ export class SampleCommandCard extends CardDef {
 // ── Tests (imports resolved via loader.shimModule in live-test.js) ────────────
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
-import { click, render } from '@ember/test-helpers';
+import { click, render, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { module, test } from 'qunit';
 
-import { getService } from '@universal-ember/test-support';
-import { baseRealm, type Store } from '@cardstack/runtime-common';
+import { type Store } from '@cardstack/runtime-common';
 import {
+  setupCardTest,
   setupIntegrationTestRealm,
-  setupLocalIndexing,
-  setupOnSave,
-  setupCardLogs,
   testRealmURL,
-  setupRealmCacheTeardown,
   withCachedRealmSetup,
   type TestContextWithSave,
 } from '@cardstack/host/tests/helpers';
 import { TestRealmAdapter } from '@cardstack/host/tests/helpers/adapter';
-import { setupMockMatrix } from '@cardstack/host/tests/helpers/mock-matrix';
-import { setupRenderingTest } from '@cardstack/host/tests/helpers/setup';
 
 class CreateCardButton extends GlimmerComponent {
   @service declare store: Store;
@@ -57,26 +51,13 @@ class CreateCardButton extends GlimmerComponent {
 
 export function runTests() {
   module('Experiments | SampleCommandCard', function (hooks) {
-    setupRenderingTest(hooks);
-    setupLocalIndexing(hooks);
-    setupOnSave(hooks);
-    setupRealmCacheTeardown(hooks);
-    setupCardLogs(hooks, async () =>
-      (getService('loader-service') as any).loader.import(
-        `${baseRealm.url}card-api`,
-      ),
-    );
-
-    let mockMatrixUtils = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-      autostart: true,
-    });
+    let { mockMatrixUtils } = setupCardTest(hooks);
 
     let testRealmAdapter: TestRealmAdapter;
+    let testRealm: Awaited<ReturnType<typeof setupIntegrationTestRealm>>['realm'];
 
     hooks.beforeEach(async function () {
-      ({ adapter: testRealmAdapter } = await withCachedRealmSetup(async () =>
+      let result = await withCachedRealmSetup(async () =>
         setupIntegrationTestRealm({
           mockMatrixUtils,
           contents: {
@@ -84,7 +65,9 @@ export function runTests() {
             '.realm.json': '{ "name": "Sample Realm" }',
           },
         }),
-      ));
+      );
+      testRealmAdapter = result.adapter;
+      testRealm = result.realm;
     });
 
     test('clicking Create Card writes a new card to the realm', async function (this: TestContextWithSave, assert) {
@@ -107,6 +90,55 @@ export function runTests() {
       let relativePath = `${savedUrl!.href.substring(testRealmURL.length)}.json`;
       let file = await testRealmAdapter.openFile(relativePath);
       assert.ok(file, 'card JSON file exists in the realm adapter');
+    });
+
+    test('search finds the newly created card', async function (this: TestContextWithSave, assert) {
+      assert.expect(3);
+
+      let savedUrl: URL | undefined;
+      this.onSave((url) => {
+        savedUrl = url;
+      });
+
+      await render(<template><CreateCardButton /></template>);
+      await click('button');
+
+      await waitUntil(() => Boolean(savedUrl), { timeout: 5000 });
+
+      await waitUntil(
+        async () => {
+          let { data: cards } =
+            await testRealm.realmIndexQueryEngine.searchCards({
+              filter: {
+                on: {
+                  module: `${testRealmURL}sample-command-card`,
+                  name: 'SampleCommandCard',
+                },
+                eq: { title: 'Hello from live-test' },
+              },
+            });
+          return cards.length === 1;
+        },
+        { timeout: 5000 },
+      );
+
+      let { data: cards } = await testRealm.realmIndexQueryEngine.searchCards({
+        filter: {
+          on: {
+            module: `${testRealmURL}sample-command-card`,
+            name: 'SampleCommandCard',
+          },
+          eq: { title: 'Hello from live-test' },
+        },
+      });
+
+      assert.strictEqual(cards.length, 1, 'search returns the created card');
+      assert.strictEqual(
+        (cards[0] as any).attributes?.title,
+        'Hello from live-test',
+        'search result has correct title',
+      );
+      assert.ok(savedUrl, 'card save completed');
     });
   });
 }
