@@ -27,6 +27,10 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     return this.args.model.allFileContents?.length ?? 0;
   }
 
+  get isFileCountPlural() {
+    return this.fileCount !== 1;
+  }
+
   get listingName() {
     return this.args.model.listing?.name ?? this.args.model.listing?.cardTitle;
   }
@@ -142,7 +146,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
               <span class='file-count-badge'>
                 <FileCodeIcon width='12' height='12' />
                 {{this.fileCount}}
-                file{{#if (isPlural this.fileCount)}}s{{/if}}
+                file{{#if this.isFileCountPlural}}s{{/if}}
               </span>
             {{/if}}
             {{#if @model.listing}}
@@ -450,6 +454,3 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   </template>
 }
 
-function isPlural(count: number): boolean {
-  return count !== 1;
-}

@@ -196,7 +196,6 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
         margin: 0;
         width: 100%;
         min-width: 0;
-        display: flex;
         align-items: end;
         gap: var(--boxel-sp-5xs);
       }

@@ -51,6 +51,11 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     this.searchText = value;
   }, 300);
 
+  willDestroy() {
+    super.willDestroy();
+    this.debouncedSetSearch.cancel();
+  }
+
   @action
   onSearchInput(value: string) {
     this.debouncedSetSearch(value);

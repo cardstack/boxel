@@ -201,7 +201,7 @@ export class CommandRunner {
         prUrl: prResult.prUrl,
         prTitle: prResult.prTitle,
         branchName: prResult.branchName,
-        prSummary: prResult.summary,
+        prSummary: prResult.summary ?? undefined,
         submittedBy: runAs,
       },
     });

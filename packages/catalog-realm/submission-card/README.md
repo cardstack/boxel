@@ -45,7 +45,7 @@ Linking: SubmissionCard → PrCard
 - `SubmissionCard.prCard` points across realms to the exact `PrCard` created after GitHub opens the PR.
 - `SubmissionCard.branchName` remains as display/debug metadata.
 - `PrCard.branchName` remains for display and webhook-event correlation.
-- Submission card UI reads `@model.prCard` directly`.
+- Submission card UI reads `@model.prCard` directly.
 
 ---
 Key Files

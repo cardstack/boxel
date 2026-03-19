@@ -78,6 +78,10 @@ export class FileContentField extends FieldDef {
       return contents ? contents.split('\n').length : 0;
     }
 
+    get isLineCountPlural() {
+      return this.lineCount !== 1;
+    }
+
     <template>
       <div class='file-embedded'>
         <div class='file-header'>
@@ -85,7 +89,7 @@ export class FileContentField extends FieldDef {
           <span class='file-name'>{{this.filename}}</span>
           {{#if this.lineCount}}
             <span class='line-badge'>{{this.lineCount}}
-              line{{#if (isPlural this.lineCount)}}s{{/if}}</span>
+              line{{#if this.isLineCountPlural}}s{{/if}}</span>
           {{/if}}
         </div>
         {{#if this.preview}}
@@ -182,6 +186,3 @@ export class SubmissionCard extends CardDef {
   @field allFileContents = containsMany(FileContentField);
 }
 
-function isPlural(count: number): boolean {
-  return count !== 1;
-}

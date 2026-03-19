@@ -17,11 +17,11 @@ interface RealmTabsSignature {
 
 export class RealmTabs extends GlimmerComponent<RealmTabsSignature> {
   <template>
-    <div class='realm-tabs' role='tablist' aria-label='Filter by realm'>
+    <div class='realm-tabs' role='group' aria-label='Filter by realm'>
       <Pill
         @kind='button'
         class='realm-pill {{if (eq @selectedRealm null) "active"}}'
-        aria-selected={{if (eq @selectedRealm null) 'true' 'false'}}
+        aria-pressed={{if (eq @selectedRealm null) 'true' 'false'}}
         {{on 'click' (fn @onChange null)}}
       >
         <:default>All Realms</:default>
@@ -30,7 +30,7 @@ export class RealmTabs extends GlimmerComponent<RealmTabsSignature> {
         <Pill
           @kind='button'
           class='realm-pill {{if (eq @selectedRealm realm.url) "active"}}'
-          aria-selected={{if (eq @selectedRealm realm.url) 'true' 'false'}}
+          aria-pressed={{if (eq @selectedRealm realm.url) 'true' 'false'}}
           title={{realm.url}}
           {{on 'click' (fn @onChange realm.url)}}
         >

@@ -19,9 +19,9 @@ export class MergeableSection extends GlimmerComponent<MergeableSectionSignature
             <CircleCheckIcon class='mergeable-icon' />
           </span>
           <div class='mergeable-content'>
-            <span class='mergeable-title'>This branch has no conflicts</span>
-            <span class='mergeable-subtitle'>Merging can be performed
-              automatically</span>
+            <span class='mergeable-title'>Ready to merge</span>
+            <span class='mergeable-subtitle'>All merge requirements have been
+              met</span>
           </div>
         </div>
       {{else}}
