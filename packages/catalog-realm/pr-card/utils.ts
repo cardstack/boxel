@@ -24,9 +24,6 @@ export type CiGroup = {
 export type ReviewState =
   | 'changes_requested'
   | 'approved'
-  | 'commented'
-  | 'dismissed'
-  | 'pending'
   | 'unknown';
 
 // ── PR State Helpers ─────────────────────────────────────────────────────
@@ -269,8 +266,6 @@ export function normalizeReviewState(
       return 'changes_requested';
     case 'approved':
       return 'approved';
-    case 'commented':
-      return 'commented';
     default:
       return 'unknown';
   }
