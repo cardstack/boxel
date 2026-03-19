@@ -1611,11 +1611,17 @@ module(basename(__filename), function () {
 
     let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
+    const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
+      '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
+      'person.gts': readFileSync(
+        join(__dirname, 'cards', 'person.gts'),
+        'utf8',
+      ),
+      'person-1.json': readJSONSync(join(__dirname, 'cards', 'person-1.json')),
+    };
 
     hooks.beforeEach(async function () {
       dir = dirSync();
-      ensureDirSync(join(dir.name, 'demo'));
-      copySync(join(__dirname, 'cards'), join(dir.name, 'demo'));
     });
 
     setupDB(hooks, {
@@ -1649,6 +1655,7 @@ module(basename(__filename), function () {
           withWorker: true,
           prerenderer,
           dir: join(dir.name, 'demo'),
+          fileSystem: demoFileSystem,
           virtualNetwork,
           realmURL: 'http://127.0.0.1:4446/demo/',
           publisher,
