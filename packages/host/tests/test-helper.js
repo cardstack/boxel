@@ -7,6 +7,7 @@ import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/hel
 import start from 'ember-exam/test-support/start';
 import { useTestWaiters } from '@cardstack/runtime-common';
 import * as TestWaiters from '@ember/test-waiters';
+// eslint-disable-next-line ember/no-test-import-export
 import './live-test';
 
 const isLiveTest = new URL(window.location.href).pathname.endsWith(

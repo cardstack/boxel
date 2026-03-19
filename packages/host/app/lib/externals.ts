@@ -6,10 +6,10 @@ import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
 import * as emberService from '@ember/service';
-import * as emberTestHelpers from '@ember/test-helpers';
-import * as universalEmberTestSupport from '@universal-ember/test-support';
+
 import * as emberTemplate from '@ember/template';
 import * as emberTemplateFactory from '@ember/template-factory';
+import * as emberTestHelpers from '@ember/test-helpers';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
@@ -136,7 +136,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
   virtualNetwork.shimModule('@ember/service', emberService);
   virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
-  virtualNetwork.shimModule('@universal-ember/test-support', universalEmberTestSupport);
+  virtualNetwork.shimModule(
+    '@universal-ember/test-support',
+    universalEmberTestSupport,
+  );
   virtualNetwork.shimModule('@ember/helper', emberHelper);
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
   virtualNetwork.shimModule(

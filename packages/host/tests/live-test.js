@@ -1,18 +1,21 @@
+import { setApplication } from '@ember/test-helpers';
+
+import * as TestWaiters from '@ember/test-waiters';
+
+import { start } from 'ember-qunit';
+import * as QUnit from 'qunit';
+import { setup } from 'qunit-dom';
+
+import { useTestWaiters } from '@cardstack/runtime-common';
+
 import Application from '@cardstack/host/app';
 import config from '@cardstack/host/config/environment';
-import * as QUnit from 'qunit';
-import { setApplication } from '@ember/test-helpers';
-import { setup } from 'qunit-dom';
-import { useTestWaiters } from '@cardstack/runtime-common';
-import * as TestWaiters from '@ember/test-waiters';
-import { start } from 'ember-qunit';
 
 const isLiveTest = new URL(window.location.href).pathname.endsWith(
   '/live-test.html',
 );
 
 if (!isLiveTest) {
-  // eslint-disable-next-line no-console
   console.warn('[live-test] Skipping initialization outside live-test.html');
 } else {
   const globalAny = /** @type {any} */ (globalThis);
@@ -27,10 +30,11 @@ if (!isLiveTest) {
     globalThis.QUnit = QUnit;
   }
 
+  const qunitAny = /** @type {any} */ (QUnit);
   const originalQUnitStart =
     globalAny.__liveTestOriginalQUnitStart || QUnit.start;
   if (globalAny.__liveTestOriginalQUnitStart) {
-    QUnit.start = originalQUnitStart;
+    qunitAny.start = originalQUnitStart;
   }
 
   QUnit.dump.maxDepth = 20;
@@ -54,7 +58,7 @@ if (!isLiveTest) {
     }
   });
 
-  async function loadRealmTests() {
+  const loadRealmTests = async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const qunitFilter = urlParams.get('filter');
     const qunitModule = urlParams.get('module');
@@ -68,9 +72,8 @@ if (!isLiveTest) {
     }
 
     const helpers = await import('@cardstack/host/tests/helpers');
-    const mockMatrix = await import(
-      '@cardstack/host/tests/helpers/mock-matrix'
-    );
+    const mockMatrix =
+      await import('@cardstack/host/tests/helpers/mock-matrix');
     const setupHelpers = await import('@cardstack/host/tests/helpers/setup');
 
     const loaderInstance = application.buildInstance({
@@ -87,15 +90,34 @@ if (!isLiveTest) {
     const realmURL =
       urlParams.get('realmURL') ?? 'http://localhost:4201/experiments/';
 
-    const testModules = (testModuleParam ?? 'sample-command-card')
-      .split(',')
-      .map((name) => name.trim())
-      .filter(Boolean)
-      .map((name) => `${realmURL}${name}`);
+    let testModuleNames;
+    if (testModuleParam) {
+      testModuleNames = testModuleParam
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean);
+    } else {
+      try {
+        const resp = await fetch(realmURL, {
+          headers: { Accept: 'application/vnd.api+json' },
+        });
+        const { data } = await resp.json();
+        testModuleNames = Object.entries(data.relationships ?? {})
+          .filter(
+            ([name, entry]) =>
+              name.endsWith('.gts') && entry.meta?.kind === 'file',
+          )
+          .map(([name]) => name.slice(0, -4));
+      } catch {
+        testModuleNames = [];
+      }
+    }
+
+    const testModules = testModuleNames.map((name) => `${realmURL}${name}`);
 
     const capturedModules = new Set();
     const originalModule = QUnit.module;
-    QUnit.module = function (...args) {
+    qunitAny.module = function (...args) {
       const [name] = args;
       if (typeof name === 'string') {
         capturedModules.add(name);
@@ -112,7 +134,7 @@ if (!isLiveTest) {
         }
       }
     } finally {
-      QUnit.module = originalModule;
+      qunitAny.module = originalModule;
       await loaderInstance.destroy();
     }
 
@@ -124,10 +146,9 @@ if (!isLiveTest) {
     if (!QUnit.config.started) {
       QUnit.start();
     }
-  }
+  };
 
   loadRealmTests().catch((error) => {
-    // eslint-disable-next-line no-console
     console.error('Failed to load realm tests', error);
     if (!QUnit.config.started) {
       QUnit.start();

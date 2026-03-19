@@ -63,15 +63,12 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
-import {
-  testRealmServerMatrixUsername,
-  setupMockMatrix,
-} from './mock-matrix';
+import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
+import { setupRenderingTest } from './setup';
 import { createJWT, testRealmSecretSeed } from './test-auth';
 import { getTestRealmRegistry } from './test-realm-registry';
-import { setupRenderingTest } from './setup';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
