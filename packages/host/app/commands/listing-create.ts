@@ -442,8 +442,15 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
     }
 
+    // Only auto-fill additional examples when the user didn't explicitly choose
+    const userExplicitlyChose = openCardIds && openCardIds.length > 0;
     const MAX_EXAMPLES = 4;
-    if (codeRef && uniqueById.size > 0 && uniqueById.size < MAX_EXAMPLES) {
+    if (
+      !userExplicitlyChose &&
+      codeRef &&
+      uniqueById.size > 0 &&
+      uniqueById.size < MAX_EXAMPLES
+    ) {
       try {
         const searchAndChoose = new SearchAndChooseCommand(this.commandContext);
         const existingIds = Array.from(uniqueById.keys());
