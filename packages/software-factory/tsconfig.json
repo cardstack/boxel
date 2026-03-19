@@ -25,14 +25,7 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "@cardstack/boxel-ui/helpers": ["../boxel-ui/addon/src/helpers"],
-      "@cardstack/boxel-ui/helpers/*": ["../boxel-ui/addon/src/helpers/*"],
-      "@cardstack/boxel-icons": ["../boxel-icons/src"],
-      "@cardstack/boxel-icons/*": ["../boxel-icons/src/icons/*"]
+      "https://cardstack.com/base/*": ["../base/*"]
     },
     "types": ["@cardstack/local-types", "node"]
   },
