@@ -1,0 +1,34 @@
+diff --git a/dist/-private/new/array.js b/dist/-private/new/array.js
+index 7711bc0009f7e51c669b133b3b91250449ea8b36..24aed6c1f0b5876b5aa244c7213f5ef6adb85fab 100644
+--- a/dist/-private/new/array.js
++++ b/dist/-private/new/array.js
+@@ -15,29 +15,7 @@ class TrackedArray {
+   }
+   constructor(arr = []) {
+     const reactive = trackedArray(arr, config);
+-    const boundFns = new WeakMap();
+-    function call(target, receiver, fn) {
+-      let existing = boundFns.get(fn);
+-      if (!existing) {
+-        existing = (...args) => {
+-          const result = fn.apply(target, args);
+-          if (result === reactive) {
+-            return receiver;
+-          }
+-          return result;
+-        };
+-        boundFns.set(fn, existing);
+-      }
+-      return existing;
+-    }
+     return new Proxy(reactive, {
+-      get(target, prop, receiver) {
+-        const value = Reflect.get(target, prop, target);
+-        if (typeof value === 'function') {
+-          return call(target, receiver, value);
+-        }
+-        return value;
+-      },
+       getPrototypeOf() {
+         return TrackedArray.prototype;
+       }
