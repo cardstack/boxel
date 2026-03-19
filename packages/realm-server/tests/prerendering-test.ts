@@ -5383,15 +5383,11 @@ module(basename(__filename), function () {
       });
 
       test(`card with ${childCount} linksToMany each with linksTo in another realm prerenders without timeout`, async function (assert) {
-        // Simulate background-tab RAF throttling: each requestAnimationFrame
-        // callback is delayed by 2 seconds. Without the fix (which uses
-        // setTimeout(0) instead of RAF in prerender context), the 20-pass
-        // stability loop would take 20 × 2s = 40s and hit our 15s timeout.
-        // With the fix, RAF is bypassed entirely and the render completes fast.
-        // Throttle RAF by 1.5s per frame. Without the fix the 20-pass
-        // stability loop would need 20 × 1.5 = 30s just for the loop,
-        // pushing the total well past the 45s timeout below. With the
-        // fix the loop bypasses RAF entirely so total time stays low.
+        // Throttle RAF by 1.5s per frame to simulate background-tab behavior.
+        // Without the fix the 20-pass stability loop would need 20 × 1.5 = 30s
+        // just for the loop, pushing the total well past the 30s assertion
+        // threshold below. With the fix the loop bypasses RAF entirely so
+        // total time stays low.
         let rafPatch = installThrottledRAFPatch(1_500);
         try {
           let cardURL = `${parentRealmURL}parent`;
