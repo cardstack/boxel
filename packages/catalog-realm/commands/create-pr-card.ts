@@ -5,6 +5,7 @@ import {
   contains,
   type Theme,
 } from 'https://cardstack.com/base/card-api';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
@@ -19,6 +20,7 @@ class CreatePrCardInput extends CardDef {
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
   @field branchName = contains(StringField);
+  @field prSummary = contains(MarkdownField);
   @field submittedBy = contains(StringField);
 }
 
@@ -33,7 +35,15 @@ export default class CreatePrCardCommand extends Command<
   }
 
   protected async run(input: CreatePrCardInput): Promise<PrCard> {
-    let { realm, prNumber, prUrl, prTitle, branchName, submittedBy } = input;
+    let {
+      realm,
+      prNumber,
+      prUrl,
+      prTitle,
+      branchName,
+      prSummary,
+      submittedBy,
+    } = input;
     let catalogRealmUrl = new RealmPaths(new URL('..', import.meta.url)).url;
 
     let card = new PrCard({
@@ -41,6 +51,7 @@ export default class CreatePrCardCommand extends Command<
       prUrl,
       prTitle,
       branchName,
+      prSummary,
       submittedBy,
       submittedAt: new Date(),
     });
@@ -55,11 +66,11 @@ export default class CreatePrCardCommand extends Command<
     }
 
     // Save the PR card to the submission realm
-    await new SaveCardCommand(this.commandContext).execute({
+    let savedCard = (await new SaveCardCommand(this.commandContext).execute({
       card,
       realm,
-    });
+    })) as PrCard;
 
-    return card;
+    return savedCard;
   }
 }
