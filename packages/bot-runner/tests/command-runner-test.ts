@@ -64,7 +64,12 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(dbAdapter, queuePublisher, githubClient);
+    let commandRunner = new CommandRunner(
+      '@submissionbot:localhost',
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+    );
     let result = await commandRunner.maybeEnqueueCommand(
       '@alice:localhost',
       {
@@ -101,23 +106,40 @@ module('command runner', () => {
     let publishedJobs: unknown[] = [];
     let submissionCardUrl =
       'http://localhost:4201/submissions/SubmissionCard/abc-123';
+    let prCardUrl = 'http://localhost:4201/test/PrCard/pr-1';
     let queuePublisher: QueuePublisher = {
       publish: async (job: unknown) => {
         publishedJobs.push(job);
+        if (publishedJobs.length === 1) {
+          return {
+            id: 1,
+            done: Promise.resolve({
+              status: 'ready',
+              cardResultString: JSON.stringify({
+                data: {
+                  id: submissionCardUrl,
+                  attributes: {
+                    allFileContents: [
+                      {
+                        filename: 'catalog/MyListing/listing.json',
+                        contents: '{"data":{"type":"card"}}',
+                      },
+                    ],
+                  },
+                },
+              }),
+            }),
+          } as any;
+        }
         return {
-          id: 1,
+          id: 2,
           done: Promise.resolve({
             status: 'ready',
             cardResultString: JSON.stringify({
               data: {
-                id: submissionCardUrl,
+                id: prCardUrl,
                 attributes: {
-                  allFileContents: [
-                    {
-                      filename: 'catalog/MyListing/listing.json',
-                      contents: '{"data":{"type":"card"}}',
-                    },
-                  ],
+                  prNumber: 1,
                 },
               },
             }),
@@ -180,7 +202,12 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(dbAdapter, queuePublisher, githubClient);
+    let commandRunner = new CommandRunner(
+      '@submissionbot:localhost',
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+    );
     await commandRunner.maybeEnqueueCommand(
       '@alice:localhost',
       {
@@ -196,14 +223,157 @@ module('command runner', () => {
       'bot-registration-2',
     );
 
-    assert.strictEqual(publishedJobs.length, 1, 'enqueues run-command job');
+    assert.strictEqual(
+      publishedJobs.length,
+      3,
+      'enqueues create-submission, create-pr-card, and patch-card-instance jobs',
+    );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
+    assert.deepEqual(
+      (publishedJobs[1] as { args: Record<string, unknown> }).args,
+      {
+        realmURL: 'http://localhost:4201/submissions/',
+        realmUsername: '@submissionbot:localhost',
+        runAs: '@submissionbot:localhost',
+        command: '@cardstack/catalog/commands/create-pr-card/default',
+        commandInput: {
+          realm: 'http://localhost:4201/submissions/',
+          prNumber: 1,
+          prUrl: 'https://example/pr/1',
+          prTitle: 'Add My Listing Name listing',
+          branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing-name',
+          prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Submission Card: [${submissionCardUrl}](${submissionCardUrl})`,
+          submittedBy: '@alice:localhost',
+        },
+      },
+      'enqueues PR card creation in submissions realm',
+    );
+    assert.deepEqual(
+      (publishedJobs[2] as { args: Record<string, unknown> }).args,
+      {
+        realmURL: 'http://localhost:4201/test/',
+        realmUsername: '@alice:localhost',
+        runAs: '@alice:localhost',
+        command: '@cardstack/boxel-host/commands/patch-card-instance/default',
+        commandInput: {
+          cardId: submissionCardUrl,
+          patch: {
+            relationships: {
+              prCard: {
+                links: {
+                  self: prCardUrl,
+                },
+              },
+            },
+          },
+        },
+      },
+      'enqueues submission card patch in the user realm',
+    );
     let prBody = (openedPRs[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
     assert.true(
       prBody.includes(`[${submissionCardUrl}](${submissionCardUrl})`),
       'PR body includes submission card URL as markdown link',
+    );
+  });
+
+  test('does not enqueue PR card creation when PR is not opened', async (assert) => {
+    let publishedJobs: unknown[] = [];
+    let queuePublisher: QueuePublisher = {
+      publish: async (job: unknown) => {
+        publishedJobs.push(job);
+        return {
+          id: 1,
+          done: Promise.resolve({
+            status: 'ready',
+            cardResultString: JSON.stringify({
+              data: {
+                id: 'http://localhost:4201/submissions/SubmissionCard/abc-123',
+                attributes: {
+                  allFileContents: [
+                    {
+                      filename: 'catalog/MyListing/listing.json',
+                      contents: '{"data":{"type":"card"}}',
+                    },
+                  ],
+                },
+              },
+            }),
+          }),
+        } as any;
+      },
+      destroy: async () => {},
+    };
+
+    let githubClient: GitHubClient = {
+      createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
+      writeFileToBranch: async () => ({ commitSha: 'def456' }),
+      writeFilesToBranch: async () => ({ commitSha: 'def456' }),
+      openPullRequest: async () => {
+        throw new Error('A pull request already exists for this branch');
+      },
+    };
+    let commandsByRegistrationId = new Map<
+      string,
+      Record<string, PgPrimitive>[]
+    >([
+      [
+        'bot-registration-4',
+        [
+          {
+            command_filter: {
+              type: 'matrix-event',
+              event_type: 'app.boxel.bot-trigger',
+              content_type: 'pr-listing-create',
+            },
+            command: '@cardstack/catalog/commands/create-submission/default',
+          },
+        ],
+      ],
+    ]);
+    let dbAdapter = {
+      kind: 'pg',
+      isClosed: false,
+      execute: async (sql: string, opts?: ExecuteOptions) => {
+        if (sql.includes('FROM bot_commands WHERE bot_id =')) {
+          let registrationId = opts?.bind?.[0];
+          if (typeof registrationId !== 'string') {
+            return [];
+          }
+          return commandsByRegistrationId.get(registrationId) ?? [];
+        }
+        return [];
+      },
+      close: async () => {},
+      getColumnNames: async () => [],
+    } as DBAdapter;
+
+    let commandRunner = new CommandRunner(
+      '@submissionbot:localhost',
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+    );
+    await commandRunner.maybeEnqueueCommand(
+      '@alice:localhost',
+      {
+        type: 'pr-listing-create',
+        realm: 'http://localhost:4201/test/',
+        userId: '@alice:localhost',
+        input: {
+          roomId: '!abc123:localhost',
+          listingName: 'My Listing',
+        },
+      },
+      'bot-registration-4',
+    );
+
+    assert.strictEqual(
+      publishedJobs.length,
+      1,
+      'only the submission command is enqueued when PR creation returns null',
     );
   });
 
@@ -277,7 +447,12 @@ module('command runner', () => {
       getColumnNames: async () => [],
     } as DBAdapter;
 
-    let commandRunner = new CommandRunner(dbAdapter, queuePublisher, githubClient);
+    let commandRunner = new CommandRunner(
+      '@submissionbot:localhost',
+      dbAdapter,
+      queuePublisher,
+      githubClient,
+    );
 
     await assert.rejects(
       commandRunner.maybeEnqueueCommand(

@@ -2,23 +2,23 @@
   "data": {
     "meta": {
       "adoptsFrom": {
-        "name": "ProductCatalog",
-        "module": "../product-catalog"
+        "name": "SubmissionCardPortal",
+        "module": "../submission-card/submission-card-portal"
       }
     },
     "type": "card",
     "attributes": {
       "cardInfo": {
+        "name": "Submission Card Portal",
         "notes": null,
-        "name": "Furniture Catalog",
-        "summary": "Auto-generated grid of all IKEA-inspired products.",
+        "summary": null,
         "cardThumbnailURL": null
       }
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "https://cardstack.com/base/Theme/cardstack"
+          "self": "../Theme/cardstack"
         }
       }
     }
