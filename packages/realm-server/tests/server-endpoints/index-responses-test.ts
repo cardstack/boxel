@@ -7,12 +7,11 @@ import { dirSync, type DirResult } from 'tmp';
 import {
   DEFAULT_PERMISSIONS,
   systemInitiatedPriority,
-  type QueuePublisher,
-  type QueueRunner,
+  type DBAdapter,
   type Realm,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
-import { testRealm2URL } from './helpers';
+import { testRealmURL } from './helpers';
 import {
   closeServer,
   createVirtualNetwork,
@@ -24,1148 +23,1125 @@ import {
   waitUntil,
 } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import {
-  copySync,
-  ensureDirSync,
-  writeFileSync,
-  writeJSONSync,
-} from 'fs-extra';
+import { ensureDirSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
-function writeTestCards(testRealmDir: string) {
-  let subdirectoryPath = join(testRealmDir, 'subdirectory');
-  ensureDirSync(subdirectoryPath);
-  writeJSONSync(join(subdirectoryPath, 'index.json'), {
-    data: {
-      type: 'card',
-      attributes: {
-        firstName: 'Subdirectory Index',
-      },
-      meta: {
-        adoptsFrom: {
-          module: '../person.gts',
-          name: 'Person',
-        },
-      },
-    },
-  });
+module(`server-endpoints/${basename(__filename)}`, function () {
+  module(
+    'Realm Server Endpoints (not specific to one realm)',
+    function (hooks) {
+      let request: SuperTest<Test>;
+      let dbAdapter: DBAdapter;
 
-  writeFileSync(
-    join(testRealmDir, 'isolated-card.gts'),
-    `
-      import { Component, CardDef } from 'https://cardstack.com/base/card-api';
-
-      export class IsolatedCard extends CardDef {
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            <div data-test-isolated-html>Isolated HTML</div>
-          </template>
-        };
+      function onRealmSetup(args: {
+        request: SuperTest<Test>;
+        testRealm: Realm;
+        dbAdapter: DBAdapter;
+      }) {
+        request = args.request;
+        dbAdapter = args.dbAdapter;
       }
-      `,
-  );
 
-  writeJSONSync(join(testRealmDir, 'isolated-test.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      meta: {
-        adoptsFrom: {
-          module: './isolated-card.gts',
-          name: 'IsolatedCard',
-        },
-      },
-    },
-  });
+      setupPermissionedRealmCached(hooks, {
+        realmURL: testRealmURL,
+        fileSystem: {
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './home.gts',
+                  name: 'Home',
+                },
+              },
+            },
+          },
+          'home.gts': `import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+                      export class Home extends CardDef {
+                        static isolated = class Isolated extends Component<typeof this> {
+                          <template>
+                            <p data-test-home-card>Hello, world</p>
+                          </template>
+                        };
+                      }`,
+          'person.gts': `import {
+                            contains,
+                            field,
+                            Component,
+                            CardDef,
+                          } from 'https://cardstack.com/base/card-api';
+                          import StringField from 'https://cardstack.com/base/string';
 
-  writeFileSync(
-    join(testRealmDir, 'dollar-sign-card.gts'),
-    `
-    import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+                          export class Person extends CardDef {
+                            static displayName = 'Person';
+                            @field firstName = contains(StringField);
+                            @field cardTitle = contains(StringField, {
+                              computeVia: function (this: Person) {
+                                return this.firstName;
+                              },
+                            });
+                            static isolated = class Isolated extends Component<typeof this> {
+                              <template>
+                                <h1 data-test-card><@fields.firstName /></h1>
+                              </template>
+                            };
+                          }`,
+          'subdirectory/index.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Subdirectory Index',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person.gts',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'isolated-card.gts': `
+              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
-    export class DollarSignCard extends CardDef {
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-dollar-sign>Price: $0.50 per unit</div>
-        </template>
-      };
-    }
-    `,
-  );
+              export class IsolatedCard extends CardDef {
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <div data-test-isolated-html>Isolated HTML</div>
+                  </template>
+                };
+              }
+              `,
+          'isolated-test.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './isolated-card.gts',
+                  name: 'IsolatedCard',
+                },
+              },
+            },
+          },
 
-  writeJSONSync(join(testRealmDir, 'dollar-sign-test.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      meta: {
-        adoptsFrom: {
-          module: './dollar-sign-card.gts',
-          name: 'DollarSignCard',
-        },
-      },
-    },
-  });
+          'dollar-sign-card.gts': `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
-  writeFileSync(
-    join(testRealmDir, 'head-card.gts'),
-    `
-    import { Component, CardDef } from 'https://cardstack.com/base/card-api';
-
-    export class HeadCard extends CardDef {
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-isolated-html>Private isolated HTML</div>
-        </template>
-      };
-
-      static head = class Head extends Component<typeof this> {
-        <template>
-          <meta data-test-head-html content="private-head" />
-        </template>
-      };
-    }
-    `,
-  );
-
-  writeJSONSync(join(testRealmDir, 'private-index-test.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      meta: {
-        adoptsFrom: {
-          module: './head-card.gts',
-          name: 'HeadCard',
-        },
-      },
-    },
-  });
-
-  writeFileSync(
-    join(testRealmDir, 'unsafe-head-card.gts'),
-    `
-    import { Component, CardDef } from 'https://cardstack.com/base/card-api';
-
-    export class UnsafeHeadCard extends CardDef {
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-isolated-html>Unsafe head card</div>
-        </template>
-      };
-
-      static head = class Head extends Component<typeof this> {
-        <template>
-          {{! template-lint-disable no-forbidden-elements }}
-          <title>Safe Title</title>
-          <meta name="description" content="safe description" />
-          <script>void 0</script>
-          <style>.injected-style { color: red }</style>
-        </template>
-      };
-    }
-    `,
-  );
-
-  writeJSONSync(join(testRealmDir, 'unsafe-head-test.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      meta: {
-        adoptsFrom: {
-          module: './unsafe-head-card.gts',
-          name: 'UnsafeHeadCard',
-        },
-      },
-    },
-  });
-
-  writeFileSync(
-    join(testRealmDir, 'scoped-css-card.gts'),
-    `
-    import { Component, CardDef } from 'https://cardstack.com/base/card-api';
-
-    export class ScopedCssCard extends CardDef {
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div class="scoped-css-marker" data-test-scoped-css>Scoped CSS</div>
-          <style scoped>
-            .scoped-css-marker {
-              --scoped-css-marker: 1;
+            export class DollarSignCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-dollar-sign>Price: $0.50 per unit</div>
+                </template>
+              };
             }
-          </style>
-        </template>
-      };
-    }
-    `,
-  );
+            `,
 
-  writeJSONSync(join(testRealmDir, 'scoped-css-test.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      meta: {
-        adoptsFrom: {
-          module: './scoped-css-card.gts',
-          name: 'ScopedCssCard',
-        },
-      },
-    },
-  });
+          'dollar-sign-test.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './dollar-sign-card.gts',
+                  name: 'DollarSignCard',
+                },
+              },
+            },
+          },
 
-  // Cards for testing scoped CSS from linked card instances.
-  // The parent declares linksTo with a base type, but the actual linked
-  // instance is a subclass with its own scoped CSS. This means the child's
-  // CSS is NOT reachable through the parent's static module imports — it
-  // can only be found by iterating over serialized.included resources.
-  writeFileSync(
-    join(testRealmDir, 'linked-css-base.gts'),
-    `
-    import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+          'head-card.gts': `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
-    export class LinkedCssBase extends CardDef {
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <div data-test-linked-base>Base</div>
-        </template>
-      };
-    }
-    `,
-  );
+            export class HeadCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-isolated-html>Private isolated HTML</div>
+                </template>
+              };
 
-  writeFileSync(
-    join(testRealmDir, 'linked-css-child.gts'),
-    `
-    import { Component } from 'https://cardstack.com/base/card-api';
-    import { LinkedCssBase } from './linked-css-base.gts';
-
-    export class LinkedCssChild extends LinkedCssBase {
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
-          <style scoped>
-            .linked-child-marker {
-              --linked-child-css: 1;
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  <meta data-test-head-html content="private-head" />
+                </template>
+              };
             }
-          </style>
-        </template>
-      };
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
-          <style scoped>
-            .linked-child-marker {
-              --linked-child-css: 1;
+            `,
+
+          'private-index-test.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './head-card.gts',
+                  name: 'HeadCard',
+                },
+              },
+            },
+          },
+
+          'unsafe-head-card.gts': `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class UnsafeHeadCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-isolated-html>Unsafe head card</div>
+                </template>
+              };
+
+              static head = class Head extends Component<typeof this> {
+                <template>
+                  {{! template-lint-disable no-forbidden-elements }}
+                  <title>Safe Title</title>
+                  <meta name="description" content="safe description" />
+                  <script>void 0</script>
+                  <style>.injected-style { color: red }</style>
+                </template>
+              };
             }
-          </style>
-        </template>
-      };
-    }
-    `,
-  );
+            `,
 
-  writeFileSync(
-    join(testRealmDir, 'linked-css-parent.gts'),
-    `
-    import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
-    import { LinkedCssBase } from './linked-css-base.gts';
+          'unsafe-head-test.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './unsafe-head-card.gts',
+                  name: 'UnsafeHeadCard',
+                },
+              },
+            },
+          },
 
-    export class LinkedCssParent extends CardDef {
-      @field child = linksTo(() => LinkedCssBase);
-      static isolated = class Isolated extends Component<typeof this> {
-        <template>
-          <div data-test-linked-parent>Parent</div>
-          <@fields.child @format='embedded' />
-        </template>
-      };
-    }
-    `,
-  );
+          'scoped-css-card.gts': `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
-  writeJSONSync(join(testRealmDir, 'linked-css-child-1.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      meta: {
-        adoptsFrom: {
-          module: './linked-css-child.gts',
-          name: 'LinkedCssChild',
-        },
-      },
-    },
-  });
+            export class ScopedCssCard extends CardDef {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div class="scoped-css-marker" data-test-scoped-css>Scoped CSS</div>
+                  <style scoped>
+                    .scoped-css-marker {
+                      --scoped-css-marker: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+          'scoped-css-test.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './scoped-css-card.gts',
+                  name: 'ScopedCssCard',
+                },
+              },
+            },
+          },
 
-  writeJSONSync(join(testRealmDir, 'linked-css-parent-1.json'), {
-    data: {
-      type: 'card',
-      attributes: {},
-      relationships: {
-        child: {
-          links: {
-            self: './linked-css-child-1',
+          // Cards for testing scoped CSS from linked card instances.
+          // The parent declares linksTo with a base type, but the actual linked
+          // instance is a subclass with its own scoped CSS. This means the child's
+          // CSS is NOT reachable through the parent's static module imports — it
+          // can only be found by iterating over serialized.included resources.
+
+          'linked-css-base.gts': `
+            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+
+            export class LinkedCssBase extends CardDef {
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-base>Base</div>
+                </template>
+              };
+            }
+            `,
+
+          'linked-css-child.gts': `
+            import { Component } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssChild extends LinkedCssBase {
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
+                  <style scoped>
+                    .linked-child-marker {
+                      --linked-child-css: 1;
+                    }
+                  </style>
+                </template>
+              };
+              static embedded = class Embedded extends Component<typeof this> {
+                <template>
+                  <div class="linked-child-marker" data-test-linked-child>Linked Child</div>
+                  <style scoped>
+                    .linked-child-marker {
+                      --linked-child-css: 1;
+                    }
+                  </style>
+                </template>
+              };
+            }
+            `,
+
+          'linked-css-parent.gts': `
+            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { LinkedCssBase } from './linked-css-base.gts';
+
+            export class LinkedCssParent extends CardDef {
+              @field child = linksTo(() => LinkedCssBase);
+              static isolated = class Isolated extends Component<typeof this> {
+                <template>
+                  <div data-test-linked-parent>Parent</div>
+                  <@fields.child @format='embedded' />
+                </template>
+              };
+            }
+            `,
+
+          'linked-css-child-1.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-child.gts',
+                  name: 'LinkedCssChild',
+                },
+              },
+            },
+          },
+
+          'linked-css-parent-1.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                child: {
+                  links: {
+                    self: './linked-css-child-1',
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-parent.gts',
+                  name: 'LinkedCssParent',
+                },
+              },
+            },
+          },
+
+          // Cards for testing default head template with cardInfo.theme
+          'a-test-theme.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardInfo: {
+                  cardThumbnailURL: 'https://example.com/brand-icon.png',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'Theme',
+                },
+              },
+            },
+          },
+
+          'a-brand-guide-theme.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                markUsage: {
+                  socialMediaProfileIcon: 'https://example.com/social-icon.png',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/brand-guide',
+                  name: 'default',
+                },
+              },
+            },
           },
         },
-      },
-      meta: {
-        adoptsFrom: {
-          module: './linked-css-parent.gts',
-          name: 'LinkedCssParent',
-        },
-      },
-    },
-  });
-
-  // Cards for testing default head template with cardInfo.theme
-  writeJSONSync(join(testRealmDir, 'a-test-theme.json'), {
-    data: {
-      type: 'card',
-      attributes: {
-        cardInfo: {
-          cardThumbnailURL: 'https://example.com/brand-icon.png',
-        },
-      },
-      meta: {
-        adoptsFrom: {
-          module: 'https://cardstack.com/base/card-api',
-          name: 'Theme',
-        },
-      },
-    },
-  });
-
-  writeJSONSync(join(testRealmDir, 'a-brand-guide-theme.json'), {
-    data: {
-      type: 'card',
-      attributes: {
-        markUsage: {
-          socialMediaProfileIcon: 'https://example.com/social-icon.png',
-        },
-      },
-      meta: {
-        adoptsFrom: {
-          module: 'https://cardstack.com/base/brand-guide',
-          name: 'default',
-        },
-      },
-    },
-  });
-}
-
-function setupSingleRealmTest(
-  hooks: NestedHooks,
-  mode: 'before' | 'beforeEach',
-) {
-  let context = {} as {
-    request: SuperTest<Test>;
-    dbAdapter: PgAdapter;
-  };
-  let testRealmHttpServer: Server;
-  let ownerUserId = '@mango:localhost';
-
-  setupDB(hooks, {
-    [mode]: async (
-      dbAdapter: PgAdapter,
-      publisher: QueuePublisher,
-      runner: QueueRunner,
-    ) => {
-      let dir = dirSync();
-      let testRealmDir = join(dir.name, 'realm_server_1', 'test');
-      ensureDirSync(testRealmDir);
-      copySync(join(__dirname, '..', 'cards'), testRealmDir);
-      writeTestCards(testRealmDir);
-
-      let virtualNetwork = createVirtualNetwork();
-      let result = await runTestRealmServer({
-        virtualNetwork,
-        testRealmDir,
-        realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: testRealm2URL,
-        dbAdapter,
-        publisher,
-        runner,
-        matrixURL,
         permissions: {
           '*': ['read', 'write'],
-          [ownerUserId]: DEFAULT_PERMISSIONS,
         },
+        onRealmSetup,
       });
 
-      testRealmHttpServer = result.testRealmHttpServer;
-      context.request = supertest(result.testRealmHttpServer);
-      context.dbAdapter = dbAdapter;
-    },
-  });
-
-  hooks[mode === 'beforeEach' ? 'afterEach' : 'after'](async function () {
-    await closeServer(testRealmHttpServer);
-  });
-
-  return context;
-}
-
-module(`server-endpoints/${basename(__filename)}`, function () {
-  module('Index responses (read-only)', function (hooks) {
-    let context = setupSingleRealmTest(hooks, 'before');
-
-    test('startup indexing uses system initiated queue priority', async function (assert) {
-      let [job] = (await context.dbAdapter.execute(
-        `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealm2URL.href}' ORDER BY created_at DESC LIMIT 1`,
-      )) as { priority: number }[];
-
-      assert.ok(job, 'found startup from-scratch index job for realm');
-      assert.strictEqual(
-        job.priority,
-        systemInitiatedPriority,
-        'realm startup uses system initiated priority',
-      );
-    });
-
-    test('serves isolated HTML for realm index request', async function (assert) {
-      let response = await context.request
-        .get('/test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.ok(
-        response.text.includes('data-test-home-card'),
-        'isolated HTML for index card is injected into the HTML response',
-      );
-    });
-
-    test('serves isolated HTML in index responses for card URLs', async function (assert) {
-      let response = await context.request
-        .get('/test/isolated-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.ok(
-        response.text.includes('data-test-isolated-html'),
-        'isolated HTML is injected into the HTML response',
-      );
-    });
-
-    test('HTML response does not include boxel-ready class on body', async function (assert) {
-      let response = await context.request
-        .get('/test/isolated-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.notOk(
-        response.text.includes('boxel-ready'),
-        'boxel-ready class is not present in server-rendered HTML',
-      );
-    });
-
-    test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
-      let response = await context.request
-        .get('/test/subdirectory/')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      assert.ok(
-        response.text.includes('Subdirectory Index'),
-        'isolated HTML is injected into the HTML response',
-      );
-    });
-
-    test('serves scoped CSS in index responses for card URLs', async function (assert) {
-      let response = await context.request
-        .get('/test/scoped-css-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.ok(
-        response.text.includes('data-boxel-scoped-css'),
-        'scoped CSS style tag is injected into the HTML response',
-      );
-      assert.ok(
-        response.text.includes('--scoped-css-marker: 1'),
-        'scoped CSS is included in the HTML response',
-      );
-    });
-
-    test('serves scoped CSS from linked cards in index responses', async function (assert) {
-      let response = await context.request
-        .get('/test/linked-css-parent-1')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.ok(
-        response.text.includes('data-test-linked-parent'),
-        'parent isolated HTML is in the response',
-      );
-      assert.ok(
-        response.text.includes('--linked-child-css: 1'),
-        'scoped CSS from linked card is included in the HTML response',
-      );
-    });
-
-    test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
-      let response = await context.request
-        .get('/test/unsafe-head-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      // Extract content between head markers
-      let headMatch = response.text.match(
-        /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
-      );
-      let headContent = headMatch?.[1] ?? '';
-
-      assert.ok(
-        headContent.includes('<title>'),
-        'title tag is preserved in head HTML',
-      );
-      assert.ok(
-        headContent.includes('<meta'),
-        'meta tag is preserved in head HTML',
-      );
-      assert.notOk(
-        headContent.includes('<script'),
-        'script tag is stripped from head HTML',
-      );
-      assert.notOk(
-        headContent.includes('void 0'),
-        'script content is stripped from head HTML',
-      );
-      assert.notOk(
-        headContent.includes('.injected-style'),
-        'user-injected style content is stripped from head HTML',
-      );
-    });
-
-    test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
-      let response = await context.request
-        .get('/test/dollar-sign-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.ok(
-        response.text.includes('data-test-dollar-sign'),
-        'isolated HTML with dollar signs is injected into the HTML response',
-      );
-      assert.ok(
-        response.text.includes('$0.50'),
-        'dollar sign content is preserved without regex replacement pattern corruption',
-      );
-      assert.ok(
-        response.text.includes('boxel-isolated-end'),
-        'isolated end boundary marker is present (not corrupted by $0 backreference)',
-      );
-    });
-
-    test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
-      let response = await context.request
-        .get('/test/isolated-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
-      let appleTouchIconCount = (
-        response.text.match(/rel="apple-touch-icon"/g) || []
-      ).length;
-
-      assert.strictEqual(
-        faviconCount,
-        1,
-        'exactly one favicon link is present in the HTML response',
-      );
-      assert.strictEqual(
-        appleTouchIconCount,
-        1,
-        'exactly one apple-touch-icon link is present in the HTML response',
-      );
-      assert.ok(
-        /<title[\s>]/.test(response.text),
-        'title element is present in the HTML response',
-      );
-    });
-
-    test('default icon links are injected when card has no theme', async function (assert) {
-      let response = await context.request
-        .get('/test/isolated-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let headMatch = response.text.match(
-        /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
-      );
-      let headContent = headMatch?.[1] ?? '';
-
-      assert.ok(
-        /<title[\s>]/.test(headContent),
-        'title element is preserved in head when no theme is present',
-      );
-      assert.ok(
-        headContent.includes('rel="icon"'),
-        'default favicon link is injected into head when no theme is present',
-      );
-      assert.ok(
-        headContent.includes('rel="apple-touch-icon"'),
-        'default apple-touch-icon link is injected into head when no theme is present',
-      );
-      assert.ok(
-        headContent.includes('boxel-favicon.png'),
-        'default favicon points to boxel-favicon.png',
-      );
-      assert.ok(
-        headContent.includes('boxel-webclip.png'),
-        'default apple-touch-icon points to boxel-webclip.png',
-      );
-    });
-
-    test('returns 404 for request that has malformed URI', async function (assert) {
-      let response = await context.request.get('/%c0').set('Accept', '*/*');
-      assert.strictEqual(response.status, 404, 'HTTP 404 status');
-    });
-  });
-
-  module('Index responses (mutating)', function (hooks) {
-    let context = setupSingleRealmTest(hooks, 'beforeEach');
-
-    test('does not inject head or isolated HTML when realm is not public', async function (assert) {
-      await context.dbAdapter.execute(
-        `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
-      );
-
-      let response = await context.request
-        .get('/test/private-index-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-      assert.notOk(
-        response.text.includes('data-test-head-html'),
-        'head HTML is not injected into the HTML response',
-      );
-      assert.notOk(
-        response.text.includes('data-test-isolated-html'),
-        'isolated HTML is not injected into the HTML response',
-      );
-    });
-
-    test('non-public realm includes exactly one favicon and one apple-touch-icon', async function (assert) {
-      await context.dbAdapter.execute(
-        `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
-      );
-
-      let response = await context.request
-        .get('/test/private-index-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
-      let appleTouchIconCount = (
-        response.text.match(/rel="apple-touch-icon"/g) || []
-      ).length;
-
-      assert.strictEqual(
-        faviconCount,
-        1,
-        'exactly one favicon link is present even without head injection',
-      );
-      assert.strictEqual(
-        appleTouchIconCount,
-        1,
-        'exactly one apple-touch-icon link is present even without head injection',
-      );
-      assert.ok(
-        response.text.includes('<title>Boxel</title>'),
-        'title element is present even for non-public realm',
-      );
-    });
-
-    test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
-      // Directly set head_html to contain only a favicon link (no apple-touch-icon)
-      let cardURL = `${testRealm2URL.href}isolated-test.json`;
-      await context.dbAdapter.execute(
-        `UPDATE boxel_index
-         SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
-         WHERE url = '${cardURL}'
-           AND type = 'instance'
-           AND is_deleted IS NOT TRUE`,
-      );
-
-      let response = await context.request
-        .get('/test/isolated-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let headMatch = response.text.match(
-        /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
-      );
-      let headContent = headMatch?.[1] ?? '';
-
-      assert.ok(
-        headContent.includes(
-          '<link rel="icon" href="https://example.com/custom-icon.png"',
-        ),
-        'custom favicon from head HTML is preserved',
-      );
-      assert.ok(
-        headContent.includes('rel="apple-touch-icon"'),
-        'default apple-touch-icon is injected when missing from head HTML',
-      );
-      assert.ok(
-        headContent.includes('boxel-webclip.png'),
-        'default apple-touch-icon points to boxel-webclip.png',
-      );
-
-      let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
-      let appleTouchIconCount = (
-        response.text.match(/rel="apple-touch-icon"/g) || []
-      ).length;
-      assert.strictEqual(
-        faviconCount,
-        1,
-        'exactly one favicon link (no default duplicate)',
-      );
-      assert.strictEqual(
-        appleTouchIconCount,
-        1,
-        'exactly one apple-touch-icon link',
-      );
-    });
-
-    test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
-      let cardURL = `${testRealm2URL.href}isolated-test.json`;
-      await context.dbAdapter.execute(
-        `UPDATE boxel_index
-         SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
-         WHERE url = '${cardURL}'
-           AND type = 'instance'
-           AND is_deleted IS NOT TRUE`,
-      );
-
-      let response = await context.request
-        .get('/test/isolated-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let headMatch = response.text.match(
-        /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
-      );
-      let headContent = headMatch?.[1] ?? '';
-
-      assert.ok(
-        headContent.includes(
-          '<link rel="apple-touch-icon" href="https://example.com/custom-touch.png"',
-        ),
-        'custom apple-touch-icon from head HTML is preserved',
-      );
-      assert.ok(
-        headContent.includes('rel="icon"'),
-        'default favicon is injected when missing from head HTML',
-      );
-      assert.ok(
-        headContent.includes('boxel-favicon.png'),
-        'default favicon points to boxel-favicon.png',
-      );
-
-      let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
-      let appleTouchIconCount = (
-        response.text.match(/rel="apple-touch-icon"/g) || []
-      ).length;
-      assert.strictEqual(faviconCount, 1, 'exactly one favicon link');
-      assert.strictEqual(
-        appleTouchIconCount,
-        1,
-        'exactly one apple-touch-icon link (no default duplicate)',
-      );
-    });
-
-    test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
-      // Create card-with-theme via API so it's indexed incrementally AFTER
-      // the theme card is already in boxel_index (from-scratch indexing
-      // batches writes and can't resolve cross-card linksTo references).
-      let cardWithThemeJSON = JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Themed Card',
-            cardInfo: {
-              name: null,
-              summary: null,
-              cardThumbnailURL: null,
-              notes: null,
-            },
-          },
-          relationships: {
-            'cardInfo.theme': {
-              links: {
-                self: './a-test-theme',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person.gts',
-              name: 'Person',
-            },
-          },
-        },
-      });
-
-      let writeResponse = await context.request
-        .post('/test/card-with-theme.json')
-        .set('Accept', 'application/vnd.card+source')
-        .send(cardWithThemeJSON);
-
-      assert.strictEqual(
-        writeResponse.status,
-        204,
-        'card-with-theme file write was accepted',
-      );
-
-      // Wait for the card to be indexed (head_html populated, even if empty string).
-      await waitUntil(
-        async () => {
-          let rows = (await context.dbAdapter.execute(
-            `SELECT url, head_html FROM boxel_index
-             WHERE url LIKE '%card-with-theme%'
-               AND type = 'instance'
-               AND is_deleted IS NOT TRUE
-             LIMIT 1`,
-          )) as { url: string; head_html: string | null }[];
-
-          return rows.length > 0 && rows[0].head_html != null;
-        },
-        {
-          timeout: 30000,
-          interval: 500,
-          timeoutMessage: 'Timed out waiting for card-with-theme to be indexed',
-        },
-      );
-
-      let response = await context.request
-        .get('/test/card-with-theme')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let headMatch = response.text.match(
-        /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
-      );
-      let headContent = headMatch?.[1] ?? '';
-
-      assert.ok(
-        headContent.includes(
-          '<link rel="icon" href="https://example.com/brand-icon.png"',
-        ),
-        `head HTML includes favicon link from theme. headContent=${headContent.substring(0, 500)}`,
-      );
-      assert.ok(
-        headContent.includes(
-          '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
-        ),
-        `head HTML includes apple-touch-icon link from theme`,
-      );
-
-      let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
-      let appleTouchIconCount = (
-        response.text.match(/rel="apple-touch-icon"/g) || []
-      ).length;
-      assert.strictEqual(
-        faviconCount,
-        1,
-        'exactly one favicon link in response (no duplicate from defaults)',
-      );
-      assert.strictEqual(
-        appleTouchIconCount,
-        1,
-        'exactly one apple-touch-icon link in response (no duplicate from defaults)',
-      );
-    });
-
-    test('default head template uses markUsage.socialMediaProfileIcon from BrandGuide theme', async function (assert) {
-      let cardJSON = JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'BrandGuide Themed Card',
-            cardInfo: {
-              name: null,
-              summary: null,
-              cardThumbnailURL: null,
-              notes: null,
-            },
-          },
-          relationships: {
-            'cardInfo.theme': {
-              links: {
-                self: './a-brand-guide-theme',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person.gts',
-              name: 'Person',
-            },
-          },
-        },
-      });
-
-      let writeResponse = await context.request
-        .post('/test/card-with-brand-guide-theme.json')
-        .set('Accept', 'application/vnd.card+source')
-        .send(cardJSON);
-
-      assert.strictEqual(
-        writeResponse.status,
-        204,
-        'card file write was accepted',
-      );
-
-      await waitUntil(
-        async () => {
-          let rows = (await context.dbAdapter.execute(
-            `SELECT url, head_html FROM boxel_index
-             WHERE url LIKE '%card-with-brand-guide-theme%'
-               AND type = 'instance'
-               AND is_deleted IS NOT TRUE
-             LIMIT 1`,
-          )) as { url: string; head_html: string | null }[];
-
-          return rows.length > 0 && rows[0].head_html != null;
-        },
-        {
-          timeout: 30000,
-          interval: 500,
-          timeoutMessage:
-            'Timed out waiting for card-with-brand-guide-theme to be indexed',
-        },
-      );
-
-      let response = await context.request
-        .get('/test/card-with-brand-guide-theme')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(response.status, 200, 'serves HTML response');
-
-      let headMatch = response.text.match(
-        /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
-      );
-      let headContent = headMatch?.[1] ?? '';
-
-      assert.ok(
-        headContent.includes(
-          '<link rel="icon" href="https://example.com/social-icon.png"',
-        ),
-        `head HTML includes favicon from BrandGuide markUsage.socialMediaProfileIcon. headContent=${headContent.substring(0, 500)}`,
-      );
-      assert.ok(
-        headContent.includes(
-          '<link rel="apple-touch-icon" href="https://example.com/social-icon.png"',
-        ),
-        `head HTML includes apple-touch-icon from BrandGuide markUsage.socialMediaProfileIcon`,
-      );
-
-      let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
-      let appleTouchIconCount = (
-        response.text.match(/rel="apple-touch-icon"/g) || []
-      ).length;
-      assert.strictEqual(
-        faviconCount,
-        1,
-        'exactly one favicon link in response (no duplicate from defaults)',
-      );
-      assert.strictEqual(
-        appleTouchIconCount,
-        1,
-        'exactly one apple-touch-icon link in response (no duplicate from defaults)',
-      );
-    });
-
-    test('ignores deleted index entries for head, isolated, and scoped CSS injection', async function (assert) {
-      let deleteSlugs = ['private-index-test', 'scoped-css-test'];
-
-      for (let slug of deleteSlugs) {
-        let deleteResponse = await context.request
-          .delete(`/test/${slug}`)
-          .set('Accept', 'application/vnd.card+json');
-
+      test('startup indexing uses system initiated queue priority', async function (assert) {
+        let [job] = (await dbAdapter.execute(
+          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealmURL.href}' ORDER BY created_at DESC LIMIT 1`,
+        )) as { priority: number }[];
+
+        assert.ok(job, 'found startup from-scratch index job for realm');
         assert.strictEqual(
-          deleteResponse.status,
-          204,
-          `deleted ${slug} via card API`,
+          job.priority,
+          systemInitiatedPriority,
+          'realm startup uses system initiated priority',
         );
-      }
+      });
 
-      await waitUntil(
-        async () => {
-          let realmURLNoProtocol = testRealm2URL.href.replace(
-            /^https?:\/\//,
-            '',
+      test('serves isolated HTML for realm index request', async function (assert) {
+        let response = await request.get('/test').set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-home-card'),
+          'isolated HTML for index card is injected into the HTML response',
+        );
+      });
+
+      test('serves isolated HTML in index responses for card URLs', async function (assert) {
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-isolated-html'),
+          'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('HTML response does not include boxel-ready class on body', async function (assert) {
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.notOk(
+          response.text.includes('boxel-ready'),
+          'boxel-ready class is not present in server-rendered HTML',
+        );
+      });
+
+      test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
+        let response = await request
+          .get('/test/subdirectory/')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        assert.ok(
+          response.text.includes('Subdirectory Index'),
+          'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('does not inject head or isolated HTML when realm is not public', async function (assert) {
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
+        );
+
+        let response = await request
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.notOk(
+          response.text.includes('data-test-head-html'),
+          'head HTML is not injected into the HTML response',
+        );
+        assert.notOk(
+          response.text.includes('data-test-isolated-html'),
+          'isolated HTML is not injected into the HTML response',
+        );
+      });
+
+      test('serves scoped CSS in index responses for card URLs', async function (assert) {
+        let response = await request
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-boxel-scoped-css'),
+          'scoped CSS style tag is injected into the HTML response',
+        );
+        assert.ok(
+          response.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS is included in the HTML response',
+        );
+      });
+
+      test('serves scoped CSS from linked cards in index responses', async function (assert) {
+        let response = await request
+          .get('/test/linked-css-parent-1')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-linked-parent'),
+          'parent isolated HTML is in the response',
+        );
+        assert.ok(
+          response.text.includes('--linked-child-css: 1'),
+          'scoped CSS from linked card is included in the HTML response',
+        );
+      });
+
+      test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
+        let response = await request
+          .get('/test/unsafe-head-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        // Extract content between head markers
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes('<title>'),
+          'title tag is preserved in head HTML',
+        );
+        assert.ok(
+          headContent.includes('<meta'),
+          'meta tag is preserved in head HTML',
+        );
+        assert.notOk(
+          headContent.includes('<script'),
+          'script tag is stripped from head HTML',
+        );
+        assert.notOk(
+          headContent.includes('void 0'),
+          'script content is stripped from head HTML',
+        );
+        assert.notOk(
+          headContent.includes('.injected-style'),
+          'user-injected style content is stripped from head HTML',
+        );
+      });
+
+      test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
+        let response = await request
+          .get('/test/dollar-sign-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-dollar-sign'),
+          'isolated HTML with dollar signs is injected into the HTML response',
+        );
+        assert.ok(
+          response.text.includes('$0.50'),
+          'dollar sign content is preserved without regex replacement pattern corruption',
+        );
+        assert.ok(
+          response.text.includes('boxel-isolated-end'),
+          'isolated end boundary marker is present (not corrupted by $0 backreference)',
+        );
+      });
+
+      test('ignores deleted index entries for head, isolated, and scoped CSS injection', async function (assert) {
+        let deleteSlugs = ['private-index-test', 'scoped-css-test'];
+
+        for (let slug of deleteSlugs) {
+          let deleteResponse = await request
+            .delete(`/test/${slug}`)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            deleteResponse.status,
+            204,
+            `deleted ${slug} via card API`,
           );
+        }
 
-          for (let slug of deleteSlugs) {
-            for (let table of ['boxel_index', 'boxel_index_working']) {
-              let rows = (await context.dbAdapter.execute(
-                `SELECT COUNT(*) AS count
-                 FROM ${table}
-                 WHERE type = 'instance'
-                   AND is_deleted IS NOT TRUE
-                   AND (regexp_replace(url, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%'
-                        OR regexp_replace(file_alias, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%')`,
-              )) as { count: string | number }[];
+        await waitUntil(
+          async () => {
+            let realmURLNoProtocol = testRealmURL.href.replace(
+              /^https?:\/\//,
+              '',
+            );
 
-              if (Number(rows[0]?.count ?? 0) > 0) {
-                return false;
+            for (let slug of deleteSlugs) {
+              for (let table of ['boxel_index', 'boxel_index_working']) {
+                let rows = (await dbAdapter.execute(
+                  `SELECT COUNT(*) AS count
+                   FROM ${table}
+                   WHERE type = 'instance'
+                     AND is_deleted IS NOT TRUE
+                     AND (regexp_replace(url, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%'
+                          OR regexp_replace(file_alias, '^https?://', '') LIKE '${realmURLNoProtocol}%${slug}%')`,
+                )) as { count: string | number }[];
+
+                if (Number(rows[0]?.count ?? 0) > 0) {
+                  return false;
+                }
               }
             }
-          }
 
-          return true;
-        },
-        {
-          timeout: 5000,
-          interval: 200,
-          timeoutMessage:
-            'Timed out waiting for deleted index entries to be tombstoned',
-        },
-      );
-
-      let headResponse = await context.request
-        .get('/test/private-index-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(headResponse.status, 200, 'serves HTML response');
-      assert.notOk(
-        headResponse.text.includes('data-test-head-html'),
-        'deleted head HTML is not injected into the HTML response',
-      );
-      assert.notOk(
-        headResponse.text.includes('data-test-isolated-html'),
-        'deleted isolated HTML is not injected into the HTML response',
-      );
-
-      let scopedCSSResponse = await context.request
-        .get('/test/scoped-css-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(scopedCSSResponse.status, 200, 'serves HTML response');
-      assert.notOk(
-        scopedCSSResponse.text.includes('data-boxel-scoped-css'),
-        'deleted scoped CSS is not injected into the HTML response',
-      );
-      assert.notOk(
-        scopedCSSResponse.text.includes('--scoped-css-marker: 1'),
-        'deleted scoped CSS contents are not included in the HTML response',
-      );
-      assert.notOk(
-        scopedCSSResponse.text.includes('data-test-scoped-css'),
-        'deleted isolated HTML is not injected for scoped CSS card',
-      );
-    });
-
-    test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
-      // First verify the card is indexed successfully and scoped CSS is served
-      let initialResponse = await context.request
-        .get('/test/scoped-css-test')
-        .set('Accept', 'text/html');
-
-      assert.strictEqual(
-        initialResponse.status,
-        200,
-        'initial HTML response is successful',
-      );
-      assert.ok(
-        initialResponse.text.includes('--scoped-css-marker: 1'),
-        'scoped CSS is present in initial response',
-      );
-
-      // Break the instance by making it reference a non-existent module
-      // This is more reliable than breaking the module and waiting for propagation
-      let brokenInstanceJSON = JSON.stringify({
-        data: {
-          type: 'card',
-          attributes: {},
-          meta: {
-            adoptsFrom: {
-              module: './non-existent-module.gts',
-              name: 'NonExistentCard',
-            },
+            return true;
           },
-        },
+          {
+            timeout: 5000,
+            interval: 200,
+            timeoutMessage:
+              'Timed out waiting for deleted index entries to be tombstoned',
+          },
+        );
+
+        let headResponse = await request
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(headResponse.status, 200, 'serves HTML response');
+        assert.notOk(
+          headResponse.text.includes('data-test-head-html'),
+          'deleted head HTML is not injected into the HTML response',
+        );
+        assert.notOk(
+          headResponse.text.includes('data-test-isolated-html'),
+          'deleted isolated HTML is not injected into the HTML response',
+        );
+
+        let scopedCSSResponse = await request
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          scopedCSSResponse.status,
+          200,
+          'serves HTML response',
+        );
+        assert.notOk(
+          scopedCSSResponse.text.includes('data-boxel-scoped-css'),
+          'deleted scoped CSS is not injected into the HTML response',
+        );
+        assert.notOk(
+          scopedCSSResponse.text.includes('--scoped-css-marker: 1'),
+          'deleted scoped CSS contents are not included in the HTML response',
+        );
+        assert.notOk(
+          scopedCSSResponse.text.includes('data-test-scoped-css'),
+          'deleted isolated HTML is not injected for scoped CSS card',
+        );
       });
 
-      let writeResponse = await context.request
-        .post('/test/scoped-css-test.json')
-        .set('Accept', 'application/vnd.card+source')
-        .send(brokenInstanceJSON);
+      test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
 
-      assert.strictEqual(
-        writeResponse.status,
-        204,
-        'instance file write was accepted',
-      );
+        assert.strictEqual(response.status, 200, 'serves HTML response');
 
-      // Wait for the index to reflect the error state
-      await waitUntil(
-        async () => {
-          let rows = (await context.dbAdapter.execute(
-            `SELECT has_error FROM boxel_index
-             WHERE url = '${testRealm2URL.href}scoped-css-test.json'
-               AND type = 'instance'`,
-          )) as { has_error: boolean }[];
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
 
-          return rows.length > 0 && rows[0].has_error === true;
-        },
-        {
-          timeout: 10000,
-          interval: 200,
-          timeoutMessage: 'Timed out waiting for instance to enter error state',
-        },
-      );
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link is present in the HTML response',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link is present in the HTML response',
+        );
+        assert.ok(
+          /<title[\s>]/.test(response.text),
+          'title element is present in the HTML response',
+        );
+      });
 
-      // Verify the database row has an error
-      let errorRows = (await context.dbAdapter.execute(
-        `SELECT has_error, last_known_good_deps FROM boxel_index
-         WHERE url = '${testRealm2URL.href}scoped-css-test.json'
-           AND type = 'instance'`,
-      )) as { has_error: boolean; last_known_good_deps: string[] | null }[];
+      test('default icon links are injected when card has no theme', async function (assert) {
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
 
-      assert.strictEqual(errorRows.length, 1, 'found the index entry');
-      assert.true(
-        errorRows[0].has_error,
-        'instance is in error state in the database',
-      );
-      assert.ok(
-        errorRows[0].last_known_good_deps,
-        'last_known_good_deps is preserved',
-      );
-      assert.ok(
-        errorRows[0].last_known_good_deps!.some((dep: string) =>
-          dep.includes('.glimmer-scoped.css'),
-        ),
-        'last_known_good_deps contains scoped CSS URL',
-      );
+        assert.strictEqual(response.status, 200, 'serves HTML response');
 
-      // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
-      let errorStateResponse = await context.request
-        .get('/test/scoped-css-test')
-        .set('Accept', 'text/html');
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
 
-      assert.strictEqual(
-        errorStateResponse.status,
-        200,
-        'HTML response is still successful even with errored card',
-      );
-      assert.ok(
-        errorStateResponse.text.includes('data-boxel-scoped-css'),
-        'scoped CSS style tag is still present after error (from last_known_good_deps)',
-      );
-      assert.ok(
-        errorStateResponse.text.includes('--scoped-css-marker: 1'),
-        'scoped CSS content is preserved from last_known_good_deps after card enters error state',
-      );
-    });
-  });
+        assert.ok(
+          /<title[\s>]/.test(headContent),
+          'title element is preserved in head when no theme is present',
+        );
+        assert.ok(
+          headContent.includes('rel="icon"'),
+          'default favicon link is injected into head when no theme is present',
+        );
+        assert.ok(
+          headContent.includes('rel="apple-touch-icon"'),
+          'default apple-touch-icon link is injected into head when no theme is present',
+        );
+        assert.ok(
+          headContent.includes('boxel-favicon.png'),
+          'default favicon points to boxel-favicon.png',
+        );
+        assert.ok(
+          headContent.includes('boxel-webclip.png'),
+          'default apple-touch-icon points to boxel-webclip.png',
+        );
+      });
+
+      test('non-public realm includes exactly one favicon and one apple-touch-icon', async function (assert) {
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
+        );
+
+        let response = await request
+          .get('/test/private-index-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link is present even without head injection',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link is present even without head injection',
+        );
+        assert.ok(
+          response.text.includes('<title>Boxel</title>'),
+          'title element is present even for non-public realm',
+        );
+      });
+
+      test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
+        // Directly set head_html to contain only a favicon link (no apple-touch-icon)
+        let cardURL = `${testRealmURL.href}isolated-test.json`;
+        await dbAdapter.execute(
+          `UPDATE boxel_index
+           SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/custom-icon.png"',
+          ),
+          'custom favicon from head HTML is preserved',
+        );
+        assert.ok(
+          headContent.includes('rel="apple-touch-icon"'),
+          'default apple-touch-icon is injected when missing from head HTML',
+        );
+        assert.ok(
+          headContent.includes('boxel-webclip.png'),
+          'default apple-touch-icon points to boxel-webclip.png',
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link (no default duplicate)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link',
+        );
+      });
+
+      test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
+        let cardURL = `${testRealmURL.href}isolated-test.json`;
+        await dbAdapter.execute(
+          `UPDATE boxel_index
+           SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/custom-touch.png"',
+          ),
+          'custom apple-touch-icon from head HTML is preserved',
+        );
+        assert.ok(
+          headContent.includes('rel="icon"'),
+          'default favicon is injected when missing from head HTML',
+        );
+        assert.ok(
+          headContent.includes('boxel-favicon.png'),
+          'default favicon points to boxel-favicon.png',
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(faviconCount, 1, 'exactly one favicon link');
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link (no default duplicate)',
+        );
+      });
+
+      test('default head template includes favicon and apple-touch-icon from cardInfo.theme', async function (assert) {
+        // Create card-with-theme via API so it's indexed incrementally AFTER
+        // the theme card is already in boxel_index (from-scratch indexing
+        // batches writes and can't resolve cross-card linksTo references).
+        let cardWithThemeJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'Themed Card',
+              cardInfo: {
+                name: null,
+                summary: null,
+                cardThumbnailURL: null,
+                notes: null,
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: './a-test-theme',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await request
+          .post('/test/card-with-theme.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(cardWithThemeJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'card-with-theme file write was accepted',
+        );
+
+        // Wait for the card to be indexed (head_html populated, even if empty string).
+        await waitUntil(
+          async () => {
+            let rows = (await dbAdapter.execute(
+              `SELECT url, head_html FROM boxel_index
+               WHERE url LIKE '%card-with-theme%'
+                 AND type = 'instance'
+                 AND is_deleted IS NOT TRUE
+               LIMIT 1`,
+            )) as { url: string; head_html: string | null }[];
+
+            return rows.length > 0 && rows[0].head_html != null;
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for card-with-theme to be indexed',
+          },
+        );
+
+        let response = await request
+          .get('/test/card-with-theme')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/brand-icon.png"',
+          ),
+          `head HTML includes favicon link from theme. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon link from theme`,
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link in response (no duplicate from defaults)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link in response (no duplicate from defaults)',
+        );
+      });
+
+      test('default head template uses markUsage.socialMediaProfileIcon from BrandGuide theme', async function (assert) {
+        let cardJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'BrandGuide Themed Card',
+              cardInfo: {
+                name: null,
+                summary: null,
+                cardThumbnailURL: null,
+                notes: null,
+              },
+            },
+            relationships: {
+              'cardInfo.theme': {
+                links: {
+                  self: './a-brand-guide-theme',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await request
+          .post('/test/card-with-brand-guide-theme.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(cardJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'card file write was accepted',
+        );
+
+        await waitUntil(
+          async () => {
+            let rows = (await dbAdapter.execute(
+              `SELECT url, head_html FROM boxel_index
+               WHERE url LIKE '%card-with-brand-guide-theme%'
+                 AND type = 'instance'
+                 AND is_deleted IS NOT TRUE
+               LIMIT 1`,
+            )) as { url: string; head_html: string | null }[];
+
+            return rows.length > 0 && rows[0].head_html != null;
+          },
+          {
+            timeout: 30000,
+            interval: 500,
+            timeoutMessage:
+              'Timed out waiting for card-with-brand-guide-theme to be indexed',
+          },
+        );
+
+        let response = await request
+          .get('/test/card-with-brand-guide-theme')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/social-icon.png"',
+          ),
+          `head HTML includes favicon from BrandGuide markUsage.socialMediaProfileIcon. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/social-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon from BrandGuide markUsage.socialMediaProfileIcon`,
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link in response (no duplicate from defaults)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link in response (no duplicate from defaults)',
+        );
+      });
+
+      test('returns 404 for request that has malformed URI', async function (assert) {
+        let response = await request.get('/%c0').set('Accept', '*/*');
+        assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      });
+
+      test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
+        // First verify the card is indexed successfully and scoped CSS is served
+        let initialResponse = await request
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          initialResponse.status,
+          200,
+          'initial HTML response is successful',
+        );
+        assert.ok(
+          initialResponse.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS is present in initial response',
+        );
+
+        // Break the instance by making it reference a non-existent module
+        // This is more reliable than breaking the module and waiting for propagation
+        let brokenInstanceJSON = JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: './non-existent-module.gts',
+                name: 'NonExistentCard',
+              },
+            },
+          },
+        });
+
+        let writeResponse = await request
+          .post('/test/scoped-css-test.json')
+          .set('Accept', 'application/vnd.card+source')
+          .send(brokenInstanceJSON);
+
+        assert.strictEqual(
+          writeResponse.status,
+          204,
+          'instance file write was accepted',
+        );
+
+        // Wait for the index to reflect the error state
+        await waitUntil(
+          async () => {
+            let rows = (await dbAdapter.execute(
+              `SELECT has_error FROM boxel_index
+               WHERE url = '${testRealmURL.href}scoped-css-test.json'
+                 AND type = 'instance'`,
+            )) as { has_error: boolean }[];
+
+            return rows.length > 0 && rows[0].has_error === true;
+          },
+          {
+            timeout: 10000,
+            interval: 200,
+            timeoutMessage:
+              'Timed out waiting for instance to enter error state',
+          },
+        );
+
+        // Verify the database row has an error
+        let errorRows = (await dbAdapter.execute(
+          `SELECT has_error, last_known_good_deps FROM boxel_index
+           WHERE url = '${testRealmURL.href}scoped-css-test.json'
+             AND type = 'instance'`,
+        )) as { has_error: boolean; last_known_good_deps: string[] | null }[];
+
+        assert.strictEqual(errorRows.length, 1, 'found the index entry');
+        assert.true(
+          errorRows[0].has_error,
+          'instance is in error state in the database',
+        );
+        assert.ok(
+          errorRows[0].last_known_good_deps,
+          'last_known_good_deps is preserved',
+        );
+        assert.ok(
+          errorRows[0].last_known_good_deps!.some((dep: string) =>
+            dep.includes('.glimmer-scoped.css'),
+          ),
+          'last_known_good_deps contains scoped CSS URL',
+        );
+
+        // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
+        let errorStateResponse = await request
+          .get('/test/scoped-css-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(
+          errorStateResponse.status,
+          200,
+          'HTML response is still successful even with errored card',
+        );
+        assert.ok(
+          errorStateResponse.text.includes('data-boxel-scoped-css'),
+          'scoped CSS style tag is still present after error (from last_known_good_deps)',
+        );
+        assert.ok(
+          errorStateResponse.text.includes('--scoped-css-marker: 1'),
+          'scoped CSS content is preserved from last_known_good_deps after card enters error state',
+        );
+      });
+    },
+  );
 
   module('Published realm index responses', function (hooks) {
     // Use a URL with a path segment. Server-level routes are now namespaced
@@ -1190,7 +1166,6 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       },
       published: true,
       onRealmSetup,
-      mode: 'before',
     });
 
     hooks.beforeEach(async function () {
@@ -1250,18 +1225,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       hooks.beforeEach(function () {
         dir = dirSync();
       });
-
       setupDB(hooks, {
         beforeEach: async (_dbAdapter, _publisher, _runner) => {
           dbAdapter = _dbAdapter;
           let virtualNetwork = createVirtualNetwork();
           let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
           ensureDirSync(testRealmDir);
-          copySync(join(__dirname, '..', 'cards'), testRealmDir);
-
           ({ testRealmHttpServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
+            fileSystem: {},
             realmsRootPath: join(dir.name, 'realm_server_theme'),
             realmURL: new URL('http://127.0.0.1:4444/test/'),
             dbAdapter: _dbAdapter,

@@ -4,7 +4,6 @@ import { JsonField } from 'https://cardstack.com/base/commands/search-card-resul
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import { GithubEventCard } from '../github-event/github-event';
-import CreatePrCardCommand from './create-pr-card';
 
 class ProcessGithubEventInput extends CardDef {
   @field eventType = contains(StringField); // from command_filter
@@ -31,21 +30,6 @@ export default class ProcessGithubEventCommand extends Command<
       eventType,
       payload,
     });
-
-    // When a PR is opened, create the PR card first
-    if (eventType === 'pull_request' && payload?.action === 'opened') {
-      let pr = payload.pull_request;
-      if (pr) {
-        await new CreatePrCardCommand(this.commandContext).execute({
-          realm,
-          prNumber: pr.number,
-          prUrl: pr.html_url,
-          prTitle: pr.title,
-          branchName: pr.head?.ref,
-          submittedBy: pr.user?.login,
-        });
-      }
-    }
 
     await new SaveCardCommand(this.commandContext).execute({
       card,

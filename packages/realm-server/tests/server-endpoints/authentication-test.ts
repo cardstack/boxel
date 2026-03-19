@@ -1,21 +1,14 @@
 import { module, test } from 'qunit';
-import { basename, join } from 'path';
+import { basename } from 'path';
 import type { Test, SuperTest } from 'supertest';
-import supertest from 'supertest';
-import { dirSync, type DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
 import type { Server } from 'http';
 import jwt from 'jsonwebtoken';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { RealmServerTokenClaim } from '../../utils/jwt';
 import {
-  closeServer,
-  createVirtualNetwork,
-  matrixURL,
   realmSecretSeed,
   realmServerTestMatrix,
-  runTestRealmServer,
-  setupDB,
+  setupPermissionedRealmCached,
   testRealmURL,
 } from '../helpers';
 import { createRealmServerSession } from './helpers';
@@ -25,41 +18,25 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Realm server authentication', function (hooks) {
-    let testRealmServer: Server;
     let request: SuperTest<Test>;
-    let dir: DirResult;
     let dbAdapter: PgAdapter;
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
+    function onRealmSetup(args: {
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dbAdapter: PgAdapter;
+    }) {
+      dbAdapter = args.dbAdapter;
+      request = args.request;
+    }
 
-    setupDB(hooks, {
-      beforeEach: async (_dbAdapter, publisher, runner) => {
-        dbAdapter = _dbAdapter;
-        let testRealmDir = join(dir.name, 'realm_server_5', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, '..', 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_5'),
-            realmURL: testRealmURL,
-            permissions: {
-              '@test_realm:localhost': ['read', 'realm-owner'],
-            },
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      fileSystem: {},
+      permissions: {
+        '@test_realm:localhost': ['read', 'realm-owner'],
       },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
-      },
+      realmURL: testRealmURL,
+      onRealmSetup: onRealmSetup,
     });
 
     test('authenticates user and creates session room', async function (assert) {

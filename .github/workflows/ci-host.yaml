@@ -30,6 +30,9 @@ jobs:
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       skip_catalog: true
+    concurrency:
+      group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
 
   host-test:
     name: Host Tests
@@ -44,7 +47,7 @@ jobs:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Download test web assets
@@ -115,16 +118,16 @@ jobs:
 
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: host-test-report-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Print realm server logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: cat /tmp/server.log
       - name: Extract worker and prerender logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           grep -E '^\[start:worker-development' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
@@ -133,56 +136,56 @@ jobs:
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload start:development log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: start-development-log-${{ matrix.shardIndex }}
           path: /tmp/start-development.log
           retention-days: 30
       - name: Upload test-realms log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: test-realms-log-${{ matrix.shardIndex }}
           path: /tmp/test-realms.log
           retention-days: 30
       - name: Upload testem log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: testem-log-${{ matrix.shardIndex }}
           path: junit/host-testem.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
@@ -190,12 +193,15 @@ jobs:
 
   host-percy-finalize:
     name: Finalise Percy
-    if: always()
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: host-percy-finalize-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Finalise Percy
@@ -207,12 +213,15 @@ jobs:
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
-    if: always()
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: host-merge-reports-and-publish-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Download JUnit reports from GitHub Actions Artifacts
@@ -234,7 +243,7 @@ jobs:
 
       - name: Upload merged report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: host-test-report-merged
           path: host.xml
@@ -242,7 +251,7 @@ jobs:
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           junit_files: host.xml
           check_name: Host Test Results

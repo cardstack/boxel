@@ -20,7 +20,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
         }
       }
     }
