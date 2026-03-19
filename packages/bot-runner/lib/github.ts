@@ -1,5 +1,5 @@
 const GITHUB_API_BASE = 'https://api.github.com';
-const GITHUB_TEAM_REVIEWERS = ['ecosystem-team', 'boxel-developers'];
+const GITHUB_TEAM_REVIEWERS = ['ecosystem-team'];
 
 export interface OpenPullRequestParams {
   owner: string;
