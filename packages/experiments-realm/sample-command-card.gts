@@ -55,56 +55,58 @@ class CreateCardButton extends GlimmerComponent {
   </template>
 }
 
-module('Experiments | SampleCommandCard', function (hooks) {
-  setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
-  setupOnSave(hooks);
-  setupRealmCacheTeardown(hooks);
-  setupCardLogs(hooks, async () =>
-    (getService('loader-service') as any).loader.import(
-      `${baseRealm.url}card-api`,
-    ),
-  );
+export function runTests() {
+  module('Experiments | SampleCommandCard', function (hooks) {
+    setupRenderingTest(hooks);
+    setupLocalIndexing(hooks);
+    setupOnSave(hooks);
+    setupRealmCacheTeardown(hooks);
+    setupCardLogs(hooks, async () =>
+      (getService('loader-service') as any).loader.import(
+        `${baseRealm.url}card-api`,
+      ),
+    );
 
-  let mockMatrixUtils = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [testRealmURL],
-    autostart: true,
-  });
-
-  let testRealmAdapter: TestRealmAdapter;
-
-  hooks.beforeEach(async function () {
-    ({ adapter: testRealmAdapter } = await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
-        mockMatrixUtils,
-        contents: {
-          'sample-command-card.gts': { SampleCommandCard },
-          '.realm.json': '{ "name": "Sample Realm" }',
-        },
-      }),
-    ));
-  });
-
-  test('clicking Create Card writes a new card to the realm', async function (this: TestContextWithSave, assert) {
-    assert.expect(3);
-
-    let savedUrl: URL | undefined;
-    this.onSave((url, doc) => {
-      savedUrl = url;
-      assert.strictEqual(
-        (doc as any).data.attributes.title,
-        'Hello from live-test',
-        'saved doc has correct title',
-      );
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
     });
 
-    await render(<template><CreateCardButton /></template>);
-    await click('button');
+    let testRealmAdapter: TestRealmAdapter;
 
-    assert.ok(savedUrl, 'card was saved to realm');
-    let relativePath = `${savedUrl!.href.substring(testRealmURL.length)}.json`;
-    let file = await testRealmAdapter.openFile(relativePath);
-    assert.ok(file, 'card JSON file exists in the realm adapter');
+    hooks.beforeEach(async function () {
+      ({ adapter: testRealmAdapter } = await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'sample-command-card.gts': { SampleCommandCard },
+            '.realm.json': '{ "name": "Sample Realm" }',
+          },
+        }),
+      ));
+    });
+
+    test('clicking Create Card writes a new card to the realm', async function (this: TestContextWithSave, assert) {
+      assert.expect(3);
+
+      let savedUrl: URL | undefined;
+      this.onSave((url, doc) => {
+        savedUrl = url;
+        assert.strictEqual(
+          (doc as any).data.attributes.title,
+          'Hello from live-test',
+          'saved doc has correct title',
+        );
+      });
+
+      await render(<template><CreateCardButton /></template>);
+      await click('button');
+
+      assert.ok(savedUrl, 'card was saved to realm');
+      let relativePath = `${savedUrl!.href.substring(testRealmURL.length)}.json`;
+      let file = await testRealmAdapter.openFile(relativePath);
+      assert.ok(file, 'card JSON file exists in the realm adapter');
+    });
   });
-});
+}
