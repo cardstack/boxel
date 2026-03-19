@@ -9,21 +9,8 @@
 
 if (process.env.BOXEL_ENVIRONMENT) {
   try {
-    type UndiciModule = {
-      Agent: new (opts: {
-        connect: {
-          lookup: (
-            hostname: string,
-            options: any,
-            cb: (...args: any[]) => void,
-          ) => void;
-        };
-      }) => unknown;
-      setGlobalDispatcher: (dispatcher: unknown) => void;
-    };
-
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const undici = require('undici') as UndiciModule;
+    const undici = require('undici') as typeof import('undici');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const dns = require('dns');
 

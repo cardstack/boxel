@@ -196,8 +196,9 @@ export class RenderRunner {
         return;
       };
 
+      // please leave the auth token in the debug log so that we can debug timed out prerenders
       log.debug(
-        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
+        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
       );
 
       // We need to render the isolated HTML view first, as the template will pull linked fields.

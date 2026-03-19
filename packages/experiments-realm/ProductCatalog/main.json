@@ -18,7 +18,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "@cardstack/catalog/Theme/cardstack"
+          "self": "https://cardstack.com/base/Theme/cardstack"
         }
       }
     }
