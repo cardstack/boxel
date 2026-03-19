@@ -45,6 +45,7 @@ import {
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -730,7 +731,11 @@ export default class Room extends Component<Signature> {
       return this.matrixService.fileAPI.createFileDef({
         sourceUrl: url,
         name,
-        contentType: name ? inferContentType(name) : undefined,
+        contentType: url.endsWith('.json')
+          ? SupportedMimeType.CardJson
+          : name
+            ? inferContentType(name)
+            : undefined,
       });
     });
 

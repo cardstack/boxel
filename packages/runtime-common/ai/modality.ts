@@ -54,7 +54,7 @@ export function modalityLabel(modality: Modality): string {
 export function isTextBasedContentType(contentType?: string): boolean {
   if (!contentType) return false;
   if (contentType.includes('text/')) return true;
-  if (contentType.includes('json')) return true; // application/json, application/vnd.card+json, etc.
+  if (contentType.includes('application/vnd.card+json')) return true;
   if (contentType.includes('application/vnd.card+source')) return true; // .gts card definitions
   return false;
 }

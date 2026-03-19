@@ -123,7 +123,7 @@ function getLog() {
 function isTextBasedContentType(contentType?: string): boolean {
   if (!contentType) return false;
   if (contentType.includes('text/')) return true;
-  if (contentType.includes('json')) return true;
+  if (contentType.includes('application/vnd.card+json')) return true;
   if (contentType.includes('application/vnd.card+source')) return true;
   return false;
 }

@@ -5354,9 +5354,9 @@ new
   });
 
   test('card JSON and card definition files are included as text content', async () => {
-    // Verifies that application/vnd.card+json, application/json, and
-    // application/vnd.card+source files have their full content sent to the
-    // bot rather than being treated as unsupported binary files (CS-10468).
+    // Verifies that application/vnd.card+json and application/vnd.card+source
+    // files have their full content sent to the bot rather than being treated
+    // as unsupported binary files (CS-10468).
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -5385,12 +5385,6 @@ new
                 name: 'person.gts',
                 contentType: 'application/vnd.card+source',
               },
-              {
-                sourceUrl: 'http://test.com/my-realm/config.json',
-                url: 'http://test.com/config-uploaded.json',
-                name: 'config.json',
-                contentType: 'application/json',
-              },
             ],
           },
         },
@@ -5408,10 +5402,6 @@ new
     mockResponses.set('http://test.com/person-uploaded.gts', {
       ok: true,
       text: 'export class Person extends CardDef { @field name = contains(StringField); }',
-    });
-    mockResponses.set('http://test.com/config-uploaded.json', {
-      ok: true,
-      text: '{"setting":"value"}',
     });
 
     let prompt = await buildPromptForModel(
@@ -5433,10 +5423,6 @@ new
     assert.ok(
       content.includes('export class Person'),
       'Card definition (application/vnd.card+source) content should be included',
-    );
-    assert.ok(
-      content.includes('"setting":"value"'),
-      'Plain JSON (application/json) content should be included',
     );
     assert.notOk(
       content.includes('Unsupported file type'),
