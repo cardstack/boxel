@@ -1,8 +1,5 @@
 import { existsSync, rmSync } from 'node:fs';
-import {
-  readSupportMetadata,
-  sharedRuntimeDir,
-} from './src/runtime-metadata.ts';
+import { readSupportMetadata, sharedRuntimeDir } from './src/runtime-metadata';
 
 function killBackgroundProcess(pid: number, signal: NodeJS.Signals) {
   try {

@@ -7,7 +7,7 @@ import {
   copySync,
 } from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import { createHash } from 'crypto';
 import type {
   LooseSingleCardDocument,
@@ -768,10 +768,12 @@ export async function createRealm({
   }
 
   for (let [filename, contents] of Object.entries(fileSystem)) {
+    let path = join(dir, filename);
+    ensureDirSync(dirname(path));
     if (typeof contents === 'string') {
-      writeFileSync(join(dir, filename), contents);
+      writeFileSync(path, contents);
     } else {
-      writeJSONSync(join(dir, filename), contents);
+      writeJSONSync(path, contents);
     }
   }
 
@@ -942,6 +944,7 @@ export async function runTestRealmServer({
     testRealmHttpServer,
     testRealmAdapter,
     matrixClient,
+    virtualNetwork,
   };
 }
 
@@ -1647,6 +1650,7 @@ export function setupPermissionedRealm(
       testRealmAdapter: RealmAdapter;
       request: SuperTest<Test>;
       dir: DirResult;
+      virtualNetwork: VirtualNetwork;
     }) => void;
     subscribeToRealmEvents?: boolean;
     mode?: 'beforeEach' | 'before';
@@ -1694,6 +1698,7 @@ export function setupPermissionedRealm(
         testRealmPath: testRealmServer.testRealmDir,
         testRealmHttpServer: testRealmServer.testRealmHttpServer,
         testRealmAdapter: testRealmServer.testRealmAdapter,
+        virtualNetwork: testRealmServer.virtualNetwork,
         request,
         dir,
       });

@@ -1,8 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "lib": ["es2020", "dom", "dom.iterable"]
-  },
-  "include": ["./tests/**/*.ts"],
-  "exclude": []
-}

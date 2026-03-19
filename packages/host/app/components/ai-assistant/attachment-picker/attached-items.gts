@@ -88,10 +88,6 @@ export default class AttachedItems extends Component<Signature> {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
   }
 
-  private getCardErrorId(cardError: CardErrorJSONAPI) {
-    return cardError.id ?? '';
-  }
-
   private getCardErrorRealm(cardError: CardErrorJSONAPI) {
     return cardError.realm ?? this.operatorModeStateService.realmURL;
   }
@@ -150,45 +146,36 @@ export default class AttachedItems extends Component<Signature> {
       {{#if @isLoaded}}
         {{#each this.itemsToDisplay as |item|}}
           {{#if (isCardErrorJSONAPI item)}}
-            {{#if (this.isAutoAttachedCard (this.getCardErrorId item))}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <CardPill
-                    @cardId={{this.getCardErrorId item}}
-                    @borderType='dashed'
-                    @onClick={{fn
-                      this.handleChooseCard
-                      (this.getCardErrorId item)
-                    }}
-                    @onRemove={{fn
-                      this.handleRemoveCard
-                      (this.getCardErrorId item)
-                    }}
-                    @urlForRealmLookup={{this.getCardErrorRealm item}}
-                    data-test-autoattached-card={{this.getCardErrorId item}}
-                  />
-                </:trigger>
+            {{#if item.id}}
+              {{#if (this.isAutoAttachedCard item.id)}}
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <CardPill
+                      @cardId={{item.id}}
+                      @borderType='dashed'
+                      @onClick={{fn this.handleChooseCard item.id}}
+                      @onRemove={{fn this.handleRemoveCard item.id}}
+                      @urlForRealmLookup={{this.getCardErrorRealm item}}
+                      data-test-autoattached-card={{item.id}}
+                    />
+                  </:trigger>
 
-                <:content>
-                  {{#if @autoAttachedCardTooltipMessage}}
-                    {{@autoAttachedCardTooltipMessage}}
-                  {{else if
-                    (this.isAutoAttachedCard (this.getCardErrorId item))
-                  }}
-                    Topmost card is shared automatically
-                  {{/if}}
-                </:content>
-              </Tooltip>
-            {{else}}
-              <CardPill
-                @cardId={{this.getCardErrorId item}}
-                @borderType='solid'
-                @onRemove={{fn
-                  this.handleRemoveCard
-                  (this.getCardErrorId item)
-                }}
-                @urlForRealmLookup={{this.getCardErrorRealm item}}
-              />
+                  <:content>
+                    {{#if @autoAttachedCardTooltipMessage}}
+                      {{@autoAttachedCardTooltipMessage}}
+                    {{else if (this.isAutoAttachedCard item.id)}}
+                      Topmost card is shared automatically
+                    {{/if}}
+                  </:content>
+                </Tooltip>
+              {{else}}
+                <CardPill
+                  @cardId={{item.id}}
+                  @borderType='solid'
+                  @onRemove={{fn this.handleRemoveCard item.id}}
+                  @urlForRealmLookup={{this.getCardErrorRealm item}}
+                />
+              {{/if}}
             {{/if}}
           {{else if (this.isCard item)}}
             {{#if (this.isAutoAttachedCard item.id)}}

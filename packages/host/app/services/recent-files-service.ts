@@ -62,6 +62,22 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
+  removeRecentFilesForRealmURL(url: string) {
+    let realmURL = new RealmPaths(new URL(url)).url;
+    let removedAny = false;
+
+    for (let index = this.recentFiles.length - 1; index >= 0; index--) {
+      if (this.recentFiles[index].realmURL.href === realmURL) {
+        this.recentFiles.splice(index, 1);
+        removedAny = true;
+      }
+    }
+
+    if (removedAny) {
+      this.persistRecentFiles();
+    }
+  }
+
   addRecentFileUrl(urlString: string) {
     if (!urlString) {
       return;

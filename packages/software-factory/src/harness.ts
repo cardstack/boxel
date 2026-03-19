@@ -20,6 +20,8 @@ import type { StdioOptions } from 'node:child_process';
 import fsExtra from 'fs-extra';
 import jwt from 'jsonwebtoken';
 import { Client as PgClient } from 'pg';
+import './setup-logger';
+import { logger } from './logger';
 
 type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 const { copySync, ensureDirSync } = fsExtra;
@@ -177,6 +179,37 @@ const FULL_INDEX_REALM_STARTUP_TIMEOUT_MS = Number(
 );
 
 let preparePgPromise: Promise<void> | undefined;
+const harnessLog = logger('software-factory:harness');
+const supportLog = logger('software-factory:harness:support');
+const templateLog = logger('software-factory:harness:template');
+const realmLog = logger('software-factory:harness:realm');
+
+function formatElapsedMs(elapsedMs: number): string {
+  return `${(elapsedMs / 1000).toFixed(1)}s`;
+}
+
+async function logTimed<T>(
+  log: ReturnType<typeof logger>,
+  label: string,
+  callback: () => Promise<T>,
+): Promise<T> {
+  let startedAt = Date.now();
+  log.debug(`${label}: starting`);
+  try {
+    let result = await callback();
+    log.debug(
+      `${label}: finished in ${formatElapsedMs(Date.now() - startedAt)}`,
+    );
+    return result;
+  } catch (error) {
+    log.warn(
+      `${label}: failed after ${formatElapsedMs(Date.now() - startedAt)}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    throw error;
+  }
+}
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -410,97 +443,116 @@ async function loadIsolatedRealmServerModule() {
 }
 
 async function ensureHostReady(): Promise<void> {
-  let response: Response;
-  try {
-    response = await fetch(DEFAULT_HOST_URL);
-  } catch (error) {
-    throw new Error(
-      `Host app is not reachable at ${DEFAULT_HOST_URL}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-  if (!response.ok) {
-    throw new Error(
-      `Host app is not ready at ${DEFAULT_HOST_URL}: status ${response.status}`,
-    );
-  }
+  await logTimed(
+    supportLog,
+    `ensureHostReady ${DEFAULT_HOST_URL}`,
+    async () => {
+      let response: Response;
+      try {
+        response = await fetch(DEFAULT_HOST_URL);
+      } catch (error) {
+        throw new Error(
+          `Host app is not reachable at ${DEFAULT_HOST_URL}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      if (!response.ok) {
+        throw new Error(
+          `Host app is not ready at ${DEFAULT_HOST_URL}: status ${response.status}`,
+        );
+      }
+    },
+  );
 }
 
 async function ensureIconsReady(): Promise<{
   stop?: () => Promise<void>;
 }> {
-  try {
-    let response = await fetch(DEFAULT_ICONS_PROBE_URL);
-    if (response.ok) {
-      return {};
-    }
-  } catch {
-    // fall through and start the local icon server
-  }
-
-  let child = spawn('pnpm', ['serve'], {
-    cwd: boxelIconsDir,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: process.env,
-  });
-
-  let logs = '';
-  child.stdout?.on('data', (chunk) => {
-    logs = `${logs}${String(chunk)}`.slice(-20_000);
-  });
-  child.stderr?.on('data', (chunk) => {
-    logs = `${logs}${String(chunk)}`.slice(-20_000);
-  });
-
-  await waitUntil(
+  return await logTimed(
+    supportLog,
+    `ensureIconsReady ${DEFAULT_ICONS_PROBE_URL}`,
     async () => {
-      if (child.exitCode !== null) {
-        throw new Error(
-          `icons server exited early with code ${child.exitCode}\n${logs}`,
-        );
-      }
       try {
         let response = await fetch(DEFAULT_ICONS_PROBE_URL);
-        return response.ok;
+        if (response.ok) {
+          supportLog.debug('icons server already available');
+          return {};
+        }
       } catch {
-        return false;
+        // fall through and start the local icon server
       }
-    },
-    {
-      timeout: 30_000,
-      interval: 250,
-      timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_PROBE_URL}\n${logs}`,
+
+      let child = spawn('pnpm', ['serve'], {
+        cwd: boxelIconsDir,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      });
+
+      let logs = '';
+      child.stdout?.on('data', (chunk) => {
+        logs = `${logs}${String(chunk)}`.slice(-20_000);
+      });
+      child.stderr?.on('data', (chunk) => {
+        logs = `${logs}${String(chunk)}`.slice(-20_000);
+      });
+
+      await waitUntil(
+        async () => {
+          if (child.exitCode !== null) {
+            throw new Error(
+              `icons server exited early with code ${child.exitCode}\n${logs}`,
+            );
+          }
+          try {
+            let response = await fetch(DEFAULT_ICONS_PROBE_URL);
+            return response.ok;
+          } catch {
+            return false;
+          }
+        },
+        {
+          timeout: 30_000,
+          interval: 250,
+          timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_PROBE_URL}\n${logs}`,
+        },
+      );
+
+      supportLog.debug('started local icons server');
+      return {
+        async stop() {
+          if (child.exitCode === null) {
+            try {
+              process.kill(-child.pid!, 'SIGTERM');
+            } catch {
+              // best effort cleanup
+            }
+          }
+        },
+      };
     },
   );
-
-  return {
-    async stop() {
-      if (child.exitCode === null) {
-        try {
-          process.kill(-child.pid!, 'SIGTERM');
-        } catch {
-          // best effort cleanup
-        }
-      }
-    },
-  };
 }
 
 async function ensurePgReady(): Promise<void> {
   if (!preparePgPromise) {
-    preparePgPromise = (async () => {
-      if (await canConnectToPg()) {
-        return;
-      }
-      runCommand('bash', [prepareTestPgScript], workspaceRoot);
-      await waitUntil(() => canConnectToPg(), {
-        timeout: 30_000,
-        interval: 250,
-        timeoutMessage: `Timed out waiting for Postgres on ${DEFAULT_PG_HOST}:${DEFAULT_PG_PORT}`,
-      });
-    })().catch((error) => {
+    preparePgPromise = logTimed(
+      supportLog,
+      `ensurePgReady ${DEFAULT_PG_HOST}:${DEFAULT_PG_PORT}`,
+      async () => {
+        if (await canConnectToPg()) {
+          supportLog.debug('postgres already available');
+          return;
+        }
+        runCommand('bash', [prepareTestPgScript], workspaceRoot);
+        await waitUntil(() => canConnectToPg(), {
+          timeout: 30_000,
+          interval: 250,
+          timeoutMessage: `Timed out waiting for Postgres on ${DEFAULT_PG_HOST}:${DEFAULT_PG_PORT}`,
+        });
+      },
+    ).catch((error) => {
       preparePgPromise = undefined;
       throw error;
     });
@@ -524,67 +576,81 @@ async function databaseExists(databaseName: string): Promise<boolean> {
 }
 
 async function dropDatabase(databaseName: string): Promise<void> {
-  let client = new PgClient(pgAdminConnectionConfig());
-  try {
-    await client.connect();
-    await client.query(
-      `SELECT pg_terminate_backend(pid)
+  await logTimed(templateLog, `dropDatabase ${databaseName}`, async () => {
+    let client = new PgClient(pgAdminConnectionConfig());
+    try {
+      await client.connect();
+      await client.query(
+        `SELECT pg_terminate_backend(pid)
        FROM pg_stat_activity
        WHERE datname = $1 AND pid <> pg_backend_pid()`,
-      [databaseName],
-    );
-    await client.query(
-      `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
-    );
-  } finally {
-    await client.end();
-  }
+        [databaseName],
+      );
+      await client.query(
+        `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+      );
+    } finally {
+      await client.end();
+    }
+  });
 }
 
 async function cloneDatabaseFromTemplate(
   templateDatabaseName: string,
   databaseName: string,
 ): Promise<void> {
-  let client = new PgClient(pgAdminConnectionConfig());
-  try {
-    await client.connect();
-    await client.query(
-      `CREATE DATABASE ${quotePgIdentifier(databaseName)} TEMPLATE ${quotePgIdentifier(
-        templateDatabaseName,
-      )}`,
-    );
-  } finally {
-    await client.end();
-  }
+  await logTimed(
+    templateLog,
+    `cloneDatabaseFromTemplate ${templateDatabaseName} -> ${databaseName}`,
+    async () => {
+      let client = new PgClient(pgAdminConnectionConfig());
+      try {
+        await client.connect();
+        await client.query(
+          `CREATE DATABASE ${quotePgIdentifier(databaseName)} TEMPLATE ${quotePgIdentifier(
+            templateDatabaseName,
+          )}`,
+        );
+      } finally {
+        await client.end();
+      }
+    },
+  );
 }
 
 async function createTemplateSnapshot(
   sourceDatabaseName: string,
   templateDatabaseName: string,
 ): Promise<void> {
-  let client = new PgClient(pgAdminConnectionConfig());
-  try {
-    await client.connect();
-    await client.query(
-      `SELECT pg_terminate_backend(pid)
+  await logTimed(
+    templateLog,
+    `createTemplateSnapshot ${sourceDatabaseName} -> ${templateDatabaseName}`,
+    async () => {
+      let client = new PgClient(pgAdminConnectionConfig());
+      try {
+        await client.connect();
+        await client.query(
+          `SELECT pg_terminate_backend(pid)
        FROM pg_stat_activity
        WHERE datname = $1 AND pid <> pg_backend_pid()`,
-      [templateDatabaseName],
-    );
-    await client.query(
-      `DROP DATABASE IF EXISTS ${quotePgIdentifier(templateDatabaseName)}`,
-    );
-    await client.query(
-      `CREATE DATABASE ${quotePgIdentifier(templateDatabaseName)} TEMPLATE ${quotePgIdentifier(
-        sourceDatabaseName,
-      )}`,
-    );
-    await client.query(
-      `ALTER DATABASE ${quotePgIdentifier(templateDatabaseName)} WITH IS_TEMPLATE true`,
-    );
-  } finally {
-    await client.end();
-  }
+          [templateDatabaseName],
+        );
+        await client.query(
+          `DROP DATABASE IF EXISTS ${quotePgIdentifier(templateDatabaseName)}`,
+        );
+        await client.query(
+          `CREATE DATABASE ${quotePgIdentifier(templateDatabaseName)} TEMPLATE ${quotePgIdentifier(
+            sourceDatabaseName,
+          )}`,
+        );
+        await client.query(
+          `ALTER DATABASE ${quotePgIdentifier(templateDatabaseName)} WITH IS_TEMPLATE true`,
+        );
+      } finally {
+        await client.end();
+      }
+    },
+  );
 }
 
 async function seedRealmPermissions(
@@ -592,32 +658,36 @@ async function seedRealmPermissions(
   realmURL: URL,
   permissions: RealmPermissions,
 ): Promise<void> {
-  let client = new PgClient(pgAdminConnectionConfig(databaseName));
-  try {
-    await client.connect();
-    await client.query('BEGIN');
+  await logTimed(
+    templateLog,
+    `seedRealmPermissions ${databaseName} ${realmURL.href}`,
+    async () => {
+      let client = new PgClient(pgAdminConnectionConfig(databaseName));
+      try {
+        await client.connect();
+        await client.query('BEGIN');
 
-    for (let [username, actions] of Object.entries(permissions)) {
-      if (!actions || actions.length === 0) {
-        await client.query(
-          `DELETE FROM realm_user_permissions
+        for (let [username, actions] of Object.entries(permissions)) {
+          if (!actions || actions.length === 0) {
+            await client.query(
+              `DELETE FROM realm_user_permissions
            WHERE realm_url = $1 AND username = $2`,
-          [realmURL.href, username],
-        );
-        continue;
-      }
+              [realmURL.href, username],
+            );
+            continue;
+          }
 
-      if (username !== '*') {
-        await client.query(
-          `INSERT INTO users (matrix_user_id)
+          if (username !== '*') {
+            await client.query(
+              `INSERT INTO users (matrix_user_id)
            VALUES ($1)
            ON CONFLICT (matrix_user_id) DO NOTHING`,
-          [username],
-        );
-      }
+              [username],
+            );
+          }
 
-      await client.query(
-        `INSERT INTO realm_user_permissions (
+          await client.query(
+            `INSERT INTO realm_user_permissions (
           realm_url,
           username,
           read,
@@ -628,131 +698,150 @@ async function seedRealmPermissions(
         SET read = EXCLUDED.read,
             write = EXCLUDED.write,
             realm_owner = EXCLUDED.realm_owner`,
-        [
-          realmURL.href,
-          username,
-          actions.includes('read'),
-          actions.includes('write'),
-          actions.includes('realm-owner'),
-        ],
-      );
-    }
+            [
+              realmURL.href,
+              username,
+              actions.includes('read'),
+              actions.includes('write'),
+              actions.includes('realm-owner'),
+            ],
+          );
+        }
 
-    await client.query('COMMIT');
-  } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {
-      // best effort cleanup
-    }
-    throw error;
-  } finally {
-    await client.end();
-  }
+        await client.query('COMMIT');
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // best effort cleanup
+        }
+        throw error;
+      } finally {
+        await client.end();
+      }
+    },
+  );
 }
 
 async function resetRealmState(
   databaseName: string,
   realmURL: URL,
 ): Promise<void> {
-  let client = new PgClient(pgAdminConnectionConfig(databaseName));
-  try {
-    await client.connect();
-    await client.query('BEGIN');
+  await logTimed(
+    templateLog,
+    `resetRealmState ${databaseName} ${realmURL.href}`,
+    async () => {
+      let client = new PgClient(pgAdminConnectionConfig(databaseName));
+      try {
+        await client.connect();
+        await client.query('BEGIN');
 
-    await client.query(`DELETE FROM modules WHERE resolved_realm_url = $1`, [
-      realmURL.href,
-    ]);
-    await client.query(`DELETE FROM boxel_index WHERE realm_url = $1`, [
-      realmURL.href,
-    ]);
-    await client.query(`DELETE FROM boxel_index_working WHERE realm_url = $1`, [
-      realmURL.href,
-    ]);
-    await client.query(`DELETE FROM realm_versions WHERE realm_url = $1`, [
-      realmURL.href,
-    ]);
-    await client.query(`DELETE FROM realm_file_meta WHERE realm_url = $1`, [
-      realmURL.href,
-    ]);
-    await client.query(
-      `DELETE FROM published_realms
+        await client.query(
+          `DELETE FROM modules WHERE resolved_realm_url = $1`,
+          [realmURL.href],
+        );
+        await client.query(`DELETE FROM boxel_index WHERE realm_url = $1`, [
+          realmURL.href,
+        ]);
+        await client.query(
+          `DELETE FROM boxel_index_working WHERE realm_url = $1`,
+          [realmURL.href],
+        );
+        await client.query(`DELETE FROM realm_versions WHERE realm_url = $1`, [
+          realmURL.href,
+        ]);
+        await client.query(`DELETE FROM realm_file_meta WHERE realm_url = $1`, [
+          realmURL.href,
+        ]);
+        await client.query(
+          `DELETE FROM published_realms
        WHERE source_realm_url = $1 OR published_realm_url = $1`,
-      [realmURL.href],
-    );
+          [realmURL.href],
+        );
 
-    await client.query('COMMIT');
-  } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch {
-      // best effort cleanup
-    }
-    throw error;
-  } finally {
-    await client.end();
-  }
+        await client.query('COMMIT');
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // best effort cleanup
+        }
+        throw error;
+      } finally {
+        await client.end();
+      }
+    },
+  );
 }
 
 async function resetMountedRealmState(
   databaseName: string,
   realmURLs: URL[],
 ): Promise<void> {
-  for (let realmURL of realmURLs) {
-    await resetRealmState(databaseName, realmURL);
-  }
-}
-
-async function waitForQueueIdle(databaseName: string): Promise<void> {
-  await waitUntil(
+  await logTimed(
+    templateLog,
+    `resetMountedRealmState ${databaseName} (${realmURLs.length} realms)`,
     async () => {
-      let client = new PgClient(pgAdminConnectionConfig(databaseName));
-      try {
-        await client.connect();
-        let {
-          rows: [{ count: unfulfilledJobs }],
-        } = await client.query<{ count: number }>(
-          `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
-        );
-        let {
-          rows: [{ count: activeReservations }],
-        } = await client.query<{ count: number }>(
-          `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
-        );
-        return unfulfilledJobs === 0 && activeReservations === 0;
-      } finally {
-        await client.end();
+      for (let realmURL of realmURLs) {
+        await resetRealmState(databaseName, realmURL);
       }
-    },
-    {
-      timeout: 30_000,
-      interval: 100,
-      timeoutMessage: `Timed out waiting for queue to become idle in ${databaseName}`,
     },
   );
 }
 
+async function waitForQueueIdle(databaseName: string): Promise<void> {
+  await logTimed(templateLog, `waitForQueueIdle ${databaseName}`, async () => {
+    await waitUntil(
+      async () => {
+        let client = new PgClient(pgAdminConnectionConfig(databaseName));
+        try {
+          await client.connect();
+          let {
+            rows: [{ count: unfulfilledJobs }],
+          } = await client.query<{ count: number }>(
+            `SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'unfulfilled'`,
+          );
+          let {
+            rows: [{ count: activeReservations }],
+          } = await client.query<{ count: number }>(
+            `SELECT COUNT(*)::int AS count FROM job_reservations WHERE completed_at IS NULL`,
+          );
+          return unfulfilledJobs === 0 && activeReservations === 0;
+        } finally {
+          await client.end();
+        }
+      },
+      {
+        timeout: 30_000,
+        interval: 100,
+        timeoutMessage: `Timed out waiting for queue to become idle in ${databaseName}`,
+      },
+    );
+  });
+}
+
+async function ensureSupportUsers(synapse: SynapseInstance): Promise<void> {
+  await logTimed(supportLog, 'ensureSupportUsers', async () => {
+    let { registerUser } = await loadSynapseModule();
+
+    await registerUser(
+      synapse,
+      DEFAULT_MATRIX_SERVER_USERNAME,
+      browserPassword(DEFAULT_MATRIX_SERVER_USERNAME),
+    );
+    await registerUser(
+      synapse,
+      DEFAULT_MATRIX_BROWSER_USERNAME,
+      browserPassword(DEFAULT_MATRIX_BROWSER_USERNAME),
+    );
+  });
+}
 function browserPassword(username: string): string {
   let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
   return createHash('sha256')
     .update(cleanUsername)
     .update(REALM_SECRET_SEED)
     .digest('hex');
-}
-
-async function ensureSupportUsers(synapse: SynapseInstance): Promise<void> {
-  let { registerUser } = await loadSynapseModule();
-
-  await registerUser(
-    synapse,
-    DEFAULT_MATRIX_SERVER_USERNAME,
-    browserPassword(DEFAULT_MATRIX_SERVER_USERNAME),
-  );
-  await registerUser(
-    synapse,
-    DEFAULT_MATRIX_BROWSER_USERNAME,
-    browserPassword(DEFAULT_MATRIX_BROWSER_USERNAME),
-  );
 }
 
 function parseFactoryContext(): FactoryTestContext | undefined {
@@ -911,6 +1000,9 @@ async function startCompatRealmProxy({
     return undefined;
   }
 
+  realmLog.debug(
+    `startCompatRealmProxy: ${listenPort} -> ${targetPort} starting`,
+  );
   let server = createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
       let incomingURL = new URL(
@@ -988,11 +1080,18 @@ async function startCompatRealmProxy({
   }
 
   if (!started) {
+    realmLog.debug(
+      `startCompatRealmProxy: ${listenPort} -> ${targetPort} skipped (port unavailable)`,
+    );
     return undefined;
   }
 
+  realmLog.debug(`startCompatRealmProxy: ${listenPort} -> ${targetPort} ready`);
   return {
     async stop() {
+      realmLog.debug(
+        `startCompatRealmProxy: ${listenPort} -> ${targetPort} stopping`,
+      );
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
@@ -1031,183 +1130,198 @@ async function startIsolatedRealmStack({
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
 }): Promise<RunningFactoryStack> {
-  let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
-  let testRealmDir = join(rootDir, 'test');
-  ensureDirSync(testRealmDir);
-  copyRealmFixture(realmDir, testRealmDir);
+  return await logTimed(
+    realmLog,
+    `startIsolatedRealmStack ${databaseName} ${realmURL.href}`,
+    async () => {
+      let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
+      let testRealmDir = join(rootDir, 'test');
+      ensureDirSync(testRealmDir);
+      copyRealmFixture(realmDir, testRealmDir);
+      realmLog.debug(
+        `startIsolatedRealmStack: copied fixture ${realmDir} -> ${testRealmDir}`,
+      );
 
-  let env = {
-    ...process.env,
-    PGHOST: DEFAULT_PG_HOST,
-    PGPORT: DEFAULT_PG_PORT,
-    PGUSER: DEFAULT_PG_USER,
-    PGDATABASE: databaseName,
-    NODE_NO_WARNINGS: '1',
-    NODE_ENV: 'test',
-    REALM_SERVER_SECRET_SEED,
-    REALM_SECRET_SEED,
-    GRAFANA_SECRET,
-    MATRIX_URL: context.matrixURL,
-    MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
-    REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
-    REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
-    LOW_CREDIT_THRESHOLD: '2000',
-    LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
-    PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
-    PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
-  };
+      let env = {
+        ...process.env,
+        PGHOST: DEFAULT_PG_HOST,
+        PGPORT: DEFAULT_PG_PORT,
+        PGUSER: DEFAULT_PG_USER,
+        PGDATABASE: databaseName,
+        NODE_NO_WARNINGS: '1',
+        NODE_ENV: 'test',
+        REALM_SERVER_SECRET_SEED,
+        REALM_SECRET_SEED,
+        GRAFANA_SECRET,
+        MATRIX_URL: context.matrixURL,
+        MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
+        REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
+        REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
+        LOW_CREDIT_THRESHOLD: '2000',
+        LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
+        PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+        PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+      };
 
-  let workerArgs = [
-    '--transpileOnly',
-    'worker-manager',
-    `--port=${WORKER_MANAGER_PORT}`,
-    `--matrixURL=${context.matrixURL}`,
-    `--prerendererUrl=${context.prerenderURL}`,
-    `--fromUrl=${realmURL.href}`,
-    `--toUrl=${realmURL.href}`,
-    '--fromUrl=https://cardstack.com/base/',
-    `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
-  ];
-  if (INCLUDE_SKILLS) {
-    workerArgs.push(
-      `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-      `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-    );
-  }
-  if (migrateDB) {
-    workerArgs.splice(5, 0, '--migrateDB');
-  }
+      let workerArgs = [
+        '--transpileOnly',
+        'worker-manager',
+        `--port=${WORKER_MANAGER_PORT}`,
+        `--matrixURL=${context.matrixURL}`,
+        `--prerendererUrl=${context.prerenderURL}`,
+        `--fromUrl=${realmURL.href}`,
+        `--toUrl=${realmURL.href}`,
+        '--fromUrl=https://cardstack.com/base/',
+        `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+      ];
+      if (INCLUDE_SKILLS) {
+        workerArgs.push(
+          `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+          `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+        );
+      }
+      if (migrateDB) {
+        workerArgs.splice(5, 0, '--migrateDB');
+      }
 
-  let workerManager = spawn('ts-node', workerArgs, {
-    cwd: realmServerDir,
-    env,
-    stdio: managedProcessStdio,
-  }) as SpawnedProcess;
-  let getWorkerLogs = captureProcessLogs(workerManager);
+      realmLog.debug(
+        `startIsolatedRealmStack: starting worker-manager for ${databaseName}`,
+      );
+      let workerManager = spawn('ts-node', workerArgs, {
+        cwd: realmServerDir,
+        env,
+        stdio: managedProcessStdio,
+      }) as SpawnedProcess;
+      let getWorkerLogs = captureProcessLogs(workerManager);
 
-  let serverArgs = [
-    '--transpileOnly',
-    'main',
-    `--port=${REALM_SERVER_PORT}`,
-    `--matrixURL=${context.matrixURL}`,
-    `--realmsRootPath=${rootDir}`,
-    `--workerManagerPort=${WORKER_MANAGER_PORT}`,
-    `--prerendererUrl=${context.prerenderURL}`,
-    `--path=${testRealmDir}`,
-    '--username=test_realm',
-    `--fromUrl=${realmURL.href}`,
-    `--toUrl=${realmURL.href}`,
-    '--username=base_realm',
-    `--path=${baseRealmDir}`,
-    '--fromUrl=https://cardstack.com/base/',
-    `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
-    '--username=software_factory_realm',
-    `--path=${sourceRealmDir}`,
-    `--fromUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
-    `--toUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
-  ];
-  if (INCLUDE_SKILLS) {
-    serverArgs.splice(
-      11,
-      0,
-      '--username=skills_realm',
-      `--path=${skillsRealmDir}`,
-      `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-      `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-    );
-  }
+      let serverArgs = [
+        '--transpileOnly',
+        'main',
+        `--port=${REALM_SERVER_PORT}`,
+        `--matrixURL=${context.matrixURL}`,
+        `--realmsRootPath=${rootDir}`,
+        `--workerManagerPort=${WORKER_MANAGER_PORT}`,
+        `--prerendererUrl=${context.prerenderURL}`,
+        `--path=${testRealmDir}`,
+        '--username=test_realm',
+        `--fromUrl=${realmURL.href}`,
+        `--toUrl=${realmURL.href}`,
+        '--username=base_realm',
+        `--path=${baseRealmDir}`,
+        '--fromUrl=https://cardstack.com/base/',
+        `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+        '--username=software_factory_realm',
+        `--path=${sourceRealmDir}`,
+        `--fromUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
+        `--toUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
+      ];
+      if (INCLUDE_SKILLS) {
+        serverArgs.splice(
+          11,
+          0,
+          '--username=skills_realm',
+          `--path=${skillsRealmDir}`,
+          `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+          `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+        );
+      }
 
-  let realmServer = spawn('ts-node', serverArgs, {
-    cwd: realmServerDir,
-    env,
-    stdio: managedProcessStdio,
-  }) as SpawnedProcess;
-  let getServerLogs = captureProcessLogs(realmServer);
-  let compatProxy = await startCompatRealmProxy({
-    listenPort: COMPAT_REALM_SERVER_PORT,
-    targetPort: REALM_SERVER_PORT,
-  });
+      realmLog.debug(`startIsolatedRealmStack: starting realm server`);
+      let realmServer = spawn('ts-node', serverArgs, {
+        cwd: realmServerDir,
+        env,
+        stdio: managedProcessStdio,
+      }) as SpawnedProcess;
+      let getServerLogs = captureProcessLogs(realmServer);
+      let compatProxy = await startCompatRealmProxy({
+        listenPort: COMPAT_REALM_SERVER_PORT,
+        targetPort: REALM_SERVER_PORT,
+      });
 
-  try {
-    await Promise.race([
-      waitForReady(
+      try {
+        await Promise.race([
+          waitForReady(
+            realmServer,
+            'realm server',
+            fullIndexOnStartup
+              ? FULL_INDEX_REALM_STARTUP_TIMEOUT_MS
+              : DEFAULT_REALM_STARTUP_TIMEOUT_MS,
+            () =>
+              [
+                'realm server logs:',
+                getServerLogs(),
+                'worker manager logs:',
+                getWorkerLogs(),
+              ]
+                .filter((entry) => entry && entry.trim().length > 0)
+                .join('\n\n'),
+          ),
+          createProcessExitPromise(workerManager, 'worker manager'),
+        ]);
+      } catch (error) {
+        try {
+          await stopManagedProcess(realmServer);
+        } catch {
+          // best effort cleanup
+        }
+        try {
+          await stopManagedProcess(workerManager);
+        } catch {
+          // best effort cleanup
+        }
+        try {
+          await compatProxy?.stop();
+        } catch {
+          // best effort cleanup
+        }
+        rmSync(rootDir, { recursive: true, force: true });
+        throw error;
+      }
+
+      return {
+        compatProxy,
         realmServer,
-        'realm server',
-        fullIndexOnStartup
-          ? FULL_INDEX_REALM_STARTUP_TIMEOUT_MS
-          : DEFAULT_REALM_STARTUP_TIMEOUT_MS,
-        () =>
-          [
-            'realm server logs:',
-            getServerLogs(),
-            'worker manager logs:',
-            getWorkerLogs(),
-          ]
-            .filter((entry) => entry && entry.trim().length > 0)
-            .join('\n\n'),
-      ),
-      createProcessExitPromise(workerManager, 'worker manager'),
-    ]);
-  } catch (error) {
-    try {
-      await stopManagedProcess(realmServer);
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      await stopManagedProcess(workerManager);
-    } catch {
-      // best effort cleanup
-    }
-    try {
-      await compatProxy?.stop();
-    } catch {
-      // best effort cleanup
-    }
-    rmSync(rootDir, { recursive: true, force: true });
-    throw error;
-  }
-
-  return {
-    compatProxy,
-    realmServer,
-    workerManager,
-    rootDir,
-  };
+        workerManager,
+        rootDir,
+      };
+    },
+  );
 }
 
 async function stopIsolatedRealmStack(
   stack: RunningFactoryStack,
 ): Promise<void> {
-  let cleanupError: unknown;
+  await logTimed(realmLog, 'stopIsolatedRealmStack', async () => {
+    let cleanupError: unknown;
 
-  try {
-    await stopManagedProcess(stack.realmServer);
-  } catch (error) {
-    cleanupError ??= error;
-  }
+    try {
+      await stopManagedProcess(stack.realmServer);
+    } catch (error) {
+      cleanupError ??= error;
+    }
 
-  try {
-    await stopManagedProcess(stack.workerManager);
-  } catch (error) {
-    cleanupError ??= error;
-  }
+    try {
+      await stopManagedProcess(stack.workerManager);
+    } catch (error) {
+      cleanupError ??= error;
+    }
 
-  try {
-    await stack.compatProxy?.stop();
-  } catch (error) {
-    cleanupError ??= error;
-  }
+    try {
+      await stack.compatProxy?.stop();
+    } catch (error) {
+      cleanupError ??= error;
+    }
 
-  try {
-    rmSync(stack.rootDir, { recursive: true, force: true });
-  } catch (error) {
-    cleanupError ??= error;
-  }
+    try {
+      rmSync(stack.rootDir, { recursive: true, force: true });
+    } catch (error) {
+      cleanupError ??= error;
+    }
 
-  if (cleanupError) {
-    throw cleanupError;
-  }
+    if (cleanupError) {
+      throw cleanupError;
+    }
+  });
 }
 
 async function buildTemplateDatabase({
@@ -1225,81 +1339,104 @@ async function buildTemplateDatabase({
   cacheKey: string;
   templateDatabaseName: string;
 }): Promise<void> {
-  let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
-  let hasMigratedTemplate = await databaseExists(DEFAULT_MIGRATED_TEMPLATE_DB);
+  await logTimed(
+    templateLog,
+    `buildTemplateDatabase ${templateDatabaseName}`,
+    async () => {
+      let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+      let hasMigratedTemplate = await databaseExists(
+        DEFAULT_MIGRATED_TEMPLATE_DB,
+      );
 
-  await dropDatabase(templateDatabaseName);
-  await dropDatabase(builderDatabaseName);
+      templateLog.debug(
+        `buildTemplateDatabase: builder=${builderDatabaseName} migratedTemplate=${hasMigratedTemplate}`,
+      );
+      await dropDatabase(templateDatabaseName);
+      await dropDatabase(builderDatabaseName);
 
-  if (hasMigratedTemplate) {
-    await cloneDatabaseFromTemplate(
-      DEFAULT_MIGRATED_TEMPLATE_DB,
-      builderDatabaseName,
-    );
-  }
+      if (hasMigratedTemplate) {
+        await cloneDatabaseFromTemplate(
+          DEFAULT_MIGRATED_TEMPLATE_DB,
+          builderDatabaseName,
+        );
+      }
 
-  await resetMountedRealmState(builderDatabaseName, [
-    realmURL,
-    LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
-  ]);
-  await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
-  await seedRealmPermissions(
-    builderDatabaseName,
-    LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
-    DEFAULT_SOURCE_REALM_PERMISSIONS,
+      await resetMountedRealmState(builderDatabaseName, [
+        realmURL,
+        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+      ]);
+      await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
+      await seedRealmPermissions(
+        builderDatabaseName,
+        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+        DEFAULT_SOURCE_REALM_PERMISSIONS,
+      );
+
+      let stack = await startIsolatedRealmStack({
+        realmDir,
+        realmURL,
+        databaseName: builderDatabaseName,
+        context,
+        migrateDB: !hasMigratedTemplate,
+        fullIndexOnStartup: true,
+      });
+
+      try {
+        await waitForQueueIdle(builderDatabaseName);
+      } finally {
+        await stopIsolatedRealmStack(stack);
+      }
+
+      await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+      await dropDatabase(builderDatabaseName);
+    },
   );
-
-  let stack = await startIsolatedRealmStack({
-    realmDir,
-    realmURL,
-    databaseName: builderDatabaseName,
-    context,
-    migrateDB: !hasMigratedTemplate,
-    fullIndexOnStartup: true,
-  });
-
-  try {
-    await waitForQueueIdle(builderDatabaseName);
-  } finally {
-    await stopIsolatedRealmStack(stack);
-  }
-
-  await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
-  await dropDatabase(builderDatabaseName);
 }
 
 export async function startFactorySupportServices(): Promise<{
   context: FactorySupportContext;
   stop(): Promise<void>;
 }> {
-  await ensurePgReady();
-  await ensureHostReady();
-  let icons = await ensureIconsReady();
-  cleanupStaleSynapseContainers();
-  let { synapseStart, synapseStop } = await loadSynapseModule();
-  let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
-  let { startPrerenderServer } = await loadIsolatedRealmServerModule();
+  return await logTimed(supportLog, 'startFactorySupportServices', async () => {
+    await ensurePgReady();
+    await ensureHostReady();
+    let icons = await ensureIconsReady();
+    cleanupStaleSynapseContainers();
+    let { synapseStart, synapseStop } = await loadSynapseModule();
+    let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
+    let { startPrerenderServer } = await loadIsolatedRealmServerModule();
 
-  let synapse = await synapseStart(
-    { suppressRegistrationSecretFile: true },
-    true,
-  );
-  await ensureSupportUsers(synapse);
-  let prerender = await startPrerenderServer();
-  let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
+    let synapseStartedAt = Date.now();
+    let synapse = await synapseStart(
+      { suppressRegistrationSecretFile: true },
+      true,
+    );
+    supportLog.debug(
+      `synapse started in ${formatElapsedMs(Date.now() - synapseStartedAt)} on port ${synapse.port}`,
+    );
+    await ensureSupportUsers(synapse);
+    let prerenderStartedAt = Date.now();
+    let prerender = await startPrerenderServer();
+    supportLog.debug(
+      `prerender started in ${formatElapsedMs(Date.now() - prerenderStartedAt)} at ${prerender.url}`,
+    );
+    let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
 
-  return {
-    context: {
-      matrixURL,
-      matrixRegistrationSecret: synapse.registrationSecret,
-      prerenderURL: prerender.url,
-    },
-    async stop() {
-      await prerender.stop();
-      await synapseStop(synapse.synapseId);
-      await icons.stop?.();
-    },
-  };
+    return {
+      context: {
+        matrixURL,
+        matrixRegistrationSecret: synapse.registrationSecret,
+        prerenderURL: prerender.url,
+      },
+      async stop() {
+        await logTimed(supportLog, 'stopFactorySupportServices', async () => {
+          await prerender.stop();
+          await synapseStop(synapse.synapseId);
+          await icons.stop?.();
+        });
+      },
+    };
+  });
 }
 
 export function getFactoryTestContext(): FactoryTestContext {
@@ -1313,232 +1450,262 @@ export function getFactoryTestContext(): FactoryTestContext {
 export async function startFactoryGlobalContext(
   options: FactoryRealmOptions = {},
 ): Promise<FactoryGlobalContextHandle> {
-  let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-  let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
-  let support = await startFactorySupportServices();
-  try {
-    let template = await ensureFactoryRealmTemplate({
-      ...options,
-      realmDir,
-      realmURL,
-      context: support.context,
-    });
+  return await logTimed(harnessLog, 'startFactoryGlobalContext', async () => {
+    let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
+    let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+    let support = await startFactorySupportServices();
+    try {
+      let template = await ensureFactoryRealmTemplate({
+        ...options,
+        realmDir,
+        realmURL,
+        context: support.context,
+      });
 
-    let context: FactoryTestContext = {
-      ...support.context,
-      cacheKey: template.cacheKey,
-      fixtureHash: template.fixtureHash,
-      realmDir,
-      realmURL: realmURL.href,
-      templateDatabaseName: template.templateDatabaseName,
-    };
+      let context: FactoryTestContext = {
+        ...support.context,
+        cacheKey: template.cacheKey,
+        fixtureHash: template.fixtureHash,
+        realmDir,
+        realmURL: realmURL.href,
+        templateDatabaseName: template.templateDatabaseName,
+      };
 
-    return {
-      context,
-      stop: support.stop,
-    };
-  } catch (error) {
-    await support.stop();
-    throw error;
-  }
+      return {
+        context,
+        stop: support.stop,
+      };
+    } catch (error) {
+      await support.stop();
+      throw error;
+    }
+  });
 }
 
 export async function ensureFactoryRealmTemplate(
   options: FactoryRealmOptions = {},
 ): Promise<FactoryRealmTemplate> {
-  let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-  let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
-  let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
-  let fixtureHash = hashRealmFixture(realmDir);
-  let cacheKey = hashString(
-    stableStringify({
-      version: CACHE_VERSION,
-      realmURL: realmURL.href,
-      permissions,
-      fixtureHash,
-      cacheSalt:
-        options.cacheSalt ?? process.env.SOFTWARE_FACTORY_CACHE_SALT ?? null,
-    }),
-  );
-  let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+  return await logTimed(harnessLog, 'ensureFactoryRealmTemplate', async () => {
+    let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
+    let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+    let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
+    let fixtureHash = hashRealmFixture(realmDir);
+    let cacheKey = hashString(
+      stableStringify({
+        version: CACHE_VERSION,
+        realmURL: realmURL.href,
+        permissions,
+        fixtureHash,
+        cacheSalt:
+          options.cacheSalt ?? process.env.SOFTWARE_FACTORY_CACHE_SALT ?? null,
+      }),
+    );
+    let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
 
-  let ownedSupport:
-    | {
-        context: FactorySupportContext;
-        stop(): Promise<void>;
+    let ownedSupport:
+      | {
+          context: FactorySupportContext;
+          stop(): Promise<void>;
+        }
+      | undefined;
+    let context = options.context;
+    if (!context) {
+      ownedSupport = await startFactorySupportServices();
+      context = ownedSupport.context;
+    }
+
+    try {
+      if (await databaseExists(templateDatabaseName)) {
+        templateLog.debug(
+          `ensureFactoryRealmTemplate: cache hit ${templateDatabaseName}`,
+        );
+        return {
+          cacheKey,
+          templateDatabaseName,
+          fixtureHash,
+          cacheHit: true,
+        };
       }
-    | undefined;
-  let context = options.context;
-  if (!context) {
-    ownedSupport = await startFactorySupportServices();
-    context = ownedSupport.context;
-  }
 
-  try {
-    if (await databaseExists(templateDatabaseName)) {
+      templateLog.debug(
+        `ensureFactoryRealmTemplate: cache miss ${templateDatabaseName}`,
+      );
+      await buildTemplateDatabase({
+        realmDir,
+        realmURL,
+        permissions,
+        context,
+        cacheKey,
+        templateDatabaseName,
+      });
+
       return {
         cacheKey,
         templateDatabaseName,
         fixtureHash,
-        cacheHit: true,
+        cacheHit: false,
       };
+    } finally {
+      await ownedSupport?.stop();
     }
-
-    await buildTemplateDatabase({
-      realmDir,
-      realmURL,
-      permissions,
-      context,
-      cacheKey,
-      templateDatabaseName,
-    });
-
-    return {
-      cacheKey,
-      templateDatabaseName,
-      fixtureHash,
-      cacheHit: false,
-    };
-  } finally {
-    await ownedSupport?.stop();
-  }
+  });
 }
 
 export async function startFactoryRealmServer(
   options: FactoryRealmOptions = {},
 ): Promise<StartedFactoryRealm> {
-  let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-  let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
-  let templateDatabaseName = options.templateDatabaseName;
-  let databaseName = runtimeDatabaseName();
+  return await logTimed(harnessLog, 'startFactoryRealmServer', async () => {
+    let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
+    let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+    let templateDatabaseName = options.templateDatabaseName;
+    let databaseName = runtimeDatabaseName();
 
-  let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
-  let context = options.context ?? parseFactoryContext();
-  if (!context) {
-    ownedGlobalContext = await startFactoryGlobalContext({
-      ...options,
-      realmDir,
-      realmURL,
-    });
-    context = ownedGlobalContext.context;
-  }
+    let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
+    let context = options.context ?? parseFactoryContext();
+    if (!context) {
+      ownedGlobalContext = await startFactoryGlobalContext({
+        ...options,
+        realmDir,
+        realmURL,
+      });
+      context = ownedGlobalContext.context;
+    }
 
-  if (!templateDatabaseName) {
-    templateDatabaseName = hasTemplateDatabaseName(context)
-      ? context.templateDatabaseName
-      : (
-          await ensureFactoryRealmTemplate({
-            ...options,
-            realmDir,
-            realmURL,
-            context,
-          })
-        ).templateDatabaseName;
-  }
+    if (!templateDatabaseName) {
+      templateDatabaseName = hasTemplateDatabaseName(context)
+        ? context.templateDatabaseName
+        : (
+            await ensureFactoryRealmTemplate({
+              ...options,
+              realmDir,
+              realmURL,
+              context,
+            })
+          ).templateDatabaseName;
+    }
 
-  let stack: RunningFactoryStack;
-  try {
-    await dropDatabase(databaseName);
-    await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
-    await resetMountedRealmState(databaseName, [
-      LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
-    ]);
-    await seedRealmPermissions(
-      databaseName,
-      LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
-      DEFAULT_SOURCE_REALM_PERMISSIONS,
+    realmLog.debug(
+      `startFactoryRealmServer: database=${databaseName} template=${templateDatabaseName}`,
     );
-
-    stack = await startIsolatedRealmStack({
-      realmDir,
-      realmURL,
-      databaseName,
-      context,
-      migrateDB: false,
-      fullIndexOnStartup: false,
-    });
-  } catch (error) {
-    let cleanupError: unknown;
-
+    let stack: RunningFactoryStack;
     try {
       await dropDatabase(databaseName);
-    } catch (cleanupFailure) {
-      cleanupError ??= cleanupFailure;
-    }
+      await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
+      await resetMountedRealmState(databaseName, [
+        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+      ]);
+      await seedRealmPermissions(
+        databaseName,
+        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+        DEFAULT_SOURCE_REALM_PERMISSIONS,
+      );
 
-    try {
-      await ownedGlobalContext?.stop();
-    } catch (cleanupFailure) {
-      cleanupError ??= cleanupFailure;
-    }
-
-    if (cleanupError) {
-      throw cleanupError;
-    }
-
-    throw error;
-  }
-
-  return {
-    realmDir,
-    realmURL,
-    databaseName,
-    cardURL(path: string) {
-      return new URL(path, realmURL).href;
-    },
-    createBearerToken(user = DEFAULT_REALM_OWNER, permissions?: RealmAction[]) {
-      return buildRealmToken(realmURL, user, permissions);
-    },
-    authorizationHeaders(user?: string, permissions?: RealmAction[]) {
-      return {
-        Authorization: `Bearer ${buildRealmToken(realmURL, user, permissions)}`,
-      };
-    },
-    async stop() {
+      stack = await startIsolatedRealmStack({
+        realmDir,
+        realmURL,
+        databaseName,
+        context,
+        migrateDB: false,
+        fullIndexOnStartup: false,
+      });
+    } catch (error) {
       let cleanupError: unknown;
 
       try {
-        await stopIsolatedRealmStack(stack);
-      } catch (error) {
-        cleanupError ??= error;
-      }
-
-      try {
         await dropDatabase(databaseName);
-      } catch (error) {
-        cleanupError ??= error;
+      } catch (cleanupFailure) {
+        cleanupError ??= cleanupFailure;
       }
 
       try {
         await ownedGlobalContext?.stop();
-      } catch (error) {
-        cleanupError ??= error;
+      } catch (cleanupFailure) {
+        cleanupError ??= cleanupFailure;
       }
 
       if (cleanupError) {
         throw cleanupError;
       }
-    },
-  };
+
+      throw error;
+    }
+
+    return {
+      realmDir,
+      realmURL,
+      databaseName,
+      cardURL(path: string) {
+        return new URL(path, realmURL).href;
+      },
+      createBearerToken(
+        user = DEFAULT_REALM_OWNER,
+        permissions?: RealmAction[],
+      ) {
+        return buildRealmToken(realmURL, user, permissions);
+      },
+      authorizationHeaders(user?: string, permissions?: RealmAction[]) {
+        return {
+          Authorization: `Bearer ${buildRealmToken(
+            realmURL,
+            user,
+            permissions,
+          )}`,
+        };
+      },
+      async stop() {
+        await logTimed(
+          realmLog,
+          `stopFactoryRealmServer ${databaseName}`,
+          async () => {
+            let cleanupError: unknown;
+
+            try {
+              await stopIsolatedRealmStack(stack);
+            } catch (error) {
+              cleanupError ??= error;
+            }
+
+            try {
+              await dropDatabase(databaseName);
+            } catch (error) {
+              cleanupError ??= error;
+            }
+
+            try {
+              await ownedGlobalContext?.stop();
+            } catch (error) {
+              cleanupError ??= error;
+            }
+
+            if (cleanupError) {
+              throw cleanupError;
+            }
+          },
+        );
+      },
+    };
+  });
 }
 
 export async function fetchRealmCardJson(
   path: string,
   options: FactoryRealmOptions = {},
 ) {
-  let runtime = await startFactoryRealmServer(options);
-  try {
-    let response = await fetch(runtime.cardURL(path), {
-      headers: {
-        Accept: 'application/vnd.card+json',
-      },
-    });
-    return {
-      status: response.status,
-      body: await response.text(),
-      url: response.url,
-    };
-  } finally {
-    await runtime.stop();
-  }
+  return await logTimed(harnessLog, `fetchRealmCardJson ${path}`, async () => {
+    let runtime = await startFactoryRealmServer(options);
+    try {
+      let response = await fetch(runtime.cardURL(path), {
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      });
+      return {
+        status: response.status,
+        body: await response.text(),
+        url: response.url,
+      };
+    } finally {
+      await runtime.stop();
+    }
+  });
 }
