@@ -158,7 +158,7 @@ if (port != null) {
   if (eventSink) {
     let getPendingJobs = async (): Promise<PendingJob[]> => {
       let rows = (await query([
-        `SELECT j.id, j.job_type, j.args, j.priority, j.created_at`,
+        `SELECT j.id, j.job_type, j.args, j.priority, EXTRACT(EPOCH FROM j.created_at) * 1000 AS created_at_ms`,
         `FROM jobs j`,
         `WHERE j.status = 'unfulfilled'`,
         `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
@@ -172,14 +172,14 @@ if (port != null) {
         job_type: string;
         args: { realmURL?: string };
         priority: number;
-        created_at: string;
+        created_at_ms: string;
       }[];
       return rows.map((r) => ({
         jobId: Number(r.id),
         jobType: r.job_type,
         realmURL: r.args?.realmURL ?? 'unknown',
         priority: r.priority,
-        createdAt: r.created_at,
+        createdAt: Number(r.created_at_ms),
       }));
     };
 
