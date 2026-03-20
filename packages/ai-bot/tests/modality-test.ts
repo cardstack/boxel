@@ -81,7 +81,9 @@ module('modality helpers', () => {
     assert.true(isTextBasedContentType('text/plain'));
     assert.true(isTextBasedContentType('text/typescript'));
     assert.true(isTextBasedContentType('text/html'));
+    assert.true(isTextBasedContentType('text/typescript+glimmer'));
     assert.true(isTextBasedContentType('application/vnd.card+json'));
+    assert.true(isTextBasedContentType('application/vnd.card+source'));
     assert.false(isTextBasedContentType('application/json'));
     assert.false(
       isTextBasedContentType(

@@ -18,6 +18,7 @@ import type { MatrixEvent } from 'matrix-js-sdk';
 import type { PromptParts } from './types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import { isTextBasedContentType } from './modality';
 
 function getLog() {
   return logger('ai-bot');
@@ -333,10 +334,7 @@ export async function downloadFile(
   if (!fileUrl) {
     throw new Error('Attached file URL is missing');
   }
-  if (
-    !attachedFile?.contentType?.includes('text/') &&
-    !attachedFile.contentType?.includes('application/vnd.card+json')
-  ) {
+  if (!isTextBasedContentType(attachedFile?.contentType)) {
     throw new Error(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );
