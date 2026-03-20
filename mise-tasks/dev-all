@@ -8,39 +8,16 @@ PATH="$(pwd)/../../node_modules/.bin:$(pwd)/node_modules/.bin:$PATH"
 
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
-# Start host app in background and wait for it before launching the rest.
-# start-server-and-test v1.x only supports 2 server phases (5 args), so we
-# start the host manually and use wait-on to gate readiness.
+# Start host app in background — start-server-and-test will wait for HOST_URL
+# as part of the phase 1 readiness check, so no manual polling needed.
 pnpm --filter @cardstack/host start &
 HOST_PID=$!
-cleanup_host() {
-  kill "$HOST_PID" >/dev/null 2>&1 || true
-}
+cleanup_host() { kill "$HOST_PID" >/dev/null 2>&1 || true; }
 trap cleanup_host EXIT INT TERM
-
-HOST_TIMEOUT=120
-ELAPSED=0
-echo "Waiting for host app at ${HOST_URL} (timeout: ${HOST_TIMEOUT}s)…"
-while true; do
-  if ! kill -0 "$HOST_PID" 2>/dev/null; then
-    echo "ERROR: Host app process died." >&2
-    exit 1
-  fi
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' "$HOST_URL" 2>/dev/null)" = "200" ]; then
-    break
-  fi
-  sleep 2
-  ELAPSED=$((ELAPSED + 2))
-  if [ "$ELAPSED" -ge "$HOST_TIMEOUT" ]; then
-    echo "ERROR: Host app did not become ready within ${HOST_TIMEOUT}s." >&2
-    exit 1
-  fi
-done
-echo "Host app is ready."
 
 WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
-  "$PHASE1_URLS" \
+  "${HOST_URL}|${PHASE1_URLS}" \
   'run-p -ln start:worker-test start:test-realms' \
   "$NODE_TEST_REALM_READY" \
   'wait'
