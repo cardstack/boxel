@@ -26,11 +26,11 @@ test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
 test.setTimeout(180_000);
 
-// Known issue: This test hangs when run in the same Playwright suite after
-// other specs that start isolated realm servers (e.g. factory-bootstrap.spec).
-// The subprocess's auth middleware hangs during Matrix auth → realm _session
-// when prior isolated realm server teardowns leave residual state. The test
-// passes reliably when run in isolation:
+// Known issue (CS-10472): This test hangs when run in the same Playwright
+// suite after other specs that start isolated realm servers. The subprocess's
+// auth middleware hangs during Matrix auth → realm _session when prior
+// isolated realm server teardowns leave orphaned processes. Passes reliably
+// when run in isolation:
 //   pnpm exec playwright test tests/factory-target-realm.spec.ts
 test.fixme('factory:go creates a target realm and bootstraps project artifacts end-to-end', async ({
   realm,
