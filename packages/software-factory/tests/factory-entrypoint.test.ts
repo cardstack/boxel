@@ -8,6 +8,7 @@ import {
   runFactoryEntrypoint,
   wantsFactoryEntrypointHelp,
 } from '../src/factory-entrypoint';
+import type { FactoryBootstrapResult } from '../src/factory-bootstrap';
 import type { FactoryBrief } from '../src/factory-brief';
 import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
 
@@ -28,6 +29,19 @@ const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   serverUrl: 'https://realms.example.test/',
   ownerUsername: 'hassan',
   createdRealm: true,
+};
+const mockBootstrapResult: FactoryBootstrapResult = {
+  project: { id: 'Project/sticky-note-mvp', status: 'created' },
+  knowledgeArticles: [
+    { id: 'KnowledgeArticle/sticky-note-brief-context', status: 'created' },
+    { id: 'KnowledgeArticle/sticky-note-agent-onboarding', status: 'created' },
+  ],
+  tickets: [
+    { id: 'Ticket/sticky-note-define-core', status: 'created' },
+    { id: 'Ticket/sticky-note-design-views', status: 'created' },
+    { id: 'Ticket/sticky-note-add-integration', status: 'created' },
+  ],
+  activeTicket: { id: 'Ticket/sticky-note-define-core', status: 'created' },
 };
 
 module('factory-entrypoint', function (hooks) {
@@ -91,6 +105,7 @@ module('factory-entrypoint', function (hooks) {
       },
       normalizedBrief,
       bootstrappedTargetRealm,
+      mockBootstrapResult,
     );
 
     assert.strictEqual(summary.command, 'factory:go');
@@ -113,8 +128,19 @@ module('factory-entrypoint', function (hooks) {
         'normalized-brief',
         'resolved-target-realm',
         'bootstrapped-target-realm',
+        'bootstrapped-project-artifacts',
       ],
     );
+    assert.strictEqual(
+      summary.bootstrap.createdProject,
+      'Project/sticky-note-mvp',
+    );
+    assert.strictEqual(summary.bootstrap.createdTickets.length, 3);
+    assert.strictEqual(
+      summary.bootstrap.activeTicket.id,
+      'Ticket/sticky-note-define-core',
+    );
+    assert.strictEqual(summary.bootstrap.activeTicket.status, 'in_progress');
     assert.deepEqual(summary.result, {
       status: 'ready',
       nextStep: 'bootstrap-target-realm',
@@ -162,6 +188,7 @@ module('factory-entrypoint', function (hooks) {
           serverUrl: resolution.serverUrl,
           createdRealm: false,
         }),
+        bootstrapArtifacts: async () => mockBootstrapResult,
         fetch: async (_input, init) => {
           assert.strictEqual(
             new Headers(init?.headers).get('Authorization'),

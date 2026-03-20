@@ -56,6 +56,54 @@ Instead, split testing into layers:
 
 The more logic we can move into deterministic code, the less fragile the overall system becomes.
 
+## How to Run Tests
+
+### Node-side tests (`tests/*.test.ts`)
+
+No prerequisites. Run directly:
+
+```bash
+pnpm test:node
+```
+
+### Playwright tests (`tests/*.spec.ts`)
+
+Playwright tests are hermetically sealed. They start their own Postgres, Synapse, prerender server, and isolated realm server. They do not depend on any externally running realm server (e.g. `localhost:4201`).
+
+Prerequisites:
+
+1. Docker must be running (for Synapse)
+2. Host app assets must be served at `http://localhost:4200/`:
+   ```bash
+   cd packages/host && pnpm serve:dist
+   ```
+3. Run `pnpm cache:prepare` to build or reuse the cached template database:
+   ```bash
+   pnpm cache:prepare
+   ```
+
+Then run the Playwright tests:
+
+```bash
+pnpm test:playwright
+```
+
+To run a specific spec file:
+
+```bash
+pnpm test:playwright --grep "bootstrap"
+```
+
+The `cache:prepare` step is a one-time setup that builds a Postgres template database from the test fixtures. It only needs to be rerun when the fixture content changes. The global setup for `pnpm test:playwright` will also run `cache:prepare` automatically if the cache is stale, but running it explicitly first avoids delays during test execution.
+
+### All tests
+
+```bash
+pnpm test
+```
+
+This runs Node-side tests first, then Playwright tests sequentially.
+
 ## Test Location Rule
 
 All package tests should live under `packages/software-factory/tests/`.

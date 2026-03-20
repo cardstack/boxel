@@ -23,6 +23,12 @@ interface FactoryEntrypointIntegrationSummary {
     url: string;
     ownerUsername: string;
   };
+  bootstrap: {
+    createdProject: string;
+    createdKnowledgeArticles: string[];
+    createdTickets: string[];
+    activeTicket: { id: string; status: string };
+  };
   result: Record<string, string>;
 }
 
@@ -98,6 +104,30 @@ module('factory-entrypoint integration', function () {
             },
           }),
         );
+      } else if (
+        request.url === '/hassan/personal/_session' &&
+        request.method === 'POST'
+      ) {
+        // Realm session for target realm auth
+        response.writeHead(201, {
+          'content-type': 'application/json',
+          Authorization: 'Bearer target-realm-token',
+        });
+        response.end('');
+      } else if (
+        request.url?.startsWith('/hassan/personal/') &&
+        request.method === 'GET'
+      ) {
+        // Card existence check — return 404 for first run
+        response.writeHead(404, { 'content-type': 'text/plain' });
+        response.end('not found');
+      } else if (
+        request.url?.startsWith('/hassan/personal/') &&
+        request.method === 'POST'
+      ) {
+        // Card creation — accept it
+        response.writeHead(204);
+        response.end();
       } else {
         response.writeHead(404, { 'content-type': 'text/plain' });
         response.end(`Unexpected request: ${request.method} ${request.url}`);
@@ -165,6 +195,16 @@ module('factory-entrypoint integration', function () {
       ]);
       assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
       assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
+      assert.strictEqual(
+        summary.bootstrap.createdProject,
+        'Project/sticky-note-mvp',
+      );
+      assert.strictEqual(summary.bootstrap.createdTickets.length, 3);
+      assert.strictEqual(
+        summary.bootstrap.activeTicket.id,
+        'Ticket/sticky-note-define-core',
+      );
+      assert.strictEqual(summary.bootstrap.activeTicket.status, 'in_progress');
       assert.deepEqual(summary.result, {
         status: 'ready',
         nextStep: 'bootstrap-and-select-active-ticket',

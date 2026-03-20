@@ -17,6 +17,7 @@ async function main(): Promise<void> {
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
     let summary = await runFactoryEntrypoint(options);
     console.log(JSON.stringify(summary, null, 2));
+    process.exit(0);
   } catch (error) {
     if (error instanceof FactoryEntrypointUsageError) {
       console.error(error.message);
@@ -28,7 +29,7 @@ async function main(): Promise<void> {
       console.error(error);
     }
 
-    process.exitCode = 1;
+    process.exit(1);
   }
 }
 
