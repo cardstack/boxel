@@ -1313,7 +1313,7 @@ export default class StoreService extends Service implements StoreInterface {
       return this.createFileMetaFromSerialized(
         resource,
         doc,
-        new URL(resource.id),
+        cardIdToURL(resource.id),
         dependencyTrackingContext,
       ) as Promise<T>;
     }
@@ -1568,7 +1568,7 @@ export default class StoreService extends Service implements StoreInterface {
       let fileInstance = await api.createFromSerialized(
         fileMetaDoc.data,
         fileMetaDoc,
-        fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
+        fileMetaDoc.data.id ? cardIdToURL(fileMetaDoc.data.id) : new URL(url),
         {
           store: this.store,
           dependencyTrackingContext: opts?.dependencyTrackingContext,
