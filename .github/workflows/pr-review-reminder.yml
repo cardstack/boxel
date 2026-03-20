@@ -22,6 +22,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "::error::PR_REVIEW_DISCORD_WEBHOOK secret is not set"
+            exit 1
+          fi
+
           # Only run at 9 AM ET — skip the trigger that doesn't match current DST
           current_et_hour="$(TZ=America/New_York date +%H)"
           if [ "$current_et_hour" != "09" ]; then
@@ -39,7 +44,7 @@ jobs:
                     url
                     isDraft
                     author { login }
-                    reviewRequests(first: 10) {
+                    reviewRequests(first: 100) {
                       nodes {
                         requestedReviewer {
                           ... on User { login }
@@ -47,7 +52,7 @@ jobs:
                         }
                       }
                     }
-                    timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], first: 1) {
+                    timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 1) {
                       nodes {
                         ... on ReviewRequestedEvent {
                           createdAt
@@ -102,7 +107,7 @@ jobs:
             }]
           }')"
 
-          curl -sf -X POST \
+          curl -sSf -X POST \
             -H "Content-Type: application/json" \
             -d "$payload" \
             "$DISCORD_WEBHOOK"
