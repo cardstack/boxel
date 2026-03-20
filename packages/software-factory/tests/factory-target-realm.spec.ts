@@ -32,7 +32,7 @@ test.setTimeout(180_000);
 // isolated realm server teardowns leave orphaned processes. Passes reliably
 // when run in isolation:
 //   pnpm exec playwright test tests/factory-target-realm.spec.ts
-test.fixme('factory:go creates a target realm and bootstraps project artifacts end-to-end', async ({
+test('factory:go creates a target realm and bootstraps project artifacts end-to-end', async ({
   realm,
 }) => {
   let supportMetadata = readSupportMetadata();
@@ -106,22 +106,22 @@ test.fixme('factory:go creates a target realm and bootstraps project artifacts e
       command: string;
       targetRealm: { url: string; ownerUsername: string };
       bootstrap: {
-        createdProject: string;
-        createdTickets: string[];
-        createdKnowledgeArticles: string[];
+        projectId: string;
+        ticketIds: string[];
+        knowledgeArticleIds: string[];
         activeTicket: { id: string; status: string };
       };
     };
 
     expect(summary.command).toBe('factory:go');
     expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
-    expect(summary.bootstrap.createdProject).toBe('Project/sticky-note-mvp');
-    expect(summary.bootstrap.createdTickets).toHaveLength(3);
-    expect(summary.bootstrap.createdKnowledgeArticles).toHaveLength(2);
+    expect(summary.bootstrap.projectId).toBe('Project/sticky-note-mvp');
+    expect(summary.bootstrap.ticketIds).toHaveLength(3);
+    expect(summary.bootstrap.knowledgeArticleIds).toHaveLength(2);
     expect(summary.bootstrap.activeTicket.id).toBe(
       'Ticket/sticky-note-define-core',
     );
-    expect(summary.bootstrap.activeTicket.status).toBe('in_progress');
+    expect(summary.bootstrap.activeTicket.status).toBe('created');
 
     // Verify the project card actually exists in the newly created target realm
     // by authenticating as the target user who owns the realm

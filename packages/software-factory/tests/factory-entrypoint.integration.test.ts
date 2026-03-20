@@ -24,9 +24,9 @@ interface FactoryEntrypointIntegrationSummary {
     ownerUsername: string;
   };
   bootstrap: {
-    createdProject: string;
-    createdKnowledgeArticles: string[];
-    createdTickets: string[];
+    projectId: string;
+    knowledgeArticleIds: string[];
+    ticketIds: string[];
     activeTicket: { id: string; status: string };
   };
   result: Record<string, string>;
@@ -196,15 +196,15 @@ module('factory-entrypoint integration', function () {
       assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
       assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
       assert.strictEqual(
-        summary.bootstrap.createdProject,
+        summary.bootstrap.projectId,
         'Project/sticky-note-mvp',
       );
-      assert.strictEqual(summary.bootstrap.createdTickets.length, 3);
+      assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
       assert.strictEqual(
         summary.bootstrap.activeTicket.id,
         'Ticket/sticky-note-define-core',
       );
-      assert.strictEqual(summary.bootstrap.activeTicket.status, 'in_progress');
+      assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
       assert.deepEqual(summary.result, {
         status: 'ready',
         nextStep: 'bootstrap-and-select-active-ticket',

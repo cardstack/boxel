@@ -45,6 +45,12 @@ export async function registerMatrixUser(
   let registerUrl = `${baseUrl}_synapse/admin/v1/register`;
 
   let nonceResponse = await fetch(registerUrl, { method: 'GET' });
+  if (!nonceResponse.ok) {
+    let text = await nonceResponse.text();
+    throw new Error(
+      `Failed to fetch registration nonce from ${registerUrl}: HTTP ${nonceResponse.status} ${text}`,
+    );
+  }
   let { nonce } = (await nonceResponse.json()) as { nonce: string };
 
   let mac = createHmac('sha1', registrationSecret)
@@ -88,6 +94,12 @@ export async function getRealmToken(
       password,
     }),
   });
+  if (!loginResponse.ok) {
+    let text = await loginResponse.text();
+    throw new Error(
+      `Failed to login to Matrix as ${username}: HTTP ${loginResponse.status} ${text}`,
+    );
+  }
   let { access_token, user_id } = (await loginResponse.json()) as {
     access_token: string;
     user_id: string;
@@ -104,13 +116,26 @@ export async function getRealmToken(
       body: '{}',
     },
   );
+  if (!openIdResponse.ok) {
+    let text = await openIdResponse.text();
+    throw new Error(
+      `Failed to get OpenID token for ${user_id}: HTTP ${openIdResponse.status} ${text}`,
+    );
+  }
   let openId = (await openIdResponse.json()) as { access_token: string };
 
-  let sessionResponse = await fetch(new URL('_session', realmUrl).href, {
+  let sessionUrl = new URL('_session', realmUrl).href;
+  let sessionResponse = await fetch(sessionUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ access_token: openId.access_token }),
   });
+  if (!sessionResponse.ok) {
+    let text = await sessionResponse.text();
+    throw new Error(
+      `Failed to create realm session at ${sessionUrl}: HTTP ${sessionResponse.status} ${text}`,
+    );
+  }
 
   let realmToken = sessionResponse.headers.get('Authorization');
   if (!realmToken) {

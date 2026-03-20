@@ -39,9 +39,9 @@ export interface FactoryEntrypointBriefSummary extends FactoryBrief {
 }
 
 export interface FactoryEntrypointBootstrapSummary {
-  createdProject: string;
-  createdKnowledgeArticles: string[];
-  createdTickets: string[];
+  projectId: string;
+  knowledgeArticleIds: string[];
+  ticketIds: string[];
   activeTicket: {
     id: string;
     status: string;
@@ -261,12 +261,12 @@ export function buildFactoryEntrypointSummary(
       ownerUsername: targetRealm.ownerUsername,
     },
     bootstrap: {
-      createdProject: artifacts.project.id,
-      createdKnowledgeArticles: artifacts.knowledgeArticles.map((ka) => ka.id),
-      createdTickets: artifacts.tickets.map((t) => t.id),
+      projectId: artifacts.project.id,
+      knowledgeArticleIds: artifacts.knowledgeArticles.map((ka) => ka.id),
+      ticketIds: artifacts.tickets.map((t) => t.id),
       activeTicket: {
         id: artifacts.activeTicket.id,
-        status: 'in_progress',
+        status: artifacts.activeTicket.status,
       },
     },
     actions,

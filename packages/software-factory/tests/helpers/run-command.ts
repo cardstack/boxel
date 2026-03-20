@@ -20,6 +20,7 @@ export async function runCommand(
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
@@ -32,18 +33,24 @@ export async function runCommand(
     child.once('error', (error) => {
       if (!settled) {
         settled = true;
+        if (timer) {
+          clearTimeout(timer);
+        }
         reject(error);
       }
     });
     child.once('close', (status) => {
       if (!settled) {
         settled = true;
+        if (timer) {
+          clearTimeout(timer);
+        }
         resolvePromise({ status, stdout, stderr });
       }
     });
 
     if (options.timeoutMs) {
-      setTimeout(() => {
+      timer = setTimeout(() => {
         if (!settled) {
           settled = true;
           child.kill('SIGTERM');
@@ -54,6 +61,7 @@ export async function runCommand(
           });
         }
       }, options.timeoutMs);
+      timer.unref();
     }
   });
 }

@@ -97,23 +97,26 @@ export async function bootstrapProjectArtifacts(
     ),
   );
 
-  let activeTicket = tickets[0];
+  let inProgressPath = await hasInProgressTicket(
+    targetRealmUrl,
+    ticketPaths,
+    fetchImpl,
+  );
 
-  if (activeTicket.status === 'existing') {
-    let hasInProgress = await hasInProgressTicket(
+  let activeTicket: FactoryBootstrapArtifact;
+
+  if (inProgressPath) {
+    let idx = ticketPaths.indexOf(inProgressPath);
+    activeTicket = idx >= 0 ? tickets[idx] : tickets[0];
+  } else {
+    await patchTicketStatus(
       targetRealmUrl,
-      ticketPaths,
+      ticketPaths[0],
+      'in_progress',
+      darkfactoryModuleUrl,
       fetchImpl,
     );
-    if (!hasInProgress) {
-      await patchTicketStatus(
-        targetRealmUrl,
-        ticketPaths[0],
-        'in_progress',
-        darkfactoryModuleUrl,
-        fetchImpl,
-      );
-    }
+    activeTicket = tickets[0];
   }
 
   return {
@@ -489,7 +492,7 @@ async function hasInProgressTicket(
   realmUrl: string,
   ticketPaths: string[],
   fetchImpl: typeof globalThis.fetch,
-): Promise<boolean> {
+): Promise<string | null> {
   for (let path of ticketPaths) {
     let url = new URL(path, realmUrl).href;
     let response = await fetchImpl(url, {
@@ -505,10 +508,10 @@ async function hasInProgressTicket(
       data?: { attributes?: { status?: string } };
     };
     if (json.data?.attributes?.status === 'in_progress') {
-      return true;
+      return path;
     }
   }
-  return false;
+  return null;
 }
 
 async function patchTicketStatus(

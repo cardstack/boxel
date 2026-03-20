@@ -131,16 +131,13 @@ module('factory-entrypoint', function (hooks) {
         'bootstrapped-project-artifacts',
       ],
     );
-    assert.strictEqual(
-      summary.bootstrap.createdProject,
-      'Project/sticky-note-mvp',
-    );
-    assert.strictEqual(summary.bootstrap.createdTickets.length, 3);
+    assert.strictEqual(summary.bootstrap.projectId, 'Project/sticky-note-mvp');
+    assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
     assert.strictEqual(
       summary.bootstrap.activeTicket.id,
       'Ticket/sticky-note-define-core',
     );
-    assert.strictEqual(summary.bootstrap.activeTicket.status, 'in_progress');
+    assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
     assert.deepEqual(summary.result, {
       status: 'ready',
       nextStep: 'bootstrap-target-realm',

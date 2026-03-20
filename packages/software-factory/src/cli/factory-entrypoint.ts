@@ -16,8 +16,12 @@ async function main(): Promise<void> {
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
     let summary = await runFactoryEntrypoint(options);
-    console.log(JSON.stringify(summary, null, 2));
-    process.exit(0);
+    let output = JSON.stringify(summary, null, 2) + '\n';
+    if (!process.stdout.write(output)) {
+      process.stdout.once('drain', () => process.exit(0));
+    } else {
+      process.exit(0);
+    }
   } catch (error) {
     if (error instanceof FactoryEntrypointUsageError) {
       console.error(error.message);
