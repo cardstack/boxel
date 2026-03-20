@@ -79,6 +79,12 @@ export function createBoxelRealmFetch(
 function getOptionalActiveProfile(
   resourceUrl: string,
 ): ActiveBoxelProfile | undefined {
+  let envProfile = buildEnvProfile(resourceUrl);
+
+  if (envProfile) {
+    return envProfile;
+  }
+
   let config = parseProfilesConfig();
 
   if (config.activeProfile && config.profiles[config.activeProfile]) {
@@ -96,7 +102,7 @@ function getOptionalActiveProfile(
     };
   }
 
-  return buildEnvProfile(resourceUrl);
+  return undefined;
 }
 
 function parseProfilesConfig(): BoxelProfilesConfig {

@@ -211,7 +211,6 @@ The bootstrap logic currently lives in agent judgment. It needs stable rules for
 
 ### 3. Target Realm Bootstrap
 
-The target realm currently needs explicit bootstrap for realm creation and entry-surface setup. Shared tracker modules should be reused from the public source realm rather than copied into each target realm.
 The target realm currently needs explicit bootstrap through the realm-server API. Shared tracker modules should be reused from the public source realm rather than copied into each target realm.
 
 ### 4. Resume Semantics

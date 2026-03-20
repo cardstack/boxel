@@ -257,11 +257,66 @@ module('realm-auth', function () {
         'Private brief content for testing realm auth.',
       );
     } finally {
-      process.env.HOME = originalHome;
-      process.env.MATRIX_URL = originalMatrixUrl;
-      process.env.MATRIX_USERNAME = originalMatrixUsername;
-      process.env.MATRIX_PASSWORD = originalMatrixPassword;
-      process.env.REALM_SERVER_URL = originalRealmServerUrl;
+      restoreEnv('HOME', originalHome);
+      restoreEnv('MATRIX_URL', originalMatrixUrl);
+      restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
+      restoreEnv('MATRIX_PASSWORD', originalMatrixPassword);
+      restoreEnv('REALM_SERVER_URL', originalRealmServerUrl);
+      await servers.stop();
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
+  test('createBoxelRealmFetch prefers env auth over an unrelated active profile', async function (assert) {
+    let tempHome = mkdtempSync(join(tmpdir(), 'software-factory-realm-auth-'));
+    let originalHome = process.env.HOME;
+    let originalMatrixUrl = process.env.MATRIX_URL;
+    let originalMatrixUsername = process.env.MATRIX_USERNAME;
+    let originalMatrixPassword = process.env.MATRIX_PASSWORD;
+    let originalRealmServerUrl = process.env.REALM_SERVER_URL;
+    let profilesDir = join(tempHome, '.boxel-cli');
+    mkdirSync(profilesDir, { recursive: true });
+    writeFileSync(
+      join(profilesDir, 'profiles.json'),
+      JSON.stringify({
+        activeProfile: '@someone-else:localhost',
+        profiles: {
+          '@someone-else:localhost': {
+            matrixUrl: 'https://unrelated-matrix.example.test/',
+            realmServerUrl: 'https://unrelated-realm-server.example.test/',
+            password: 'wrong-password',
+          },
+        },
+      }),
+    );
+
+    let username = 'software-factory-browser';
+    let password = browserPassword(username);
+    let servers = await startServers({ username, password });
+    let briefUrl = `${servers.realmServer.realmUrl}Wiki/brief-card`;
+
+    try {
+      process.env.HOME = tempHome;
+      process.env.MATRIX_URL = servers.matrixServer.url;
+      process.env.MATRIX_USERNAME = username;
+      process.env.MATRIX_PASSWORD = password;
+      delete process.env.REALM_SERVER_URL;
+
+      let brief = await loadFactoryBrief(briefUrl, {
+        fetch: createBoxelRealmFetch(briefUrl),
+      });
+
+      assert.strictEqual(brief.title, 'Private Brief');
+      assert.strictEqual(
+        brief.contentSummary,
+        'Private brief content for testing realm auth.',
+      );
+    } finally {
+      restoreEnv('HOME', originalHome);
+      restoreEnv('MATRIX_URL', originalMatrixUrl);
+      restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
+      restoreEnv('MATRIX_PASSWORD', originalMatrixPassword);
+      restoreEnv('REALM_SERVER_URL', originalRealmServerUrl);
       await servers.stop();
       rmSync(tempHome, { recursive: true, force: true });
     }
@@ -311,8 +366,16 @@ module('realm-auth', function () {
           error.message.includes('Failed to parse Boxel profiles config at'),
       );
     } finally {
-      process.env.HOME = originalHome;
+      restoreEnv('HOME', originalHome);
       rmSync(tempHome, { recursive: true, force: true });
     }
   });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}

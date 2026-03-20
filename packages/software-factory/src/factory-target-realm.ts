@@ -25,8 +25,15 @@ export interface FactoryTargetRealmBootstrapResult extends FactoryTargetRealmRes
   createdRealm: boolean;
 }
 
+interface CreateRealmResult {
+  createdRealm: boolean;
+  url: string;
+}
+
 export interface FactoryTargetRealmBootstrapActions {
-  createRealm?: (resolution: FactoryTargetRealmResolution) => Promise<boolean>;
+  createRealm?: (
+    resolution: FactoryTargetRealmResolution,
+  ) => Promise<CreateRealmResult>;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -48,7 +55,7 @@ export async function bootstrapFactoryTargetRealm(
   resolution: FactoryTargetRealmResolution,
   actions?: FactoryTargetRealmBootstrapActions,
 ): Promise<FactoryTargetRealmBootstrapResult> {
-  let createdRealm = await (
+  let createRealmResult = await (
     actions?.createRealm ??
     ((targetRealm) =>
       createRealm(targetRealm, {
@@ -58,14 +65,15 @@ export async function bootstrapFactoryTargetRealm(
 
   return {
     ...resolution,
-    createdRealm,
+    url: createRealmResult.url,
+    createdRealm: createRealmResult.createdRealm,
   };
 }
 
 async function createRealm(
   resolution: FactoryTargetRealmResolution,
   dependencies?: { fetch?: typeof globalThis.fetch },
-): Promise<boolean> {
+): Promise<CreateRealmResult> {
   let fetchImpl = dependencies?.fetch ?? globalThis.fetch;
 
   if (typeof fetchImpl !== 'function') {
@@ -102,13 +110,29 @@ async function createRealm(
   );
 
   if (response.ok) {
-    return true;
+    let json = (await response.json()) as {
+      data?: {
+        id?: unknown;
+      };
+    };
+    let canonicalRealmUrl = normalizeCreatedRealmUrl(
+      json.data?.id,
+      resolution.url,
+    );
+
+    return {
+      createdRealm: true,
+      url: canonicalRealmUrl,
+    };
   }
 
   let text = await response.text();
 
   if (response.status === 400 && /already exists on this server/.test(text)) {
-    return false;
+    return {
+      createdRealm: false,
+      url: resolution.url,
+    };
   }
 
   throw new Error(
@@ -161,7 +185,7 @@ function buildEnvRealmServerProfile(
   let matrixPassword = normalizeOptionalString(process.env.MATRIX_PASSWORD);
   let envRealmServerUrl = normalizeOptionalString(process.env.REALM_SERVER_URL);
 
-  if (!matrixUrl && !matrixPassword) {
+  if (!matrixPassword) {
     return undefined;
   }
 
@@ -277,6 +301,19 @@ function normalizeUrl(url: string, label: string): string {
       }`,
     );
   }
+}
+
+function normalizeCreatedRealmUrl(
+  createdRealmId: unknown,
+  fallbackTargetRealmUrl: string,
+): string {
+  if (typeof createdRealmId !== 'string' || createdRealmId.trim() === '') {
+    throw new Error(
+      `Realm server returned an invalid realm id for ${fallbackTargetRealmUrl}`,
+    );
+  }
+
+  return normalizeUrl(createdRealmId, 'realm server response data.id');
 }
 
 function normalizeOptionalString(

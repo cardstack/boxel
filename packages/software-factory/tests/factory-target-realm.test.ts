@@ -9,6 +9,7 @@ import {
 const targetRealmUrl = 'https://realms.example.test/hassan/personal/';
 
 module('factory-target-realm', function (hooks) {
+  let originalHome = process.env.HOME;
   let originalMatrixUsername = process.env.MATRIX_USERNAME;
   let originalMatrixUrl = process.env.MATRIX_URL;
   let originalMatrixPassword = process.env.MATRIX_PASSWORD;
@@ -16,10 +17,11 @@ module('factory-target-realm', function (hooks) {
   let originalFetch = globalThis.fetch;
 
   hooks.afterEach(function () {
-    process.env.MATRIX_USERNAME = originalMatrixUsername;
-    process.env.MATRIX_URL = originalMatrixUrl;
-    process.env.MATRIX_PASSWORD = originalMatrixPassword;
-    process.env.REALM_SERVER_URL = originalRealmServerUrl;
+    restoreEnv('HOME', originalHome);
+    restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
+    restoreEnv('MATRIX_URL', originalMatrixUrl);
+    restoreEnv('MATRIX_PASSWORD', originalMatrixPassword);
+    restoreEnv('REALM_SERVER_URL', originalRealmServerUrl);
     globalThis.fetch = originalFetch;
   });
 
@@ -91,7 +93,10 @@ module('factory-target-realm', function (hooks) {
     let result = await bootstrapFactoryTargetRealm(resolution, {
       createRealm: async () => {
         createCalls++;
-        return true;
+        return {
+          createdRealm: true,
+          url: resolution.url,
+        };
       },
     });
 
@@ -107,10 +112,33 @@ module('factory-target-realm', function (hooks) {
     });
 
     let result = await bootstrapFactoryTargetRealm(resolution, {
-      createRealm: async () => false,
+      createRealm: async () => ({
+        createdRealm: false,
+        url: resolution.url,
+      }),
     });
 
     assert.false(result.createdRealm);
+  });
+
+  test('bootstrapFactoryTargetRealm uses the canonical realm URL returned by create-realm', async function (assert) {
+    process.env.MATRIX_USERNAME = 'hassan';
+    let resolution = resolveFactoryTargetRealm({
+      targetRealmUrl: 'https://realms.example.test/typed-by-user/personal/',
+      realmServerUrl: null,
+    });
+
+    let result = await bootstrapFactoryTargetRealm(resolution, {
+      createRealm: async () => ({
+        createdRealm: true,
+        url: 'https://realms.example.test/hassan/personal/',
+      }),
+    });
+
+    assert.strictEqual(
+      result.url,
+      'https://realms.example.test/hassan/personal/',
+    );
   });
 
   test('bootstrapFactoryTargetRealm sends the realm-server JWT to create-realm', async function (assert) {
@@ -194,12 +222,20 @@ module('factory-target-realm', function (hooks) {
             },
           },
         });
-        response = new Response('{}', {
-          status: 201,
-          headers: {
-            'content-type': 'application/json',
+        response = new Response(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              id: targetRealmUrl,
+            },
+          }),
+          {
+            status: 201,
+            headers: {
+              'content-type': 'application/json',
+            },
           },
-        });
+        );
       } else {
         throw new Error(`Unexpected url: ${request.url}`);
       }
@@ -212,3 +248,11 @@ module('factory-target-realm', function (hooks) {
     assert.true(result.createdRealm);
   });
 });
+
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[name];
+  } else {
+    process.env[name] = value;
+  }
+}

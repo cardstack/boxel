@@ -40,6 +40,7 @@ interface RunCommandResult {
 
 module('factory-entrypoint integration', function () {
   test('factory:go package script prints a structured JSON summary', async function (assert) {
+    let canonicalTargetRealmUrl: string;
     let targetRealmUrl: string;
     let server = createServer((request, response) => {
       if (request.url === '/software-factory/Wiki/sticky-note') {
@@ -93,7 +94,7 @@ module('factory-entrypoint integration', function () {
           JSON.stringify({
             data: {
               type: 'realm',
-              id: targetRealmUrl,
+              id: canonicalTargetRealmUrl,
             },
           }),
         );
@@ -114,7 +115,8 @@ module('factory-entrypoint integration', function () {
 
     let origin = `http://127.0.0.1:${address.port}`;
     let briefUrl = `${origin}/software-factory/Wiki/sticky-note`;
-    targetRealmUrl = `${origin}/hassan/personal/`;
+    targetRealmUrl = `${origin}/typed-by-user/personal/`;
+    canonicalTargetRealmUrl = `${origin}/hassan/personal/`;
 
     try {
       let result = await runCommand(
@@ -161,7 +163,7 @@ module('factory-entrypoint integration', function () {
         'sticky',
         'note',
       ]);
-      assert.strictEqual(summary.targetRealm.url, targetRealmUrl);
+      assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
       assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
       assert.deepEqual(summary.result, {
         status: 'ready',
