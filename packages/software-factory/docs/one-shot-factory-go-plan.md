@@ -5,7 +5,7 @@
 Turn the current `experiment_1` workflow from an agent-assisted toolbox into a single-entrypoint flow that can:
 
 1. accept a brief URL like `http://localhost:4201/software-factory/Wiki/sticky-note`
-2. target a local Boxel realm such as `packages/realm-server/realms/localhost_4201/hassan1/personal`
+2. target a Boxel realm URL such as `http://localhost:4201/hassan1/personal/`
 3. bootstrap project artifacts in that target realm
 4. immediately enter implementation and verification iterations
 5. stop only when a clear completion or blocker condition is reached
@@ -15,6 +15,12 @@ This document covers:
 - the desired one-shot flow
 - what is currently missing
 - the minimum implementation needed in `experiment_1`
+
+## Assumptions
+
+- `factory:go` must not assume it is co-located on the same filesystem as the target realm.
+- Target-realm bootstrap and artifact creation should use realm HTTP APIs and realm URLs rather than local file writes into the realm directory.
+- Local filesystem paths may still be useful as user hints or local workspace references, but they should not be the source of truth for manipulating target-realm contents.
 
 ## Realm Roles
 
@@ -74,7 +80,8 @@ The target user experience is one command or one prompt:
 ```bash
 npm run factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm-path /home/hassan/codez/boxel/packages/realm-server/realms/localhost_4201/hassan1/personal \
+  --target-realm-url http://localhost:4201/hassan1/personal/ \
+  [--realm-server-url http://localhost:4201/] \
   --mode implement
 ```
 
@@ -100,8 +107,8 @@ The important property is that the user should not need to manually:
 Inputs:
 
 - `brief-url`
-- `target-realm-path`
-- optional `target-realm-url`
+- `target-realm-url`
+- optional `realm-server-url`
 - optional mode:
   - `bootstrap`
   - `implement`
@@ -118,9 +125,10 @@ Required behavior:
 
 Required behavior:
 
-- resolve the target realm URL from `.boxel-sync.json` or CLI arguments
-- ensure the target realm can resolve the tracker module from the shared source realm, or explicitly install a local copy if that is the chosen bootstrap strategy
-- ensure the target realm has a visible entry surface such as `cards-grid.json`
+- require `MATRIX_USERNAME` so the target realm owner is explicit before bootstrap starts
+- infer the target realm server URL from the target realm URL by default, but allow an explicit override when the realm server lives under a subdirectory and the URL shape is ambiguous
+- create missing target realms through the realm server `/_create-realm` API rather than by creating local directories directly
+- treat the successful `/_create-realm` response as the readiness boundary for the new realm
 
 Minimum requirement:
 
@@ -203,7 +211,7 @@ The bootstrap logic currently lives in agent judgment. It needs stable rules for
 
 ### 3. Target Realm Bootstrap
 
-The target realm currently needs tracker support added manually or implicitly. That should be an explicit, reusable setup step.
+The target realm currently needs explicit bootstrap through the realm-server API. Shared tracker modules should be reused from the public source realm rather than copied into each target realm.
 
 ### 4. Resume Semantics
 
@@ -233,8 +241,7 @@ Add a new script and a small shared library layer. Do not attempt a fully autono
 The first version should support:
 
 - one brief URL
-- one target realm path
-- local Boxel realms
+- one target realm URL
 - Boxel-card implementation workflows
 - simple bootstrap and first-ticket execution
 
@@ -257,7 +264,8 @@ Expected usage:
 ```bash
 npm run factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm-path /home/hassan/codez/boxel/packages/realm-server/realms/localhost_4201/hassan1/personal \
+  --target-realm-url http://localhost:4201/hassan1/personal/ \
+  [--realm-server-url http://localhost:4201/] \
   --mode implement
 ```
 
@@ -265,10 +273,10 @@ CLI parameters for the first version:
 
 - `--brief-url`
   - Required. Absolute URL for the brief card that drives the one-shot flow.
-- `--target-realm-path`
-  - Required. Local filesystem path to the realm where generated artifacts should land.
 - `--target-realm-url`
-  - Optional. Explicit realm URL when path-based inference is not enough.
+  - Required. Absolute URL for the realm where generated artifacts should land.
+- `--realm-server-url`
+  - Optional. Explicit realm server URL for target-realm bootstrap when it should not be inferred from the target realm URL.
 - `--mode`
   - Optional. `bootstrap`, `implement`, or `resume`. Default should be `implement`.
 - `--help`
@@ -284,8 +292,8 @@ Responsibilities:
 
 - parse args
 - fetch the brief
-- resolve target realm path and URL
-- ensure the target realm can consume the shared tracker module without confusing source content with generated output
+- resolve the target realm URL
+- resolve the realm server URL for bootstrap
 - bootstrap or reconcile project artifacts
 - pick the next ticket
 - invoke the implementation loop
@@ -300,7 +308,6 @@ New helper module for creating or updating:
 - `Project`
 - `KnowledgeArticle`
 - `Ticket`
-- `cards-grid.json`
 
 Responsibilities:
 
@@ -324,10 +331,9 @@ New helper module for target realm preparation.
 
 Responsibilities:
 
-- resolve target realm URL from `.boxel-sync.json` when available
-- infer local workspace URL from path when possible
-- ensure the `darkfactory` module files exist in the target realm
-- ensure `cards-grid.json` exists
+- validate the explicit target realm URL
+- create the realm through `POST /_create-realm` when needed
+- return the target realm bootstrap result
 
 This isolates the realm bootstrapping concern from the orchestration logic.
 
@@ -407,7 +413,7 @@ Start with Option 1. Build a one-shot orchestrator that prepares state and makes
 The first version of `factory:go` should do exactly this:
 
 1. fetch the brief
-2. ensure the target realm contains the tracker module and visible entry surface
+2. ensure the target realm exists
 3. create or reconcile starter project artifacts
 4. select the first actionable ticket
 5. print a structured execution bundle for the agent or next stage
@@ -457,7 +463,6 @@ Optional later additions:
     "tags": ["documents-content", "sticky", "note"]
   },
   "targetRealm": {
-    "path": "/.../personal",
     "url": "http://localhost:4201/hassan1/personal/"
   },
   "bootstrap": {
@@ -484,11 +489,11 @@ Brief intake should not assume public realm access.
 
 - `factory:go` should fetch the brief with `Accept: application/vnd.card+source`
 - when the brief URL is on the active Boxel realm-server origin, the CLI should try to resolve a realm JWT from the active Boxel profile before fetching
-- the CLI should also allow an explicit brief auth override for cases where the caller already has an `Authorization` header value to use
+- the CLI should rely on profile or Matrix environment auth rather than a separate explicit brief-token flag
 
 ## Acceptance Criteria For The First `factory:go`
 
-- a user can point to a brief URL and a target realm path
+- a user can point to a brief URL and a target realm URL
 - the target realm ends up with a coherent project bootstrap
 - exactly one ticket becomes active
 - rerunning does not create duplicate starter artifacts

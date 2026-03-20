@@ -2,7 +2,7 @@
 # Stop all processes for a given environment and clean up Traefik configs.
 #
 # Usage:
-#   ./scripts/stop-branch.sh [environment-name]
+#   mise run stop-environment [environment-name]
 #
 # If no environment is given, uses $BOXEL_ENVIRONMENT or the current git branch.
 # Pass --drop-db to also drop the per-environment databases.
@@ -11,6 +11,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/env-slug.sh"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TRAEFIK_DIR="$REPO_ROOT/traefik/dynamic"
 
@@ -37,7 +38,7 @@ if [ -z "$BRANCH" ]; then
   exit 1
 fi
 
-SLUG=$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+SLUG=$(compute_env_slug "$BRANCH")
 
 echo "Stopping all services for environment: $BRANCH (slug: $SLUG)"
 
@@ -66,7 +67,7 @@ fi
 ROOT_PIDS=$(ps ax -o pid,command 2>/dev/null \
   | grep -E "($MATCH_PATTERN)" \
   | grep -v "grep" \
-  | grep -v "stop-branch" \
+  | grep -v "stop-environment" \
   | grep -v "shell-snapshots" `# exclude Claude Code shell wrappers` \
   | awk '{print $1}' \
   | sort -u)

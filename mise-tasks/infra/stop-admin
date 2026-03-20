@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Stop the Matrix admin console"
+
+docker stop synapse-admin && docker rm synapse-admin

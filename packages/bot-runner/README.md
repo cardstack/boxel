@@ -26,7 +26,7 @@ Environment variables:
 - `SENTRY_ENVIRONMENT` (optional, default: `development`)
 
 ```
-pnpm start:development
+mise run services:bot-runner
 ```
 
 

@@ -1,6 +1,3 @@
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { module, test } from 'qunit';
 
 import {
@@ -12,6 +9,7 @@ import {
   wantsFactoryEntrypointHelp,
 } from '../src/factory-entrypoint';
 import type { FactoryBrief } from '../src/factory-brief';
+import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
@@ -25,36 +23,36 @@ const normalizedBrief: FactoryBrief = {
     'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
   tags: ['documents-content', 'sticky', 'note'],
 };
+const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
+  url: targetRealmUrl,
+  serverUrl: 'https://realms.example.test/',
+  ownerUsername: 'hassan',
+  createdRealm: true,
+};
 
-module('factory-entrypoint', function () {
+module('factory-entrypoint', function (hooks) {
+  let originalMatrixUsername = process.env.MATRIX_USERNAME;
+
+  hooks.afterEach(function () {
+    process.env.MATRIX_USERNAME = originalMatrixUsername;
+  });
+
   test('parseFactoryEntrypointArgs accepts required inputs and defaults mode', function (assert) {
     let options = parseFactoryEntrypointArgs([
       '--brief-url',
       briefUrl,
-      '--target-realm-path',
-      './realms/personal',
+      '--target-realm-url',
+      targetRealmUrl,
+      '--realm-server-url',
+      'https://realms.example.test/',
     ]);
 
     assert.deepEqual(options, {
       briefUrl,
-      authToken: null,
-      targetRealmPath: './realms/personal',
-      targetRealmUrl: null,
+      targetRealmUrl,
+      realmServerUrl: 'https://realms.example.test/',
       mode: 'implement',
     });
-  });
-
-  test('parseFactoryEntrypointArgs accepts an optional brief auth token override', function (assert) {
-    let options = parseFactoryEntrypointArgs([
-      '--brief-url',
-      briefUrl,
-      '--auth-token',
-      'Bearer brief-token',
-      '--target-realm-path',
-      './realms/personal',
-    ]);
-
-    assert.strictEqual(options.authToken, 'Bearer brief-token');
   });
 
   test('parseFactoryEntrypointArgs rejects invalid mode', function (assert) {
@@ -63,8 +61,8 @@ module('factory-entrypoint', function () {
         parseFactoryEntrypointArgs([
           '--brief-url',
           briefUrl,
-          '--target-realm-path',
-          './realms/personal',
+          '--target-realm-url',
+          targetRealmUrl,
           '--mode',
           'ship-it',
         ]),
@@ -76,11 +74,7 @@ module('factory-entrypoint', function () {
   });
   test('parseFactoryEntrypointArgs rejects missing required inputs', function (assert) {
     assert.throws(
-      () =>
-        parseFactoryEntrypointArgs([
-          '--target-realm-path',
-          './realms/personal',
-        ]),
+      () => parseFactoryEntrypointArgs(['--target-realm-url', targetRealmUrl]),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
         error.message === 'Missing required --brief-url',
@@ -88,17 +82,15 @@ module('factory-entrypoint', function () {
   });
 
   test('buildFactoryEntrypointSummary reports structured run details', function (assert) {
-    let targetRealmPath = mkdtempSync(join(tmpdir(), 'factory-go-summary-'));
-
     let summary = buildFactoryEntrypointSummary(
       {
         briefUrl,
-        authToken: null,
-        targetRealmPath,
         targetRealmUrl,
         mode: 'bootstrap',
+        realmServerUrl: null,
       },
       normalizedBrief,
+      bootstrappedTargetRealm,
     );
 
     assert.strictEqual(summary.command, 'factory:go');
@@ -110,17 +102,17 @@ module('factory-entrypoint', function () {
       'sticky',
       'note',
     ]);
-    assert.strictEqual(summary.targetRealm.path, targetRealmPath);
-    assert.true(summary.targetRealm.exists);
     assert.strictEqual(summary.targetRealm.url, targetRealmUrl);
+    assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
     assert.deepEqual(
       summary.actions.map((action) => action.name),
       [
         'validated-inputs',
+        'resolved-target-realm-owner',
         'fetched-brief',
         'normalized-brief',
-        'resolved-target-realm-path',
-        'resolved-target-realm-url',
+        'resolved-target-realm',
+        'bootstrapped-target-realm',
       ],
     );
     assert.deepEqual(summary.result, {
@@ -139,38 +131,41 @@ module('factory-entrypoint', function () {
     let usage = getFactoryEntrypointUsage();
 
     assert.true(/--brief-url <url>/.test(usage));
-    assert.true(/--auth-token <token>/.test(usage));
-    assert.true(/--target-realm-path <path>/.test(usage));
     assert.true(/--target-realm-url <url>/.test(usage));
+    assert.true(/--realm-server-url <url>/.test(usage));
     assert.true(/--mode <mode>/.test(usage));
     assert.true(/--help/.test(usage));
+    assert.true(/MATRIX_USERNAME is required/.test(usage));
     assert.true(/For public briefs, no auth setup is needed./.test(usage));
     assert.true(
       /MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD \+ REALM_SERVER_URL/.test(
         usage,
       ),
     );
-    assert.true(
-      /MATRIX_URL \+ REALM_SERVER_URL \+ REALM_SECRET_SEED/.test(usage),
-    );
+    assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 
   test('runFactoryEntrypoint loads and includes normalized brief data', async function (assert) {
-    let targetRealmPath = mkdtempSync(join(tmpdir(), 'factory-go-summary-'));
+    process.env.MATRIX_USERNAME = 'hassan';
 
     let summary = await runFactoryEntrypoint(
       {
         briefUrl,
-        authToken: 'Bearer brief-token',
-        targetRealmPath,
-        targetRealmUrl: null,
+        targetRealmUrl,
+        realmServerUrl: null,
         mode: 'implement',
       },
       {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: false,
+        }),
         fetch: async (_input, init) => {
           assert.strictEqual(
             new Headers(init?.headers).get('Authorization'),
-            'Bearer brief-token',
+            null,
           );
 
           return new Response(
@@ -201,6 +196,7 @@ module('factory-entrypoint', function () {
 
     assert.strictEqual(summary.brief.title, 'Sticky Note');
     assert.strictEqual(summary.brief.sourceUrl, briefUrl);
+    assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
     assert.strictEqual(
       summary.brief.contentSummary,
       'Colorful, short-form note designed for spatial arrangement on boards and artboards.',

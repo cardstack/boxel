@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Start full dev stack (realm server, workers, test realms)"
+#MISE dir="packages/realm-server"
+
+. "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
+
+WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
+  'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
+  "$PHASE1_URLS" \
+  'run-p -ln start:worker-test start:test-realms' \
+  "$NODE_TEST_REALM_READY" \
+  'wait'

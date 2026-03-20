@@ -1,0 +1,17 @@
+#!/bin/sh
+#MISE description="Start prerender server for development"
+#MISE depends=["infra:ensure-traefik"]
+#MISE dir="packages/realm-server"
+
+if [ -n "$ENV_MODE" ]; then
+  DEFAULT_HOST_URL="${HOST_URL}"
+else
+  DEFAULT_HOST_URL="${HOST_URL:-http://localhost:4200}"
+fi
+
+NODE_ENV=development \
+  NODE_NO_WARNINGS=1 \
+  BOXEL_HOST_URL="${BOXEL_HOST_URL:-$DEFAULT_HOST_URL}" \
+  ts-node \
+  --transpileOnly prerender/prerender-server \
+  --port="${PRERENDER_PORT}"

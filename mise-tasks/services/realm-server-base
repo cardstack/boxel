@@ -1,29 +1,26 @@
-#! /bin/sh
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "$SCRIPTS_DIR/wait-for-pg.sh"
-
-wait_for_postgres
+#!/bin/sh
+#MISE description="Start base realm server only"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
-  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly ./scripts/matrix-registration-secret.ts)
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
-PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
-
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
-  PGPORT=5435 \
+  PGPORT="${PGPORT}" \
   PGDATABASE=boxel_base \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
-  MATRIX_URL=http://localhost:8008 \
+  MATRIX_URL="${MATRIX_URL_VAL}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly main \
   --port=4201 \
-  --matrixURL='http://localhost:8008' \
+  --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath='./realms/localhost_4201_base' \
   --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \
