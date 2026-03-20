@@ -1261,9 +1261,13 @@ View or create checkpoints.
 
 #### Available Realm Server APIs
 
-The agent can also invoke realm server HTTP endpoints directly through `invoke_tool` actions with `category: 'realm-api'`. These are lower-level than the CLI but useful for atomic operations.
+The realm server exposes HTTP endpoints that the agent can invoke directly through `invoke_tool` actions with `category: 'realm-api'`. Rather than hardcoding specific API calls in the orchestrator, the plan is to expose the full range of realm server capabilities as tools the agent can use. This means operations like realm creation, card CRUD, search, and batch mutations are all available to the agent — the orchestrator validates and executes them, but the agent decides when and how to use them.
 
-##### `realm-read`
+This is an important design principle: **any Boxel API call that the orchestrator might make on behalf of the agent should also be expressible as a tool the agent can invoke directly**. The orchestrator still owns safety constraints and execution, but the agent has the vocabulary to request any realm operation it needs.
+
+##### Card and File Operations
+
+###### `realm-read`
 
 Fetch a card or file from a realm.
 
@@ -1271,7 +1275,7 @@ Fetch a card or file from a realm.
 - **Headers**: `Accept: application/vnd.card+source` or `application/vnd.api+json`
 - **Use by agent**: reading existing card definitions, inspecting current state
 
-##### `realm-write`
+###### `realm-write`
 
 Create or update a card or file in a realm.
 
@@ -1279,14 +1283,14 @@ Create or update a card or file in a realm.
 - **Headers**: `Content-Type: application/vnd.card+source` or `application/vnd.api+json`
 - **Use by agent**: writing card definitions (`.gts`) and card instances (`.json`)
 
-##### `realm-delete`
+###### `realm-delete`
 
 Delete a card or file from a realm.
 
 - **Endpoint**: `DELETE <realm-url>/<path>`
 - **Use by agent**: removing outdated artifacts
 
-##### `realm-atomic`
+###### `realm-atomic`
 
 Batch operations that succeed or fail atomically.
 
@@ -1294,12 +1298,51 @@ Batch operations that succeed or fail atomically.
 - **Body**: `{ "atomic:operations": [{ "op": "add"|"update"|"remove", "href": "...", "data": {...} }] }`
 - **Use by agent**: creating multiple related files in a single transaction (e.g., card definition + instances)
 
-##### `realm-search`
+##### Query Operations
+
+###### `realm-search`
 
 Search for cards using structured queries.
 
 - **Endpoint**: `QUERY <realm-url>/_search`
-- **Use by agent**: same as `search-realm` script but at the HTTP level
+- **Use by agent**: finding existing cards, checking for duplicates, querying project state
+
+###### `realm-mtimes`
+
+Get file modification times for a realm.
+
+- **Endpoint**: `GET <realm-url>/_mtimes`
+- **Use by agent**: checking what files exist in a realm, detecting changes
+
+##### Realm Management Operations
+
+###### `realm-create`
+
+Create a new realm on the realm server.
+
+- **Endpoint**: `POST <realm-server-url>/_create-realm`
+- **Auth**: realm server JWT (from `_server-session`)
+- **Use by agent**: creating scratch realms for experimentation, creating additional test realms, bootstrapping new workspaces
+
+###### `realm-server-session`
+
+Obtain a realm server JWT for management operations.
+
+- **Endpoint**: `POST <realm-server-url>/_server-session`
+- **Use by agent**: obtaining auth for realm management APIs that require server-level tokens
+
+###### `realm-reindex`
+
+Trigger a full reindex of a realm.
+
+- **Endpoint**: `POST <realm-url>/_reindex`
+- **Use by agent**: forcing the realm server to re-process card definitions after updates
+
+##### Design Principle: APIs as Tools
+
+The boundary between "what the orchestrator does directly" and "what the agent invokes as a tool" is intentionally flexible. In Phase 2 (Target Realm Preparation), the orchestrator calls `/_create-realm` directly because realm creation is a deterministic prerequisite. But during Phase 4 (Execution Loop), the agent might invoke `realm-create` as a tool to spin up a scratch realm for an experiment, or `realm-atomic` to write multiple cards at once.
+
+The rule is: **if the orchestrator hardcodes an API call today, it should also be registered as a tool so the agent can invoke the same operation when the situation calls for it**. Over time, more of the deterministic orchestrator steps may migrate to being agent-driven, with the orchestrator only handling safety validation and execution.
 
 #### How the Orchestrator Exposes Tools to the Agent
 
