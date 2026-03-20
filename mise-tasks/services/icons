@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Start boxel-icons HTTP server"
+#MISE dir="packages/realm-server"
+
+# This script delegates to the existing start-icons.sh which handles
+# both environment mode (dynamic port + Traefik registration) and
+# standard mode (fixed port 4206).
+exec sh ./scripts/start-icons.sh

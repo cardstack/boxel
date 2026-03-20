@@ -232,3 +232,18 @@ export async function withTimersBlocked<T>(
     release();
   }
 }
+
+/**
+ * Schedule a callback via the native (unblocked) setTimeout, bypassing the
+ * prerender timer stub. This is intended for the render-ready stability loop
+ * which needs a real timer to avoid being blocked by the prerender stub while
+ * still not relying on requestAnimationFrame (which is throttled in background
+ * tabs and headless browsers).
+ */
+export function scheduleNativeTimeout(
+  callback: () => void,
+  delay?: number,
+): ReturnType<typeof window.setTimeout> {
+  let fn = invokeSetTimeout ?? globalThis.setTimeout;
+  return fn(callback, delay);
+}
