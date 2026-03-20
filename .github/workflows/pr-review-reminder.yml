@@ -70,7 +70,7 @@ jobs:
                  url,
                  author: .author.login,
                  waitingSince: (.timelineItems.nodes[0].createdAt // "unknown"),
-                 reviewers: [.reviewRequests.nodes[].requestedReviewer | .login // .name]
+                 reviewers: [.reviewRequests.nodes[].requestedReviewer | (.login // .name // empty)] | map(select(. != ""))
                }
             ] | sort_by(.waitingSince)')"
 
@@ -83,7 +83,7 @@ jobs:
 
           fields="$(echo "$filtered" | jq -c '[.[] | {
             name: ("#\(.number) by \(.author) — waiting since \(.waitingSince | split("T")[0])"),
-            value: "[\(.title)](\(.url))\nReviewers: \(.reviewers | join(", "))",
+            value: (["[\(.title)](\(.url))"] + (if (.reviewers | length) > 0 then ["Reviewers: \(.reviewers | join(", "))"] else [] end) | join("\n")),
             inline: false
           }]')"
 
