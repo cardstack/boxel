@@ -64,17 +64,19 @@ let loadMoreSentinel = modifier(
 
     let optionsList = element
       .closest('.ember-basic-dropdown-content')
-      ?.querySelector('.ember-power-select-options');
+      ?.querySelector('.ember-power-select-options') as HTMLElement | null;
     if (!optionsList) {
       return;
     }
 
+    let alreadyRequested = false;
     let handleScroll = () => {
-      if (isLoadingMore) {
+      if (isLoadingMore || alreadyRequested) {
         return;
       }
-      let { scrollTop, scrollHeight, clientHeight } = optionsList as Element;
+      let { scrollTop, scrollHeight, clientHeight } = optionsList;
       if (scrollTop + clientHeight >= scrollHeight - 50) {
+        alreadyRequested = true;
         onLoadMore();
       }
     };

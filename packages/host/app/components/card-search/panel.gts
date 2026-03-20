@@ -191,9 +191,7 @@ export default class SearchPanel extends Component<Signature> {
         return;
       }
 
-      if (append) {
-        this._isLoadingMoreTypes = true;
-      } else {
+      if (!append) {
         this._isLoadingTypes = true;
       }
 
@@ -380,6 +378,7 @@ export default class SearchPanel extends Component<Signature> {
     ) {
       return;
     }
+    this._isLoadingMoreTypes = true;
     this._typePageNumber = this._typePageNumber + 1;
     this.fetchTypeSummaries.perform(
       this.selectedRealmURLs,

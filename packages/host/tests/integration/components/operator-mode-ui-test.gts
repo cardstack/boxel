@@ -993,7 +993,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     // Open type picker dropdown
     await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
     await waitFor('[data-test-boxel-picker-option-row]');
-    // Wait for all pages to load via infinite scroll
+    // Wait until the "Pet" type option is visible
     await waitFor('[data-test-boxel-picker-option-row="Pet"]');
 
     assert
