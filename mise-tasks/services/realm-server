@@ -1,9 +1,9 @@
-#! /bin/sh
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "$SCRIPTS_DIR/wait-for-pg.sh"
-. "$SCRIPTS_DIR/ensure-traefik.sh"
+#!/bin/sh
+#MISE description="Start realm development server"
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:ensure-db"]
+#MISE dir="packages/realm-server"
 
-ensure_traefik
+SCRIPTS_DIR="./scripts"
 
 sh "$SCRIPTS_DIR/start-icons.sh" &
 ICONS_PID=$!
@@ -13,8 +13,6 @@ cleanup_icons_server() {
   fi
 }
 trap cleanup_icons_server EXIT INT TERM
-
-wait_for_postgres
 
 pnpm --dir=../skills-realm skills:setup
 
@@ -40,25 +38,6 @@ fi
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
 
-# Environment-mode configuration: when BOXEL_ENVIRONMENT is set, use dynamic ports and
-# Traefik routing instead of hardcoded ports.
-if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
-  REALM_PORT=0
-  REALMS_ROOT="./realms/${ENV_SLUG}"
-  PGDATABASE_VAL="boxel_${ENV_SLUG}"
-  MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
-  # Ensure per-environment database exists
-  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "$ENV_SLUG"
-else
-  REALM_BASE_URL="http://localhost:4201"
-  REALM_PORT=4201
-  REALMS_ROOT="./realms/localhost_4201"
-  PGDATABASE_VAL="boxel"
-  MATRIX_URL_VAL="http://localhost:8008"
-fi
-
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_EXTERNAL_CATALOG_REALM_URL="${REALM_BASE_URL}/external-catalog/"
@@ -79,21 +58,17 @@ if [ -n "$START_SUBMISSION" ]; then
   sh "$SCRIPTS_DIR/setup-submission-realm.sh" "$SUBMISSION_REALM_PATH"
 fi
 
-
-# In environment mode, override prerender URL and worker manager arg to use Traefik hostnames
-if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender.${ENV_SLUG}.localhost}"
-  WORKER_MANAGER_ARG="--workerManagerUrl=http://worker.${ENV_SLUG}.localhost"
+if [ -n "$ENV_MODE" ]; then
+  WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_MGR_URL}"
 else
-  PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
   WORKER_MANAGER_ARG="$1"
 fi
 
 LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
-  PGPORT=5435 \
-  PGDATABASE="${PGDATABASE_VAL}" \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE}" \
   LOG_LEVELS='*=info' \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
@@ -154,4 +129,3 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --username='software_factory_realm' \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
-  ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"}

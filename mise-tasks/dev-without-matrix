@@ -1,0 +1,15 @@
+#!/bin/sh
+#MISE description="Start dev stack without starting Matrix/SMTP (expects them already running)"
+#MISE dir="packages/realm-server"
+
+READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
+EXPERIMENTS_READY="http-get://${REALM_BASE_URL#http://}/experiments/${READY_PATH}"
+NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+
+WAIT_ON_TIMEOUT=900000 SKIP_BOXEL_HOMEPAGE=true NODE_NO_WARNINGS=1 start-server-and-test \
+  'run-p start:pg start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
+  "${BASE_REALM_READY}|${EXPERIMENTS_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
+  'run-p start:worker-test start:test-realms' \
+  "${NODE_TEST_REALM_READY}" \
+  'wait'

@@ -1,7 +1,9 @@
-#! /bin/sh
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-. "$SCRIPTS_DIR/wait-for-pg.sh"
-. "$SCRIPTS_DIR/ensure-traefik.sh"
+#!/bin/sh
+#MISE description="Start test realm servers"
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+SCRIPTS_DIR="./scripts"
 
 # In environment mode, share the dev icons server; otherwise start our own
 if [ -z "$BOXEL_ENVIRONMENT" ]; then
@@ -13,37 +15,18 @@ if [ -z "$BOXEL_ENVIRONMENT" ]; then
     fi
   }
   trap cleanup_icons_server EXIT INT TERM
-else
-  ensure_traefik
 fi
 
-wait_for_postgres
-
-# Environment-mode configuration
-if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
-  REALM_TEST_URL="http://realm-test.${ENV_SLUG}.localhost"
-  REALM_BASE_URL="http://realm-server.${ENV_SLUG}.localhost"
-  TEST_PORT=0
-  PGDATABASE_VAL="boxel_test_${ENV_SLUG}"
-  REALMS_ROOT="./realms/${ENV_SLUG}_test"
-  PRERENDER_URL="${PRERENDER_URL:-http://prerender.${ENV_SLUG}.localhost}"
-  WORKER_MANAGER_ARG="--workerManagerUrl=http://worker-test.${ENV_SLUG}.localhost"
+if [ -n "$ENV_MODE" ]; then
+  WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_TEST_MGR_URL}"
   SERVICE_NAME_ARG="--serviceName=realm-test"
-  MATRIX_URL_VAL="http://matrix.${ENV_SLUG}.localhost"
 
   # Ensure per-environment test database exists
-  sh "$SCRIPTS_DIR/../../../scripts/ensure-branch-db.sh" "test_${ENV_SLUG}"
+  REPO_ROOT="$(cd "../.." && pwd)"
+  sh "$REPO_ROOT/scripts/ensure-branch-db.sh" "test_${ENV_SLUG}"
 else
-  REALM_TEST_URL="http://localhost:4202"
-  REALM_BASE_URL="http://localhost:4201"
-  TEST_PORT=4202
-  PGDATABASE_VAL="boxel_test"
-  REALMS_ROOT="./realms/localhost_4202"
-  PRERENDER_URL="${PRERENDER_URL:-http://localhost:4221}"
   WORKER_MANAGER_ARG="$1"
   SERVICE_NAME_ARG=""
-  MATRIX_URL_VAL="http://localhost:8008"
 fi
 
 pnpm --dir=../skills-realm skills:setup
@@ -54,8 +37,8 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 NODE_ENV=test \
-  PGPORT=5435 \
-  PGDATABASE="${PGDATABASE_VAL}" \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE_TEST}" \
   NODE_NO_WARNINGS=1 \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
@@ -66,7 +49,7 @@ NODE_ENV=test \
   --transpileOnly main \
   --port="${TEST_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
-  --realmsRootPath="${REALMS_ROOT}" \
+  --realmsRootPath="${REALMS_TEST_ROOT}" \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   --migrateDB \
   --prerendererUrl="${PRERENDER_URL}" \

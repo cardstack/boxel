@@ -2,13 +2,16 @@
 # Ensure Synapse is running. In environment mode, also auto-register users
 # since each environment gets a fresh Synapse data dir.
 
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/../../../scripts/env-slug.sh"
+
 cd ../matrix
 
 pnpm assert-synapse-running
 
 # In environment mode, register users once per fresh Synapse data dir.
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  SLUG=$(resolve_env_slug)
   export PGDATABASE="${PGDATABASE:-boxel_${SLUG}}"
   export PGPORT="${PGPORT:-5435}"
 

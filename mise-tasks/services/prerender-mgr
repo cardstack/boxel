@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Start prerender manager for development"
+#MISE depends=["infra:ensure-traefik"]
+#MISE dir="packages/realm-server"
+
+NODE_ENV=development \
+  NODE_NO_WARNINGS=1 \
+  PRERENDER_MANAGER_VERBOSE_LOGS=false \
+  ts-node \
+  --transpileOnly prerender/manager-server \
+  --port=${PRERENDER_MANAGER_PORT:-$PRERENDER_MGR_PORT} \
+  --exit-on-signal

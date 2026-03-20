@@ -676,7 +676,7 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       context.testRealmServer as unknown as { realms: { url: string }[] }
     ).realms;
     let publishedRealmIndex = mountedRealms.findIndex(
-      (realm) => realm.url === publishedRealmURL,
+      (realm: { url: string }) => realm.url === publishedRealmURL,
     );
     assert.notStrictEqual(
       publishedRealmIndex,

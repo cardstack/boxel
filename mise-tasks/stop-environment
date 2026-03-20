@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Stop all services for an environment and clean up"
+
+exec ./scripts/stop-environment.sh "$@"

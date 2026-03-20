@@ -1,62 +1,84 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { parseArgs as parseNodeArgs } from 'node:util';
+
+import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
+import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
+import {
+  bootstrapFactoryTargetRealm,
+  resolveFactoryTargetRealm,
+  type FactoryTargetRealmBootstrapResult,
+  type FactoryTargetRealmResolution,
+  type ResolveFactoryTargetRealmOptions,
+} from './factory-target-realm';
+import { createBoxelRealmFetch } from './realm-auth';
 
 const allowedModes = ['bootstrap', 'implement', 'resume'] as const;
 
 export type FactoryEntrypointMode = (typeof allowedModes)[number];
 
-export type FactoryEntrypointOptions = {
+export interface FactoryEntrypointOptions {
   briefUrl: string;
-  targetRealmPath: string;
   targetRealmUrl: string | null;
+  realmServerUrl: string | null;
   mode: FactoryEntrypointMode;
-};
+}
 
-export type FactoryEntrypointAction = {
+export interface FactoryEntrypointAction {
   name: string;
   status: 'ok';
   detail: string;
-};
+}
 
-export type FactoryEntrypointSummary = {
+export interface FactoryEntrypointBriefSummary extends FactoryBrief {
+  url: string;
+}
+
+export interface FactoryEntrypointSummary {
   command: 'factory:go';
   mode: FactoryEntrypointMode;
-  brief: {
-    url: string;
-  };
+  brief: FactoryEntrypointBriefSummary;
   targetRealm: {
-    path: string;
-    url: string | null;
-    exists: boolean;
+    url: string;
+    ownerUsername: string;
   };
   actions: FactoryEntrypointAction[];
   result: {
     status: 'ready';
     nextStep: string;
   };
-};
-
-export class FactoryEntrypointUsageError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FactoryEntrypointUsageError';
-  }
 }
+
+export interface RunFactoryEntrypointDependencies {
+  fetch?: typeof globalThis.fetch;
+  resolveTargetRealm?: (
+    options: ResolveFactoryTargetRealmOptions,
+  ) => FactoryTargetRealmResolution;
+  bootstrapTargetRealm?: (
+    resolution: FactoryTargetRealmResolution,
+  ) => Promise<FactoryTargetRealmBootstrapResult>;
+}
+export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
 export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
-    '  pnpm factory:go -- --brief-url <url> --target-realm-path <path> [options]',
+    '  pnpm factory:go -- --brief-url <url> --target-realm-url <url> [options]',
     '',
     'Required:',
     '  --brief-url <url>           Absolute URL for the source brief card',
-    '  --target-realm-path <path>  Local filesystem path to the target realm',
+    '  --target-realm-url <url>    Absolute URL for the target realm',
     '',
     'Options:',
-    '  --target-realm-url <url>    Absolute URL for the target realm when known',
+    '  --realm-server-url <url>   Explicit realm server URL for target realm bootstrap',
     '  --mode <mode>               One of: bootstrap, implement, resume',
     '  --help                      Show this usage information',
+    '',
+    'Auth:',
+    '  MATRIX_USERNAME is required and determines the target realm owner.',
+    '  For public briefs, no auth setup is needed.',
+    '  For private briefs, factory:go can authenticate via:',
+    '    1. the active Boxel profile, or',
+    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD + REALM_SERVER_URL',
+    '  Target realm creation uses separate realm-server auth and post-create realm auth.',
   ].join('\n');
 }
 
@@ -75,10 +97,10 @@ export function parseFactoryEntrypointArgs(
         'brief-url': {
           type: 'string',
         },
-        'target-realm-path': {
+        'target-realm-url': {
           type: 'string',
         },
-        'target-realm-url': {
+        'realm-server-url': {
           type: 'string',
         },
         help: {
@@ -101,19 +123,20 @@ export function parseFactoryEntrypointArgs(
   }
 
   let briefUrl = requireStringValue(parsed.values['brief-url'], '--brief-url');
-  let targetRealmPath = requireStringValue(
-    parsed.values['target-realm-path'],
-    '--target-realm-path',
+  let targetRealmUrl = requireStringValue(
+    parsed.values['target-realm-url'],
+    '--target-realm-url',
   );
-  let targetRealmUrl = optionalStringValue(parsed.values['target-realm-url']);
+  let realmServerUrl =
+    typeof parsed.values['realm-server-url'] === 'string'
+      ? normalizeUrl(parsed.values['realm-server-url'], '--realm-server-url')
+      : null;
   let mode = parseMode(parsed.values.mode);
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
-    targetRealmPath,
-    targetRealmUrl: targetRealmUrl
-      ? normalizeUrl(targetRealmUrl, '--target-realm-url')
-      : null,
+    targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
+    realmServerUrl,
     mode,
   };
 }
@@ -123,11 +146,35 @@ export function wantsFactoryEntrypointHelp(argv: string[]): boolean {
   return normalizedArgv.includes('--help');
 }
 
+export async function runFactoryEntrypoint(
+  options: FactoryEntrypointOptions,
+  dependencies?: RunFactoryEntrypointDependencies,
+): Promise<FactoryEntrypointSummary> {
+  let targetRealmResolution = (
+    dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
+  )({
+    targetRealmUrl: options.targetRealmUrl,
+    realmServerUrl: options.realmServerUrl,
+  });
+  let fetchImpl = createBoxelRealmFetch(options.briefUrl, {
+    fetch: dependencies?.fetch,
+  });
+
+  let brief = await loadFactoryBrief(options.briefUrl, {
+    fetch: fetchImpl,
+  });
+
+  let targetRealm = await (
+    dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
+  )(targetRealmResolution);
+
+  return buildFactoryEntrypointSummary(options, brief, targetRealm);
+}
 export function buildFactoryEntrypointSummary(
   options: FactoryEntrypointOptions,
+  brief: FactoryBrief,
+  targetRealm: FactoryTargetRealmBootstrapResult,
 ): FactoryEntrypointSummary {
-  let resolvedTargetRealmPath = resolve(process.cwd(), options.targetRealmPath);
-  let targetRealmExists = existsSync(resolvedTargetRealmPath);
   let actions: FactoryEntrypointAction[] = [
     {
       name: 'validated-inputs',
@@ -135,30 +182,44 @@ export function buildFactoryEntrypointSummary(
       detail: 'accepted required CLI inputs',
     },
     {
-      name: 'resolved-target-realm-path',
+      name: 'resolved-target-realm-owner',
       status: 'ok',
-      detail: resolvedTargetRealmPath,
+      detail: targetRealm.ownerUsername,
+    },
+    {
+      name: 'fetched-brief',
+      status: 'ok',
+      detail: brief.sourceUrl,
+    },
+    {
+      name: 'normalized-brief',
+      status: 'ok',
+      detail: 'prepared-brief-data',
+    },
+    {
+      name: 'resolved-target-realm',
+      status: 'ok',
+      detail: targetRealm.url,
+    },
+    {
+      name: 'bootstrapped-target-realm',
+      status: 'ok',
+      detail: targetRealm.createdRealm
+        ? 'created realm via realm server API'
+        : 'target realm already existed',
     },
   ];
-
-  if (options.targetRealmUrl) {
-    actions.push({
-      name: 'resolved-target-realm-url',
-      status: 'ok',
-      detail: options.targetRealmUrl,
-    });
-  }
 
   return {
     command: 'factory:go',
     mode: options.mode,
     brief: {
-      url: options.briefUrl,
+      ...brief,
+      url: brief.sourceUrl,
     },
     targetRealm: {
-      path: resolvedTargetRealmPath,
-      url: options.targetRealmUrl,
-      exists: targetRealmExists,
+      url: targetRealm.url,
+      ownerUsername: targetRealm.ownerUsername,
     },
     actions,
     result: {
@@ -180,16 +241,6 @@ function requireStringValue(
   }
 
   throw new FactoryEntrypointUsageError(`Missing required ${flagName}`);
-}
-
-function optionalStringValue(
-  value: string | boolean | undefined,
-): string | undefined {
-  if (typeof value === 'string' && value.trim() !== '') {
-    return value;
-  }
-
-  return undefined;
 }
 
 function parseMode(value: string | boolean | undefined): FactoryEntrypointMode {
