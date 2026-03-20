@@ -20,13 +20,7 @@ import {
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import { join } from 'path';
-import {
-  ensureDirSync,
-  copySync,
-  readJsonSync,
-  writeJsonSync,
-  removeSync,
-} from 'fs-extra';
+import { copySync, readJsonSync, writeJsonSync, removeSync } from 'fs-extra';
 
 import {
   fetchRequestFromContext,
@@ -339,8 +333,10 @@ export default function handlePublishRealm({
       let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmId);
+      // Remove existing published files so that files deleted from the source
+      // realm don't persist in the published realm on republish
+      removeSync(publishedRealmPath);
       copySync(sourceRealmPath, publishedRealmPath);
-      ensureDirSync(publishedRealmPath);
 
       let newlyPublishedRealmConfig = readJsonSync(
         join(publishedRealmPath, '.realm.json'),
