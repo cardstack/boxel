@@ -2982,13 +2982,6 @@ function trackRuntimeRelationshipDependencies(
   }
 }
 
-// Track which modules have already had their full dependency trees tracked in
-// this session to avoid redundant getKnownConsumedModules() calls. This is
-// critical for performance: without it, every linksTo field getter access
-// walks the entire module dependency graph, leading to O(cards × modules)
-// scaling with expensive URL construction on each node.
-const trackedRelationshipModules = new Set<string>();
-
 function trackRuntimeRelationshipModuleDependencies(
   value: unknown,
   dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -3009,18 +3002,15 @@ function trackRuntimeRelationshipModuleDependencies(
 
   trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
 
-  // Skip the expensive dependency graph walk if we already tracked this
-  // module's full dep tree. The dep tree for an evaluated module is immutable.
-  if (trackedRelationshipModules.has(identity.module)) {
-    return;
-  }
-  trackedRelationshipModules.add(identity.module);
-
   let loader = Loader.getLoaderFor(ctor);
   if (!loader) {
     return;
   }
 
+  // getKnownConsumedModules is fast now: the Loader caches the dependency
+  // graph traversal result in collectKnownModuleDependencies, and
+  // trimModuleIdentifier uses string ops + a cache instead of URL
+  // construction. No need for a caller-side skip cache here.
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
     trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }

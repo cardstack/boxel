@@ -258,8 +258,10 @@ export class Loader {
     let knownDependencies = this.collectKnownModuleDependencies(
       resolvedModuleIdentifier,
     );
-    knownDependencies.delete(resolvedModuleIdentifier);
-    return [...knownDependencies];
+    // Filter rather than delete to avoid mutating the cached Set
+    return [...knownDependencies].filter(
+      (dep) => dep !== resolvedModuleIdentifier,
+    );
   }
 
   private trackKnownModuleDependencies(
