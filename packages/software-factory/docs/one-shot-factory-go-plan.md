@@ -486,26 +486,26 @@ The orchestration loop communicates with the LLM through a `FactoryAgent` interf
 
 ```typescript
 interface FactoryAgentConfig {
-  model: string;               // OpenRouter model ID
-  realmServerUrl: string;      // for proxied API calls
-  authorization?: string;      // realm server JWT
+  model: string; // OpenRouter model ID
+  realmServerUrl: string; // for proxied API calls
+  authorization?: string; // realm server JWT
 }
 
 interface AgentContext {
-  project: ProjectCard;        // current project state
-  ticket: TicketCard;          // active ticket
+  project: ProjectCard; // current project state
+  ticket: TicketCard; // active ticket
   knowledge: KnowledgeArticle[]; // relevant knowledge cards
-  skills: ResolvedSkill[];     // active skills for this ticket (see Skills Integration)
-  tools: ToolManifest[];       // available tools for this ticket (see Tools Integration)
-  testResults?: TestResult;    // previous test run output (if iterating)
+  skills: ResolvedSkill[]; // active skills for this ticket (see Skills Integration)
+  tools: ToolManifest[]; // available tools for this ticket (see Tools Integration)
+  testResults?: TestResult; // previous test run output (if iterating)
   targetRealmUrl: string;
   testRealmUrl: string;
 }
 
 interface ResolvedSkill {
-  name: string;                // e.g., 'boxel-development'
-  content: string;             // full markdown content of the skill
-  references?: string[];       // loaded reference file contents (for skills with references/)
+  name: string; // e.g., 'boxel-development'
+  content: string; // full markdown content of the skill
+  references?: string[]; // loaded reference file contents (for skills with references/)
 }
 
 // Every AgentAction is a tool call. The `type` field selects which tool
@@ -516,19 +516,19 @@ interface ResolvedSkill {
 
 interface AgentAction {
   type:
-    | 'create_file'       // convenience: realm-write to target realm
-    | 'update_file'       // convenience: realm-write to target realm
-    | 'create_test'       // convenience: realm-write to test realm
-    | 'update_test'       // convenience: realm-write to test realm
-    | 'update_ticket'     // convenience: realm-write to update ticket card
-    | 'create_knowledge'  // convenience: realm-write to create/update knowledge card
-    | 'invoke_tool'       // invoke any registered tool directly
+    | 'create_file' // convenience: realm-write to target realm
+    | 'update_file' // convenience: realm-write to target realm
+    | 'create_test' // convenience: realm-write to test realm
+    | 'update_test' // convenience: realm-write to test realm
+    | 'update_ticket' // convenience: realm-write to update ticket card
+    | 'create_knowledge' // convenience: realm-write to create/update knowledge card
+    | 'invoke_tool' // invoke any registered tool directly
     | 'request_clarification' // signal: stop and ask the user
-    | 'done';             // signal: ticket is complete
-  path?: string;          // realm-relative path for file actions
-  content?: string;       // file content or message
+    | 'done'; // signal: ticket is complete
+  path?: string; // realm-relative path for file actions
+  content?: string; // file content or message
   realm?: 'target' | 'test'; // which realm the action targets
-  tool?: string;          // tool name for invoke_tool actions
+  tool?: string; // tool name for invoke_tool actions
   toolArgs?: Record<string, unknown>; // arguments for the tool
 }
 
@@ -628,9 +628,9 @@ Each `plan()` call is a **one-shot LLM request**: one system message and one use
 
 ```typescript
 [
-  { role: 'system',    content: systemPrompt },
-  { role: 'user',      content: ticketPrompt },
-]
+  { role: 'system', content: systemPrompt },
+  { role: 'user', content: ticketPrompt },
+];
 ```
 
 The **system prompt** is the same for every call within a ticket: role definition, output schema, skills, and tools.
@@ -682,11 +682,13 @@ around the JSON. The orchestrator parses your response as JSON directly.
 # Skills
 
 {{#each skills}}
+
 ## Skill: {{name}}
 
 {{content}}
 
 {{#each references}}
+
 ### Reference: {{referenceName}}
 
 {{referenceContent}}
@@ -698,6 +700,7 @@ around the JSON. The orchestrator parses your response as JSON directly.
 You may invoke any of the following tools by returning an `invoke_tool` action.
 
 {{#each tools}}
+
 ## Tool: {{name}}
 
 {{description}}
@@ -707,9 +710,10 @@ Output format: {{outputFormat}}
 
 Arguments:
 {{#each args}}
+
 - {{name}} ({{type}}, {{#if required}}required{{else}}optional{{/if}}): {{description}}{{#if default}} (default: {{default}}){{/if}}
-{{/each}}
-{{/each}}
+  {{/each}}
+  {{/each}}
 ```
 
 The `{{action-schema}}` variable is replaced with the contents of `prompts/action-schema.md`, which contains the full JSON schema for `AgentAction[]`. This is the canonical reference the LLM uses to produce valid output.
@@ -727,12 +731,14 @@ Template: `prompts/ticket-implement.md`
 
 Success criteria:
 {{#each project.successCriteria}}
+
 - {{this}}
-{{/each}}
+  {{/each}}
 
 # Knowledge
 
 {{#each knowledge}}
+
 ## {{title}}
 
 {{content}}
@@ -751,13 +757,15 @@ Description:
 {{#if ticket.checklist}}
 Checklist:
 {{#each ticket.checklist}}
+
 - [ ] {{this}}
-{{/each}}
-{{/if}}
+      {{/each}}
+      {{/if}}
 
 # Instructions
 
 Implement this ticket. Return actions that:
+
 1. Create or update card definitions (.gts) and/or card instances (.json) in the target realm
 2. Create test specs (.spec.ts) in the test realm that verify your implementation
 3. Use `invoke_tool` actions to inspect existing realm state before creating files
@@ -777,10 +785,12 @@ Template: `prompts/ticket-test.md`
 You implemented the following files for ticket {{ticket.id}}:
 
 {{#each implementedFiles}}
-## {{path}} ({{realm}} realm)
 
+## {{path}} ({{realm}} realm)
 ```
+
 {{content}}
+
 ```
 {{/each}}
 
@@ -819,10 +829,12 @@ Description:
 You previously produced the following actions for this ticket:
 
 {{#each previousActions}}
-## {{type}}: {{path}} ({{realm}} realm)
 
+## {{type}}: {{path}} ({{realm}} realm)
 ```
+
 {{content}}
+
 ```
 {{/each}}
 
@@ -839,14 +851,18 @@ Duration: {{testResults.durationMs}}ms
 ## Failure: {{testName}}
 
 ```
+
 {{error}}
+
 ```
 
 {{#if stackTrace}}
 Stack trace:
 ```
+
 {{stackTrace}}
-```
+
+````
 {{/if}}
 {{/each}}
 
@@ -858,13 +874,15 @@ Stack trace:
 
 ```json
 {{output}}
-```
+````
+
 {{/each}}
 {{/if}}
 
 # Instructions
 
 Fix the failing tests. You may:
+
 - Update implementation files (use `update_file` actions)
 - Update test specs (use `update_test` actions)
 - Invoke tools to inspect current realm state
@@ -872,6 +890,7 @@ Fix the failing tests. You may:
 - If the implementation is wrong, fix the implementation
 
 Return the actions needed to make all tests pass.
+
 ```
 
 #### One-Shot Iteration Flow
@@ -879,24 +898,26 @@ Return the actions needed to make all tests pass.
 A single ticket may require multiple iterations. Each iteration is an independent one-shot call — the orchestrator packs everything into a single `[system, user]` message pair:
 
 ```
+
 Pass 1 (initial implementation):
-  system:    [system prompt with skills, tools, schema]
-  user:      [ticket-implement — project context, ticket description]
-  → LLM responds: AgentAction[] — creates files + tests
-  → orchestrator applies actions, runs tests, tests fail
+system: [system prompt with skills, tools, schema]
+user: [ticket-implement — project context, ticket description]
+→ LLM responds: AgentAction[] — creates files + tests
+→ orchestrator applies actions, runs tests, tests fail
 
 Pass 2 (first fix):
-  system:    [same system prompt]
-  user:      [ticket-iterate — ticket context + pass 1 actions + test failure output]
-  → LLM responds: AgentAction[] — updates to fix failures
-  → orchestrator applies actions, runs tests, tests fail again
+system: [same system prompt]
+user: [ticket-iterate — ticket context + pass 1 actions + test failure output]
+→ LLM responds: AgentAction[] — updates to fix failures
+→ orchestrator applies actions, runs tests, tests fail again
 
 Pass 3 (second fix):
-  system:    [same system prompt]
-  user:      [ticket-iterate — ticket context + pass 2 actions + new test failure output]
-  → LLM responds: AgentAction[] — further fixes
-  → orchestrator applies actions, runs tests, tests pass → ticket done
-```
+system: [same system prompt]
+user: [ticket-iterate — ticket context + pass 2 actions + new test failure output]
+→ LLM responds: AgentAction[] — further fixes
+→ orchestrator applies actions, runs tests, tests pass → ticket done
+
+````
 
 Each call is self-contained. The agent sees what it tried on the **previous** iteration (the actions and test results are in the user message), but it does not see the full history of all iterations. This keeps the prompt size bounded and each call independent.
 
@@ -926,7 +947,7 @@ Your previous response was not valid JSON or contained invalid actions.
 Parse error: {{parseError}}
 
 Please respond with ONLY a valid JSON array of AgentAction objects.
-```
+````
 
 If the retry also fails, the orchestrator marks the ticket as blocked.
 
@@ -959,16 +980,16 @@ A new card type added to the DarkFactory schema (`darkfactory-schema.gts`):
 
 ```typescript
 class AgentExecutionLog extends CardDef {
-  @field logId = contains(StringField);             // stable ID: <ticket-slug>-log-<n>
-  @field ticket = linksTo(Ticket);                  // which ticket this log is for
-  @field model = contains(StringField);             // OpenRouter model ID used
-  @field status = contains(ExecutionStatusField);   // running, completed, failed, blocked
-  @field iterations = contains(MarkdownField);      // serialized log of all one-shot calls (see below)
-  @field iterationCount = contains(NumberField);    // number of plan() calls made
-  @field tokenUsage = contains(NumberField);        // total tokens consumed across all calls
+  @field logId = contains(StringField); // stable ID: <ticket-slug>-log-<n>
+  @field ticket = linksTo(Ticket); // which ticket this log is for
+  @field model = contains(StringField); // OpenRouter model ID used
+  @field status = contains(ExecutionStatusField); // running, completed, failed, blocked
+  @field iterations = contains(MarkdownField); // serialized log of all one-shot calls (see below)
+  @field iterationCount = contains(NumberField); // number of plan() calls made
+  @field tokenUsage = contains(NumberField); // total tokens consumed across all calls
   @field startedAt = contains(DateTimeField);
   @field completedAt = contains(DateTimeField);
-  @field errorSummary = contains(StringField);      // if failed/blocked, why
+  @field errorSummary = contains(StringField); // if failed/blocked, why
 }
 
 // running → completed | failed | blocked
@@ -995,16 +1016,20 @@ Each `AgentExecutionLog` card captures every one-shot call made for a ticket's i
 ## Iteration 1
 
 ### Prompt
+
 <the assembled user prompt sent to the LLM — ticket-implement>
 
 ### Response
+
 <raw JSON AgentAction[] returned by the LLM>
 
 ### Actions Applied
+
 - create_file: sticky-note.gts (target realm)
 - create_test: TestSpec/define-sticky-note-core.spec.ts (test realm)
 
 ### Test Results
+
 Status: failed
 Passed: 0, Failed: 1
 Error: "Cannot find module './sticky-note'"
@@ -1014,15 +1039,19 @@ Error: "Cannot find module './sticky-note'"
 ## Iteration 2
 
 ### Prompt
+
 <the assembled user prompt — ticket-iterate with previous actions + test failure>
 
 ### Response
+
 <raw JSON AgentAction[] returned by the LLM>
 
 ### Actions Applied
+
 - update_file: sticky-note.gts (target realm)
 
 ### Test Results
+
 Status: passed
 Passed: 1, Failed: 0
 ```
@@ -1072,7 +1101,7 @@ Project
 └── knowledgeBase (linksToMany → KnowledgeArticle)
 ```
 
-The `AgentExecutionLog` card fills the gap between the Ticket (what needs to be done) and the test results in the test realm (what was verified). It captures *how* the agent got from one to the other — the full sequence of one-shot calls, actions, and results.
+The `AgentExecutionLog` card fills the gap between the Ticket (what needs to be done) and the test results in the test realm (what was verified). It captures _how_ the agent got from one to the other — the full sequence of one-shot calls, actions, and results.
 
 ### Swapping Models
 
@@ -1133,7 +1162,6 @@ Each skill is a `SKILL.md` file with YAML frontmatter:
 name: boxel-development
 description: For .gts card definitions, .json instances, templates, styling, queries, commands
 ---
-
 # Skill content (markdown)
 ...
 ```
@@ -1233,7 +1261,7 @@ interface FactoryAgentConfig {
   model: string;
   realmServerUrl: string;
   authorization?: string;
-  maxSkillTokens?: number;     // optional cap on skill context size
+  maxSkillTokens?: number; // optional cap on skill context size
 }
 ```
 
@@ -1260,25 +1288,25 @@ Each tool is described by a manifest that the orchestrator includes in the `Agen
 
 ```typescript
 interface ToolManifest {
-  name: string;              // unique tool identifier
-  description: string;       // what the tool does (LLM-readable)
+  name: string; // unique tool identifier
+  description: string; // what the tool does (LLM-readable)
   category: 'script' | 'boxel-cli' | 'realm-api';
-  args: ToolArg[];           // expected arguments
+  args: ToolArg[]; // expected arguments
   outputFormat: 'json' | 'text'; // what the tool returns
 }
 
 interface ToolArg {
-  name: string;              // argument name (e.g., 'realm', 'status')
-  description: string;       // what the argument controls
+  name: string; // argument name (e.g., 'realm', 'status')
+  description: string; // what the argument controls
   required: boolean;
   type: 'string' | 'number' | 'boolean';
-  default?: string;          // default value if not provided
+  default?: string; // default value if not provided
 }
 
 interface ToolResult {
-  tool: string;              // tool name that was invoked
-  exitCode: number;          // 0 = success
-  output: unknown;           // parsed JSON or raw text
+  tool: string; // tool name that was invoked
+  exitCode: number; // 0 = success
+  output: unknown; // parsed JSON or raw text
   durationMs: number;
 }
 ```
