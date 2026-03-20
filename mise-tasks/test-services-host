@@ -1,10 +1,11 @@
-#! /bin/sh
+#!/bin/sh
+#MISE description="Start services for host test suite (trimmed catalog)"
+#MISE dir="packages/realm-server"
 
-# Use POSIX flags; pipefail is not portable in /bin/sh
 set -eu
 
-SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
-CATALOG_SRC_PATH="$(cd "$SCRIPTS_DIR/../../catalog-realm" && pwd)"
+SCRIPTS_DIR="./scripts"
+CATALOG_SRC_PATH="$(cd "../../packages/catalog-realm" && pwd)"
 CATALOG_TEMP_PATH="$(mktemp -d "${TMPDIR:-/tmp}/catalog-realm.hosttests.XXXXXX")"
 
 cleanup() {
@@ -46,13 +47,13 @@ done
 
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
-# Make host-test startup logs focus on indexing progress rather than per-request noise.
+READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
+NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+
 HOST_TEST_LOG_LEVELS="${HOST_TEST_LOG_LEVELS:-*=info,realm:requests=warn,realm-index-updater=debug,index-runner=debug,index-perf=debug,index-writer=debug,worker=debug,worker-manager=debug}"
 SKIP_CATALOG="${SKIP_CATALOG:-}"
-# There is a race condition starting up the servers that setting up the
-# submission realm triggers which triggers the start-development.sh script to
-# SIGTERM. currently we don't need the submission realm for host tests to
-# skipping that. but this issue needs to be fixed.
+
 WAIT_ON_TIMEOUT=900000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG="$SKIP_CATALOG" \
@@ -63,7 +64,7 @@ WAIT_ON_TIMEOUT=900000 \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
     'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    'http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson|http://localhost:8008|http://localhost:5001|http://localhost:4206' \
+    "${BASE_REALM_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
-    'http-get://localhost:4202/node-test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson' \
+    "${NODE_TEST_REALM_READY}" \
     'wait'

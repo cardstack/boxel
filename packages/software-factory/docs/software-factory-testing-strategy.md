@@ -140,8 +140,11 @@ These should be covered with unit tests and focused integration tests.
 Hermetic requirement for this layer:
 
 - deterministic `factory:go` tests must not depend on an ambient realm server on `http://localhost:4201/`
+- deterministic `factory:go` tests must not hard-code `localhost:4201` or port `4201` just to get an absolute URL shape
 - when a test only needs an absolute URL shape, use a synthetic URL such as `https://briefs.example.test/...`
+- prefer reserved synthetic hosts such as `*.example.test` or dynamically assigned local test-server ports over canonical dev ports
 - when a test needs a live realm, use the isolated software-factory harness rather than external local infrastructure
+- the only acceptable exceptions are harness-level redirect tests that intentionally intercept a canonical realm URL without depending on a server actually listening on that port
 
 Debugging note:
 
@@ -153,7 +156,7 @@ Examples:
 
 - a public wiki card becomes a normalized brief object
 - a vague brief defaults to thin-MVP planning
-- a temporary realm without tracker support gets bootstrapped correctly
+- a missing target realm gets bootstrapped correctly via `/_create-realm` while reusing the public tracker module URL
 - rerunning bootstrap does not create duplicate cards
 - existing `in_progress` tickets are resumed instead of replaced
 
@@ -256,6 +259,9 @@ Use:
 Use:
 
 - temporary-directory integration tests
+- bootstrap tests that cover missing-realm creation through `/_create-realm`
+- readiness checks that treat a successful `/_create-realm` response as the readiness boundary
+- tests that require `MATRIX_USERNAME` instead of an explicit brief JWT flag
 
 ### Project Artifact Bootstrap
 

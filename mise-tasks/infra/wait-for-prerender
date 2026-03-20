@@ -1,0 +1,21 @@
+#!/bin/sh
+#MISE description="Wait for prerender manager to be ready"
+
+URL="${1:-${PRERENDER_MGR_URL}}"
+TRIMMED_URL="${URL%/}/"
+TIMEOUT_SECONDS=1500
+START_TIME=$(date +%s)
+
+echo "Waiting for prerender manager at ${TRIMMED_URL}"
+
+while ! curl -sf "$TRIMMED_URL" >/dev/null 2>&1; do
+  CURRENT_TIME=$(date +%s)
+  ELAPSED=$((CURRENT_TIME - START_TIME))
+  if [ "$ELAPSED" -ge "$TIMEOUT_SECONDS" ]; then
+    echo "Timed out waiting for prerender manager after ${TIMEOUT_SECONDS}s"
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "Prerender manager is ready"
