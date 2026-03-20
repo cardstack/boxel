@@ -212,7 +212,7 @@ catalog:
   simple-html-tokenizer: ^0.5.11
   sinon: ^19.0.2
   sql-parser-cst: ^0.28.0
-  start-server-and-test: ^2.0.3
+  start-server-and-test: ^2.1.5
   statuses: ^2.0.1
   stream-browserify: ^3.0.0
   stream-chain: ^2.2.5
