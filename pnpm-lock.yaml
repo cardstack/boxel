@@ -583,7 +583,7 @@ catalogs:
       specifier: ^0.28.0
       version: 0.28.1
     start-server-and-test:
-      specifier: ^2.0.3
+      specifier: ^2.1.5
       version: 2.1.5
     statuses:
       specifier: ^2.0.1
@@ -15221,7 +15221,7 @@ snapshots:
       handlebars: 4.7.8
       js-string-escape: 1.0.1
       jsdom: 25.0.1(supports-color@8.1.1)
-      lodash: 4.17.21
+      lodash: 4.17.23
       resolve: 1.22.11
       resolve-package-path: 4.0.3
       resolve.exports: 2.0.3
@@ -15262,7 +15262,7 @@ snapshots:
       babel-import-util: 3.0.1
       ember-cli-babel: 7.26.11
       find-up: 5.0.0
-      lodash: 4.17.21
+      lodash: 4.17.23
       resolve: 1.22.11
       semver: 7.7.3
     optionalDependencies:
@@ -15283,7 +15283,7 @@ snapshots:
       fs-extra: 9.1.0
       is-subdir: 1.2.0
       js-string-escape: 1.0.1
-      lodash: 4.17.21
+      lodash: 4.17.23
       minimatch: 3.1.2
       pkg-entry-points: 1.1.1
       resolve-package-path: 4.0.3
@@ -15300,7 +15300,7 @@ snapshots:
       fs-extra: 9.1.0
       is-subdir: 1.2.0
       js-string-escape: 1.0.1
-      lodash: 4.17.21
+      lodash: 4.17.23
       minimatch: 3.1.2
       pkg-entry-points: 1.1.1
       resolve-package-path: 4.0.3
@@ -15317,7 +15317,7 @@ snapshots:
       fs-extra: 9.1.0
       is-subdir: 1.2.0
       js-string-escape: 1.0.1
-      lodash: 4.17.21
+      lodash: 4.17.23
       minimatch: 3.1.2
       pkg-entry-points: 1.1.1
       resolve-package-path: 4.0.3
@@ -17144,7 +17144,7 @@ snapshots:
       chalk: 4.1.2
       debug: 4.4.3(supports-color@8.1.1)
       js-yaml: 4.1.1
-      lodash: 4.17.21
+      lodash: 4.17.23
       pluralize: 2.0.0
       string-width: 4.2.3
       strip-ansi: 6.0.1
@@ -18082,7 +18082,7 @@ snapshots:
       graceful-fs: 4.2.11
       is-stream: 2.0.1
       lazystream: 1.0.1
-      lodash: 4.17.21
+      lodash: 4.17.23
       normalize-path: 3.0.0
       readable-stream: 4.7.0
 
@@ -18253,7 +18253,7 @@ snapshots:
 
   async@2.6.4:
     dependencies:
-      lodash: 4.17.21
+      lodash: 4.17.23
 
   async@3.2.6: {}
 
@@ -21460,7 +21460,7 @@ snapshots:
   ember-try-config@4.0.0:
     dependencies:
       ember-source-channel-url: 3.0.0
-      lodash: 4.17.21
+      lodash: 4.17.23
       package-json: 6.5.0
       remote-git-tags: 3.0.0
       semver: 7.7.3
@@ -23316,7 +23316,7 @@ snapshots:
       cli-width: 2.2.1
       external-editor: 3.1.0
       figures: 2.0.0
-      lodash: 4.17.21
+      lodash: 4.17.23
       mute-stream: 0.0.7
       run-async: 2.4.1
       rxjs: 6.6.7
@@ -23332,7 +23332,7 @@ snapshots:
       cli-width: 3.0.0
       external-editor: 3.1.0
       figures: 3.2.0
-      lodash: 4.17.21
+      lodash: 4.17.23
       mute-stream: 0.0.8
       run-async: 2.4.1
       rxjs: 6.6.7
