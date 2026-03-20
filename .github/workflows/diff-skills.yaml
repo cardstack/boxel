@@ -7,6 +7,7 @@ on:
       - "packages/base/Skill/**/*.json"
       - "packages/catalog-realm/**/Skill/**/*.json"
       - "packages/experiments-realm/**/Skill*/**/*.json"
+      - "packages/host/tests/cards/skill-*.json"
       - "packages/skills-realm/**/*.json"
       - "packages/software-factory/realm/**/*skill*.json"
 
