@@ -26,10 +26,13 @@ jobs:
           set -euo pipefail
 
           # Only run at 9 AM ET — skip the trigger that doesn't match current DST
-          current_et_hour="$(TZ=America/New_York date +%H)"
-          if [ "$current_et_hour" != "09" ]; then
-            echo "Current ET hour is $current_et_hour, not 9 AM. Skipping."
-            exit 0
+          # Skip the check for push events (testing)
+          if [ "${{ github.event_name }}" != "push" ]; then
+            current_et_hour="$(TZ=America/New_York date +%H)"
+            if [ "$current_et_hour" != "09" ]; then
+              echo "Current ET hour is $current_et_hour, not 9 AM. Skipping."
+              exit 0
+            fi
           fi
 
           prs="$(gh api graphql -f query='
