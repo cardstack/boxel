@@ -156,7 +156,7 @@ Examples:
 
 - a public wiki card becomes a normalized brief object
 - a vague brief defaults to thin-MVP planning
-- a temporary realm without tracker support gets bootstrapped correctly
+- a missing target realm gets bootstrapped correctly via `/_create-realm` while reusing the public tracker module URL
 - rerunning bootstrap does not create duplicate cards
 - existing `in_progress` tickets are resumed instead of replaced
 
@@ -259,6 +259,9 @@ Use:
 Use:
 
 - temporary-directory integration tests
+- bootstrap tests that cover missing-realm creation through `/_create-realm`
+- readiness checks that treat a successful `/_create-realm` response as the readiness boundary
+- tests that require `MATRIX_USERNAME` instead of an explicit brief JWT flag
 
 ### Project Artifact Bootstrap
 
