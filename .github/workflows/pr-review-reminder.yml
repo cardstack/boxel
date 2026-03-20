@@ -17,7 +17,7 @@ jobs:
       - name: Gather PRs and notify Discord
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_WEBHOOK: ${{ secrets.PR_REVIEW_DISCORD_WEBHOOK }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
