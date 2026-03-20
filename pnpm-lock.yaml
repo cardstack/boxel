@@ -583,8 +583,8 @@ catalogs:
       specifier: ^0.28.0
       version: 0.28.1
     start-server-and-test:
-      specifier: ^1.14.0
-      version: 1.15.4
+      specifier: ^2.0.3
+      version: 2.1.5
     statuses:
       specifier: ^2.0.1
       version: 2.0.2
@@ -2200,7 +2200,7 @@ importers:
         version: 0.5.11
       start-server-and-test:
         specifier: 'catalog:'
-        version: 1.15.4
+        version: 2.1.5
       statuses:
         specifier: 'catalog:'
         version: 2.0.2
@@ -2284,7 +2284,7 @@ importers:
         version: 8.16.3
       start-server-and-test:
         specifier: 'catalog:'
-        version: 1.15.4
+        version: 2.1.5
       tmp:
         specifier: 'catalog:'
         version: 0.2.5
@@ -2571,7 +2571,7 @@ importers:
         version: 19.0.5
       start-server-and-test:
         specifier: 'catalog:'
-        version: 1.15.4
+        version: 2.1.5
       stripe:
         specifier: 'catalog:'
         version: 17.7.0
@@ -4922,11 +4922,25 @@ packages:
     resolution: {integrity: sha512-n/SZW+12rwikx/f8YcSv9JCi5p9vn1Bnts9ZtVvfErG4h0gbjHI1H1ZMhVUnaOC7yzFc6PtsCKIK8XeTnL90Gw==}
     engines: {node: ^18 || ^20 || ^22 || >=24}
 
-  '@hapi/hoek@9.3.0':
-    resolution: {integrity: sha512-/c6rf4UJlmHlC9b5BaNvzAcFv7HZ2QHaV0D4/HNlBdvFnvQq8RI4kYdhyPCl7Xj+oWvTWQ8ujhqS53LIgAe6KQ==}
+  '@hapi/address@5.1.1':
+    resolution: {integrity: sha512-A+po2d/dVoY7cYajycYI43ZbYMXukuopIsqCjh5QzsBCipDtdofHntljDlpccMjIfTy6UOkg+5KPriwYch2bXA==}
+    engines: {node: '>=14.0.0'}
 
-  '@hapi/topo@5.1.0':
-    resolution: {integrity: sha512-foQZKJig7Ob0BMAYBfcJk8d77QtOe7Wo4ox7ff1lQYoNNAb6jwcY1ncdoy2e9wQZzvNy7ODZCYJkK8kzmcAnAg==}
+  '@hapi/formula@3.0.2':
+    resolution: {integrity: sha512-hY5YPNXzw1He7s0iqkRQi+uMGh383CGdyyIGYtB+W5N3KHPXoqychklvHhKCC9M3Xtv0OCs/IHw+r4dcHtBYWw==}
+
+  '@hapi/hoek@11.0.7':
+    resolution: {integrity: sha512-HV5undWkKzcB4RZUusqOpcgxOaq6VOAH7zhhIr2g3G8NF/MlFO75SjOr2NfuSx0Mh40+1FqCkagKLJRykUWoFQ==}
+
+  '@hapi/pinpoint@2.0.1':
+    resolution: {integrity: sha512-EKQmr16tM8s16vTT3cA5L0kZZcTMU5DUOZTuvpnY738m+jyP3JIUj+Mm1xc1rsLkGBQ/gVnfKYPwOmPg1tUR4Q==}
+
+  '@hapi/tlds@1.1.6':
+    resolution: {integrity: sha512-xdi7A/4NZokvV0ewovme3aUO5kQhW9pQ2YD1hRqZGhhSi5rBv4usHYidVocXSi9eihYsznZxLtAiEYYUL6VBGw==}
+    engines: {node: '>=14.0.0'}
+
+  '@hapi/topo@6.0.2':
+    resolution: {integrity: sha512-KR3rD5inZbGMrHmgPxsJ9dbi6zEK+C3ZwUwTa+eMwWLz7oijWUTWD2pMSNNYJAU6Qq+65NkxXjqHr/7LM2Xkqg==}
 
   '@humanwhocodes/config-array@0.13.0':
     resolution: {integrity: sha512-DZLEEqFWQFiyK6h5YIeynKx7JlvCYWL0cImfSRXZ9l4Sg2efkFGTuFf6vzXjK1cq6IYkU+Eg/JizXw+TD2vRNw==}
@@ -5711,15 +5725,6 @@ packages:
       '@opentelemetry/sdk-trace-base': ^1.30.1
       '@opentelemetry/semantic-conventions': ^1.28.0
 
-  '@sideway/address@4.1.5':
-    resolution: {integrity: sha512-IqO/DUQHUkPeixNQ8n0JA6102hT9CmaljNTPmQ1u8MEhBo/R4Q8eKLN/vGZxuebwOroDB4cbpjheD4+/sKFK4Q==}
-
-  '@sideway/formula@3.0.1':
-    resolution: {integrity: sha512-/poHZJJVjx3L+zVD6g9KgHfYnb443oi7wLu/XKojDviHy6HOEOA6z1Trk5aR1dGcmPenJEgb2sK2I80LeS3MIg==}
-
-  '@sideway/pinpoint@2.0.0':
-    resolution: {integrity: sha512-RNiOoTPkptFtSVzQevY/yWtZwf/RxyVnPy/OcA9HBM3MlGDnBEYL5B41H0MTn0Uec8Hi+2qUtTfG2WWZBmMejQ==}
-
   '@simple-dom/document@1.4.0':
     resolution: {integrity: sha512-/RUeVH4kuD3rzo5/91+h4Z1meLSLP66eXqpVAw/4aZmYozkeqUkMprq0znL4psX/adEed5cBgiNJcfMz/eKZLg==}
 
@@ -5786,6 +5791,9 @@ packages:
   '@sqlite.org/sqlite-wasm@3.45.1-build1':
     resolution: {integrity: sha512-1EgshFNhVeBtZ9KtQPm3PzzJ2CtpmXAq2DAPywy7WZ3gOK6p5n8TY+M+mBMpQCF5cLqrdNFb3Kp9uNie9rUAHw==}
     hasBin: true
+
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
   '@szmarczak/http-timer@1.1.2':
     resolution: {integrity: sha512-XIB2XbzHTN6ieIjfIMV9hlVcfPU26s2vafYWQcZHWXHOxiaRZYEDKEwdl129Zyg50+foYV2jCgtrqSA6qNuNSA==}
@@ -6766,8 +6774,8 @@ packages:
     resolution: {integrity: sha512-BASOg+YwO2C+346x3LZOeoovTIoTrRqEsqMa6fmfAV0P+U9mFr9NsyOEpiYvFjbc64NMrSswhV50WdXzdb/Z5A==}
     engines: {node: '>=4'}
 
-  axios@0.27.2:
-    resolution: {integrity: sha512-t+yRIyySRTp/wua5xEr+z1q60QmLq8ABsS5O9Me1AsE5dfKqgnCFzwiCZZ/cGNd1lq4/7akDWMxdhVlucjmnOQ==}
+  axios@1.13.6:
+    resolution: {integrity: sha512-ChTCHMouEe2kn713WHbQGcuYrr6fXTBiu460OTwWrWob16g1bXn4vtz07Ope7ewMozJAnEquLk5lWQWtBig9DQ==}
 
   azure-devops-node-api@12.5.0:
     resolution: {integrity: sha512-R5eFskGvOm3U/GzeAuxRkUsAl0hrAwGgWn6zAd2KrZmrEhWZVqLew4OOupbQlXUuojUzpGtq62SmdhJ06N88og==}
@@ -8022,15 +8030,6 @@ packages:
 
   debug@3.2.7:
     resolution: {integrity: sha512-CFjzYYAi4ThfiQvizrFQevTTXHtnCqWfe7x1AhgEscTz6ZbLbfoLRLPugTQyBth6f8ZERVUSyWHFD/7Wu4t1XQ==}
-    peerDependencies:
-      supports-color: '*'
-    peerDependenciesMeta:
-      supports-color:
-        optional: true
-
-  debug@4.3.4:
-    resolution: {integrity: sha512-PRWFHuSU3eDtQJPvnNY7Jcket1j0t5OuOsFzPPzsekD52Zl8qUfFIPEiswXqIvHWGVHOgX+7G/vCNNhehwxfkQ==}
-    engines: {node: '>=6.0'}
     peerDependencies:
       supports-color: '*'
     peerDependenciesMeta:
@@ -10429,8 +10428,9 @@ packages:
     resolution: {integrity: sha512-9FzQjJ7MATs1tSpnco1K6ayiYE3figslrXA72G2HQ/n76RzvYlofyi5QM+iX4YRs/pu3yzxlVQSST23+dMDknw==}
     engines: {node: '>= 0.6.0'}
 
-  joi@17.13.3:
-    resolution: {integrity: sha512-otDA4ldcIx+ZXsKHWmp0YizCweVRZG96J10b0FevjfuncLO1oX59THoAmHkNubYJ+9gWsYsp5k8v4ib6oDv1fA==}
+  joi@18.0.2:
+    resolution: {integrity: sha512-RuCOQMIt78LWnktPoeBL0GErkNaJPTBGcYuyaBvUOQSpcpcLfWrHPPihYdOGbV5pam9VTWbeoF7TsGiHugcjGA==}
+    engines: {node: '>= 20'}
 
   js-string-escape@1.0.1:
     resolution: {integrity: sha512-Smw4xcfIQ5LVjAOuJCvN/zIodzA/BBSsluuoSykP+lUvScIi4U6RJLfwHet5cxFnCswUjISV8oAXaqaJDY3chg==}
@@ -10744,6 +10744,9 @@ packages:
 
   lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
+
+  lodash@4.17.23:
+    resolution: {integrity: sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==}
 
   log-symbols@2.2.0:
     resolution: {integrity: sha512-VeIAFslyIerEJLXHziedo2basKbMKtTw3vfn5IzG0XTjhAVEJyNHnL2p7vc+wBDSdQuUpNw3M2u6xb9QsAY5Eg==}
@@ -11131,9 +11134,6 @@ packages:
 
   ms@2.0.0:
     resolution: {integrity: sha512-Tpp60P6IUJDTuOq/5Z8cdskzJujfwqfOTkrwIwj7IRISpnkJnT6SyJ4PCPnGMoFjC9ddhal5KVIYtAt97ix05A==}
-
-  ms@2.1.2:
-    resolution: {integrity: sha512-sGkPx+VjMtmA6MX27oA4FBFELFCZZ4S4XqeGOXCv68tT+jb3vk/RyaKWP0PTKyWtmLSM0b+adUTEvbs1PEaH2w==}
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
@@ -12731,9 +12731,9 @@ packages:
     resolution: {integrity: sha512-GqXBq2SPWv9hTXDFKS8WrKK1aISB0aKGHZzH+uD4ShAgs+Fz20ZfoerLOm8U+f62iRWLrw6nimOY/uYuTcVhvg==}
     engines: {node: 6.* || 8.* || >= 10.*}
 
-  start-server-and-test@1.15.4:
-    resolution: {integrity: sha512-ucQtp5+UCr0m4aHlY+aEV2JSYNTiMZKdSKK/bsIr6AlmwAWDYDnV7uGlWWEtWa7T4XvRI5cPYcPcQgeLqpz+Tg==}
-    engines: {node: '>=6'}
+  start-server-and-test@2.1.5:
+    resolution: {integrity: sha512-A/SbXpgXE25ScSkpLLqvGvVZT0ykN6+AzS8tVqMBCTxbJy2Nwuen59opT+afalK5aS+AuQmZs0EsLwjnuDN+/g==}
+    engines: {node: '>=16'}
     hasBin: true
 
   static-extend@0.1.2:
@@ -13665,9 +13665,9 @@ packages:
     resolution: {integrity: sha512-i3yX7qgAnxFXWOS6Om7SNi19HRygFvCGh0iy0nOsrYOSiIlhUqoUuzLoW4jHVYS4dzNGzRU100uwTyluOMWcjw==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  wait-on@7.0.1:
-    resolution: {integrity: sha512-9AnJE9qTjRQOlTZIldAaf/da2eW0eSRSgcqq85mXQja/DW3MriHxkpODDSUEg+Gri/rKEcXUZHe+cevvYItaog==}
-    engines: {node: '>=12.0.0'}
+  wait-on@9.0.4:
+    resolution: {integrity: sha512-k8qrgfwrPVJXTeFY8tl6BxVHiclK11u72DVKhpybHfUL/K6KM4bdyK9EhIVYGytB5MJe/3lq4Tf0hrjM+pvJZQ==}
+    engines: {node: '>=20.0.0'}
     hasBin: true
 
   walk-sync@0.2.7:
@@ -16028,11 +16028,21 @@ snapshots:
 
   '@handlebars/parser@2.2.2': {}
 
-  '@hapi/hoek@9.3.0': {}
-
-  '@hapi/topo@5.1.0':
+  '@hapi/address@5.1.1':
     dependencies:
-      '@hapi/hoek': 9.3.0
+      '@hapi/hoek': 11.0.7
+
+  '@hapi/formula@3.0.2': {}
+
+  '@hapi/hoek@11.0.7': {}
+
+  '@hapi/pinpoint@2.0.1': {}
+
+  '@hapi/tlds@1.1.6': {}
+
+  '@hapi/topo@6.0.2':
+    dependencies:
+      '@hapi/hoek': 11.0.7
 
   '@humanwhocodes/config-array@0.13.0':
     dependencies:
@@ -17051,14 +17061,6 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.38.0
       '@sentry/core': 8.55.0
 
-  '@sideway/address@4.1.5':
-    dependencies:
-      '@hapi/hoek': 9.3.0
-
-  '@sideway/formula@3.0.1': {}
-
-  '@sideway/pinpoint@2.0.0': {}
-
   '@simple-dom/document@1.4.0':
     dependencies:
       '@simple-dom/interface': 1.4.0
@@ -17121,6 +17123,8 @@ snapshots:
   '@socket.io/component-emitter@3.1.2': {}
 
   '@sqlite.org/sqlite-wasm@3.45.1-build1': {}
+
+  '@standard-schema/spec@1.1.0': {}
 
   '@szmarczak/http-timer@1.1.2':
     dependencies:
@@ -18280,10 +18284,11 @@ snapshots:
 
   axe-core@4.11.1: {}
 
-  axios@0.27.2(debug@4.3.4):
+  axios@1.13.6(debug@4.4.3):
     dependencies:
-      follow-redirects: 1.15.11(debug@4.3.4)
+      follow-redirects: 1.15.11(debug@4.4.3)
       form-data: 4.0.5
+      proxy-from-env: 1.1.0
     transitivePeerDependencies:
       - debug
 
@@ -19742,10 +19747,6 @@ snapshots:
   debug@3.2.7:
     dependencies:
       ms: 2.1.3
-
-  debug@4.3.4:
-    dependencies:
-      ms: 2.1.2
 
   debug@4.4.3(supports-color@8.1.1):
     dependencies:
@@ -22542,9 +22543,9 @@ snapshots:
     dependencies:
       tabbable: 6.4.0
 
-  follow-redirects@1.15.11(debug@4.3.4):
+  follow-redirects@1.15.11(debug@4.4.3):
     optionalDependencies:
-      debug: 4.3.4
+      debug: 4.4.3(supports-color@8.1.1)
 
   for-each@0.3.5:
     dependencies:
@@ -23190,7 +23191,7 @@ snapshots:
   http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11(debug@4.3.4)
+      follow-redirects: 1.15.11(debug@4.4.3)
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -23666,13 +23667,15 @@ snapshots:
 
   jmespath@0.16.0: {}
 
-  joi@17.13.3:
+  joi@18.0.2:
     dependencies:
-      '@hapi/hoek': 9.3.0
-      '@hapi/topo': 5.1.0
-      '@sideway/address': 4.1.5
-      '@sideway/formula': 3.0.1
-      '@sideway/pinpoint': 2.0.0
+      '@hapi/address': 5.1.1
+      '@hapi/formula': 3.0.2
+      '@hapi/hoek': 11.0.7
+      '@hapi/pinpoint': 2.0.1
+      '@hapi/tlds': 1.1.6
+      '@hapi/topo': 6.0.2
+      '@standard-schema/spec': 1.1.0
 
   js-string-escape@1.0.1: {}
 
@@ -24043,6 +24046,8 @@ snapshots:
   lodash.upperfirst@4.3.1: {}
 
   lodash@4.17.21: {}
+
+  lodash@4.17.23: {}
 
   log-symbols@2.2.0:
     dependencies:
@@ -24432,8 +24437,6 @@ snapshots:
       - supports-color
 
   ms@2.0.0: {}
-
-  ms@2.1.2: {}
 
   ms@2.1.3: {}
 
@@ -26280,16 +26283,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  start-server-and-test@1.15.4:
+  start-server-and-test@2.1.5:
     dependencies:
       arg: 5.0.2
       bluebird: 3.7.2
       check-more-types: 2.24.0
-      debug: 4.3.4
+      debug: 4.4.3(supports-color@8.1.1)
       execa: 5.1.1
       lazy-ass: 1.6.0
       ps-tree: 1.2.0
-      wait-on: 7.0.1(debug@4.3.4)
+      wait-on: 9.0.4(debug@4.4.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -27351,11 +27354,11 @@ snapshots:
 
   wait-for-localhost@4.1.0: {}
 
-  wait-on@7.0.1(debug@4.3.4):
+  wait-on@9.0.4(debug@4.4.3):
     dependencies:
-      axios: 0.27.2(debug@4.3.4)
-      joi: 17.13.3
-      lodash: 4.17.21
+      axios: 1.13.6(debug@4.4.3)
+      joi: 18.0.2
+      lodash: 4.17.23
       minimist: 1.2.8
       rxjs: 7.8.2
     transitivePeerDependencies:
