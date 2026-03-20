@@ -5,6 +5,9 @@ on:
     - cron: "0 13 * * 1-5" # 9 AM EDT (summer)
     - cron: "0 14 * * 1-5" # 9 AM EST (winter)
   workflow_dispatch:
+  push:
+    branches:
+      - ci/discord-pr-review-summary-cs-10475
 
 permissions:
   pull-requests: read
