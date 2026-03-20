@@ -508,17 +508,23 @@ interface ResolvedSkill {
   references?: string[];       // loaded reference file contents (for skills with references/)
 }
 
+// Every AgentAction is a tool call. The `type` field selects which tool
+// the orchestrator executes. High-level action types like `create_file`
+// are convenience aliases that the orchestrator maps to the underlying
+// realm-api tool calls (e.g., `create_file` → `realm-write`).
+// The agent can also use `invoke_tool` directly for any registered tool.
+
 interface AgentAction {
   type:
-    | 'create_file'       // create a new card or module in the target realm
-    | 'update_file'       // update an existing card or module
-    | 'create_test'       // create a test spec in the test realm
-    | 'update_test'       // update an existing test spec
-    | 'update_ticket'     // update ticket status or notes
-    | 'create_knowledge'  // create or update a knowledge article
-    | 'invoke_tool'       // invoke a registered tool (see Tools Integration)
-    | 'request_clarification' // stop and ask the user
-    | 'done';             // ticket is complete
+    | 'create_file'       // convenience: realm-write to target realm
+    | 'update_file'       // convenience: realm-write to target realm
+    | 'create_test'       // convenience: realm-write to test realm
+    | 'update_test'       // convenience: realm-write to test realm
+    | 'update_ticket'     // convenience: realm-write to update ticket card
+    | 'create_knowledge'  // convenience: realm-write to create/update knowledge card
+    | 'invoke_tool'       // invoke any registered tool directly
+    | 'request_clarification' // signal: stop and ask the user
+    | 'done';             // signal: ticket is complete
   path?: string;          // realm-relative path for file actions
   content?: string;       // file content or message
   realm?: 'target' | 'test'; // which realm the action targets
@@ -544,9 +550,9 @@ The execution loop in `factory-loop.ts` drives the agent:
 3.  orchestrator builds tool manifest from registry (via ToolRegistry)
 4.  orchestrator assembles AgentContext from realm state + skills + tools
 5.  orchestrator calls agent.plan(context)
-6.  agent returns AgentAction[] (file actions, tool invocations, test files)
-7.  orchestrator executes invoke_tool actions via ToolExecutor, captures ToolResults
-8.  orchestrator applies file actions to target/test realms via HTTP API
+6.  agent returns AgentAction[] — each action is a tool call the orchestrator executes
+7.  orchestrator validates each action against the tool registry and safety constraints
+8.  orchestrator executes actions via the appropriate ToolExecutor, captures ToolResults
 9.  orchestrator runs test harness against test realm
 10. if tests fail:
     a. orchestrator reads test results
@@ -558,7 +564,7 @@ The execution loop in `factory-loop.ts` drives the agent:
     c. orchestrator moves to next ticket (skills + tools re-resolved)
 ```
 
-The agent never directly writes to realms or executes tests. The orchestrator owns all side effects. The agent only produces structured actions that the orchestrator validates and applies.
+The agent never directly produces side effects. Every `AgentAction` — whether it creates a file, writes a test, searches a realm, or calls a management API — is a tool call that the orchestrator validates and executes on the agent's behalf. Tool calls are the mechanism by which the orchestrator owns all side effects while still letting the agent decide what operations to perform.
 
 ### `FactoryAgent` Implementation
 
@@ -618,31 +624,23 @@ Keeping prompts as standalone Markdown files (not embedded in TypeScript) means 
 
 #### Message Structure
 
-Each call to the LLM is an array of chat messages. The structure depends on where the agent is in the execution loop.
-
-##### First implementation pass (new ticket)
+Each `plan()` call is a **one-shot LLM request**: one system message and one user message. The orchestrator assembles everything the agent needs into a single prompt. There is no multi-turn conversation — the agent is not having a dialogue with anyone. It receives a complete description of the current state and responds with actions.
 
 ```typescript
 [
   { role: 'system',    content: systemPrompt },
-  { role: 'user',      content: ticketImplementPrompt },
+  { role: 'user',      content: ticketPrompt },
 ]
 ```
 
-##### Test iteration pass (after test failure)
+The **system prompt** is the same for every call within a ticket: role definition, output schema, skills, and tools.
 
-```typescript
-[
-  { role: 'system',    content: systemPrompt },
-  { role: 'user',      content: ticketImplementPrompt },
-  { role: 'assistant', content: previousAgentResponse },
-  { role: 'user',      content: ticketIteratePrompt },
-]
-```
+The **user prompt** changes depending on where the orchestrator is in the execution loop:
 
-The conversation grows across iterations within a single ticket. Each iteration appends the previous agent response and a new user message containing the test failure context. This gives the agent memory of what it already tried.
+- **First pass** — uses `ticket-implement.md`: project context, knowledge articles, ticket description, and instructions to implement + write tests.
+- **Iteration pass** — uses `ticket-iterate.md`: everything from the first pass, plus the actions the agent already took, the test results from the last run, and instructions to fix what failed.
 
-When the orchestrator moves to a new ticket, the conversation resets.
+Each call is self-contained. The orchestrator packs whatever history is relevant (previous actions, test output) into the single user message rather than replaying a growing conversation.
 
 #### System Prompt
 
@@ -800,16 +798,37 @@ Return only `create_test` actions.
 
 #### Test Iteration Prompt
 
-Sent after a test failure. Contains the full test output so the agent can diagnose and fix.
+Sent as the user message after a test failure. This is a **self-contained one-shot prompt** — it includes everything the agent needs: the original ticket context, what was already tried, and the test results. The agent does not need to "remember" a prior conversation because all relevant history is in this single message.
 
 Template: `prompts/ticket-iterate.md`
 
 ```markdown
-# Test Failure
+# Project
 
-The tests for ticket {{ticket.id}} failed.
+{{project.objective}}
 
-## Test Results
+# Current Ticket
+
+ID: {{ticket.id}}
+Summary: {{ticket.summary}}
+Description:
+{{ticket.description}}
+
+# Previous Attempt (iteration {{iteration}})
+
+You previously produced the following actions for this ticket:
+
+{{#each previousActions}}
+## {{type}}: {{path}} ({{realm}} realm)
+
+```
+{{content}}
+```
+{{/each}}
+
+# Test Results
+
+The orchestrator applied your actions and ran tests. They failed.
 
 Status: {{testResults.status}}
 Passed: {{testResults.passed}}
@@ -829,17 +848,13 @@ Stack trace:
 {{stackTrace}}
 ```
 {{/if}}
-
-{{#if screenshot}}
-Screenshot saved at: {{screenshot}}
-{{/if}}
 {{/each}}
 
 {{#if toolResults}}
-## Previous Tool Results
+# Tool Results From Previous Iteration
 
 {{#each toolResults}}
-### {{tool}} (exit code: {{exitCode}})
+## {{tool}} (exit code: {{exitCode}})
 
 ```json
 {{output}}
@@ -859,48 +874,38 @@ Fix the failing tests. You may:
 Return the actions needed to make all tests pass.
 ```
 
-#### Conversation Flow Across Iterations
+#### One-Shot Iteration Flow
 
-A single ticket may require multiple iterations. The full message history for a ticket that takes three passes looks like:
+A single ticket may require multiple iterations. Each iteration is an independent one-shot call — the orchestrator packs everything into a single `[system, user]` message pair:
 
 ```
 Pass 1 (initial implementation):
   system:    [system prompt with skills, tools, schema]
-  user:      [ticket-implement prompt with project/ticket context]
-  assistant: [AgentAction[] — creates files + tests]
-
+  user:      [ticket-implement — project context, ticket description]
+  → LLM responds: AgentAction[] — creates files + tests
   → orchestrator applies actions, runs tests, tests fail
 
 Pass 2 (first fix):
   system:    [same system prompt]
-  user:      [same ticket-implement prompt]
-  assistant: [same AgentAction[] from pass 1]
-  user:      [ticket-iterate prompt with test failure details]
-  assistant: [AgentAction[] — updates to fix failures]
-
+  user:      [ticket-iterate — ticket context + pass 1 actions + test failure output]
+  → LLM responds: AgentAction[] — updates to fix failures
   → orchestrator applies actions, runs tests, tests fail again
 
 Pass 3 (second fix):
   system:    [same system prompt]
-  user:      [same ticket-implement prompt]
-  assistant: [same AgentAction[] from pass 1]
-  user:      [ticket-iterate prompt from pass 2]
-  assistant: [same AgentAction[] from pass 2]
-  user:      [ticket-iterate prompt with new test failure details]
-  assistant: [AgentAction[] — further fixes]
-
+  user:      [ticket-iterate — ticket context + pass 2 actions + new test failure output]
+  → LLM responds: AgentAction[] — further fixes
   → orchestrator applies actions, runs tests, tests pass → ticket done
 ```
 
-The conversation accumulates context so the agent can see what it tried before and avoid repeating mistakes. The system prompt and skills stay constant. Only the user messages (with new test results) and assistant messages (with previous actions) grow.
+Each call is self-contained. The agent sees what it tried on the **previous** iteration (the actions and test results are in the user message), but it does not see the full history of all iterations. This keeps the prompt size bounded and each call independent.
 
-#### Conversation Limits
+If the orchestrator needs to give the agent more history (e.g., "you've tried this three times and keep making the same mistake"), it can include a summary of prior attempts in the `ticket-iterate` prompt. But the default is: show only the most recent attempt and its results.
 
-The conversation can grow large across many iterations. The orchestrator enforces limits:
+#### Iteration Limits
 
 - `maxIterations` (default: 5) — maximum fix attempts before the orchestrator marks the ticket as blocked
-- if the conversation exceeds the model's context window, the orchestrator truncates the middle of the history, keeping the system prompt, the first ticket-implement message, and the most recent 2 iteration pairs
-- truncation is logged so the agent's behavior change can be diagnosed
+- since each call is one-shot, there is no growing conversation to truncate — the prompt size is naturally bounded by the ticket context + one iteration's worth of actions and test results
 
 #### Output Parsing and Validation
 
@@ -943,6 +948,131 @@ interface PromptLoader {
 ```
 
 The loader reads from `prompts/`, caches the raw templates, and performs `{{variable}}` interpolation at call time. For `{{#each}}` blocks, it uses a minimal mustache-like expansion — no full template engine, just enough to iterate over arrays.
+
+### Execution Log Persistence
+
+Each one-shot LLM call and its results are valuable artifacts — they are the audit trail, the debugging surface, and the resume state. Rather than treating them as ephemeral in-memory data, the factory persists them as DarkFactory cards in the target realm.
+
+#### `AgentExecutionLog` Card Type
+
+A new card type added to the DarkFactory schema (`darkfactory-schema.gts`):
+
+```typescript
+class AgentExecutionLog extends CardDef {
+  @field logId = contains(StringField);             // stable ID: <ticket-slug>-log-<n>
+  @field ticket = linksTo(Ticket);                  // which ticket this log is for
+  @field model = contains(StringField);             // OpenRouter model ID used
+  @field status = contains(ExecutionStatusField);   // running, completed, failed, blocked
+  @field iterations = contains(MarkdownField);      // serialized log of all one-shot calls (see below)
+  @field iterationCount = contains(NumberField);    // number of plan() calls made
+  @field tokenUsage = contains(NumberField);        // total tokens consumed across all calls
+  @field startedAt = contains(DateTimeField);
+  @field completedAt = contains(DateTimeField);
+  @field errorSummary = contains(StringField);      // if failed/blocked, why
+}
+
+// running → completed | failed | blocked
+class ExecutionStatusField extends StringField {
+  // Enum: running, completed, failed, blocked
+}
+```
+
+#### Why a Card, Not a File
+
+Persisting execution logs as DarkFactory cards (not raw JSON files) means:
+
+- they are **queryable** — the agent can search for past logs by ticket, status, or model
+- they are **renderable** — the DarkFactory UI can display the execution history alongside tickets and projects
+- they are **linkable** — tickets link to their execution logs
+- they are **resumable** — if the factory restarts, it can load the log card and know what was already tried
+- they follow the same realm API patterns as all other factory artifacts
+
+#### What Gets Persisted
+
+Each `AgentExecutionLog` card captures every one-shot call made for a ticket's implementation attempt. The `iterations` field is a structured Markdown document:
+
+```markdown
+## Iteration 1
+
+### Prompt
+<the assembled user prompt sent to the LLM — ticket-implement>
+
+### Response
+<raw JSON AgentAction[] returned by the LLM>
+
+### Actions Applied
+- create_file: sticky-note.gts (target realm)
+- create_test: TestSpec/define-sticky-note-core.spec.ts (test realm)
+
+### Test Results
+Status: failed
+Passed: 0, Failed: 1
+Error: "Cannot find module './sticky-note'"
+
+---
+
+## Iteration 2
+
+### Prompt
+<the assembled user prompt — ticket-iterate with previous actions + test failure>
+
+### Response
+<raw JSON AgentAction[] returned by the LLM>
+
+### Actions Applied
+- update_file: sticky-note.gts (target realm)
+
+### Test Results
+Status: passed
+Passed: 1, Failed: 0
+```
+
+Each iteration records: what prompt was sent, what the LLM returned, what actions were applied, and what test results came back. This is a complete, self-contained log — since each call is one-shot, no "conversation" context is needed to make sense of individual entries.
+
+#### When the Log Is Written
+
+The orchestrator creates and updates `AgentExecutionLog` cards during the execution loop:
+
+1. **On ticket start** — create a new `AgentExecutionLog` card with `status: running`, linked to the active ticket
+2. **After each one-shot call** — append the iteration (prompt, response, actions, test results)
+3. **On ticket completion** — set `status: completed`, record `completedAt`
+4. **On failure/block** — set `status: failed` or `blocked`, record `errorSummary`
+
+The card is written to the **target realm** (not the test realm), because it's a project artifact that tracks the implementation process — it belongs alongside the Project, Ticket, and KnowledgeArticle cards.
+
+#### Execution Logs and Resume
+
+When `factory:go --mode resume` runs:
+
+1. the orchestrator finds the active ticket
+2. it searches for an existing `AgentExecutionLog` card linked to that ticket with `status: running`
+3. if found, it reads the last iteration to know what was already tried and what failed
+4. it assembles the next one-shot `ticket-iterate` prompt with that context
+5. the execution loop continues from where it left off
+
+Since each call is one-shot, resume is straightforward — the orchestrator only needs the last iteration's actions and test results to construct the next prompt. There's no conversation state to reconstruct.
+
+#### Execution Logs as Agent Context
+
+Past logs are also useful as context for the agent. When starting work on a new ticket, the orchestrator can optionally include summaries of completed logs from related tickets in the `AgentContext.knowledge` field. This gives the agent awareness of what approaches worked (or didn't) on earlier tickets in the same project — without needing to replay any "conversation."
+
+#### Relationship to Existing DarkFactory Cards
+
+```
+Project
+├── Ticket (linksToMany)
+│   ├── AgentExecutionLog (linked via ticket field)
+│   │   ├── iterations (one-shot call log)
+│   │   │   ├── prompt sent
+│   │   │   ├── actions returned
+│   │   │   └── test results
+│   │   └── status (running/completed/failed/blocked)
+│   ├── relatedKnowledge (linksToMany → KnowledgeArticle)
+│   └── assignedAgent (linksTo → AgentProfile)
+└── knowledgeBase (linksToMany → KnowledgeArticle)
+```
+
+The `AgentExecutionLog` card fills the gap between the Ticket (what needs to be done) and the test results in the test realm (what was verified). It captures *how* the agent got from one to the other — the full sequence of one-shot calls, actions, and results.
 
 ### Swapping Models
 
