@@ -1,0 +1,102 @@
+name: PR Review Reminder
+
+on:
+  schedule:
+    - cron: "0 14 * * 1-5" # Weekdays at 2 PM UTC / 10 AM ET
+  workflow_dispatch:
+
+permissions:
+  pull-requests: read
+
+jobs:
+  notify:
+    name: Post awaiting-review PRs to Discord
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gather PRs and notify Discord
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          prs="$(gh api graphql -f query='
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequests(states: OPEN, first: 100, orderBy: {field: CREATED_AT, direction: ASC}) {
+                  nodes {
+                    number
+                    title
+                    url
+                    isDraft
+                    author { login }
+                    reviewRequests(first: 10) {
+                      nodes {
+                        requestedReviewer {
+                          ... on User { login }
+                          ... on Team { name }
+                        }
+                      }
+                    }
+                    timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], first: 1) {
+                      nodes {
+                        ... on ReviewRequestedEvent {
+                          createdAt
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ' -f owner="${REPO%/*}" -f repo="${REPO#*/}")"
+
+          filtered="$(echo "$prs" | jq -c '
+            [.data.repository.pullRequests.nodes[]
+             | select(.isDraft == false)
+             | select((.reviewRequests.nodes | length) > 0)
+             | {
+                 number,
+                 title,
+                 url,
+                 author: .author.login,
+                 waitingSince: (.timelineItems.nodes[0].createdAt // "unknown"),
+                 reviewers: [.reviewRequests.nodes[].requestedReviewer | .login // .name]
+               }
+            ] | sort_by(.waitingSince)')"
+
+          count="$(echo "$filtered" | jq 'length')"
+
+          if [ "$count" -eq 0 ]; then
+            echo "No PRs awaiting review. Skipping Discord notification."
+            exit 0
+          fi
+
+          fields="$(echo "$filtered" | jq -c '[.[] | {
+            name: ("#\(.number) by \(.author) — waiting since \(.waitingSince | split("T")[0])"),
+            value: "[\(.title)](\(.url))\nReviewers: \(.reviewers | join(", "))",
+            inline: false
+          }]')"
+
+          # Discord embeds support max 25 fields
+          if [ "$count" -gt 25 ]; then
+            extra=$((count - 24))
+            fields="$(echo "$fields" | jq -c ".[:24] + [{\"name\": \"... and ${extra} more\", \"value\": \"Additional PRs not shown\", \"inline\": false}]")"
+          fi
+
+          payload="$(jq -n --argjson fields "$fields" --arg count "$count" '{
+            embeds: [{
+              title: ("📋 " + $count + " PR(s) awaiting review"),
+              color: 16750848,
+              fields: $fields,
+              footer: { text: "Sorted by oldest review request first" }
+            }]
+          }')"
+
+          curl -sf -X POST \
+            -H "Content-Type: application/json" \
+            -d "$payload" \
+            "$DISCORD_WEBHOOK"
+
+          echo "Posted $count PR(s) to Discord."
