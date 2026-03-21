@@ -142,7 +142,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm sends the realm-server JWT to create-realm', async function (assert) {
-    assert.expect(8);
+    assert.expect(11);
 
     process.env.MATRIX_URL = 'https://matrix.example.test/';
     process.env.MATRIX_USERNAME = 'hassan';
@@ -216,15 +216,28 @@ module('factory-target-realm', function (hooks) {
           request.headers.get('Authorization'),
           'Bearer realm-server-token',
         );
-        assert.deepEqual(await request.json(), {
+        let body = (await request.json()) as {
           data: {
-            type: 'realm',
+            type: string;
             attributes: {
-              endpoint: 'personal',
-              name: 'personal',
-            },
-          },
-        });
+              endpoint: string;
+              name: string;
+              iconURL: string;
+              backgroundURL: string;
+            };
+          };
+        };
+        assert.strictEqual(body.data.attributes.endpoint, 'personal');
+        assert.strictEqual(body.data.attributes.name, 'personal');
+        assert.strictEqual(
+          body.data.attributes.iconURL,
+          'https://boxel-images.boxel.ai/icons/Letter-p.png',
+        );
+        assert.true(
+          body.data.attributes.backgroundURL.startsWith(
+            'https://boxel-images.boxel.ai/background-images/',
+          ),
+        );
         response = new Response(
           JSON.stringify({
             data: {

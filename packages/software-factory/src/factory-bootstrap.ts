@@ -475,7 +475,7 @@ async function createCardIfMissing(
       Accept: cardSourceMimeType,
       'Content-Type': cardSourceMimeType,
     },
-    body: JSON.stringify(document),
+    body: JSON.stringify(document, null, 2),
   });
 
   if (!writeResponse.ok) {
@@ -545,7 +545,7 @@ async function patchTicketStatus(
       Accept: cardSourceMimeType,
       'Content-Type': cardSourceMimeType,
     },
-    body: JSON.stringify(existing),
+    body: JSON.stringify(existing, null, 2),
   });
 
   if (!patchResponse.ok) {
