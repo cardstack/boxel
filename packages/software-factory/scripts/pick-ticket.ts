@@ -73,7 +73,7 @@ async function main(): Promise<void> {
   let moduleUrl =
     typeof args.module === 'string'
       ? args.module
-      : `${realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`}darkfactory-schema`;
+      : `${realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`}darkfactory`;
 
   let matrixAuth = await matrixLogin();
   let realmTokens = await getAccessibleRealmTokens(matrixAuth);
