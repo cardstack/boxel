@@ -14,7 +14,7 @@ BASE_REALM_READY="http-get://${BASE_REALM_HOST#http://}/base/${READY_PATH}"
 echo "Waiting for base realm at ${BASE_REALM_HOST}..."
 echo "Running matrix tests${1:+ (shard: $1)}"
 
-WAIT_ON_TIMEOUT=600000 start-server-and-test \
+WAIT_ON_TIMEOUT=600000 pnpm exec start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY" \
-  "pnpm playwright test ${shard_flag} ${1}"
+  "pnpm exec playwright test ${shard_flag} ${1}"
