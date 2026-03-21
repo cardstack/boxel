@@ -105,6 +105,20 @@ module('factory-entrypoint integration', function () {
           }),
         );
       } else if (
+        request.url ===
+          '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
+        request.method === 'GET'
+      ) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ realms: [] }));
+      } else if (
+        request.url ===
+          '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
+        request.method === 'PUT'
+      ) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{}');
+      } else if (
         request.url === '/hassan/personal/_session' &&
         request.method === 'POST'
       ) {

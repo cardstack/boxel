@@ -142,7 +142,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm sends the realm-server JWT to create-realm', async function (assert) {
-    assert.expect(6);
+    assert.expect(8);
 
     process.env.MATRIX_URL = 'https://matrix.example.test/';
     process.env.MATRIX_USERNAME = 'hassan';
@@ -153,6 +153,9 @@ module('factory-target-realm', function (hooks) {
       targetRealmUrl,
       realmServerUrl: null,
     });
+
+    let accountDataUrl =
+      'https://matrix.example.test/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms';
 
     globalThis.fetch = (async (input, init) => {
       let request = new Request(input, init);
@@ -236,8 +239,22 @@ module('factory-target-realm', function (hooks) {
             },
           },
         );
+      } else if (request.url === accountDataUrl && request.method === 'GET') {
+        // Return empty account data (no realms yet)
+        response = new Response(JSON.stringify({ realms: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      } else if (request.url === accountDataUrl && request.method === 'PUT') {
+        let body = (await request.json()) as { realms: string[] };
+        assert.deepEqual(body.realms, [targetRealmUrl]);
+        assert.strictEqual(
+          request.headers.get('Authorization'),
+          'Bearer matrix-access-token',
+        );
+        response = new Response('{}', { status: 200 });
       } else {
-        throw new Error(`Unexpected url: ${request.url}`);
+        throw new Error(`Unexpected url: ${request.method} ${request.url}`);
       }
 
       return response;
