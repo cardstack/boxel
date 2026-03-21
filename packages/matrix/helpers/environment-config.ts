@@ -83,9 +83,11 @@ export function getSynapseURL(): string {
   }
 }
 
-export function registerSynapseWithTraefik(hostPort: number): void {
+export function registerServiceWithTraefik(
+  serviceName: string,
+  hostPort: number,
+): void {
   let slug = getEnvironmentSlug();
-  let serviceName = 'matrix';
   let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   let routerKey = `${serviceName}-${slug}`;
   let hostname = `${serviceName}.${slug}.${DOMAIN}`;
@@ -111,26 +113,36 @@ export function registerSynapseWithTraefik(hostPort: number): void {
 
   atomicWrite(configPath, yaml.stringify(config));
   console.log(
-    `Registered Synapse at ${hostname} -> localhost:${hostPort}`,
+    `Registered ${serviceName} at ${hostname} -> localhost:${hostPort}`,
   );
 }
 
-export function deregisterSynapseFromTraefik(): void {
+export function registerSynapseWithTraefik(hostPort: number): void {
+  registerServiceWithTraefik('matrix', hostPort);
+}
+
+export function deregisterServiceFromTraefik(serviceName: string): void {
   if (!isEnvironmentMode()) {
     return;
   }
   let slug = getEnvironmentSlug();
-  let configPath = join(traefikDynamicDir(), `${slug}-matrix.yml`);
+  let configPath = join(traefikDynamicDir(), `${slug}-${serviceName}.yml`);
   try {
     unlinkSync(configPath);
-    console.log(`Deregistered Synapse for environment ${slug} from Traefik`);
+    console.log(
+      `Deregistered ${serviceName} for environment ${slug} from Traefik`,
+    );
   } catch (e: any) {
     if (e.code !== 'ENOENT') {
       console.error(
-        `Failed to deregister Synapse for environment ${slug}: ${e.message}`,
+        `Failed to deregister ${serviceName} for environment ${slug}: ${e.message}`,
       );
     }
   }
+}
+
+export function deregisterSynapseFromTraefik(): void {
+  deregisterServiceFromTraefik('matrix');
 }
 
 function atomicWrite(filePath: string, content: string): void {

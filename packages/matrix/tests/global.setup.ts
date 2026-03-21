@@ -11,6 +11,11 @@ import {
 import type { IsolatedRealmServer } from '../helpers/isolated-realm-server';
 import { registerRealmUsers, REGISTRATION_TOKEN } from '../helpers';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import {
+  isEnvironmentMode,
+  getSynapseURL,
+  deregisterSynapseFromTraefik,
+} from '../helpers/environment-config';
 
 export default async function setup() {
   await smtpStart();
@@ -19,7 +24,11 @@ export default async function setup() {
   let admin = await registerUser(synapse, 'admin', 'adminpass', true);
   await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
   const prerenderServer = await startPrerenderServer();
-  const matrixURL = `http://localhost:${synapse.port}`;
+  // In environment mode the Synapse URL is routed through Traefik;
+  // otherwise use the direct localhost port.
+  const matrixURL = isEnvironmentMode()
+    ? getSynapseURL()
+    : `http://localhost:${synapse.port}`;
   let realmServer: IsolatedRealmServer;
   try {
     realmServer = await startRealmServer({
@@ -39,6 +48,7 @@ export default async function setup() {
   });
   return async () => {
     await synapseStop(synapse.synapseId);
+    deregisterSynapseFromTraefik();
     await realmServer.stop();
     await prerenderServer.stop();
     await smtpStop();

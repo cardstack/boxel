@@ -1,8 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
+import { appURL, realmDomain } from './helpers/isolated-realm-server';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
+
+// In environment mode the isolated realm server is behind Traefik on port 80;
+// in standard mode it listens on its own port (default 4205).
+let resolverPort = realmDomain.includes(':')
+  ? realmDomain.split(':').pop()!
+  : '80';
 
 export default defineConfig({
   testDir: './tests',
@@ -14,7 +21,7 @@ export default defineConfig({
   reporter: process.env.CI ? 'blob' : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
-    baseURL: 'http://localhost:4205/test',
+    baseURL: appURL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'retry-with-trace',
@@ -35,7 +42,7 @@ export default defineConfig({
         launchOptions: {
           args: [
             // Simulate resolving a custom workspace domain to a realm server
-            '--host-resolver-rules=MAP published.realm 127.0.0.1:4205',
+            `--host-resolver-rules=MAP published.realm 127.0.0.1:${resolverPort}`,
             // Allow iframe to request storage access depsite being considered insecure
             '--unsafely-treat-insecure-origin-as-secure=http://published.realm',
           ],

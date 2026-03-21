@@ -54,6 +54,14 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   # Paths
   export REALMS_ROOT="./realms/${ENV_SLUG}"
   export REALMS_TEST_ROOT="./realms/${ENV_SLUG}_test"
+
+  # Matrix test services (isolated realm server + worker for Playwright tests)
+  export MATRIX_TEST_REALM_URL="http://realm-matrix-test.${ENV_SLUG}.localhost"
+  export MATRIX_TEST_REALM_PORT=0
+  export MATRIX_TEST_WORKER_PORT=0
+  export MATRIX_TEST_PUBLISHED_DOMAIN="realm-matrix-test.${ENV_SLUG}.localhost"
+  export SMTP_URL="http://smtp.${ENV_SLUG}.localhost"
+  export SMTP_PORT=0
 else
   # Capture previous ENV_MODE before resetting it, so we can detect transitions
   _PREV_ENV_MODE="${ENV_MODE:-}"
@@ -91,6 +99,14 @@ else
     # Paths
     export REALMS_ROOT="./realms/localhost_4201"
     export REALMS_TEST_ROOT="./realms/localhost_4202"
+
+    # Matrix test services
+    export MATRIX_TEST_REALM_URL="http://localhost:4205"
+    export MATRIX_TEST_REALM_PORT=4205
+    export MATRIX_TEST_WORKER_PORT=4232
+    export MATRIX_TEST_PUBLISHED_DOMAIN="localhost:4205"
+    export SMTP_URL="http://localhost:5001"
+    export SMTP_PORT=5001
   else
     # Fresh standard mode or non-env-mode shell:
     # use :- so production/staging env vars are not clobbered.
@@ -122,6 +138,14 @@ else
     # Paths
     export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
     export REALMS_TEST_ROOT="${REALMS_TEST_ROOT:-./realms/localhost_4202}"
+
+    # Matrix test services
+    export MATRIX_TEST_REALM_URL="${MATRIX_TEST_REALM_URL:-http://localhost:4205}"
+    export MATRIX_TEST_REALM_PORT="${MATRIX_TEST_REALM_PORT:-4205}"
+    export MATRIX_TEST_WORKER_PORT="${MATRIX_TEST_WORKER_PORT:-4232}"
+    export MATRIX_TEST_PUBLISHED_DOMAIN="${MATRIX_TEST_PUBLISHED_DOMAIN:-localhost:4205}"
+    export SMTP_URL="${SMTP_URL:-http://localhost:5001}"
+    export SMTP_PORT="${SMTP_PORT:-5001}"
   fi
 
   unset _PREV_ENV_MODE

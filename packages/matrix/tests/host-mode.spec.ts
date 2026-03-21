@@ -6,7 +6,7 @@ import {
   postCardSource,
   waitUntil,
 } from '../helpers';
-import { appURL } from '../helpers/isolated-realm-server';
+import { appURL, serverIndexUrl, realmDomain } from '../helpers/isolated-realm-server';
 import { randomUUID } from 'crypto';
 
 test.describe('Host mode', () => {
@@ -185,10 +185,10 @@ test.describe('Host mode', () => {
     await page.reload();
     await page.locator('[data-test-host-mode-isolated]').waitFor();
 
-    publishedRealmURL = `http://published.localhost:4205/${username}/${realmName}/`;
+    publishedRealmURL = `http://published.${realmDomain}/${username}/${realmName}/`;
 
     await page.evaluate(
-      async ({ realmURL, publishedRealmURL }) => {
+      async ({ realmURL, publishedRealmURL, realmServerUrl }) => {
         let sessions = JSON.parse(
           window.localStorage.getItem('boxel-session') ?? '{}',
         );
@@ -197,7 +197,7 @@ test.describe('Host mode', () => {
           throw new Error(`No session token found for ${realmURL}`);
         }
 
-        let response = await fetch('http://localhost:4205/_publish-realm', {
+        let response = await fetch(`${realmServerUrl}/_publish-realm`, {
           method: 'POST',
           headers: {
             Accept: 'application/json',
@@ -216,13 +216,13 @@ test.describe('Host mode', () => {
 
         return response.json();
       },
-      { realmURL, publishedRealmURL },
+      { realmURL, publishedRealmURL, realmServerUrl: serverIndexUrl },
     );
 
     publishedCardURL = `${publishedRealmURL}index.json`;
     publishedWhitePaperCardURL = `${publishedRealmURL}white-paper.json`;
     publishedMyCardURL = `${publishedRealmURL}my-card.json`;
-    connectRouteURL = `http://localhost:4205/connect/${encodeURIComponent(
+    connectRouteURL = `${serverIndexUrl}/connect/${encodeURIComponent(
       publishedRealmURL,
     )}`;
 
@@ -322,7 +322,7 @@ test.describe('Host mode', () => {
     page,
   }) => {
     let response = await page.goto(
-      'http://localhost:4205/connect/http%3A%2F%2Fexample.com',
+      `${serverIndexUrl}/connect/http%3A%2F%2Fexample.com`,
     );
 
     expect(response?.status()).toBe(404);

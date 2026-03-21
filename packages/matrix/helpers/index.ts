@@ -12,12 +12,18 @@ import {
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
 import type { SQLExecutor } from './isolated-realm-server';
-import { appURL, BasicSQLExecutor } from './isolated-realm-server';
+import {
+  appURL,
+  serverIndexUrl,
+  realmDomain,
+  BasicSQLExecutor,
+} from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
-export const testHost = 'http://localhost:4205/test';
-export const mailHost = 'http://localhost:5001';
+export { realmDomain, serverIndexUrl };
+export const testHost = appURL;
+export const mailHost = process.env.SMTP_URL || 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 export const REGISTRATION_TOKEN = 'abc123';
 
@@ -108,15 +114,16 @@ async function registerRealmRedirect(
 }
 
 export async function setRealmRedirects(page: Page) {
+  let baseServerUrl = process.env.REALM_BASE_URL || 'http://localhost:4201';
   await registerRealmRedirect(
     page,
-    'http://localhost:4201/skills/',
-    'http://localhost:4205/skills/',
+    `${baseServerUrl}/skills/`,
+    `${serverIndexUrl}/skills/`,
   );
   await registerRealmRedirect(
     page,
-    'http://localhost:4201/base/',
-    'http://localhost:4205/base/',
+    `${baseServerUrl}/base/`,
+    `${serverIndexUrl}/base/`,
   );
 }
 

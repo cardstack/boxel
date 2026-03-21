@@ -6,6 +6,11 @@ import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from '../docker/synapse';
+import {
+  isEnvironmentMode,
+  registerServiceWithTraefik,
+  deregisterServiceFromTraefik,
+} from './environment-config';
 
 setGracefulCleanup();
 
@@ -18,7 +23,16 @@ const skillsRealmDir = resolve(
 );
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
-export const appURL = 'http://localhost:4205/test';
+
+const ISOLATED_REALM_SERVICE = 'realm-matrix-test';
+const ISOLATED_WORKER_SERVICE = 'worker-matrix-test';
+
+// In environment mode, the isolated realm server is accessed via Traefik.
+// The env var is set by mise-tasks/lib/env-vars.sh.
+export const serverIndexUrl =
+  process.env.MATRIX_TEST_REALM_URL || 'http://localhost:4205';
+export const appURL = `${serverIndexUrl}/test`;
+export const realmDomain = serverIndexUrl.replace(/^https?:\/\//, '');
 
 const DEFAULT_PRERENDER_PORT = 4231;
 
@@ -219,9 +233,20 @@ export async function startServer({
   copySync(testRealmCards, testRealmDir);
 
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
-  let workerManagerPort = await findAvailablePort(4232);
+  let envMode = isEnvironmentMode();
+  let preferredWorkerPort = envMode
+    ? 0
+    : parseInt(process.env.MATRIX_TEST_WORKER_PORT || '4232', 10);
+  let workerManagerPort = await findAvailablePort(preferredWorkerPort);
+  let preferredRealmPort = envMode
+    ? 0
+    : parseInt(process.env.MATRIX_TEST_REALM_PORT || '4205', 10);
+  let realmPort = await findAvailablePort(preferredRealmPort);
 
-  process.env.PGPORT = '5435';
+  let publishedDomain =
+    process.env.MATRIX_TEST_PUBLISHED_DOMAIN || realmDomain;
+
+  process.env.PGPORT = process.env.PGPORT || '5435';
   process.env.PGDATABASE = testDBName;
   process.env.NODE_NO_WARNINGS = '1';
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
@@ -241,12 +266,12 @@ export async function startServer({
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
 
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='${serverIndexUrl}/test/'`,
+    `--toUrl='${serverIndexUrl}/test/'`,
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='${serverIndexUrl}/base/'`,
   ]);
 
   let workerManager = spawn('ts-node', workerArgs, {
@@ -267,7 +292,7 @@ export async function startServer({
   let serverArgs = [
     `--transpileOnly`,
     'main',
-    `--port=4205`,
+    `--port=${realmPort}`,
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
     `--workerManagerPort=${workerManagerPort}`,
@@ -276,20 +301,20 @@ export async function startServer({
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='${serverIndexUrl}/test/'`,
+    `--toUrl='${serverIndexUrl}/test/'`,
   ];
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
-    `--fromUrl='http://localhost:4205/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--fromUrl='${serverIndexUrl}/skills/'`,
+    `--toUrl='${serverIndexUrl}/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,
     `--path='${baseRealmDir}'`,
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='${serverIndexUrl}/base/'`,
   ]);
 
   console.log(`realm server database: ${testDBName}`);
@@ -302,8 +327,8 @@ export async function startServer({
       // Matrix tests don't exercise GitHub PR creation, so disable that route
       // to avoid pulling Octokit into the realm server startup path.
       DISABLE_GITHUB_PR_ROUTE: 'true',
-      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
-      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: publishedDomain,
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: publishedDomain,
     },
   });
   realmServer.unref();
@@ -349,11 +374,18 @@ export async function startServer({
     );
   }
 
+  // In environment mode, register the isolated realm server and worker with Traefik
+  if (envMode) {
+    registerServiceWithTraefik(ISOLATED_REALM_SERVICE, realmPort);
+    registerServiceWithTraefik(ISOLATED_WORKER_SERVICE, workerManagerPort);
+  }
+
   return new IsolatedRealmServer(
     realmServer,
     workerManager,
     testRealmDir,
     testDBName,
+    envMode,
   );
 }
 
@@ -394,6 +426,7 @@ export class IsolatedRealmServer implements SQLExecutor {
     private workerManagerProcess: ReturnType<typeof spawn>,
     readonly realmPath: string, // useful for debugging
     readonly db: string,
+    private envMode: boolean = false,
   ) {
     workerManagerProcess.on('message', (message) => {
       if (message === 'stopped') {
@@ -450,6 +483,11 @@ export class IsolatedRealmServer implements SQLExecutor {
   }
 
   async stop() {
+    if (this.envMode) {
+      deregisterServiceFromTraefik(ISOLATED_REALM_SERVICE);
+      deregisterServiceFromTraefik(ISOLATED_WORKER_SERVICE);
+    }
+
     let realmServerStop = new Promise<void>(
       (r) => (this.realmServerStopped = r),
     );
