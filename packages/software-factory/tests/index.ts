@@ -4,4 +4,6 @@ import './factory-brief.test';
 import './factory-entrypoint.test';
 import './factory-entrypoint.integration.test';
 import './factory-target-realm.test';
+import './factory-tool-executor.test';
+import './factory-tool-registry.test';
 import './realm-auth.test';
