@@ -382,20 +382,30 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     );
   });
 
-  test('user message includes project and ticket IDs', function (assert) {
+  test('user message includes project and ticket context', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
     });
 
     let ctx = makeMinimalContext({
-      project: { id: 'Project/sticky-note' },
-      ticket: { id: 'Ticket/define-core' },
+      project: { id: 'Project/sticky-note', objective: 'Build sticky notes' },
+      ticket: {
+        id: 'Ticket/define-core',
+        summary: 'Define core card',
+        description: 'Create the StickyNote card.',
+      },
     });
     let messages = agent.buildMessages(ctx);
 
-    assert.ok(messages[1].content.includes('Project/sticky-note'));
-    assert.ok(messages[1].content.includes('Ticket/define-core'));
+    assert.ok(
+      messages[1].content.includes('Ticket/define-core'),
+      'user message includes ticket ID',
+    );
+    assert.ok(
+      messages[1].content.includes('Define core card'),
+      'user message includes ticket summary',
+    );
   });
 
   test('includes skills when present', function (assert) {
@@ -435,7 +445,7 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     assert.ok(messages[0].content.includes('Search cards'));
   });
 
-  test('includes test results when present', function (assert) {
+  test('includes test results in iterate mode', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
@@ -455,7 +465,15 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
         durationMs: 3000,
       },
     });
-    let messages = agent.buildMessages(ctx);
+    let previousActions = [
+      {
+        type: 'create_file' as const,
+        path: 'card.gts',
+        content: 'code',
+        realm: 'target' as const,
+      },
+    ];
+    let messages = agent.buildMessages(ctx, previousActions, 2);
 
     assert.ok(messages[1].content.includes('failed'));
     assert.ok(messages[1].content.includes('renders card'));

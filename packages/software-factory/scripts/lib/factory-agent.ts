@@ -1,5 +1,14 @@
 import { createBoxelRealmFetch } from '../../src/realm-auth';
 
+import {
+  assembleImplementPrompt,
+  assembleIteratePrompt,
+  assembleSystemPrompt,
+  buildOneShotMessages,
+  FilePromptLoader,
+  type PromptLoader,
+} from './factory-prompt-loader';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -330,11 +339,13 @@ export class AgentResponseParseError extends Error {
 export class OpenRouterFactoryAgent implements FactoryAgent {
   private config: FactoryAgentConfig;
   private fetchImpl: typeof globalThis.fetch;
+  private promptLoader: PromptLoader;
   /** True when calling OpenRouter directly; false when proxying via realm server. */
   readonly useDirectApi: boolean;
 
-  constructor(config: FactoryAgentConfig) {
+  constructor(config: FactoryAgentConfig, promptLoader?: PromptLoader) {
     this.config = config;
+    this.promptLoader = promptLoader ?? new FilePromptLoader();
 
     // Env var takes precedence — lets you override the proxy path at runtime.
     // Trim and treat empty/whitespace-only values as missing so that
@@ -417,70 +428,42 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
   }
 
   /**
-   * Build the message array for the LLM call.
-   * This is a minimal stub — CS-10477 (prompt templates) will replace this
-   * with full template-based prompt assembly.
+   * Build the message array for a one-shot LLM call.
+   * Uses prompt templates for consistent, model-agnostic prompt assembly.
+   *
+   * If the context includes testResults (i.e., this is an iteration pass),
+   * the user prompt uses ticket-iterate. Otherwise it uses ticket-implement.
    */
-  buildMessages(context: AgentContext): ChatMessage[] {
-    let skillsBlock =
-      context.skills.length > 0
-        ? `\n\nAvailable skills:\n${context.skills.map((s) => `- ${s.name}`).join('\n')}`
-        : '';
+  buildMessages(
+    context: AgentContext,
+    previousActions?: AgentAction[],
+    iteration?: number,
+  ): ChatMessage[] {
+    let systemPrompt = assembleSystemPrompt({
+      context,
+      loader: this.promptLoader,
+    });
 
-    let toolsBlock =
-      context.tools.length > 0
-        ? `\n\nAvailable tools:\n${context.tools.map((t) => `- ${t.name}: ${t.description}`).join('\n')}`
-        : '';
+    let userPrompt: string;
 
-    let systemContent =
-      `You are a software factory agent. You receive a project context and ticket, ` +
-      `and respond with a JSON array of AgentAction objects.\n\n` +
-      `Valid action types: ${VALID_ACTION_TYPES.join(', ')}\n` +
-      `Each file action (create_file, update_file, create_test, update_test) requires "path" and "content".\n` +
-      `invoke_tool requires "tool" and optionally "toolArgs".\n` +
-      `Use "done" when the ticket is complete.` +
-      skillsBlock +
-      toolsBlock +
-      `\n\nRespond with ONLY a valid JSON array. No markdown fences, no explanation.`;
-
-    let testResultsBlock = '';
-    if (context.testResults) {
-      testResultsBlock =
-        `\n\nPrevious test results: ${context.testResults.status}\n` +
-        `Passed: ${context.testResults.passedCount}, Failed: ${context.testResults.failedCount}\n`;
-      if (context.testResults.failures.length > 0) {
-        testResultsBlock += `Failures:\n${context.testResults.failures.map((f) => `- ${f.testName}: ${f.error}`).join('\n')}`;
-      }
+    if (context.testResults && previousActions && iteration !== undefined) {
+      // Iteration pass — ticket-iterate template
+      userPrompt = assembleIteratePrompt({
+        context,
+        previousActions,
+        iteration,
+        loader: this.promptLoader,
+      });
+    } else {
+      // First pass — ticket-implement template
+      userPrompt = assembleImplementPrompt({
+        context,
+        loader: this.promptLoader,
+      });
     }
 
-    let toolResultsBlock = '';
-    if (context.toolResults && context.toolResults.length > 0) {
-      toolResultsBlock =
-        `\n\nPrevious tool results:\n` +
-        context.toolResults
-          .map(
-            (r) =>
-              `- ${r.tool}: exit=${r.exitCode} (${r.durationMs}ms)\n  output: ${JSON.stringify(r.output).slice(0, 200)}`,
-          )
-          .join('\n');
-    }
-
-    let userContent =
-      `Project: ${context.project.id}\n` +
-      `Ticket: ${context.ticket.id}\n` +
-      `Target realm: ${context.targetRealmUrl}\n` +
-      `Test realm: ${context.testRealmUrl}\n` +
-      (context.knowledge.length > 0
-        ? `\nKnowledge articles: ${context.knowledge.map((k) => k.id).join(', ')}\n`
-        : '') +
-      testResultsBlock +
-      toolResultsBlock +
-      `\n\nPlease implement the ticket and respond with AgentAction[].`;
-
-    return [
-      { role: 'system', content: systemContent },
-      { role: 'user', content: userContent },
-    ];
+    let [system, user] = buildOneShotMessages(systemPrompt, userPrompt);
+    return [system, user];
   }
 
   private async callOpenRouter(messages: ChatMessage[]): Promise<string> {
