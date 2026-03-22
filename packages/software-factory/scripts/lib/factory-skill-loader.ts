@@ -103,6 +103,21 @@ const ALWAYS_LOAD_REFERENCES: readonly string[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Internal types for tracking reference metadata
+// ---------------------------------------------------------------------------
+
+interface NamedReference {
+  fileName: string;
+  content: string;
+}
+
+interface RawSkillData {
+  name: string;
+  content: string;
+  references?: NamedReference[];
+}
+
+// ---------------------------------------------------------------------------
 // SkillResolver
 // ---------------------------------------------------------------------------
 
@@ -143,8 +158,9 @@ export class DefaultSkillResolver implements SkillResolver {
       }
     }
 
-    // Check for additional skills specified by knowledge articles in the project
-    let additionalSkills = extractKnowledgeSkillTags(project);
+    // Check for additional skills from knowledge articles on the project
+    // and from related knowledge on the ticket itself.
+    let additionalSkills = extractKnowledgeSkillTags(project, ticket);
     for (let skillName of additionalSkills) {
       if (!skills.includes(skillName)) {
         skills.push(skillName);
@@ -160,13 +176,13 @@ export class DefaultSkillResolver implements SkillResolver {
 // ---------------------------------------------------------------------------
 
 export interface SkillLoaderInterface {
-  load(skillName: string): Promise<ResolvedSkill>;
-  loadAll(skillNames: string[]): Promise<ResolvedSkill[]>;
+  load(skillName: string, ticket?: TicketCard): Promise<ResolvedSkill>;
+  loadAll(skillNames: string[], ticket?: TicketCard): Promise<ResolvedSkill[]>;
 }
 
 export class SkillLoader implements SkillLoaderInterface {
   private skillsDirs: string[];
-  private cache: Map<string, ResolvedSkill> = new Map();
+  private rawCache: Map<string, RawSkillData> = new Map();
 
   /**
    * @param skillsDir      Primary directory to search for skills.
@@ -184,10 +200,52 @@ export class SkillLoader implements SkillLoaderInterface {
   /**
    * Load a single skill by name.
    * Searches the primary skills directory first, then each fallback directory.
+   * When a ticket is provided, `boxel-development` references are filtered to
+   * only include ticket-relevant files (always applied, not just with a budget).
    * Results are cached for the duration of the factory run.
    */
-  async load(skillName: string): Promise<ResolvedSkill> {
-    let cached = this.cache.get(skillName);
+  async load(skillName: string, ticket?: TicketCard): Promise<ResolvedSkill> {
+    let raw = await this.loadRaw(skillName);
+    return toResolvedSkill(raw, ticket);
+  }
+
+  /**
+   * Load all skills matching the resolved names.
+   * Missing skills log a warning but do not fail the batch.
+   */
+  async loadAll(
+    skillNames: string[],
+    ticket?: TicketCard,
+  ): Promise<ResolvedSkill[]> {
+    let results: ResolvedSkill[] = [];
+
+    for (let name of skillNames) {
+      try {
+        let skill = await this.load(name, ticket);
+        results.push(skill);
+      } catch (error) {
+        console.warn(
+          `[SkillLoader] Skipping unavailable skill "${name}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    return results;
+  }
+
+  /** Clear the cache so skills are re-read from disk on next load. */
+  clearCache(): void {
+    this.rawCache.clear();
+  }
+
+  /**
+   * Load raw skill data (with reference filenames preserved) from disk.
+   * Cached for the factory run duration.
+   */
+  private async loadRaw(skillName: string): Promise<RawSkillData> {
+    let cached = this.rawCache.get(skillName);
     if (cached) {
       return cached;
     }
@@ -211,7 +269,7 @@ export class SkillLoader implements SkillLoaderInterface {
       );
     }
 
-    let references: string[] | undefined;
+    let references: NamedReference[] | undefined;
 
     // Check for rules/ directory first (e.g., ember-best-practices).
     // Load compiled AGENTS.md instead of individual rule files.
@@ -220,61 +278,36 @@ export class SkillLoader implements SkillLoaderInterface {
       let agentsMdPath = join(skillDir, 'AGENTS.md');
       try {
         let agentsContent = await readFile(agentsMdPath, 'utf8');
-        references = [agentsContent];
+        references = [{ fileName: 'AGENTS.md', content: agentsContent }];
       } catch {
         // If AGENTS.md doesn't exist, fall through — no references
       }
     }
 
     // Check for references/ directory (e.g., boxel-development).
-    // Load all reference files — the caller filters by relevance.
+    // Load all reference files with their filenames preserved.
     if (!references) {
       let refsDir = join(skillDir, 'references');
       if (await directoryExists(refsDir)) {
         let files = await readdir(refsDir);
         let mdFiles = files.filter((f) => f.endsWith('.md')).sort();
         references = await Promise.all(
-          mdFiles.map((f) => readFile(join(refsDir, f), 'utf8')),
+          mdFiles.map(async (f) => ({
+            fileName: f,
+            content: await readFile(join(refsDir, f), 'utf8'),
+          })),
         );
       }
     }
 
-    let resolved: ResolvedSkill = {
+    let raw: RawSkillData = {
       name: skillName,
       content,
       ...(references && references.length > 0 ? { references } : {}),
     };
 
-    this.cache.set(skillName, resolved);
-    return resolved;
-  }
-
-  /**
-   * Load all skills matching the resolved names.
-   * Missing skills log a warning but do not fail the batch.
-   */
-  async loadAll(skillNames: string[]): Promise<ResolvedSkill[]> {
-    let results: ResolvedSkill[] = [];
-
-    for (let name of skillNames) {
-      try {
-        let skill = await this.load(name);
-        results.push(skill);
-      } catch (error) {
-        console.warn(
-          `[SkillLoader] Skipping unavailable skill "${name}": ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
-
-    return results;
-  }
-
-  /** Clear the cache so skills are re-read from disk on next load. */
-  clearCache(): void {
-    this.cache.clear();
+    this.rawCache.set(skillName, raw);
+    return raw;
   }
 
   /**
@@ -302,30 +335,25 @@ export class SkillLoader implements SkillLoaderInterface {
 
 /**
  * Filter resolved skills to fit within a token budget.
- * Skills are sorted by priority (from SKILL_PRIORITY), then trimmed from the
- * end (lowest priority) when the budget is exceeded.
+ * Skills are sorted by priority (from SKILL_PRIORITY) and then added in that
+ * order until the budget would be exceeded. Skills that do not fit are
+ * skipped, and later (lower-priority) skills may still be included if they
+ * fit within the remaining budget.
  *
- * For `boxel-development`, only ticket-relevant references are included when
- * a ticket is provided, keeping the context focused.
+ * Reference filtering for `boxel-development` is handled at load time by the
+ * SkillLoader when a ticket is provided — it is always applied regardless of
+ * whether a budget is set.
  */
 export function enforceSkillBudget(
   skills: ResolvedSkill[],
   maxTokens: number | undefined,
-  ticket?: TicketCard,
 ): ResolvedSkill[] {
   if (!maxTokens || maxTokens <= 0) {
     return skills;
   }
 
-  // Apply targeted reference filtering for boxel-development
-  let filtered = skills.map((skill) =>
-    skill.name === 'boxel-development' && skill.references
-      ? filterBoxelDevelopmentRefs(skill, ticket)
-      : skill,
-  );
-
   // Sort by priority
-  let sorted = [...filtered].sort((a, b) => {
+  let sorted = [...skills].sort((a, b) => {
     let aPriority = SKILL_PRIORITY.indexOf(a.name);
     let bPriority = SKILL_PRIORITY.indexOf(b.name);
     if (aPriority === -1) {
@@ -358,64 +386,6 @@ export function enforceSkillBudget(
   return result;
 }
 
-/**
- * Filter boxel-development references to include only the "always load"
- * references plus those whose keywords match the ticket text.
- */
-function filterBoxelDevelopmentRefs(
-  skill: ResolvedSkill,
-  ticket?: TicketCard,
-): ResolvedSkill {
-  if (!skill.references || skill.references.length === 0) {
-    return skill;
-  }
-
-  if (!ticket) {
-    return skill;
-  }
-
-  let ticketText = extractTicketText(ticket);
-  let allRefNames = Object.keys(REFERENCE_KEYWORD_MAP);
-
-  let filteredRefs = skill.references.filter((_content, index) => {
-    // We need to know the filename to decide. Since references are loaded
-    // in sorted order, we reconstruct the sorted file list. The "always load"
-    // references (dev-core-concept.md, dev-technical-rules.md, dev-quick-reference.md)
-    // come first alphabetically in the sorted list. We use a simpler approach:
-    // keep all always-load refs plus keyword-matched refs.
-    let sortedNames = [...ALWAYS_LOAD_REFERENCES, ...allRefNames].sort();
-    // Deduplicate
-    let uniqueNames = [...new Set(sortedNames)];
-
-    if (index >= uniqueNames.length) {
-      return false;
-    }
-
-    let refName = uniqueNames[index];
-    if (!refName) {
-      return false;
-    }
-
-    // Always-load refs are always included
-    if (ALWAYS_LOAD_REFERENCES.includes(refName)) {
-      return true;
-    }
-
-    // Check if ticket text matches any keywords for this reference
-    let keywords = REFERENCE_KEYWORD_MAP[refName];
-    if (keywords && matchesAnyKeyword(ticketText, keywords)) {
-      return true;
-    }
-
-    return false;
-  });
-
-  return {
-    ...skill,
-    references: filteredRefs.length > 0 ? filteredRefs : undefined,
-  };
-}
-
 /** Estimate token count for a resolved skill. */
 export function estimateTokens(skill: ResolvedSkill): number {
   let total = skill.content.length;
@@ -427,6 +397,69 @@ export function estimateTokens(skill: ResolvedSkill): number {
   }
 
   return Math.ceil(total / CHARS_PER_TOKEN);
+}
+
+// ---------------------------------------------------------------------------
+// Internal: convert raw data to public ResolvedSkill
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert RawSkillData (with named references) to the public ResolvedSkill
+ * interface. For `boxel-development`, filters references by ticket relevance
+ * using actual filenames — this happens on every load, not just when a
+ * budget is enforced.
+ */
+function toResolvedSkill(
+  raw: RawSkillData,
+  ticket?: TicketCard,
+): ResolvedSkill {
+  let refs = raw.references;
+
+  if (refs && raw.name === 'boxel-development' && ticket) {
+    refs = filterBoxelDevelopmentRefs(refs, ticket);
+  }
+
+  let refContents =
+    refs && refs.length > 0 ? refs.map((r) => r.content) : undefined;
+
+  return {
+    name: raw.name,
+    content: raw.content,
+    ...(refContents ? { references: refContents } : {}),
+  };
+}
+
+/**
+ * Filter boxel-development references to include only the "always load"
+ * references plus those whose keywords match the ticket text.
+ * Uses actual filenames from disk — no index-based reconstruction.
+ */
+function filterBoxelDevelopmentRefs(
+  refs: NamedReference[],
+  ticket: TicketCard,
+): NamedReference[] {
+  let ticketText = extractTicketText(ticket);
+
+  return refs.filter((ref) => {
+    // Always-load refs are always included
+    if (
+      ALWAYS_LOAD_REFERENCES.includes(
+        ref.fileName as (typeof ALWAYS_LOAD_REFERENCES)[number],
+      )
+    ) {
+      return true;
+    }
+
+    // Check if ticket text matches any keywords for this reference
+    let keywords = REFERENCE_KEYWORD_MAP[ref.fileName];
+    if (keywords && matchesAnyKeyword(ticketText, keywords)) {
+      return true;
+    }
+
+    // References not in the keyword map (e.g., dev-file-editing.md) are only
+    // loaded when no ticket context is available (handled by the caller).
+    return false;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -476,18 +509,33 @@ export function extractTicketText(ticket: TicketCard): string {
 }
 
 /**
- * Extract additional skill names from knowledge articles in a project card.
- * Looks for `knowledge` array entries with `skills` or `tags` arrays.
+ * Extract additional skill names from knowledge articles.
+ * Checks both the project's `knowledgeBase` field (Project card schema) and
+ * the ticket's `relatedKnowledge` field (Ticket card schema), as well as the
+ * generic `knowledge` field for forward compatibility.
  */
-function extractKnowledgeSkillTags(project: ProjectCard): string[] {
-  let knowledge = project.knowledge;
-  if (!Array.isArray(knowledge)) {
-    return [];
+function extractKnowledgeSkillTags(
+  project: ProjectCard,
+  ticket?: TicketCard,
+): string[] {
+  let articles: unknown[] = [];
+
+  // Collect knowledge articles from all known field names
+  for (let source of [project, ticket]) {
+    if (!source) {
+      continue;
+    }
+    for (let field of ['knowledge', 'knowledgeBase', 'relatedKnowledge']) {
+      let value = (source as Record<string, unknown>)[field];
+      if (Array.isArray(value)) {
+        articles.push(...value);
+      }
+    }
   }
 
   let skills: string[] = [];
 
-  for (let article of knowledge) {
+  for (let article of articles) {
     if (typeof article !== 'object' || article === null) {
       continue;
     }
@@ -527,8 +575,27 @@ function extractKnowledgeSkillTags(project: ProjectCard): string[] {
   return skills;
 }
 
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function matchesAnyKeyword(text: string, keywords: string[]): boolean {
-  return keywords.some((kw) => text.includes(kw.toLowerCase()));
+  let lowerText = text.toLowerCase();
+
+  return keywords.some((kw) => {
+    let lowerKw = kw.toLowerCase();
+
+    // Allow dotted/special tokens (e.g. ".gts", "CardDef") to match as
+    // substrings — these are specific enough to not cause false positives.
+    if (lowerKw.includes('.') || lowerKw !== lowerKw.toLowerCase()) {
+      return lowerText.includes(lowerKw);
+    }
+
+    // For plain-word keywords, require word-boundary matches to avoid
+    // false positives like "sync" matching "async".
+    let pattern = new RegExp(`\\b${escapeRegExp(lowerKw)}\\b`);
+    return pattern.test(lowerText);
+  });
 }
 
 async function directoryExists(dirPath: string): Promise<boolean> {

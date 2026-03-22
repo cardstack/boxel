@@ -183,6 +183,36 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
+  test('does not trigger boxel-sync for "async" (word boundary)', function (assert) {
+    let resolver = new DefaultSkillResolver();
+    let ticket = makeTicket({
+      description: 'Fix async rendering in the card component',
+    });
+    let project = makeProject();
+
+    let skills = resolver.resolve(ticket, project);
+
+    assert.false(
+      skills.includes('boxel-sync'),
+      'does not include boxel-sync for "async"',
+    );
+  });
+
+  test('does not trigger boxel-track for "stacktrace" (word boundary)', function (assert) {
+    let resolver = new DefaultSkillResolver();
+    let ticket = makeTicket({
+      description: 'Improve error stacktrace formatting',
+    });
+    let project = makeProject();
+
+    let skills = resolver.resolve(ticket, project);
+
+    assert.false(
+      skills.includes('boxel-track'),
+      'does not include boxel-track for "stacktrace"',
+    );
+  });
+
   test('includes boxel-restore when ticket involves restore', function (assert) {
     let resolver = new DefaultSkillResolver();
     let ticket = makeTicket({
@@ -248,6 +278,46 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     assert.true(skills.includes('extra-skill-a'), 'includes extra-skill-a');
     assert.true(skills.includes('extra-skill-b'), 'includes extra-skill-b');
+  });
+
+  test('reads skills from knowledgeBase field (Project schema)', function (assert) {
+    let resolver = new DefaultSkillResolver();
+    let ticket = makeTicket();
+    let project = makeProject({
+      knowledgeBase: [
+        {
+          id: 'KnowledgeArticle/from-schema',
+          skills: ['schema-skill'],
+        },
+      ],
+    });
+
+    let skills = resolver.resolve(ticket, project);
+
+    assert.true(
+      skills.includes('schema-skill'),
+      'includes skill from knowledgeBase field',
+    );
+  });
+
+  test('reads skills from relatedKnowledge field (Ticket schema)', function (assert) {
+    let resolver = new DefaultSkillResolver();
+    let ticket = makeTicket({
+      relatedKnowledge: [
+        {
+          id: 'KnowledgeArticle/ticket-knowledge',
+          tags: ['skill:ticket-skill'],
+        },
+      ],
+    });
+    let project = makeProject();
+
+    let skills = resolver.resolve(ticket, project);
+
+    assert.true(
+      skills.includes('ticket-skill'),
+      'includes skill from ticket relatedKnowledge',
+    );
   });
 
   test('does not duplicate skills', function (assert) {
@@ -406,7 +476,7 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     }
   });
 
-  test('caches loaded skills for repeated calls', async function (assert) {
+  test('caches raw skill data for repeated calls', async function (assert) {
     writeSkill(tempDir, 'cached-skill', '# Cached\n\nOriginal content.');
 
     let loader = new SkillLoader(tempDir, []);
@@ -423,7 +493,6 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
       second.content.includes('Original content'),
       'returns cached version',
     );
-    assert.strictEqual(first, second, 'same object reference');
   });
 
   test('clearCache forces re-read from disk', async function (assert) {
@@ -618,6 +687,57 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
       rmSync(primaryDir, { recursive: true, force: true });
       rmSync(fallbackDir, { recursive: true, force: true });
     }
+  });
+
+  test('filters boxel-development references by ticket when loaded with ticket', async function (assert) {
+    // Set up a boxel-development skill with references matching the real structure
+    writeSkill(tempDir, 'boxel-development', '# Boxel Development', {
+      references: {
+        'dev-core-concept.md': 'Core concept content',
+        'dev-technical-rules.md': 'Technical rules content',
+        'dev-quick-reference.md': 'Quick reference content',
+        'dev-styling-design.md': 'Styling design content',
+        'dev-file-editing.md': 'File editing content',
+        'dev-query-systems.md': 'Query systems content',
+      },
+    });
+
+    let loader = new SkillLoader(tempDir, []);
+
+    // Load WITHOUT ticket — should get all references
+    let allRefs = await loader.load('boxel-development');
+    assert.strictEqual(
+      allRefs.references!.length,
+      6,
+      'all 6 references loaded without ticket',
+    );
+
+    // Load WITH a styling ticket — should get always-load + styling only
+    loader.clearCache();
+    let stylingTicket = makeTicket({
+      description: 'Fix the CSS styling on the card',
+    });
+    let filtered = await loader.load('boxel-development', stylingTicket);
+
+    assert.true(
+      filtered.references!.length < 6,
+      'fewer references with ticket filtering',
+    );
+    // Always-load refs should be present
+    assert.true(
+      filtered.references!.some((r) => r.includes('Core concept')),
+      'always-load ref included',
+    );
+    // Styling ref should be present (keyword match)
+    assert.true(
+      filtered.references!.some((r) => r.includes('Styling design')),
+      'keyword-matched ref included',
+    );
+    // File editing ref should NOT be present (no keyword match, not always-load)
+    assert.false(
+      filtered.references!.some((r) => r.includes('File editing')),
+      'non-matching ref excluded',
+    );
   });
 });
 

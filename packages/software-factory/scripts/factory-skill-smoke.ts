@@ -5,8 +5,8 @@
  *
  * Usage:
  *   pnpm factory:skill-smoke
- *   pnpm factory:skill-smoke -- --max-tokens 8000
- *   pnpm factory:skill-smoke -- --ticket-text "Create a .gts component with styling"
+ *   pnpm factory:skill-smoke --max-tokens 8000
+ *   pnpm factory:skill-smoke --ticket-text "Create a .gts component with styling"
  */
 
 import { parseArgs } from 'node:util';
@@ -71,6 +71,18 @@ async function main(): Promise<void> {
   let maxTokens = values['max-tokens']
     ? Number(values['max-tokens'])
     : undefined;
+
+  if (
+    values['max-tokens'] !== undefined &&
+    (maxTokens === undefined || !Number.isFinite(maxTokens) || maxTokens <= 0)
+  ) {
+    console.error(
+      `Invalid value for --max-tokens: "${values['max-tokens']}". ` +
+        'Please provide a positive numeric value.',
+    );
+    process.exit(1);
+  }
+
   let customTicketText = values['ticket-text'];
 
   let resolver = new DefaultSkillResolver();
@@ -101,8 +113,8 @@ async function main(): Promise<void> {
     let skillNames = resolver.resolve(ticket, project);
     console.log(`  Resolved skills: [${skillNames.join(', ')}]`);
 
-    // 2. Load
-    let skills = await loader.loadAll(skillNames);
+    // 2. Load (with ticket context for reference filtering)
+    let skills = await loader.loadAll(skillNames, ticket);
     console.log(`  Loaded: ${skills.length}/${skillNames.length} skills`);
 
     for (let skill of skills) {
@@ -114,20 +126,19 @@ async function main(): Promise<void> {
 
     // 3. Budget enforcement
     if (maxTokens) {
-      let budgeted = enforceSkillBudget(skills, maxTokens, ticket);
+      let budgeted = enforceSkillBudget(skills, maxTokens);
       let totalBefore = skills.reduce((s, sk) => s + estimateTokens(sk), 0);
       let totalAfter = budgeted.reduce((s, sk) => s + estimateTokens(sk), 0);
       console.log(
-        `  Budget (${maxTokens} tokens): ${budgeted.length}/${skills.length} skills kept ` +
+        `  Budget (${maxTokens} tokens): ` +
+          `${budgeted.length}/${skills.length} skills kept ` +
           `(${totalAfter}/${totalBefore} tokens)`,
       );
       if (budgeted.length < skills.length) {
         let dropped = skills.filter(
           (s) => !budgeted.find((b) => b.name === s.name),
         );
-        console.log(
-          `  Dropped: [${dropped.map((d) => d.name).join(', ')}]`,
-        );
+        console.log(`  Dropped: [${dropped.map((d) => d.name).join(', ')}]`);
       }
     }
 
@@ -164,7 +175,9 @@ async function main(): Promise<void> {
   if (missing.length > 0) {
     console.log(`  Not found: [${missing.join(', ')}]`);
   }
-  console.log(`  Total: ~${grandTotal} tokens across ${allSkills.length} skills`);
+  console.log(
+    `  Total: ~${grandTotal} tokens across ${allSkills.length} skills`,
+  );
 
   console.log('\nSmoke test passed.');
 }
