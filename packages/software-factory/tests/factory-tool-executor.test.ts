@@ -6,6 +6,7 @@ import {
   ToolNotFoundError,
   ToolSafetyError,
   ToolTimeoutError,
+  iconURLForName,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
 } from '../scripts/lib/factory-tool-executor';
@@ -449,7 +450,7 @@ module('factory-tool-executor > realm-api execution', function () {
     );
   });
 
-  test('realm-mtimes makes GET to _mtimes', async function (assert) {
+  test('realm-auth makes POST to _realm-auth', async function (assert) {
     let capturedUrl: string | undefined;
     let capturedMethod: string | undefined;
 
@@ -458,7 +459,7 @@ module('factory-tool-executor > realm-api execution', function () {
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         capturedUrl = String(input);
         capturedMethod = init?.method;
-        return new Response(JSON.stringify({ 'foo.json': 12345 }), {
+        return new Response(JSON.stringify({ ok: true }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -467,13 +468,13 @@ module('factory-tool-executor > realm-api execution', function () {
     let executor = new ToolExecutor(registry, config);
 
     let result = await executor.execute(
-      makeInvokeToolAction('realm-mtimes', {
-        'realm-url': 'https://realms.example.test/user/target/',
+      makeInvokeToolAction('realm-auth', {
+        'realm-server-url': 'https://realms.example.test/user/target/',
       }),
     );
 
-    assert.strictEqual(capturedMethod, 'GET');
-    assert.true(capturedUrl!.endsWith('_mtimes'));
+    assert.strictEqual(capturedMethod, 'POST');
+    assert.true(capturedUrl!.endsWith('_realm-auth'));
     assert.strictEqual(result.exitCode, 0);
   });
 
@@ -486,10 +487,18 @@ module('factory-tool-executor > realm-api execution', function () {
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         capturedUrl = String(input);
         capturedBody = typeof init?.body === 'string' ? init.body : undefined;
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              id: 'https://realms.example.test/user/scratch-123/',
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
@@ -507,28 +516,175 @@ module('factory-tool-executor > realm-api execution', function () {
       'https://realms.example.test/_create-realm',
     );
     let body = JSON.parse(capturedBody!);
-    assert.deepEqual(body, {
-      data: {
-        type: 'realm',
-        attributes: {
-          name: 'my-scratch-realm',
-          endpoint: 'user/scratch-123',
-        },
-      },
-    });
+    assert.strictEqual(body.data.type, 'realm');
+    assert.strictEqual(body.data.attributes.name, 'my-scratch-realm');
+    assert.strictEqual(body.data.attributes.endpoint, 'user/scratch-123');
+    assert.ok(body.data.attributes.iconURL, 'iconURL is present');
+    assert.ok(body.data.attributes.backgroundURL, 'backgroundURL is present');
     assert.strictEqual(result.exitCode, 0);
   });
 
-  test('realm-reindex makes POST to _reindex', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedMethod: string | undefined;
+  test('realm-create with explicit iconURL and backgroundURL', async function (assert) {
+    let capturedBody: string | undefined;
 
     let registry = new ToolRegistry();
     let config = makeConfig({
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              id: 'https://realms.example.test/user/scratch/',
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }) as typeof globalThis.fetch,
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    await executor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/',
+        name: 'my-realm',
+        endpoint: 'user/scratch',
+        iconURL: 'https://example.test/icon.png',
+        backgroundURL: 'https://example.test/bg.jpg',
+      }),
+    );
+
+    let body = JSON.parse(capturedBody!);
+    assert.strictEqual(
+      body.data.attributes.iconURL,
+      'https://example.test/icon.png',
+    );
+    assert.strictEqual(
+      body.data.attributes.backgroundURL,
+      'https://example.test/bg.jpg',
+    );
+  });
+
+  test('realm-create applies default icon from name', async function (assert) {
+    let capturedBody: string | undefined;
+
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              id: 'https://realms.example.test/user/scratch/',
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }) as typeof globalThis.fetch,
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    await executor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/',
+        name: 'My Realm',
+        endpoint: 'user/scratch',
+      }),
+    );
+
+    let body = JSON.parse(capturedBody!);
+    assert.strictEqual(
+      body.data.attributes.iconURL,
+      iconURLForName('My Realm'),
+      'iconURL defaults from name',
+    );
+  });
+
+  test('realm-create applies default random background', async function (assert) {
+    let capturedBody: string | undefined;
+
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              id: 'https://realms.example.test/user/scratch/',
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }) as typeof globalThis.fetch,
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    await executor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/',
+        name: 'My Realm',
+        endpoint: 'user/scratch',
+      }),
+    );
+
+    let body = JSON.parse(capturedBody!);
+    assert.true(
+      body.data.attributes.backgroundURL.startsWith(
+        'https://boxel-images.boxel.ai/background-images/',
+      ),
+      'backgroundURL defaults to a random background',
+    );
+  });
+
+  test('realm-create updates Matrix account data when config present', async function (assert) {
+    let fetchCalls: { url: string; method: string }[] = [];
+
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      matrixUrl: 'https://matrix.example.test',
+      matrixAccessToken: 'matrix-token-123',
+      matrixUserId: '@factory:example.test',
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedMethod = init?.method;
-        return new Response(JSON.stringify({ ok: true }), {
+        let url = String(input);
+        let method = init?.method ?? 'GET';
+        fetchCalls.push({ url, method });
+
+        if (url.includes('_create-realm')) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                type: 'realm',
+                id: 'https://realms.example.test/user/scratch/',
+              },
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
+        }
+        if (url.includes('account_data') && method === 'GET') {
+          return new Response(
+            JSON.stringify({ realms: ['https://existing.test/'] }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
+        }
+        // PUT account_data
+        return new Response('{}', {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -536,15 +692,75 @@ module('factory-tool-executor > realm-api execution', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-reindex', {
-        'realm-url': 'https://realms.example.test/user/target/',
+    await executor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/',
+        name: 'scratch',
+        endpoint: 'user/scratch',
       }),
     );
 
-    assert.strictEqual(capturedMethod, 'POST');
-    assert.true(capturedUrl!.endsWith('_reindex'));
-    assert.strictEqual(result.exitCode, 0);
+    assert.strictEqual(fetchCalls.length, 3, 'three fetch calls made');
+    assert.true(
+      fetchCalls[0].url.includes('_create-realm'),
+      'first call is _create-realm',
+    );
+    assert.true(
+      fetchCalls[1].url.includes('account_data'),
+      'second call is Matrix GET account_data',
+    );
+    assert.strictEqual(fetchCalls[1].method, 'GET');
+    assert.true(
+      fetchCalls[2].url.includes('account_data'),
+      'third call is Matrix PUT account_data',
+    );
+    assert.strictEqual(fetchCalls[2].method, 'PUT');
+  });
+
+  test('realm-create skips Matrix update when config absent', async function (assert) {
+    let fetchCalls: { url: string; method: string }[] = [];
+
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      // No matrixUrl, matrixAccessToken, or matrixUserId
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        let url = String(input);
+        let method = init?.method ?? 'GET';
+        fetchCalls.push({ url, method });
+
+        return new Response(
+          JSON.stringify({
+            data: {
+              type: 'realm',
+              id: 'https://realms.example.test/user/scratch/',
+            },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      }) as typeof globalThis.fetch,
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    await executor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/',
+        name: 'scratch',
+        endpoint: 'user/scratch',
+      }),
+    );
+
+    assert.strictEqual(
+      fetchCalls.length,
+      1,
+      'only one fetch call (no Matrix update)',
+    );
+    assert.true(
+      fetchCalls[0].url.includes('_create-realm'),
+      'only call is _create-realm',
+    );
   });
 
   test('realm-server-session sends OpenID token and captures Authorization header', async function (assert) {
@@ -743,7 +959,7 @@ module('factory-tool-executor > auth header propagation', function () {
     );
   });
 
-  test('realm-reindex sends realm JWT in Authorization header', async function (assert) {
+  test('realm-auth sends server JWT in Authorization header', async function (assert) {
     let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
     let registry = new ToolRegistry();
     let executor = new ToolExecutor(
@@ -752,8 +968,8 @@ module('factory-tool-executor > auth header propagation', function () {
     );
 
     await executor.execute(
-      makeInvokeToolAction('realm-reindex', {
-        'realm-url': 'https://realms.example.test/user/target/',
+      makeInvokeToolAction('realm-auth', {
+        'realm-server-url': 'https://realms.example.test/user/target/',
       }),
     );
 

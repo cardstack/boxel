@@ -80,7 +80,7 @@ async function main(): Promise<void> {
 
   check('has script tools', byCategory['script']?.length === 4);
   check('has boxel-cli tools', byCategory['boxel-cli']?.length === 6);
-  check('has realm-api tools', byCategory['realm-api']?.length === 9);
+  check('has realm-api tools', byCategory['realm-api']?.length === 8);
   check(
     'all names unique',
     new Set(manifests.map((m) => m.name)).size === manifests.length,

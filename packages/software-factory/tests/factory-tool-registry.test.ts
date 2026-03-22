@@ -286,10 +286,9 @@ module('factory-tool-registry > built-in manifests', function () {
     assert.true(registry.has('realm-delete'));
     assert.true(registry.has('realm-atomic'));
     assert.true(registry.has('realm-search'));
-    assert.true(registry.has('realm-mtimes'));
     assert.true(registry.has('realm-create'));
     assert.true(registry.has('realm-server-session'));
-    assert.true(registry.has('realm-reindex'));
+    assert.true(registry.has('realm-auth'));
   });
 });
 

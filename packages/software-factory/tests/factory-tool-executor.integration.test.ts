@@ -303,36 +303,37 @@ module('factory-tool-executor integration > realm-api requests', function () {
     }
   });
 
-  test('realm-mtimes sends correct GET to _mtimes', async function (assert) {
+  test('realm-auth sends correct POST to _realm-auth with Authorization header', async function (assert) {
     let captured: CapturedRequest | undefined;
 
     let { server, origin } = await startTestServer((req, respond) => {
       captured = req;
-      respond(200, { 'Card/foo.json': 1700000000 });
+      respond(200, { ok: true });
     });
 
     try {
       let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
-        targetRealmUrl: realmUrl,
+        targetRealmUrl: `${origin}/user/target/`,
         testRealmUrl: `${origin}/user/target-tests/`,
-        authorization: 'Bearer realm-jwt-for-user',
+        authorization: 'Bearer realm-server-jwt-xyz',
       });
 
       let result = await executor.execute({
         type: 'invoke_tool',
-        tool: 'realm-mtimes',
-        toolArgs: { 'realm-url': realmUrl },
+        tool: 'realm-auth',
+        toolArgs: {
+          'realm-server-url': `${origin}/user/target/`,
+        },
       });
 
       assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'GET');
-      assert.strictEqual(captured!.url, '/user/target/_mtimes');
+      assert.strictEqual(captured!.method, 'POST');
+      assert.strictEqual(captured!.url, '/user/target/_realm-auth');
       assert.strictEqual(
         captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
+        'Bearer realm-server-jwt-xyz',
       );
     } finally {
       await stopServer(server);
@@ -382,15 +383,14 @@ module('factory-tool-executor integration > realm-api requests', function () {
       );
 
       let body = JSON.parse(captured!.body);
-      assert.deepEqual(body, {
-        data: {
-          type: 'realm',
-          attributes: {
-            name: 'New Realm',
-            endpoint: 'user/new-realm',
-          },
-        },
-      });
+      assert.strictEqual(body.data.type, 'realm');
+      assert.strictEqual(body.data.attributes.name, 'New Realm');
+      assert.strictEqual(body.data.attributes.endpoint, 'user/new-realm');
+      assert.ok(body.data.attributes.iconURL, 'body includes iconURL');
+      assert.ok(
+        body.data.attributes.backgroundURL,
+        'body includes backgroundURL',
+      );
     } finally {
       await stopServer(server);
     }
@@ -439,42 +439,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
         result.output,
         { token: 'Bearer freshly-minted-jwt' },
         'captures JWT from Authorization response header',
-      );
-    } finally {
-      await stopServer(server);
-    }
-  });
-
-  test('realm-reindex sends correct POST to _reindex', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { status: 'reindexing' });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
-        authorization: 'Bearer realm-jwt-for-user',
-      });
-
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-reindex',
-        toolArgs: { 'realm-url': realmUrl },
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_reindex');
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
       );
     } finally {
       await stopServer(server);

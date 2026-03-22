@@ -56,6 +56,12 @@ export interface ToolExecutorConfig {
   timeoutMs?: number;
   /** Optional log function for auditability. */
   log?: (entry: ToolExecutionLogEntry) => void;
+  /** Matrix homeserver URL (for post-create account data update). */
+  matrixUrl?: string;
+  /** Matrix access token (from Matrix login). */
+  matrixAccessToken?: string;
+  /** Matrix user ID (e.g. @factory:localhost). */
+  matrixUserId?: string;
 }
 
 export interface ToolExecutionLogEntry {
@@ -388,6 +394,15 @@ export class ToolExecutor {
         responseBody = { token: authorizationHeader };
       }
 
+      // After successful realm-create, update Matrix account data to include
+      // the new realm in the user's realm list (matching host app behavior).
+      if (toolName === 'realm-create' && response.ok) {
+        let createdRealmUrl = extractCreatedRealmUrl(responseBody);
+        if (createdRealmUrl) {
+          await this.appendRealmToMatrixAccountData(fetchImpl, createdRealmUrl);
+        }
+      }
+
       return {
         tool: toolName,
         exitCode: response.ok ? 0 : 1,
@@ -492,6 +507,63 @@ export class ToolExecutor {
 
   private logExecution(entry: ToolExecutionLogEntry): void {
     this.config.log?.(entry);
+  }
+
+  // -------------------------------------------------------------------------
+  // Matrix account data
+  // -------------------------------------------------------------------------
+
+  /**
+   * After realm creation, append the new realm URL to the user's Matrix
+   * account data so the realm appears in their realm list. Matches the host
+   * app's `appendRealmToAccountData` behavior (matrix-service.ts:639-653).
+   *
+   * Silently skips when Matrix config is not provided.
+   */
+  private async appendRealmToMatrixAccountData(
+    fetchImpl: typeof globalThis.fetch,
+    newRealmUrl: string,
+  ): Promise<void> {
+    let { matrixUrl, matrixAccessToken, matrixUserId } = this.config;
+    if (!matrixUrl || !matrixAccessToken || !matrixUserId) {
+      return;
+    }
+
+    let baseUrl = ensureTrailingSlash(matrixUrl);
+    let encodedUserId = encodeURIComponent(matrixUserId);
+    let accountDataUrl = `${baseUrl}_matrix/client/v3/user/${encodedUserId}/account_data/app.boxel.realms`;
+    let authHeaders = {
+      Authorization: `Bearer ${matrixAccessToken}`,
+      'Content-Type': 'application/json',
+    };
+
+    // GET current realm list
+    let existingRealms: string[] = [];
+    try {
+      let getResponse = await fetchImpl(accountDataUrl, {
+        method: 'GET',
+        headers: authHeaders,
+      });
+      if (getResponse.ok) {
+        let data = (await getResponse.json()) as { realms?: string[] };
+        existingRealms = data.realms ?? [];
+      }
+      // 404 means no account data yet — start with empty list
+    } catch {
+      // Network error reading account data — proceed with empty list
+    }
+
+    // Append and PUT
+    let updatedRealms = [...existingRealms, newRealmUrl];
+    try {
+      await fetchImpl(accountDataUrl, {
+        method: 'PUT',
+        headers: authHeaders,
+        body: JSON.stringify({ realms: updatedRealms }),
+      });
+    } catch {
+      // Best-effort — don't fail the realm-create if account data update fails
+    }
   }
 }
 
@@ -715,19 +787,18 @@ function buildRealmApiRequest(
       };
     }
 
-    case 'realm-mtimes': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
-      return {
-        url: `${realmUrl}_mtimes`,
-        method: 'GET',
-        headers,
-      };
-    }
-
     case 'realm-create': {
       let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
       let name = String(toolArgs['name']);
       let endpoint = String(toolArgs['endpoint']);
+      let iconURL =
+        typeof toolArgs['iconURL'] === 'string'
+          ? toolArgs['iconURL']
+          : iconURLForName(name);
+      let backgroundURL =
+        typeof toolArgs['backgroundURL'] === 'string'
+          ? toolArgs['backgroundURL']
+          : getRandomBackgroundURL();
       return {
         url: `${serverUrl}_create-realm`,
         method: 'POST',
@@ -739,7 +810,12 @@ function buildRealmApiRequest(
         body: JSON.stringify({
           data: {
             type: 'realm',
-            attributes: { name, endpoint },
+            attributes: {
+              name,
+              endpoint,
+              ...(iconURL ? { iconURL } : {}),
+              ...(backgroundURL ? { backgroundURL } : {}),
+            },
           },
         }),
       };
@@ -756,12 +832,12 @@ function buildRealmApiRequest(
       };
     }
 
-    case 'realm-reindex': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
+    case 'realm-auth': {
+      let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
       return {
-        url: `${realmUrl}_reindex`,
+        url: `${serverUrl}_realm-auth`,
         method: 'POST',
-        headers,
+        headers: { ...headers, 'Content-Type': 'application/json' },
       };
     }
 
@@ -780,4 +856,122 @@ function ensureTrailingSlash(url: string): string {
 
 function looksLikeUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://');
+}
+
+function extractCreatedRealmUrl(responseBody: unknown): string | undefined {
+  if (
+    typeof responseBody === 'object' &&
+    responseBody !== null &&
+    'data' in responseBody
+  ) {
+    let data = (responseBody as { data: unknown }).data;
+    if (typeof data === 'object' && data !== null && 'id' in data) {
+      let id = (data as { id: unknown }).id;
+      if (typeof id === 'string') {
+        return id;
+      }
+    }
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Icon and background URL defaults
+// TODO: Move iconURLForName / getRandomBackgroundURL to @cardstack/runtime-common
+// so host (packages/host/app/lib/utils.ts) and software-factory share one copy.
+// ---------------------------------------------------------------------------
+
+const ICON_URLS: Record<string, string> = {
+  a: 'https://boxel-images.boxel.ai/icons/Letter-a.png',
+  b: 'https://boxel-images.boxel.ai/icons/Letter-b.png',
+  c: 'https://boxel-images.boxel.ai/icons/Letter-c.png',
+  d: 'https://boxel-images.boxel.ai/icons/Letter-d.png',
+  e: 'https://boxel-images.boxel.ai/icons/Letter-e.png',
+  f: 'https://boxel-images.boxel.ai/icons/Letter-f.png',
+  g: 'https://boxel-images.boxel.ai/icons/Letter-g.png',
+  h: 'https://boxel-images.boxel.ai/icons/Letter-h.png',
+  i: 'https://boxel-images.boxel.ai/icons/Letter-i.png',
+  j: 'https://boxel-images.boxel.ai/icons/Letter-j.png',
+  k: 'https://boxel-images.boxel.ai/icons/Letter-k.png',
+  l: 'https://boxel-images.boxel.ai/icons/Letter-l.png',
+  m: 'https://boxel-images.boxel.ai/icons/Letter-m.png',
+  n: 'https://boxel-images.boxel.ai/icons/Letter-n.png',
+  o: 'https://boxel-images.boxel.ai/icons/Letter-o.png',
+  p: 'https://boxel-images.boxel.ai/icons/Letter-p.png',
+  q: 'https://boxel-images.boxel.ai/icons/Letter-q.png',
+  r: 'https://boxel-images.boxel.ai/icons/Letter-r.png',
+  s: 'https://boxel-images.boxel.ai/icons/Letter-s.png',
+  t: 'https://boxel-images.boxel.ai/icons/Letter-t.png',
+  u: 'https://boxel-images.boxel.ai/icons/Letter-u.png',
+  v: 'https://boxel-images.boxel.ai/icons/Letter-v.png',
+  w: 'https://boxel-images.boxel.ai/icons/Letter-w.png',
+  x: 'https://boxel-images.boxel.ai/icons/Letter-x.png',
+  y: 'https://boxel-images.boxel.ai/icons/Letter-y.png',
+  z: 'https://boxel-images.boxel.ai/icons/letter-z.png',
+};
+
+const BACKGROUND_URLS: readonly string[] = [
+  'https://boxel-images.boxel.ai/background-images/4k-arabic-teal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-arrow-weave.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-atmosphere-curvature.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-brushed-slabs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-coral-reefs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-crescent-lake.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-curvilinear-stairs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-desert-dunes.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-doodle-board.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-fallen-leaves.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-flowing-mesh.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-glass-reflection.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-glow-cells.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-granite-peaks.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-green-wormhole.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-joshua-dawn.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-lava-river.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-leaves-moss.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-lowres-glitch.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-marble-shimmer.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-metallic-leather.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-microscopic-crystals.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-moon-face.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-mountain-runway.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-paint-swirl.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-pastel-triangles.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-perforated-sheet.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-plastic-ripples.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-radiant-crystal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-redrock-canyon.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-rock-portal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-rolling-hills.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-sand-stone.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-silver-fur.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-spa-pool.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-stained-glass.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-stone-veins.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-tangerine-plains.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-techno-floor.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-thick-frost.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-water-surface.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-watercolor-splashes.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-wildflower-field.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-wood-grain.jpg',
+];
+
+export function iconURLForName(name: string): string | undefined {
+  if (!name) {
+    return undefined;
+  }
+  let cleansed = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/^[0-9]+/, '');
+  return ICON_URLS[cleansed.charAt(0)];
+}
+
+export function getRandomBackgroundURL(): string {
+  let index = Math.floor(Math.random() * BACKGROUND_URLS.length);
+  return BACKGROUND_URLS[index];
 }

@@ -345,7 +345,9 @@ const REALM_API_TOOLS: ToolManifest[] = [
         name: 'accept',
         type: 'string',
         required: false,
-        description: 'Accept header (default: application/vnd.card+source)',
+        description:
+          'Accept header. Default: application/vnd.card+source (raw source — path MUST include file extension, e.g. CardDef/my-card.gts). ' +
+          'Use application/vnd.card+json for computed card instances with resolved fields (path must NOT include extension, e.g. Card/instance).',
       },
     ],
   },
@@ -444,20 +446,6 @@ const REALM_API_TOOLS: ToolManifest[] = [
     ],
   },
   {
-    name: 'realm-mtimes',
-    description: 'Get file modification times for a realm.',
-    category: 'realm-api',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm-url',
-        type: 'string',
-        required: true,
-        description: 'Realm base URL',
-      },
-    ],
-  },
-  {
     name: 'realm-create',
     description: 'Create a new realm on the realm server.',
     category: 'realm-api',
@@ -481,6 +469,20 @@ const REALM_API_TOOLS: ToolManifest[] = [
         required: true,
         description:
           'URL path segment for the new realm (e.g. "user/my-realm")',
+      },
+      {
+        name: 'iconURL',
+        type: 'string',
+        required: false,
+        description:
+          'Icon URL for the realm. Defaults to a letter-based icon derived from the realm name.',
+      },
+      {
+        name: 'backgroundURL',
+        type: 'string',
+        required: false,
+        description:
+          'Background image URL for the realm. Defaults to a random background image.',
       },
     ],
   },
@@ -507,16 +509,17 @@ const REALM_API_TOOLS: ToolManifest[] = [
     ],
   },
   {
-    name: 'realm-reindex',
-    description: 'Trigger a full reindex of a realm.',
+    name: 'realm-auth',
+    description:
+      'Get per-realm JWTs for all realms accessible to the authenticated user.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
       {
-        name: 'realm-url',
+        name: 'realm-server-url',
         type: 'string',
         required: true,
-        description: 'Realm URL to reindex',
+        description: 'Realm server base URL',
       },
     ],
   },
