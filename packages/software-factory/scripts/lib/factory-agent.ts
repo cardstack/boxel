@@ -187,10 +187,7 @@ export function validateAgentActions(raw: unknown[]): AgentAction[] {
 
     let action = item as Record<string, unknown>;
 
-    if (
-      typeof action.type !== 'string' ||
-      !isValidActionType(action.type)
-    ) {
+    if (typeof action.type !== 'string' || !isValidActionType(action.type)) {
       throw new AgentActionValidationError(
         `Action at index ${i} has invalid type: ${JSON.stringify(action.type)}. ` +
           `Expected one of: ${VALID_ACTION_TYPES.join(', ')}`,
@@ -213,21 +210,28 @@ export function validateAgentActions(raw: unknown[]): AgentAction[] {
       }
     }
 
-    // invoke_tool requires tool name
+    // invoke_tool requires tool name and valid toolArgs
     if (type === 'invoke_tool') {
       if (typeof action.tool !== 'string' || action.tool.trim() === '') {
         throw new AgentActionValidationError(
           `Action at index ${i} (invoke_tool) requires a non-empty "tool"`,
         );
       }
+      if (
+        action.toolArgs !== undefined &&
+        (typeof action.toolArgs !== 'object' ||
+          action.toolArgs === null ||
+          Array.isArray(action.toolArgs))
+      ) {
+        throw new AgentActionValidationError(
+          `Action at index ${i} (invoke_tool) has invalid "toolArgs": expected a plain object`,
+        );
+      }
     }
 
     // Validate realm if present
     if (action.realm !== undefined) {
-      if (
-        typeof action.realm !== 'string' ||
-        !isValidRealm(action.realm)
-      ) {
+      if (typeof action.realm !== 'string' || !isValidRealm(action.realm)) {
         throw new AgentActionValidationError(
           `Action at index ${i} has invalid realm: ${JSON.stringify(action.realm)}. ` +
             `Expected one of: ${VALID_REALMS.join(', ')}`,
@@ -285,9 +289,7 @@ function stripMarkdownFences(text: string): string {
   let trimmed = text.trim();
 
   // Match ```json ... ``` or ``` ... ```
-  let fenceMatch = trimmed.match(
-    /^```(?:json)?\s*\n([\s\S]*?)\n\s*```\s*$/,
-  );
+  let fenceMatch = trimmed.match(/^```(?:json)?\s*\n([\s\S]*?)\n\s*```\s*$/);
   if (fenceMatch) {
     return fenceMatch[1].trim();
   }
@@ -334,9 +336,13 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
   constructor(config: FactoryAgentConfig) {
     this.config = config;
 
-    // Env var takes precedence — lets you override the proxy path at runtime
-    let apiKey =
+    // Env var takes precedence — lets you override the proxy path at runtime.
+    // Trim and treat empty/whitespace-only values as missing so that
+    // OPENROUTER_API_KEY='' in CI doesn't accidentally bypass the proxy.
+    let rawApiKey =
       process.env.OPENROUTER_API_KEY ?? config.openRouterApiKey ?? undefined;
+    let apiKey =
+      typeof rawApiKey === 'string' ? rawApiKey.trim() || undefined : undefined;
     this.useDirectApi = apiKey !== undefined;
 
     if (this.useDirectApi) {
@@ -351,10 +357,10 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
       }) as typeof globalThis.fetch;
     } else {
       // Proxy path — authenticated fetch through realm server _request-forward.
+      // Pass authorization through as-is (callers provide the full header value
+      // e.g. "Bearer <token>") to avoid double-prefixing.
       this.fetchImpl = createBoxelRealmFetch(config.realmServerUrl, {
-        authorization: config.authorization
-          ? `Bearer ${config.authorization}`
-          : undefined,
+        authorization: config.authorization?.trim() || undefined,
       });
     }
   }
@@ -496,7 +502,10 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
       });
     } else {
       // Proxy path — go through realm server _request-forward.
-      let proxyUrl = `${this.config.realmServerUrl}_request-forward`;
+      let proxyUrl = new URL(
+        '_request-forward',
+        this.config.realmServerUrl,
+      ).toString();
 
       response = await this.fetchImpl(proxyUrl, {
         method: 'POST',
@@ -518,9 +527,7 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
 
     if (!response.ok) {
       let errorText = await response.text();
-      throw new Error(
-        `HTTP ${response.status}: ${errorText.slice(0, 500)}`,
-      );
+      throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 500)}`);
     }
 
     let json = (await response.json()) as {

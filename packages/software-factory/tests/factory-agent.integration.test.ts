@@ -11,9 +11,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeMinimalContext(
-  overrides?: Partial<AgentContext>,
-): AgentContext {
+function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
     project: { id: 'Project/test-project' },
     ticket: { id: 'Ticket/test-ticket' },
@@ -135,7 +133,7 @@ module(
         let agent = new OpenRouterFactoryAgent({
           model: 'anthropic/claude-sonnet-4',
           realmServerUrl: `${origin}/`,
-          authorization: 'test-jwt-token',
+          authorization: 'Bearer test-jwt-token',
         });
 
         assert.false(
@@ -174,12 +172,8 @@ module(
           'anthropic/claude-sonnet-4',
           'model is set in inner request',
         );
-        assert.strictEqual(
-          capturedInnerBody!.stream,
-          false,
-          'stream is false',
-        );
-        assert.ok(
+        assert.false(capturedInnerBody!.stream as boolean, 'stream is false');
+        assert.true(
           Array.isArray(capturedInnerBody!.messages),
           'messages array present',
         );
@@ -211,7 +205,7 @@ module(
         let agent = new OpenRouterFactoryAgent({
           model: 'anthropic/claude-sonnet-4',
           realmServerUrl: `${origin}/`,
-          authorization: 'test-jwt-token',
+          authorization: 'Bearer test-jwt-token',
         });
 
         let ctx = makeMinimalContext();
@@ -220,8 +214,9 @@ module(
           await agent.plan(ctx);
           assert.ok(false, 'should have thrown');
         } catch (err) {
-          assert.ok(
-            err instanceof Error && err.message.includes('403'),
+          assert.true(err instanceof Error, 'throws an Error');
+          assert.true(
+            (err as Error).message.includes('403'),
             'error includes HTTP status',
           );
         }
@@ -264,7 +259,7 @@ module(
         let agent = new OpenRouterFactoryAgent({
           model: 'anthropic/claude-sonnet-4',
           realmServerUrl: `${origin}/`,
-          authorization: 'test-jwt-token',
+          authorization: 'Bearer test-jwt-token',
         });
 
         let ctx = makeMinimalContext();
@@ -305,10 +300,7 @@ module(
       let { server, origin } = await startServer((req, body) => {
         capturedAuthHeader = req.headers.authorization;
 
-        if (
-          req.url === '/api/v1/chat/completions' &&
-          req.method === 'POST'
-        ) {
+        if (req.url === '/api/v1/chat/completions' && req.method === 'POST') {
           capturedBody = JSON.parse(body);
           return {
             status: 200,
@@ -370,8 +362,8 @@ module(
           'google/gemini-2.5-pro',
           'model sent directly in body',
         );
-        assert.strictEqual(capturedBody!.stream, false);
-        assert.ok(Array.isArray(capturedBody!.messages));
+        assert.false(capturedBody!.stream as boolean, 'stream is false');
+        assert.true(Array.isArray(capturedBody!.messages), 'messages present');
         assert.strictEqual(
           capturedBody!.url,
           undefined,
@@ -424,8 +416,9 @@ module(
           await agent.plan(ctx);
           assert.ok(false, 'should have thrown');
         } catch (err) {
-          assert.ok(
-            err instanceof Error && err.message.includes('429'),
+          assert.true(err instanceof Error, 'throws an Error');
+          assert.true(
+            (err as Error).message.includes('429'),
             'error includes HTTP status',
           );
         }
