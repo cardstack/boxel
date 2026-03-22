@@ -328,6 +328,44 @@ export interface AssembleTestPromptOptions {
 }
 
 /**
+ * Build tool results data with outputFormat propagated from tool manifests.
+ * Shared between assembleImplementPrompt and assembleIteratePrompt.
+ */
+function buildToolResultsData(
+  context: AgentContext,
+): { tool: string; exitCode: number; output: string; outputFormat: string }[] {
+  if (!context.toolResults || context.toolResults.length === 0) {
+    return [];
+  }
+
+  let toolManifestsByName = new Map<string, ToolManifest>();
+  for (let tool of context.tools) {
+    toolManifestsByName.set(tool.name, tool);
+  }
+
+  return context.toolResults.map((r: ToolResult) => {
+    let manifest = toolManifestsByName.get(r.tool);
+    let outputFormat = manifest?.outputFormat ?? 'json';
+
+    let output: string;
+    if (typeof r.output === 'string') {
+      output = r.output;
+    } else if (outputFormat === 'text') {
+      output = String(r.output);
+    } else {
+      output = JSON.stringify(r.output, null, 2);
+    }
+
+    return {
+      tool: r.tool,
+      exitCode: r.exitCode,
+      output,
+      outputFormat,
+    };
+  });
+}
+
+/**
  * Assemble the system prompt for a one-shot LLM call.
  * This is the same for all calls within a ticket.
  */
@@ -367,16 +405,21 @@ export function assembleSystemPrompt(
 
 /**
  * Assemble the user prompt for the initial implementation pass.
+ * Includes tool results when present (e.g., after invoke_tool actions
+ * from a prior plan() call that returned tool invocations before implementation).
  */
 export function assembleImplementPrompt(
   options: AssembleImplementPromptOptions,
 ): string {
   let { context, loader } = options;
 
+  let toolResultsData = buildToolResultsData(context);
+
   return loader.load('ticket-implement', {
     project: context.project,
     ticket: context.ticket,
     knowledge: context.knowledge,
+    toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
   });
 }
 
@@ -415,14 +458,7 @@ export function assembleIteratePrompt(
     }),
   );
 
-  let toolResultsData = (context.toolResults ?? []).map((r: ToolResult) => ({
-    tool: r.tool,
-    exitCode: r.exitCode,
-    output:
-      typeof r.output === 'string'
-        ? r.output
-        : JSON.stringify(r.output, null, 2),
-  }));
+  let toolResultsData = buildToolResultsData(context);
 
   return loader.load('ticket-iterate', {
     project: context.project,

@@ -5,10 +5,9 @@
 {{#if project.successCriteria}}
 Success criteria:
 {{#each project.successCriteria}}
-
 - {{.}}
-  {{/each}}
-  {{/if}}
+{{/each}}
+{{/if}}
 
 # Knowledge
 
@@ -32,10 +31,26 @@ Description:
 {{#if ticket.checklist}}
 Checklist:
 {{#each ticket.checklist}}
-
 - [ ] {{.}}
-      {{/each}}
-      {{/if}}
+{{/each}}
+{{/if}}
+
+{{#if toolResults}}
+
+# Tool Results
+
+You previously invoked the following tools. Use these results to inform your implementation.
+
+{{#each toolResults}}
+
+## {{tool}} (exit code: {{exitCode}})
+
+```{{outputFormat}}
+{{output}}
+```
+
+{{/each}}
+{{/if}}
 
 # Instructions
 

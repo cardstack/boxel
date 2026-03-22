@@ -482,6 +482,51 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
     assert.ok(result.includes('Step 1'), 'includes checklist item 1');
     assert.ok(result.includes('Step 2'), 'includes checklist item 2');
   });
+
+  test('includes tool results when present (after invoke_tool)', function (assert) {
+    let loader = new FilePromptLoader();
+    let ctx = makeMinimalContext({
+      tools: [
+        {
+          name: 'search-realm',
+          description: 'Search cards',
+          category: 'script' as const,
+          args: [],
+          outputFormat: 'json' as const,
+        },
+      ],
+      toolResults: [
+        {
+          tool: 'search-realm',
+          exitCode: 0,
+          output: { cards: ['StickyNote/sample'] },
+          durationMs: 200,
+        },
+      ],
+    });
+    let result = assembleImplementPrompt({ context: ctx, loader });
+
+    assert.ok(result.includes('search-realm'), 'includes tool name in results');
+    assert.ok(
+      result.includes('StickyNote/sample'),
+      'includes tool output data',
+    );
+    assert.ok(
+      result.includes('Implement this ticket'),
+      'still includes implementation instructions',
+    );
+  });
+
+  test('omits tool results section when no tool results', function (assert) {
+    let loader = new FilePromptLoader();
+    let ctx = makeMinimalContext();
+    let result = assembleImplementPrompt({ context: ctx, loader });
+
+    assert.notOk(
+      result.includes('Tool Results'),
+      'no tool results section when empty',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -595,6 +640,63 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
 
     assert.ok(result.includes('search-realm'), 'includes tool name');
     assert.ok(result.includes('exit code: 0'), 'includes exit code');
+  });
+
+  test('propagates outputFormat for tool results fence', function (assert) {
+    let loader = new FilePromptLoader();
+    let ctx = makeMinimalContext({
+      tools: [
+        {
+          name: 'run-tests',
+          description: 'Run tests',
+          category: 'script' as const,
+          args: [],
+          outputFormat: 'text' as const,
+        },
+        {
+          name: 'search-realm',
+          description: 'Search cards',
+          category: 'script' as const,
+          args: [],
+          outputFormat: 'json' as const,
+        },
+      ],
+      testResults: {
+        status: 'failed',
+        passedCount: 0,
+        failedCount: 1,
+        failures: [{ testName: 'basic', error: 'fail' }],
+        durationMs: 1000,
+      },
+      toolResults: [
+        {
+          tool: 'run-tests',
+          exitCode: 1,
+          output: 'FAIL: test-a\nsome plain text output',
+          durationMs: 500,
+        },
+        {
+          tool: 'search-realm',
+          exitCode: 0,
+          output: { cards: ['Card/1'] },
+          durationMs: 200,
+        },
+      ],
+    });
+
+    let result = assembleIteratePrompt({
+      context: ctx,
+      previousActions: [{ type: 'done' }],
+      iteration: 1,
+      loader,
+    });
+
+    assert.ok(result.includes('```text'), 'text tool uses ```text fence');
+    assert.ok(result.includes('```json'), 'json tool uses ```json fence');
+    assert.ok(
+      result.includes('some plain text output'),
+      'text output preserved as-is',
+    );
   });
 
   test('is self-contained: includes project, ticket, actions, test results', function (assert) {

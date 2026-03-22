@@ -433,6 +433,8 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
    *
    * If the context includes testResults (i.e., this is an iteration pass),
    * the user prompt uses ticket-iterate. Otherwise it uses ticket-implement.
+   * The implement prompt also includes tool results when present (e.g.,
+   * after invoke_tool actions from a prior plan() call).
    */
   buildMessages(
     context: AgentContext,
@@ -446,16 +448,18 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
 
     let userPrompt: string;
 
-    if (context.testResults && previousActions && iteration !== undefined) {
-      // Iteration pass — ticket-iterate template
+    if (context.testResults) {
+      // Iteration pass — ticket-iterate template.
+      // Provide sensible defaults when previousActions/iteration are not supplied.
       userPrompt = assembleIteratePrompt({
         context,
-        previousActions,
-        iteration,
+        previousActions: previousActions ?? [],
+        iteration: iteration ?? 1,
         loader: this.promptLoader,
       });
     } else {
-      // First pass — ticket-implement template
+      // First pass — ticket-implement template.
+      // Includes tool results when present (e.g., after invoke_tool).
       userPrompt = assembleImplementPrompt({
         context,
         loader: this.promptLoader,

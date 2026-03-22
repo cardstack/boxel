@@ -59,7 +59,7 @@ Stack trace:
 
 ## {{tool}} (exit code: {{exitCode}})
 
-```json
+```{{outputFormat}}
 {{output}}
 ```
 

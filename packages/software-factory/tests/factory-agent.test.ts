@@ -479,6 +479,73 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     assert.ok(messages[1].content.includes('renders card'));
     assert.ok(messages[1].content.includes('Element not found'));
   });
+
+  test('uses iterate template when testResults present even without explicit previousActions/iteration', function (assert) {
+    let agent = new OpenRouterFactoryAgent({
+      model: 'anthropic/claude-sonnet-4',
+      realmServerUrl: 'https://realms.example.test/',
+    });
+
+    let ctx = makeMinimalContext({
+      testResults: {
+        status: 'failed',
+        passedCount: 0,
+        failedCount: 1,
+        failures: [{ testName: 'basic', error: 'boom' }],
+        durationMs: 1000,
+      },
+    });
+    // Call buildMessages with no previousActions/iteration args
+    let messages = agent.buildMessages(ctx);
+
+    assert.ok(
+      messages[1].content.includes('Fix the failing tests'),
+      'uses iterate template when testResults present',
+    );
+    assert.ok(messages[1].content.includes('boom'), 'includes failure error');
+  });
+
+  test('includes tool results in implement prompt after invoke_tool', function (assert) {
+    let agent = new OpenRouterFactoryAgent({
+      model: 'anthropic/claude-sonnet-4',
+      realmServerUrl: 'https://realms.example.test/',
+    });
+
+    let ctx = makeMinimalContext({
+      tools: [
+        {
+          name: 'search-realm',
+          description: 'Search cards',
+          category: 'script' as const,
+          args: [],
+          outputFormat: 'json' as const,
+        },
+      ],
+      toolResults: [
+        {
+          tool: 'search-realm',
+          exitCode: 0,
+          output: { cards: ['StickyNote/sample'] },
+          durationMs: 200,
+        },
+      ],
+    });
+    // No testResults — should use implement template, but include tool results
+    let messages = agent.buildMessages(ctx);
+
+    assert.ok(
+      messages[1].content.includes('Implement this ticket'),
+      'uses implement template',
+    );
+    assert.ok(
+      messages[1].content.includes('search-realm'),
+      'includes tool name in results',
+    );
+    assert.ok(
+      messages[1].content.includes('StickyNote/sample'),
+      'includes tool output data',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

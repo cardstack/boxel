@@ -51,7 +51,6 @@ Category: {{category}}
 Output format: {{outputFormat}}
 
 {{#each args}}
-
 - {{name}} ({{type}}, {{#if required}}required{{else}}optional{{/if}}): {{description}}
-  {{/each}}
-  {{/each}}
+{{/each}}
+{{/each}}
