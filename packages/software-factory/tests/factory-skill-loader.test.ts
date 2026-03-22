@@ -739,6 +739,54 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
       'non-matching ref excluded',
     );
   });
+
+  test('reference filtering works without budget (no-budget path)', async function (assert) {
+    // Verifies the P1 fix: callers that omit maxSkillTokens still get
+    // ticket-relevant references, not all 19. The filtering happens at load
+    // time, so enforceSkillBudget(skills, undefined) returns already-filtered
+    // skills — no budget required.
+    writeSkill(tempDir, 'boxel-development', '# Boxel Development', {
+      references: {
+        'dev-core-concept.md': 'Core concept content',
+        'dev-technical-rules.md': 'Technical rules content',
+        'dev-quick-reference.md': 'Quick reference content',
+        'dev-styling-design.md': 'Styling design content',
+        'dev-file-editing.md': 'File editing content',
+        'dev-query-systems.md': 'Query systems content',
+      },
+    });
+
+    let loader = new SkillLoader(tempDir, []);
+    let ticket = makeTicket({
+      description: 'Fix the CSS styling on the card',
+    });
+
+    // Load with ticket — filtering happens at load time
+    let skills = await loader.loadAll(['boxel-development'], ticket);
+    assert.strictEqual(skills.length, 1);
+
+    // Pass through enforceSkillBudget with NO budget (undefined)
+    let result = enforceSkillBudget(skills, undefined);
+
+    // Should still have the filtered references from load time
+    assert.strictEqual(result.length, 1);
+    assert.true(
+      result[0].references!.length < 6,
+      'references were filtered at load time even without budget',
+    );
+    assert.true(
+      result[0].references!.some((r) => r.includes('Core concept')),
+      'always-load ref present in no-budget path',
+    );
+    assert.true(
+      result[0].references!.some((r) => r.includes('Styling design')),
+      'keyword-matched ref present in no-budget path',
+    );
+    assert.false(
+      result[0].references!.some((r) => r.includes('File editing')),
+      'non-matching ref excluded in no-budget path',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
