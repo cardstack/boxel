@@ -27,7 +27,6 @@
     "test:node": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts --node-only",
     "test:playwright": "playwright test",
     "test:playwright:headed": "playwright test --headed",
-    "test:live": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/live-index.ts",
     "test:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-realm-tests.ts"
   },
   "devDependencies": {
