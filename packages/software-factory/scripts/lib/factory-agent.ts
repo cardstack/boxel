@@ -127,6 +127,10 @@ export interface AgentContext {
   tools: ToolManifest[];
   testResults?: TestResult;
   toolResults?: ToolResult[];
+  /** Actions from the previous plan() call, fed back for iteration prompts. */
+  previousActions?: AgentAction[];
+  /** Current iteration number (1-based), set by the orchestrator. */
+  iteration?: number;
   targetRealmUrl: string;
   testRealmUrl: string;
 }
@@ -377,7 +381,11 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
   }
 
   async plan(context: AgentContext): Promise<AgentAction[]> {
-    let messages = this.buildMessages(context);
+    let messages = this.buildMessages(
+      context,
+      context.previousActions,
+      context.iteration,
+    );
     let responseText: string;
 
     try {

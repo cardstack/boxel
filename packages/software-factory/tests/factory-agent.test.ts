@@ -549,6 +549,92 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
 });
 
 // ---------------------------------------------------------------------------
+// OpenRouterFactoryAgent.plan() threads iteration context
+// ---------------------------------------------------------------------------
+
+module(
+  'factory-agent > OpenRouterFactoryAgent.plan() iteration context',
+  function () {
+    test('plan() uses iterate template when context has previousActions and testResults', async function (assert) {
+      let capturedBody: string | undefined;
+
+      let originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify([{ type: 'done' }]),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }) as typeof globalThis.fetch;
+
+      try {
+        let agent = new OpenRouterFactoryAgent({
+          model: 'anthropic/claude-sonnet-4',
+          realmServerUrl: 'https://realms.example.test/',
+          openRouterApiKey: 'sk-or-test-key',
+        });
+
+        let ctx = makeMinimalContext({
+          testResults: {
+            status: 'failed',
+            passedCount: 0,
+            failedCount: 1,
+            failures: [
+              { testName: 'renders card', error: 'Element not found' },
+            ],
+            durationMs: 3000,
+          },
+          previousActions: [
+            {
+              type: 'create_file',
+              path: 'card.gts',
+              content: 'export class MyCard {}',
+              realm: 'target',
+            },
+          ],
+          iteration: 2,
+        });
+
+        await agent.plan(ctx);
+
+        // Verify the user message sent to the LLM uses the iterate template
+        let body = JSON.parse(capturedBody!);
+        let userMessage = body.messages[1].content;
+        assert.ok(
+          userMessage.includes('Fix the failing tests'),
+          'plan() sends iterate prompt when context has testResults + previousActions',
+        );
+        assert.ok(
+          userMessage.includes('card.gts'),
+          'iterate prompt includes previous actions from context',
+        );
+        assert.ok(
+          userMessage.includes('iteration 2'),
+          'iterate prompt includes iteration number from context',
+        );
+        assert.ok(
+          userMessage.includes('Element not found'),
+          'iterate prompt includes test failure details',
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
 // OpenRouterFactoryAgent API path selection
 // ---------------------------------------------------------------------------
 
