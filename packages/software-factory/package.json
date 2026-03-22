@@ -9,6 +9,7 @@
     "boxel:search": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-search.ts",
     "boxel:session": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-session.ts",
     "cache:prepare": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/cache-realm.ts",
+    "factory:agent-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-agent-smoke.ts",
     "factory:go": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/factory-entrypoint.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
