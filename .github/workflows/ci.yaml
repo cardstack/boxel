@@ -677,6 +677,26 @@ jobs:
       - name: Run Node tests
         run: pnpm test:node
         working-directory: packages/software-factory
+      - name: Start support services for live tests
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve:support &
+          working-directory: packages/software-factory
+          wait-for: 3m
+          wait-on: file:///tmp/software-factory-runtime/support.json
+      - name: Prepare cache for live tests
+        run: pnpm cache:prepare
+        working-directory: packages/software-factory
+      - name: Start realm server for live tests
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve:realm &
+          working-directory: packages/software-factory
+          wait-for: 3m
+          wait-on: http-get://localhost:4205/test/.realm.json
+      - name: Run live integration tests
+        run: pnpm test:live
+        working-directory: packages/software-factory
       - name: Serve host dist (test assets)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
