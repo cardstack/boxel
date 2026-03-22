@@ -239,13 +239,20 @@ export class ToolExecutor {
       }
     }
 
-    // Allowed-realm targeting for realm-api tools (always enforced)
-    let manifest = this.registry.getManifest(toolName);
-    if (manifest?.category === 'realm-api') {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string' && looksLikeUrl(realmUrl)) {
-        this.validateRealmTarget(toolName, realmUrl);
+    // Allowed-target validation for all URL args across all tool categories.
+    // Prevents SSRF and token exfiltration via the propagated Authorization header.
+    let urlArgNames = ['realm', 'realm-url'];
+    for (let argName of urlArgNames) {
+      let value = toolArgs[argName];
+      if (typeof value === 'string' && looksLikeUrl(value)) {
+        this.validateRealmTarget(toolName, value);
       }
+    }
+
+    // realm-server-url must match one of the allowed realm origins
+    let serverUrl = toolArgs['realm-server-url'];
+    if (typeof serverUrl === 'string' && looksLikeUrl(serverUrl)) {
+      this.validateRealmServerTarget(toolName, serverUrl);
     }
 
     // Extra validation for destructive operations
@@ -271,6 +278,47 @@ export class ToolExecutor {
       throw new ToolSafetyError(
         `Tool "${toolName}" targets realm "${realmUrl}" which is not in the allowed list. ` +
           `Allowed: ${[...exactAllowed, ...prefixAllowed].join(', ')}`,
+      );
+    }
+  }
+
+  /**
+   * Validate that a realm-server-url arg points to a server that hosts
+   * one of the allowed realms (origin match against target/test/prefixes).
+   */
+  private validateRealmServerTarget(toolName: string, serverUrl: string): void {
+    let normalizedServer: string;
+    try {
+      normalizedServer = new URL(serverUrl).origin;
+    } catch {
+      throw new ToolSafetyError(
+        `Tool "${toolName}" has invalid realm-server-url: "${serverUrl}"`,
+      );
+    }
+
+    let allowedOrigins = new Set<string>();
+    try {
+      allowedOrigins.add(new URL(this.config.targetRealmUrl).origin);
+    } catch {
+      // skip invalid
+    }
+    try {
+      allowedOrigins.add(new URL(this.config.testRealmUrl).origin);
+    } catch {
+      // skip invalid
+    }
+    for (let prefix of this.config.allowedRealmPrefixes ?? []) {
+      try {
+        allowedOrigins.add(new URL(prefix).origin);
+      } catch {
+        // skip invalid
+      }
+    }
+
+    if (!allowedOrigins.has(normalizedServer)) {
+      throw new ToolSafetyError(
+        `Tool "${toolName}" targets server "${serverUrl}" which is not in the allowed origins. ` +
+          `Allowed: ${[...allowedOrigins].join(', ')}`,
       );
     }
   }
@@ -302,11 +350,8 @@ export class ToolExecutor {
       }
     }
 
-    // realm-create and realm-reindex require extra validation
-    if (toolName === 'realm-create' || toolName === 'realm-reindex') {
-      // These are allowed but logged — the orchestrator trusts the agent
-      // chose them deliberately within the allowed realm set.
-    }
+    // realm-create is allowed but logged — the orchestrator trusts the agent
+    // chose it deliberately within the allowed realm set.
   }
 
   // -------------------------------------------------------------------------

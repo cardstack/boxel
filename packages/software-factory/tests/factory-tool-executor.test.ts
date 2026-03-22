@@ -236,6 +236,43 @@ module('factory-tool-executor > source realm protection', function () {
       assert.true((err as Error).message.includes('not in the allowed list'));
     }
   });
+
+  test('rejects realm-server-url targeting unknown origin', async function (assert) {
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(registry, makeConfig());
+
+    try {
+      await executor.execute(
+        makeInvokeToolAction('realm-server-session', {
+          'realm-server-url': 'https://evil.example.test/',
+          'openid-token': 'token',
+        }),
+      );
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.true(err instanceof ToolSafetyError);
+      assert.true(
+        (err as Error).message.includes('not in the allowed origins'),
+      );
+    }
+  });
+
+  test('rejects script tool targeting unknown realm URL', async function (assert) {
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(registry, makeConfig());
+
+    try {
+      await executor.execute(
+        makeInvokeToolAction('search-realm', {
+          realm: 'https://evil.example.test/hacker/realm/',
+        }),
+      );
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.true(err instanceof ToolSafetyError);
+      assert.true((err as Error).message.includes('not in the allowed list'));
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
