@@ -591,6 +591,262 @@ module('factory-tool-executor > realm-api execution', function () {
 });
 
 // ---------------------------------------------------------------------------
+// Auth header propagation
+// ---------------------------------------------------------------------------
+
+module('factory-tool-executor > auth header propagation', function () {
+  function createHeaderCapturingFetch(): {
+    fetch: typeof globalThis.fetch;
+    getCapturedHeaders: () => Headers | undefined;
+  } {
+    let capturedHeaders: Headers | undefined;
+    return {
+      fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+        capturedHeaders = new Headers(init?.headers as HeadersInit);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }) as typeof globalThis.fetch,
+      getCapturedHeaders: () => capturedHeaders,
+    };
+  }
+
+  test('realm-read sends realm JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-read', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'Card/foo.json',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-jwt-abc',
+    );
+  });
+
+  test('realm-write sends realm JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-write', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'Card/new.gts',
+        content: 'export class NewCard {}',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-jwt-abc',
+    );
+  });
+
+  test('realm-delete sends realm JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-delete', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'Card/old.json',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-jwt-abc',
+    );
+  });
+
+  test('realm-search sends realm JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-search', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        query: '{}',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-jwt-abc',
+    );
+  });
+
+  test('realm-atomic sends realm JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-atomic', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        operations: '[]',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-jwt-abc',
+    );
+  });
+
+  test('realm-create sends realm-server JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({
+        authorization: 'Bearer realm-server-jwt-xyz',
+        fetch,
+      }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/user/target/',
+        name: 'scratch',
+        endpoint: 'user/scratch',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-server-jwt-xyz',
+    );
+  });
+
+  test('realm-reindex sends realm JWT in Authorization header', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-reindex', {
+        'realm-url': 'https://realms.example.test/user/target/',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      'Bearer realm-jwt-abc',
+    );
+  });
+
+  test('no Authorization header when authorization is not configured', async function (assert) {
+    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({ fetch }), // no authorization
+    );
+
+    await executor.execute(
+      makeInvokeToolAction('realm-read', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'Card/foo.json',
+      }),
+    );
+
+    assert.strictEqual(
+      getCapturedHeaders()!.get('Authorization'),
+      null,
+      'no Authorization header sent',
+    );
+  });
+
+  test('realm-server-session JWT can be used for subsequent realm-create', async function (assert) {
+    let registry = new ToolRegistry();
+
+    // Step 1: Get realm server JWT via realm-server-session
+    let sessionExecutor = new ToolExecutor(
+      registry,
+      makeConfig({
+        fetch: (async () => {
+          return new Response(null, {
+            status: 201,
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer minted-realm-server-jwt',
+            },
+          });
+        }) as typeof globalThis.fetch,
+      }),
+    );
+
+    let sessionResult = await sessionExecutor.execute(
+      makeInvokeToolAction('realm-server-session', {
+        'realm-server-url': 'https://realms.example.test/user/target/',
+        'openid-token': 'matrix-openid-token',
+      }),
+    );
+
+    let jwt = (sessionResult.output as { token: string }).token;
+    assert.strictEqual(jwt, 'Bearer minted-realm-server-jwt');
+
+    // Step 2: Use the JWT for realm-create
+    let capturedHeaders: Headers | undefined;
+    let createExecutor = new ToolExecutor(
+      registry,
+      makeConfig({
+        authorization: jwt,
+        fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+          capturedHeaders = new Headers(init?.headers as HeadersInit);
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }) as typeof globalThis.fetch,
+      }),
+    );
+
+    await createExecutor.execute(
+      makeInvokeToolAction('realm-create', {
+        'realm-server-url': 'https://realms.example.test/user/target/',
+        name: 'test-realm',
+        endpoint: 'user/test-realm',
+      }),
+    );
+
+    assert.strictEqual(
+      capturedHeaders!.get('Authorization'),
+      'Bearer minted-realm-server-jwt',
+      'realm-create uses the JWT from realm-server-session',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
 
