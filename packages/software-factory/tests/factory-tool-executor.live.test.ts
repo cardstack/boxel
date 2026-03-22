@@ -36,7 +36,6 @@ const REALM_SERVER_PORT = Number(
 const REALM_SERVER_URL = `http://localhost:${REALM_SERVER_PORT}/`;
 const TEST_REALM_URL = `${REALM_SERVER_URL}test/`;
 const REALM_SECRET_SEED = "shhh! it's a secret";
-const REALM_SERVER_SECRET_SEED = "mum's the word";
 const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 
 // ---------------------------------------------------------------------------
@@ -48,27 +47,19 @@ function buildRealmToken(
   user = DEFAULT_REALM_OWNER,
   permissions = ['read', 'write', 'realm-owner'],
 ): string {
-  return jwt.sign(
-    {
-      user,
-      realm: realmURL,
-      permissions,
-      sessionRoom: `software-factory-session-room-for-${user}`,
-      realmServerURL: REALM_SERVER_URL,
-    },
-    REALM_SECRET_SEED,
-    { expiresIn: '7d' },
-  );
-}
-
-function buildRealmServerToken(user = DEFAULT_REALM_OWNER): string {
-  return jwt.sign(
-    {
-      user,
-      sessionRoom: `software-factory-session-room-for-${user}`,
-    },
-    REALM_SERVER_SECRET_SEED,
-    { expiresIn: '7d' },
+  return (
+    'Bearer ' +
+    jwt.sign(
+      {
+        user,
+        realm: realmURL,
+        permissions,
+        sessionRoom: `software-factory-session-room-for-${user}`,
+        realmServerURL: REALM_SERVER_URL,
+      },
+      REALM_SECRET_SEED,
+      { expiresIn: '7d' },
+    )
   );
 }
 
@@ -152,7 +143,15 @@ module('factory-tool-executor live', function (hooks) {
       tool: 'realm-search',
       toolArgs: {
         'realm-url': TEST_REALM_URL,
-        query: JSON.stringify({ filter: {}, page: { size: 1 } }),
+        query: JSON.stringify({
+          filter: {
+            type: {
+              module: 'https://cardstack.com/base/card-api',
+              name: 'CardDef',
+            },
+          },
+          page: { size: 1 },
+        }),
       },
     });
 
@@ -165,47 +164,9 @@ module('factory-tool-executor live', function (hooks) {
     assert.true(Array.isArray(output.data), 'output has data array');
   });
 
-  test('realm-create creates a scratch realm with icon and background', async function (assert) {
-    let serverJwt = buildRealmServerToken();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeExecutorConfig({ authorization: serverJwt }),
-    );
-
-    let timestamp = Date.now();
-    let endpoint = `live-test-${timestamp}`;
-
-    let result = await executor.execute({
-      type: 'invoke_tool',
-      tool: 'realm-create',
-      toolArgs: {
-        'realm-server-url': REALM_SERVER_URL,
-        name: `Live Test ${timestamp}`,
-        endpoint,
-      },
-    });
-
-    assert.strictEqual(
-      result.exitCode,
-      0,
-      `exitCode 0, got: ${JSON.stringify(result.output)}`,
-    );
-
-    let output = result.output as {
-      data?: {
-        type?: string;
-        id?: string;
-        attributes?: Record<string, unknown>;
-      };
-    };
-    assert.strictEqual(output.data?.type, 'realm', 'response type is realm');
-    assert.strictEqual(
-      typeof output.data?.id,
-      'string',
-      'response has realm id',
-    );
-  });
+  // realm-create live test is blocked by CS-10472 (harness process teardown
+  // leaves orphaned processes that interfere with subsequent realm creation).
+  // The request building and body shape are verified by unit + integration tests.
 
   test('unregistered tool is rejected', async function (assert) {
     let registry = new ToolRegistry();
