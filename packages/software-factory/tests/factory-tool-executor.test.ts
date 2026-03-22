@@ -212,6 +212,29 @@ module('factory-tool-executor > source realm protection', function () {
 
     assert.strictEqual(result.exitCode, 0);
   });
+
+  test('rejects unknown realm even without sourceRealmUrl configured', async function (assert) {
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeConfig({
+        // No sourceRealmUrl — safety should still enforce allowed-realm targeting
+      }),
+    );
+
+    try {
+      await executor.execute(
+        makeInvokeToolAction('realm-read', {
+          'realm-url': 'https://evil.example.test/hacker/realm/',
+          path: 'secrets.json',
+        }),
+      );
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.true(err instanceof ToolSafetyError);
+      assert.true((err as Error).message.includes('not in the allowed list'));
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -473,14 +496,26 @@ module('factory-tool-executor > realm-api execution', function () {
 
     let result = await executor.execute(
       makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
+        'realm-server-url': 'https://realms.example.test/',
         name: 'my-scratch-realm',
+        endpoint: 'user/scratch-123',
       }),
     );
 
-    assert.true(capturedUrl!.endsWith('_create-realm'));
+    assert.strictEqual(
+      capturedUrl,
+      'https://realms.example.test/_create-realm',
+    );
     let body = JSON.parse(capturedBody!);
-    assert.strictEqual(body.name, 'my-scratch-realm');
+    assert.deepEqual(body, {
+      data: {
+        type: 'realm',
+        attributes: {
+          name: 'my-scratch-realm',
+          endpoint: 'user/scratch-123',
+        },
+      },
+    });
     assert.strictEqual(result.exitCode, 0);
   });
 
@@ -510,6 +545,48 @@ module('factory-tool-executor > realm-api execution', function () {
     assert.strictEqual(capturedMethod, 'POST');
     assert.true(capturedUrl!.endsWith('_reindex'));
     assert.strictEqual(result.exitCode, 0);
+  });
+
+  test('realm-server-session sends OpenID token and captures Authorization header', async function (assert) {
+    let capturedUrl: string | undefined;
+    let capturedBody: string | undefined;
+
+    let registry = new ToolRegistry();
+    let config = makeConfig({
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        capturedUrl = String(input);
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response(null, {
+          status: 201,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer realm-server-jwt-123',
+          },
+        });
+      }) as typeof globalThis.fetch,
+    });
+    let executor = new ToolExecutor(registry, config);
+
+    let result = await executor.execute(
+      makeInvokeToolAction('realm-server-session', {
+        'realm-server-url': 'https://realms.example.test/user/target/',
+        'openid-token': 'openid-access-token-xyz',
+      }),
+    );
+
+    assert.true(capturedUrl!.endsWith('_server-session'));
+    let body = JSON.parse(capturedBody!);
+    assert.strictEqual(
+      body.access_token,
+      'openid-access-token-xyz',
+      'sends OpenID token in request body',
+    );
+    assert.strictEqual(result.exitCode, 0);
+    assert.deepEqual(
+      result.output,
+      { token: 'Bearer realm-server-jwt-123' },
+      'captures Authorization header in output',
+    );
   });
 });
 

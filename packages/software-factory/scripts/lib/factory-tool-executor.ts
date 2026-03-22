@@ -207,35 +207,33 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): void {
+    // Source realm protection (when configured)
     let sourceUrl = this.config.sourceRealmUrl;
-    if (!sourceUrl) {
-      return;
-    }
+    if (sourceUrl) {
+      let normalizedSource = ensureTrailingSlash(sourceUrl);
 
-    let normalizedSource = ensureTrailingSlash(sourceUrl);
+      let realmArgNames = [
+        'realm',
+        'realm-url',
+        'realm-server-url',
+        'local-dir',
+        'path',
+      ];
 
-    // Check all string args that look like realm URLs
-    let realmArgNames = [
-      'realm',
-      'realm-url',
-      'realm-server-url',
-      'local-dir',
-      'path',
-    ];
-
-    for (let argName of realmArgNames) {
-      let value = toolArgs[argName];
-      if (typeof value === 'string' && looksLikeUrl(value)) {
-        let normalizedValue = ensureTrailingSlash(value);
-        if (normalizedValue === normalizedSource) {
-          throw new ToolSafetyError(
-            `Tool "${toolName}" cannot target the source realm: ${sourceUrl}`,
-          );
+      for (let argName of realmArgNames) {
+        let value = toolArgs[argName];
+        if (typeof value === 'string' && looksLikeUrl(value)) {
+          let normalizedValue = ensureTrailingSlash(value);
+          if (normalizedValue === normalizedSource) {
+            throw new ToolSafetyError(
+              `Tool "${toolName}" cannot target the source realm: ${sourceUrl}`,
+            );
+          }
         }
       }
     }
 
-    // For realm-api tools, also check if the target URL is allowed
+    // Allowed-realm targeting for realm-api tools (always enforced)
     let manifest = this.registry.getManifest(toolName);
     if (manifest?.category === 'realm-api') {
       let realmUrl = toolArgs['realm-url'];
@@ -372,10 +370,22 @@ export class ToolExecutor {
       let responseBody: unknown;
 
       let contentType = response.headers.get('content-type') ?? '';
-      if (contentType.includes('json')) {
-        responseBody = await response.json();
+      let rawText = await response.text();
+      if (contentType.includes('json') && rawText.length > 0) {
+        try {
+          responseBody = JSON.parse(rawText);
+        } catch {
+          responseBody = rawText;
+        }
       } else {
-        responseBody = await response.text();
+        responseBody = rawText;
+      }
+
+      // Some endpoints return important values in headers (e.g. _server-session
+      // returns the JWT in the Authorization header with an empty/null body).
+      let authorizationHeader = response.headers.get('authorization');
+      if (toolName === 'realm-server-session' && authorizationHeader) {
+        responseBody = { token: authorizationHeader };
       }
 
       return {
@@ -717,21 +727,32 @@ function buildRealmApiRequest(
     case 'realm-create': {
       let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
       let name = String(toolArgs['name']);
+      let endpoint = String(toolArgs['endpoint']);
       return {
         url: `${serverUrl}_create-realm`,
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        headers: {
+          ...headers,
+          Accept: 'application/vnd.api+json',
+          'Content-Type': 'application/vnd.api+json',
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'realm',
+            attributes: { name, endpoint },
+          },
+        }),
       };
     }
 
     case 'realm-server-session': {
       let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
+      let openidToken = String(toolArgs['openid-token']);
       return {
         url: `${serverUrl}_server-session`,
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({ access_token: openidToken }),
       };
     }
 

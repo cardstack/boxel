@@ -473,13 +473,21 @@ const REALM_API_TOOLS: ToolManifest[] = [
         name: 'name',
         type: 'string',
         required: true,
-        description: 'Name for the new realm',
+        description: 'Display name for the new realm',
+      },
+      {
+        name: 'endpoint',
+        type: 'string',
+        required: true,
+        description:
+          'URL path segment for the new realm (e.g. "user/my-realm")',
       },
     ],
   },
   {
     name: 'realm-server-session',
-    description: 'Obtain a realm server JWT for management operations.',
+    description:
+      'Obtain a realm server JWT for management operations. Returns the JWT in the output.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -488,6 +496,13 @@ const REALM_API_TOOLS: ToolManifest[] = [
         type: 'string',
         required: true,
         description: 'Realm server base URL',
+      },
+      {
+        name: 'openid-token',
+        type: 'string',
+        required: true,
+        description:
+          'OpenID access_token obtained from the Matrix server via /openid/request_token',
       },
     ],
   },
@@ -520,7 +535,16 @@ export class ToolRegistry {
       ...BOXEL_CLI_TOOLS,
       ...REALM_API_TOOLS,
     ];
-    this.manifestsByName = new Map(allManifests.map((m) => [m.name, m]));
+    let map = new Map<string, ToolManifest>();
+    for (let manifest of allManifests) {
+      if (map.has(manifest.name)) {
+        throw new Error(
+          `Duplicate tool manifest name "${manifest.name}" detected in ToolRegistry`,
+        );
+      }
+      map.set(manifest.name, manifest);
+    }
+    this.manifestsByName = map;
   }
 
   /** Return all registered tool manifests. */
@@ -561,7 +585,11 @@ export class ToolRegistry {
 
     for (let arg of requiredArgs) {
       let value = toolArgs?.[arg.name];
-      if (value === undefined || value === null || value === '') {
+      let isEmpty =
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && value.trim() === '');
+      if (isEmpty) {
         errors.push(
           `Missing required argument "${arg.name}" for tool "${toolName}"`,
         );

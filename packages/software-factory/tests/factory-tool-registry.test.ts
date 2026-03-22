@@ -44,6 +44,30 @@ module('factory-tool-registry > ToolRegistry construction', function () {
     let registry = new ToolRegistry([]);
     assert.strictEqual(registry.size, 0);
   });
+
+  test('throws on duplicate tool names', function (assert) {
+    let dupes: ToolManifest[] = [
+      {
+        name: 'same-name',
+        description: 'first',
+        category: 'script',
+        args: [],
+        outputFormat: 'json',
+      },
+      {
+        name: 'same-name',
+        description: 'second',
+        category: 'script',
+        args: [],
+        outputFormat: 'json',
+      },
+    ];
+    assert.throws(
+      () => new ToolRegistry(dupes),
+      (err: Error) =>
+        err.message.includes('Duplicate') && err.message.includes('same-name'),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -153,6 +177,12 @@ module('factory-tool-registry > validateArgs', function () {
     let registry = new ToolRegistry();
     let errors = registry.validateArgs('search-realm', { realm: '' });
     assert.strictEqual(errors.length, 1);
+  });
+
+  test('whitespace-only string for required arg produces error', function (assert) {
+    let registry = new ToolRegistry();
+    let errors = registry.validateArgs('search-realm', { realm: '   ' });
+    assert.strictEqual(errors.length, 1, 'whitespace-only value is rejected');
   });
 });
 
