@@ -13,7 +13,7 @@
  * Auth uses the harness's known secret seed to mint JWTs directly,
  * matching the pattern in src/harness.ts — no Matrix login needed.
  *
- * Tests skip gracefully when the realm server is not running.
+ * Tests FAIL with a clear message when the realm server is not running.
  */
 
 import jwt from 'jsonwebtoken';
@@ -101,122 +101,110 @@ async function isRealmServerRunning(): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 module('factory-tool-executor live', function (hooks) {
-  let serverRunning = false;
-
   hooks.before(async function () {
-    serverRunning = await isRealmServerRunning();
-    if (!serverRunning) {
-      console.log(
-        '\n  [SKIP] Realm server not running at ' +
-          REALM_SERVER_URL +
-          ' — run: pnpm serve:support && pnpm cache:prepare && pnpm serve:realm\n',
+    let running = await isRealmServerRunning();
+    if (!running) {
+      throw new Error(
+        `Realm server is not running at ${REALM_SERVER_URL}. ` +
+          `Start the harness first:\n` +
+          `  pnpm serve:support\n` +
+          `  pnpm cache:prepare\n` +
+          `  pnpm serve:realm`,
       );
     }
   });
 
   test('realm-read fetches .realm.json from the test realm', async function (assert) {
-    if (!serverRunning) {
-      assert.expect(0);
-    } else {
-      let realmJwt = buildRealmToken(TEST_REALM_URL);
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(
-        registry,
-        makeExecutorConfig({ authorization: realmJwt }),
-      );
+    let realmJwt = buildRealmToken(TEST_REALM_URL);
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeExecutorConfig({ authorization: realmJwt }),
+    );
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-read',
-        toolArgs: {
-          'realm-url': TEST_REALM_URL,
-          path: '.realm.json',
-        },
-      });
+    let result = await executor.execute({
+      type: 'invoke_tool',
+      tool: 'realm-read',
+      toolArgs: {
+        'realm-url': TEST_REALM_URL,
+        path: '.realm.json',
+      },
+    });
 
-      assert.strictEqual(
-        result.exitCode,
-        0,
-        `exitCode 0, got: ${JSON.stringify(result.output)}`,
-      );
-      assert.strictEqual(typeof result.output, 'object', 'output is an object');
-    }
+    assert.strictEqual(
+      result.exitCode,
+      0,
+      `exitCode 0, got: ${JSON.stringify(result.output)}`,
+    );
+    assert.strictEqual(typeof result.output, 'object', 'output is an object');
   });
 
   test('realm-search returns results from the test realm', async function (assert) {
-    if (!serverRunning) {
-      assert.expect(0);
-    } else {
-      let realmJwt = buildRealmToken(TEST_REALM_URL);
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(
-        registry,
-        makeExecutorConfig({ authorization: realmJwt }),
-      );
+    let realmJwt = buildRealmToken(TEST_REALM_URL);
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeExecutorConfig({ authorization: realmJwt }),
+    );
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-search',
-        toolArgs: {
-          'realm-url': TEST_REALM_URL,
-          query: JSON.stringify({ filter: {}, page: { size: 1 } }),
-        },
-      });
+    let result = await executor.execute({
+      type: 'invoke_tool',
+      tool: 'realm-search',
+      toolArgs: {
+        'realm-url': TEST_REALM_URL,
+        query: JSON.stringify({ filter: {}, page: { size: 1 } }),
+      },
+    });
 
-      assert.strictEqual(
-        result.exitCode,
-        0,
-        `exitCode 0, got: ${JSON.stringify(result.output)}`,
-      );
-      let output = result.output as { data?: unknown[] };
-      assert.true(Array.isArray(output.data), 'output has data array');
-    }
+    assert.strictEqual(
+      result.exitCode,
+      0,
+      `exitCode 0, got: ${JSON.stringify(result.output)}`,
+    );
+    let output = result.output as { data?: unknown[] };
+    assert.true(Array.isArray(output.data), 'output has data array');
   });
 
   test('realm-create creates a scratch realm with icon and background', async function (assert) {
-    if (!serverRunning) {
-      assert.expect(0);
-    } else {
-      let serverJwt = buildRealmServerToken();
-      let registry = new ToolRegistry();
-      let executor = new ToolExecutor(
-        registry,
-        makeExecutorConfig({ authorization: serverJwt }),
-      );
+    let serverJwt = buildRealmServerToken();
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(
+      registry,
+      makeExecutorConfig({ authorization: serverJwt }),
+    );
 
-      let timestamp = Date.now();
-      let endpoint = `live-test-${timestamp}`;
+    let timestamp = Date.now();
+    let endpoint = `live-test-${timestamp}`;
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-create',
-        toolArgs: {
-          'realm-server-url': REALM_SERVER_URL,
-          name: `Live Test ${timestamp}`,
-          endpoint,
-        },
-      });
+    let result = await executor.execute({
+      type: 'invoke_tool',
+      tool: 'realm-create',
+      toolArgs: {
+        'realm-server-url': REALM_SERVER_URL,
+        name: `Live Test ${timestamp}`,
+        endpoint,
+      },
+    });
 
-      assert.strictEqual(
-        result.exitCode,
-        0,
-        `exitCode 0, got: ${JSON.stringify(result.output)}`,
-      );
+    assert.strictEqual(
+      result.exitCode,
+      0,
+      `exitCode 0, got: ${JSON.stringify(result.output)}`,
+    );
 
-      let output = result.output as {
-        data?: {
-          type?: string;
-          id?: string;
-          attributes?: Record<string, unknown>;
-        };
+    let output = result.output as {
+      data?: {
+        type?: string;
+        id?: string;
+        attributes?: Record<string, unknown>;
       };
-      assert.strictEqual(output.data?.type, 'realm', 'response type is realm');
-      assert.strictEqual(
-        typeof output.data?.id,
-        'string',
-        'response has realm id',
-      );
-    }
+    };
+    assert.strictEqual(output.data?.type, 'realm', 'response type is realm');
+    assert.strictEqual(
+      typeof output.data?.id,
+      'string',
+      'response has realm id',
+    );
   });
 
   test('unregistered tool is rejected', async function (assert) {

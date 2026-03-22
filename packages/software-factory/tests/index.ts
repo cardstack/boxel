@@ -6,6 +6,5 @@ import './factory-entrypoint.integration.test';
 import './factory-target-realm.test';
 import './factory-tool-executor.test';
 import './factory-tool-executor.integration.test';
-import './factory-tool-executor.live.test';
 import './factory-tool-registry.test';
 import './realm-auth.test';
