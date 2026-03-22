@@ -17,9 +17,7 @@ import {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeMinimalContext(
-  overrides?: Partial<AgentContext>,
-): AgentContext {
+function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
     project: { id: 'Project/test-project' },
     ticket: { id: 'Ticket/test-ticket' },
@@ -114,8 +112,7 @@ module('factory-agent > validateAgentActions', function () {
 
   test('rejects create_file without path', function (assert) {
     assert.throws(
-      () =>
-        validateAgentActions([{ type: 'create_file', content: 'hello' }]),
+      () => validateAgentActions([{ type: 'create_file', content: 'hello' }]),
       (err: Error) =>
         err instanceof AgentActionValidationError &&
         err.message.includes('path'),
@@ -124,10 +121,7 @@ module('factory-agent > validateAgentActions', function () {
 
   test('rejects create_file without content', function (assert) {
     assert.throws(
-      () =>
-        validateAgentActions([
-          { type: 'create_file', path: 'a.gts' },
-        ]),
+      () => validateAgentActions([{ type: 'create_file', path: 'a.gts' }]),
       (err: Error) =>
         err instanceof AgentActionValidationError &&
         err.message.includes('content'),
@@ -140,6 +134,30 @@ module('factory-agent > validateAgentActions', function () {
       (err: Error) =>
         err instanceof AgentActionValidationError &&
         err.message.includes('tool'),
+    );
+  });
+
+  test('rejects invoke_tool with non-object toolArgs', function (assert) {
+    assert.throws(
+      () =>
+        validateAgentActions([
+          { type: 'invoke_tool', tool: 'search-realm', toolArgs: 'bad' },
+        ]),
+      (err: Error) =>
+        err instanceof AgentActionValidationError &&
+        err.message.includes('toolArgs'),
+    );
+  });
+
+  test('rejects invoke_tool with array toolArgs', function (assert) {
+    assert.throws(
+      () =>
+        validateAgentActions([
+          { type: 'invoke_tool', tool: 'search-realm', toolArgs: ['bad'] },
+        ]),
+      (err: Error) =>
+        err instanceof AgentActionValidationError &&
+        err.message.includes('toolArgs'),
     );
   });
 
@@ -204,8 +222,7 @@ module('factory-agent > parseActionsFromResponse', function () {
     assert.throws(
       () => parseActionsFromResponse('{"type": "done"}'),
       (err: Error) =>
-        err instanceof AgentResponseParseError &&
-        err.message.includes('array'),
+        err instanceof AgentResponseParseError && err.message.includes('array'),
     );
   });
 
@@ -318,8 +335,9 @@ module('factory-agent > MockFactoryAgent', function () {
       await agent.plan(ctx); // second call should throw
       assert.ok(false, 'should have thrown');
     } catch (err) {
-      assert.ok(
-        err instanceof Error && err.message.includes('exhausted'),
+      assert.true(err instanceof Error, 'throws an Error');
+      assert.true(
+        (err as Error).message.includes('exhausted'),
         'throws exhaustion error',
       );
     }
@@ -476,6 +494,34 @@ module(
       assert.false(agent.useDirectApi, 'should use proxy path');
     });
 
+    test('treats empty OPENROUTER_API_KEY as missing (falls back to proxy)', function (assert) {
+      process.env.OPENROUTER_API_KEY = '';
+
+      let agent = new OpenRouterFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+      });
+
+      assert.false(
+        agent.useDirectApi,
+        'empty env var should not trigger direct path',
+      );
+    });
+
+    test('treats whitespace-only OPENROUTER_API_KEY as missing', function (assert) {
+      process.env.OPENROUTER_API_KEY = '   ';
+
+      let agent = new OpenRouterFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+      });
+
+      assert.false(
+        agent.useDirectApi,
+        'whitespace env var should not trigger direct path',
+      );
+    });
+
     test('uses direct path when openRouterApiKey is in config', function (assert) {
       let agent = new OpenRouterFactoryAgent({
         model: 'anthropic/claude-sonnet-4',
@@ -522,8 +568,7 @@ module(
         init?: RequestInit,
       ) => {
         capturedUrl = String(input);
-        capturedBody =
-          typeof init?.body === 'string' ? init.body : undefined;
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response(
           JSON.stringify({
             choices: [
@@ -558,8 +603,9 @@ module(
           'proxy body wraps the OpenRouter URL',
         );
         assert.strictEqual(body.method, 'POST');
-        assert.ok(
-          typeof body.requestBody === 'string',
+        assert.strictEqual(
+          typeof body.requestBody,
+          'string',
           'requestBody is a JSON string',
         );
       } finally {
@@ -579,8 +625,7 @@ module(
       ) => {
         capturedUrl = String(input);
         capturedHeaders = new Headers(init?.headers);
-        capturedBody =
-          typeof init?.body === 'string' ? init.body : undefined;
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response(
           JSON.stringify({
             choices: [
@@ -624,11 +669,7 @@ module(
           Array.isArray(body.messages),
           'messages array is in the body directly',
         );
-        assert.strictEqual(
-          body.url,
-          undefined,
-          'no proxy wrapper url field',
-        );
+        assert.strictEqual(body.url, undefined, 'no proxy wrapper url field');
       } finally {
         globalThis.fetch = originalFetch;
       }
