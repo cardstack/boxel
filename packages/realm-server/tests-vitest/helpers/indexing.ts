@@ -1,4 +1,5 @@
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { expect } from 'vitest';
 import { findRealmEvent, waitUntil } from './index';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { trimJsonExtension } from '@cardstack/runtime-common';
@@ -11,7 +12,6 @@ import type {
 import { validate as uuidValidate } from 'uuid';
 
 interface IncrementalIndexEventTestContext {
-  assert: Assert;
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>;
   realm: string;
   type?: string;
@@ -43,7 +43,7 @@ export async function expectIncrementalIndexEvent(
   since: number,
   opts: IncrementalIndexEventTestContext,
 ) {
-  let { assert, getMessagesSince, realm, type, timeout } = opts;
+  let { getMessagesSince, realm, type, timeout } = opts;
 
   type = type ?? 'CardDef';
 
@@ -71,9 +71,8 @@ export async function expectIncrementalIndexEvent(
       .split('/')
       .pop();
     // check if the card identifier is a UUID
-    assert.true(uuidValidate(maybeLocalId!), 'card identifier is a UUID');
-    assert.strictEqual(
-      incrementalEventContent.invalidations[0],
+    expect(uuidValidate(maybeLocalId!), 'card identifier is a UUID').toBe(true);
+    expect(incrementalEventContent.invalidations[0]).toBe(
       `${realm}${type}/${maybeLocalId}`,
     );
     targetUrl = `${realm}${type}/${maybeLocalId}.json`;
@@ -91,7 +90,7 @@ export async function expectIncrementalIndexEvent(
   if (!incrementalEventContent) {
     throw new Error('Incremental event content not found');
   }
-  assert.deepEqual(incrementalIndexInitiationEventContent, {
+  expect(incrementalIndexInitiationEventContent).toEqual({
     eventName: 'index',
     indexType: 'incremental-index-initiation',
     updatedFile: targetUrl,
@@ -108,7 +107,7 @@ export async function expectIncrementalIndexEvent(
   let actualContent = { ...incrementalEventContent };
   delete actualContent.clientRequestId;
 
-  assert.deepEqual(actualContent, expectedIncrementalContent);
+  expect(actualContent).toEqual(expectedIncrementalContent);
   return incrementalEventContent;
 }
 

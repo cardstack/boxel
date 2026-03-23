@@ -3,7 +3,6 @@ import {
   describe,
   it,
   expect,
-  assert,
   beforeAll,
   beforeEach,
   afterAll,
@@ -979,7 +978,6 @@ describe('card-endpoints-test.ts', function () {
             testRealmHref,
             realmEventTimestampStart,
             {
-              assert,
               getMessagesSince,
               realm: testRealmHref,
               timeout: 5000,
@@ -3065,7 +3063,6 @@ describe('card-endpoints-test.ts', function () {
             `${testRealmHref}person-1.json`,
             realmEventTimestampStart,
             {
-              assert,
               getMessagesSince,
               realm: testRealmHref,
             },
@@ -3228,7 +3225,6 @@ describe('card-endpoints-test.ts', function () {
             `${testRealmHref}person-1.json`,
             realmEventTimestampStart,
             {
-              assert,
               getMessagesSince,
               realm: testRealmHref,
             },

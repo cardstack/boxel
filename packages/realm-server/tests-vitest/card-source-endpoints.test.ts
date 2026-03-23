@@ -4,7 +4,6 @@ import {
   describe,
   it,
   expect,
-  assert,
   beforeAll,
   beforeEach,
   afterAll,
@@ -365,7 +364,6 @@ describe('card-source-endpoints-test.ts', function () {
             `${testRealmURL}unused-card.gts`,
             realmEventTimestampStart,
             {
-              assert,
               getMessagesSince,
               realm: testRealmHref,
             },
@@ -473,7 +471,6 @@ ${cardSrc}`);
             `${testRealmURL}unused-card.gts`,
             realmEventTimestampStart,
             {
-              assert,
               getMessagesSince,
               realm: testRealmHref,
             },
@@ -974,7 +971,6 @@ ${cardSrc}`);
             `${testRealmURL}event-test.bin`,
             realmEventTimestampStart,
             {
-              assert,
               getMessagesSince,
               realm: testRealmHref,
             },
