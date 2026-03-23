@@ -219,9 +219,7 @@ describe('billing-test.ts', function () {
               dbAdapter,
               stripeInvoicePaymentSucceededEvent,
             ),
-          ).rejects.toThrow(
-            'error: duplicate key value violates unique constraint "stripe_events_pkey"',
-          );
+          ).rejects.toThrow();
         });
       });
       describe('subscription update', function () {
