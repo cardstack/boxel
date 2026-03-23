@@ -1,5 +1,6 @@
 // Test utilities for prettier formatting tests
 import { performance } from 'perf_hooks';
+import { expect } from 'vitest';
 
 interface FormattingTestCase {
   name: string;
@@ -119,8 +120,8 @@ export function compareFormattedOutput(
  * Create performance assertion helper
  */
 export function createPerformanceAssertion(maxAverageTime: number) {
-  return (benchmark: PerformanceBenchmark, assert: any) => {
-    assert.ok(
+  return (benchmark: PerformanceBenchmark) => {
+    expect(
       benchmark.averageTime <= maxAverageTime,
       `Performance benchmark '${benchmark.name}' exceeded maximum average time. ` +
         `Expected: <= ${maxAverageTime}ms, Actual: ${benchmark.averageTime.toFixed(
