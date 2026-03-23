@@ -1,4 +1,5 @@
 import { codeRefWithAbsoluteURL, type CodeRef } from './code-ref';
+import { cardIdToURL } from './card-reference-resolver';
 import type { FieldDefinition } from './definitions';
 import type {
   FileMetaResource,
@@ -230,7 +231,7 @@ export function normalizeQueryDefinition({
   let resolvedRealm = resolveRealm(specifiedRealm);
 
   let relativeToURL =
-    relativeTo ?? (resource?.id ? new URL(resource.id) : realmURL);
+    relativeTo ?? (resource?.id ? cardIdToURL(resource.id) : realmURL);
   let targetRef = codeRefWithAbsoluteURL(
     fieldDefinition.fieldOrCard,
     relativeToURL,

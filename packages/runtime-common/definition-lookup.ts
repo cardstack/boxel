@@ -25,6 +25,11 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index';
+import {
+  isRegisteredPrefix,
+  cardIdToURL,
+  resolveCardReference,
+} from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
@@ -36,6 +41,15 @@ const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
 });
 
 function canonicalURL(url: string, relativeTo?: string): string {
+  // Resolve registered prefix identifiers (e.g. @cardstack/catalog/foo)
+  // to real URLs so that realm-membership checks and DB lookups work.
+  if (isRegisteredPrefix(url)) {
+    try {
+      return resolveCardReference(url, undefined);
+    } catch (_e) {
+      // fall through to normal URL handling
+    }
+  }
   try {
     let parsed = new URL(url, relativeTo);
     parsed.search = '';
@@ -54,7 +68,8 @@ function normalizeExecutableURL(url: string): string {
   try {
     return trimExecutableExtension(new URL(url)).href;
   } catch (_e) {
-    return url;
+    // Fallback for non-URL identifiers
+    return url.replace(/\.(gts|ts|js|gjs)$/, '');
   }
 }
 
@@ -890,7 +905,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = new URL(error.id);
+            base = cardIdToURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }
