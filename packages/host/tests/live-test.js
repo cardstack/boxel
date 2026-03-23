@@ -11,9 +11,10 @@ import { useTestWaiters } from '@cardstack/runtime-common';
 import Application from '@cardstack/host/app';
 import config from '@cardstack/host/config/environment';
 
-const isLiveTest = new URL(window.location.href).pathname.endsWith(
-  '/live-test.html',
-);
+const url = new URL(window.location.href);
+const isLiveTest =
+  url.pathname.endsWith('/live-test.html') ||
+  url.searchParams.has('liveTest');
 
 if (!isLiveTest) {
   console.warn('[live-test] Skipping initialization outside live-test.html');
@@ -41,6 +42,8 @@ if (!isLiveTest) {
 
   useTestWaiters(TestWaiters);
 
+  const urlParams = new URLSearchParams(window.location.search);
+
   const application = Application.create({
     ...config.APP,
     rootElement: '#ember-testing',
@@ -52,14 +55,15 @@ if (!isLiveTest) {
   QUnit.config.autostart = false;
   start({ loadTests: false, startTests: false });
 
-  document.getElementById('live-test-start')?.addEventListener('click', () => {
-    if (!QUnit.config.started) {
-      QUnit.start();
-    }
-  });
+  document
+    .getElementById('live-test-start')
+    ?.addEventListener('click', () => {
+      if (!QUnit.config.started) {
+        QUnit.start();
+      }
+    });
 
   const loadRealmTests = async () => {
-    const urlParams = new URLSearchParams(window.location.search);
     const qunitFilter = urlParams.get('filter');
     const qunitModule = urlParams.get('module');
     const testModuleParam = urlParams.get('testModule');
@@ -72,7 +76,7 @@ if (!isLiveTest) {
     }
 
     const realmURL =
-      urlParams.get('realmURL') ?? 'http://localhost:4201/experiments/';
+      urlParams.get('realmURL') ?? 'http://localhost:4201/catalog/';
 
     const [helpers, mockMatrix, setupHelpers, adapter] = await Promise.all([
       import('@cardstack/host/tests/helpers'),

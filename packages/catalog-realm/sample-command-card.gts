@@ -50,7 +50,7 @@ class CreateCardButton extends GlimmerComponent {
 }
 
 export function runTests() {
-  module('Experiments | SampleCommandCard', function (hooks) {
+  module('Catalog | SampleCommandCard', function (hooks) {
     let { mockMatrixUtils } = setupCardTest(hooks);
 
     let testRealmAdapter: TestRealmAdapter;

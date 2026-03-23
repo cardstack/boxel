@@ -10,9 +10,10 @@ import * as TestWaiters from '@ember/test-waiters';
 // eslint-disable-next-line ember/no-test-import-export
 import './live-test';
 
-const isLiveTest = new URL(window.location.href).pathname.endsWith(
-  '/live-test.html',
-);
+const url = new URL(window.location.href);
+const isLiveTest =
+  url.pathname.endsWith('/live-test.html') ||
+  url.searchParams.has('liveTest');
 
 if (!isLiveTest) {
   QUnit.dump.maxDepth = 20;
