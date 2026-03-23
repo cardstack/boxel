@@ -71,10 +71,15 @@ if (!isLiveTest) {
       QUnit.config.module = qunitModule;
     }
 
-    const helpers = await import('@cardstack/host/tests/helpers');
-    const mockMatrix =
-      await import('@cardstack/host/tests/helpers/mock-matrix');
-    const setupHelpers = await import('@cardstack/host/tests/helpers/setup');
+    const realmURL =
+      urlParams.get('realmURL') ?? 'http://localhost:4201/experiments/';
+
+    const [helpers, mockMatrix, setupHelpers, adapter] = await Promise.all([
+      import('@cardstack/host/tests/helpers'),
+      import('@cardstack/host/tests/helpers/mock-matrix'),
+      import('@cardstack/host/tests/helpers/setup'),
+      import('@cardstack/host/tests/helpers/adapter'),
+    ]);
 
     const loaderInstance = application.buildInstance({
       rootElement: '#ember-testing-loader',
@@ -86,9 +91,7 @@ if (!isLiveTest) {
     loader.shimModule('@cardstack/host/tests/helpers', helpers);
     loader.shimModule('@cardstack/host/tests/helpers/mock-matrix', mockMatrix);
     loader.shimModule('@cardstack/host/tests/helpers/setup', setupHelpers);
-
-    const realmURL =
-      urlParams.get('realmURL') ?? 'http://localhost:4201/experiments/';
+    loader.shimModule('@cardstack/host/tests/helpers/adapter', adapter);
 
     let testModuleNames;
     if (testModuleParam) {

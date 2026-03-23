@@ -55,11 +55,6 @@ import * as boxelUiModifiers from '@cardstack/boxel-ui/modifiers';
 import * as runtime from '@cardstack/runtime-common';
 import type { VirtualNetwork } from '@cardstack/runtime-common';
 
-import * as hostTestHelpers from '@cardstack/host/tests/helpers';
-import * as hostTestHelpersAdapter from '@cardstack/host/tests/helpers/adapter';
-import * as hostTestHelpersMockMatrix from '@cardstack/host/tests/helpers/mock-matrix';
-import * as hostTestHelpersSetup from '@cardstack/host/tests/helpers/setup';
-
 import { shimHostCommands } from '../commands';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
@@ -190,49 +185,47 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   shimHostCommands(virtualNetwork);
 }
 
-// Shims host test helper modules into the virtual network so realm cards that
-// colocate tests can import from @cardstack/host/tests/helpers etc. When a
-// module isn't present in the build, a proxy throws on access so the error is
-// visible rather than silently hidden.
+// Shims test-only module IDs into the virtual network as throwing stubs so
+// realm cards that colocate test imports can load in any environment without
+// executing test code. live-test.js overrides these at the loader level with
+// the real implementations when a test runner is present.
 export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
   const windowQUnit = (globalThis as any).QUnit;
 
-  const missingShim = (moduleId: string) =>
+  const testOnlyStub = (moduleId: string) =>
     new Proxy(
       {},
       {
         get: () => {
           throw new Error(
-            `Missing shim for ${moduleId}. This module is not available in the current environment.`,
+            `${moduleId} is only available in a test environment.`,
           );
         },
       },
     );
 
-  // Use real test helpers only when a QUnit test runner is present; otherwise
-  // shim a throwing stub so realm cards that colocate test imports can still
-  // load in non-test environments without executing test code.
+  // Use real @ember/test-helpers only when QUnit is running; stub otherwise.
   virtualNetwork.shimModule(
     '@ember/test-helpers',
-    windowQUnit ? emberTestHelpers : missingShim('@ember/test-helpers'),
+    windowQUnit ? emberTestHelpers : testOnlyStub('@ember/test-helpers'),
   );
 
+  // Always stub host test helpers here — live-test.js shimModule() on the
+  // realm loader overrides these with real implementations at test time.
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers',
-    hostTestHelpers ?? missingShim('@cardstack/host/tests/helpers'),
+    testOnlyStub('@cardstack/host/tests/helpers'),
   );
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers/mock-matrix',
-    hostTestHelpersMockMatrix ??
-      missingShim('@cardstack/host/tests/helpers/mock-matrix'),
+    testOnlyStub('@cardstack/host/tests/helpers/mock-matrix'),
   );
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers/setup',
-    hostTestHelpersSetup ?? missingShim('@cardstack/host/tests/helpers/setup'),
+    testOnlyStub('@cardstack/host/tests/helpers/setup'),
   );
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers/adapter',
-    hostTestHelpersAdapter ??
-      missingShim('@cardstack/host/tests/helpers/adapter'),
+    testOnlyStub('@cardstack/host/tests/helpers/adapter'),
   );
 }
