@@ -27,6 +27,7 @@ const matrixDir = resolve(join(__dirname, '..'));
 
 const ISOLATED_REALM_SERVICE = 'realm-matrix-test';
 const ISOLATED_WORKER_SERVICE = 'worker-matrix-test';
+const ISOLATED_PRERENDER_SERVICE = 'prerender-matrix-test';
 
 // Compute URLs from BOXEL_ENVIRONMENT directly so that setting just that
 // one env var is sufficient — no need to source env-vars.sh first.
@@ -155,8 +156,9 @@ function stopChildProcess(
 export async function startPrerenderServer(
   options?: PrerenderServerConfig,
 ): Promise<RunningPrerenderServer> {
-  let port = await findAvailablePort(options?.port ?? DEFAULT_PRERENDER_PORT);
-  let url = `http://localhost:${port}`;
+  let preferredPort = envMode ? 0 : (options?.port ?? DEFAULT_PRERENDER_PORT);
+  let port = await findAvailablePort(preferredPort);
+  let localUrl = `http://localhost:${port}`;
   let silent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT !== '0';
   let env = {
     ...process.env,
@@ -211,7 +213,7 @@ export async function startPrerenderServer(
   });
 
   try {
-    await Promise.race([waitForHttpReady(url, 60_000), exitPromise]);
+    await Promise.race([waitForHttpReady(localUrl, 60_000), exitPromise]);
   } finally {
     if (exitListener) {
       child.removeListener('exit', exitListener);
@@ -221,10 +223,22 @@ export async function startPrerenderServer(
     }
   }
 
+  // In env mode, register with Traefik so parallel environments don't collide
+  let url: string;
+  if (envMode) {
+    registerServiceWithTraefik(ISOLATED_PRERENDER_SERVICE, port);
+    url = `http://${ISOLATED_PRERENDER_SERVICE}.${envSlug}.localhost`;
+  } else {
+    url = localUrl;
+  }
+
   return {
     port,
     url,
     async stop() {
+      if (envMode) {
+        deregisterServiceFromTraefik(ISOLATED_PRERENDER_SERVICE);
+      }
       await stopChildProcess(child);
     },
   };
