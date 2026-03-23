@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -41,11 +42,18 @@ type SharedRealmHandle = {
 };
 
 const packageRoot = resolve(process.cwd());
+const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
 const defaultRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
 const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
+const compatPort = Number(
+  process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 4201,
+);
+const workerManagerPort = Number(
+  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 4232,
+);
 const localBasePrefix = `http://localhost:${realmPort}/base/`;
 const localSkillsPrefix = `http://localhost:${realmPort}/skills/`;
 const testSourceRealmDir = resolve(
@@ -68,6 +76,27 @@ function killProcessGroup(pid: number, signal: NodeJS.Signals) {
       throw error;
     }
   }
+}
+
+async function waitForPortFree(
+  port: number,
+  timeoutMs = 10_000,
+): Promise<void> {
+  let startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    let free = await new Promise<boolean>((resolve) => {
+      let server = createServer();
+      server.once('error', () => resolve(false));
+      server.listen(port, '127.0.0.1', () => {
+        server.close(() => resolve(true));
+      });
+    });
+    if (free) {
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`Port ${port} still in use after ${timeoutMs}ms`);
 }
 
 async function waitForMetadataFile<T>(
@@ -108,27 +137,32 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
       })
     : undefined;
 
-  let child = spawn('pnpm', ['serve:realm', realmDir], {
-    cwd: packageRoot,
-    detached: true,
-    env: {
-      ...process.env,
-      SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
-      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
-      ...(supportMetadata?.context
-        ? {
-            SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
-          }
-        : {}),
-      ...(supportMetadata?.templateDatabaseName
-        ? {
-            SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
-              supportMetadata.templateDatabaseName,
-          }
-        : {}),
+  let child = spawn(
+    tsNodeBin,
+    ['--transpileOnly', 'src/cli/serve-realm.ts', realmDir],
+    {
+      cwd: packageRoot,
+      detached: true,
+      env: {
+        ...process.env,
+        NODE_NO_WARNINGS: '1',
+        SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+        SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
+        ...(supportMetadata?.context
+          ? {
+              SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
+            }
+          : {}),
+        ...(supportMetadata?.templateDatabaseName
+          ? {
+              SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
+                supportMetadata.templateDatabaseName,
+            }
+          : {}),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  );
 
   child.stdout?.on('data', (chunk) => {
     logs = appendLog(logs, String(chunk));
@@ -175,6 +209,11 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
           });
         });
       }
+      await Promise.all([
+        waitForPortFree(realmPort),
+        waitForPortFree(compatPort),
+        waitForPortFree(workerManagerPort),
+      ]);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
