@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "cardTitle": "Skill Plus",
-      "cardDescription": "A card with instructions to teach a skill to the AI bot",
+      "cardTitle": "Skill Plus Markdown",
+      "cardDescription": "A skill card that can link to a markdown file for rich text display.",
       "specType": "card",
       "ref": {
-        "module": "../skill-plus",
-        "name": "SkillPlus"
+        "module": "https://cardstack.com/base/skill-plus",
+        "name": "SkillPlusMarkdown"
       }
     },
     "meta": {
