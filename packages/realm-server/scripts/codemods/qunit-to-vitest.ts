@@ -1,4 +1,9 @@
-import { ensureDirSync, readFileSync, writeFileSync, copyFileSync } from 'fs-extra';
+import {
+  ensureDirSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+} from 'fs-extra';
 import { basename, dirname, join, relative } from 'path';
 import { glob } from 'glob';
 import ts from 'typescript';
@@ -58,13 +63,20 @@ function convertAssertCall(
 ): ts.CallExpression | undefined {
   let args = [...node.arguments];
   let expectCall = (value: ts.Expression) =>
-    ts.factory.createCallExpression(ts.factory.createIdentifier('expect'), undefined, [value]);
+    ts.factory.createCallExpression(
+      ts.factory.createIdentifier('expect'),
+      undefined,
+      [value],
+    );
 
   switch (method) {
     case 'strictEqual':
       if (args.length >= 2) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toBe'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toBe',
+          ),
           undefined,
           [args[1]],
         );
@@ -74,7 +86,10 @@ function convertAssertCall(
       if (args.length >= 2) {
         return ts.factory.createCallExpression(
           ts.factory.createPropertyAccessExpression(
-            ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'not'),
+            ts.factory.createPropertyAccessExpression(
+              expectCall(args[0]),
+              'not',
+            ),
             'toBe',
           ),
           undefined,
@@ -85,7 +100,10 @@ function convertAssertCall(
     case 'deepEqual':
       if (args.length >= 2) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toEqual'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toEqual',
+          ),
           undefined,
           [args[1]],
         );
@@ -95,7 +113,10 @@ function convertAssertCall(
       if (args.length >= 2) {
         return ts.factory.createCallExpression(
           ts.factory.createPropertyAccessExpression(
-            ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'not'),
+            ts.factory.createPropertyAccessExpression(
+              expectCall(args[0]),
+              'not',
+            ),
             'toEqual',
           ),
           undefined,
@@ -106,7 +127,10 @@ function convertAssertCall(
     case 'ok':
       if (args.length >= 1) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toBeTruthy'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toBeTruthy',
+          ),
           undefined,
           [],
         );
@@ -115,7 +139,10 @@ function convertAssertCall(
     case 'notOk':
       if (args.length >= 1) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toBeFalsy'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toBeFalsy',
+          ),
           undefined,
           [],
         );
@@ -124,7 +151,10 @@ function convertAssertCall(
     case 'true':
       if (args.length >= 1) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toBe'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toBe',
+          ),
           undefined,
           [ts.factory.createTrue()],
         );
@@ -133,7 +163,10 @@ function convertAssertCall(
     case 'false':
       if (args.length >= 1) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toBe'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toBe',
+          ),
           undefined,
           [ts.factory.createFalse()],
         );
@@ -142,7 +175,10 @@ function convertAssertCall(
     case 'rejects': {
       if (args.length >= 1) {
         let rejectsExpr = ts.factory.createPropertyAccessExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'rejects'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'rejects',
+          ),
           'toThrow',
         );
         return ts.factory.createCallExpression(
@@ -156,7 +192,10 @@ function convertAssertCall(
     case 'codeEqual': {
       if (args.length >= 2) {
         return ts.factory.createCallExpression(
-          ts.factory.createPropertyAccessExpression(expectCall(args[0]), 'toEqual'),
+          ts.factory.createPropertyAccessExpression(
+            expectCall(args[0]),
+            'toEqual',
+          ),
           undefined,
           [args[1]],
         );
@@ -187,7 +226,11 @@ function addNamedImport(
         false,
         undefined,
         ts.factory.createNamedImports([
-          ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier(importName)),
+          ts.factory.createImportSpecifier(
+            false,
+            undefined,
+            ts.factory.createIdentifier(importName),
+          ),
         ]),
       ),
       ts.factory.createStringLiteral(moduleName),
@@ -202,14 +245,20 @@ function addNamedImport(
     return statements;
   }
 
-  let alreadyImported = namedBindings.elements.some((e) => e.name.text === importName);
+  let alreadyImported = namedBindings.elements.some(
+    (e) => e.name.text === importName,
+  );
   if (alreadyImported) {
     return statements;
   }
 
   let updatedNamedBindings = ts.factory.updateNamedImports(namedBindings, [
     ...namedBindings.elements,
-    ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier(importName)),
+    ts.factory.createImportSpecifier(
+      false,
+      undefined,
+      ts.factory.createIdentifier(importName),
+    ),
   ]);
   let updatedClause = ts.factory.updateImportClause(
     clause,
@@ -239,7 +288,9 @@ function ensureVitestImport(
       s.moduleSpecifier.text === 'vitest',
   );
 
-  const needed = [...new Set(['describe', 'it', 'expect', ...additionalImports])];
+  const needed = [
+    ...new Set(['describe', 'it', 'expect', ...additionalImports]),
+  ];
   if (!vitestImport) {
     let importDecl = ts.factory.createImportDeclaration(
       undefined,
@@ -248,7 +299,11 @@ function ensureVitestImport(
         undefined,
         ts.factory.createNamedImports(
           needed.map((n) =>
-            ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier(n)),
+            ts.factory.createImportSpecifier(
+              false,
+              undefined,
+              ts.factory.createIdentifier(n),
+            ),
           ),
         ),
       ),
@@ -273,7 +328,11 @@ function ensureVitestImport(
   let updatedNamedBindings = ts.factory.updateNamedImports(namedBindings, [
     ...namedBindings.elements,
     ...missing.map((n) =>
-      ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier(n)),
+      ts.factory.createImportSpecifier(
+        false,
+        undefined,
+        ts.factory.createIdentifier(n),
+      ),
     ),
   ]);
   let updatedClause = ts.factory.updateImportClause(
@@ -305,7 +364,11 @@ function ensureFilenameDirnamePrelude(
   let updatedStatements = statements;
 
   if (needsFilenamePolyfill) {
-    updatedStatements = addNamedImport(updatedStatements, 'url', 'fileURLToPath');
+    updatedStatements = addNamedImport(
+      updatedStatements,
+      'url',
+      'fileURLToPath',
+    );
   }
   if (needsDirnamePolyfill) {
     updatedStatements = addNamedImport(updatedStatements, 'path', 'dirname');
@@ -337,15 +400,19 @@ function ensureFilenameDirnamePrelude(
               ts.factory.createIdentifier('__filename'),
               undefined,
               undefined,
-              ts.factory.createCallExpression(ts.factory.createIdentifier('fileURLToPath'), undefined, [
-                ts.factory.createPropertyAccessExpression(
-                  ts.factory.createMetaProperty(
-                    ts.SyntaxKind.ImportKeyword,
-                    ts.factory.createIdentifier('meta'),
+              ts.factory.createCallExpression(
+                ts.factory.createIdentifier('fileURLToPath'),
+                undefined,
+                [
+                  ts.factory.createPropertyAccessExpression(
+                    ts.factory.createMetaProperty(
+                      ts.SyntaxKind.ImportKeyword,
+                      ts.factory.createIdentifier('meta'),
+                    ),
+                    'url',
                   ),
-                  'url',
-                ),
-              ]),
+                ],
+              ),
             ),
           ],
           ts.NodeFlags.Const,
@@ -363,9 +430,11 @@ function ensureFilenameDirnamePrelude(
               ts.factory.createIdentifier('__dirname'),
               undefined,
               undefined,
-              ts.factory.createCallExpression(ts.factory.createIdentifier('dirname'), undefined, [
-                ts.factory.createIdentifier('__filename'),
-              ]),
+              ts.factory.createCallExpression(
+                ts.factory.createIdentifier('dirname'),
+                undefined,
+                [ts.factory.createIdentifier('__filename')],
+              ),
             ),
           ],
           ts.NodeFlags.Const,
@@ -411,7 +480,9 @@ function collectUsedIdentifiers(statements: ts.Statement[]): Set<string> {
   return used;
 }
 
-function pruneUnusedPathLikeImports(statements: ts.Statement[]): ts.Statement[] {
+function pruneUnusedPathLikeImports(
+  statements: ts.Statement[],
+): ts.Statement[] {
   let used = collectUsedIdentifiers(statements);
   return statements.flatMap((statement) => {
     if (!ts.isImportDeclaration(statement)) {
@@ -492,11 +563,17 @@ function transformQUnitToVitest(
     }
 
     function isWaitRetryTimeoutCall(stmt: ts.Statement): boolean {
-      if (!ts.isExpressionStatement(stmt) || !ts.isCallExpression(stmt.expression)) {
+      if (
+        !ts.isExpressionStatement(stmt) ||
+        !ts.isCallExpression(stmt.expression)
+      ) {
         return false;
       }
       let call = stmt.expression;
-      if (!ts.isIdentifier(call.expression) || call.expression.text !== 'setTimeout') {
+      if (
+        !ts.isIdentifier(call.expression) ||
+        call.expression.text !== 'setTimeout'
+      ) {
         return false;
       }
       if (call.arguments.length < 1) {
@@ -504,10 +581,7 @@ function transformQUnitToVitest(
       }
       let callback = call.arguments[0];
       if (
-        !(
-          ts.isArrowFunction(callback) ||
-          ts.isFunctionExpression(callback)
-        )
+        !(ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
       ) {
         return false;
       }
@@ -532,9 +606,7 @@ function transformQUnitToVitest(
     }
 
     function rewriteWaitRetryFunction(
-      fn:
-        | ts.FunctionExpression
-        | ts.ArrowFunction,
+      fn: ts.FunctionExpression | ts.ArrowFunction,
     ): ts.FunctionExpression | ts.ArrowFunction {
       if (!ts.isBlock(fn.body)) {
         return fn;
@@ -566,7 +638,11 @@ function transformQUnitToVitest(
                       ts.factory.createAwaitExpression(
                         ts.factory.createNewExpression(
                           ts.factory.createIdentifier('Promise'),
-                          [ts.factory.createKeywordTypeNode(ts.SyntaxKind.VoidKeyword)],
+                          [
+                            ts.factory.createKeywordTypeNode(
+                              ts.SyntaxKind.VoidKeyword,
+                            ),
+                          ],
                           [
                             ts.factory.createArrowFunction(
                               undefined,
@@ -582,7 +658,9 @@ function transformQUnitToVitest(
                                 ),
                               ],
                               undefined,
-                              ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+                              ts.factory.createToken(
+                                ts.SyntaxKind.EqualsGreaterThanToken,
+                              ),
                               ts.factory.createCallExpression(
                                 ts.factory.createIdentifier('setTimeout'),
                                 undefined,
@@ -601,7 +679,9 @@ function transformQUnitToVitest(
                     ts.factory.createReturnStatement(
                       ts.factory.createAwaitExpression(
                         ts.factory.createCallExpression(
-                          ts.factory.createIdentifier('waitForBillingNotification'),
+                          ts.factory.createIdentifier(
+                            'waitForBillingNotification',
+                          ),
                           undefined,
                           [],
                         ),
@@ -691,7 +771,11 @@ function transformQUnitToVitest(
       }
 
       if (ts.isCallExpression(node)) {
-        let visitedNode = ts.visitEachChild(node, visit, context) as ts.CallExpression;
+        let visitedNode = ts.visitEachChild(
+          node,
+          visit,
+          context,
+        ) as ts.CallExpression;
 
         if (
           ts.isPropertyAccessExpression(visitedNode.expression) &&
@@ -715,21 +799,33 @@ function transformQUnitToVitest(
           }
         }
 
-        if (ts.isIdentifier(visitedNode.expression) && (visitedNode.expression.text === 'module' || visitedNode.expression.text === 'test')) {
-          let replacementName = visitedNode.expression.text === 'module' ? 'describe' : 'it';
+        if (
+          ts.isIdentifier(visitedNode.expression) &&
+          (visitedNode.expression.text === 'module' ||
+            visitedNode.expression.text === 'test')
+        ) {
+          let replacementName =
+            visitedNode.expression.text === 'module' ? 'describe' : 'it';
           let updatedArgs = [...visitedNode.arguments];
 
-          if (visitedNode.expression.text === 'module' && updatedArgs.length >= 1) {
+          if (
+            visitedNode.expression.text === 'module' &&
+            updatedArgs.length >= 1
+          ) {
             updatedArgs[0] = replaceBasenameFilenameArg(
               updatedArgs[0],
               sourceFileName,
             );
           }
 
-          if (visitedNode.expression.text === 'module' && updatedArgs.length >= 2) {
+          if (
+            visitedNode.expression.text === 'module' &&
+            updatedArgs.length >= 2
+          ) {
             let callback = updatedArgs[1];
             if (
-              (ts.isFunctionExpression(callback) || ts.isArrowFunction(callback)) &&
+              (ts.isFunctionExpression(callback) ||
+                ts.isArrowFunction(callback)) &&
               callback.parameters.length === 1 &&
               ts.isBlock(callback.body) &&
               ts.isIdentifier(callback.parameters[0].name)
@@ -800,10 +896,14 @@ function transformQUnitToVitest(
             }
           }
 
-          if (visitedNode.expression.text === 'test' && updatedArgs.length >= 2) {
+          if (
+            visitedNode.expression.text === 'test' &&
+            updatedArgs.length >= 2
+          ) {
             let callback = updatedArgs[1];
             if (
-              (ts.isFunctionExpression(callback) || ts.isArrowFunction(callback)) &&
+              (ts.isFunctionExpression(callback) ||
+                ts.isArrowFunction(callback)) &&
               callback.parameters.length === 1 &&
               ts.isIdentifier(callback.parameters[0].name) &&
               callback.parameters[0].name.text === 'assert'
@@ -858,9 +958,11 @@ function transformQUnitToVitest(
           node.initializer.parameters[1].name.text === 'done'
         ) {
           let rewritten = rewriteWaitRetryFunction(node.initializer);
-          let visitedRewritten = ts.visitEachChild(rewritten, visit, context) as
-            | ts.FunctionExpression
-            | ts.ArrowFunction;
+          let visitedRewritten = ts.visitEachChild(
+            rewritten,
+            visit,
+            context,
+          ) as ts.FunctionExpression | ts.ArrowFunction;
           return ts.factory.updateVariableDeclaration(
             node,
             node.name,
@@ -888,7 +990,9 @@ function transformQUnitToVitest(
 
   statements = ensureVitestImport(
     statements,
-    needsVitestHookImport ? ['beforeAll', 'beforeEach', 'afterAll', 'afterEach'] : [],
+    needsVitestHookImport
+      ? ['beforeAll', 'beforeEach', 'afterAll', 'afterEach']
+      : [],
   );
 
   let usedBeforePrelude = collectUsedIdentifiers(statements);

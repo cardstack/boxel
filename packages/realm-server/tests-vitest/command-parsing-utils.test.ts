@@ -1,4 +1,7 @@
-import { commandUrlToCodeRef, parseBoxelHostCommandSpecifier } from '@cardstack/runtime-common/command-parsing-utils';
+import {
+  commandUrlToCodeRef,
+  parseBoxelHostCommandSpecifier,
+} from '@cardstack/runtime-common/command-parsing-utils';
 import { describe, expect, it } from 'vitest';
 
 describe('command-parsing-utils-test.ts', function () {
@@ -24,7 +27,9 @@ describe('command-parsing-utils-test.ts', function () {
 
     it('parseBoxelHostCommandSpecifier rejects specifier without export name', async function () {
       expect(
-        parseBoxelHostCommandSpecifier('cardstack/boxel-host/commands/show-card'),
+        parseBoxelHostCommandSpecifier(
+          'cardstack/boxel-host/commands/show-card',
+        ),
       ).toBeUndefined();
     });
 

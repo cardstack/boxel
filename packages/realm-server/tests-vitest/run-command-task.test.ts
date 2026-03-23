@@ -200,7 +200,9 @@ describe('run-command-task-test.ts', function () {
       expect(result.status).toBe('ready');
       expect(authCall).toEqual({
         userId: '@alice:localhost',
-        permissions: { 'http://localhost:4201/experiments/': ['read', 'write'] },
+        permissions: {
+          'http://localhost:4201/experiments/': ['read', 'write'],
+        },
       });
       expect(prerenderCall?.command).toBe(
         'http://localhost:4201/experiments/commands/create-submission/default',
@@ -239,7 +241,9 @@ describe('run-command-task-test.ts', function () {
         realmUsername: '@alice:localhost',
         runAs: '@alice:localhost',
         command: '@cardstack/catalog/commands/create-submission/default',
-        commandInput: { listingId: 'http://localhost:4201/catalog/AppListing/1' },
+        commandInput: {
+          listingId: 'http://localhost:4201/catalog/AppListing/1',
+        },
         jobInfo: { id: 4 } as never,
       });
 

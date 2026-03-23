@@ -571,7 +571,7 @@ ${cardSrc}`);
           }
           if (!maybeId) {
             expect(false).toBeTruthy();
-            // eslint-disable-next-line qunit/no-early-return
+
             return;
           }
           let id = maybeId;
