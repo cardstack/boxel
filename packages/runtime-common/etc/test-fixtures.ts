@@ -67,7 +67,8 @@ export class Person extends CardDef {
         "isStrictMode": true
       }), this);
     }
-  };}
+  };
+}
 export let counter = 0;
 export function increment() {
   counter++;
