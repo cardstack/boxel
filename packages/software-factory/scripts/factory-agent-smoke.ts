@@ -56,8 +56,14 @@ import {
 } from './lib/factory-agent';
 
 async function main(): Promise<void> {
+  let argv = process.argv.slice(2);
+  // Strip leading '--' that pnpm/ts-node passes through
+  if (argv[0] === '--') {
+    argv = argv.slice(1);
+  }
+
   let { values } = parseArgs({
-    args: process.argv.slice(2),
+    args: argv,
     options: {
       'realm-server-url': { type: 'string' },
       model: { type: 'string' },
