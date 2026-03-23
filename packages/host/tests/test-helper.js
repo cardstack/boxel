@@ -12,8 +12,7 @@ import './live-test';
 
 const url = new URL(window.location.href);
 const isLiveTest =
-  url.pathname.endsWith('/live-test.html') ||
-  url.searchParams.has('liveTest');
+  url.pathname.endsWith('/live-test.html') || url.searchParams.has('liveTest');
 
 if (!isLiveTest) {
   QUnit.dump.maxDepth = 20;
