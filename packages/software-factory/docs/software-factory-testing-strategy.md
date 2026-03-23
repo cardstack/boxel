@@ -29,19 +29,40 @@ Rules:
 
 ## Realm Roles
 
-The testing strategy assumes three separate realm roles:
+The testing strategy assumes four separate realm roles:
 
 - source realm
   - `packages/software-factory/realm`
   - publishes shared modules, briefs, templates, and other software-factory inputs
 - target realm
-  - the user-selected realm where the factory writes generated tickets, knowledge articles, tests, and implementation artifacts
+  - the user-selected realm where the factory writes generated tickets, knowledge articles, and implementation artifacts
+- test realm
+  - a dedicated realm created alongside the target realm (named `<target-realm-name>-tests`)
+  - receives AI-generated test specs, test fixtures, and structured test result artifacts
+  - the test harness executes tests from this realm against cards in the target realm
+  - test output saved here is fed back into the agentic loop as verification evidence
 - fixture realm
-  - disposable test data used to verify source-realm publishing and target-realm behavior
+  - disposable test data used to verify source-realm publishing and target-realm behavior during development
 
-Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm.
+Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm. AI-generated tests and their results belong in the test realm, keeping implementation and verification artifacts separated.
 
 If the source realm includes output-like examples, they should be clearly labeled as samples rather than mixed into the canonical published tracker surface.
+
+## AI-Generated Test Loop
+
+The factory requires the agent to produce tests alongside implementation code. This is not optional.
+
+Flow per ticket:
+
+1. agent implements the card or feature in the target realm
+2. agent generates test specs in the test realm (`TestSpec/<ticket-slug>.spec.ts`)
+3. test harness executes tests from the test realm against the target realm
+4. test results are saved as structured artifacts in the test realm (`TestResult/<ticket-slug>.json`)
+5. if tests fail, the full test output (errors, stack traces, optional screenshots) is fed back to the agent
+6. agent iterates on implementation and/or tests until all tests pass
+7. passing test results serve as durable verification evidence for the ticket
+
+This loop is the primary quality gate. A ticket cannot be marked done without at least one passing test in the test realm.
 
 ## Core Principle
 
@@ -55,6 +76,54 @@ Instead, split testing into layers:
 4. thin end-to-end acceptance tests
 
 The more logic we can move into deterministic code, the less fragile the overall system becomes.
+
+## How to Run Tests
+
+### Node-side tests (`tests/*.test.ts`)
+
+No prerequisites. Run directly:
+
+```bash
+pnpm test:node
+```
+
+### Playwright tests (`tests/*.spec.ts`)
+
+Playwright tests are hermetically sealed. They start their own Postgres, Synapse, prerender server, and isolated realm server. They do not depend on any externally running realm server (e.g. `localhost:4201`).
+
+Prerequisites:
+
+1. Docker must be running (for Synapse)
+2. Host app assets must be served at `http://localhost:4200/`:
+   ```bash
+   cd packages/host && pnpm serve:dist
+   ```
+3. Run `pnpm cache:prepare` to build or reuse the cached template database:
+   ```bash
+   pnpm cache:prepare
+   ```
+
+Then run the Playwright tests:
+
+```bash
+pnpm test:playwright
+```
+
+To run a specific spec file:
+
+```bash
+pnpm test:playwright --grep "bootstrap"
+```
+
+The `cache:prepare` step is a one-time setup that builds a Postgres template database from the test fixtures. It only needs to be rerun when the fixture content changes. The global setup for `pnpm test:playwright` will also run `cache:prepare` automatically if the cache is stale, but running it explicitly first avoids delays during test execution.
+
+### All tests
+
+```bash
+pnpm test
+```
+
+This runs Node-side tests first, then Playwright tests sequentially.
 
 ## Test Location Rule
 

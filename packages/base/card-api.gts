@@ -3008,6 +3008,10 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
+  // getKnownConsumedModules is fast now: the Loader caches the dependency
+  // graph traversal result in collectKnownModuleDependencies, and
+  // trimModuleIdentifier uses string ops + a cache instead of URL
+  // construction. No need for a caller-side skip cache here.
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
     trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }

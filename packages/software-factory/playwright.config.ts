@@ -1,25 +1,12 @@
 import { defineConfig } from '@playwright/test';
 
-const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
-const realmURL =
-  process.env.SOFTWARE_FACTORY_REALM_URL ??
-  `http://localhost:${realmPort}/test/`;
+import { sharedConfig } from './playwright.shared';
 
 export default defineConfig({
-  testDir: './tests',
+  ...sharedConfig,
   testMatch: ['**/*.spec.ts'],
-  fullyParallel: false,
-  reporter: process.env.CI ? [['list']] : undefined,
-  workers: 1,
+  // factory-target-realm.spec.ts is excluded here and run separately
+  // via `pnpm test:playwright-e2e` (see CS-10472 for context)
+  testIgnore: ['**/factory-target-realm.spec.ts'],
   timeout: 60_000,
-  expect: {
-    timeout: 15_000,
-  },
-  use: {
-    baseURL: realmURL,
-    trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-  },
-  globalSetup: './playwright.global-setup.ts',
-  globalTeardown: './playwright.global-teardown.ts',
 });

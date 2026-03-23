@@ -688,7 +688,7 @@ patchedDependencies:
     hash: 0472d34281d936a5dcdacff67d2851d88c1df9593cd06b7725ee8414c12aa1d5
     path: patches/matrix-js-sdk@38.3.0.patch
   monaco-editor@0.52.2:
-    hash: a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf
+    hash: bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd
     path: patches/monaco-editor@0.52.2.patch
   openai:
     hash: 6833f1bcf56cde16edb25881777c31d2745994c6ea992d1e2051d1248d213449
@@ -2158,10 +2158,10 @@ importers:
         version: 1.2.0(moment@2.30.1)(webpack@5.104.1)
       monaco-editor:
         specifier: 'catalog:'
-        version: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
+        version: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
       monaco-editor-webpack-plugin:
         specifier: 'catalog:'
-        version: 7.1.1(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.104.1)
+        version: 7.1.1(monaco-editor@0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd))(webpack@5.104.1)
       ms:
         specifier: 'catalog:'
         version: 2.1.3
@@ -2851,7 +2851,7 @@ importers:
         version: 6.3.0
       monaco-editor:
         specifier: 'catalog:'
-        version: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
+        version: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
       statuses:
         specifier: 'catalog:'
         version: 2.0.2
@@ -24413,13 +24413,13 @@ snapshots:
 
   moment@2.30.1: {}
 
-  monaco-editor-webpack-plugin@7.1.1(monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf))(webpack@5.104.1):
+  monaco-editor-webpack-plugin@7.1.1(monaco-editor@0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd))(webpack@5.104.1):
     dependencies:
       loader-utils: 2.0.4
-      monaco-editor: 0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf)
+      monaco-editor: 0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd)
       webpack: 5.104.1
 
-  monaco-editor@0.52.2(patch_hash=a09898c89392828a4df910a8b4b952fd774a69b779906e9fa5742cb9c05c2ecf): {}
+  monaco-editor@0.52.2(patch_hash=bdefe071221b87c7c15e1add6739d24d486f543dbad0d714ae586085204626cd): {}
 
   morgan@1.10.1:
     dependencies:
