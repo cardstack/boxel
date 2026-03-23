@@ -40,7 +40,6 @@ describe('server-endpoints/download-realm-test.ts', function () {
       .query({ realm: testRealmURL.href })
       .buffer(true)
       .parse(binaryParser);
-    let bodyPreview = response.body?.toString?.('utf8') ?? response.text ?? '';
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/zip');
     expect(
@@ -99,7 +98,6 @@ describe('server-endpoints/download-realm-test.ts', function () {
       .query({ realm: testRealmURL.href, token, sig })
       .buffer(true)
       .parse(binaryParser);
-    let bodyPreview = response.body?.toString?.('utf8') ?? response.text ?? '';
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('application/zip');
   });

@@ -290,7 +290,10 @@ export class MyCard extends CardDef {
       const results = await Promise.all(operations);
       // Verify all operations succeeded
       results.forEach((result, index) => {
-        expect(result.status).toBe(200);
+        expect(
+          result.status,
+          `Memory test operation ${index} should succeed`,
+        ).toBe(200);
       });
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryIncrease = finalMemory - initialMemory;

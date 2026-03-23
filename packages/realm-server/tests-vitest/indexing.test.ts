@@ -763,7 +763,10 @@ describe('indexing-test.ts', function () {
         pattern: RegExp,
         fileName: string,
       ) => {
-        expect(!!deps.find((dep) => pattern.test(dep))).toBe(true);
+        expect(
+          !!deps.find((dep) => pattern.test(dep)),
+          `css for ${fileName} is in the deps`,
+        ).toBe(true);
       };
       let dependencies = [
         {
@@ -2156,12 +2159,6 @@ describe('indexing-test.ts', function () {
           } as LooseSingleCardDocument),
         );
         let deps = await depsFor(`${testRealm}consumer-relationship.json`);
-        let entryType = await typeForIndexEntry(
-          testDbAdapter,
-          `${testRealm}consumer-relationship.json`,
-        );
-        expect(true).toBeTruthy();
-        expect(true).toBeTruthy();
         expect(deps.includes(`${testRealm}friend-a.json`)).toBeTruthy();
         expect(deps.includes(`${testRealm}friend-b.json`)).toBeTruthy();
         expect(deps.includes(`${testRealm}friend-c.json`)).toBeTruthy();

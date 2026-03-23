@@ -10,7 +10,6 @@ import {
   vi,
 } from 'vitest';
 import { v4 as uuidv4 } from 'uuid';
-import sinon from 'sinon';
 import { PgAdapter, PgQueueRunner } from '@cardstack/postgres';
 import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
