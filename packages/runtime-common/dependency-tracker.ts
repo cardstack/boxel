@@ -1,5 +1,5 @@
 import { logger } from './log';
-import { trimExecutableExtension } from './index';
+import { executableExtensions } from './index';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
@@ -47,23 +47,30 @@ interface ContextStackEntry {
   context: RuntimeDependencyTrackingContext;
 }
 
+// String-based URL normalization to avoid expensive URL constructor calls.
+// These are called on every dependency tracking operation (field getter access)
+// so performance is critical.
+
 function canonicalURL(url: string): string | undefined {
-  try {
-    let parsed = new URL(url);
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.href;
-  } catch (_err) {
+  if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
     return undefined;
   }
+  // Strip query string and hash using string ops instead of new URL()
+  let hashIdx = url.indexOf('#');
+  if (hashIdx !== -1) {
+    url = url.slice(0, hashIdx);
+  }
+  let searchIdx = url.indexOf('?');
+  if (searchIdx !== -1) {
+    url = url.slice(0, searchIdx);
+  }
+  return url;
 }
 
-function hasPathExtension(pathname: string): boolean {
-  let segment = pathname.split('/').pop() ?? '';
-  if (segment.length === 0) {
-    return false;
-  }
-  return segment.includes('.');
+function hasPathExtension(url: string): boolean {
+  let lastSlash = url.lastIndexOf('/');
+  let segment = lastSlash !== -1 ? url.slice(lastSlash + 1) : url;
+  return segment.length > 0 && segment.includes('.');
 }
 
 function normalizeModuleURL(url: string): string | undefined {
@@ -71,7 +78,12 @@ function normalizeModuleURL(url: string): string | undefined {
   if (!canonical) {
     return undefined;
   }
-  return trimExecutableExtension(new URL(canonical)).href;
+  for (let ext of executableExtensions) {
+    if (canonical.endsWith(ext)) {
+      return canonical.slice(0, -ext.length);
+    }
+  }
+  return canonical;
 }
 
 function normalizeInstanceURL(url: string): string | undefined {
@@ -79,11 +91,10 @@ function normalizeInstanceURL(url: string): string | undefined {
   if (!canonical) {
     return undefined;
   }
-  let parsed = new URL(canonical);
-  if (!hasPathExtension(parsed.pathname)) {
-    parsed.pathname = `${parsed.pathname}.json`;
+  if (!hasPathExtension(canonical)) {
+    return `${canonical}.json`;
   }
-  return parsed.href;
+  return canonical;
 }
 
 function normalizeFileURL(url: string): string | undefined {
