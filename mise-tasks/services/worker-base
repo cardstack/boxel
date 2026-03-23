@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Start worker manager for base realm only"
-#MISE depends=["infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
 NODE_ENV=development \
