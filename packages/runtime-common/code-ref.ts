@@ -18,6 +18,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
+import { cardIdToURL } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
@@ -406,7 +407,7 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   }
   let resolved = codeRefWithAbsoluteURL(
     adoptsFrom,
-    instance[relativeTo] || new URL(instance.id),
+    instance[relativeTo] || cardIdToURL(instance.id),
   );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
@@ -422,11 +423,8 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (typeof id !== 'string') {
       return undefined;
     }
-    if (typeof URL.canParse === 'function' && !URL.canParse(id)) {
-      return undefined;
-    }
     try {
-      return new URL(id);
+      return cardIdToURL(id);
     } catch {
       return undefined;
     }

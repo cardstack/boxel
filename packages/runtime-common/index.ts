@@ -176,6 +176,13 @@ export {
   isCardErrorJSONAPI,
 } from './error';
 export { validateWriteSize } from './write-size-validation';
+export {
+  registerCardReferencePrefix,
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+  cardIdToURL,
+} from './card-reference-resolver';
 
 export interface ResourceObject {
   type: string;
@@ -222,7 +229,10 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  resolveCardReference,
+  unresolveCardReference,
+} from './card-reference-resolver';
 export * from './paths';
 export * from './cached-fetch';
 export * from './definition-lookup';
@@ -664,9 +674,11 @@ export function internalKeyFor(
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
-    let module = trimExecutableExtension(
-      new URL(resolveCardReference(ref.module, relativeTo)),
-    ).href;
+    let resolved = resolveCardReference(ref.module, relativeTo);
+    let module = trimExecutableExtension(new URL(resolved)).href;
+    // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
+    // internal key when a registered prefix mapping matches
+    module = unresolveCardReference(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
