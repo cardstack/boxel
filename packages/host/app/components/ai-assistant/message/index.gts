@@ -248,6 +248,9 @@ interface ReloadBillingOnInsertSignature {
   };
 }
 
+// In the future if we implement subscription to credit consumption, we can remove this modifier
+// It's currently used to reload the billing data when an out of credits error message is shown so that we can
+// conditionolly display the "buy more credits" button, or "credits added" message + retry button
 class ReloadBillingOnInsert extends Modifier<ReloadBillingOnInsertSignature> {
   private hasReloaded = false;
 
