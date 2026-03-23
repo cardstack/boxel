@@ -18,12 +18,18 @@ import {
   realmDomain,
   BasicSQLExecutor,
 } from './isolated-realm-server';
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+} from './environment-config';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
 export { realmDomain, serverIndexUrl };
 export const testHost = appURL;
-export const mailHost = process.env.SMTP_URL || 'http://localhost:5001';
+export const mailHost = isEnvironmentMode()
+  ? `http://smtp.${getEnvironmentSlug()}.localhost`
+  : 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 export const REGISTRATION_TOKEN = 'abc123';
 
@@ -114,7 +120,9 @@ async function registerRealmRedirect(
 }
 
 export async function setRealmRedirects(page: Page) {
-  let baseServerUrl = process.env.REALM_BASE_URL || 'http://localhost:4201';
+  let baseServerUrl = isEnvironmentMode()
+    ? `http://realm-server.${getEnvironmentSlug()}.localhost`
+    : 'http://localhost:4201';
   await registerRealmRedirect(
     page,
     `${baseServerUrl}/skills/`,

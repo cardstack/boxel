@@ -8,6 +8,7 @@ import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from '../docker/synapse';
 import {
   isEnvironmentMode,
+  getEnvironmentSlug,
   registerServiceWithTraefik,
   deregisterServiceFromTraefik,
 } from './environment-config';
@@ -27,10 +28,13 @@ const matrixDir = resolve(join(__dirname, '..'));
 const ISOLATED_REALM_SERVICE = 'realm-matrix-test';
 const ISOLATED_WORKER_SERVICE = 'worker-matrix-test';
 
-// In environment mode, the isolated realm server is accessed via Traefik.
-// The env var is set by mise-tasks/lib/env-vars.sh.
-export const serverIndexUrl =
-  process.env.MATRIX_TEST_REALM_URL || 'http://localhost:4205';
+// Compute URLs from BOXEL_ENVIRONMENT directly so that setting just that
+// one env var is sufficient — no need to source env-vars.sh first.
+const envMode = isEnvironmentMode();
+const envSlug = envMode ? getEnvironmentSlug() : '';
+export const serverIndexUrl = envMode
+  ? `http://${ISOLATED_REALM_SERVICE}.${envSlug}.localhost`
+  : 'http://localhost:4205';
 export const appURL = `${serverIndexUrl}/test`;
 export const realmDomain = serverIndexUrl.replace(/^https?:\/\//, '');
 
@@ -157,7 +161,9 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+    BOXEL_HOST_URL: envMode
+      ? `http://host.${envSlug}.localhost`
+      : (process.env.HOST_URL ?? 'http://localhost:4200'),
     LOG_LEVELS:
       process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
