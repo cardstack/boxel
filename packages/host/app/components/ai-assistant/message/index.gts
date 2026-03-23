@@ -2,10 +2,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
 import { action } from '@ember/object';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
@@ -45,6 +48,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    isMostRecentMessage?: boolean;
     userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
@@ -64,6 +68,7 @@ interface Signature {
       element: HTMLElement;
     }) => void;
     errorMessage?: string;
+    reloadBillingData?: boolean;
     isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
@@ -234,6 +239,37 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
   }
 }
 
+interface ReloadBillingOnInsertSignature {
+  Args: {
+    Named: {
+      shouldReloadBillingData: boolean;
+      reload: () => void;
+    };
+  };
+}
+
+class ReloadBillingOnInsert extends Modifier<ReloadBillingOnInsertSignature> {
+  private hasReloaded = false;
+
+  private runReload(reload: () => void) {
+    reload();
+  }
+
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    {
+      shouldReloadBillingData,
+      reload,
+    }: ReloadBillingOnInsertSignature['Args']['Named'],
+  ) {
+    if (shouldReloadBillingData && !this.hasReloaded) {
+      this.hasReloaded = true;
+      scheduleOnce('afterRender', this, this.runReload, reload);
+    }
+  }
+}
+
 function isThinkingMessage(s: string | null | undefined) {
   if (!s) {
     return false;
@@ -328,6 +364,12 @@ export default class AiAssistantMessage extends Component<Signature> {
     }
   }
 
+  private reloadBillingDataTask = task(async () => {
+    if (!this.billingService.loadingSubscriptionData) {
+      await this.billingService.loadSubscriptionData();
+    }
+  });
+
   <template>
     <section
       class={{cn
@@ -339,6 +381,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         index=@index
         registerScroller=@registerScroller
         unregisterScroller=@unregisterScroller
+      }}
+      {{ReloadBillingOnInsert
+        shouldReloadBillingData=this.shouldReloadBillingData
+        reload=(perform this.reloadBillingDataTask)
       }}
       data-test-ai-assistant-message
       data-test-ai-assistant-message-pending={{@isPending}}
@@ -540,6 +586,12 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   private get hasAlertActions() {
     return Boolean(this.args.waitAction || this.args.retryAction);
+  }
+
+  private get shouldReloadBillingData() {
+    return Boolean(
+      this.args.reloadBillingData && this.args.isMostRecentMessage,
+    );
   }
 
   private get isOutOfCreditsErrorMessage(): boolean {

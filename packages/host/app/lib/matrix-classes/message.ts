@@ -46,6 +46,7 @@ interface RoomMessageOptional {
   clientGeneratedId?: string | null;
   reasoningContent?: string | null;
   isDebugMessage?: boolean;
+  reloadBillingData?: boolean;
   hasContinuation?: boolean;
   continuationOf?: string | null;
   agentId?: string;
@@ -73,6 +74,7 @@ export class Message implements RoomMessageInterface {
   errorMessage?: string;
   clientGeneratedId?: string;
   isDebugMessage?: boolean;
+  reloadBillingData?: boolean;
   isCodePatchCorrectness?: boolean;
 
   author: RoomMember;
