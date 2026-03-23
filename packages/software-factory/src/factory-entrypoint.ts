@@ -1,5 +1,11 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
+import {
+  bootstrapProjectArtifacts,
+  inferDarkfactoryModuleUrl,
+  type FactoryBootstrapOptions,
+  type FactoryBootstrapResult,
+} from './factory-bootstrap';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
@@ -32,6 +38,16 @@ export interface FactoryEntrypointBriefSummary extends FactoryBrief {
   url: string;
 }
 
+export interface FactoryEntrypointBootstrapSummary {
+  projectId: string;
+  knowledgeArticleIds: string[];
+  ticketIds: string[];
+  activeTicket: {
+    id: string;
+    status: string;
+  };
+}
+
 export interface FactoryEntrypointSummary {
   command: 'factory:go';
   mode: FactoryEntrypointMode;
@@ -40,6 +56,7 @@ export interface FactoryEntrypointSummary {
     url: string;
     ownerUsername: string;
   };
+  bootstrap: FactoryEntrypointBootstrapSummary;
   actions: FactoryEntrypointAction[];
   result: {
     status: 'ready';
@@ -55,6 +72,11 @@ export interface RunFactoryEntrypointDependencies {
   bootstrapTargetRealm?: (
     resolution: FactoryTargetRealmResolution,
   ) => Promise<FactoryTargetRealmBootstrapResult>;
+  bootstrapArtifacts?: (
+    brief: FactoryBrief,
+    targetRealmUrl: string,
+    options?: FactoryBootstrapOptions,
+  ) => Promise<FactoryBootstrapResult>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -168,12 +190,24 @@ export async function runFactoryEntrypoint(
     dependencies?.bootstrapTargetRealm ?? bootstrapFactoryTargetRealm
   )(targetRealmResolution);
 
-  return buildFactoryEntrypointSummary(options, brief, targetRealm);
+  let realmFetch = createBoxelRealmFetch(targetRealm.url, {
+    fetch: dependencies?.fetch,
+  });
+
+  let artifacts = await (
+    dependencies?.bootstrapArtifacts ?? bootstrapProjectArtifacts
+  )(brief, targetRealm.url, {
+    fetch: realmFetch,
+    darkfactoryModuleUrl: inferDarkfactoryModuleUrl(targetRealm.url),
+  });
+
+  return buildFactoryEntrypointSummary(options, brief, targetRealm, artifacts);
 }
 export function buildFactoryEntrypointSummary(
   options: FactoryEntrypointOptions,
   brief: FactoryBrief,
   targetRealm: FactoryTargetRealmBootstrapResult,
+  artifacts: FactoryBootstrapResult,
 ): FactoryEntrypointSummary {
   let actions: FactoryEntrypointAction[] = [
     {
@@ -208,6 +242,11 @@ export function buildFactoryEntrypointSummary(
         ? 'created realm via realm server API'
         : 'target realm already existed',
     },
+    {
+      name: 'bootstrapped-project-artifacts',
+      status: 'ok',
+      detail: `project=${artifacts.project.status} tickets=${artifacts.tickets.map((t) => t.status).join(',')}`,
+    },
   ];
 
   return {
@@ -220,6 +259,15 @@ export function buildFactoryEntrypointSummary(
     targetRealm: {
       url: targetRealm.url,
       ownerUsername: targetRealm.ownerUsername,
+    },
+    bootstrap: {
+      projectId: artifacts.project.id,
+      knowledgeArticleIds: artifacts.knowledgeArticles.map((ka) => ka.id),
+      ticketIds: artifacts.tickets.map((t) => t.id),
+      activeTicket: {
+        id: artifacts.activeTicket.id,
+        status: artifacts.activeTicket.status,
+      },
     },
     actions,
     result: {

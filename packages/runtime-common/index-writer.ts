@@ -12,6 +12,10 @@ import {
   unixTime,
   logger,
 } from './index';
+import {
+  isRegisteredPrefix,
+  unresolveCardReference,
+} from './card-reference-resolver';
 import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
@@ -206,41 +210,26 @@ export class Batch {
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
+    let copyURL = (value: string) =>
+      isRegisteredPrefix(value)
+        ? value
+        : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
     let values = sources.map((entry) => {
-      let destURL = this.copiedRealmURL(
-        sourceRealmURL,
-        new URL(entry.url),
-      ).href;
+      let destURL = copyURL(entry.url);
       this.#invalidations.add(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.realm_version = this.realmVersion;
-      entry.file_alias = this.copiedRealmURL(
-        sourceRealmURL,
-        new URL(entry.file_alias),
-      ).href;
-      entry.types = entry.types
-        ? entry.types.map(
-            (type) => this.copiedRealmURL(sourceRealmURL, new URL(type)).href,
-          )
-        : entry.types;
-      entry.deps = entry.deps
-        ? entry.deps.map(
-            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
-          )
-        : entry.deps;
+      entry.file_alias = copyURL(entry.file_alias);
+      entry.types = entry.types ? entry.types.map(copyURL) : entry.types;
+      entry.deps = entry.deps ? entry.deps.map(copyURL) : entry.deps;
       entry.last_known_good_deps = entry.last_known_good_deps
-        ? entry.last_known_good_deps.map(
-            (dep) => this.copiedRealmURL(sourceRealmURL, new URL(dep)).href,
-          )
+        ? entry.last_known_good_deps.map(copyURL)
         : entry.last_known_good_deps;
       entry.pristine_doc = entry.pristine_doc
         ? {
             ...entry.pristine_doc,
-            id: this.copiedRealmURL(
-              sourceRealmURL,
-              new URL(entry.pristine_doc.id!), // these will always have an ID
-            ).href,
+            id: copyURL(entry.pristine_doc.id!), // these will always have an ID
           }
         : entry.pristine_doc;
       if (entry.type === 'instance' && entry.pristine_doc) {
@@ -639,7 +628,9 @@ export class Batch {
       return types.map((type) =>
         [
           id,
-          trimExecutableExtension(new URL(id)).href,
+          isRegisteredPrefix(id)
+            ? id.replace(/\.(gts|ts|js|gjs)$/, '')
+            : trimExecutableExtension(new URL(id)).href,
           type,
           this.realmVersion,
           this.realmURL.href,
@@ -906,10 +897,45 @@ export class Batch {
       type: BoxelIndexTable['type'];
     })[] = [];
     let pageNumber = 0;
+    // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
+    // since deps may be stored in prefix form for portability
+    let unresolvedPath = unresolveCardReference(resolvedPath);
+    let searchBothForms =
+      unresolvedPath !== resolvedPath && isRegisteredPrefix(unresolvedPath);
     do {
       // SQLite does not support cursors when used in the worker thread since
       // the API for using cursors cannot be serialized over the postMessage
       // boundary. so we use a handcrafted paging approach
+      let depCondition: Expression = searchBothForms
+        ? (any([
+            [
+              dbExpression({
+                sqlite: `deps_array_element =`,
+                pg: `i.deps @>`,
+              }),
+              param({
+                sqlite: resolvedPath,
+                pg: `["${resolvedPath}"]`,
+              }),
+            ],
+            [
+              dbExpression({
+                sqlite: `deps_array_element =`,
+                pg: `i.deps @>`,
+              }),
+              param({
+                sqlite: unresolvedPath,
+                pg: `["${unresolvedPath}"]`,
+              }),
+            ],
+          ]) as Expression)
+        : ([
+            dbExpression({
+              sqlite: `deps_array_element =`,
+              pg: `i.deps @>`,
+            }),
+            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
+          ] as Expression);
       rows = (await this.#query([
         'SELECT i.url, i.file_alias, i.type',
         'FROM boxel_index_working as i',
@@ -919,13 +945,7 @@ export class Batch {
         }),
         'WHERE',
         ...every([
-          [
-            dbExpression({
-              sqlite: `deps_array_element =`,
-              pg: `i.deps @>`,
-            }),
-            param({ sqlite: resolvedPath, pg: `["${resolvedPath}"]` }),
-          ],
+          depCondition,
           // probably need to reevaluate this condition when we get to cross
           // realm invalidation
           [`i.realm_url =`, param(this.realmURL.href)],
@@ -1068,7 +1088,9 @@ export class Batch {
           obj.id &&
           typeof obj.id === 'string'
         ) {
-          obj.id = this.copiedRealmURL(fromRealm, new URL(obj.id));
+          obj.id = isRegisteredPrefix(obj.id)
+            ? obj.id
+            : this.copiedRealmURL(fromRealm, new URL(obj.id));
         } else {
           this.updateIds(obj[key], fromRealm);
         }

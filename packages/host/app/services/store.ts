@@ -18,6 +18,7 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 import {
   baseFileRef,
   CardError,
+  cardIdToURL,
   hasExecutableExtension,
   isCardError,
   isCardInstance,
@@ -274,7 +275,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     } else {
-      this.subscribeToRealm(new URL(id));
+      this.subscribeToRealm(cardIdToURL(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
       this.wireUpNewReference(id, readType);
@@ -593,7 +594,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let linkedCards = await this.loadPatchedInstances(
       patch,
-      instance.id ? new URL(instance.id) : undefined,
+      instance.id ? cardIdToURL(instance.id) : undefined,
     );
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
@@ -1326,7 +1327,7 @@ export default class StoreService extends Service implements StoreInterface {
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
-      relativeTo: new URL(resource.id),
+      relativeTo: cardIdToURL(resource.id),
       dependencyTrackingContext,
     }) as Promise<T>;
   }
@@ -1432,7 +1433,9 @@ export default class StoreService extends Service implements StoreInterface {
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
-          let result = await this.cardService.getSource(new URL(`${url}.json`));
+          let result = await this.cardService.getSource(
+            cardIdToURL(`${url}.json`),
+          );
           if (result.status === 200) {
             json = JSON.parse(result.content);
           } else {
@@ -1457,7 +1460,7 @@ export default class StoreService extends Service implements StoreInterface {
           // Source-mode loads in render context don't include realm metadata.
           // Query-backed relationship fields require realmURL to build their
           // fallback search query.
-          let realmURL = this.realm.realmOfURL(new URL(url))?.href;
+          let realmURL = this.realm.realmOfURL(cardIdToURL(url))?.href;
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
@@ -1470,7 +1473,7 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = await this.createFromSerialized(
         doc.data,
         doc,
-        new URL(doc.data.id!), // instances from the server will have id's
+        cardIdToURL(doc.data.id!), // instances from the server will have id's
         opts?.dependencyTrackingContext,
       );
       // in case the url is an alias for the id (like index card without the
@@ -1865,7 +1868,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (isNew) {
           api.setId(instance, json.data.id!);
-          this.subscribeToRealm(new URL(instance.id));
+          this.subscribeToRealm(cardIdToURL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
           );
@@ -1874,7 +1877,7 @@ export default class StoreService extends Service implements StoreInterface {
           await this.startAutoSaving(instance);
         }
         if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(new URL(json.data.id!), json);
+          this.onSaveSubscriber(cardIdToURL(json.data.id!), json);
         }
         return instance;
       } catch (err) {

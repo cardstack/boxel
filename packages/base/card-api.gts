@@ -84,6 +84,7 @@ import {
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
   resolveCardReference,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -3370,7 +3371,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       relativeTo:
         instanceRelativeTo ??
         (resource.id && typeof resource.id === 'string'
-          ? new URL(resource.id)
+          ? cardIdToURL(resource.id)
           : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
     });

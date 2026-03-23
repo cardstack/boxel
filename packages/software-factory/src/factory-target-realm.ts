@@ -1,4 +1,5 @@
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
@@ -7,6 +8,7 @@ import {
   getRealmServerToken,
   matrixLogin,
   type ActiveBoxelProfile,
+  type MatrixAuth,
 } from '../scripts/lib/boxel';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -103,6 +105,8 @@ async function createRealm(
           attributes: {
             endpoint,
             name: endpoint,
+            iconURL: iconURLForRealmName(endpoint),
+            backgroundURL: randomBackgroundURL(),
           },
         },
       }),
@@ -118,6 +122,12 @@ async function createRealm(
     let canonicalRealmUrl = normalizeCreatedRealmUrl(
       json.data?.id,
       resolution.url,
+    );
+
+    await appendRealmToMatrixAccountData(
+      matrixAuth,
+      canonicalRealmUrl,
+      fetchImpl,
     );
 
     return {
@@ -138,6 +148,47 @@ async function createRealm(
   throw new Error(
     `Failed to create target realm ${resolution.url}: HTTP ${response.status} ${text}`.trim(),
   );
+}
+
+async function appendRealmToMatrixAccountData(
+  matrixAuth: MatrixAuth,
+  realmUrl: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let accountDataUrl = new URL(
+    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+    matrixAuth.credentials.matrixUrl,
+  ).href;
+
+  let existingRealms: string[] = [];
+
+  let getResponse = await fetchImpl(accountDataUrl, {
+    headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
+  });
+  if (getResponse.ok) {
+    let data = (await getResponse.json()) as { realms?: string[] };
+    existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
+  }
+
+  if (!existingRealms.includes(realmUrl)) {
+    existingRealms.push(realmUrl);
+  }
+
+  let putResponse = await fetchImpl(accountDataUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${matrixAuth.accessToken}`,
+    },
+    body: JSON.stringify({ realms: existingRealms }),
+  });
+
+  if (!putResponse.ok) {
+    let text = await putResponse.text();
+    throw new Error(
+      `Failed to update Matrix account data with realm ${realmUrl}: HTTP ${putResponse.status} ${text}`.trim(),
+    );
+  }
 }
 
 function resolveRealmServerProfile(
@@ -325,4 +376,71 @@ function normalizeOptionalString(
 
   let trimmed = value.trim();
   return trimmed === '' ? undefined : trimmed;
+}
+
+// Mirrors iconURLFor() from packages/host/app/lib/utils.ts
+function iconURLForRealmName(name: string): string {
+  let letter = name
+    .toLowerCase()
+    .replace(/[^a-z]/g, '')
+    .charAt(0);
+  if (!letter) {
+    letter = 'b'; // fallback for names starting with numbers/symbols
+  }
+  return `https://boxel-images.boxel.ai/icons/Letter-${letter}.png`;
+}
+
+// Mirrors getRandomBackgroundURL() from packages/host/app/lib/utils.ts
+const backgroundURLs = [
+  'https://boxel-images.boxel.ai/background-images/4k-arabic-teal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-arrow-weave.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-atmosphere-curvature.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-brushed-slabs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-coral-reefs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-crescent-lake.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-curvilinear-stairs.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-desert-dunes.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-doodle-board.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-fallen-leaves.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-flowing-mesh.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-glass-reflection.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-glow-cells.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-granite-peaks.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-green-wormhole.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-joshua-dawn.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-lava-river.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-leaves-moss.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-light-streaks.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-lowres-glitch.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-marble-shimmer.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-metallic-leather.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-microscopic-crystals.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-moon-face.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-mountain-runway.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-origami-flock.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-paint-swirl.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-pastel-triangles.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-perforated-sheet.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-plastic-ripples.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-powder-puff.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-radiant-crystal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-redrock-canyon.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-rock-portal.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-rolling-hills.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-sand-stone.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-silver-fur.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-spa-pool.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-stained-glass.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-stone-veins.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-tangerine-plains.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-techno-floor.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-thick-frost.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-water-surface.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-watercolor-splashes.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-wildflower-field.jpg',
+  'https://boxel-images.boxel.ai/background-images/4k-wood-grain.jpg',
+] as const;
+
+function randomBackgroundURL(): string {
+  return backgroundURLs[Math.floor(Math.random() * backgroundURLs.length)];
 }
