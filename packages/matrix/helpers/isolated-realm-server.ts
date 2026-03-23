@@ -267,6 +267,13 @@ export async function startServer({
   let publishedDomain =
     process.env.MATRIX_TEST_PUBLISHED_DOMAIN || realmDomain;
 
+  // Register with Traefik BEFORE spawning processes so the worker can
+  // reach the realm server via the Traefik hostname from the start.
+  if (envMode) {
+    registerServiceWithTraefik(ISOLATED_REALM_SERVICE, realmPort);
+    registerServiceWithTraefik(ISOLATED_WORKER_SERVICE, workerManagerPort);
+  }
+
   process.env.PGPORT = process.env.PGPORT || '5435';
   process.env.PGDATABASE = testDBName;
   process.env.NODE_NO_WARNINGS = '1';
@@ -395,12 +402,6 @@ export async function startServer({
     throw new Error(
       `timed-out waiting for realm server to start. Stopping server`,
     );
-  }
-
-  // In environment mode, register the isolated realm server and worker with Traefik
-  if (envMode) {
-    registerServiceWithTraefik(ISOLATED_REALM_SERVICE, realmPort);
-    registerServiceWithTraefik(ISOLATED_WORKER_SERVICE, workerManagerPort);
   }
 
   return new IsolatedRealmServer(
