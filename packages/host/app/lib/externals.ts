@@ -97,7 +97,6 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/service', emberService);
   virtualNetwork.shimModule('@ember/template', emberTemplate);
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
-  virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
   virtualNetwork.shimModule('@cardstack/view-transitions', viewTransitions);
   virtualNetwork.shimModule('awesome-phonenumber', awesomePhoneNumber);
   virtualNetwork.shimModule('date-fns', dateFns);
@@ -196,6 +195,8 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
 // module isn't present in the build, a proxy throws on access so the error is
 // visible rather than silently hidden.
 export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
+  const windowQUnit = (globalThis as any).QUnit;
+
   const missingShim = (moduleId: string) =>
     new Proxy(
       {},
@@ -207,6 +208,15 @@ export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
         },
       },
     );
+
+  // Use real test helpers only when a QUnit test runner is present; otherwise
+  // shim a throwing stub so realm cards that colocate test imports can still
+  // load in non-test environments without executing test code.
+  virtualNetwork.shimModule(
+    '@ember/test-helpers',
+    windowQUnit ? emberTestHelpers : missingShim('@ember/test-helpers'),
+  );
+
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers',
     hostTestHelpers ?? missingShim('@cardstack/host/tests/helpers'),
