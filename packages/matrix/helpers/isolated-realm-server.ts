@@ -71,7 +71,8 @@ async function isPortAvailable(port: number): Promise<boolean> {
 }
 
 async function findAvailablePort(preferred?: number): Promise<number> {
-  if (typeof preferred === 'number' && (await isPortAvailable(preferred))) {
+  // port 0 means "pick any available port" — skip straight to dynamic allocation
+  if (typeof preferred === 'number' && preferred > 0 && (await isPortAvailable(preferred))) {
     return preferred;
   }
   return await new Promise((resolve, reject) => {
@@ -258,7 +259,9 @@ export async function startServer({
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
-  let matrixURL = `http://localhost:${synapse.port}`;
+  let matrixURL = envMode
+    ? `http://matrix.${envSlug}.localhost`
+    : `http://localhost:${synapse.port}`;
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';
