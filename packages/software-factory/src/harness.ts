@@ -69,6 +69,7 @@ export interface StartedFactoryRealm {
   realmDir: string;
   realmURL: URL;
   databaseName: string;
+  childPids: number[];
   cardURL(path: string): string;
   createBearerToken(user?: string, permissions?: RealmAction[]): string;
   authorizationHeaders(
@@ -1634,6 +1635,9 @@ export async function startFactoryRealmServer(
       realmDir,
       realmURL,
       databaseName,
+      childPids: [stack.realmServer.pid, stack.workerManager.pid].filter(
+        (pid): pid is number => pid != null,
+      ),
       cardURL(path: string) {
         return new URL(path, realmURL).href;
       },
