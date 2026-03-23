@@ -25,6 +25,7 @@
     "test:all": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts",
     "test:node": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts --node-only",
     "test:playwright": "playwright test",
+    "test:playwright-e2e": "playwright test --config playwright.e2e.config.ts",
     "test:playwright:headed": "playwright test --headed",
     "test:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/run-realm-tests.ts"
   },
