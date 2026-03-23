@@ -39,6 +39,9 @@ export function resolveCardReference(
       `Cannot resolve bare package specifier "${reference}" — no matching prefix mapping registered`,
     );
   }
+  if (reference.startsWith('http://') || reference.startsWith('https://')) {
+    return new URL(reference).href;
+  }
   return new URL(reference, relativeTo).href;
 }
 
