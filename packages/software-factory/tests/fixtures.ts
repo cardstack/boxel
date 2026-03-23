@@ -84,11 +84,25 @@ async function waitForPortFree(
 ): Promise<void> {
   let startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    let free = await new Promise<boolean>((resolve) => {
+    let free = await new Promise<boolean>((resolve, reject) => {
       let server = createServer();
-      server.once('error', () => resolve(false));
+      server.once('error', (error: NodeJS.ErrnoException) => {
+        server.close(() => {
+          if (error.code === 'EADDRINUSE') {
+            resolve(false);
+          } else {
+            reject(error);
+          }
+        });
+      });
       server.listen(port, '127.0.0.1', () => {
-        server.close(() => resolve(true));
+        server.close((closeError) => {
+          if (closeError) {
+            reject(closeError);
+          } else {
+            resolve(true);
+          }
+        });
       });
     });
     if (free) {
