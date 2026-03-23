@@ -5,12 +5,17 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/env-slug.sh"
+
 if [ -n "$1" ]; then
   SLUG="$1"
+elif [ -n "$ENV_SLUG" ]; then
+  SLUG="$ENV_SLUG"
 elif [ -n "$BOXEL_ENVIRONMENT" ]; then
-  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
 else
-  SLUG=$(git branch --show-current | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  SLUG=$(compute_env_slug "$(git branch --show-current)")
 fi
 
 DB_NAME="boxel_${SLUG}"

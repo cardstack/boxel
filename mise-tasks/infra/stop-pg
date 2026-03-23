@@ -1,0 +1,4 @@
+#!/bin/sh
+#MISE description="Stop the PostgreSQL docker container"
+
+docker stop boxel-pg >/dev/null

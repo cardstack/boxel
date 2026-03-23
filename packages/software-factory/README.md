@@ -38,8 +38,8 @@ startup do not require a separate external realm server on `http://localhost:420
   - Starts the isolated realm server on `http://localhost:4205/test/`
 - `pnpm smoke:realm`
   - Boots the isolated realm server, fetches `project-demo` as card JSON, and exits
-- `pnpm factory:go -- --brief-url <url> --target-realm-path <path>`
-  - Validates one-shot factory inputs and prints a machine-readable run summary
+- `pnpm factory:go -- --brief-url <url> --target-realm-url <url>`
+  - Fetches and normalizes a brief, bootstraps the target realm, and prints a machine-readable run summary
 - `pnpm test`
   - Runs package tests from `tests/*.test.ts` and `tests/*.spec.ts`
 - `pnpm test:node`
@@ -70,8 +70,8 @@ Usage:
 ```bash
 pnpm factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm-path /path/to/target-realm \
-  [--target-realm-url http://localhost:4201/hassan/personal/] \
+  --target-realm-url http://localhost:4201/hassan/personal/ \
+  [--realm-server-url http://localhost:4201/] \
   [--mode implement]
 ```
 
@@ -79,14 +79,41 @@ Parameters:
 
 - `--brief-url`
   - Required. Absolute URL for the source brief card the factory should use as input.
-- `--target-realm-path`
-  - Required. Local filesystem path to the Boxel realm where the factory should write output.
+  - The command fetches card source JSON from this URL and includes normalized brief metadata in the summary.
 - `--target-realm-url`
-  - Optional. Absolute URL for that target realm when it is already known and should be included in the execution summary.
+  - Required. Absolute URL for the target realm the factory should bootstrap and later populate.
+- `--realm-server-url`
+  - Optional. Explicit realm server URL for target-realm bootstrap when it cannot be inferred unambiguously from the target realm URL.
 - `--mode`
   - Optional. One of `bootstrap`, `implement`, or `resume`. Defaults to `implement`.
 - `--help`
   - Optional. Prints the command usage and exits.
+
+Auth:
+
+- `MATRIX_USERNAME` is required and determines the target realm owner.
+- If the brief is in a public realm, you do not need any auth setup.
+- If the brief is in a private realm, `factory:go` can authenticate using:
+  - the active Boxel profile in `~/.boxel-cli/profiles.json`
+  - `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD`, and `REALM_SERVER_URL`
+- When the target realm does not exist yet, `factory:go` creates it with `POST /_create-realm`.
+- By default the target realm server URL is inferred from `--target-realm-url`, but `--realm-server-url` can override that when the realm server is mounted under a subdirectory.
+- The realm-server `/_create-realm` contract is the readiness boundary for bootstrap.
+
+Private brief with explicit Matrix username/password env:
+
+```bash
+export MATRIX_URL=http://localhost:8008/
+export MATRIX_USERNAME=factory
+read -s MATRIX_PASSWORD'?Matrix password: '
+export MATRIX_PASSWORD
+export REALM_SERVER_URL=http://localhost:4201/
+
+pnpm factory:go -- \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm-url http://localhost:4201/factory/personal/ \
+  --realm-server-url http://localhost:4201/
+```
 
 ## Layout
 

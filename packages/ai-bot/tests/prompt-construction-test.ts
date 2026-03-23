@@ -5353,6 +5353,83 @@ new
     );
   });
 
+  test('card JSON and card definition files are included as text content', async () => {
+    // Verifies that application/vnd.card+json and application/vnd.card+source
+    // files have their full content sent to the bot rather than being treated
+    // as unsupported binary files (CS-10468).
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Here are my card files',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/person.json',
+                url: 'http://test.com/person-uploaded.json',
+                name: 'person.json',
+                contentType: 'application/vnd.card+json',
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/person.gts',
+                url: 'http://test.com/person-uploaded.gts',
+                name: 'person.gts',
+                contentType: 'application/vnd.card+source',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/person-uploaded.json', {
+      ok: true,
+      text: '{"data":{"type":"card","attributes":{"name":"Alice"}}}',
+    });
+    mockResponses.set('http://test.com/person-uploaded.gts', {
+      ok: true,
+      text: 'export class Person extends CardDef { @field name = contains(StringField); }',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let content = userMessages[0]?.content as string;
+
+    assert.ok(
+      content.includes('"name":"Alice"'),
+      'Card JSON (application/vnd.card+json) content should be included',
+    );
+    assert.ok(
+      content.includes('export class Person'),
+      'Card definition (application/vnd.card+source) content should be included',
+    );
+    assert.notOk(
+      content.includes('Unsupported file type'),
+      'None of these file types should be treated as unsupported',
+    );
+  });
+
   test('older image attachments still include metadata in text context', async () => {
     const history: DiscreteMatrixEvent[] = [
       {

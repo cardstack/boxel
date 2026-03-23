@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="Start bot runner for development"
+#MISE dir="packages/bot-runner"
+
+MATRIX_URL="${MATRIX_URL_VAL}" \
+  NODE_NO_WARNINGS=1 \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE}" \
+  exec ts-node --transpileOnly main

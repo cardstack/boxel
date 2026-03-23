@@ -1,0 +1,5 @@
+#!/bin/sh
+#MISE description="Build and watch the host app (no live reload)"
+#MISE dir="packages/host"
+
+NODE_OPTIONS="--max-old-space-size=8192" exec pnpm exec ember build --watch
