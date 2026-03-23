@@ -21,6 +21,7 @@ import {
   SupportedMimeType,
   isCardError,
   isBaseDefInstance,
+  cardIdToURL,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -418,7 +419,7 @@ export default class RenderRoute extends Route<Model> {
           };
 
           let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: new URL(id),
+            relativeTo: cardIdToURL(id),
             realm: realmURL,
             doNotPersist: true,
           });

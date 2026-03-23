@@ -25,6 +25,43 @@ permissions:
   pull-requests: write
 
 jobs:
+  check-percy:
+    name: Check if Percy is needed
+    runs-on: ubuntu-latest
+    outputs:
+      percy_needed: ${{ steps.check.outputs.percy_needed }}
+    steps:
+      - name: Check for UI-relevant changes
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "percy_needed=true" >> "$GITHUB_OUTPUT"
+            echo "Not a pull request — Percy will always run"
+            exit 0
+          fi
+
+          CHANGED_FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
+
+          percy_needed=false
+          while IFS= read -r file; do
+            case "$file" in
+              packages/host/*|packages/boxel-ui/*|packages/boxel-icons/*|packages/base/*|packages/catalog-realm/*|packages/runtime-common/*)
+                percy_needed=true
+                echo "UI-relevant change detected: $file"
+                break
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          echo "percy_needed=$percy_needed" >> "$GITHUB_OUTPUT"
+          if [ "$percy_needed" = "true" ]; then
+            echo "Percy will run — UI-relevant changes detected"
+          else
+            echo "Percy will be skipped — no UI-relevant changes"
+          fi
+
   test-web-assets:
     name: Build test web assets
     uses: ./.github/workflows/test-web-assets.yaml
@@ -37,7 +74,7 @@ jobs:
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
-    needs: test-web-assets
+    needs: [test-web-assets, check-percy]
     strategy:
       fail-fast: false
       matrix:
@@ -95,21 +132,29 @@ jobs:
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
+          if [ "$PERCY_ENABLED" = "true" ]; then
+            TEST_CMD="pnpm test-with-percy"
+          else
+            echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
+            TEST_CMD="pnpm test:wait-for-servers"
+          fi
+
           set +e
-          dbus-run-session -- pnpm test-with-percy 2>&1 | tee /tmp/test-output.log
+          dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output.log
           exit_code=${PIPESTATUS[0]}
           if [ $exit_code -ne 0 ] && grep -q "ChunkLoadError" /tmp/test-output.log; then
             echo ""
             echo "::warning::ChunkLoadError detected — retrying shard ${{ matrix.shardIndex }}..."
             echo ""
-            dbus-run-session -- pnpm test-with-percy
+            dbus-run-session -- $TEST_CMD
             exit_code=$?
           fi
           exit $exit_code
         env:
+          PERCY_ENABLED: ${{ needs.check-percy.outputs.percy_needed }}
           SKIP_CATALOG: true
           PERCY_GZIP: true
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          PERCY_TOKEN: ${{ needs.check-percy.outputs.percy_needed == 'true' && secrets.PERCY_TOKEN_HOST || '' }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
@@ -193,11 +238,11 @@ jobs:
 
   host-percy-finalize:
     name: Finalise Percy
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
     concurrency:
       group: host-percy-finalize-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    needs: host-test
+    needs: [host-test, check-percy]
     runs-on: ubuntu-latest
 
     steps:

@@ -1,6 +1,7 @@
 import type { LooseCardResource, FileMetaResource } from './index';
 import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
+import { unresolveCardReference } from './card-reference-resolver';
 
 export function maybeURL(
   possibleURL: string,
@@ -85,6 +86,50 @@ export function hasExtension(value: string) {
     let lastSegment = path.split('/').pop() ?? '';
     let lastDotIndex = lastSegment.lastIndexOf('.');
     return lastDotIndex > 0 && lastDotIndex < lastSegment.length - 1;
+  }
+}
+
+// Converts all instance URLs in a card resource from resolved HTTP URLs
+// to registered prefix form (e.g. @cardstack/catalog/...) where applicable.
+// Handles: resource.id, links.self, relationship links.self, relationship data.id/data[].id
+export function unresolveResourceInstanceURLs(
+  resourceJson: LooseCardResource | FileMetaResource,
+): void {
+  if (resourceJson.id) {
+    resourceJson.id = unresolveCardReference(resourceJson.id);
+  }
+  if (resourceJson.links) {
+    let links = resourceJson.links;
+    if (links.self) {
+      links.self = unresolveCardReference(links.self);
+    }
+  }
+  let relationships = resourceJson.relationships;
+  if (relationships) {
+    for (let { relationship } of relationshipEntries(relationships)) {
+      let links = relationship.links;
+      if (links && links.self) {
+        links.self = unresolveCardReference(links.self);
+      }
+      let data = relationship.data;
+      if (data && typeof data === 'object') {
+        if (Array.isArray(data)) {
+          for (let item of data) {
+            if (item && typeof item === 'object' && 'id' in item) {
+              let typedItem = item as { id?: string };
+              if (typeof typedItem.id === 'string') {
+                typedItem.id = unresolveCardReference(typedItem.id);
+              }
+            }
+          }
+        } else if ('id' in data) {
+          let typedData = data as { id?: string };
+          if (typeof typedData.id === 'string') {
+            typedData.id = unresolveCardReference(typedData.id);
+          }
+        }
+      }
+    }
   }
 }
 

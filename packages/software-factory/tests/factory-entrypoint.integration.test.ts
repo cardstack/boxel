@@ -23,6 +23,12 @@ interface FactoryEntrypointIntegrationSummary {
     url: string;
     ownerUsername: string;
   };
+  bootstrap: {
+    projectId: string;
+    knowledgeArticleIds: string[];
+    ticketIds: string[];
+    activeTicket: { id: string; status: string };
+  };
   result: Record<string, string>;
 }
 
@@ -98,6 +104,44 @@ module('factory-entrypoint integration', function () {
             },
           }),
         );
+      } else if (
+        request.url ===
+          '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
+        request.method === 'GET'
+      ) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ realms: [] }));
+      } else if (
+        request.url ===
+          '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
+        request.method === 'PUT'
+      ) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end('{}');
+      } else if (
+        request.url === '/hassan/personal/_session' &&
+        request.method === 'POST'
+      ) {
+        // Realm session for target realm auth
+        response.writeHead(201, {
+          'content-type': 'application/json',
+          Authorization: 'Bearer target-realm-token',
+        });
+        response.end('');
+      } else if (
+        request.url?.startsWith('/hassan/personal/') &&
+        request.method === 'GET'
+      ) {
+        // Card existence check — return 404 for first run
+        response.writeHead(404, { 'content-type': 'text/plain' });
+        response.end('not found');
+      } else if (
+        request.url?.startsWith('/hassan/personal/') &&
+        request.method === 'POST'
+      ) {
+        // Card creation — accept it
+        response.writeHead(204);
+        response.end();
       } else {
         response.writeHead(404, { 'content-type': 'text/plain' });
         response.end(`Unexpected request: ${request.method} ${request.url}`);
@@ -165,6 +209,16 @@ module('factory-entrypoint integration', function () {
       ]);
       assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
       assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
+      assert.strictEqual(
+        summary.bootstrap.projectId,
+        'Project/sticky-note-mvp',
+      );
+      assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
+      assert.strictEqual(
+        summary.bootstrap.activeTicket.id,
+        'Ticket/sticky-note-define-core',
+      );
+      assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
       assert.deepEqual(summary.result, {
         status: 'ready',
         nextStep: 'bootstrap-and-select-active-ticket',

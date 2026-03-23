@@ -7,6 +7,15 @@ export function registerCardReferencePrefix(
   prefixMappings.set(prefix, targetURL);
 }
 
+export function isRegisteredPrefix(reference: string): boolean {
+  for (let [prefix] of prefixMappings) {
+    if (reference.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function isUrlLikeReference(ref: string): boolean {
   return (
     ref.startsWith('.') ||
@@ -31,4 +40,23 @@ export function resolveCardReference(
     );
   }
   return new URL(reference, relativeTo).href;
+}
+
+// Reverse of resolveCardReference: converts a resolved URL back to
+// its registered prefix form if one matches.
+// e.g. "http://localhost:4201/catalog/foo" → "@cardstack/catalog/foo"
+export function unresolveCardReference(resolvedURL: string): string {
+  for (let [prefix, target] of prefixMappings) {
+    if (resolvedURL.startsWith(target)) {
+      return prefix + resolvedURL.slice(target.length);
+    }
+  }
+  return resolvedURL;
+}
+
+// Converts a card instance ID (which may be a registered prefix like
+// @cardstack/catalog/foo or a regular URL) to a URL object by resolving
+// the prefix to a real URL when needed.
+export function cardIdToURL(id: string): URL {
+  return new URL(resolveCardReference(id, undefined));
 }
