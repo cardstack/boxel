@@ -8,10 +8,16 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+if [ -n "$ENV_MODE" ]; then
+  WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_MGR_URL}"
+else
+  WORKER_MANAGER_ARG="$1"
+fi
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT="${PGPORT}" \
-  PGDATABASE=boxel_base \
+  PGDATABASE="${PGDATABASE:-boxel_base}" \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
@@ -19,14 +25,14 @@ NODE_ENV=development \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly main \
-  --port=4201 \
+  --port="${REALM_PORT:-4201}" \
   --matrixURL="${MATRIX_URL_VAL}" \
-  --realmsRootPath='./realms/localhost_4201_base' \
+  --realmsRootPath="${REALMS_ROOT:-./realms/localhost_4201_base}" \
   --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \
-  $1 \
+  $WORKER_MANAGER_ARG \
   \
   --path='../base' \
   --username='base_realm' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/'
+  --toUrl="${REALM_BASE_URL:-http://localhost:4201}/base/"
