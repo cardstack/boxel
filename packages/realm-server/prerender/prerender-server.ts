@@ -37,7 +37,10 @@ webServerInstance.on('listening', () => {
   actualPort =
     (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
   if (isEnvironmentMode()) {
-    registerService(webServerInstance!, 'prerender');
+    registerService(
+      webServerInstance!,
+      process.env.PRERENDER_SERVICE_NAME || 'prerender',
+    );
   }
   log.info(`prerender server HTTP listening on port ${actualPort}`);
 });

@@ -64,7 +64,16 @@ export function getSynapseContainerName(): string {
   return 'boxel-synapse';
 }
 
+let _synapseURLOverride: string | undefined;
+
+export function setSynapseURL(url: string): void {
+  _synapseURLOverride = url;
+}
+
 export function getSynapseURL(): string {
+  if (_synapseURLOverride) {
+    return _synapseURLOverride;
+  }
   if (!isEnvironmentMode()) {
     return 'http://localhost:8008';
   }

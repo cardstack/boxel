@@ -170,6 +170,8 @@ export async function startPrerenderServer(
     BOXEL_HOST_URL: envMode
       ? serverIndexUrl
       : (process.env.HOST_URL ?? 'http://localhost:4200'),
+    // Use a distinct service name so it doesn't overwrite the dev prerender
+    PRERENDER_SERVICE_NAME: ISOLATED_PRERENDER_SERVICE,
     LOG_LEVELS:
       process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
@@ -284,7 +286,7 @@ export async function startServer({
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
   let matrixURL = envMode
-    ? `http://matrix.${envSlug}.localhost`
+    ? `http://matrix-test.${envSlug}.localhost`
     : `http://localhost:${synapse.port}`;
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
@@ -298,6 +300,8 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
+    // Use a distinct service name so the worker doesn't overwrite the dev worker
+    ...(envMode ? [`--serviceName='${ISOLATED_WORKER_SERVICE}'`] : []),
 
     `--fromUrl='${serverIndexUrl}/test/'`,
     `--toUrl='${serverIndexUrl}/test/'`,
@@ -331,6 +335,8 @@ export async function startServer({
     `--workerManagerPort=${workerManagerPort}`,
     `--prerendererUrl='${prerenderURL}'`,
     `--useRegistrationSecretFunction`,
+    // Use a distinct service name so it doesn't overwrite the dev realm server
+    ...(envMode ? [`--serviceName='${ISOLATED_REALM_SERVICE}'`] : []),
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,

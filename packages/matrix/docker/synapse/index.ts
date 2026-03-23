@@ -16,7 +16,7 @@ import {
   isEnvironmentMode,
   getSynapseContainerName,
   getSynapseURL,
-  registerSynapseWithTraefik,
+  registerServiceWithTraefik,
 } from '../../helpers/environment-config';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
@@ -110,6 +110,7 @@ interface StartOptions {
   dataDir?: string;
   containerName?: string;
   suppressRegistrationSecretFile?: true;
+  traefikServiceName?: string;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -194,7 +195,8 @@ export async function synapseStart(
     let firstLine = portOutput.split('\n')[0];
     let hostPort = parseInt(firstLine.split(':').pop()!, 10);
     console.log(`Synapse dynamic host port: ${hostPort}`);
-    registerSynapseWithTraefik(hostPort);
+    let synapseServiceName = opts?.traefikServiceName || 'matrix';
+    registerServiceWithTraefik(synapseServiceName, hostPort);
   }
 
   const synapse: SynapseInstance = { synapseId, ...synCfg };

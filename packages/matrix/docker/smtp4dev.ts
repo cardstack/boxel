@@ -9,16 +9,22 @@ import { execSync } from 'child_process';
 
 interface Options {
   mailClientPort?: number;
+  traefikServiceName?: string;
 }
+
+let _smtpServiceName = 'smtp';
 
 function smtpContainerName(): string {
   if (isEnvironmentMode()) {
-    return `boxel-smtp-${getEnvironmentSlug()}`;
+    return `boxel-${_smtpServiceName}-${getEnvironmentSlug()}`;
   }
   return 'boxel-smtp';
 }
 
 export async function smtpStart(opts?: Options) {
+  if (opts?.traefikServiceName) {
+    _smtpServiceName = opts.traefikServiceName;
+  }
   let containerName = smtpContainerName();
   try {
     await smtpStop();
@@ -44,7 +50,7 @@ export async function smtpStart(opts?: Options) {
       encoding: 'utf-8',
     }).trim();
     let hostPort = parseInt(portOutput.split('\n')[0].split(':').pop()!, 10);
-    registerServiceWithTraefik('smtp', hostPort);
+    registerServiceWithTraefik(_smtpServiceName, hostPort);
     console.log(
       `Started smtp4dev with id ${containerId} on dynamic port ${hostPort} (Traefik).`,
     );
@@ -59,7 +65,7 @@ export async function smtpStart(opts?: Options) {
 export async function smtpStop() {
   let containerName = smtpContainerName();
   if (isEnvironmentMode()) {
-    deregisterServiceFromTraefik('smtp');
+    deregisterServiceFromTraefik(_smtpServiceName);
   }
   await dockerStop({ containerId: containerName });
   await dockerRm({ containerId: containerName });

@@ -28,7 +28,7 @@ import { randomUUID } from 'crypto';
 export { realmDomain, serverIndexUrl };
 export const testHost = appURL;
 export const mailHost = isEnvironmentMode()
-  ? `http://smtp.${getEnvironmentSlug()}.localhost`
+  ? `http://smtp-test.${getEnvironmentSlug()}.localhost`
   : 'http://localhost:5001';
 export const initialRoomName = 'New AI Assistant Chat';
 export const REGISTRATION_TOKEN = 'abc123';
