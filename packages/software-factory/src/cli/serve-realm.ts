@@ -39,8 +39,22 @@ async function main(): Promise<void> {
 
   console.log(JSON.stringify(payload, null, 2));
 
+  let cleanExit = false;
+  process.on('exit', () => {
+    if (!cleanExit) {
+      for (let pid of runtime.childPids) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // already dead
+        }
+      }
+    }
+  });
+
   let stop = async () => {
     await runtime.stop();
+    cleanExit = true;
     process.exit(0);
   };
 

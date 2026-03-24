@@ -2,7 +2,7 @@
  * Smoke test for the FactoryAgent → OpenRouter round-trip.
  *
  * Usage:
- *   pnpm factory:agent-smoke -- --realm-server-url <url> [--model <model>]
+ *   pnpm factory:agent-smoke --realm-server-url <url> [--model <model>]
  *
  * Prerequisites:
  *
@@ -15,7 +15,7 @@
  *      a. OPENROUTER_API_KEY env var (simplest for local dev / CI):
  *         Calls OpenRouter directly, bypassing the realm server proxy.
  *
- *           OPENROUTER_API_KEY=sk-or-... pnpm factory:agent-smoke -- --realm-server-url <url>
+ *           OPENROUTER_API_KEY=sk-or-... pnpm factory:agent-smoke --realm-server-url <url>
  *
  *      b. Realm server proxy_endpoints table (production path):
  *         The factory goes through _request-forward, which reads the key from
@@ -56,8 +56,14 @@ import {
 } from './lib/factory-agent';
 
 async function main(): Promise<void> {
+  let argv = process.argv.slice(2);
+  // Strip leading '--' that pnpm/ts-node passes through
+  if (argv[0] === '--') {
+    argv = argv.slice(1);
+  }
+
   let { values } = parseArgs({
-    args: process.argv.slice(2),
+    args: argv,
     options: {
       'realm-server-url': { type: 'string' },
       model: { type: 'string' },
@@ -68,7 +74,7 @@ async function main(): Promise<void> {
   let realmServerUrl = values['realm-server-url'];
   if (!realmServerUrl) {
     console.error(
-      'Usage: pnpm factory:agent-smoke -- --realm-server-url <url> [--model <model>]',
+      'Usage: pnpm factory:agent-smoke --realm-server-url <url> [--model <model>]',
     );
     process.exit(1);
   }
