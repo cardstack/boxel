@@ -1,0 +1,18 @@
+#!/bin/sh
+#MISE description="Ensure per-environment database exists"
+#MISE depends=["infra:ensure-pg"]
+
+# In standard mode the database is always 'boxel' — nothing to create.
+[ -z "$BOXEL_ENVIRONMENT" ] && exit 0
+
+DB_SUFFIX="${1:-$ENV_SLUG}"
+DB_NAME="boxel_${DB_SUFFIX}"
+
+echo "Ensuring database '${DB_NAME}' exists…"
+
+if docker exec boxel-pg psql -U postgres -lqt | cut -d \| -f 1 | grep -qw "$DB_NAME"; then
+  echo "Database '${DB_NAME}' already exists."
+else
+  docker exec boxel-pg createdb -U postgres "$DB_NAME"
+  echo "Created database '${DB_NAME}'."
+fi

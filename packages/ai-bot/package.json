@@ -39,7 +39,6 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
-    "start:development": "sh scripts/start-development.sh",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
     "get-chat": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/get_chat.ts"
   }

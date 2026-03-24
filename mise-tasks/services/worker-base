@@ -1,0 +1,21 @@
+#!/bin/sh
+#MISE description="Start worker manager for base realm only"
+#MISE depends=["infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE dir="packages/realm-server"
+
+NODE_ENV=development \
+  NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
+  PGPORT="${PGPORT}" \
+  PGDATABASE=boxel_base \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  LOW_CREDIT_THRESHOLD=2000 \
+  ts-node \
+  --transpileOnly worker-manager \
+  --port=4213 \
+  --matrixURL="${MATRIX_URL_VAL}" \
+  --prerendererUrl="${PRERENDER_MGR_URL}" \
+  \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl='http://localhost:4201/base/'

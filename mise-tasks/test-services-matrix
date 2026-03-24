@@ -1,0 +1,14 @@
+#!/bin/sh
+#MISE description="Start services for matrix test suite (base realm only)"
+#MISE dir="packages/realm-server"
+
+pnpm --dir=../skills-realm skills:setup
+
+READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
+
+WAIT_ON_TIMEOUT=600000 NODE_NO_WARNINGS=1 SKIP_SUBMISSION=true \
+  start-server-and-test \
+    'run-p -ln start:pg start:icons start:prerender-dev start:prerender-manager-dev start:worker-base start:base' \
+    "${BASE_REALM_READY}|${ICONS_URL}" \
+    'wait'

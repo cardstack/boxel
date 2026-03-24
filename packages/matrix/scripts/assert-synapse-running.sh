@@ -2,8 +2,11 @@
 # Check if the correct Synapse container is running (environment-aware).
 # If not running, start it.
 
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/../../../scripts/env-slug.sh"
+
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  SLUG=$(resolve_env_slug)
   CONTAINER_NAME="boxel-synapse-${SLUG}"
 else
   CONTAINER_NAME="boxel-synapse"

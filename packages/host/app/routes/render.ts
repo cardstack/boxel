@@ -21,6 +21,7 @@ import {
   SupportedMimeType,
   isCardError,
   isBaseDefInstance,
+  cardIdToURL,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -51,6 +52,7 @@ import {
   beginTimerBlock,
   appendRenderTimerSummaryToStack,
   resetRenderTimerStats,
+  scheduleNativeTimeout,
 } from '../utils/render-timer-stub';
 
 import type LoaderService from '../services/loader-service';
@@ -417,7 +419,7 @@ export default class RenderRoute extends Route<Model> {
           };
 
           let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: new URL(id),
+            relativeTo: cardIdToURL(id),
             realm: realmURL,
             doNotPersist: true,
           });
@@ -728,6 +730,15 @@ export default class RenderRoute extends Route<Model> {
   async #waitForNextRenderFrame(): Promise<void> {
     if (typeof requestAnimationFrame !== 'function') {
       await Promise.resolve();
+      return;
+    }
+    // In the prerender context, requestAnimationFrame is throttled in
+    // background tabs (~1 frame/10s) and may be slow in headless browsers.
+    // Use a native setTimeout(0) instead — this yields to the event loop so
+    // Ember's runloop can flush, without being subject to RAF throttling.
+    // The timer bypasses the prerender timer stub via scheduleNativeTimeout.
+    if ((globalThis as any).__boxelRenderContext) {
+      await new Promise<void>((resolve) => scheduleNativeTimeout(resolve, 0));
       return;
     }
     await new Promise<void>((resolve) =>

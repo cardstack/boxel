@@ -10,6 +10,7 @@ import {
 } from './src/runtime-metadata';
 
 const packageRoot = resolve(__dirname);
+const tsNodeBin = resolve(packageRoot, 'node_modules', '.bin', 'ts-node');
 const configuredRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
@@ -155,16 +156,21 @@ export default async function globalSetup() {
 
   supportLog.debug(`starting serve:support for realm ${realmDir}`);
   let logs = '';
-  let child = spawn('pnpm', ['serve:support', realmDir], {
-    cwd: packageRoot,
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: metadataFile,
-      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
+  let child = spawn(
+    tsNodeBin,
+    ['--transpileOnly', 'src/cli/serve-support.ts', realmDir],
+    {
+      cwd: packageRoot,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        NODE_NO_WARNINGS: '1',
+        SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: metadataFile,
+        SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
+      },
     },
-  });
+  );
 
   mirrorChildOutput(
     child,
