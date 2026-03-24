@@ -1052,7 +1052,8 @@ module(basename(__filename), function () {
           );
 
           // Verify the relationship resolved correctly
-          let bestFriendRel = doc.data.relationships?.bestFriend as Relationship;
+          let bestFriendRel = doc.data.relationships
+            ?.bestFriend as Relationship;
           assert.ok(bestFriendRel, 'bestFriend relationship exists');
           assert.deepEqual(
             bestFriendRel.data,
@@ -1076,10 +1077,7 @@ module(basename(__filename), function () {
           let includedMango = doc.included!.find(
             (r: any) => r.id === `${prefixForTest}Pet/mango`,
           );
-          assert.ok(
-            includedMango,
-            'linked card is included in the response',
-          );
+          assert.ok(includedMango, 'linked card is included in the response');
           assert.strictEqual(
             (includedMango as any)?.attributes?.name,
             'Mango',
