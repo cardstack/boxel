@@ -10,7 +10,10 @@ import {
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker';
-import { unresolveCardReference } from './card-reference-resolver';
+import {
+  unresolveCardReference,
+  resolveCardReference,
+} from './card-reference-resolver';
 
 type FetchingModule = {
   state: 'fetching';
@@ -166,7 +169,9 @@ export class Loader {
       consumed.push(moduleIdentifier);
     }
 
-    let resolvedModuleIdentifier = new URL(moduleIdentifier);
+    let resolvedModuleIdentifier = new URL(
+      resolveCardReference(moduleIdentifier, undefined),
+    );
     let module = this.getModule(resolvedModuleIdentifier.href);
 
     if (!module || module.state === 'fetching') {
