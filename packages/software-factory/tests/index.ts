@@ -4,6 +4,7 @@ import './factory-bootstrap.test';
 import './factory-brief.test';
 import './factory-entrypoint.test';
 import './factory-entrypoint.integration.test';
+import './factory-skill-loader.test';
 import './factory-target-realm.test';
 import './factory-tool-executor.test';
 import './factory-tool-executor.integration.test';
