@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vault — Data Explorer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Menlo', 'Monaco', 'Courier New', monospace; background: #0d1117; color: #e6edf3; width: 375px; font-size: 11px; }
+    header { background: #161b22; border-bottom: 1px solid #30363d; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 13px; font-weight: 700; color: #58a6ff; font-family: -apple-system, sans-serif; }
+    .breadcrumb { font-size: 10px; color: #8b949e; }
+    .breadcrumb span { color: #e6edf3; }
+    .toolbar { background: #161b22; border-bottom: 1px solid #30363d; padding: 8px 14px; display: flex; align-items: center; gap: 8px; }
+    .search { background: #0d1117; border: 1px solid #30363d; border-radius: 5px; padding: 4px 8px; color: #8b949e; font-size: 10px; flex: 1; font-family: inherit; }
+    .btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; font-size: 10px; padding: 4px 8px; border-radius: 5px; font-family: inherit; }
+    .schema-bar { display: flex; overflow-x: auto; gap: 0; background: #161b22; border-bottom: 1px solid #30363d; padding: 0 14px; }
+    .schema-item { font-size: 10px; color: #8b949e; padding: 8px 10px; border-bottom: 2px solid transparent; white-space: nowrap; font-family: -apple-system, sans-serif; }
+    .schema-item.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #161b22; }
+    th { text-align: left; padding: 7px 10px; font-size: 9px; font-weight: 600; color: #8b949e; border-bottom: 1px solid #30363d; text-transform: uppercase; letter-spacing: 0.5px; }
+    td { padding: 6px 10px; border-bottom: 1px solid #21262d; font-size: 10px; color: #e6edf3; }
+    tr:hover td { background: #161b22; }
+    .type-tag { font-size: 9px; color: #8b949e; background: #21262d; padding: 1px 5px; border-radius: 3px; }
+    .id { color: #8b949e; }
+    .null { color: #6e7681; font-style: italic; }
+    .string { color: #a5d6ff; }
+    .num { color: #79c0ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Vault</div>
+    <div class="breadcrumb">db / <span>users</span></div>
+  </header>
+  <div class="toolbar">
+    <input class="search" value="SELECT * FROM users LIMIT 20" readonly />
+    <button class="btn">▶ Run</button>
+  </div>
+  <div class="schema-bar">
+    <div class="schema-item active">users</div>
+    <div class="schema-item">orders</div>
+    <div class="schema-item">products</div>
+    <div class="schema-item">events</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>id <span class="type-tag">int</span></th>
+        <th>name <span class="type-tag">str</span></th>
+        <th>plan <span class="type-tag">str</span></th>
+        <th>created</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="id">1</td><td class="string">Alice Chen</td><td class="string">pro</td><td class="num">2024-01-12</td></tr>
+      <tr><td class="id">2</td><td class="string">Bob Ramos</td><td class="string">free</td><td class="num">2024-01-14</td></tr>
+      <tr><td class="id">3</td><td class="string">Priya Singh</td><td class="string">team</td><td class="num">2024-02-03</td></tr>
+      <tr><td class="id">4</td><td class="string">Marco Liu</td><td class="null">null</td><td class="num">2024-02-17</td></tr>
+      <tr><td class="id">5</td><td class="string">Sara Kim</td><td class="string">pro</td><td class="num">2024-03-01</td></tr>
+      <tr><td class="id">6</td><td class="string">Dev Patel</td><td class="string">team</td><td class="num">2024-03-05</td></tr>
+      <tr><td class="id">7</td><td class="string">Lena Müller</td><td class="string">free</td><td class="num">2024-03-07</td></tr>
+      <tr><td class="id">8</td><td class="string">Kwame Asante</td><td class="string">pro</td><td class="num">2024-03-08</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

@@ -14,15 +14,28 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
     </button>
     <style scoped>
       .workspace {
-        min-width: 251.6px;
-        width: 251.6px;
-        height: 215.3px;
+        min-width: 250px;
+        width: 250px;
+        height: 166px;
         display: flex;
         flex-direction: column;
         border-radius: 15px;
-        border: solid 1px rgba(255, 255, 255, 0.5);
+        border: none;
         overflow: hidden;
         padding: 0;
+        position: relative;
+      }
+      .workspace::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 15px;
+        border: 1px solid var(--item-container-border-color, rgba(255 255 255 / 15%));
+        pointer-events: none;
+        z-index: 2;
+      }
+      .workspace:hover::after {
+        border-color: var(--item-container-border-hover-color, rgba(255 255 255 / 40%));
       }
       .workspace:focus-visible {
         outline-offset: -1px;

@@ -102,6 +102,13 @@ type PanelWidths = {
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
+  @tracked private sortOrder: 'default' | 'hosted-only' = 'default';
+
+  @action private setSortOrder(event: Event) {
+    this.sortOrder = (event.target as HTMLSelectElement).value as
+      | 'default'
+      | 'hosted-only';
+  }
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
@@ -401,6 +408,20 @@ export default class SubmodeLayout extends Component<Signature> {
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-workspace-chooser-toggle
             />
+            {{#if this.workspaceChooserOpened}}
+              <div class='sort-controls'>
+                <label class='sort-label' for='workspace-sort-dropdown'>Sort by</label>
+                <select
+                  id='workspace-sort-dropdown'
+                  class='sort-dropdown'
+                  {{on 'change' this.setSortOrder}}
+                  aria-label='Filter workspaces'
+                >
+                  <option value='default'>View All</option>
+                  <option value='hosted-only'>Hosted Only</option>
+                </select>
+              </div>
+            {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -432,7 +453,10 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser />
+            <WorkspaceChooser
+              @sortOrder={{this.sortOrder}}
+              @onSortChange={{this.setSortOrder}}
+            />
           {{/if}}
 
           {{yield
@@ -572,6 +596,50 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--operator-mode-spacing);
+      }
+
+      .sort-controls {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        pointer-events: auto;
+      }
+      .sort-label {
+        color: rgba(255 255 255 / 50%);
+        font: 400 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+        white-space: nowrap;
+      }
+      .sort-dropdown {
+        appearance: none;
+        background-color: rgba(255 255 255 / 8%);
+        border: 1px solid rgba(255 255 255 / 25%);
+        border-radius: 7px;
+        color: var(--boxel-light);
+        cursor: pointer;
+        font: 400 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
+        padding: 6px 32px 6px 14px;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+      }
+      .sort-dropdown:hover {
+        background-color: rgba(255 255 255 / 12%);
+        border-color: rgba(255 255 255 / 50%);
+      }
+      .sort-dropdown:focus {
+        outline: none;
+        border-color: rgba(255 255 255 / 50%);
+      }
+      .sort-dropdown option {
+        background-color: #1a1628;
+        color: var(--boxel-light);
       }
 
       .submode-switcher {

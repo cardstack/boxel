@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prism — Content Studio</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9fafb; color: #111827; width: 375px; }
+    header { background: white; border-bottom: 1px solid #e5e7eb; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 15px; font-weight: 700; color: #6d28d9; }
+    .new-btn { background: #6d28d9; color: white; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; }
+    .tabs { display: flex; gap: 0; background: white; border-bottom: 1px solid #e5e7eb; padding: 0 16px; }
+    .tab { font-size: 12px; color: #6b7280; padding: 10px 12px; border-bottom: 2px solid transparent; }
+    .tab.active { color: #6d28d9; border-bottom-color: #6d28d9; font-weight: 600; }
+    .content { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .post-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; }
+    .post-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+    .post-title { font-size: 13px; font-weight: 600; color: #111827; line-height: 1.3; }
+    .status { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+    .status.published { background: #d1fae5; color: #065f46; }
+    .status.draft { background: #fef3c7; color: #92400e; }
+    .status.review { background: #dbeafe; color: #1e40af; }
+    .post-meta { display: flex; gap: 10px; margin-top: 6px; }
+    .post-meta span { font-size: 10px; color: #9ca3af; }
+    .channel { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #6b7280; background: #f3f4f6; padding: 2px 6px; border-radius: 4px; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Prism</div>
+    <div class="new-btn">+ New Post</div>
+  </header>
+  <div class="tabs">
+    <div class="tab active">All</div>
+    <div class="tab">Published</div>
+    <div class="tab">Drafts</div>
+    <div class="tab">Scheduled</div>
+  </div>
+  <div class="content">
+    <div class="post-card">
+      <div class="post-header">
+        <div class="post-title">Q2 Product Launch Campaign</div>
+        <span class="status published">Published</span>
+      </div>
+      <div class="channel">📣 Email · Blog · Social</div>
+      <div class="post-meta">
+        <span>Mar 8 · 4 min read</span>
+        <span>1.2k views</span>
+      </div>
+    </div>
+    <div class="post-card">
+      <div class="post-header">
+        <div class="post-title">Spring Brand Refresh — Style Guide Update</div>
+        <span class="status review">In Review</span>
+      </div>
+      <div class="channel">🎨 Brand</div>
+      <div class="post-meta">
+        <span>Mar 7 · Updated 2h ago</span>
+      </div>
+    </div>
+    <div class="post-card">
+      <div class="post-header">
+        <div class="post-title">Newsletter: Developer Spotlight #12</div>
+        <span class="status draft">Draft</span>
+      </div>
+      <div class="channel">✉️ Newsletter</div>
+      <div class="post-meta">
+        <span>Mar 5 · 60% complete</span>
+      </div>
+    </div>
+    <div class="post-card">
+      <div class="post-header">
+        <div class="post-title">SEO Audit — Homepage Copy Revisions</div>
+        <span class="status published">Published</span>
+      </div>
+      <div class="channel">🌐 Website</div>
+      <div class="post-meta">
+        <span>Mar 3 · 843 views</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
