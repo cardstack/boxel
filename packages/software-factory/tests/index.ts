@@ -1,6 +1,9 @@
+import './factory-agent.test';
+import './factory-agent.integration.test';
 import './factory-bootstrap.test';
 import './factory-brief.test';
 import './factory-entrypoint.test';
 import './factory-entrypoint.integration.test';
+import './factory-skill-loader.test';
 import './factory-target-realm.test';
 import './realm-auth.test';
