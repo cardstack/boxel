@@ -173,6 +173,7 @@ import './publish-unpublish-realm-test';
 import './boxel-domain-availability-test';
 import './get-boxel-claimed-domain-test';
 import './claim-boxel-domain-test';
+import './card-reference-resolver-test';
 import './command-parsing-utils-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
