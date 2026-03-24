@@ -93,7 +93,7 @@ export type StartedCompatRealmProxy = {
 };
 
 export type RunningFactoryStack = {
-  prerender: {
+  prerender?: {
     stop(): Promise<void>;
   };
   realmServer: SpawnedProcess;
@@ -168,6 +168,10 @@ export const DEFAULT_PG_USER =
 export const DEFAULT_PRERENDER_PORT = Number(
   process.env.SOFTWARE_FACTORY_PRERENDER_PORT ?? 0,
 );
+export const CONFIGURED_PRERENDER_URL = process.env
+  .SOFTWARE_FACTORY_PRERENDER_URL
+  ? new URL(process.env.SOFTWARE_FACTORY_PRERENDER_URL)
+  : undefined;
 // The seeded test Postgres used by the harness runs with max_connections=20, so
 // isolated workers need a smaller per-process pool cap to keep workers=2 stable.
 export const DEFAULT_PG_POOL_MAX = Number(

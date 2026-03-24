@@ -75,6 +75,19 @@ const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
 const CONSOLE_ERROR_LIMIT = 50;
 
+export class StandbyTargetNotReadyError extends Error {}
+
+function isExpectedStandbyTargetNotReadyError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error instanceof StandbyTargetNotReadyError ||
+    /ERR_CONNECTION_REFUSED|returned HTTP 50[23]/.test(error.message)
+  );
+}
+
 export class PagePool {
   #affinityPages = new Map<string, Set<PoolEntry>>();
   #standbys = new Set<StandbyEntry>();
@@ -329,10 +342,12 @@ export class PagePool {
       try {
         return await this.#createStandby();
       } catch (e) {
-        log.error(
-          `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`,
-          e,
-        );
+        let message = `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`;
+        if (isExpectedStandbyTargetNotReadyError(e)) {
+          log.debug(message, e);
+        } else {
+          log.error(message, e);
+        }
         if (attempt >= STANDBY_CREATION_RETRIES) {
           return undefined;
         }
@@ -369,7 +384,11 @@ export class PagePool {
       this.#standbys.add(entry);
       return entry;
     } catch (e) {
-      log.error('Error creating standby page:', e);
+      if (isExpectedStandbyTargetNotReadyError(e)) {
+        log.debug('Standby page target is not ready yet:', e);
+      } else {
+        log.error('Error creating standby page:', e);
+      }
       if (context) {
         try {
           await context.close();
@@ -384,10 +403,31 @@ export class PagePool {
   }
 
   async #loadStandbyPage(page: Page, pageId: string): Promise<void> {
-    await page.goto(`${this.#boxelHostURL}/_standby`, {
-      waitUntil: 'domcontentloaded',
-      timeout: this.#standbyTimeoutMs,
-    });
+    let standbyURL = `${this.#boxelHostURL}/_standby`;
+    try {
+      let response = await page.goto(standbyURL, {
+        waitUntil: 'domcontentloaded',
+        timeout: this.#standbyTimeoutMs,
+      });
+      let status = response?.status();
+      if (status === 502 || status === 503) {
+        throw new StandbyTargetNotReadyError(
+          `Standby target ${standbyURL} returned HTTP ${status}`,
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/.test(
+          error.message,
+        )
+      ) {
+        throw new StandbyTargetNotReadyError(
+          `Standby target ${standbyURL} is not reachable yet: ${error.message}`,
+        );
+      }
+      throw error;
+    }
     await this.#withStandbyTimeout(
       () =>
         page.waitForFunction(() => {

@@ -12,6 +12,7 @@ import {
   type PreparedTemplateMetadata,
   readSupportMetadata,
 } from '../src/runtime-metadata';
+import { startHarnessPrerenderServer } from '../src/harness/support-services';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
 type StartedFactoryRealm = {
@@ -45,6 +46,10 @@ type FactoryRealmOptions = {
 type FactoryRealmInternalFixtures = {
   realm: StartedFactoryRealm;
   testWorkerPortSet: TestWorkerPortSet;
+  testWorkerPrerender: {
+    url: string;
+    stop(): Promise<void>;
+  };
 };
 
 type SharedRealmHandle = {
@@ -214,6 +219,7 @@ async function waitForMetadataFile<T>(
 async function startRealmProcess(
   realmDir = defaultRealmDir,
   testWorkerPortSet: TestWorkerPortSet,
+  testWorkerPrerenderURL: string,
 ) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
   let metadataFile = join(tempDir, 'runtime.json');
@@ -267,6 +273,7 @@ async function startRealmProcess(
         SOFTWARE_FACTORY_PRERENDER_PORT: String(
           testWorkerPortSet.prerenderPort,
         ),
+        SOFTWARE_FACTORY_PRERENDER_URL: testWorkerPrerenderURL,
         ...(supportMetadata?.context
           ? {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
@@ -386,10 +393,15 @@ async function acquireSharedRealm(
   key: string,
   realmDir: string,
   testWorkerPortSet: TestWorkerPortSet,
+  testWorkerPrerenderURL: string,
 ): Promise<StartedFactoryRealm> {
   let existing = sharedRealms.get(key);
   if (!existing) {
-    existing = startRealmProcess(realmDir, testWorkerPortSet).then((realm) => ({
+    existing = startRealmProcess(
+      realmDir,
+      testWorkerPortSet,
+      testWorkerPrerenderURL,
+    ).then((realm) => ({
       realm,
       refCount: 0,
     }));
@@ -432,15 +444,45 @@ export const test = base.extend<
     },
     { scope: 'worker' },
   ],
+  testWorkerPrerender: [
+    async ({ browserName: _browserName, testWorkerPortSet }, use) => {
+      // Prerender is intentionally testWorker-scoped instead of test-scoped.
+      // It is stateless, and now that the compat/realm ports are also stable
+      // for the same Playwright testWorker, each restarted realm stack can
+      // point back to the same prerender process without changing BOXEL_HOST_URL.
+      let boxelHostURL = `http://localhost:${testWorkerPortSet.compatRealmServerPort}`;
+      let prerender = await startHarnessPrerenderServer({
+        boxelHostURL,
+        port: testWorkerPortSet.prerenderPort,
+      });
+      try {
+        await use(prerender);
+      } finally {
+        await prerender.stop();
+      }
+    },
+    { scope: 'worker' },
+  ],
 
   realm: async (
-    { browserName: _browserName, realmDir, realmServerMode, testWorkerPortSet },
+    {
+      browserName: _browserName,
+      realmDir,
+      realmServerMode,
+      testWorkerPortSet,
+      testWorkerPrerender,
+    },
     use,
     testInfo,
   ) => {
     if (realmServerMode === 'shared') {
       let key = sharedRealmKey(testInfo.workerIndex, testInfo.file, realmDir);
-      let realm = await acquireSharedRealm(key, realmDir, testWorkerPortSet);
+      let realm = await acquireSharedRealm(
+        key,
+        realmDir,
+        testWorkerPortSet,
+        testWorkerPrerender.url,
+      );
       try {
         await use(realm);
       } finally {
@@ -449,7 +491,11 @@ export const test = base.extend<
       return;
     }
 
-    let realm = await startRealmProcess(realmDir, testWorkerPortSet);
+    let realm = await startRealmProcess(
+      realmDir,
+      testWorkerPortSet,
+      testWorkerPrerender.url,
+    );
     try {
       await use(realm);
     } finally {

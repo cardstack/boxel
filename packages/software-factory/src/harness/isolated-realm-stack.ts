@@ -19,6 +19,7 @@ import {
   baseRealmDir,
   baseRealmURLFor,
   captureProcessLogs,
+  CONFIGURED_PRERENDER_URL,
   createProcessExitPromise,
   DEFAULT_MATRIX_SERVER_USERNAME,
   DEFAULT_PG_HOST,
@@ -310,9 +311,21 @@ export async function startIsolatedRealmStack({
   let compatProxy = await startCompatRealmProxy({
     listenPort: Number(realmServerURL.port),
   });
-  let prerender = await startHarnessPrerenderServer({
-    boxelHostURL: realmServerURL.href.replace(/\/$/, ''),
-  });
+  // The software-factory Playwright harness can keep prerender alive for the
+  // lifetime of a Playwright testWorker even though the realm stack itself is
+  // recreated per test. When provided, reuse that long-lived prerender URL so
+  // we only restart realm-server and worker-manager here.
+  let prerender = CONFIGURED_PRERENDER_URL
+    ? undefined
+    : await startHarnessPrerenderServer({
+        boxelHostURL: realmServerURL.href.replace(/\/$/, ''),
+      });
+  let prerenderURL = CONFIGURED_PRERENDER_URL?.href ?? prerender?.url;
+  if (!prerenderURL) {
+    throw new Error(
+      'Unable to determine prerender URL for isolated realm stack',
+    );
+  }
 
   let env = {
     ...process.env,
@@ -343,7 +356,7 @@ export async function startIsolatedRealmStack({
     'worker-manager',
     `--port=${DEFAULT_WORKER_MANAGER_PORT}`,
     `--matrixURL=${context.matrixURL}`,
-    `--prerendererUrl=${prerender.url}`,
+    `--prerendererUrl=${prerenderURL}`,
     `--fromUrl=${realmURL.href}`,
     `--toUrl=${actualRealmURL.href}`,
     `--fromUrl=${publicBaseRealmURL.href}`,
@@ -406,7 +419,7 @@ export async function startIsolatedRealmStack({
     `--matrixURL=${context.matrixURL}`,
     `--realmsRootPath=${rootDir}`,
     `--workerManagerUrl=${workerManagerRuntime.url}`,
-    `--prerendererUrl=${prerender.url}`,
+    `--prerendererUrl=${prerenderURL}`,
     '--username=base_realm',
     `--path=${baseRealmDir}`,
     `--fromUrl=${publicBaseRealmURL.href}`,
@@ -532,7 +545,7 @@ export async function stopIsolatedRealmStack(
   let cleanupError: unknown;
 
   try {
-    await stack.prerender.stop();
+    await stack.prerender?.stop();
   } catch (error) {
     cleanupError ??= error;
   }
