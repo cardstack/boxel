@@ -44,11 +44,19 @@ type FactoryRealmOptions = {
 
 type FactoryRealmInternalFixtures = {
   realm: StartedFactoryRealm;
+  testWorkerPortSet: TestWorkerPortSet;
 };
 
 type SharedRealmHandle = {
   realm: StartedFactoryRealm;
   refCount: number;
+};
+
+type TestWorkerPortSet = {
+  compatRealmServerPort: number;
+  realmServerPort: number;
+  workerManagerPort: number;
+  prerenderPort: number;
 };
 
 const packageRoot = resolve(process.cwd());
@@ -62,6 +70,11 @@ const testSourceRealmDir = resolve(
   'test-fixtures/public-software-factory-source',
 );
 const sharedRealms = new Map<string, Promise<SharedRealmHandle>>();
+const testWorkerPortBlockSize = 10;
+const testWorkerPortSearchStride = 200;
+const testWorkerPortBase = Number(
+  process.env.SOFTWARE_FACTORY_TEST_WORKER_PORT_BASE ?? 43100,
+);
 
 function appendLog(buffer: string, chunk: string): string {
   let combined = `${buffer}${chunk}`;
@@ -114,6 +127,63 @@ async function waitForPortFree(
   throw new Error(`Port ${port} still in use after ${timeoutMs}ms`);
 }
 
+async function isPortFree(port: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve, reject) => {
+    let server = createServer();
+    server.once('error', (error: NodeJS.ErrnoException) => {
+      server.close(() => {
+        if (error.code === 'EADDRINUSE') {
+          resolve(false);
+        } else {
+          reject(error);
+        }
+      });
+    });
+    server.listen(port, '127.0.0.1', () => {
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+        } else {
+          resolve(true);
+        }
+      });
+    });
+  });
+}
+
+async function allocateTestWorkerPortSet(
+  testWorkerIndex: number,
+): Promise<TestWorkerPortSet> {
+  // Reserve one stable port block per Playwright testWorker. The isolated
+  // harness still restarts realm-server, worker-manager, compat proxy, and
+  // prerender between tests, but those services should come back on the same
+  // URLs for the lifetime of the testWorker. That keeps BOXEL_HOST_URL and the
+  // prerender standby target stable within a worker even when the realm stack
+  // itself is recreated per test.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    let blockStart =
+      testWorkerPortBase +
+      testWorkerIndex * testWorkerPortBlockSize +
+      attempt * testWorkerPortSearchStride;
+    let candidate: TestWorkerPortSet = {
+      compatRealmServerPort: blockStart,
+      realmServerPort: blockStart + 1,
+      workerManagerPort: blockStart + 2,
+      prerenderPort: blockStart + 3,
+    };
+    let ports = Object.values(candidate);
+    if (
+      (await Promise.all(ports.map((port) => isPortFree(port)))).every(Boolean)
+    ) {
+      return candidate;
+    }
+  }
+
+  throw new Error(
+    `Unable to allocate a stable software-factory port block for testWorker ${testWorkerIndex}`,
+  );
+}
+
 async function waitForMetadataFile<T>(
   metadataFile: string,
   child: ReturnType<typeof spawn>,
@@ -141,7 +211,10 @@ async function waitForMetadataFile<T>(
   );
 }
 
-async function startRealmProcess(realmDir = defaultRealmDir) {
+async function startRealmProcess(
+  realmDir = defaultRealmDir,
+  testWorkerPortSet: TestWorkerPortSet,
+) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
   let metadataFile = join(tempDir, 'runtime.json');
   let logs = '';
@@ -184,6 +257,16 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
         NODE_NO_WARNINGS: '1',
         SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
         SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
+        SOFTWARE_FACTORY_COMPAT_REALM_PORT: String(
+          testWorkerPortSet.compatRealmServerPort,
+        ),
+        SOFTWARE_FACTORY_REALM_PORT: String(testWorkerPortSet.realmServerPort),
+        SOFTWARE_FACTORY_WORKER_MANAGER_PORT: String(
+          testWorkerPortSet.workerManagerPort,
+        ),
+        SOFTWARE_FACTORY_PRERENDER_PORT: String(
+          testWorkerPortSet.prerenderPort,
+        ),
         ...(supportMetadata?.context
           ? {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
@@ -302,10 +385,11 @@ function sharedRealmKey(
 async function acquireSharedRealm(
   key: string,
   realmDir: string,
+  testWorkerPortSet: TestWorkerPortSet,
 ): Promise<StartedFactoryRealm> {
   let existing = sharedRealms.get(key);
   if (!existing) {
-    existing = startRealmProcess(realmDir).then((realm) => ({
+    existing = startRealmProcess(realmDir, testWorkerPortSet).then((realm) => ({
       realm,
       refCount: 0,
     }));
@@ -337,15 +421,26 @@ export const test = base.extend<
 >({
   realmDir: [defaultRealmDir, { option: true }],
   realmServerMode: ['shared', { option: true }],
+  testWorkerPortSet: [
+    async ({ browserName: _browserName }, use, workerInfo) => {
+      // These services are ephemeral per test, but we intentionally keep their
+      // port assignments stable for the lifetime of a Playwright testWorker.
+      // That gives each testWorker a consistent harness URL set even as the
+      // underlying realm stack is torn down and recreated between tests.
+      let portSet = await allocateTestWorkerPortSet(workerInfo.parallelIndex);
+      await use(portSet);
+    },
+    { scope: 'worker' },
+  ],
 
   realm: async (
-    { browserName: _browserName, realmDir, realmServerMode },
+    { browserName: _browserName, realmDir, realmServerMode, testWorkerPortSet },
     use,
     testInfo,
   ) => {
     if (realmServerMode === 'shared') {
       let key = sharedRealmKey(testInfo.workerIndex, testInfo.file, realmDir);
-      let realm = await acquireSharedRealm(key, realmDir);
+      let realm = await acquireSharedRealm(key, realmDir, testWorkerPortSet);
       try {
         await use(realm);
       } finally {
@@ -354,7 +449,7 @@ export const test = base.extend<
       return;
     }
 
-    let realm = await startRealmProcess(realmDir);
+    let realm = await startRealmProcess(realmDir, testWorkerPortSet);
     try {
       await use(realm);
     } finally {
