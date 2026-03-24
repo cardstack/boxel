@@ -1,5 +1,37 @@
 import * as QUnit from 'qunit';
 
+/**
+ * Recursively discovers all .gts module paths under a realm directory.
+ * Returns paths relative to realmURL (without the .gts extension).
+ *
+ * @param {string} realmURL - The base realm URL (e.g. "http://localhost:4201/catalog/")
+ * @param {string} prefix - Current directory prefix relative to realm root (e.g. "tests/")
+ * @returns {Promise<string[]>}
+ */
+async function discoverGtsModules(realmURL, prefix) {
+  const resp = await fetch(`${realmURL}${prefix}`, {
+    headers: { Accept: 'application/vnd.api+json' },
+  });
+  const { data } = await resp.json();
+  const entries = Object.entries(data.relationships ?? {});
+
+  /** @type {string[]} */
+  const modules = [];
+
+  await Promise.all(
+    entries.map(async ([name, entry]) => {
+      if (entry.meta?.kind === 'file' && name.endsWith('.gts')) {
+        modules.push(`${prefix}${name.slice(0, -4)}`);
+      } else if (entry.meta?.kind === 'directory') {
+        const nested = await discoverGtsModules(realmURL, `${prefix}${name}`);
+        modules.push(...nested);
+      }
+    }),
+  );
+
+  return modules;
+}
+
 // eslint-disable-next-line ember/no-test-import-export
 export async function loadRealmTests(application) {
   const urlParams = new URLSearchParams(window.location.search);
@@ -52,16 +84,7 @@ export async function loadRealmTests(application) {
       .filter(Boolean);
   } else {
     try {
-      const resp = await fetch(realmURL, {
-        headers: { Accept: 'application/vnd.api+json' },
-      });
-      const { data } = await resp.json();
-      testModuleNames = Object.entries(data.relationships ?? {})
-        .filter(
-          ([name, entry]) =>
-            name.endsWith('.gts') && entry.meta?.kind === 'file',
-        )
-        .map(([name]) => name.slice(0, -4));
+      testModuleNames = await discoverGtsModules(realmURL, '');
     } catch {
       testModuleNames = [];
     }

@@ -7,7 +7,7 @@ import {
 } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
 
-import { SampleCommandCard } from './sample-command-card';
+import { SampleCommandCard } from '../sample-command-card';
 
 export function runTests() {
   module('Catalog | SampleCommandCard (standalone test file)', function (hooks) {
