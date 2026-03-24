@@ -55,7 +55,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../Theme/cardstack-brand-guide"
+          "self": "https://cardstack.com/base/Theme/cardstack-brand-guide"
         }
       },
       "categories.0": {
@@ -65,7 +65,7 @@
       },
       "cardInfo.theme": {
         "links": {
-          "self": "../Theme/cardstack-brand-guide"
+          "self": "https://cardstack.com/base/Theme/cardstack-brand-guide"
         }
       }
     }
