@@ -363,10 +363,7 @@ export default function handlePublishRealm({
         removeSync(backupPath);
       } catch (swapError) {
         // Restore the old published realm if the swap failed
-        if (
-          !existsSync(publishedRealmPath) &&
-          existsSync(backupPath)
-        ) {
+        if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
           moveSync(backupPath, publishedRealmPath);
         }
         removeSync(tempCopyPath);
