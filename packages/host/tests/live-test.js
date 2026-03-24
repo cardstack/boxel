@@ -1,5 +1,6 @@
 import * as QUnit from 'qunit';
 
+// eslint-disable-next-line ember/no-test-import-export
 export async function loadRealmTests(application) {
   const urlParams = new URLSearchParams(window.location.search);
   const qunitAny = /** @type {any} */ (QUnit);
