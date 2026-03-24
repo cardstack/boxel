@@ -227,15 +227,9 @@ export async function startHarnessPrerenderServer(options: {
     port = await findAvailablePort();
   }
   let url = `http://localhost:${port}`;
-  let silent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT !== '0';
   let child = spawn(
     'ts-node',
-    [
-      '--transpileOnly',
-      'prerender/prerender-server',
-      `--port=${port}`,
-      ...(silent ? ['--silent'] : []),
-    ],
+    ['--transpileOnly', 'prerender/prerender-server', `--port=${port}`],
     {
       cwd: realmServerDir,
       stdio: ['pipe', 'pipe', 'pipe'],

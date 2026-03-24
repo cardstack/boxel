@@ -138,11 +138,9 @@ export async function ensureFactoryRealmTemplate(
     let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
     let cachedTemplateMetadata =
       readPreparedTemplateMetadata(templateDatabaseName);
+    let hasTemplateDatabase = await databaseExists(templateDatabaseName);
 
-    if (
-      (await databaseExists(templateDatabaseName)) &&
-      cachedTemplateMetadata
-    ) {
+    if (hasTemplateDatabase && cachedTemplateMetadata) {
       return {
         cacheKey,
         templateDatabaseName,
@@ -152,6 +150,12 @@ export async function ensureFactoryRealmTemplate(
         realmServerURL: new URL(cachedTemplateMetadata.templateRealmServerURL),
       };
     }
+
+    let cacheMissReason = !cachedTemplateMetadata
+      ? hasTemplateDatabase
+        ? 'template metadata is missing'
+        : 'template database has not been prepared yet'
+      : 'template database is missing';
 
     let ownedSupport:
       | {
@@ -187,6 +191,7 @@ export async function ensureFactoryRealmTemplate(
         templateDatabaseName,
         fixtureHash,
         cacheHit: false,
+        cacheMissReason,
         realmURL,
         realmServerURL,
       };

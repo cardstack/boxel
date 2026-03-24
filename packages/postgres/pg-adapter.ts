@@ -32,7 +32,7 @@ function config() {
 type Config = ReturnType<typeof config>;
 
 function configuredPoolMax(): number | undefined {
-  let rawValue = process.env.PG_POOL_MAX ?? process.env.PGPOOLMAX;
+  let rawValue = process.env.PG_POOL_MAX;
   if (!rawValue) {
     return undefined;
   }

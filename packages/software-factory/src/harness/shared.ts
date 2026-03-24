@@ -44,6 +44,7 @@ export interface FactoryRealmTemplate {
   templateDatabaseName: string;
   fixtureHash: string;
   cacheHit: boolean;
+  cacheMissReason?: string;
   realmURL: URL;
   realmServerURL: URL;
 }

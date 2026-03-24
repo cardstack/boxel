@@ -34,6 +34,7 @@ async function main(): Promise<void> {
       templateDatabaseName: template.templateDatabaseName,
       fixtureHash: template.fixtureHash,
       cacheHit: template.cacheHit,
+      cacheMissReason: template.cacheMissReason,
       realmURL: template.realmURL.href,
       realmServerURL: template.realmServerURL.href,
     });
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
     templateDatabaseName: primaryTemplate.templateDatabaseName,
     fixtureHash: primaryTemplate.fixtureHash,
     cacheHit: primaryTemplate.cacheHit,
+    cacheMissReason: primaryTemplate.cacheMissReason,
     realmURL: primaryTemplate.realmURL,
     realmServerURL: primaryTemplate.realmServerURL,
     preparedTemplates: preparedTemplates.map((template) => ({
@@ -52,6 +54,8 @@ async function main(): Promise<void> {
       templateDatabaseName: template.templateDatabaseName,
       templateRealmURL: template.realmURL,
       templateRealmServerURL: template.realmServerURL,
+      cacheHit: template.cacheHit,
+      cacheMissReason: template.cacheMissReason,
     })),
   };
   if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {

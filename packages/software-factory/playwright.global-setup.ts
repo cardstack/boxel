@@ -233,6 +233,21 @@ async function prepareTemplatesForRealms(
     );
   }
 
+  for (let template of cachePayload.preparedTemplates) {
+    let realmLabel = template.realmDir.replace(`${packageRoot}/`, '');
+    if (template.cacheHit) {
+      setupLog.info(
+        `cache hit for ${realmLabel} -> ${template.templateDatabaseName}`,
+      );
+    } else {
+      setupLog.warn(
+        `cache miss for ${realmLabel} -> ${template.templateDatabaseName}: ${
+          template.cacheMissReason ?? 'unknown reason'
+        }`,
+      );
+    }
+  }
+
   return cachePayload.preparedTemplates;
 }
 

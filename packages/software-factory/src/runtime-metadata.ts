@@ -23,6 +23,8 @@ export interface PreparedTemplateMetadata {
   templateDatabaseName: string;
   templateRealmURL: string;
   templateRealmServerURL: string;
+  cacheHit?: boolean;
+  cacheMissReason?: string;
 }
 
 export function getSupportMetadataFile() {
