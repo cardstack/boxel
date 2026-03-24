@@ -227,4 +227,59 @@ module('factory-entrypoint', function (hooks) {
     );
     assert.true(summary.brief.content.includes('structured drafting'));
   });
+
+  test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory artifacts', async function (assert) {
+    process.env.MATRIX_USERNAME = 'hassan';
+
+    let capturedDarkfactoryModuleUrl: string | undefined;
+
+    await runFactoryEntrypoint(
+      {
+        briefUrl,
+        targetRealmUrl,
+        realmServerUrl: 'https://realms.example.test/app/',
+        mode: 'implement',
+      },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: false,
+          authorization: 'Bearer target-realm-token',
+        }),
+        bootstrapArtifacts: async (_brief, _targetRealmUrl, options) => {
+          capturedDarkfactoryModuleUrl = options?.darkfactoryModuleUrl;
+          return mockBootstrapResult;
+        },
+        fetch: async () =>
+          new Response(
+            JSON.stringify({
+              data: {
+                attributes: {
+                  content: 'Brief content',
+                  cardInfo: {
+                    name: 'Sticky Note',
+                    summary:
+                      'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
+                  },
+                  tags: ['documents-content', 'sticky', 'note'],
+                },
+              },
+            }),
+            {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+              },
+            },
+          ),
+      },
+    );
+
+    assert.strictEqual(
+      capturedDarkfactoryModuleUrl,
+      'https://realms.example.test/app/software-factory/darkfactory',
+    );
+  });
 });

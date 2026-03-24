@@ -17,6 +17,7 @@ import {
 const REQUEST_BODY_STATE = 'requestBody';
 
 interface ProxyOptions {
+  requestHeaders?: Record<string, string>;
   responseHeaders?: Record<string, string>;
 }
 
@@ -33,6 +34,11 @@ export function proxyAsset(
       return `/${filename}`;
     },
     events: {
+      proxyReq: (proxyReq) => {
+        for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
+          proxyReq.setHeader(key, value);
+        }
+      },
       proxyRes: (_proxyRes, _req, res) => {
         for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
           res.setHeader(key, value);
@@ -103,6 +109,10 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
 }
 
 export function fullRequestURL(ctxt: Koa.Context): URL {
+  let forwardedURL = ctxt.req.headers['x-boxel-forwarded-url'];
+  if (typeof forwardedURL === 'string' && forwardedURL.trim() !== '') {
+    return new URL(forwardedURL);
+  }
   let protocol =
     ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
   return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`);

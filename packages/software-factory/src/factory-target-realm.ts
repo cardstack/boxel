@@ -4,6 +4,7 @@ import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
 import {
+  getAccessibleRealmTokens,
   getActiveProfile,
   getRealmServerToken,
   matrixLogin,
@@ -25,11 +26,13 @@ export interface FactoryTargetRealmResolution {
 
 export interface FactoryTargetRealmBootstrapResult extends FactoryTargetRealmResolution {
   createdRealm: boolean;
+  authorization: string;
 }
 
 interface CreateRealmResult {
   createdRealm: boolean;
   url: string;
+  authorization: string;
 }
 
 export interface FactoryTargetRealmBootstrapActions {
@@ -37,6 +40,11 @@ export interface FactoryTargetRealmBootstrapActions {
     resolution: FactoryTargetRealmResolution,
   ) => Promise<CreateRealmResult>;
   fetch?: typeof globalThis.fetch;
+  waitForRealmReady?: (
+    realmUrl: string,
+    authorization: string,
+    fetchImpl: typeof globalThis.fetch,
+  ) => Promise<void>;
 }
 
 export function resolveFactoryTargetRealm(
@@ -62,6 +70,7 @@ export async function bootstrapFactoryTargetRealm(
     ((targetRealm) =>
       createRealm(targetRealm, {
         fetch: actions?.fetch,
+        waitForRealmReady: actions?.waitForRealmReady,
       }))
   )(resolution);
 
@@ -69,12 +78,16 @@ export async function bootstrapFactoryTargetRealm(
     ...resolution,
     url: createRealmResult.url,
     createdRealm: createRealmResult.createdRealm,
+    authorization: createRealmResult.authorization,
   };
 }
 
 async function createRealm(
   resolution: FactoryTargetRealmResolution,
-  dependencies?: { fetch?: typeof globalThis.fetch },
+  dependencies?: {
+    fetch?: typeof globalThis.fetch;
+    waitForRealmReady?: FactoryTargetRealmBootstrapActions['waitForRealmReady'];
+  },
 ): Promise<CreateRealmResult> {
   let fetchImpl = dependencies?.fetch ?? globalThis.fetch;
 
@@ -129,19 +142,31 @@ async function createRealm(
       canonicalRealmUrl,
       fetchImpl,
     );
+    let authorization = await getRealmAuthorization(
+      matrixAuth,
+      canonicalRealmUrl,
+    );
+    await (dependencies?.waitForRealmReady ?? waitForRealmReady)(
+      canonicalRealmUrl,
+      authorization,
+      fetchImpl,
+    );
 
     return {
       createdRealm: true,
       url: canonicalRealmUrl,
+      authorization,
     };
   }
 
   let text = await response.text();
 
   if (response.status === 400 && /already exists on this server/.test(text)) {
+    let authorization = await getRealmAuthorization(matrixAuth, resolution.url);
     return {
       createdRealm: false,
       url: resolution.url,
+      authorization,
     };
   }
 
@@ -189,6 +214,61 @@ async function appendRealmToMatrixAccountData(
       `Failed to update Matrix account data with realm ${realmUrl}: HTTP ${putResponse.status} ${text}`.trim(),
     );
   }
+}
+
+async function waitForRealmReady(
+  realmUrl: string,
+  authorization: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let readinessUrl = new URL('_readiness-check', realmUrl).href;
+  let timeoutMs = 15_000;
+  let retryDelayMs = 250;
+  let startedAt = Date.now();
+  let lastError: string | undefined;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      let response = await fetchImpl(readinessUrl, {
+        headers: {
+          Accept: SupportedMimeType.RealmInfo,
+          Authorization: authorization,
+        },
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = `HTTP ${response.status} ${await response.text()}`.trim();
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+
+  throw new Error(
+    `Timed out waiting for target realm ${realmUrl} to become ready${
+      lastError ? `: ${lastError}` : ''
+    }`,
+  );
+}
+
+async function getRealmAuthorization(
+  matrixAuth: MatrixAuth,
+  realmUrl: string,
+): Promise<string> {
+  let realmTokens = await getAccessibleRealmTokens(matrixAuth);
+  let authorization = realmTokens[ensureTrailingSlash(realmUrl)];
+
+  if (!authorization) {
+    throw new Error(
+      `Realm auth lookup did not include ${ensureTrailingSlash(realmUrl)}`,
+    );
+  }
+
+  return authorization;
 }
 
 function resolveRealmServerProfile(

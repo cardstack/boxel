@@ -1,9 +1,5 @@
 import { execSync } from 'child_process';
-import {
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-} from 'fs';
+import { writeFileSync, renameSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
 
@@ -64,7 +60,16 @@ export function getSynapseContainerName(): string {
   return 'boxel-synapse';
 }
 
-export function getSynapseURL(): string {
+export function getSynapseURL(synapse?: {
+  baseUrl?: string;
+  port?: number;
+}): string {
+  if (synapse?.baseUrl) {
+    return synapse.baseUrl;
+  }
+  if (synapse?.port != null) {
+    return `http://localhost:${synapse.port}`;
+  }
   if (!isEnvironmentMode()) {
     return 'http://localhost:8008';
   }
@@ -110,9 +115,7 @@ export function registerSynapseWithTraefik(hostPort: number): void {
   };
 
   atomicWrite(configPath, yaml.stringify(config));
-  console.log(
-    `Registered Synapse at ${hostname} -> localhost:${hostPort}`,
-  );
+  console.log(`Registered Synapse at ${hostname} -> localhost:${hostPort}`);
 }
 
 export function deregisterSynapseFromTraefik(): void {

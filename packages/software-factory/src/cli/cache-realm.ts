@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     );
   }
   console.log(JSON.stringify(payload, null, 2));
+  process.exit(0);
 }
 
 main().catch((error: unknown) => {

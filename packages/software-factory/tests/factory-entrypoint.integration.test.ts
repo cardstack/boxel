@@ -118,6 +118,21 @@ module('factory-entrypoint integration', function () {
       ) {
         response.writeHead(200, { 'content-type': 'application/json' });
         response.end('{}');
+      } else if (request.url === '/_realm-auth' && request.method === 'POST') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            [canonicalTargetRealmUrl]: 'Bearer target-realm-token',
+          }),
+        );
+      } else if (
+        request.url === '/hassan/personal/_readiness-check' &&
+        request.method === 'GET'
+      ) {
+        response.writeHead(200, {
+          'content-type': 'text/html',
+        });
+        response.end('');
       } else if (
         request.url === '/hassan/personal/_session' &&
         request.method === 'POST'

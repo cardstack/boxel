@@ -25,7 +25,9 @@ async function main(): Promise<void> {
   let payload = {
     realmDir,
     realmURL: runtime.realmURL.href,
+    realmServerURL: runtime.realmServerURL.href,
     databaseName: runtime.databaseName,
+    ports: runtime.ports,
     sampleCardURL: runtime.cardURL('project-demo'),
     ownerBearerToken: runtime.createBearerToken(),
   };
@@ -40,6 +42,7 @@ async function main(): Promise<void> {
   console.log(JSON.stringify(payload, null, 2));
 
   let cleanExit = false;
+  let keepAlive = setInterval(() => {}, 60_000);
   process.on('exit', () => {
     if (!cleanExit) {
       for (let pid of runtime.childPids) {
@@ -53,6 +56,7 @@ async function main(): Promise<void> {
   });
 
   let stop = async () => {
+    clearInterval(keepAlive);
     await runtime.stop();
     cleanExit = true;
     process.exit(0);
@@ -60,6 +64,10 @@ async function main(): Promise<void> {
 
   process.on('SIGINT', () => void stop());
   process.on('SIGTERM', () => void stop());
+
+  // Keep the harness process alive so its managed children stay attached until
+  // the test fixture explicitly shuts the stack down.
+  await new Promise<void>(() => {});
 }
 
 main().catch((error: unknown) => {

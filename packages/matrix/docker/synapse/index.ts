@@ -110,7 +110,18 @@ interface StartOptions {
   dataDir?: string;
   containerName?: string;
   suppressRegistrationSecretFile?: true;
+  dynamicHostPort?: true;
 }
+
+async function resolveHostPort(synapseId: string): Promise<number> {
+  let { execSync } = await import('child_process');
+  let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
+    encoding: 'utf-8',
+  }).trim();
+  let firstLine = portOutput.split('\n')[0];
+  return parseInt(firstLine.split(':').pop()!, 10);
+}
+
 export async function synapseStart(
   opts?: StartOptions,
   stopExisting = true,
@@ -146,8 +157,11 @@ export async function synapseStart(
     '-v',
     `${path.join(__dirname, 'templates')}:/custom/templates/`,
   ];
-  if (isEnvironmentMode()) {
-    // Branch mode: dynamic host port, no fixed IP
+  if (isEnvironmentMode() || opts?.dynamicHostPort) {
+    // Dynamic host port, with fixed container IP only when not running in branch mode
+    if (!isEnvironmentMode()) {
+      dockerParams.push(`--ip=${synCfg.host}`);
+    }
     dockerParams.push('-p', '0:8008/tcp', '--network=boxel');
   } else {
     dockerParams.push(
@@ -185,19 +199,23 @@ export async function synapseStart(
     ],
   });
 
-  // In branch mode, read the dynamic host port and register with Traefik
-  if (isEnvironmentMode()) {
-    let { execSync } = await import('child_process');
-    let portOutput = execSync(`docker port ${synapseId} 8008/tcp`, {
-      encoding: 'utf-8',
-    }).trim();
-    let firstLine = portOutput.split('\n')[0];
-    let hostPort = parseInt(firstLine.split(':').pop()!, 10);
+  let hostPort = synCfg.port;
+  if (isEnvironmentMode() || opts?.dynamicHostPort) {
+    hostPort = await resolveHostPort(synapseId);
     console.log(`Synapse dynamic host port: ${hostPort}`);
+  }
+
+  if (isEnvironmentMode()) {
     registerSynapseWithTraefik(hostPort);
   }
 
-  const synapse: SynapseInstance = { synapseId, ...synCfg };
+  const synapse: SynapseInstance = {
+    synapseId,
+    ...synCfg,
+    host: '127.0.0.1',
+    port: hostPort,
+    baseUrl: `http://localhost:${hostPort}`,
+  };
   synapses.set(synapseId, synapse);
 
   function cleanupRegistrationSecret() {
@@ -250,7 +268,7 @@ export async function registerUser(
   admin = false,
   displayName?: string,
 ): Promise<Credentials> {
-  const url = `${getSynapseURL()}/_synapse/admin/v1/register`;
+  const url = `${getSynapseURL(synapse)}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin

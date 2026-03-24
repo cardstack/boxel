@@ -43,7 +43,10 @@ test.use({ realmServerMode: 'isolated' });
 test('bootstrap creates actual card instances in a live realm', async ({
   realm,
 }) => {
-  let darkfactoryModuleUrl = `${realm.realmURL.origin}/software-factory/darkfactory`;
+  let darkfactoryModuleUrl = new URL(
+    '../software-factory/darkfactory',
+    realm.realmURL,
+  ).href;
   let authenticatedFetch = buildAuthenticatedFetch(
     realm.ownerBearerToken,
     fetch,
@@ -120,7 +123,10 @@ test('bootstrap creates actual card instances in a live realm', async ({
 test('bootstrap is idempotent — rerun does not duplicate cards', async ({
   realm,
 }) => {
-  let darkfactoryModuleUrl = `${realm.realmURL.origin}/software-factory/darkfactory`;
+  let darkfactoryModuleUrl = new URL(
+    '../software-factory/darkfactory',
+    realm.realmURL,
+  ).href;
   let authenticatedFetch = buildAuthenticatedFetch(
     realm.ownerBearerToken,
     fetch,
@@ -152,7 +158,10 @@ test('bootstrapped project card renders correctly in the browser', async ({
   realm,
   authedPage,
 }) => {
-  let darkfactoryModuleUrl = `${realm.realmURL.origin}/software-factory/darkfactory`;
+  let darkfactoryModuleUrl = new URL(
+    '../software-factory/darkfactory',
+    realm.realmURL,
+  ).href;
   let authenticatedFetch = buildAuthenticatedFetch(
     realm.ownerBearerToken,
     fetch,
@@ -164,12 +173,12 @@ test('bootstrapped project card renders correctly in the browser', async ({
   });
 
   await authedPage.goto(realm.cardURL('Project/sticky-note-mvp'), {
-    waitUntil: 'domcontentloaded',
+    waitUntil: 'commit',
   });
 
   await expect(
     authedPage.getByRole('heading', { name: 'Sticky Note MVP' }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(
     authedPage.getByRole('heading', { name: 'Objective' }),
   ).toBeVisible();

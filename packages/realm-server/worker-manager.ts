@@ -20,6 +20,8 @@ import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
+import { mkdirSync, renameSync, writeFileSync } from 'fs';
+import { dirname, join } from 'path';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
@@ -43,6 +45,22 @@ import {
  */
 
 let log = logger('worker-manager');
+const runtimeMetadataFile =
+  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE;
+
+function writeRuntimeMetadata(payload: unknown): void {
+  if (!runtimeMetadataFile) {
+    return;
+  }
+
+  mkdirSync(dirname(runtimeMetadataFile), { recursive: true });
+  let tempFile = join(
+    dirname(runtimeMetadataFile),
+    `.worker-manager.${process.pid}.${Date.now()}.tmp`,
+  );
+  writeFileSync(tempFile, JSON.stringify(payload, null, 2));
+  renameSync(tempFile, runtimeMetadataFile);
+}
 
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
@@ -232,6 +250,11 @@ if (port != null) {
   webServerInstance.on('listening', () => {
     let actualPort =
       (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+    writeRuntimeMetadata({
+      pid: process.pid,
+      port: actualPort,
+      url: `http://127.0.0.1:${actualPort}`,
+    });
     if (isEnvironmentMode()) {
       registerService(webServerInstance!, serviceName);
     }

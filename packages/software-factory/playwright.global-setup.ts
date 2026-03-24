@@ -54,6 +54,33 @@ function prefixChunk(label: string, chunk: string): string {
     .join('\n');
 }
 
+function maybeLogCacheProgress(
+  log: ReturnType<typeof logger>,
+  chunk: string,
+): void {
+  let trimmed = chunk.replace(/\s+$/, '');
+  if (!trimmed) {
+    return;
+  }
+
+  for (let line of trimmed.split('\n')) {
+    if (
+      /\b(begin visiting file|completed visiting file|starting from-scratch indexing|completed from scratch indexing|starting indexing|has completed indexing)\b/.test(
+        line,
+      )
+    ) {
+      log.info(line);
+      continue;
+    }
+
+    if (
+      /encountered error indexing|Render timed-out|missing file /.test(line)
+    ) {
+      log.warn(line);
+    }
+  }
+}
+
 function mirrorChildOutput(
   child: ReturnType<typeof spawn>,
   log: ReturnType<typeof logger>,
@@ -217,6 +244,12 @@ export default async function globalSetup() {
     },
     () => cacheLogs,
   );
+  cacheChild.stdout?.on('data', (chunk) => {
+    maybeLogCacheProgress(cacheLog, String(chunk));
+  });
+  cacheChild.stderr?.on('data', (chunk) => {
+    maybeLogCacheProgress(cacheLog, String(chunk));
+  });
 
   let cacheStartedAt = Date.now();
   await waitForCommand(cacheChild, () => cacheLogs);

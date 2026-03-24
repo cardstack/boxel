@@ -96,12 +96,14 @@ module('factory-target-realm', function (hooks) {
         return {
           createdRealm: true,
           url: resolution.url,
+          authorization: 'Bearer target-realm-token',
         };
       },
     });
 
     assert.strictEqual(createCalls, 1);
     assert.true(result.createdRealm);
+    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 
   test('bootstrapFactoryTargetRealm reports when the realm already exists', async function (assert) {
@@ -115,10 +117,12 @@ module('factory-target-realm', function (hooks) {
       createRealm: async () => ({
         createdRealm: false,
         url: resolution.url,
+        authorization: 'Bearer target-realm-token',
       }),
     });
 
     assert.false(result.createdRealm);
+    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 
   test('bootstrapFactoryTargetRealm uses the canonical realm URL returned by create-realm', async function (assert) {
@@ -132,6 +136,7 @@ module('factory-target-realm', function (hooks) {
       createRealm: async () => ({
         createdRealm: true,
         url: 'https://realms.example.test/hassan/personal/',
+        authorization: 'Bearer target-realm-token',
       }),
     });
 
@@ -139,10 +144,11 @@ module('factory-target-realm', function (hooks) {
       result.url,
       'https://realms.example.test/hassan/personal/',
     );
+    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 
   test('bootstrapFactoryTargetRealm sends the realm-server JWT to create-realm', async function (assert) {
-    assert.expect(11);
+    assert.expect(17);
 
     process.env.MATRIX_URL = 'https://matrix.example.test/';
     process.env.MATRIX_USERNAME = 'hassan';
@@ -266,6 +272,40 @@ module('factory-target-realm', function (hooks) {
           'Bearer matrix-access-token',
         );
         response = new Response('{}', { status: 200 });
+      } else if (request.url === 'https://realms.example.test/_realm-auth') {
+        assert.strictEqual(
+          request.headers.get('Authorization'),
+          'Bearer realm-server-token',
+        );
+        response = new Response(
+          JSON.stringify({
+            [targetRealmUrl]: 'Bearer target-realm-token',
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json',
+            },
+          },
+        );
+      } else if (
+        request.url ===
+        'https://realms.example.test/hassan/personal/_readiness-check'
+      ) {
+        assert.strictEqual(
+          request.headers.get('Authorization'),
+          'Bearer target-realm-token',
+        );
+        assert.strictEqual(
+          request.headers.get('Accept'),
+          'application/vnd.api+json',
+        );
+        response = new Response(null, {
+          status: 200,
+          headers: {
+            'content-type': 'text/html',
+          },
+        });
       } else {
         throw new Error(`Unexpected url: ${request.method} ${request.url}`);
       }
@@ -276,6 +316,7 @@ module('factory-target-realm', function (hooks) {
     let result = await bootstrapFactoryTargetRealm(resolution);
 
     assert.true(result.createdRealm);
+    assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
 });
 

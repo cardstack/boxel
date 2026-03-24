@@ -13,7 +13,13 @@ import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 type StartedFactoryRealm = {
   realmDir: string;
   realmURL: URL;
+  realmServerURL: URL;
   ownerBearerToken: string;
+  ports: {
+    publicPort: number;
+    realmServerPort: number;
+    workerManagerPort: number;
+  };
   cardURL(path: string): string;
   authorizationHeaders(): Record<string, string>;
   stop(): Promise<void>;
@@ -47,15 +53,6 @@ const defaultRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
-const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
-const compatPort = Number(
-  process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 4201,
-);
-const workerManagerPort = Number(
-  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 4232,
-);
-const localBasePrefix = `http://localhost:${realmPort}/base/`;
-const localSkillsPrefix = `http://localhost:${realmPort}/skills/`;
 const testSourceRealmDir = resolve(
   packageRoot,
   'test-fixtures/public-software-factory-source',
@@ -117,7 +114,7 @@ async function waitForMetadataFile<T>(
   metadataFile: string,
   child: ReturnType<typeof spawn>,
   getLogs: () => string,
-  timeoutMs = 120_000,
+  timeoutMs = 300_000,
 ): Promise<T> {
   let startedAt = Date.now();
 
@@ -147,7 +144,6 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   let supportMetadata = existsSync(defaultSupportMetadataFile)
     ? (JSON.parse(readFileSync(defaultSupportMetadataFile, 'utf8')) as {
         context?: Record<string, unknown>;
-        templateDatabaseName?: string;
       })
     : undefined;
 
@@ -167,12 +163,6 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
             }
           : {}),
-        ...(supportMetadata?.templateDatabaseName
-          ? {
-              SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
-                supportMetadata.templateDatabaseName,
-            }
-          : {}),
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
@@ -188,6 +178,12 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   let metadata: {
     realmDir: string;
     realmURL: string;
+    realmServerURL: string;
+    ports: {
+      publicPort: number;
+      realmServerPort: number;
+      workerManagerPort: number;
+    };
     sampleCardURL: string;
     ownerBearerToken: string;
   };
@@ -196,6 +192,12 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
     metadata = await waitForMetadataFile<{
       realmDir: string;
       realmURL: string;
+      realmServerURL: string;
+      ports: {
+        publicPort: number;
+        realmServerPort: number;
+        workerManagerPort: number;
+      };
       sampleCardURL: string;
       ownerBearerToken: string;
     }>(metadataFile, child, () => logs);
@@ -224,9 +226,9 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
         });
       }
       await Promise.all([
-        waitForPortFree(realmPort),
-        waitForPortFree(compatPort),
-        waitForPortFree(workerManagerPort),
+        waitForPortFree(metadata.ports.realmServerPort),
+        waitForPortFree(metadata.ports.publicPort),
+        waitForPortFree(metadata.ports.workerManagerPort),
       ]);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -236,7 +238,9 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   return {
     realmDir: metadata.realmDir,
     realmURL: new URL(metadata.realmURL),
+    realmServerURL: new URL(metadata.realmServerURL),
     ownerBearerToken: metadata.ownerBearerToken,
+    ports: metadata.ports,
     cardURL(path: string) {
       return new URL(path, metadata.realmURL).href;
     },
@@ -290,43 +294,11 @@ async function releaseSharedRealm(key: string): Promise<void> {
   }
 }
 
-async function registerRealmRedirect(
-  page: Page,
-  fromPrefix: string,
-  toPrefix: string,
-) {
-  await page.route(`${fromPrefix}**`, async (route) => {
-    let url = route.request().url();
-    let suffix = url.slice(fromPrefix.length);
-    await route.continue({ url: `${toPrefix}${suffix}` });
-  });
-}
-
-async function setRealmRedirects(page: Page) {
-  await registerRealmRedirect(
-    page,
-    'http://localhost:4201/base/',
-    localBasePrefix,
-  );
-  if (process.env.SOFTWARE_FACTORY_INCLUDE_SKILLS === '1') {
-    await registerRealmRedirect(
-      page,
-      'http://localhost:4201/skills/',
-      localSkillsPrefix,
-    );
-  }
-}
-
 export const test = base.extend<
   FactoryRealmFixtures & FactoryRealmOptions & FactoryRealmInternalFixtures
 >({
   realmDir: [defaultRealmDir, { option: true }],
   realmServerMode: ['shared', { option: true }],
-
-  page: async ({ page }, use) => {
-    await setRealmRedirects(page);
-    await use(page);
-  },
 
   realm: async (
     { browserName: _browserName, realmDir, realmServerMode },
@@ -360,12 +332,14 @@ export const test = base.extend<
     await use((path: string) => realm.cardURL(path));
   },
 
-  authedPage: async ({ browser, realmURL }, use) => {
-    let state = await buildBrowserState(realmURL.href);
+  authedPage: async ({ browser, realm }, use) => {
+    let state = await buildBrowserState(
+      realm.realmURL.href,
+      realm.realmServerURL.href,
+    );
     let context = await browser.newContext();
     await installBrowserState(context, state);
     let page = await context.newPage();
-    await setRealmRedirects(page);
 
     try {
       await use(page);
@@ -375,6 +349,6 @@ export const test = base.extend<
   },
 });
 
-test.setTimeout(120_000);
+test.setTimeout(300_000);
 
 export { expect };

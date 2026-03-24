@@ -384,7 +384,7 @@ export class PagePool {
   }
 
   async #loadStandbyPage(page: Page, pageId: string): Promise<void> {
-    await page.goto(`${this.#boxelHostURL}/standby`, {
+    await page.goto(`${this.#boxelHostURL}/_standby`, {
       waitUntil: 'domcontentloaded',
       timeout: this.#standbyTimeoutMs,
     });

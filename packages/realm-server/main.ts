@@ -15,6 +15,8 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
+import { dirname, join } from 'path';
+import { mkdirSync, renameSync, writeFileSync } from 'fs';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -35,6 +37,23 @@ import {
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 let log = logger('main');
+const runtimeMetadataFile =
+  process.env.SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE;
+
+function writeRuntimeMetadata(payload: unknown): void {
+  if (!runtimeMetadataFile) {
+    return;
+  }
+
+  mkdirSync(dirname(runtimeMetadataFile), { recursive: true });
+  let tempFile = join(
+    dirname(runtimeMetadataFile),
+    `.realm-server.${process.pid}.${Date.now()}.tmp`,
+  );
+  writeFileSync(tempFile, JSON.stringify(payload, null, 2));
+  renameSync(tempFile, runtimeMetadataFile);
+}
+
 if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
@@ -386,6 +405,12 @@ const getIndexHTML = async () => {
 
   let httpServer = server.listen(port);
   httpServer.on('listening', () => {
+    let actualPort =
+      (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+    writeRuntimeMetadata({
+      pid: process.pid,
+      port: actualPort,
+    });
     if (isEnvironmentMode()) {
       registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }

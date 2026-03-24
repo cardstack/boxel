@@ -17,7 +17,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4205/software-factory/darkfactory",
+        "module": "https://sf.boxel.test/darkfactory",
         "name": "KnowledgeArticle"
       }
     }

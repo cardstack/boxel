@@ -102,6 +102,7 @@ export type CreateRoutesArgs = {
     backgroundURL?: string;
     iconURL?: string;
   }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
+  serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   sendEvent: (
@@ -126,6 +127,7 @@ export function createRoutes(args: CreateRoutesArgs) {
 
   router.head('/', livenessCheck);
   router.get('/', healthCheck, args.serveIndex, args.serveFromRealm);
+  router.get('/_standby', healthCheck, args.serveHostApp, args.serveFromRealm);
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',

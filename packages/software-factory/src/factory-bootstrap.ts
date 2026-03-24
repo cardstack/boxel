@@ -485,6 +485,8 @@ async function createCardIfMissing(
     );
   }
 
+  await waitForCardToBeReadable(realmUrl, cardPath, fetchImpl);
+
   return { id: cardPath, status: 'created' };
 }
 
@@ -554,4 +556,43 @@ async function patchTicketStatus(
       `Failed to patch ticket status for ${ticketPath}: HTTP ${patchResponse.status} ${text}`.trim(),
     );
   }
+
+  await waitForCardToBeReadable(realmUrl, ticketPath, fetchImpl);
+}
+
+async function waitForCardToBeReadable(
+  realmUrl: string,
+  cardPath: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let cardUrl = new URL(cardPath, realmUrl).href;
+  let timeoutMs = 15_000;
+  let retryDelayMs = 250;
+  let startedAt = Date.now();
+  let lastError: string | undefined;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      let response = await fetchImpl(cardUrl, {
+        method: 'GET',
+        headers: { Accept: cardSourceMimeType },
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = `HTTP ${response.status} ${await response.text()}`.trim();
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+
+  throw new Error(
+    `Timed out waiting for card ${cardPath} in ${realmUrl} to become readable${
+      lastError ? `: ${lastError}` : ''
+    }`,
+  );
 }

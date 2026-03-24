@@ -11,7 +11,9 @@ import {
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from 'node:fs';
+import { createServer as createNetServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
@@ -31,7 +33,6 @@ type RealmPermissions = Record<string, RealmAction[]>;
 type FactorySupportContext = {
   matrixURL: string;
   matrixRegistrationSecret: string;
-  prerenderURL: string;
 };
 
 type SynapseInstance = {
@@ -43,6 +44,7 @@ type SynapseInstance = {
 export interface FactoryRealmOptions {
   realmDir?: string;
   realmURL?: URL;
+  realmServerURL?: URL;
   permissions?: RealmPermissions;
   useCache?: boolean;
   cacheSalt?: string;
@@ -62,14 +64,21 @@ export interface FactoryTestContext extends FactorySupportContext {
   fixtureHash: string;
   realmDir: string;
   realmURL: string;
+  realmServerURL: string;
   templateDatabaseName: string;
 }
 
 export interface StartedFactoryRealm {
   realmDir: string;
   realmURL: URL;
+  realmServerURL: URL;
   databaseName: string;
   childPids: number[];
+  ports: {
+    publicPort: number;
+    realmServerPort: number;
+    workerManagerPort: number;
+  };
   cardURL(path: string): string;
   createBearerToken(user?: string, permissions?: RealmAction[]): string;
   authorizationHeaders(
@@ -88,11 +97,24 @@ type SpawnedProcess = ChildProcess & {
   send(message: string): boolean;
 };
 
+type StartedCompatRealmProxy = {
+  listenPort: number;
+  setTargetPort(targetPort: number): void;
+  stop(): Promise<void>;
+};
+
 type RunningFactoryStack = {
-  realmServer: SpawnedProcess;
-  workerManager: SpawnedProcess;
-  compatProxy?: {
+  prerender: {
     stop(): Promise<void>;
+  };
+  realmServer: SpawnedProcess;
+  realmServerURL: URL;
+  workerManager: SpawnedProcess;
+  compatProxy?: StartedCompatRealmProxy;
+  ports: {
+    publicPort: number;
+    realmServerPort: number;
+    workerManagerPort: number;
   };
   rootDir: string;
 };
@@ -100,6 +122,7 @@ type RunningFactoryStack = {
 const packageRoot = resolve(process.cwd());
 const workspaceRoot = resolve(packageRoot, '..', '..');
 const realmServerDir = resolve(packageRoot, '..', 'realm-server');
+const hostDir = resolve(packageRoot, '..', 'host');
 const baseRealmDir = resolve(packageRoot, '..', 'base');
 const skillsRealmDir = resolve(packageRoot, '..', 'skills-realm', 'contents');
 const sourceRealmDir = resolve(
@@ -114,23 +137,23 @@ const prepareTestPgScript = resolve(
   'prepare-test-pg.sh',
 );
 
-const CACHE_VERSION = 7;
-const REALM_SERVER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205,
+const CACHE_VERSION = 8;
+const DEFAULT_REALM_SERVER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_REALM_PORT ?? 0,
 );
-const COMPAT_REALM_SERVER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 4201,
+const DEFAULT_COMPAT_REALM_SERVER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 0,
 );
-const WORKER_MANAGER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 4232,
+const DEFAULT_WORKER_MANAGER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 0,
 );
-const DEFAULT_REALM_URL = new URL(
-  process.env.SOFTWARE_FACTORY_REALM_URL ??
-    `http://localhost:${REALM_SERVER_PORT}/test/`,
-);
-const LOCAL_SOFTWARE_FACTORY_SOURCE_URL = new URL(
-  `http://localhost:${REALM_SERVER_PORT}/software-factory/`,
-);
+const CONFIGURED_REALM_URL = process.env.SOFTWARE_FACTORY_REALM_URL
+  ? new URL(process.env.SOFTWARE_FACTORY_REALM_URL)
+  : undefined;
+const CONFIGURED_REALM_SERVER_URL = process.env
+  .SOFTWARE_FACTORY_REALM_SERVER_URL
+  ? new URL(process.env.SOFTWARE_FACTORY_REALM_SERVER_URL)
+  : undefined;
 const DEFAULT_REALM_DIR = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
@@ -144,6 +167,9 @@ const DEFAULT_ICONS_PROBE_URL = new URL(
 const DEFAULT_PG_PORT = process.env.SOFTWARE_FACTORY_PGPORT ?? '55436';
 const DEFAULT_PG_HOST = process.env.SOFTWARE_FACTORY_PGHOST ?? '127.0.0.1';
 const DEFAULT_PG_USER = process.env.SOFTWARE_FACTORY_PGUSER ?? 'postgres';
+const DEFAULT_PRERENDER_PORT = Number(
+  process.env.SOFTWARE_FACTORY_PRERENDER_PORT ?? 4231,
+);
 const DEFAULT_MIGRATED_TEMPLATE_DB =
   process.env.SOFTWARE_FACTORY_MIGRATED_TEMPLATE_DB ??
   'boxel_migrated_template';
@@ -154,6 +180,7 @@ const DEFAULT_REALM_OWNER = '@software-factory-owner:localhost';
 const REALM_SECRET_SEED = "shhh! it's a secret";
 const REALM_SERVER_SECRET_SEED = "mum's the word";
 const GRAFANA_SECRET = "shhh! it's a secret";
+const FIXTURE_SOURCE_REALM_URL_PLACEHOLDER = 'https://sf.boxel.test/';
 const DEFAULT_MATRIX_SERVER_USERNAME =
   process.env.SOFTWARE_FACTORY_MATRIX_SERVER_USERNAME ?? 'realm_server';
 const DEFAULT_MATRIX_BROWSER_USERNAME =
@@ -168,6 +195,8 @@ const DEFAULT_SOURCE_REALM_PERMISSIONS: RealmPermissions = {
   '*': ['read'],
   [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
 };
+const DEFAULT_BASE_REALM_PERMISSIONS: RealmPermissions =
+  DEFAULT_SOURCE_REALM_PERMISSIONS;
 const managedProcessStdio: StdioOptions =
   process.env.SOFTWARE_FACTORY_DEBUG_SERVER === '1'
     ? (['ignore', 'inherit', 'inherit', 'ipc'] as const)
@@ -228,6 +257,121 @@ function stableStringify(value: unknown): string {
 
 function hashString(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+async function findAvailablePort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    let server = createNetServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      let address = server.address();
+      if (!address || typeof address === 'string') {
+        reject(new Error('Unable to determine allocated port'));
+        return;
+      }
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(address.port);
+        }
+      });
+    });
+  });
+}
+
+async function resolveFactoryRealmServerURL(
+  realmServerURL?: URL,
+): Promise<URL> {
+  if (realmServerURL) {
+    return new URL(realmServerURL.href);
+  }
+
+  if (CONFIGURED_REALM_SERVER_URL) {
+    return new URL(CONFIGURED_REALM_SERVER_URL.href);
+  }
+
+  let port =
+    DEFAULT_COMPAT_REALM_SERVER_PORT === 0
+      ? await findAvailablePort()
+      : DEFAULT_COMPAT_REALM_SERVER_PORT;
+  return new URL(`http://localhost:${port}/`);
+}
+
+async function resolveFactoryRealmLocation(options: {
+  realmURL?: URL;
+  realmServerURL?: URL;
+}): Promise<{
+  realmURL: URL;
+  realmServerURL: URL;
+}> {
+  let realmURL = options.realmURL
+    ? new URL(options.realmURL.href)
+    : CONFIGURED_REALM_URL
+      ? new URL(CONFIGURED_REALM_URL.href)
+      : undefined;
+  let realmServerURL = options.realmServerURL
+    ? new URL(options.realmServerURL.href)
+    : CONFIGURED_REALM_SERVER_URL
+      ? new URL(CONFIGURED_REALM_SERVER_URL.href)
+      : undefined;
+
+  if (!realmURL && !realmServerURL) {
+    realmServerURL = await resolveFactoryRealmServerURL();
+    realmURL = new URL('test/', realmServerURL);
+  } else if (!realmServerURL) {
+    throw new Error(
+      'An explicit realm server URL is required when a realm URL is provided. Set options.realmServerURL or SOFTWARE_FACTORY_REALM_SERVER_URL.',
+    );
+  } else if (!realmURL) {
+    realmURL = new URL('test/', realmServerURL);
+  }
+
+  return {
+    realmURL,
+    realmServerURL,
+  };
+}
+
+function baseRealmURLFor(realmServerURL: URL): URL {
+  return new URL('base/', realmServerURL);
+}
+
+function skillsRealmURLFor(realmServerURL: URL): URL {
+  return new URL('skills/', realmServerURL);
+}
+
+function sourceRealmURLFor(realmServerURL: URL): URL {
+  return new URL('software-factory/', realmServerURL);
+}
+
+function withPort(url: URL, port: number): URL {
+  let next = new URL(url.href);
+  next.port = String(port);
+  return next;
+}
+
+function realmRelativePath(realmURL: URL, realmServerURL: URL): string {
+  if (realmURL.origin !== realmServerURL.origin) {
+    throw new Error(
+      `Realm URL ${realmURL.href} does not share an origin with realm server URL ${realmServerURL.href}`,
+    );
+  }
+
+  let serverPath = realmServerURL.pathname.endsWith('/')
+    ? realmServerURL.pathname
+    : `${realmServerURL.pathname}/`;
+  if (!realmURL.pathname.startsWith(serverPath)) {
+    throw new Error(
+      `Realm URL ${realmURL.href} is not mounted under realm server URL ${realmServerURL.href}`,
+    );
+  }
+
+  return realmURL.pathname.slice(serverPath.length);
+}
+
+function realmURLWithinServer(realmServerURL: URL, realmPath: string): URL {
+  return new URL(realmPath || '.', realmServerURL);
 }
 
 function shouldIgnoreFixturePath(relativePath: string): boolean {
@@ -329,6 +473,42 @@ async function waitUntil<T>(
   throw new Error(options.timeoutMessage ?? 'Timed out waiting for condition');
 }
 
+async function waitForJsonFile<T>(
+  file: string,
+  getLogs: () => string,
+  options: {
+    timeout?: number;
+    label: string;
+    process?: SpawnedProcess;
+  },
+): Promise<T> {
+  let timeout = options.timeout ?? DEFAULT_REALM_STARTUP_TIMEOUT_MS;
+  let startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeout) {
+    try {
+      return JSON.parse(readFileSync(file, 'utf8')) as T;
+    } catch (error) {
+      let nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code !== 'ENOENT' && !(error instanceof SyntaxError)) {
+        throw error;
+      }
+    }
+
+    if (options.process && options.process.exitCode !== null) {
+      throw new Error(
+        `${options.label} exited early with code ${options.process.exitCode}\n${getLogs()}`,
+      );
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error(
+    `Timed out waiting for ${options.label} metadata in ${file}\n${getLogs()}`,
+  );
+}
+
 async function canConnectToPg(): Promise<boolean> {
   let client = new PgClient({
     ...pgAdminConnectionConfig(),
@@ -408,6 +588,42 @@ function maybeRequire(specifier: string) {
   return undefined;
 }
 
+function fileExists(path: string): boolean {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function findHostDistPackageDir(): string | undefined {
+  let siblingRoot = resolve(workspaceRoot, '..');
+  let candidates = [
+    process.env.SOFTWARE_FACTORY_HOST_DIST_PACKAGE_DIR,
+    resolve(siblingRoot, 'boxel', 'packages', 'host'),
+    ...readdirSync(siblingRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => resolve(siblingRoot, entry.name, 'packages', 'host')),
+    hostDir,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => resolve(value));
+
+  let seen = new Set<string>();
+  for (let candidate of candidates) {
+    if (seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+
+    if (fileExists(join(candidate, 'dist', 'index.html'))) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 async function loadSynapseModule() {
   let moduleSpecifier = '../../matrix/docker/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
@@ -419,7 +635,10 @@ async function loadSynapseModule() {
       displayName?: string,
     ) => Promise<unknown>;
     synapseStart: (
-      opts?: { suppressRegistrationSecretFile?: true },
+      opts?: {
+        suppressRegistrationSecretFile?: true;
+        dynamicHostPort?: true;
+      },
       stopExisting?: boolean,
     ) => Promise<SynapseInstance>;
     synapseStop: (id: string) => Promise<void>;
@@ -429,42 +648,220 @@ async function loadSynapseModule() {
 async function loadMatrixEnvironmentConfigModule() {
   let moduleSpecifier = '../../matrix/helpers/environment-config.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
-    getSynapseURL: () => string;
+    getSynapseURL: (synapse?: { baseUrl?: string; port?: number }) => string;
   };
 }
 
-async function loadIsolatedRealmServerModule() {
-  let moduleSpecifier = '../../matrix/helpers/isolated-realm-server.ts';
-  return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
-    startPrerenderServer: () => Promise<{
-      url: string;
-      stop(): Promise<void>;
-    }>;
-  };
-}
-
-async function ensureHostReady(): Promise<void> {
-  await logTimed(
+async function ensureHostReady(matrixURL: string): Promise<{
+  stop?: () => Promise<void>;
+}> {
+  return await logTimed(
     supportLog,
     `ensureHostReady ${DEFAULT_HOST_URL}`,
     async () => {
       let response: Response;
       try {
         response = await fetch(DEFAULT_HOST_URL);
+        if (response.ok) {
+          return {};
+        }
       } catch (error) {
-        throw new Error(
-          `Host app is not reachable at ${DEFAULT_HOST_URL}: ${
+        supportLog.debug(
+          `host app not reachable at ${DEFAULT_HOST_URL}, starting fallback host service: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
       }
-      if (!response.ok) {
-        throw new Error(
-          `Host app is not ready at ${DEFAULT_HOST_URL}: status ${response.status}`,
+
+      let hostPackageDir = findHostDistPackageDir();
+      let command = ['start'];
+      let cwd = hostDir;
+      if (hostPackageDir) {
+        supportLog.debug(`serving built host dist from ${hostPackageDir}`);
+        command = ['serve:dist'];
+        cwd = hostPackageDir;
+      } else {
+        supportLog.warn(
+          'no built host dist found; falling back to pnpm start in packages/host',
         );
       }
+
+      let child = spawn('pnpm', command, {
+        cwd,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          MATRIX_URL: matrixURL,
+        },
+      });
+
+      let logs = '';
+      child.stdout?.on('data', (chunk) => {
+        logs = `${logs}${String(chunk)}`.slice(-20_000);
+      });
+      child.stderr?.on('data', (chunk) => {
+        logs = `${logs}${String(chunk)}`.slice(-20_000);
+      });
+
+      await waitUntil(
+        async () => {
+          if (child.exitCode !== null) {
+            throw new Error(
+              `host app exited early with code ${child.exitCode}\n${logs}`,
+            );
+          }
+          try {
+            let readyResponse = await fetch(DEFAULT_HOST_URL);
+            return readyResponse.ok;
+          } catch {
+            return false;
+          }
+        },
+        {
+          timeout: 180_000,
+          interval: 500,
+          timeoutMessage: `Timed out waiting for host app at ${DEFAULT_HOST_URL}\n${logs}`,
+        },
+      );
+
+      return {
+        async stop() {
+          if (child.exitCode === null) {
+            try {
+              process.kill(-child.pid!, 'SIGTERM');
+            } catch {
+              // best effort cleanup
+            }
+          }
+        },
+      };
     },
   );
+}
+
+async function waitForHttpReady(url: string, timeoutMs = 60_000) {
+  let startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      let response = await fetch(url);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // server not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error(`timed out waiting for ${url} to become ready`);
+}
+
+async function stopChildProcess(
+  child: ChildProcess,
+  signal: NodeJS.Signals = 'SIGINT',
+): Promise<void> {
+  if (child.exitCode !== null || child.killed) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    let timeout: NodeJS.Timeout | undefined;
+    let cleanup = () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      child.removeAllListeners('exit');
+      child.removeAllListeners('error');
+    };
+
+    child.once('exit', () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    });
+    child.once('error', () => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    });
+
+    timeout = setTimeout(() => {
+      if (!settled) {
+        child.kill('SIGTERM');
+      }
+    }, 5_000);
+
+    child.kill(signal);
+  });
+}
+
+async function startHarnessPrerenderServer(options: {
+  boxelHostURL: string;
+  port?: number;
+}): Promise<{
+  url: string;
+  stop(): Promise<void>;
+}> {
+  let port = options.port ?? DEFAULT_PRERENDER_PORT;
+  if (port === 0) {
+    port = await findAvailablePort();
+  }
+  let url = `http://localhost:${port}`;
+  let silent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT !== '0';
+  let child = spawn(
+    'ts-node',
+    [
+      '--transpileOnly',
+      'prerender/prerender-server',
+      `--port=${port}`,
+      ...(silent ? ['--silent'] : []),
+    ],
+    {
+      cwd: realmServerDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        NODE_ENV: process.env.NODE_ENV ?? 'development',
+        NODE_NO_WARNINGS: '1',
+        BOXEL_HOST_URL: options.boxelHostURL,
+        LOG_LEVELS:
+          process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ??
+          process.env.LOG_LEVELS,
+      },
+    },
+  );
+
+  child.stdout?.on('data', (data: Buffer) => {
+    console.log(`prerender: ${data.toString()}`);
+  });
+  child.stderr?.on('data', (data: Buffer) => {
+    console.error(`prerender: ${data.toString()}`);
+  });
+
+  let exitPromise = new Promise<never>((_, reject) => {
+    child.once('exit', (code, signal) => {
+      reject(
+        new Error(
+          `prerender server exited before it became ready (code: ${code}, signal: ${signal})`,
+        ),
+      );
+    });
+    child.once('error', reject);
+  });
+
+  await Promise.race([waitForHttpReady(url), exitPromise]);
+
+  return {
+    url,
+    async stop() {
+      await stopChildProcess(child);
+    },
+  };
 }
 
 async function ensureIconsReady(): Promise<{
@@ -790,6 +1187,28 @@ async function resetMountedRealmState(
   );
 }
 
+async function resetQueueState(databaseName: string): Promise<void> {
+  await logTimed(templateLog, `resetQueueState ${databaseName}`, async () => {
+    let client = new PgClient(pgAdminConnectionConfig(databaseName));
+    try {
+      await client.connect();
+      await client.query('BEGIN');
+      await client.query(`DELETE FROM job_reservations`);
+      await client.query(`DELETE FROM jobs`);
+      await client.query('COMMIT');
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        // best effort cleanup
+      }
+      throw error;
+    } finally {
+      await client.end();
+    }
+  });
+}
+
 async function waitForQueueIdle(databaseName: string): Promise<void> {
   await logTimed(templateLog, `waitForQueueIdle ${databaseName}`, async () => {
     await waitUntil(
@@ -861,6 +1280,7 @@ function hasTemplateDatabaseName(
 
 function buildRealmToken(
   realmURL: URL,
+  realmServerURL: URL,
   user = DEFAULT_REALM_OWNER,
   permissions = DEFAULT_PERMISSIONS[DEFAULT_REALM_OWNER] ?? [
     'read',
@@ -874,7 +1294,7 @@ function buildRealmToken(
       realm: realmURL.href,
       permissions,
       sessionRoom: `software-factory-session-room-for-${user}`,
-      realmServerURL: new URL(realmURL.origin).href,
+      realmServerURL: realmServerURL.href,
     },
     REALM_SECRET_SEED,
     { expiresIn: '7d' },
@@ -985,30 +1405,51 @@ async function readIncomingRequestBody(
   return chunks.length ? Buffer.concat(chunks) : undefined;
 }
 
-async function startCompatRealmProxy({
-  listenPort,
-  targetPort,
-}: {
-  listenPort: number;
-  targetPort: number;
-}): Promise<
-  | {
-      stop(): Promise<void>;
-    }
-  | undefined
-> {
-  if (listenPort === targetPort) {
-    return undefined;
+function describeCompatProxyError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
   }
 
-  realmLog.debug(
-    `startCompatRealmProxy: ${listenPort} -> ${targetPort} starting`,
-  );
+  let parts: string[] = [];
+  let current: unknown = error;
+
+  while (current) {
+    if (current instanceof Error) {
+      let code =
+        'code' in current && typeof current.code === 'string'
+          ? ` (${current.code})`
+          : '';
+      parts.push(`${current.message}${code}`);
+      current = current.cause;
+    } else {
+      parts.push(String(current));
+      break;
+    }
+  }
+
+  return parts.join(' <- ');
+}
+
+async function startCompatRealmProxy({
+  listenPort,
+}: {
+  listenPort: number;
+}): Promise<StartedCompatRealmProxy> {
+  realmLog.debug(`startCompatRealmProxy: requested listenPort=${listenPort}`);
+  let targetPort: number | undefined;
   let server = createServer(
     async (req: IncomingMessage, res: ServerResponse) => {
+      if (targetPort == null) {
+        res.statusCode = 503;
+        res.setHeader('content-type', 'text/plain; charset=utf-8');
+        res.end('software-factory compat proxy target is not ready');
+        return;
+      }
       let incomingURL = new URL(
         req.url ?? '/',
-        `http://127.0.0.1:${listenPort}`,
+        `${
+          req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'
+        }://${req.headers.host ?? `127.0.0.1:${actualListenPort}`}`,
       );
       let upstreamURL = new URL(
         `${incomingURL.pathname}${incomingURL.search}`,
@@ -1022,10 +1463,14 @@ async function startCompatRealmProxy({
             ([key]) => key.toLowerCase() !== 'host',
           ),
         ) as Record<string, string>;
+        headers['x-boxel-forwarded-url'] = incomingURL.href;
         let response = await fetch(upstreamURL, {
           method: req.method,
           headers,
           body: body as BodyInit | undefined,
+          // Preserve upstream redirects so the client follows them against the
+          // public compat URL with a fresh forwarded URL header.
+          redirect: 'manual',
         });
 
         let responseHeaders = new Headers(response.headers);
@@ -1051,47 +1496,39 @@ async function startCompatRealmProxy({
         });
         res.end(Buffer.from(await response.arrayBuffer()));
       } catch (error) {
+        let description = describeCompatProxyError(error);
+        realmLog.warn(
+          `startCompatRealmProxy: upstream fetch failed for ${upstreamURL.href}: ${description}`,
+        );
         res.statusCode = 502;
         res.setHeader('content-type', 'text/plain; charset=utf-8');
         res.end(
-          `software-factory compat proxy failed for ${upstreamURL.href}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `software-factory compat proxy failed for ${upstreamURL.href}: ${description}`,
         );
       }
     },
   );
-
-  let started = false;
-  for (let attempt = 0; attempt < 20; attempt++) {
-    try {
-      await new Promise<void>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(listenPort, '127.0.0.1', () => resolve());
-      });
-      started = true;
-      break;
-    } catch (error) {
-      let nodeError = error as NodeJS.ErrnoException;
-      if (nodeError.code !== 'EADDRINUSE') {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(listenPort, '127.0.0.1', () => resolve());
+  });
+  let address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('Unable to determine compat proxy port');
   }
-
-  if (!started) {
-    realmLog.debug(
-      `startCompatRealmProxy: ${listenPort} -> ${targetPort} skipped (port unavailable)`,
-    );
-    return undefined;
-  }
-
-  realmLog.debug(`startCompatRealmProxy: ${listenPort} -> ${targetPort} ready`);
+  let actualListenPort = address.port;
+  realmLog.debug(`startCompatRealmProxy: listening on ${actualListenPort}`);
   return {
+    listenPort: actualListenPort,
+    setTargetPort(nextTargetPort: number) {
+      targetPort = nextTargetPort;
+      realmLog.debug(
+        `startCompatRealmProxy: ${actualListenPort} -> ${nextTargetPort} ready`,
+      );
+    },
     async stop() {
       realmLog.debug(
-        `startCompatRealmProxy: ${listenPort} -> ${targetPort} stopping`,
+        `startCompatRealmProxy: ${actualListenPort} -> ${targetPort ?? 'unset'} stopping`,
       );
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -1106,7 +1543,51 @@ async function startCompatRealmProxy({
   };
 }
 
-function copyRealmFixture(realmDir: string, destination: string): void {
+function rewriteFixtureSourceModuleUrls(
+  destination: string,
+  sourceRealmURL: URL,
+): void {
+  let rewrittenFiles = 0;
+
+  function visit(currentDir: string) {
+    for (let entry of readdirSync(currentDir, { withFileTypes: true })) {
+      let absolutePath = join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolutePath);
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.json')) {
+        continue;
+      }
+
+      let contents = readFileSync(absolutePath, 'utf8');
+      if (!contents.includes(FIXTURE_SOURCE_REALM_URL_PLACEHOLDER)) {
+        continue;
+      }
+
+      writeFileSync(
+        absolutePath,
+        contents
+          .split(FIXTURE_SOURCE_REALM_URL_PLACEHOLDER)
+          .join(sourceRealmURL.href),
+      );
+      rewrittenFiles++;
+    }
+  }
+
+  visit(destination);
+  if (rewrittenFiles > 0) {
+    realmLog.debug(
+      `rewriteFixtureSourceModuleUrls: rewrote ${rewrittenFiles} files to ${sourceRealmURL.href}`,
+    );
+  }
+}
+
+function copyRealmFixture(
+  realmDir: string,
+  destination: string,
+  sourceRealmURL: URL,
+): void {
   copySync(realmDir, destination, {
     preserveTimestamps: true,
     filter(src) {
@@ -1114,11 +1595,13 @@ function copyRealmFixture(realmDir: string, destination: string): void {
       return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
     },
   });
+  rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
 }
 
 async function startIsolatedRealmStack({
   realmDir,
   realmURL,
+  realmServerURL,
   databaseName,
   context,
   migrateDB,
@@ -1126,6 +1609,7 @@ async function startIsolatedRealmStack({
 }: {
   realmDir: string;
   realmURL: URL;
+  realmServerURL: URL;
   databaseName: string;
   context: FactorySupportContext;
   migrateDB: boolean;
@@ -1137,11 +1621,45 @@ async function startIsolatedRealmStack({
     async () => {
       let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
       let testRealmDir = join(rootDir, 'test');
+      let workerManagerMetadataFile = join(
+        rootDir,
+        'worker-manager.runtime.json',
+      );
+      let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
+      let actualRealmServerPort =
+        DEFAULT_REALM_SERVER_PORT === 0
+          ? await findAvailablePort()
+          : DEFAULT_REALM_SERVER_PORT;
+      let actualRealmServerURL = withPort(
+        realmServerURL,
+        actualRealmServerPort,
+      );
+      let actualRealmPath = realmRelativePath(realmURL, realmServerURL);
+      let actualRealmURL = realmURLWithinServer(
+        actualRealmServerURL,
+        actualRealmPath,
+      );
+      let legacyRealmServerURL = new URL('http://localhost:4205/');
+      let legacyRealmURL = new URL('test/', legacyRealmServerURL);
+      let publicBaseRealmURL = baseRealmURLFor(realmServerURL);
+      let actualBaseRealmURL = baseRealmURLFor(actualRealmServerURL);
+      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
+      let actualSourceRealmURL = sourceRealmURLFor(actualRealmServerURL);
+      let legacySourceRealmURL = sourceRealmURLFor(legacyRealmServerURL);
+      let skillsRealmURL = skillsRealmURLFor(realmServerURL);
+      let actualSkillsRealmURL = skillsRealmURLFor(actualRealmServerURL);
+      let legacySkillsRealmURL = skillsRealmURLFor(legacyRealmServerURL);
       ensureDirSync(testRealmDir);
-      copyRealmFixture(realmDir, testRealmDir);
+      copyRealmFixture(realmDir, testRealmDir, sourceRealmURL);
       realmLog.debug(
         `startIsolatedRealmStack: copied fixture ${realmDir} -> ${testRealmDir}`,
       );
+      let compatProxy = await startCompatRealmProxy({
+        listenPort: Number(realmServerURL.port),
+      });
+      let prerender = await startHarnessPrerenderServer({
+        boxelHostURL: realmServerURL.href.replace(/\/$/, ''),
+      });
 
       let env = {
         ...process.env,
@@ -1160,25 +1678,44 @@ async function startIsolatedRealmStack({
         REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
         LOW_CREDIT_THRESHOLD: '2000',
         LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
-        PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
-        PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${REALM_SERVER_PORT}`,
+        PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${compatProxy.listenPort}`,
+        PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${compatProxy.listenPort}`,
+        SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE:
+          workerManagerMetadataFile,
+        SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
       };
 
       let workerArgs = [
         '--transpileOnly',
         'worker-manager',
-        `--port=${WORKER_MANAGER_PORT}`,
+        `--port=${DEFAULT_WORKER_MANAGER_PORT}`,
         `--matrixURL=${context.matrixURL}`,
-        `--prerendererUrl=${context.prerenderURL}`,
+        `--prerendererUrl=${prerender.url}`,
         `--fromUrl=${realmURL.href}`,
-        `--toUrl=${realmURL.href}`,
+        `--toUrl=${actualRealmURL.href}`,
+        `--fromUrl=${publicBaseRealmURL.href}`,
+        `--toUrl=${actualBaseRealmURL.href}`,
         '--fromUrl=https://cardstack.com/base/',
-        `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+        `--toUrl=${publicBaseRealmURL.href}`,
+        `--fromUrl=${sourceRealmURL.href}`,
+        `--toUrl=${actualSourceRealmURL.href}`,
       ];
       if (INCLUDE_SKILLS) {
         workerArgs.push(
-          `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-          `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+          `--fromUrl=${skillsRealmURL.href}`,
+          `--toUrl=${actualSkillsRealmURL.href}`,
+        );
+      }
+      workerArgs.push(
+        `--fromUrl=${legacyRealmURL.href}`,
+        `--toUrl=${actualRealmURL.href}`,
+        `--fromUrl=${legacySourceRealmURL.href}`,
+        `--toUrl=${actualSourceRealmURL.href}`,
+      );
+      if (INCLUDE_SKILLS) {
+        workerArgs.push(
+          `--fromUrl=${legacySkillsRealmURL.href}`,
+          `--toUrl=${actualSkillsRealmURL.href}`,
         );
       }
       if (migrateDB) {
@@ -1194,36 +1731,57 @@ async function startIsolatedRealmStack({
         stdio: managedProcessStdio,
       }) as SpawnedProcess;
       let getWorkerLogs = captureProcessLogs(workerManager);
+      let workerManagerRuntime = await waitForJsonFile<{
+        pid: number;
+        port: number;
+        url: string;
+      }>(workerManagerMetadataFile, getWorkerLogs, {
+        label: 'worker manager',
+        process: workerManager,
+      });
 
       let serverArgs = [
         '--transpileOnly',
         'main',
-        `--port=${REALM_SERVER_PORT}`,
+        `--port=${actualRealmServerPort}`,
+        `--serverURL=${realmServerURL.href}`,
         `--matrixURL=${context.matrixURL}`,
         `--realmsRootPath=${rootDir}`,
-        `--workerManagerPort=${WORKER_MANAGER_PORT}`,
-        `--prerendererUrl=${context.prerenderURL}`,
-        `--path=${testRealmDir}`,
-        '--username=test_realm',
-        `--fromUrl=${realmURL.href}`,
-        `--toUrl=${realmURL.href}`,
+        `--workerManagerUrl=${workerManagerRuntime.url}`,
+        `--prerendererUrl=${prerender.url}`,
         '--username=base_realm',
         `--path=${baseRealmDir}`,
-        '--fromUrl=https://cardstack.com/base/',
-        `--toUrl=http://localhost:${REALM_SERVER_PORT}/base/`,
+        `--fromUrl=${publicBaseRealmURL.href}`,
+        `--toUrl=${actualBaseRealmURL.href}`,
         '--username=software_factory_realm',
         `--path=${sourceRealmDir}`,
-        `--fromUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
-        `--toUrl=${LOCAL_SOFTWARE_FACTORY_SOURCE_URL.href}`,
+        `--fromUrl=${sourceRealmURL.href}`,
+        `--toUrl=${actualSourceRealmURL.href}`,
+        '--username=test_realm',
+        `--path=${testRealmDir}`,
+        `--fromUrl=${realmURL.href}`,
+        `--toUrl=${actualRealmURL.href}`,
       ];
       if (INCLUDE_SKILLS) {
         serverArgs.splice(
-          11,
+          16,
           0,
           '--username=skills_realm',
           `--path=${skillsRealmDir}`,
-          `--fromUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
-          `--toUrl=http://localhost:${REALM_SERVER_PORT}/skills/`,
+          `--fromUrl=${skillsRealmURL.href}`,
+          `--toUrl=${actualSkillsRealmURL.href}`,
+        );
+      }
+      serverArgs.push(
+        `--fromUrl=${legacyRealmURL.href}`,
+        `--toUrl=${actualRealmURL.href}`,
+        `--fromUrl=${legacySourceRealmURL.href}`,
+        `--toUrl=${actualSourceRealmURL.href}`,
+      );
+      if (INCLUDE_SKILLS) {
+        serverArgs.push(
+          `--fromUrl=${legacySkillsRealmURL.href}`,
+          `--toUrl=${actualSkillsRealmURL.href}`,
         );
       }
 
@@ -1234,12 +1792,20 @@ async function startIsolatedRealmStack({
         stdio: managedProcessStdio,
       }) as SpawnedProcess;
       let getServerLogs = captureProcessLogs(realmServer);
-      let compatProxy = await startCompatRealmProxy({
-        listenPort: COMPAT_REALM_SERVER_PORT,
-        targetPort: REALM_SERVER_PORT,
-      });
+      let realmServerRuntime: {
+        pid: number;
+        port: number;
+      };
 
       try {
+        realmServerRuntime = await waitForJsonFile<{
+          pid: number;
+          port: number;
+        }>(realmServerMetadataFile, getServerLogs, {
+          label: 'realm server',
+          process: realmServer,
+        });
+        compatProxy.setTargetPort(realmServerRuntime.port);
         await Promise.race([
           waitForReady(
             realmServer,
@@ -1261,6 +1827,11 @@ async function startIsolatedRealmStack({
         ]);
       } catch (error) {
         try {
+          await prerender.stop();
+        } catch {
+          // best effort cleanup
+        }
+        try {
           await stopManagedProcess(realmServer);
         } catch {
           // best effort cleanup
@@ -1281,7 +1852,14 @@ async function startIsolatedRealmStack({
 
       return {
         compatProxy,
+        prerender,
         realmServer,
+        realmServerURL,
+        ports: {
+          publicPort: compatProxy.listenPort,
+          realmServerPort: realmServerRuntime.port,
+          workerManagerPort: workerManagerRuntime.port,
+        },
         workerManager,
         rootDir,
       };
@@ -1294,6 +1872,12 @@ async function stopIsolatedRealmStack(
 ): Promise<void> {
   await logTimed(realmLog, 'stopIsolatedRealmStack', async () => {
     let cleanupError: unknown;
+
+    try {
+      await stack.prerender.stop();
+    } catch (error) {
+      cleanupError ??= error;
+    }
 
     try {
       await stopManagedProcess(stack.realmServer);
@@ -1328,6 +1912,7 @@ async function stopIsolatedRealmStack(
 async function buildTemplateDatabase({
   realmDir,
   realmURL,
+  realmServerURL,
   permissions,
   context,
   cacheKey,
@@ -1335,6 +1920,7 @@ async function buildTemplateDatabase({
 }: {
   realmDir: string;
   realmURL: URL;
+  realmServerURL: URL;
   permissions: RealmPermissions;
   context: FactorySupportContext;
   cacheKey: string;
@@ -1361,21 +1947,31 @@ async function buildTemplateDatabase({
           builderDatabaseName,
         );
       }
+      let baseRealmURL = baseRealmURLFor(realmServerURL);
+      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
 
       await resetMountedRealmState(builderDatabaseName, [
         realmURL,
-        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+        baseRealmURL,
+        sourceRealmURL,
       ]);
+      await resetQueueState(builderDatabaseName);
       await seedRealmPermissions(builderDatabaseName, realmURL, permissions);
       await seedRealmPermissions(
         builderDatabaseName,
-        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+        baseRealmURL,
+        DEFAULT_BASE_REALM_PERMISSIONS,
+      );
+      await seedRealmPermissions(
+        builderDatabaseName,
+        sourceRealmURL,
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
 
       let stack = await startIsolatedRealmStack({
         realmDir,
         realmURL,
+        realmServerURL,
         databaseName: builderDatabaseName,
         context,
         migrateDB: !hasMigratedTemplate,
@@ -1400,39 +1996,33 @@ export async function startFactorySupportServices(): Promise<{
 }> {
   return await logTimed(supportLog, 'startFactorySupportServices', async () => {
     await ensurePgReady();
-    await ensureHostReady();
-    let icons = await ensureIconsReady();
     cleanupStaleSynapseContainers();
     let { synapseStart, synapseStop } = await loadSynapseModule();
     let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
-    let { startPrerenderServer } = await loadIsolatedRealmServerModule();
 
     let synapseStartedAt = Date.now();
     let synapse = await synapseStart(
-      { suppressRegistrationSecretFile: true },
+      { suppressRegistrationSecretFile: true, dynamicHostPort: true },
       true,
     );
     supportLog.debug(
       `synapse started in ${formatElapsedMs(Date.now() - synapseStartedAt)} on port ${synapse.port}`,
     );
+    let matrixURL =
+      process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL(synapse);
+    let host = await ensureHostReady(matrixURL);
+    let icons = await ensureIconsReady();
     await ensureSupportUsers(synapse);
-    let prerenderStartedAt = Date.now();
-    let prerender = await startPrerenderServer();
-    supportLog.debug(
-      `prerender started in ${formatElapsedMs(Date.now() - prerenderStartedAt)} at ${prerender.url}`,
-    );
-    let matrixURL = process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL();
 
     return {
       context: {
         matrixURL,
         matrixRegistrationSecret: synapse.registrationSecret,
-        prerenderURL: prerender.url,
       },
       async stop() {
         await logTimed(supportLog, 'stopFactorySupportServices', async () => {
-          await prerender.stop();
           await synapseStop(synapse.synapseId);
+          await host.stop?.();
           await icons.stop?.();
         });
       },
@@ -1453,13 +2043,17 @@ export async function startFactoryGlobalContext(
 ): Promise<FactoryGlobalContextHandle> {
   return await logTimed(harnessLog, 'startFactoryGlobalContext', async () => {
     let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-    let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+    let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
+      realmURL: options.realmURL,
+      realmServerURL: options.realmServerURL,
+    });
     let support = await startFactorySupportServices();
     try {
       let template = await ensureFactoryRealmTemplate({
         ...options,
         realmDir,
         realmURL,
+        realmServerURL,
         context: support.context,
       });
 
@@ -1469,6 +2063,7 @@ export async function startFactoryGlobalContext(
         fixtureHash: template.fixtureHash,
         realmDir,
         realmURL: realmURL.href,
+        realmServerURL: realmServerURL.href,
         templateDatabaseName: template.templateDatabaseName,
       };
 
@@ -1488,7 +2083,18 @@ export async function ensureFactoryRealmTemplate(
 ): Promise<FactoryRealmTemplate> {
   return await logTimed(harnessLog, 'ensureFactoryRealmTemplate', async () => {
     let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-    let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+    let contextRealmURL =
+      options.context && hasTemplateDatabaseName(options.context)
+        ? new URL(options.context.realmURL)
+        : undefined;
+    let contextRealmServerURL =
+      options.context && hasTemplateDatabaseName(options.context)
+        ? new URL(options.context.realmServerURL)
+        : undefined;
+    let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
+      realmURL: options.realmURL ?? contextRealmURL,
+      realmServerURL: options.realmServerURL ?? contextRealmServerURL,
+    });
     let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
     let fixtureHash = hashRealmFixture(realmDir);
     let cacheKey = hashString(
@@ -1534,6 +2140,7 @@ export async function ensureFactoryRealmTemplate(
       await buildTemplateDatabase({
         realmDir,
         realmURL,
+        realmServerURL,
         permissions,
         context,
         cacheKey,
@@ -1557,17 +2164,30 @@ export async function startFactoryRealmServer(
 ): Promise<StartedFactoryRealm> {
   return await logTimed(harnessLog, 'startFactoryRealmServer', async () => {
     let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
-    let realmURL = new URL((options.realmURL ?? DEFAULT_REALM_URL).href);
+    let existingContext = options.context ?? parseFactoryContext();
+    let contextRealmURL =
+      existingContext && hasTemplateDatabaseName(existingContext)
+        ? new URL(existingContext.realmURL)
+        : undefined;
+    let contextRealmServerURL =
+      existingContext && hasTemplateDatabaseName(existingContext)
+        ? new URL(existingContext.realmServerURL)
+        : undefined;
+    let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
+      realmURL: options.realmURL ?? contextRealmURL,
+      realmServerURL: options.realmServerURL ?? contextRealmServerURL,
+    });
     let templateDatabaseName = options.templateDatabaseName;
     let databaseName = runtimeDatabaseName();
 
     let ownedGlobalContext: FactoryGlobalContextHandle | undefined;
-    let context = options.context ?? parseFactoryContext();
+    let context = existingContext;
     if (!context) {
       ownedGlobalContext = await startFactoryGlobalContext({
         ...options,
         realmDir,
         realmURL,
+        realmServerURL,
       });
       context = ownedGlobalContext.context;
     }
@@ -1580,6 +2200,7 @@ export async function startFactoryRealmServer(
               ...options,
               realmDir,
               realmURL,
+              realmServerURL,
               context,
             })
           ).templateDatabaseName;
@@ -1590,20 +2211,27 @@ export async function startFactoryRealmServer(
     );
     let stack: RunningFactoryStack;
     try {
+      let baseRealmURL = baseRealmURLFor(realmServerURL);
+      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
       await dropDatabase(databaseName);
       await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
-      await resetMountedRealmState(databaseName, [
-        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
-      ]);
+      await resetQueueState(databaseName);
       await seedRealmPermissions(
         databaseName,
-        LOCAL_SOFTWARE_FACTORY_SOURCE_URL,
+        baseRealmURL,
+        DEFAULT_BASE_REALM_PERMISSIONS,
+      );
+      await resetMountedRealmState(databaseName, [sourceRealmURL]);
+      await seedRealmPermissions(
+        databaseName,
+        sourceRealmURL,
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
 
       stack = await startIsolatedRealmStack({
         realmDir,
         realmURL,
+        realmServerURL,
         databaseName,
         context,
         migrateDB: false,
@@ -1634,7 +2262,9 @@ export async function startFactoryRealmServer(
     return {
       realmDir,
       realmURL,
+      realmServerURL,
       databaseName,
+      ports: stack.ports,
       childPids: [stack.realmServer.pid, stack.workerManager.pid].filter(
         (pid): pid is number => pid != null,
       ),
@@ -1645,12 +2275,13 @@ export async function startFactoryRealmServer(
         user = DEFAULT_REALM_OWNER,
         permissions?: RealmAction[],
       ) {
-        return buildRealmToken(realmURL, user, permissions);
+        return buildRealmToken(realmURL, realmServerURL, user, permissions);
       },
       authorizationHeaders(user?: string, permissions?: RealmAction[]) {
         return {
           Authorization: `Bearer ${buildRealmToken(
             realmURL,
+            realmServerURL,
             user,
             permissions,
           )}`,
