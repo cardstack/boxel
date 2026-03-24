@@ -38,6 +38,7 @@ import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalCommandModule from './open-create-listing-modal';
+import * as OpenCreatePRModalCommandModule from './open-create-pr-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
@@ -262,6 +263,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     OpenCreateListingModalCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/open-create-pr-modal',
+    OpenCreatePRModalCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-workspace',
     OpenWorkspaceCommandModule,
   );
@@ -410,6 +415,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
   OpenCreateListingModalCommandModule.default,
+  OpenCreatePRModalCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
   GenerateThemeExampleCommandModule.default,
