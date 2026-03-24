@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import type { Page } from '@playwright/test';
+
 import { expect, test } from './fixtures';
 
 const adopterRealmDir = resolve(
@@ -11,10 +13,7 @@ const adopterRealmDir = resolve(
 test.use({ realmDir: adopterRealmDir });
 test.use({ realmServerMode: 'shared' });
 
-async function gotoCard(
-  page: Parameters<typeof test>[0]['authedPage'],
-  url: string,
-) {
+async function gotoCard(page: Page, url: string) {
   await page.goto(url, { waitUntil: 'commit' });
 }
 

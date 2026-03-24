@@ -29,6 +29,7 @@ const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   serverUrl: 'https://realms.example.test/',
   ownerUsername: 'hassan',
   createdRealm: true,
+  authorization: 'Bearer token',
 };
 const mockBootstrapResult: FactoryBootstrapResult = {
   project: { id: 'Project/sticky-note-mvp', status: 'created' },
