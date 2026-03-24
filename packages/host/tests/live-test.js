@@ -19,12 +19,14 @@ export async function loadRealmTests(application) {
   const realmURL =
     urlParams.get('realmURL') ?? 'http://localhost:4201/catalog/';
 
-  const [helpers, mockMatrix, setupHelpers, adapter] = await Promise.all([
-    import('@cardstack/host/tests/helpers'),
-    import('@cardstack/host/tests/helpers/mock-matrix'),
-    import('@cardstack/host/tests/helpers/setup'),
-    import('@cardstack/host/tests/helpers/adapter'),
-  ]);
+  const [helpers, mockMatrix, setupHelpers, adapter, renderComponent] =
+    await Promise.all([
+      import('@cardstack/host/tests/helpers'),
+      import('@cardstack/host/tests/helpers/mock-matrix'),
+      import('@cardstack/host/tests/helpers/setup'),
+      import('@cardstack/host/tests/helpers/adapter'),
+      import('@cardstack/host/tests/helpers/render-component'),
+    ]);
 
   const loaderInstance = application.buildInstance({
     rootElement: '#ember-testing-loader',
@@ -37,6 +39,10 @@ export async function loadRealmTests(application) {
   loader.shimModule('@cardstack/host/tests/helpers/mock-matrix', mockMatrix);
   loader.shimModule('@cardstack/host/tests/helpers/setup', setupHelpers);
   loader.shimModule('@cardstack/host/tests/helpers/adapter', adapter);
+  loader.shimModule(
+    '@cardstack/host/tests/helpers/render-component',
+    renderComponent,
+  );
 
   let testModuleNames;
   if (testModuleParam) {

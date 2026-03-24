@@ -58,11 +58,12 @@ import type { VirtualNetwork } from '@cardstack/runtime-common';
 import { shimHostCommands } from '../commands';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
-  // Always shim qunit. In test environments, use window.QUnit so realm-loaded
-  // test modules register on the same instance the runner will execute. In
-  // non-test environments (code mode, card rendering), use a no-op stub so
-  // realm cards that colocate test imports don't fail to load — the no-op
-  // module() means test callbacks are never invoked outside of test runs.
+  // Always shim qunit on the virtual network. In non-test environments (code
+  // mode, card rendering), this no-op stub prevents realm cards that co-locate
+  // test imports from failing to load — test callbacks are never invoked.
+  // In live-test runs, loadRealmTests() overrides this at the realm loader
+  // level via loader.shimModule('qunit', QUnit), so the real QUnit instance
+  // is used there and this network-level shim is never reached.
   const windowQUnit = (globalThis as any).QUnit;
   virtualNetwork.shimModule(
     'qunit',
@@ -227,5 +228,9 @@ export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers/adapter',
     testOnlyStub('@cardstack/host/tests/helpers/adapter'),
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/render-component',
+    testOnlyStub('@cardstack/host/tests/helpers/render-component'),
   );
 }
