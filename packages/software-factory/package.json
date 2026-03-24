@@ -11,6 +11,7 @@
     "cache:prepare": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/cache-realm.ts",
     "factory:agent-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-agent-smoke.ts",
     "factory:go": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/factory-entrypoint.ts",
+    "factory:prompt-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-prompt-smoke.ts",
     "factory:skill-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-skill-smoke.ts",
     "factory:tools-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-tools-smoke.ts",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

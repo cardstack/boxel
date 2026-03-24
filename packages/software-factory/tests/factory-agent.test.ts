@@ -382,20 +382,30 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     );
   });
 
-  test('user message includes project and ticket IDs', function (assert) {
+  test('user message includes project and ticket context', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
     });
 
     let ctx = makeMinimalContext({
-      project: { id: 'Project/sticky-note' },
-      ticket: { id: 'Ticket/define-core' },
+      project: { id: 'Project/sticky-note', objective: 'Build sticky notes' },
+      ticket: {
+        id: 'Ticket/define-core',
+        summary: 'Define core card',
+        description: 'Create the StickyNote card.',
+      },
     });
     let messages = agent.buildMessages(ctx);
 
-    assert.ok(messages[1].content.includes('Project/sticky-note'));
-    assert.ok(messages[1].content.includes('Ticket/define-core'));
+    assert.ok(
+      messages[1].content.includes('Ticket/define-core'),
+      'user message includes ticket ID',
+    );
+    assert.ok(
+      messages[1].content.includes('Define core card'),
+      'user message includes ticket summary',
+    );
   });
 
   test('includes skills when present', function (assert) {
@@ -435,7 +445,7 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     assert.ok(messages[0].content.includes('Search cards'));
   });
 
-  test('includes test results when present', function (assert) {
+  test('includes test results in iterate mode', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
@@ -455,13 +465,174 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
         durationMs: 3000,
       },
     });
-    let messages = agent.buildMessages(ctx);
+    let previousActions = [
+      {
+        type: 'create_file' as const,
+        path: 'card.gts',
+        content: 'code',
+        realm: 'target' as const,
+      },
+    ];
+    let messages = agent.buildMessages(ctx, previousActions, 2);
 
     assert.ok(messages[1].content.includes('failed'));
     assert.ok(messages[1].content.includes('renders card'));
     assert.ok(messages[1].content.includes('Element not found'));
   });
+
+  test('uses iterate template when testResults present even without explicit previousActions/iteration', function (assert) {
+    let agent = new OpenRouterFactoryAgent({
+      model: 'anthropic/claude-sonnet-4',
+      realmServerUrl: 'https://realms.example.test/',
+    });
+
+    let ctx = makeMinimalContext({
+      testResults: {
+        status: 'failed',
+        passedCount: 0,
+        failedCount: 1,
+        failures: [{ testName: 'basic', error: 'boom' }],
+        durationMs: 1000,
+      },
+    });
+    // Call buildMessages with no previousActions/iteration args
+    let messages = agent.buildMessages(ctx);
+
+    assert.ok(
+      messages[1].content.includes('Fix the failing tests'),
+      'uses iterate template when testResults present',
+    );
+    assert.ok(messages[1].content.includes('boom'), 'includes failure error');
+  });
+
+  test('includes tool results in implement prompt after invoke_tool', function (assert) {
+    let agent = new OpenRouterFactoryAgent({
+      model: 'anthropic/claude-sonnet-4',
+      realmServerUrl: 'https://realms.example.test/',
+    });
+
+    let ctx = makeMinimalContext({
+      tools: [
+        {
+          name: 'search-realm',
+          description: 'Search cards',
+          category: 'script' as const,
+          args: [],
+          outputFormat: 'json' as const,
+        },
+      ],
+      toolResults: [
+        {
+          tool: 'search-realm',
+          exitCode: 0,
+          output: { cards: ['StickyNote/sample'] },
+          durationMs: 200,
+        },
+      ],
+    });
+    // No testResults — should use implement template, but include tool results
+    let messages = agent.buildMessages(ctx);
+
+    assert.ok(
+      messages[1].content.includes('Implement this ticket'),
+      'uses implement template',
+    );
+    assert.ok(
+      messages[1].content.includes('search-realm'),
+      'includes tool name in results',
+    );
+    assert.ok(
+      messages[1].content.includes('StickyNote/sample'),
+      'includes tool output data',
+    );
+  });
 });
+
+// ---------------------------------------------------------------------------
+// OpenRouterFactoryAgent.plan() threads iteration context
+// ---------------------------------------------------------------------------
+
+module(
+  'factory-agent > OpenRouterFactoryAgent.plan() iteration context',
+  function () {
+    test('plan() uses iterate template when context has previousActions and testResults', async function (assert) {
+      let capturedBody: string | undefined;
+
+      let originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (
+        _input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify([{ type: 'done' }]),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }) as typeof globalThis.fetch;
+
+      try {
+        let agent = new OpenRouterFactoryAgent({
+          model: 'anthropic/claude-sonnet-4',
+          realmServerUrl: 'https://realms.example.test/',
+          openRouterApiKey: 'sk-or-test-key',
+        });
+
+        let ctx = makeMinimalContext({
+          testResults: {
+            status: 'failed',
+            passedCount: 0,
+            failedCount: 1,
+            failures: [
+              { testName: 'renders card', error: 'Element not found' },
+            ],
+            durationMs: 3000,
+          },
+          previousActions: [
+            {
+              type: 'create_file',
+              path: 'card.gts',
+              content: 'export class MyCard {}',
+              realm: 'target',
+            },
+          ],
+          iteration: 2,
+        });
+
+        await agent.plan(ctx);
+
+        // Verify the user message sent to the LLM uses the iterate template
+        let body = JSON.parse(capturedBody!);
+        let userMessage = body.messages[1].content;
+        assert.ok(
+          userMessage.includes('Fix the failing tests'),
+          'plan() sends iterate prompt when context has testResults + previousActions',
+        );
+        assert.ok(
+          userMessage.includes('card.gts'),
+          'iterate prompt includes previous actions from context',
+        );
+        assert.ok(
+          userMessage.includes('iteration 2'),
+          'iterate prompt includes iteration number from context',
+        );
+        assert.ok(
+          userMessage.includes('Element not found'),
+          'iterate prompt includes test failure details',
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // OpenRouterFactoryAgent API path selection
