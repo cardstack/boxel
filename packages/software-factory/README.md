@@ -18,6 +18,11 @@ the repo. Package linting currently runs `glint`, `eslint`, and `prettier`.
 - Docker running
 - Host app assets available at `http://localhost:4200/`
   - use `cd packages/host && pnpm serve:dist`
+- Boxel icons server available at `http://localhost:4206/`
+  - use `cd packages/boxel-icons && pnpm serve`
+  - in a worktree where boxel-icons hasn't been built, symlink the dist from the main checkout:
+    `ln -s /path/to/boxel/packages/boxel-icons/dist packages/boxel-icons/dist`
+  - required before `cache:prepare` — the harness indexes cards that reference icon modules
 
 The harness starts its own seeded test Postgres, Synapse, prerender server, and
 isolated realm server. By default it serves the test realm and base realm from

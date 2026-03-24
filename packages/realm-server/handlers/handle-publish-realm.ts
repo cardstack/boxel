@@ -21,11 +21,12 @@ import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/cons
 
 import { join } from 'path';
 import {
-  ensureDirSync,
   copySync,
   readJsonSync,
   writeJsonSync,
   removeSync,
+  existsSync,
+  moveSync,
 } from 'fs-extra';
 
 import {
@@ -339,8 +340,35 @@ export default function handlePublishRealm({
       let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmId);
-      copySync(sourceRealmPath, publishedRealmPath);
-      ensureDirSync(publishedRealmPath);
+      // Copy source to a temporary directory first, then swap it into
+      // place so that a failed copy doesn't destroy the existing
+      // published realm (e.g. due to disk-full or permission errors).
+      let tempCopyPath = `${publishedRealmPath}.tmp`;
+      let backupPath = `${publishedRealmPath}.backup`;
+      removeSync(tempCopyPath);
+      removeSync(backupPath);
+      copySync(sourceRealmPath, tempCopyPath);
+      // Unmount the existing published realm before swapping the
+      // directory so it can't serve requests from a partially
+      // replaced filesystem.
+      if (existingPublishedRealm) {
+        realms.splice(realms.indexOf(existingPublishedRealm), 1);
+        virtualNetwork.unmount(existingPublishedRealm.handle);
+      }
+      try {
+        if (existsSync(publishedRealmPath)) {
+          moveSync(publishedRealmPath, backupPath);
+        }
+        moveSync(tempCopyPath, publishedRealmPath);
+        removeSync(backupPath);
+      } catch (swapError) {
+        // Restore the old published realm if the swap failed
+        if (!existsSync(publishedRealmPath) && existsSync(backupPath)) {
+          moveSync(backupPath, publishedRealmPath);
+        }
+        removeSync(tempCopyPath);
+        throw swapError;
+      }
 
       let newlyPublishedRealmConfig = readJsonSync(
         join(publishedRealmPath, '.realm.json'),
@@ -358,11 +386,6 @@ export default function handlePublishRealm({
         join(publishedRealmPath, '.realm.json'),
         newlyPublishedRealmConfig,
       );
-
-      if (existingPublishedRealm) {
-        realms.splice(realms.indexOf(existingPublishedRealm), 1);
-        virtualNetwork.unmount(existingPublishedRealm.handle);
-      }
 
       // Clear stale modules cache for the published realm so that
       // error entries from a previous publish don't persist

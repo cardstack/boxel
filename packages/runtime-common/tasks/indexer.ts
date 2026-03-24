@@ -16,7 +16,7 @@ import { IndexRunner } from '../index-runner';
 import type { Stats } from '../worker';
 
 export { fromScratchIndex, incrementalIndex };
-const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 40 * 60;
+const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
 const envTimeoutSec = Number(
   (
     globalThis as {
