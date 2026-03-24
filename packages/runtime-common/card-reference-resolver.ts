@@ -39,6 +39,19 @@ export function resolveCardReference(
       `Cannot resolve bare package specifier "${reference}" — no matching prefix mapping registered`,
     );
   }
+  if (reference.startsWith('http://') || reference.startsWith('https://')) {
+    return new URL(reference).href;
+  }
+  // If relativeTo is a prefix-form ID (e.g. @cardstack/skills/Foo/bar),
+  // resolve it to a real URL before using it as a base.
+  if (typeof relativeTo === 'string') {
+    for (let [prefix, target] of prefixMappings) {
+      if (relativeTo.startsWith(prefix)) {
+        relativeTo = new URL(relativeTo.slice(prefix.length), target).href;
+        break;
+      }
+    }
+  }
   return new URL(reference, relativeTo).href;
 }
 
