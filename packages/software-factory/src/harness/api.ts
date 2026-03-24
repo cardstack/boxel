@@ -1,6 +1,10 @@
 import { resolve } from 'node:path';
 
 import {
+  readPreparedTemplateMetadata,
+  writePreparedTemplateMetadata,
+} from '../runtime-metadata';
+import {
   buildRealmToken,
   CACHE_VERSION,
   DEFAULT_BASE_REALM_PERMISSIONS,
@@ -20,6 +24,7 @@ import {
   templateDatabaseNameForCacheKey,
   hashString,
   baseRealmURLFor,
+  realmRelativePath,
   sourceRealmURLFor,
   realmLog,
   type FactoryGlobalContextHandle,
@@ -118,10 +123,11 @@ export async function ensureFactoryRealmTemplate(
     let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
     let fixtureHash = hashRealmFixture(realmDir);
     let sourceRealmHash = hashRealmFixture(sourceRealmDir);
+    let realmPath = realmRelativePath(realmURL, realmServerURL);
     let cacheKey = hashString(
       stableStringify({
         version: CACHE_VERSION,
-        realmURL: realmURL.href,
+        realmPath,
         permissions,
         fixtureHash,
         sourceRealmHash,
@@ -130,6 +136,22 @@ export async function ensureFactoryRealmTemplate(
       }),
     );
     let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+    let cachedTemplateMetadata =
+      readPreparedTemplateMetadata(templateDatabaseName);
+
+    if (
+      (await databaseExists(templateDatabaseName)) &&
+      cachedTemplateMetadata
+    ) {
+      return {
+        cacheKey,
+        templateDatabaseName,
+        fixtureHash,
+        cacheHit: true,
+        realmURL: new URL(cachedTemplateMetadata.templateRealmURL),
+        realmServerURL: new URL(cachedTemplateMetadata.templateRealmServerURL),
+      };
+    }
 
     let ownedSupport:
       | {
@@ -144,17 +166,6 @@ export async function ensureFactoryRealmTemplate(
     }
 
     try {
-      if (await databaseExists(templateDatabaseName)) {
-        return {
-          cacheKey,
-          templateDatabaseName,
-          fixtureHash,
-          cacheHit: true,
-          realmURL,
-          realmServerURL,
-        };
-      }
-
       await buildTemplateDatabase({
         realmDir,
         realmURL,
@@ -163,6 +174,12 @@ export async function ensureFactoryRealmTemplate(
         context,
         cacheKey,
         templateDatabaseName,
+      });
+      writePreparedTemplateMetadata({
+        realmDir,
+        templateDatabaseName,
+        templateRealmURL: realmURL.href,
+        templateRealmServerURL: realmServerURL.href,
       });
 
       return {

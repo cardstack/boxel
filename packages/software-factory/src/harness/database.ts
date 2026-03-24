@@ -59,6 +59,16 @@ export async function dropDatabase(databaseName: string): Promise<void> {
     let client = new PgClient(pgAdminConnectionConfig());
     try {
       await client.connect();
+      let result = await client.query<{ exists: boolean }>(
+        'SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1) AS exists',
+        [databaseName],
+      );
+      if (!result.rows[0]?.exists) {
+        return;
+      }
+      await client.query(
+        `ALTER DATABASE ${quotePgIdentifier(databaseName)} WITH IS_TEMPLATE false`,
+      );
       await client.query(
         `SELECT pg_terminate_backend(pid)
        FROM pg_stat_activity
