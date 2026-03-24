@@ -844,8 +844,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
         },
       ],
     });
+    await settled();
     // Click on the apply button, skill card will be updated since it has changed
-    await waitFor('[data-test-message-idx="0"]');
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
 
     const finalRoomStateSkillsJson = getRoomState(
@@ -951,6 +952,7 @@ ${REPLACE_MARKER}
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
+    await settled();
     // Click on the apply button, skill card will be updated since it has changed
     await waitFor('[data-test-apply-code-button]');
     await click('[data-test-apply-code-button]');
