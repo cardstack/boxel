@@ -2,15 +2,13 @@
 import { registerRealmUser } from './register-realm-user-using-api';
 import { realmPassword } from '../helpers/realm-credentials';
 
-// Usage: register-github-webhook.ts [publicURL] [roomId] [prNumber]
+// Registers a GitHub webhook as the submission_realm user.
 //
-// Environment variables (override or replace positional args):
+// Environment variables:
 //   REALM_SERVER_URL        - realm server base URL (default: http://localhost:4201)
 //   COMMAND_URL             - override the command URL registered with the webhook
 //   SUBMISSION_REALM_URL    - realm URL where GithubEventCards are saved
-//   REALM_SECRET_SEED       - seed used to derive submission_realm password (required if MATRIX_PASSWORD not set)
-//   MATRIX_USERNAME         - override Matrix username (default: submission_realm)
-//   MATRIX_PASSWORD         - override Matrix password (default: derived from REALM_SECRET_SEED)
+//   REALM_SECRET_SEED       - seed used to derive submission_realm password (required)
 
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
 
@@ -200,22 +198,14 @@ async function main() {
   console.log(`Command URL:   ${commandURL}`);
   console.log('');
 
-  // Step 1: Authenticate as submission_realm user by default
-  if (!process.env.MATRIX_USERNAME) {
-    process.env.MATRIX_USERNAME = 'submission_realm';
+  // Step 1: Authenticate as submission_realm user
+  const username = 'submission_realm';
+  const seed = process.env.REALM_SECRET_SEED;
+  if (!seed) {
+    throw new Error('REALM_SECRET_SEED must be set to derive submission_realm password');
   }
-  if (!process.env.MATRIX_PASSWORD) {
-    const seed = process.env.REALM_SECRET_SEED;
-    if (!seed) {
-      throw new Error(
-        'REALM_SECRET_SEED must be set to derive submission_realm password (or set MATRIX_PASSWORD explicitly)',
-      );
-    }
-    process.env.MATRIX_PASSWORD = await realmPassword(
-      process.env.MATRIX_USERNAME,
-      seed,
-    );
-  }
+  process.env.MATRIX_USERNAME = username;
+  process.env.MATRIX_PASSWORD = await realmPassword(username, seed);
 
   console.log('Authenticating...');
   const { jwt, userId } = await registerRealmUser();
