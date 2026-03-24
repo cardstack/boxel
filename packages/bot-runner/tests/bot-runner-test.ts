@@ -196,6 +196,8 @@ module('timeline handler', () => {
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
+      submissionRealmUrl: 'http://localhost:4201/submissions/',
+      submissionRealmUsername: '@submissionbot:localhost',
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -282,6 +284,8 @@ module('timeline handler', () => {
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
+      submissionRealmUrl: 'http://localhost:4201/submissions/',
+      submissionRealmUsername: '@submissionbot:localhost',
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -424,6 +428,8 @@ module('timeline handler', () => {
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
+      submissionRealmUrl: 'http://localhost:4201/submissions/',
+      submissionRealmUsername: '@submissionbot:localhost',
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -491,6 +497,8 @@ module('timeline handler', () => {
 
     let handleTimelineEvent = onTimelineEvent({
       authUserId: '@submissionbot:localhost',
+      submissionRealmUrl: 'http://localhost:4201/submissions/',
+      submissionRealmUsername: '@submissionbot:localhost',
       dbAdapter,
       queuePublisher,
       githubClient,
