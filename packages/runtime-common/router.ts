@@ -16,6 +16,35 @@ type Handler = (
   requestContext: RequestContext,
 ) => Promise<Response>;
 
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack?.trim() || error.message;
+  }
+
+  if (
+    error === null ||
+    error === undefined ||
+    typeof error === 'string' ||
+    typeof error === 'number' ||
+    typeof error === 'boolean' ||
+    typeof error === 'bigint'
+  ) {
+    return String(error);
+  }
+
+  try {
+    let serialized = JSON.stringify(error);
+    if (serialized && serialized !== '{}') {
+      return serialized;
+    }
+  } catch {
+    // fall through to object tag
+  }
+
+  let tag = Object.prototype.toString.call(error);
+  return tag === '[object Object]' ? 'non-Error object thrown' : tag;
+}
+
 export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 
 /* eslint-disable @typescript-eslint/no-duplicate-enum-values */
@@ -194,9 +223,12 @@ export class Router {
 
       this.log.error(err);
 
-      return new Response(`unexpected exception in realm ${err}`, {
-        status: 500,
-      });
+      return new Response(
+        `unexpected exception in realm ${formatUnknownError(err)}`,
+        {
+          status: 500,
+        },
+      );
     }
   }
 

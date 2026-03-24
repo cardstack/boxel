@@ -20,6 +20,10 @@ async function main(): Promise<void> {
   let runtime = await startFactoryRealmServer({
     realmDir,
     templateDatabaseName: process.env.SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME,
+    templateRealmServerURL: process.env
+      .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL
+      ? new URL(process.env.SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL)
+      : undefined,
   });
 
   let payload = {

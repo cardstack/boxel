@@ -11,6 +11,7 @@ import {
   type ActiveBoxelProfile,
   type MatrixAuth,
 } from '../scripts/lib/boxel';
+import { formatErrorResponse, formatUnknownError } from './error-format';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
 export interface ResolveFactoryTargetRealmOptions {
@@ -159,7 +160,7 @@ async function createRealm(
     };
   }
 
-  let text = await response.text();
+  let text = await formatErrorResponse(response);
 
   if (response.status === 400 && /already exists on this server/.test(text)) {
     let authorization = await getRealmAuthorization(matrixAuth, resolution.url);
@@ -209,7 +210,7 @@ async function appendRealmToMatrixAccountData(
   });
 
   if (!putResponse.ok) {
-    let text = await putResponse.text();
+    let text = await formatErrorResponse(putResponse);
     throw new Error(
       `Failed to update Matrix account data with realm ${realmUrl}: HTTP ${putResponse.status} ${text}`.trim(),
     );
@@ -240,9 +241,11 @@ async function waitForRealmReady(
         return;
       }
 
-      lastError = `HTTP ${response.status} ${await response.text()}`.trim();
+      lastError = `HTTP ${response.status} ${await formatErrorResponse(
+        response,
+      )}`.trim();
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = formatUnknownError(error);
     }
 
     await new Promise((resolve) => setTimeout(resolve, retryDelayMs));

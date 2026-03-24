@@ -1,4 +1,5 @@
 import type { FactoryBrief } from './factory-brief';
+import { formatErrorResponse, formatUnknownError } from './error-format';
 
 const cardSourceMimeType = 'application/vnd.card+source';
 
@@ -479,7 +480,7 @@ async function createCardIfMissing(
   });
 
   if (!writeResponse.ok) {
-    let text = await writeResponse.text();
+    let text = await formatErrorResponse(writeResponse);
     throw new Error(
       `Failed to create card ${cardPath} in ${realmUrl}: HTTP ${writeResponse.status} ${text}`.trim(),
     );
@@ -551,7 +552,7 @@ async function patchTicketStatus(
   });
 
   if (!patchResponse.ok) {
-    let text = await patchResponse.text();
+    let text = await formatErrorResponse(patchResponse);
     throw new Error(
       `Failed to patch ticket status for ${ticketPath}: HTTP ${patchResponse.status} ${text}`.trim(),
     );
@@ -582,9 +583,11 @@ async function waitForCardToBeReadable(
         return;
       }
 
-      lastError = `HTTP ${response.status} ${await response.text()}`.trim();
+      lastError = `HTTP ${response.status} ${await formatErrorResponse(
+        response,
+      )}`.trim();
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = formatUnknownError(error);
     }
 
     await new Promise((resolve) => setTimeout(resolve, retryDelayMs));

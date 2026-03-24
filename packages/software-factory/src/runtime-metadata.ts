@@ -8,6 +8,13 @@ export const defaultSupportMetadataFile = join(
   'support.json',
 );
 
+export interface PreparedTemplateMetadata {
+  realmDir: string;
+  templateDatabaseName: string;
+  templateRealmURL: string;
+  templateRealmServerURL: string;
+}
+
 export function getSupportMetadataFile() {
   return (
     process.env.SOFTWARE_FACTORY_SUPPORT_METADATA_FILE ??
@@ -22,6 +29,9 @@ export function readSupportMetadata():
       pid?: number;
       realmDir?: string;
       templateDatabaseName?: string;
+      templateRealmURL?: string;
+      templateRealmServerURL?: string;
+      preparedTemplates?: PreparedTemplateMetadata[];
     }
   | undefined {
   let metadataFile = getSupportMetadataFile();
@@ -35,6 +45,9 @@ export function readSupportMetadata():
       pid?: number;
       realmDir?: string;
       templateDatabaseName?: string;
+      templateRealmURL?: string;
+      templateRealmServerURL?: string;
+      preparedTemplates?: PreparedTemplateMetadata[];
     };
   } catch (error) {
     throw new Error(

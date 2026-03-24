@@ -7,6 +7,7 @@ import {
   sharedRuntimeDir,
   writeSupportMetadata,
   getSupportMetadataFile,
+  type PreparedTemplateMetadata,
 } from './src/runtime-metadata';
 
 const packageRoot = resolve(__dirname);
@@ -22,6 +23,10 @@ const fallbackRealmDir = resolve(
 const testSourceRealmDir = resolve(
   packageRoot,
   'test-fixtures/public-software-factory-source',
+);
+const bootstrapTargetRealmDir = resolve(
+  packageRoot,
+  'test-fixtures/bootstrap-target',
 );
 const realmDir = existsSync(configuredRealmDir)
   ? configuredRealmDir
@@ -175,6 +180,64 @@ async function waitForMetadataFile<T>(
   );
 }
 
+async function prepareTemplateForRealm(
+  realmDir: string,
+  context: Record<string, unknown>,
+  metadataFile: string,
+): Promise<PreparedTemplateMetadata> {
+  let cacheLogs = '';
+  setupLog.warn(
+    `starting cache:prepare for ${realmDir}; this can take a while on cold startup or in CI`,
+  );
+  let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
+    cwd: packageRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      SOFTWARE_FACTORY_CONTEXT: JSON.stringify(context),
+      SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
+      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
+    },
+  });
+
+  mirrorChildOutput(
+    cacheChild,
+    cacheLog,
+    (next) => {
+      cacheLogs = next;
+    },
+    () => cacheLogs,
+  );
+  cacheChild.stdout?.on('data', (chunk) => {
+    maybeLogCacheProgress(cacheLog, String(chunk));
+  });
+  cacheChild.stderr?.on('data', (chunk) => {
+    maybeLogCacheProgress(cacheLog, String(chunk));
+  });
+
+  let cacheStartedAt = Date.now();
+  await waitForCommand(cacheChild, () => cacheLogs);
+  let cachePayload = await waitForMetadataFile<{
+    realmDir: string;
+    templateDatabaseName: string;
+    realmURL: string;
+    realmServerURL: string;
+  }>(metadataFile, cacheChild, () => cacheLogs, 5_000);
+  setupLog.info(
+    `cache:prepare finished for ${realmDir} in ${(
+      (Date.now() - cacheStartedAt) /
+      1000
+    ).toFixed(1)}s`,
+  );
+
+  return {
+    realmDir: cachePayload.realmDir,
+    templateDatabaseName: cachePayload.templateDatabaseName,
+    templateRealmURL: cachePayload.realmURL,
+    templateRealmServerURL: cachePayload.realmServerURL,
+  };
+}
+
 export default async function globalSetup() {
   let setupStartedAt = Date.now();
   rmSync(sharedRuntimeDir, { recursive: true, force: true });
@@ -219,53 +282,28 @@ export default async function globalSetup() {
     )}s`,
   );
 
-  let cacheLogs = '';
-  let cacheMetadataFile = resolve(sharedRuntimeDir, 'cache.json');
-  setupLog.warn(
-    'starting cache:prepare; this can take a while on cold startup or in CI',
-  );
-  setupLog.info(`starting cache:prepare for realm ${realmDir}`);
-  let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
-    cwd: packageRoot,
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      SOFTWARE_FACTORY_CONTEXT: JSON.stringify(payload.context),
-      SOFTWARE_FACTORY_METADATA_FILE: cacheMetadataFile,
-      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
-    },
-  });
-
-  mirrorChildOutput(
-    cacheChild,
-    cacheLog,
-    (next) => {
-      cacheLogs = next;
-    },
-    () => cacheLogs,
-  );
-  cacheChild.stdout?.on('data', (chunk) => {
-    maybeLogCacheProgress(cacheLog, String(chunk));
-  });
-  cacheChild.stderr?.on('data', (chunk) => {
-    maybeLogCacheProgress(cacheLog, String(chunk));
-  });
-
-  let cacheStartedAt = Date.now();
-  await waitForCommand(cacheChild, () => cacheLogs);
-  let cachePayload = await waitForMetadataFile<{
-    templateDatabaseName: string;
-  }>(cacheMetadataFile, cacheChild, () => cacheLogs, 5_000);
-  setupLog.info(
-    `cache:prepare finished in ${((Date.now() - cacheStartedAt) / 1000).toFixed(
-      1,
-    )}s`,
-  );
+  let preparedRealmDirs = [...new Set([realmDir, bootstrapTargetRealmDir])];
+  let preparedTemplates: PreparedTemplateMetadata[] = [];
+  for (let [index, preparedRealmDir] of preparedRealmDirs.entries()) {
+    preparedTemplates.push(
+      await prepareTemplateForRealm(
+        preparedRealmDir,
+        payload.context,
+        resolve(sharedRuntimeDir, `cache-${index}.json`),
+      ),
+    );
+  }
+  let primaryTemplate =
+    preparedTemplates.find((entry) => entry.realmDir === realmDir) ??
+    preparedTemplates[0];
 
   writeSupportMetadata({
     ...payload,
     pid: child.pid,
-    templateDatabaseName: cachePayload.templateDatabaseName,
+    templateDatabaseName: primaryTemplate?.templateDatabaseName,
+    templateRealmURL: primaryTemplate?.templateRealmURL,
+    templateRealmServerURL: primaryTemplate?.templateRealmServerURL,
+    preparedTemplates,
   });
 
   setupLog.info(

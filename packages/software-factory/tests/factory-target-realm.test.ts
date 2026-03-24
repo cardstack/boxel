@@ -318,6 +318,87 @@ module('factory-target-realm', function (hooks) {
     assert.true(result.createdRealm);
     assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
+
+  test('bootstrapFactoryTargetRealm does not surface non-serialized response objects as [object Object]', async function (assert) {
+    assert.expect(2);
+
+    process.env.MATRIX_URL = 'https://matrix.example.test/';
+    process.env.MATRIX_USERNAME = 'hassan';
+    process.env.MATRIX_PASSWORD = 'secret';
+    process.env.REALM_SERVER_URL = 'https://realms.example.test/';
+
+    let resolution = resolveFactoryTargetRealm({
+      targetRealmUrl,
+      realmServerUrl: null,
+    });
+
+    globalThis.fetch = (async (input, init) => {
+      let request = new Request(input, init);
+
+      if (
+        request.url === 'https://matrix.example.test/_matrix/client/v3/login'
+      ) {
+        return new Response(
+          JSON.stringify({
+            access_token: 'matrix-access-token',
+            device_id: 'device-id',
+            user_id: '@hassan:localhost',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
+
+      if (
+        request.url ===
+        'https://matrix.example.test/_matrix/client/v3/user/%40hassan%3Alocalhost/openid/request_token'
+      ) {
+        return new Response(
+          JSON.stringify({
+            access_token: 'openid-token',
+            expires_in: 300,
+            matrix_server_name: 'localhost',
+            token_type: 'Bearer',
+          }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }
+
+      if (request.url === 'https://realms.example.test/_server-session') {
+        return new Response('{}', {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+            Authorization: 'Bearer realm-server-token',
+          },
+        });
+      }
+
+      if (request.url === 'https://realms.example.test/_create-realm') {
+        return new Response({ errors: ['boom'] } as unknown as BodyInit, {
+          status: 500,
+        });
+      }
+
+      throw new Error(`Unexpected url: ${request.method} ${request.url}`);
+    }) as typeof globalThis.fetch;
+
+    await assert.rejects(
+      bootstrapFactoryTargetRealm(resolution),
+      (error: unknown) => {
+        assert.false(String(error).includes('[object Object]'));
+        return (
+          error instanceof Error &&
+          error.message.includes('server returned a non-serialized object body')
+        );
+      },
+    );
+  });
 });
 
 function restoreEnv(name: string, value: string | undefined): void {

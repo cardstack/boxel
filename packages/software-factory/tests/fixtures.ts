@@ -7,7 +7,11 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
-import { defaultSupportMetadataFile } from '../src/runtime-metadata';
+import {
+  defaultSupportMetadataFile,
+  type PreparedTemplateMetadata,
+  readSupportMetadata,
+} from '../src/runtime-metadata';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
 type StartedFactoryRealm = {
@@ -142,10 +146,32 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
   let metadataFile = join(tempDir, 'runtime.json');
   let logs = '';
   let supportMetadata = existsSync(defaultSupportMetadataFile)
-    ? (JSON.parse(readFileSync(defaultSupportMetadataFile, 'utf8')) as {
-        context?: Record<string, unknown>;
-      })
+    ? (readSupportMetadata() as
+        | {
+            context?: Record<string, unknown>;
+            templateDatabaseName?: string;
+            templateRealmURL?: string;
+            templateRealmServerURL?: string;
+            realmDir?: string;
+            preparedTemplates?: PreparedTemplateMetadata[];
+          }
+        | undefined)
     : undefined;
+  let preparedTemplate =
+    supportMetadata?.preparedTemplates?.find(
+      (entry) => resolve(entry.realmDir) === resolve(realmDir),
+    ) ??
+    (supportMetadata?.realmDir != null &&
+    resolve(supportMetadata.realmDir) === resolve(realmDir) &&
+    supportMetadata.templateDatabaseName &&
+    supportMetadata.templateRealmServerURL
+      ? {
+          realmDir: supportMetadata.realmDir,
+          templateDatabaseName: supportMetadata.templateDatabaseName,
+          templateRealmURL: supportMetadata.templateRealmURL ?? '',
+          templateRealmServerURL: supportMetadata.templateRealmServerURL,
+        }
+      : undefined);
 
   let child = spawn(
     tsNodeBin,
@@ -161,6 +187,18 @@ async function startRealmProcess(realmDir = defaultRealmDir) {
         ...(supportMetadata?.context
           ? {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
+            }
+          : {}),
+        ...(preparedTemplate
+          ? {
+              SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
+                preparedTemplate.templateDatabaseName,
+            }
+          : {}),
+        ...(preparedTemplate
+          ? {
+              SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
+                preparedTemplate.templateRealmServerURL,
             }
           : {}),
       },

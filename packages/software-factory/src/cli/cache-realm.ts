@@ -28,6 +28,8 @@ async function main(): Promise<void> {
     templateDatabaseName: template.templateDatabaseName,
     fixtureHash: template.fixtureHash,
     cacheHit: template.cacheHit,
+    realmURL: template.realmURL.href,
+    realmServerURL: template.realmServerURL.href,
   };
   if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
     mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {

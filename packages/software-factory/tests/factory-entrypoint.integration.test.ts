@@ -48,6 +48,7 @@ module('factory-entrypoint integration', function () {
   test('factory:go package script prints a structured JSON summary', async function (assert) {
     let canonicalTargetRealmUrl: string;
     let targetRealmUrl: string;
+    let createdCardPaths = new Set<string>();
     let server = createServer((request, response) => {
       if (request.url === '/software-factory/Wiki/sticky-note') {
         response.writeHead(200, { 'content-type': 'application/json' });
@@ -147,13 +148,37 @@ module('factory-entrypoint integration', function () {
         request.url?.startsWith('/hassan/personal/') &&
         request.method === 'GET'
       ) {
-        // Card existence check — return 404 for first run
-        response.writeHead(404, { 'content-type': 'text/plain' });
-        response.end('not found');
+        let cardPath = request.url
+          .replace('/hassan/personal/', '')
+          .replace(/\.json$/, '');
+        if (createdCardPaths.has(cardPath)) {
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: `${origin}/software-factory/darkfactory`,
+                    name: 'Project',
+                  },
+                },
+              },
+            }),
+          );
+        } else {
+          // Card existence check — return 404 for first run
+          response.writeHead(404, { 'content-type': 'text/plain' });
+          response.end('not found');
+        }
       } else if (
         request.url?.startsWith('/hassan/personal/') &&
         request.method === 'POST'
       ) {
+        createdCardPaths.add(
+          request.url.replace('/hassan/personal/', '').replace(/\.json$/, ''),
+        );
         // Card creation — accept it
         response.writeHead(204);
         response.end();
