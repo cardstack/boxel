@@ -29,6 +29,7 @@ import {
   isRegisteredPrefix,
   cardIdToURL,
   resolveCardReference,
+  unresolveCardReference,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 
@@ -54,7 +55,9 @@ function canonicalURL(url: string, relativeTo?: string): string {
     let parsed = new URL(url, relativeTo);
     parsed.search = '';
     parsed.hash = '';
-    return parsed.href;
+    // Convert resolved URLs back to prefix form if possible, consistent
+    // with how dependency-url.ts canonicalURL stores module URLs.
+    return unresolveCardReference(parsed.href);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;
