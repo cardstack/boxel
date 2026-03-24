@@ -8,28 +8,51 @@ import {
 import { readSupportContext } from '../runtime-metadata';
 
 async function main(): Promise<void> {
-  let realmDir = resolve(
-    process.cwd(),
-    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
-  );
+  let realmDirs = [
+    ...new Set(
+      (process.argv.slice(2).length > 0
+        ? process.argv.slice(2)
+        : ['test-fixtures/darkfactory-adopter']
+      ).map((realmDir) => resolve(process.cwd(), realmDir)),
+    ),
+  ];
   let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
 
   let supportContext: FactoryRealmOptions['context'] = serializedSupportContext
     ? (JSON.parse(serializedSupportContext) as FactoryRealmOptions['context'])
     : (readSupportContext() as FactoryRealmOptions['context']);
 
-  let template = await ensureFactoryRealmTemplate({
-    realmDir,
-    context: supportContext,
-  });
+  let preparedTemplates = [];
+  for (let realmDir of realmDirs) {
+    let template = await ensureFactoryRealmTemplate({
+      realmDir,
+      context: supportContext,
+    });
+    preparedTemplates.push({
+      realmDir,
+      cacheKey: template.cacheKey,
+      templateDatabaseName: template.templateDatabaseName,
+      fixtureHash: template.fixtureHash,
+      cacheHit: template.cacheHit,
+      realmURL: template.realmURL.href,
+      realmServerURL: template.realmServerURL.href,
+    });
+  }
+  let primaryTemplate = preparedTemplates[0];
   let payload = {
-    realmDir,
-    cacheKey: template.cacheKey,
-    templateDatabaseName: template.templateDatabaseName,
-    fixtureHash: template.fixtureHash,
-    cacheHit: template.cacheHit,
-    realmURL: template.realmURL.href,
-    realmServerURL: template.realmServerURL.href,
+    realmDir: primaryTemplate.realmDir,
+    cacheKey: primaryTemplate.cacheKey,
+    templateDatabaseName: primaryTemplate.templateDatabaseName,
+    fixtureHash: primaryTemplate.fixtureHash,
+    cacheHit: primaryTemplate.cacheHit,
+    realmURL: primaryTemplate.realmURL,
+    realmServerURL: primaryTemplate.realmServerURL,
+    preparedTemplates: preparedTemplates.map((template) => ({
+      realmDir: template.realmDir,
+      templateDatabaseName: template.templateDatabaseName,
+      templateRealmURL: template.realmURL,
+      templateRealmServerURL: template.realmServerURL,
+    })),
   };
   if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
     mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {

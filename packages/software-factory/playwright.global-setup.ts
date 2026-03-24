@@ -180,16 +180,16 @@ async function waitForMetadataFile<T>(
   );
 }
 
-async function prepareTemplateForRealm(
-  realmDir: string,
+async function prepareTemplatesForRealms(
+  realmDirs: string[],
   context: Record<string, unknown>,
   metadataFile: string,
-): Promise<PreparedTemplateMetadata> {
+): Promise<PreparedTemplateMetadata[]> {
   let cacheLogs = '';
   setupLog.warn(
-    `starting cache:prepare for ${realmDir}; this can take a while on cold startup or in CI`,
+    `starting cache:prepare for ${realmDirs.length} realm(s); this can take a while on cold startup or in CI`,
   );
-  let cacheChild = spawn('pnpm', ['cache:prepare', realmDir], {
+  let cacheChild = spawn('pnpm', ['cache:prepare', ...realmDirs], {
     cwd: packageRoot,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
@@ -218,24 +218,22 @@ async function prepareTemplateForRealm(
   let cacheStartedAt = Date.now();
   await waitForCommand(cacheChild, () => cacheLogs);
   let cachePayload = await waitForMetadataFile<{
-    realmDir: string;
-    templateDatabaseName: string;
-    realmURL: string;
-    realmServerURL: string;
+    preparedTemplates?: PreparedTemplateMetadata[];
   }>(metadataFile, cacheChild, () => cacheLogs, 5_000);
   setupLog.info(
-    `cache:prepare finished for ${realmDir} in ${(
+    `cache:prepare finished for ${realmDirs.length} realm(s) in ${(
       (Date.now() - cacheStartedAt) /
       1000
     ).toFixed(1)}s`,
   );
 
-  return {
-    realmDir: cachePayload.realmDir,
-    templateDatabaseName: cachePayload.templateDatabaseName,
-    templateRealmURL: cachePayload.realmURL,
-    templateRealmServerURL: cachePayload.realmServerURL,
-  };
+  if (!cachePayload.preparedTemplates?.length) {
+    throw new Error(
+      `cache:prepare did not return preparedTemplates for ${realmDirs.join(', ')}`,
+    );
+  }
+
+  return cachePayload.preparedTemplates;
 }
 
 export default async function globalSetup() {
@@ -283,16 +281,11 @@ export default async function globalSetup() {
   );
 
   let preparedRealmDirs = [...new Set([realmDir, bootstrapTargetRealmDir])];
-  let preparedTemplates: PreparedTemplateMetadata[] = [];
-  for (let [index, preparedRealmDir] of preparedRealmDirs.entries()) {
-    preparedTemplates.push(
-      await prepareTemplateForRealm(
-        preparedRealmDir,
-        payload.context,
-        resolve(sharedRuntimeDir, `cache-${index}.json`),
-      ),
-    );
-  }
+  let preparedTemplates = await prepareTemplatesForRealms(
+    preparedRealmDirs,
+    payload.context,
+    resolve(sharedRuntimeDir, 'cache.json'),
+  );
   let primaryTemplate =
     preparedTemplates.find((entry) => entry.realmDir === realmDir) ??
     preparedTemplates[0];
