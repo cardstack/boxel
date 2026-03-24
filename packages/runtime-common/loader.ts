@@ -161,18 +161,25 @@ export class Loader {
     consumed: string[] = [],
     initialIdentifier = moduleIdentifier,
   ): Promise<string[]> {
-    if (consumed.includes(moduleIdentifier)) {
+    // Normalize to resolved URL href so that prefix-form identifiers
+    // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
+    // are treated as the same module for cycle detection and self-exclusion.
+    let resolvedHref = new URL(
+      resolveCardReference(moduleIdentifier, undefined),
+    ).href;
+    let resolvedInitial = new URL(
+      resolveCardReference(initialIdentifier, undefined),
+    ).href;
+
+    if (consumed.includes(resolvedHref)) {
       return [];
     }
     // you can't consume yourself
-    if (moduleIdentifier !== initialIdentifier) {
-      consumed.push(moduleIdentifier);
+    if (resolvedHref !== resolvedInitial) {
+      consumed.push(resolvedHref);
     }
 
-    let resolvedModuleIdentifier = new URL(
-      resolveCardReference(moduleIdentifier, undefined),
-    );
-    let module = this.getModule(resolvedModuleIdentifier.href);
+    let module = this.getModule(resolvedHref);
 
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
