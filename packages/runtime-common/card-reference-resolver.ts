@@ -7,6 +7,10 @@ export function registerCardReferencePrefix(
   prefixMappings.set(prefix, targetURL);
 }
 
+export function unregisterCardReferencePrefix(prefix: string): void {
+  prefixMappings.delete(prefix);
+}
+
 export function isRegisteredPrefix(reference: string): boolean {
   for (let [prefix] of prefixMappings) {
     if (reference.startsWith(prefix)) {
