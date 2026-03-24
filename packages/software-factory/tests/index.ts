@@ -1,3 +1,5 @@
+import './factory-agent.test';
+import './factory-agent.integration.test';
 import './factory-bootstrap.test';
 import './factory-brief.test';
 import './factory-entrypoint.test';
