@@ -43,13 +43,16 @@ type FactoryRealmOptions = {
   realmServerMode: RealmServerMode;
 };
 
-type FactoryRealmInternalFixtures = {
-  realm: StartedFactoryRealm;
+type FactoryRealmWorkerFixtures = {
   testWorkerPortSet: TestWorkerPortSet;
   testWorkerPrerender: {
     url: string;
     stop(): Promise<void>;
   };
+};
+
+type FactoryRealmTestFixtures = {
+  realm: StartedFactoryRealm;
 };
 
 type SharedRealmHandle = {
@@ -429,7 +432,8 @@ async function releaseSharedRealm(key: string): Promise<void> {
 }
 
 export const test = base.extend<
-  FactoryRealmFixtures & FactoryRealmOptions & FactoryRealmInternalFixtures
+  FactoryRealmFixtures & FactoryRealmOptions & FactoryRealmTestFixtures,
+  FactoryRealmWorkerFixtures
 >({
   realmDir: [defaultRealmDir, { option: true }],
   realmServerMode: ['shared', { option: true }],

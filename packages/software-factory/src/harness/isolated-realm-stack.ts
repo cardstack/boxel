@@ -515,7 +515,7 @@ export async function startIsolatedRealmStack({
     };
   } catch (error) {
     try {
-      await prerender.stop();
+      await prerender?.stop();
     } catch {
       // best effort cleanup
     }
