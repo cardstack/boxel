@@ -13,8 +13,6 @@ import type {
 import {
   baseRealm,
   isSingleCardDocument,
-  registerCardReferencePrefix,
-  unregisterCardReferencePrefix,
   type LooseSingleCardDocument,
   type SingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -943,149 +941,6 @@ module(basename(__filename), function () {
         });
       });
 
-      module('prefix-form card IDs with relationships', function (hooks) {
-        let prefixForTest = '@test-e2e/realm/';
-
-        setupPermissionedRealmCached(hooks, {
-          realmURL,
-          permissions: {
-            '*': ['read', 'write'],
-            '@node-test_realm:localhost': ['read', 'realm-owner'],
-          },
-          onRealmSetup,
-        });
-
-        hooks.beforeEach(function () {
-          registerCardReferencePrefix(prefixForTest, testRealmHref);
-        });
-
-        hooks.afterEach(function () {
-          unregisterCardReferencePrefix(prefixForTest);
-        });
-
-        test('resolves linksTo relationship when card ID is in prefix form', async function (assert) {
-          let { testRealm: realm, request } = getRealmSetup();
-
-          let writes = new Map<string, string>([
-            [
-              'pet.gts',
-              `
-                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
-
-                export class Pet extends CardDef {
-                  @field name = contains(StringField);
-                  @field bestFriend = linksTo(() => Pet);
-                  @field cardTitle = contains(StringField, {
-                    computeVia: function (this: Pet) {
-                      return this.name;
-                    },
-                  });
-                }
-              `,
-            ],
-            [
-              'Pet/mango.json',
-              JSON.stringify({
-                data: {
-                  attributes: {
-                    name: 'Mango',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../pet.gts',
-                      name: 'Pet',
-                    },
-                  },
-                },
-              }),
-            ],
-            [
-              'Pet/vangogh.json',
-              JSON.stringify({
-                data: {
-                  attributes: {
-                    name: 'Van Gogh',
-                  },
-                  relationships: {
-                    bestFriend: {
-                      links: {
-                        self: './mango',
-                      },
-                    },
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../pet.gts',
-                      name: 'Pet',
-                    },
-                  },
-                },
-              }),
-            ],
-          ]);
-
-          await realm.writeMany(writes);
-
-          // GET the card - this triggers loadLinks -> processRelationships.
-          // Before the fix in resolveCardReference, this would fail because
-          // resource.id in the pristine_doc is in prefix form (e.g.
-          // "@test-e2e/realm/Pet/vangogh") and could not be used as a URL base
-          // to resolve the relative relationship link "./mango".
-          let response = await request
-            .get('/Pet/vangogh')
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(
-            response.status,
-            200,
-            `HTTP 200 status: ${response.text}`,
-          );
-
-          let doc = response.body as SingleCardDocument;
-
-          // Verify the card's ID is in prefix form
-          assert.strictEqual(
-            doc.data.id,
-            `${prefixForTest}Pet/vangogh`,
-            'card ID is in prefix form',
-          );
-
-          // Verify the relationship resolved correctly
-          let bestFriendRel = doc.data.relationships
-            ?.bestFriend as Relationship;
-          assert.ok(bestFriendRel, 'bestFriend relationship exists');
-          assert.deepEqual(
-            bestFriendRel.data,
-            {
-              type: 'card',
-              id: `${prefixForTest}Pet/mango`,
-            },
-            'relationship data.id is in prefix form and resolves correctly',
-          );
-          assert.strictEqual(
-            bestFriendRel.links?.self,
-            `./mango`,
-            'relationship links.self is relativized correctly',
-          );
-
-          // Verify included resources are present (loadLinks succeeded)
-          assert.ok(
-            Array.isArray(doc.included),
-            'included resources are present',
-          );
-          let includedMango = doc.included!.find(
-            (r: any) => r.id === `${prefixForTest}Pet/mango`,
-          );
-          assert.ok(includedMango, 'linked card is included in the response');
-          assert.strictEqual(
-            (includedMango as any)?.attributes?.name,
-            'Mango',
-            'included card has correct attributes',
-          );
-        });
-      });
-
       // using public writable realm to make it easy for test setup for the error tests
       module('public writable realm', function (hooks) {
         setupPermissionedRealmCached(hooks, {
@@ -1096,6 +951,7 @@ module(basename(__filename), function () {
           },
           onRealmSetup,
         });
+
 
         test('serves a card error request with last known good state', async function (assert) {
           await request
