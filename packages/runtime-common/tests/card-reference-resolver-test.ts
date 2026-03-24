@@ -1,90 +1,99 @@
 import type { SharedTests } from '../helpers';
-import {
-  registerCardReferencePrefix,
-  resolveCardReference,
-  cardIdToURL,
-  isRegisteredPrefix,
-} from '../card-reference-resolver';
+import { registerCardReferencePrefix } from '../card-reference-resolver';
+import { relativizeDocument } from '../realm-index-query-engine';
+import type { SingleCardDocument } from '../index';
 
 const tests = Object.freeze({
-  'resolveCardReference resolves relative URL against prefix-form ID via cardIdToURL':
+  // Regression test for CS-10498: cards in prefix-mapped realms (like
+  // @cardstack/openrouter/) threw TypeError: Invalid URL when served.
+  //
+  // After the import-maps change, unresolveResourceInstanceURLs converts
+  // card IDs in the index to prefix form (e.g. "@cardstack/openrouter/...").
+  // relativizeResource then used the raw prefix string as a URL base for
+  // resolveCardReference, causing new URL() to throw when resolving
+  // relative module deps like "../openrouter-model".
+  //
+  // The fix uses cardIdToURL() to resolve the prefix to a real URL first.
+  'relativizeDocument succeeds when resource ID is a registered prefix':
     async (assert: Assert) => {
-      // Regression test for CS-10498: a card in a prefix-mapped realm (e.g.
-      // @cardstack/openrouter/) has its ID stored in prefix form after
-      // unresolveResourceInstanceURLs runs during indexing. When
-      // relativizeResource later tries to resolve a relative module URL
-      // (like "../openrouter-model") against that prefix-form ID, passing
-      // the raw prefix string as a URL base to new URL() throws
-      // TypeError: Invalid URL.
-      //
-      // The fix resolves the prefix-form ID to a real URL first via
-      // cardIdToURL() before using it as a relativeTo base.
       registerCardReferencePrefix(
         '@test-cs10498/',
         'http://test-host/my-realm/',
       );
 
-      let prefixId = '@test-cs10498/SomeType/my-card';
-
-      // Verify the ID is recognized as a registered prefix
-      assert.true(
-        isRegisteredPrefix(prefixId),
-        'prefix-form ID is recognized as registered prefix',
-      );
-
-      // Verify cardIdToURL resolves the prefix to a real URL
-      let resolvedURL = cardIdToURL(prefixId);
-      assert.strictEqual(
-        resolvedURL.href,
-        'http://test-host/my-realm/SomeType/my-card',
-        'cardIdToURL resolves prefix to full URL',
-      );
-
-      // Verify that resolving a relative module URL against the resolved
-      // URL works — this is the code path after the fix
-      let moduleURL = resolveCardReference(
-        '../some-module',
-        cardIdToURL(prefixId),
-      );
-      assert.strictEqual(
-        moduleURL,
-        'http://test-host/my-realm/some-module',
-        'relative module URL resolves correctly against cardIdToURL result',
-      );
-
-      // Verify that resolving a relative module URL against the raw prefix
-      // string throws — this is the original bug
-      assert.throws(
-        () => {
-          resolveCardReference('../some-module', prefixId);
+      // Build a SingleCardDocument that mirrors what the index returns for
+      // a card in a prefix-mapped realm:
+      // - links.self is a full URL (set by cardDocument)
+      // - data.id is in prefix form (set by unresolveResourceInstanceURLs)
+      // - meta.adoptsFrom.module is a relative URL (from serialization)
+      let doc: SingleCardDocument = {
+        data: {
+          id: '@test-cs10498/Card/my-instance',
+          type: 'card' as const,
+          attributes: { name: 'Test' },
+          relationships: {},
+          links: { self: 'http://test-host/my-realm/Card/my-instance' },
+          meta: {
+            adoptsFrom: {
+              module: '../card-def',
+              name: 'MyCard',
+            },
+          },
         },
-        /Invalid URL/,
-        'resolving relative URL against raw prefix string throws Invalid URL',
-      );
+      };
+
+      let realmURL = new URL('http://test-host/my-realm/');
+
+      // This is the exact call that getCard → cardDocument makes.
+      // Without the fix, it throws TypeError: Invalid URL because
+      // relativizeResource passes the prefix-form data.id directly
+      // as a URL base to resolveCardReference.
+      try {
+        relativizeDocument(doc, realmURL);
+        assert.ok(
+          true,
+          'relativizeDocument handles prefix-form resource ID without throwing',
+        );
+      } catch (err) {
+        assert.ok(
+          false,
+          `relativizeDocument threw for prefix-form resource ID: ${err}`,
+        );
+      }
     },
 
-  'cardIdToURL works for both prefix-form and regular URL IDs':
+  'relativizeDocument succeeds when resource ID is a regular URL':
     async (assert: Assert) => {
-      registerCardReferencePrefix(
-        '@test-cs10498-b/',
-        'http://test-host/realm-b/',
-      );
+      let doc: SingleCardDocument = {
+        data: {
+          id: 'http://test-host/my-realm/Card/my-instance',
+          type: 'card' as const,
+          attributes: { name: 'Test' },
+          relationships: {},
+          links: { self: 'http://test-host/my-realm/Card/my-instance' },
+          meta: {
+            adoptsFrom: {
+              module: '../card-def',
+              name: 'MyCard',
+            },
+          },
+        },
+      };
 
-      // Prefix-form ID
-      let prefixURL = cardIdToURL('@test-cs10498-b/Card/123');
-      assert.strictEqual(
-        prefixURL.href,
-        'http://test-host/realm-b/Card/123',
-        'prefix-form ID resolves to full URL',
-      );
+      let realmURL = new URL('http://test-host/my-realm/');
 
-      // Regular URL ID
-      let regularURL = cardIdToURL('http://example.com/realm/Card/456');
-      assert.strictEqual(
-        regularURL.href,
-        'http://example.com/realm/Card/456',
-        'regular URL ID passes through unchanged',
-      );
+      try {
+        relativizeDocument(doc, realmURL);
+        assert.ok(
+          true,
+          'relativizeDocument handles regular URL resource ID',
+        );
+      } catch (err) {
+        assert.ok(
+          false,
+          `relativizeDocument threw for regular URL resource ID: ${err}`,
+        );
+      }
     },
 } satisfies SharedTests<Record<string, never>>);
 

@@ -1017,7 +1017,11 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
   }
 }
 
-function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+// Exported for testing (CS-10498 regression test)
+export function relativizeDocument(
+  doc: SingleCardDocument,
+  realmURL: URL,
+): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
     return;

@@ -5,11 +5,11 @@ import cardReferenceResolverTests from '@cardstack/runtime-common/tests/card-ref
 
 module(basename(__filename), function () {
   module('card reference resolver', function () {
-    test('resolveCardReference resolves relative URL against prefix-form ID via cardIdToURL', async function (assert) {
+    test('relativizeDocument succeeds when resource ID is a registered prefix', async function (assert) {
       await runSharedTest(cardReferenceResolverTests, assert, {});
     });
 
-    test('cardIdToURL works for both prefix-form and regular URL IDs', async function (assert) {
+    test('relativizeDocument succeeds when resource ID is a regular URL', async function (assert) {
       await runSharedTest(cardReferenceResolverTests, assert, {});
     });
   });
