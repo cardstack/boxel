@@ -20,7 +20,14 @@ import {
 import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import { join } from 'path';
-import { copySync, readJsonSync, writeJsonSync, removeSync } from 'fs-extra';
+import {
+  copySync,
+  readJsonSync,
+  writeJsonSync,
+  removeSync,
+  existsSync,
+  moveSync,
+} from 'fs-extra';
 
 import {
   fetchRequestFromContext,
@@ -333,10 +340,31 @@ export default function handlePublishRealm({
       let sourceRealmPath = sourceRealm.dir;
       let publishedDir = join(realmsRootPath, PUBLISHED_DIRECTORY_NAME);
       let publishedRealmPath = join(publishedDir, publishedRealmId);
-      // Remove existing published files so that files deleted from the source
-      // realm don't persist in the published realm on republish
-      removeSync(publishedRealmPath);
-      copySync(sourceRealmPath, publishedRealmPath);
+      // Copy source to a temporary directory first, then swap it into
+      // place so that a failed copy doesn't destroy the existing
+      // published realm (e.g. due to disk-full or permission errors).
+      let tempCopyPath = `${publishedRealmPath}.tmp`;
+      let backupPath = `${publishedRealmPath}.backup`;
+      removeSync(tempCopyPath);
+      removeSync(backupPath);
+      copySync(sourceRealmPath, tempCopyPath);
+      try {
+        if (existsSync(publishedRealmPath)) {
+          moveSync(publishedRealmPath, backupPath);
+        }
+        moveSync(tempCopyPath, publishedRealmPath);
+        removeSync(backupPath);
+      } catch (swapError) {
+        // Restore the old published realm if the swap failed
+        if (
+          !existsSync(publishedRealmPath) &&
+          existsSync(backupPath)
+        ) {
+          moveSync(backupPath, publishedRealmPath);
+        }
+        removeSync(tempCopyPath);
+        throw swapError;
+      }
 
       let newlyPublishedRealmConfig = readJsonSync(
         join(publishedRealmPath, '.realm.json'),
