@@ -6,10 +6,10 @@ import {
   ToolNotFoundError,
   ToolSafetyError,
   ToolTimeoutError,
-  iconURLForName,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
 } from '../scripts/lib/factory-tool-executor';
+import { iconURLFor } from '@cardstack/runtime-common/realm-display-defaults';
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
@@ -639,7 +639,7 @@ module('factory-tool-executor > realm-api execution', function () {
     let body = JSON.parse(capturedBody!);
     assert.strictEqual(
       body.data.attributes.iconURL,
-      iconURLForName('My Realm'),
+      iconURLFor('My Realm'),
       'iconURL defaults from name',
     );
   });
