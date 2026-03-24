@@ -58,11 +58,15 @@ export default class CreatePrCardCommand extends Command<
 
     // Link the GitHub PR brand guide theme from the catalog realm
     let themeCardId = `${catalogRealmUrl}${GITHUB_PR_THEME_PATH}`;
-    let theme = await new GetCardCommand(this.commandContext).execute({
-      cardId: themeCardId,
-    });
-    if (theme) {
-      card.cardInfo.theme = theme as Theme;
+    try {
+      let theme = await new GetCardCommand(this.commandContext).execute({
+        cardId: themeCardId,
+      });
+      if (theme) {
+        card.cardInfo.theme = theme as Theme;
+      }
+    } catch {
+      // Theme is optional — don't block PR card creation if it can't be fetched
     }
 
     // Save the PR card to the submission realm

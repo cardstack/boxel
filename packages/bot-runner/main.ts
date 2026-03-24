@@ -15,6 +15,11 @@ const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
 const submissionBotUsername =
   process.env.SUBMISSION_BOT_USERNAME || 'submissionbot';
 const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
+const realmServerUrl = process.env.REALM_SERVER_URL || 'http://localhost:4201';
+const submissionRealmUrl =
+  process.env.SUBMISSION_REALM_URL || `${realmServerUrl}/submissions/`;
+const submissionRealmUsername =
+  process.env.SUBMISSION_REALM_USERNAME || 'submission_realm';
 
 (async () => {
   let client = createClient({
@@ -63,6 +68,8 @@ const botPassword = process.env.SUBMISSION_BOT_PASSWORD || 'password';
 
   let handleTimelineEvent = onTimelineEvent({
     authUserId: auth.user_id,
+    submissionRealmUrl,
+    submissionRealmUsername,
     dbAdapter,
     queuePublisher,
     githubClient,

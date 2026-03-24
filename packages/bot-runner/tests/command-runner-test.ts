@@ -9,6 +9,9 @@ import type {
 import type { GitHubClient } from '../lib/github';
 import { CommandRunner } from '../lib/command-runner';
 
+const SUBMISSION_REALM_URL = 'http://localhost:4201/submissions/';
+const SUBMISSION_REALM_USERNAME = 'submission_realm';
+
 module('command runner', () => {
   test('enqueues run-command job for matching trigger', async (assert) => {
     let publishedJobs: unknown[] = [];
@@ -65,7 +68,8 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      '@submissionbot:localhost',
+      SUBMISSION_REALM_URL,
+      SUBMISSION_REALM_USERNAME,
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -203,7 +207,8 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      '@submissionbot:localhost',
+      SUBMISSION_REALM_URL,
+      SUBMISSION_REALM_USERNAME,
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -234,12 +239,12 @@ module('command runner', () => {
     assert.deepEqual(
       (publishedJobs[1] as { args: Record<string, unknown> }).args,
       {
-        realmURL: 'http://localhost:4201/submissions/',
-        realmUsername: '@submissionbot:localhost',
-        runAs: '@submissionbot:localhost',
+        realmURL: SUBMISSION_REALM_URL,
+        realmUsername: SUBMISSION_REALM_USERNAME,
+        runAs: SUBMISSION_REALM_USERNAME,
         command: '@cardstack/catalog/commands/create-pr-card/default',
         commandInput: {
-          realm: 'http://localhost:4201/submissions/',
+          realm: SUBMISSION_REALM_URL,
           prNumber: 1,
           prUrl: 'https://example/pr/1',
           prTitle: 'Add My Listing Name listing',
@@ -351,7 +356,8 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      '@submissionbot:localhost',
+      SUBMISSION_REALM_URL,
+      SUBMISSION_REALM_USERNAME,
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -448,7 +454,8 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      '@submissionbot:localhost',
+      SUBMISSION_REALM_URL,
+      SUBMISSION_REALM_USERNAME,
       dbAdapter,
       queuePublisher,
       githubClient,

@@ -26,7 +26,8 @@ export class CommandRunner {
   private createListingPRHandler: CreateListingPRHandler;
 
   constructor(
-    private submissionBotUserId: string,
+    private submissionRealmUrl: string,
+    private submissionRealmUsername: string,
     private dbAdapter: DBAdapter,
     private queuePublisher: QueuePublisher,
     githubClient: GitHubClient,
@@ -190,13 +191,12 @@ export class CommandRunner {
     submissionCardUrl: string;
     prResult: CreatedListingPRResult;
   }): Promise<void> {
-    let submissionRealm = new URL('/submissions/', realmURL).href;
     let prCardResult = await this.enqueueRunCommand({
-      runAs: this.submissionBotUserId,
-      realmURL: submissionRealm,
+      runAs: this.submissionRealmUsername,
+      realmURL: this.submissionRealmUrl,
       command: CREATE_PR_CARD_COMMAND,
       commandInput: {
-        realm: submissionRealm,
+        realm: this.submissionRealmUrl,
         prNumber: prResult.prNumber,
         prUrl: prResult.prUrl,
         prTitle: prResult.prTitle,
