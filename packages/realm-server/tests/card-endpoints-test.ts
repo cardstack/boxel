@@ -1071,6 +1071,7 @@ module(basename(__filename), function () {
           onRealmSetup,
         });
 
+
         test('serves a card error request with last known good state', async function (assert) {
           await request
             .patch('/hassan')
