@@ -345,6 +345,7 @@ export async function startIsolatedRealmStack({
     REALM_SERVER_FULL_INDEX_ON_STARTUP: String(fullIndexOnStartup),
     LOW_CREDIT_THRESHOLD: '2000',
     LOG_LEVELS: DEFAULT_REALM_LOG_LEVELS,
+    BOXEL_TRUST_FORWARDED_URL: 'true',
     PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: `localhost:${compatProxy.listenPort}`,
     PUBLISHED_REALM_BOXEL_SITE_DOMAIN: `localhost:${compatProxy.listenPort}`,
     SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE: workerManagerMetadataFile,

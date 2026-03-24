@@ -46,7 +46,6 @@ async function main(): Promise<void> {
   console.log(JSON.stringify(payload, null, 2));
 
   let cleanExit = false;
-  let keepAlive = setInterval(() => {}, 60_000);
   process.on('exit', () => {
     if (!cleanExit) {
       for (let pid of runtime.childPids) {
@@ -60,21 +59,24 @@ async function main(): Promise<void> {
   });
 
   let stop = async () => {
-    clearInterval(keepAlive);
     await runtime.stop();
     cleanExit = true;
-    process.exit(0);
   };
 
-  process.on('SIGINT', () => void stop());
-  process.on('SIGTERM', () => void stop());
-
-  // Keep the harness process alive so its managed children stay attached until
-  // the test fixture explicitly shuts the stack down.
-  await new Promise<void>(() => {});
+  await new Promise<void>((resolve, reject) => {
+    let handleSignal = () => {
+      process.removeListener('SIGINT', onSigint);
+      process.removeListener('SIGTERM', onSigterm);
+      void stop().then(resolve).catch(reject);
+    };
+    let onSigint = () => handleSignal();
+    let onSigterm = () => handleSignal();
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+  });
 }
 
 main().catch((error: unknown) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

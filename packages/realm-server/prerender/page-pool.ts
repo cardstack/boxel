@@ -88,6 +88,20 @@ function isExpectedStandbyTargetNotReadyError(error: unknown): boolean {
   );
 }
 
+function isExpectedStandbyConsoleError(args: {
+  affinityKey: string;
+  type: ReturnType<ConsoleMessage['type']>;
+  formatted: string;
+  locationURL?: string;
+}): boolean {
+  return (
+    args.affinityKey === 'standby' &&
+    args.type === 'error' &&
+    /status of 50[23]/.test(args.formatted) &&
+    args.locationURL?.includes('/_standby') === true
+  );
+}
+
 export class PagePool {
   #affinityPages = new Map<string, Set<PoolEntry>>();
   #standbys = new Set<StandbyEntry>();
@@ -681,15 +695,25 @@ export class PagePool {
           let suffix = segments.length ? `:${segments.join(':')}` : '';
           locationInfo = ` (${locationData.url}${suffix})`;
         }
+        let type = message.type();
+        if (
+          isExpectedStandbyConsoleError({
+            affinityKey,
+            type,
+            formatted,
+            locationURL: locationData?.url,
+          })
+        ) {
+          return;
+        }
         logFn(
           'Console[%s] affinity=%s pageId=%s%s %s',
-          message.type(),
+          type,
           affinityKey,
           pageId,
           locationInfo,
           formatted,
         );
-        let type = message.type();
         if (type === 'error' || type === 'assert') {
           this.#recordConsoleError(pageId, {
             type,

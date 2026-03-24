@@ -29,6 +29,10 @@ import { canConnectToPg } from './database';
 
 let preparePgPromise: Promise<void> | undefined;
 
+function hostStartupLooksLikePortContention(logs: string): boolean {
+  return /EADDRINUSE|address already in use/i.test(logs);
+}
+
 async function loadSynapseModule() {
   let moduleSpecifier = '../../../matrix/docker/synapse/index.ts';
   return (maybeRequire(moduleSpecifier) ?? (await import(moduleSpecifier))) as {
@@ -111,17 +115,23 @@ async function ensureHostReady(matrixURL: string): Promise<{
 
       await waitUntil(
         async () => {
+          try {
+            let readyResponse = await fetch(DEFAULT_HOST_URL);
+            if (readyResponse.ok) {
+              return true;
+            }
+          } catch {
+            // host not ready yet
+          }
           if (child.exitCode !== null) {
+            if (hostStartupLooksLikePortContention(logs)) {
+              return false;
+            }
             throw new Error(
               `host app exited early with code ${child.exitCode}\n${logs}`,
             );
           }
-          try {
-            let readyResponse = await fetch(DEFAULT_HOST_URL);
-            return readyResponse.ok;
-          } catch {
-            return false;
-          }
+          return false;
         },
         {
           timeout: 180_000,

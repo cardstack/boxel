@@ -15,8 +15,6 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
-import { dirname, join } from 'path';
-import { mkdirSync, renameSync, writeFileSync } from 'fs';
 import * as Sentry from '@sentry/node';
 import { PgAdapter, PgQueuePublisher } from '@cardstack/postgres';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -33,6 +31,7 @@ import {
   registerService,
   deregisterEnvironment,
 } from './lib/dev-service-registry';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
@@ -41,17 +40,7 @@ const runtimeMetadataFile =
   process.env.SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
-  if (!runtimeMetadataFile) {
-    return;
-  }
-
-  mkdirSync(dirname(runtimeMetadataFile), { recursive: true });
-  let tempFile = join(
-    dirname(runtimeMetadataFile),
-    `.realm-server.${process.pid}.${Date.now()}.tmp`,
-  );
-  writeFileSync(tempFile, JSON.stringify(payload, null, 2));
-  renameSync(tempFile, runtimeMetadataFile);
+  writeRuntimeMetadataFile(runtimeMetadataFile, 'realm-server', payload);
 }
 
 if (process.env.NODE_ENV === 'test') {

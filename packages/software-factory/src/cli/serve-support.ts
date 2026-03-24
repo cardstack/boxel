@@ -21,23 +21,25 @@ async function main(): Promise<void> {
   writeSupportMetadata(payload);
 
   console.log(JSON.stringify(payload, null, 2));
-  let keepAlive = setInterval(() => {}, 60_000);
 
   let stop = async () => {
-    clearInterval(keepAlive);
     await support.stop();
-    process.exit(0);
   };
 
-  process.on('SIGINT', () => void stop());
-  process.on('SIGTERM', () => void stop());
-
-  // Keep the wrapper alive so test teardown can signal it and so the shared
-  // support processes remain attached to this parent process.
-  await new Promise<void>(() => {});
+  await new Promise<void>((resolve, reject) => {
+    let handleSignal = () => {
+      process.removeListener('SIGINT', onSigint);
+      process.removeListener('SIGTERM', onSigterm);
+      void stop().then(resolve).catch(reject);
+    };
+    let onSigint = () => handleSignal();
+    let onSigterm = () => handleSignal();
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+  });
 }
 
 main().catch((error: unknown) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

@@ -20,8 +20,6 @@ import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
-import { mkdirSync, renameSync, writeFileSync } from 'fs';
-import { dirname, join } from 'path';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import type { Server } from 'http';
 import { PgAdapter } from '@cardstack/postgres';
@@ -36,6 +34,7 @@ import {
   renderIndexingDashboard,
   type PendingJob,
 } from './handlers/handle-indexing-dashboard';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 
 /* About the Worker Manager
  *
@@ -49,17 +48,7 @@ const runtimeMetadataFile =
   process.env.SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE;
 
 function writeRuntimeMetadata(payload: unknown): void {
-  if (!runtimeMetadataFile) {
-    return;
-  }
-
-  mkdirSync(dirname(runtimeMetadataFile), { recursive: true });
-  let tempFile = join(
-    dirname(runtimeMetadataFile),
-    `.worker-manager.${process.pid}.${Date.now()}.tmp`,
-  );
-  writeFileSync(tempFile, JSON.stringify(payload, null, 2));
-  renameSync(tempFile, runtimeMetadataFile);
+  writeRuntimeMetadataFile(runtimeMetadataFile, 'worker-manager', payload);
 }
 
 // This is an ENV var we get from ECS that looks like:

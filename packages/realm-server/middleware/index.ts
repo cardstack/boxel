@@ -108,14 +108,40 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
+function isLoopbackAddress(address: string | undefined): boolean {
+  return (
+    address === '127.0.0.1' ||
+    address === '::1' ||
+    address === '::ffff:127.0.0.1'
+  );
+}
+
 export function fullRequestURL(ctxt: Koa.Context): URL {
-  let forwardedURL = ctxt.req.headers['x-boxel-forwarded-url'];
-  if (typeof forwardedURL === 'string' && forwardedURL.trim() !== '') {
-    return new URL(forwardedURL);
-  }
   let protocol =
     ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`);
+  let computedURL = new URL(
+    `${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`,
+  );
+  let forwardedURL = ctxt.req.headers['x-boxel-forwarded-url'];
+  if (
+    process.env.BOXEL_TRUST_FORWARDED_URL === 'true' &&
+    typeof forwardedURL === 'string' &&
+    forwardedURL.trim() !== '' &&
+    isLoopbackAddress(ctxt.req.socket?.remoteAddress)
+  ) {
+    try {
+      let parsed = new URL(forwardedURL);
+      if (
+        parsed.pathname === computedURL.pathname &&
+        parsed.search === computedURL.search
+      ) {
+        return parsed;
+      }
+    } catch {
+      // Ignore malformed forwarded URLs and fall back to the computed request.
+    }
+  }
+  return computedURL;
 }
 
 export async function fetchRequestFromContext(
