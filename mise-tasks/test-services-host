@@ -13,15 +13,21 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Always include key config files so the realm loads correctly.
-for f in .realm.json package.json tsconfig.json .gitignore; do
-  if [ -e "$CATALOG_SRC_PATH/$f" ]; then
-    cp -a "$CATALOG_SRC_PATH/$f" "$CATALOG_TEMP_PATH/"
+# Copy required folders
+KEEP_FOLDERS="fields catalog-app components commands"
+for item in $KEEP_FOLDERS; do
+  if [ -d "$CATALOG_SRC_PATH/$item" ]; then
+    cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/"
+  else
+    echo "ERROR: required catalog folder not found: $item" >&2
+    exit 1
   fi
 done
 
-# Copy the entire catalog realm
-cp -a "$CATALOG_SRC_PATH/." "$CATALOG_TEMP_PATH/"
+# Copy all root-level files (e.g. *.gts, *.json, config files)
+find "$CATALOG_SRC_PATH" -maxdepth 1 -type f | while read -r f; do
+  cp -a "$f" "$CATALOG_TEMP_PATH/"
+done
 
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"
 
