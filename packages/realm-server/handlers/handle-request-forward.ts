@@ -13,6 +13,10 @@ import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
 
+// Track pending cost-saving promises per user so we can ensure the previous
+// request's cost has been recorded before allowing a new one
+const pendingCostPromises = new Map<string, Promise<void>>();
+
 async function handleStreamingRequest(
   ctxt: Koa.Context,
   url: string,
@@ -61,13 +65,11 @@ async function handleStreamingRequest(
         // Handle end of stream
         if (data === '[DONE]') {
           if (generationId) {
-            // Create a mock response object with the generation ID for the credit strategy
-            const mockResponse = { id: generationId };
-            await endpointConfig.creditStrategy.saveUsageCost(
-              dbAdapter,
-              matrixUserId,
-              mockResponse,
-            );
+            // Save cost in the background so we don't block the stream on OpenRouter's generation cost API
+            const costPromise = endpointConfig.creditStrategy
+              .saveUsageCost(dbAdapter, matrixUserId, { id: generationId })
+              .finally(() => pendingCostPromises.delete(matrixUserId));
+            pendingCostPromises.set(matrixUserId, costPromise);
           }
           ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';
@@ -328,7 +330,22 @@ export default function handleRequestForward({
         return;
       }
 
-      // 4. Check user has sufficient credits using credit strategy
+      // 4. Wait for any pending cost from a previous request to be recorded
+      const pendingCost = pendingCostPromises.get(matrixUserId);
+      if (pendingCost) {
+        try {
+          await pendingCost;
+        } catch (e) {
+          log.error('Error waiting for pending cost:', e);
+          await sendResponseForSystemError(
+            ctxt,
+            'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+          );
+          return;
+        }
+      }
+
+      // 5. Check user has sufficient credits using credit strategy
       const creditValidation =
         await destinationConfig.creditStrategy.validateCredits(
           dbAdapter,
@@ -469,12 +486,14 @@ export default function handleRequestForward({
 
       const responseData = await externalResponse.json();
 
-      // 6. Calculate and deduct credits using credit strategy
-      await destinationConfig.creditStrategy.saveUsageCost(
-        dbAdapter,
-        matrixUserId,
-        responseData,
-      );
+      // 6. Deduct credits in the background using the cost from the response
+      const costInUsd = responseData?.usage?.cost;
+      if (costInUsd != null) {
+        const costPromise = destinationConfig.creditStrategy
+          .spendUsageCost(dbAdapter, matrixUserId, costInUsd)
+          .finally(() => pendingCostPromises.delete(matrixUserId));
+        pendingCostPromises.set(matrixUserId, costPromise);
+      }
 
       // 7. Return response
       const response = new Response(JSON.stringify(responseData), {
