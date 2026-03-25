@@ -41,13 +41,14 @@ export async function loadRealmTests(application) {
   const realmURL =
     urlParams.get('realmURL') ?? 'http://localhost:4201/catalog/';
 
-  const [helpers, mockMatrix, setupHelpers, adapter, renderComponent] =
+  const [helpers, mockMatrix, setupHelpers, adapter, renderComponent, baseRealm] =
     await Promise.all([
       import('@cardstack/host/tests/helpers'),
       import('@cardstack/host/tests/helpers/mock-matrix'),
       import('@cardstack/host/tests/helpers/setup'),
       import('@cardstack/host/tests/helpers/adapter'),
       import('@cardstack/host/tests/helpers/render-component'),
+      import('@cardstack/host/tests/helpers/base-realm'),
     ]);
 
   const loaderInstance = application.buildInstance({
@@ -65,6 +66,7 @@ export async function loadRealmTests(application) {
     '@cardstack/host/tests/helpers/render-component',
     renderComponent,
   );
+  loader.shimModule('@cardstack/host/tests/helpers/base-realm', baseRealm);
 
   let testModuleNames;
   if (testModuleParam) {
