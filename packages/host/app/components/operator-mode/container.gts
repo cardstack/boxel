@@ -144,7 +144,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode'>
+    <div class='operator-mode' ...attributes>
       <ChooseFileModal />
       <CreateListingModal />
       <CreatePRModal />
