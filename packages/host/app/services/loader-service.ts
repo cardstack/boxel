@@ -36,7 +36,6 @@ export default class LoaderService extends Service {
   @service declare private reset: ResetService;
 
   @tracked public loader = this.makeInstance();
-  private previousLoader: Loader | null = null;
   private resetTime: number | undefined;
 
   constructor(owner: Owner) {
@@ -48,13 +47,11 @@ export default class LoaderService extends Service {
   }
 
   public resetState() {
-    this.previousLoader = null;
     this.clearSessionCaches();
   }
 
   public resetSessionBoundary(reason?: string) {
     this.resetTime = undefined;
-    this.previousLoader = null;
     log.debug(`resetting loader for session boundary (${reason ?? ''})`);
     this.clearSessionCaches();
     this.loader = this.loader
@@ -70,7 +67,6 @@ export default class LoaderService extends Service {
     if (options?.clearFetchCache) {
       this.resetTime = Date.now();
       log.debug(`resetting loader (clearFetchCache, ${options.reason ?? ''})`);
-      this.previousLoader = this.loader;
       clearFetchCache();
       this.loader = this.makeInstance();
       return;
@@ -84,7 +80,6 @@ export default class LoaderService extends Service {
     if (this.resetTime == null || Date.now() - this.resetTime > 250) {
       this.resetTime = Date.now();
       log.debug(`resetting loader (${options?.reason ?? ''})`);
-      this.previousLoader = this.loader;
       // by default we keep the fetch cache so we can take advantage of HTTP
       // caching when rebuilding the loader state
       if (this.loader) {
@@ -93,18 +88,6 @@ export default class LoaderService extends Service {
         this.loader = this.makeInstance();
       }
     }
-  }
-
-  // Check if a module was loaded in the current loader or in the loader that
-  // was active before the most recent reset. This handles the timing window
-  // where a save path resets the loader before the realm invalidation event
-  // arrives: the module is no longer in the new (cloned) loader, but it was
-  // in the previous one.
-  public wasModuleLoaded(moduleIdentifier: string): boolean {
-    return (
-      this.loader.isModuleLoaded(moduleIdentifier) ||
-      (this.previousLoader?.isModuleLoaded(moduleIdentifier) ?? false)
-    );
   }
 
   private makeInstance() {
