@@ -1033,7 +1033,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1061,7 +1061,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1074,7 +1074,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1087,7 +1087,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                   },
@@ -1125,7 +1125,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1162,7 +1162,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1187,7 +1187,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1212,7 +1212,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1258,7 +1258,7 @@ describe('card-endpoints-test.ts', function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend',
+                  module: './friend',
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1317,7 +1317,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1346,7 +1346,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1375,7 +1375,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1435,7 +1435,7 @@ describe('card-endpoints-test.ts', function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend',
+                  module: './friend',
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -1476,7 +1476,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1505,7 +1505,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1548,7 +1548,7 @@ describe('card-endpoints-test.ts', function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1595,7 +1595,7 @@ describe('card-endpoints-test.ts', function () {
                 meta: {
                   adoptsFrom: {
                     name: 'Friend',
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                   },
                   realmInfo: testRealmInfo,
                   realmURL: testRealmHref,
@@ -1626,7 +1626,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1640,7 +1640,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                     realmURL: `http://some-other-realm/`,
@@ -1677,7 +1677,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: './friend',
                     name: 'Friend',
                   },
                 },
@@ -1707,7 +1707,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'http://localhost:4202/node-test/friend',
+                    module: '../friend',
                     name: 'Friend',
                   },
                   realmURL: testRealmHref.replace(/\/$/, ''),
@@ -1715,6 +1715,7 @@ describe('card-endpoints-test.ts', function () {
               },
             } as LooseSingleCardDocument)
             .set('Accept', 'application/vnd.card+json');
+          console.log(response.body);
           expect(response.status).toBe(201);
           expect(response.get('X-boxel-realm-url')).toBe(testRealmHref);
           let json = response.body as SingleCardDocument;
@@ -1736,7 +1737,7 @@ describe('card-endpoints-test.ts', function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'http://localhost:4202/node-test/friend',
+                  module: '../friend',
                   name: 'Friend',
                 },
               },
@@ -1777,7 +1778,7 @@ describe('card-endpoints-test.ts', function () {
               meta: {
                 adoptsFrom: {
                   name: 'Friend',
-                  module: 'http://localhost:4202/node-test/friend',
+                  module: '../friend',
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -2715,8 +2716,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      'http://localhost:4202/node-test/friend-with-used-link',
+                    module: './friend-with-used-link.gts',
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -2730,8 +2730,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module:
-                        'http://localhost:4202/node-test/friend-with-used-link',
+                      module: './friend-with-used-link.gts',
                       name: 'FriendWithUsedLink',
                     },
                   },
@@ -2779,8 +2778,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      'http://localhost:4202/node-test/friend-with-used-link',
+                    module: './friend-with-used-link',
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -2805,8 +2803,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      'http://localhost:4202/node-test/friend-with-used-link',
+                    module: '../friend-with-used-link',
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -2852,8 +2849,7 @@ describe('card-endpoints-test.ts', function () {
               meta: {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
-                  module:
-                    'http://localhost:4202/node-test/friend-with-used-link',
+                  module: './friend-with-used-link',
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -2894,8 +2890,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module:
-                      'http://localhost:4202/node-test/friend-with-used-link',
+                    module: './friend-with-used-link',
                     name: 'FriendWithUsedLink',
                   },
                 },
@@ -2937,8 +2932,7 @@ describe('card-endpoints-test.ts', function () {
               meta: {
                 adoptsFrom: {
                   name: 'FriendWithUsedLink',
-                  module:
-                    'http://localhost:4202/node-test/friend-with-used-link',
+                  module: '../friend-with-used-link',
                 },
                 realmInfo: testRealmInfo,
                 realmURL: testRealmHref,
@@ -2982,7 +2976,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'http://localhost:4202/node-test/friend',
+                      module: './friend',
                       name: 'Friend',
                     },
                     realmURL: `http://some-other-realm/`,

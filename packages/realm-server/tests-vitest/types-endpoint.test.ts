@@ -170,7 +170,7 @@ describe('types-endpoint-test.ts', function () {
         },
         {
           type: 'card-type-summary',
-          id: 'http://localhost:4202/node-test/friend-with-used-link/FriendWithUsedLink',
+          id: `${testRealm.url}friend-with-used-link/FriendWithUsedLink`,
           attributes: {
             displayName: 'FriendWithUsedLink',
             total: 2,
