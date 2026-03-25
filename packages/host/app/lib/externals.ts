@@ -233,4 +233,8 @@ export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
     '@cardstack/host/tests/helpers/render-component',
     testOnlyStub('@cardstack/host/tests/helpers/render-component'),
   );
+  virtualNetwork.shimModule(
+    '@cardstack/host/tests/helpers/base-realm',
+    testOnlyStub('@cardstack/host/tests/helpers/base-realm'),
+  );
 }
