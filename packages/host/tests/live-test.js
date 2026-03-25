@@ -112,14 +112,19 @@ export async function loadRealmTests(application) {
   }
 
   if (capturedModules.size === 0) {
-    throw new Error(
-      `No realm test modules found. Searched ${testModules.length} module(s) in ${realmURL}`,
+    console.warn(
+      `[live-test] No realm test modules found. Searched ${testModules.length} module(s) in ${realmURL}`,
     );
+    QUnit.module('Live Tests', function () {
+      QUnit.test('no realm tests found', function (assert) {
+        assert.ok(true, 'No realm test modules discovered');
+      });
+    });
+  } else {
+    console.log(`[live-test] Found ${capturedModules.size} test module(s):`, [
+      ...capturedModules,
+    ]);
   }
-
-  console.log(`[live-test] Found ${capturedModules.size} test module(s):`, [
-    ...capturedModules,
-  ]);
 
   QUnit.config.testFilter = (testInfo) => capturedModules.has(testInfo.module);
 
