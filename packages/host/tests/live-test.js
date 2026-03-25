@@ -130,10 +130,9 @@ export async function loadRealmTests(application) {
     );
   }
 
-  console.log(
-    `[live-test] Found ${capturedModules.size} test module(s):`,
-    [...capturedModules],
-  );
+  console.log(`[live-test] Found ${capturedModules.size} test module(s):`, [
+    ...capturedModules,
+  ]);
 
   QUnit.config.testFilter = (testInfo) => capturedModules.has(testInfo.module);
 
