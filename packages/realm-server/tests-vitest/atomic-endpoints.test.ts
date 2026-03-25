@@ -90,7 +90,7 @@ describe('atomic-endpoints-test.ts', function () {
         expect(response.body['atomic:results'].length).toBe(1);
         expect(response.status).toBe(201);
         expect(response.body['atomic:results'][0].data.id).toEqual(
-          `${testRealmHref}place-modules/place.gts`,
+          `${testRealmHref}place-modules/place.gts-deliberate-error`,
         );
         let sourceResponse = await request
           .get('/place-modules/place.gts')
