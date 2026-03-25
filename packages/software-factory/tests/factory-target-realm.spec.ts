@@ -57,9 +57,12 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   let briefPort = (briefServer.address() as AddressInfo).port;
   let briefUrl = `http://127.0.0.1:${briefPort}/brief/sticky-note`;
 
-  let serverOrigin = realm.realmURL.origin;
+  let realmServerURL = realm.realmServerURL.href;
   let newEndpoint = `e2e-realm-${Date.now()}`;
-  let targetRealmUrl = `${serverOrigin}/${targetUsername}/${newEndpoint}/`;
+  let targetRealmUrl = new URL(
+    `${targetUsername}/${newEndpoint}/`,
+    realmServerURL,
+  ).href;
 
   try {
     let result = await runCommand(
@@ -74,7 +77,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         '--target-realm-url',
         targetRealmUrl,
         '--realm-server-url',
-        `${serverOrigin}/`,
+        realmServerURL,
         '--mode',
         'implement',
       ],
@@ -85,7 +88,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
           MATRIX_USERNAME: targetUsername,
           MATRIX_PASSWORD: targetPassword,
           MATRIX_URL: matrixURL,
-          REALM_SERVER_URL: `${serverOrigin}/`,
+          REALM_SERVER_URL: realmServerURL,
         },
         timeoutMs: 120_000,
       },

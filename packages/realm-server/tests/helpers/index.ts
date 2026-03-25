@@ -569,7 +569,6 @@ async function startTestPrerenderServer(): Promise<string> {
     return testPrerenderURL;
   }
   let server = createPrerenderHttpServer({
-    silent: Boolean(process.env.SILENT_PRERENDERER),
     maxPages: 1,
   });
   prerenderServer = server;

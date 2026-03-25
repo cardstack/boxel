@@ -9,6 +9,8 @@ type TestRunnerOptions = {
   headed: boolean;
 };
 
+const defaultNodeTestLogLevels = '*=info,prerenderer-chrome=none';
+
 function parseArgs(argv: string[]): TestRunnerOptions {
   let options: TestRunnerOptions = {
     nodeOnly: false,
@@ -70,8 +72,11 @@ async function main(): Promise<void> {
   let shouldRunPlaywright = !options.nodeOnly;
 
   if (shouldRunNode) {
+    let logLevels = process.env.LOG_LEVELS ?? defaultNodeTestLogLevels;
     await runCommand(
-      'NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts',
+      `LOG_LEVELS=${JSON.stringify(
+        logLevels,
+      )} NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts`,
     );
   }
 

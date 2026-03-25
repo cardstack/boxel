@@ -440,6 +440,40 @@ module('factory-bootstrap', function () {
         'Ticket/my-app-v2-0-beta-define-core',
       );
     });
+
+    test('does not surface non-serialized response objects as [object Object]', async function (assert) {
+      assert.expect(2);
+
+      let failingFetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        let request = new Request(input, init);
+        if (request.method === 'GET') {
+          return new Response('Not found', { status: 404 });
+        }
+
+        return new Response({ errors: ['boom'] } as unknown as BodyInit, {
+          status: 500,
+        });
+      }) as typeof globalThis.fetch;
+
+      await assert.rejects(
+        bootstrapProjectArtifacts(stickyNoteBrief, targetRealmUrl, {
+          darkfactoryModuleUrl,
+          fetch: failingFetch,
+        }),
+        (error: unknown) => {
+          assert.false(String(error).includes('[object Object]'));
+          return (
+            error instanceof Error &&
+            error.message.includes(
+              'server returned a non-serialized object body',
+            )
+          );
+        },
+      );
+    });
   });
 });
 
@@ -455,7 +489,9 @@ function buildMockFetch(
   calls: { url: string; method: string }[],
   options: MockFetchOptions,
 ): typeof globalThis.fetch {
-  let existingCards = options.existingPaths ?? new Set<string>();
+  let initialExistingCards = new Set(options.existingPaths ?? []);
+  let createdCards = new Set<string>();
+  let storedBodies: Record<string, unknown> = {};
 
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     let request = new Request(input, init);
@@ -469,16 +505,19 @@ function buildMockFetch(
     if (method === 'GET') {
       let exists =
         options.allExist ||
-        (!options.allMissing && existingCards.has(cardPath));
+        createdCards.has(cardPath) ||
+        (!options.allMissing && initialExistingCards.has(cardPath));
 
       if (exists) {
-        let ticketStatus = options.existingTicketStatus ?? 'backlog';
-        let mockAttributes: Record<string, unknown> = { status: ticketStatus };
-        return new Response(
-          JSON.stringify({
+        let existingBody = storedBodies[cardPath];
+        let payload =
+          existingBody ??
+          ({
             data: {
               type: 'card',
-              attributes: mockAttributes,
+              attributes: {
+                status: options.existingTicketStatus ?? 'backlog',
+              },
               meta: {
                 adoptsFrom: {
                   module: darkfactoryModuleUrl,
@@ -486,18 +525,22 @@ function buildMockFetch(
                 },
               },
             },
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
+          } satisfies Record<string, unknown>);
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
 
       return new Response('Not found', { status: 404 });
     }
 
     if (method === 'POST') {
+      createdCards.add(cardPath);
+      let body = await request.text();
+      storedBodies[cardPath] = JSON.parse(body);
       if (options.captureWrites) {
-        let body = await request.text();
-        options.captureWrites[cardPath] = JSON.parse(body);
+        options.captureWrites[cardPath] = storedBodies[cardPath];
       }
       return new Response(null, { status: 204 });
     }

@@ -138,7 +138,6 @@ export async function startPrerenderServer(
 ): Promise<RunningPrerenderServer> {
   let port = await findAvailablePort(options?.port ?? DEFAULT_PRERENDER_PORT);
   let url = `http://localhost:${port}`;
-  let silent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT !== '0';
   let env = {
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
@@ -152,9 +151,6 @@ export async function startPrerenderServer(
     'prerender/prerender-server',
     `--port=${port}`,
   ];
-  if (silent) {
-    prerenderArgs.push('--silent');
-  }
 
   let child = spawn('ts-node', prerenderArgs, {
     cwd: realmServerDir,

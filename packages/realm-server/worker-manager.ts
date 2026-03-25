@@ -34,6 +34,7 @@ import {
   renderIndexingDashboard,
   type PendingJob,
 } from './handlers/handle-indexing-dashboard';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 
 /* About the Worker Manager
  *
@@ -43,6 +44,12 @@ import {
  */
 
 let log = logger('worker-manager');
+const runtimeMetadataFile =
+  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE;
+
+function writeRuntimeMetadata(payload: unknown): void {
+  writeRuntimeMetadataFile(runtimeMetadataFile, 'worker-manager', payload);
+}
 
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
@@ -232,6 +239,11 @@ if (port != null) {
   webServerInstance.on('listening', () => {
     let actualPort =
       (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+    writeRuntimeMetadata({
+      pid: process.pid,
+      port: actualPort,
+      url: `http://127.0.0.1:${actualPort}`,
+    });
     if (isEnvironmentMode()) {
       registerService(webServerInstance!, serviceName);
     }

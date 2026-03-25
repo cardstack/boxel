@@ -31,6 +31,16 @@ function config() {
 
 type Config = ReturnType<typeof config>;
 
+function configuredPoolMax(): number | undefined {
+  let rawValue = process.env.PG_POOL_MAX;
+  if (!rawValue) {
+    return undefined;
+  }
+
+  let value = Number(rawValue);
+  return Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
 export class PgAdapter implements DBAdapter {
   readonly kind = 'pg';
   #isClosed = false;
@@ -46,6 +56,7 @@ export class PgAdapter implements DBAdapter {
     }
     this.config = config();
     let { user, host, database, password, port } = this.config;
+    let max = configuredPoolMax();
     log.debug(`connecting to DB ${this.url}`);
     this.pool = new Pool({
       user,
@@ -53,6 +64,7 @@ export class PgAdapter implements DBAdapter {
       database,
       password,
       port,
+      ...(max ? { max } : {}),
     });
   }
 

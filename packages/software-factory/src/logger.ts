@@ -1,4 +1,5 @@
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'none';
+type AcceptedLogLevel = LogLevel | 'silent';
 
 type LoggerConfiguration = {
   defaultLevel?: LogLevel;
@@ -36,37 +37,42 @@ export function logger(logName: string): Logger {
 function parseLogConfiguration(
   serializedLogLevels: string,
 ): LoggerConfiguration {
-  let parsedLevels = serializedLogLevels
+  // Keep pattern ordering intact to match @cardstack/logger. In particular,
+  // `*` is just another pattern rule rather than a special default-level
+  // signal, so later rules can still override earlier ones exactly as the
+  // package does.
+  let logLevels = serializedLogLevels
     .split(',')
     .map((pattern) => pattern.trim())
     .filter(Boolean)
     .map((pattern) => {
       let [logName, level] = pattern.split('=');
       assertLogLevel(level);
-      return [logName, level] as [string, LogLevel];
+      return [logName, normalizeLogLevel(level)] as [string, LogLevel];
     });
 
-  let defaultLevel =
-    parsedLevels.find(([pattern]) => pattern === '*')?.[1] ?? 'info';
-  let logLevels = parsedLevels.filter(([pattern]) => pattern !== '*');
-
   return {
-    defaultLevel,
+    defaultLevel: 'info',
     logLevels,
   };
 }
 
-function assertLogLevel(level: unknown): asserts level is LogLevel {
+function normalizeLogLevel(level: AcceptedLogLevel): LogLevel {
+  return level === 'silent' ? 'none' : level;
+}
+
+function assertLogLevel(level: unknown): asserts level is AcceptedLogLevel {
   if (
     level !== 'trace' &&
     level !== 'debug' &&
     level !== 'info' &&
     level !== 'warn' &&
     level !== 'error' &&
-    level !== 'none'
+    level !== 'none' &&
+    level !== 'silent'
   ) {
     throw new Error(
-      `${String(level)} is not a valid log level. valid values are trace,debug,info,warn,error,none`,
+      `${String(level)} is not a valid log level. valid values are trace,debug,info,warn,error,none (silent is accepted as an alias for none)`,
     );
   }
 }

@@ -1,4 +1,5 @@
 import type { FactoryBrief } from './factory-brief';
+import { formatErrorResponse, formatUnknownError } from './error-format';
 
 const cardSourceMimeType = 'application/vnd.card+source';
 
@@ -479,11 +480,13 @@ async function createCardIfMissing(
   });
 
   if (!writeResponse.ok) {
-    let text = await writeResponse.text();
+    let text = await formatErrorResponse(writeResponse);
     throw new Error(
       `Failed to create card ${cardPath} in ${realmUrl}: HTTP ${writeResponse.status} ${text}`.trim(),
     );
   }
+
+  await waitForCardToBeReadable(realmUrl, cardPath, fetchImpl);
 
   return { id: cardPath, status: 'created' };
 }
@@ -549,9 +552,50 @@ async function patchTicketStatus(
   });
 
   if (!patchResponse.ok) {
-    let text = await patchResponse.text();
+    let text = await formatErrorResponse(patchResponse);
     throw new Error(
       `Failed to patch ticket status for ${ticketPath}: HTTP ${patchResponse.status} ${text}`.trim(),
     );
   }
+
+  await waitForCardToBeReadable(realmUrl, ticketPath, fetchImpl);
+}
+
+async function waitForCardToBeReadable(
+  realmUrl: string,
+  cardPath: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let cardUrl = new URL(cardPath, realmUrl).href;
+  let timeoutMs = 15_000;
+  let retryDelayMs = 250;
+  let startedAt = Date.now();
+  let lastError: string | undefined;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      let response = await fetchImpl(cardUrl, {
+        method: 'GET',
+        headers: { Accept: cardSourceMimeType },
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = `HTTP ${response.status} ${await formatErrorResponse(
+        response,
+      )}`.trim();
+    } catch (error) {
+      lastError = formatUnknownError(error);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+
+  throw new Error(
+    `Timed out waiting for card ${cardPath} in ${realmUrl} to become readable${
+      lastError ? `: ${lastError}` : ''
+    }`,
+  );
 }
