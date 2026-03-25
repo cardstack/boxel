@@ -1064,7 +1064,7 @@ export default class StoreService extends Service implements StoreInterface {
       invalidations.find(
         (i) =>
           hasExecutableExtension(i) &&
-          this.loaderService.loader.isModuleLoaded(i),
+          this.loaderService.wasModuleLoaded(i),
       )
     ) {
       // the invalidation included code changes to modules that are already

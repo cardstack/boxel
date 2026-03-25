@@ -267,9 +267,16 @@ export class Loader {
   }
 
   isModuleLoaded(moduleIdentifier: string): boolean {
-    moduleIdentifier = this.resolveImport(moduleIdentifier);
-    let resolvedModuleIdentifier = new URL(moduleIdentifier).href;
-    return this.getModule(resolvedModuleIdentifier) !== undefined;
+    try {
+      moduleIdentifier = this.resolveImport(moduleIdentifier);
+      let resolvedModuleIdentifier = new URL(moduleIdentifier).href;
+      return this.getModule(resolvedModuleIdentifier) !== undefined;
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return false;
+      }
+      throw e;
+    }
   }
 
   getKnownConsumedModules(moduleIdentifier: string): string[] {
