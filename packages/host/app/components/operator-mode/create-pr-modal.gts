@@ -78,7 +78,7 @@ export default class CreatePRModal extends Component<Signature> {
       <ModalContainer
         class='create-pr-modal'
         @cardContainerClass='create-pr'
-        @title={{if this.isSubmitted 'Listing Submitted' 'Make a PR'}}
+        @title={{if this.isSubmitted 'Listing Submitted 🎉 ! ' 'Make a PR'}}
         @size='small'
         @isOpen={{this.isModalOpen}}
         @onClose={{this.onClose}}
