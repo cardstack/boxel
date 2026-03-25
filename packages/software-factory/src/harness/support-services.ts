@@ -194,7 +194,7 @@ async function ensureHostReady(): Promise<{
         [
           'serve',
           '--config',
-          '../tests/serve.json',
+          'tests/serve.json',
           '--single',
           '--cors',
           '--no-request-logging',
