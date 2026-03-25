@@ -30,7 +30,6 @@ export async function loadRealmTests(application) {
 
   const qunitFilter = urlParams.get('filter');
   const qunitModule = urlParams.get('module');
-  const testModuleParam = urlParams.get('testModule');
 
   if (qunitFilter) {
     QUnit.config.filter = qunitFilter;
@@ -81,19 +80,7 @@ export async function loadRealmTests(application) {
   loader.shimModule('@universal-ember/test-support', universalEmberTestSupport);
   loader.shimModule('@ember/owner', emberOwner);
 
-  let testModuleNames;
-  if (testModuleParam) {
-    testModuleNames = testModuleParam
-      .split(',')
-      .map((name) => name.trim())
-      .filter(Boolean);
-  } else {
-    testModuleNames = await discoverTestModules(realmURL);
-  }
-
-  const testModules = testModuleParam
-    ? testModuleNames.map((name) => `${realmURL}${name}`)
-    : testModuleNames;
+  const testModules = await discoverTestModules(realmURL);
 
   const capturedModules = new Set();
   const originalModule = QUnit.module;
