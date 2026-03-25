@@ -1,19 +1,21 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   boxelIconsDir,
   browserPassword,
   cleanupStaleSynapseContainers,
-  DEFAULT_HOST_URL,
   DEFAULT_ICONS_PROBE_URL,
   DEFAULT_MATRIX_BROWSER_USERNAME,
   DEFAULT_MATRIX_SERVER_USERNAME,
   DEFAULT_PG_HOST,
   DEFAULT_PG_PORT,
   DEFAULT_PRERENDER_PORT,
+  CONFIGURED_HOST_URL,
   findAvailablePort,
   findHostDistPackageDir,
-  hostDir,
+  findRootRepoCheckoutDir,
   logTimed,
   maybeRequire,
   prepareTestPgScript,
@@ -31,6 +33,91 @@ let preparePgPromise: Promise<void> | undefined;
 
 function hostStartupLooksLikePortContention(logs: string): boolean {
   return /EADDRINUSE|address already in use/i.test(logs);
+}
+
+function assertUsableBoxelUIDist(hostPackageDir: string): void {
+  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  let boxelUIDistDir = join(boxelUIAddonDir, 'dist');
+  let requiredPaths = [
+    join(boxelUIDistDir, 'components.js'),
+    join(boxelUIDistDir, 'helpers.js'),
+    join(boxelUIDistDir, 'icons.js'),
+    join(boxelUIDistDir, 'styles', 'global.css'),
+  ];
+
+  if (requiredPaths.every((path) => existsSync(path))) {
+    return;
+  }
+
+  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
+  let rootRepoBoxelUIAddonDir =
+    rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot
+      ? join(rootRepoCheckoutDir, 'packages', 'boxel-ui', 'addon')
+      : undefined;
+  let rootRepoBoxelUIDistDir = rootRepoBoxelUIAddonDir
+    ? join(rootRepoBoxelUIAddonDir, 'dist')
+    : undefined;
+  let hasRootRepoBoxelUIDist =
+    rootRepoBoxelUIDistDir != null &&
+    requiredPaths
+      .map((path) =>
+        join(rootRepoBoxelUIDistDir, path.slice(boxelUIDistDir.length + 1)),
+      )
+      .every((path) => existsSync(path));
+
+  let fixInstructions = [
+    `Run \`cd ${boxelUIAddonDir} && mise exec -- pnpm build\` to build boxel-ui in this checkout.`,
+  ];
+
+  if (hasRootRepoBoxelUIDist && rootRepoBoxelUIDistDir) {
+    fixInstructions.push(
+      `If you are in a worktree and want to reuse the main checkout build, run \`ln -sfn ${rootRepoBoxelUIDistDir} ${boxelUIDistDir}\`.`,
+    );
+  }
+
+  throw new Error(
+    `Boxel UI dist is missing or incomplete at ${boxelUIDistDir}. The software-factory harness needs built @cardstack/boxel-ui artifacts before the host app can boot. ${fixInstructions.join(
+      ' ',
+    )}`,
+  );
+}
+
+function assertUsableHostDist(hostPackageDir: string): void {
+  let indexHTMLPath = join(hostPackageDir, 'dist', 'index.html');
+  if (!existsSync(indexHTMLPath)) {
+    throw new Error(
+      `No built host dist was found at ${indexHTMLPath}. The software-factory harness requires a built host app from the current worktree or root repo checkout. Run \`cd ${hostPackageDir} && mise exec -- pnpm build\` and retry.`,
+    );
+  }
+
+  let html = readFileSync(indexHTMLPath, 'utf8');
+  let match = html.match(
+    /<meta name="@cardstack\/host\/config\/environment" content="([^"]+)">/,
+  );
+  if (!match) {
+    return;
+  }
+
+  try {
+    let config = JSON.parse(decodeURIComponent(match[1]));
+    if (
+      config?.environment === 'test' ||
+      config?.APP?.autoboot === false ||
+      config?.APP?.rootElement === '#ember-testing'
+    ) {
+      throw new Error(
+        `Host dist at ${hostPackageDir}/dist is a test build and cannot power the software-factory harness (environment=${String(
+          config?.environment,
+        )}, autoboot=${String(config?.APP?.autoboot)}, rootElement=${String(
+          config?.APP?.rootElement,
+        )}). The harness needs a normal host app build so /_standby can boot. Run \`cd ${hostPackageDir} && mise exec -- pnpm build\` and retry.`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+  }
 }
 
 async function loadSynapseModule() {
@@ -61,49 +148,68 @@ async function loadMatrixEnvironmentConfigModule() {
   };
 }
 
-async function ensureHostReady(matrixURL: string): Promise<{
+async function ensureHostReady(): Promise<{
+  hostURL: string;
   stop?: () => Promise<void>;
 }> {
+  let configuredHostURL = CONFIGURED_HOST_URL?.href;
   return await logTimed(
     supportLog,
-    `ensureHostReady ${DEFAULT_HOST_URL}`,
+    `ensureHostReady ${configuredHostURL ?? 'dynamic host dist'}`,
     async () => {
-      let response: Response;
-      try {
-        response = await fetch(DEFAULT_HOST_URL);
-        if (response.ok) {
-          return {};
+      if (configuredHostURL) {
+        try {
+          let response = await fetch(configuredHostURL);
+          if (response.ok) {
+            return { hostURL: configuredHostURL };
+          }
+          throw new Error(
+            `configured software-factory host URL ${configuredHostURL} returned HTTP ${response.status}`,
+          );
+        } catch (error) {
+          throw new Error(
+            `configured software-factory host URL ${configuredHostURL} is not reachable: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
         }
-      } catch (error) {
-        supportLog.debug(
-          `host app not reachable at ${DEFAULT_HOST_URL}, starting fallback host service: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
       }
 
       let hostPackageDir = findHostDistPackageDir();
-      let command = ['start'];
-      let cwd = hostDir;
-      if (hostPackageDir) {
-        supportLog.debug(`serving built host dist from ${hostPackageDir}`);
-        command = ['serve:dist'];
-        cwd = hostPackageDir;
-      } else {
-        supportLog.warn(
-          'no built host dist found; falling back to pnpm start in packages/host',
+      if (!hostPackageDir) {
+        throw new Error(
+          'No built host dist is available in the current worktree or root repo checkout',
         );
       }
+      assertUsableBoxelUIDist(hostPackageDir);
+      assertUsableHostDist(hostPackageDir);
+      let port = await findAvailablePort();
+      let hostURL = `http://localhost:${port}/`;
+      supportLog.debug(
+        `serving built host dist from ${hostPackageDir} at ${hostURL}`,
+      );
 
-      let child = spawn('pnpm', command, {
-        cwd,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          ...process.env,
-          MATRIX_URL: matrixURL,
+      let child = spawn(
+        'npx',
+        [
+          'serve',
+          '--config',
+          '../tests/serve.json',
+          '--single',
+          '--cors',
+          '--no-request-logging',
+          '--no-etag',
+          '--listen',
+          String(port),
+          'dist',
+        ],
+        {
+          cwd: hostPackageDir,
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: process.env,
         },
-      });
+      );
 
       let logs = '';
       child.stdout?.on('data', (chunk) => {
@@ -116,7 +222,7 @@ async function ensureHostReady(matrixURL: string): Promise<{
       await waitUntil(
         async () => {
           try {
-            let readyResponse = await fetch(DEFAULT_HOST_URL);
+            let readyResponse = await fetch(hostURL);
             if (readyResponse.ok) {
               return true;
             }
@@ -136,11 +242,12 @@ async function ensureHostReady(matrixURL: string): Promise<{
         {
           timeout: 180_000,
           interval: 500,
-          timeoutMessage: `Timed out waiting for host app at ${DEFAULT_HOST_URL}\n${logs}`,
+          timeoutMessage: `Timed out waiting for host app at ${hostURL}\n${logs}`,
         },
       );
 
       return {
+        hostURL,
         async stop() {
           if (child.exitCode === null) {
             try {
@@ -401,7 +508,7 @@ export async function startFactorySupportServices(): Promise<{
     );
     let matrixURL =
       process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL(synapse);
-    let host = await ensureHostReady(matrixURL);
+    let host = await ensureHostReady();
     let icons = await ensureIconsReady();
     await ensureSupportUsers(synapse);
 
@@ -409,6 +516,7 @@ export async function startFactorySupportServices(): Promise<{
       context: {
         matrixURL,
         matrixRegistrationSecret: synapse.registrationSecret,
+        hostURL: host.hostURL,
       },
       async stop() {
         await logTimed(supportLog, 'stopFactorySupportServices', async () => {
