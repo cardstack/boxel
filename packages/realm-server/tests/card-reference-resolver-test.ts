@@ -75,6 +75,18 @@ module(basename(__filename), function () {
     });
   });
 
+  // Regression test for CS-10498: cards in prefix-mapped realms (like the
+  // openrouter realm) threw TypeError: Invalid URL when served.
+  //
+  // After the import-maps change, unresolveResourceInstanceURLs converts
+  // card IDs in the index to prefix form (e.g. "@cardstack/openrouter/...").
+  // relativizeResource then used the raw prefix string as a URL base for
+  // resolveCardReference, causing new URL() to throw when resolving
+  // relative module deps like "../openrouter-model".
+  //
+  // The fix uses cardIdToURL() in realm-index-query-engine.ts to resolve
+  // the prefix to a real URL first, and resolveCardReference also handles
+  // prefix-form relativeTo strings internally.
   module('relativizeDocument with prefix-form IDs', function (hooks) {
     let prefix = '@test-rel/realm/';
 
