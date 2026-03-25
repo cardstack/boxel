@@ -664,7 +664,7 @@ jobs:
 
       - name: Merge reports
         working-directory: packages/realm-server
-        run: pnpm vitest --merge-report
+        run: pnpm vitest run --merge-reports
 
   software-factory-test:
     name: Software Factory Tests
@@ -830,3 +830,4 @@ jobs:
     secrets: inherit
     with:
       environment: "staging"
+
