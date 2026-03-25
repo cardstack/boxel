@@ -1626,7 +1626,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: '../friend',
                     name: 'Friend',
                   },
                 },
@@ -1640,7 +1640,7 @@ describe('card-endpoints-test.ts', function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: './friend',
+                      module: '../friend',
                       name: 'Friend',
                     },
                     realmURL: `http://some-other-realm/`,
@@ -1677,7 +1677,7 @@ describe('card-endpoints-test.ts', function () {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: './friend',
+                    module: '../friend',
                     name: 'Friend',
                   },
                 },
