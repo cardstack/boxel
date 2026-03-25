@@ -79,6 +79,17 @@ export async function spendUsageCost(
   costInUsd: number,
 ) {
   try {
+    if (
+      typeof costInUsd !== 'number' ||
+      !Number.isFinite(costInUsd) ||
+      costInUsd < 0
+    ) {
+      log.warn(
+        `Invalid costInUsd value: ${costInUsd} for user ${matrixUserId}, skipping`,
+      );
+      return;
+    }
+
     let creditsConsumed = Math.round(costInUsd * CREDITS_PER_USD);
     let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
 
