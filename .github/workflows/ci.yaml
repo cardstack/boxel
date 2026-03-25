@@ -626,19 +626,17 @@ jobs:
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        working-directory: packages/realm-server
         with:
           name: blob-report-${{ matrix.shardIndex }}
-          path: .vitest-reports/*
+          path: packages/realm-server/.vitest-reports/*
           include-hidden-files: true
           retention-days: 1
       - name: Upload attachments to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        working-directory: packages/realm-server
         with:
           name: blob-attachments-${{ matrix.shardIndex }}
-          path: .vitest-attachments/**
+          path: packages/realm-server/.vitest-attachments/**
           include-hidden-files: true
           retention-days: 1
   merge-realm-server-test-reports:
@@ -652,17 +650,15 @@ jobs:
 
       - name: Download blob reports from GitHub Actions Artifacts
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        working-directory: packages/realm-server
         with:
-          path: .vitest-reports
+          path: packages/realm-server/vitest-reports
           pattern: blob-report-*
           merge-multiple: true
 
       - name: Download attachments from GitHub Actions Artifacts
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
-        working-directory: packages/realm-server
         with:
-          path: .vitest-attachments
+          path: packages/realm-server/.vitest-attachments
           pattern: blob-attachments-*
           merge-multiple: true
 
