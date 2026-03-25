@@ -626,6 +626,7 @@ jobs:
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        working-directory: packages/realm-server
         with:
           name: blob-report-${{ matrix.shardIndex }}
           path: .vitest-reports/*
@@ -634,6 +635,7 @@ jobs:
       - name: Upload attachments to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        working-directory: packages/realm-server
         with:
           name: blob-attachments-${{ matrix.shardIndex }}
           path: .vitest-attachments/**
@@ -650,6 +652,7 @@ jobs:
 
       - name: Download blob reports from GitHub Actions Artifacts
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        working-directory: packages/realm-server
         with:
           path: .vitest-reports
           pattern: blob-report-*
@@ -657,12 +660,14 @@ jobs:
 
       - name: Download attachments from GitHub Actions Artifacts
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        working-directory: packages/realm-server
         with:
           path: .vitest-attachments
           pattern: blob-attachments-*
           merge-multiple: true
 
       - name: Merge reports
+        working-directory: packages/realm-server
         run: pnpm vitest --merge-report
 
   software-factory-test:
