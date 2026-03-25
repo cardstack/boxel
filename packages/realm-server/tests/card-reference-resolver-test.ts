@@ -117,6 +117,10 @@ module(basename(__filename), function () {
 
       let realmURL = new URL('http://test-host/my-realm/');
 
+      // This is the exact call that getCard → cardDocument makes.
+      // Without the fix, it throws TypeError: Invalid URL because
+      // relativizeResource passes the prefix-form data.id directly
+      // as a URL base to resolveCardReference.
       try {
         relativizeDocument(doc, realmURL);
         assert.ok(
