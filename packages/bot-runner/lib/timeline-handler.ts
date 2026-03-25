@@ -19,8 +19,6 @@ export interface BotRegistration {
 
 export interface TimelineHandlerOptions {
   authUserId: string;
-  submissionRealmUrl: string;
-  submissionRealmUsername: string;
   dbAdapter: DBAdapter;
   queuePublisher: QueuePublisher;
   githubClient: GitHubClient;
@@ -29,16 +27,13 @@ export interface TimelineHandlerOptions {
 
 export function onTimelineEvent({
   authUserId,
-  submissionRealmUrl,
-  submissionRealmUsername,
   dbAdapter,
   queuePublisher,
   githubClient,
   startTime,
 }: TimelineHandlerOptions) {
   let commandRunner = new CommandRunner(
-    submissionRealmUrl,
-    submissionRealmUsername,
+    authUserId,
     dbAdapter,
     queuePublisher,
     githubClient,

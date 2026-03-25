@@ -10,7 +10,7 @@ import type { GitHubClient } from '../lib/github';
 import { CommandRunner } from '../lib/command-runner';
 
 const SUBMISSION_REALM_URL = 'http://localhost:4201/submissions/';
-const SUBMISSION_REALM_USERNAME = 'submission_realm';
+const SUBMISSION_BOT_USER_ID = '@submissionbot:localhost';
 
 module('command runner', () => {
   test('enqueues run-command job for matching trigger', async (assert) => {
@@ -68,8 +68,7 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      SUBMISSION_REALM_URL,
-      SUBMISSION_REALM_USERNAME,
+      SUBMISSION_BOT_USER_ID,
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -207,8 +206,7 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      SUBMISSION_REALM_URL,
-      SUBMISSION_REALM_USERNAME,
+      SUBMISSION_BOT_USER_ID,
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -240,8 +238,8 @@ module('command runner', () => {
       (publishedJobs[1] as { args: Record<string, unknown> }).args,
       {
         realmURL: SUBMISSION_REALM_URL,
-        realmUsername: SUBMISSION_REALM_USERNAME,
-        runAs: SUBMISSION_REALM_USERNAME,
+        realmUsername: SUBMISSION_BOT_USER_ID,
+        runAs: SUBMISSION_BOT_USER_ID,
         command: '@cardstack/catalog/commands/create-pr-card/default',
         commandInput: {
           realm: SUBMISSION_REALM_URL,
@@ -356,8 +354,7 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      SUBMISSION_REALM_URL,
-      SUBMISSION_REALM_USERNAME,
+      SUBMISSION_BOT_USER_ID,
       dbAdapter,
       queuePublisher,
       githubClient,
@@ -454,8 +451,7 @@ module('command runner', () => {
     } as DBAdapter;
 
     let commandRunner = new CommandRunner(
-      SUBMISSION_REALM_URL,
-      SUBMISSION_REALM_USERNAME,
+      SUBMISSION_BOT_USER_ID,
       dbAdapter,
       queuePublisher,
       githubClient,
