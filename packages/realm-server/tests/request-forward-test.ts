@@ -15,6 +15,7 @@ import {
   insertPlan,
   realmSecretSeed,
   createVirtualNetwork,
+  waitUntil,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import {
@@ -212,20 +213,19 @@ module(basename(__filename), function () {
         );
 
         // Verify credits were deducted (0.003 USD * 1000 = 3 credits)
-        // Allow a tick for the background cost saving to complete
-        await new Promise((resolve) => setTimeout(resolve, 50));
         const user = await getUserByMatrixUserId(
           dbAdapter,
           '@testuser:localhost',
         );
-        const remainingCredits = await sumUpCreditsLedger(dbAdapter, {
-          creditType: ['extra_credit', 'extra_credit_used'],
-          userId: user!.id,
-        });
-        assert.strictEqual(
-          remainingCredits,
-          47,
-          'Credits should be deducted (50 - 3 = 47)',
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 47;
+          },
+          { timeoutMessage: 'Credits should be deducted (50 - 3 = 47)' },
         );
       } finally {
         mockFetch.restore();
