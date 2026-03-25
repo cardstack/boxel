@@ -56,6 +56,7 @@ interface Signature {
   Args: {
     onClose: () => void;
   };
+  Element: HTMLElement;
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
