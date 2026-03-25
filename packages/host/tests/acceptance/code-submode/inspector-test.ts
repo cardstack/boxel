@@ -2693,4 +2693,74 @@ export class ExportedCard extends ExportedCardParent {
         .includesText('File Definition');
     });
   });
+
+  test('clicking "Create Listing" opens confirmation modal for card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .exists('confirmation modal appears after clicking Create Listing');
+  });
+
+  test('clicking "Create Listing" on a card instance opens modal with instance pre-selected', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-card-instance-definition]');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .exists('confirmation modal appears after clicking Create Listing');
+
+    await waitFor('[data-test-create-listing-examples]');
+    assert
+      .dom(
+        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
+      )
+      .exists({ count: 1 }, 'the opened instance is pre-selected');
+    assert
+      .dom(
+        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
+      )
+      .containsText('Mango', 'mango instance is pre-selected');
+  });
+
+  test('cancel button in Create Listing modal closes the modal', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+
+    await click('[data-test-create-listing-cancel-button]');
+
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .doesNotExist('modal is dismissed after clicking Cancel');
+  });
 });

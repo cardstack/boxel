@@ -6,7 +6,7 @@ import {
 
 import CopyCardCommand from '@cardstack/boxel-host/commands/copy-card';
 import GenerateExampleCardsCommand from '@cardstack/boxel-host/commands/generate-example-cards';
-import ListingCreateCommand from '@cardstack/boxel-host/commands/listing-create';
+import OpenCreateListingModalCommand from '@cardstack/boxel-host/commands/open-create-listing-modal';
 import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import PopulateWithSampleDataCommand from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
@@ -155,7 +155,7 @@ export function getDefaultCardMenuItems(
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
     menuItems.push({
-      label: `Create Listing with AI`,
+      label: `Create Listing`,
       action: async () => {
         const codeRef = resolveAdoptsFrom(card);
         if (!codeRef) {
@@ -165,9 +165,9 @@ export function getDefaultCardMenuItems(
         if (!targetRealm) {
           throw new Error('Unable to determine target realm from card');
         }
-        await new ListingCreateCommand(params.commandContext).execute({
-          openCardId: cardId,
+        await new OpenCreateListingModalCommand(params.commandContext).execute({
           codeRef,
+          openCardIds: [cardId],
           targetRealm,
         });
       },

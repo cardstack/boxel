@@ -69,6 +69,18 @@ import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
 
+export interface CreateListingModalPayload {
+  codeRef: CodeRef;
+  targetRealm: string;
+  openCardIds?: string[];
+}
+
+export interface CreatePRModalPayload {
+  realm: string;
+  listingId: string;
+  listingName?: string;
+}
+
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
@@ -143,6 +155,8 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
+  @tracked createListingModalPayload?: CreateListingModalPayload;
+  @tracked createPRModalPayload?: CreatePRModalPayload;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -211,6 +225,22 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   };
 
+  showCreateListingModal = (payload: CreateListingModalPayload) => {
+    this.createListingModalPayload = payload;
+  };
+
+  dismissCreateListingModal = () => {
+    this.createListingModalPayload = undefined;
+  };
+
+  showCreatePRModal = (payload: CreatePRModalPayload) => {
+    this.createPRModalPayload = payload;
+  };
+
+  dismissCreatePRModal = () => {
+    this.createPRModalPayload = undefined;
+  };
+
   setNewFileDropdownOpen = () => {
     this._state.newFileDropdownOpen = true;
     this.schedulePersist();
@@ -241,6 +271,8 @@ export default class OperatorModeStateService extends Service {
     this.cardTitles = new TrackedMap();
     this.moduleInspectorHistory = {};
     this.profileSettingsOpen = false;
+    this.createListingModalPayload = undefined;
+    this.createPRModalPayload = undefined;
     window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }

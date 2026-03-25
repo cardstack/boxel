@@ -71,6 +71,72 @@ jobs:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
 
+  live-test:
+    name: Live Tests (realm)
+    runs-on: ubuntu-latest
+    needs: test-web-assets
+    concurrency:
+      group: boxel-live-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+
+      - name: Serve boxel-icons
+        run: pnpm serve &> /tmp/icon-server.log &
+        working-directory: packages/boxel-icons
+
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
+      - name: Serve host dist (test assets) for realm server
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve:dist &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+      - name: Start realm servers
+        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
+        working-directory: packages/realm-server
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
+
+      - name: Live test suite
+        run: dbus-run-session -- pnpm test:live
+        working-directory: packages/host
+        env:
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+
+      - name: Upload junit report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: host-live-test-report
+          path: junit/host-live.xml
+          retention-days: 30
+      - name: Print realm server logs
+        if: ${{ !cancelled() }}
+        run: cat /tmp/server.log
+
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest

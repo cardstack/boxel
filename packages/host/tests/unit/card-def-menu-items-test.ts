@@ -121,13 +121,13 @@ module('Unit | CardDef menu items', function (hooks) {
     });
 
     let hasCreateListing = items.some((i: MenuItemOptions) =>
-      i.label.includes('Create Listing with AI'),
+      i.label.includes('Create Listing'),
     );
     let hasSampleDataTagged = items.some((i: MenuItemOptions) =>
       (i.tags || []).includes('playground-sample-data'),
     );
 
-    assert.ok(hasCreateListing, 'contains Create Listing with AI');
+    assert.ok(hasCreateListing, 'contains Create Listing');
     assert.ok(
       hasSampleDataTagged,
       'contains items tagged playground-sample-data',
