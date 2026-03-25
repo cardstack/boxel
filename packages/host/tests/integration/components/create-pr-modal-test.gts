@@ -31,9 +31,7 @@ module('Integration | components | create-pr-modal', function (hooks) {
     await waitFor('[data-test-create-pr-modal]');
 
     assert.dom('[data-test-create-pr-modal]').exists();
-    assert
-      .dom('[data-test-create-pr-modal]')
-      .includesText('Make a PR');
+    assert.dom('[data-test-create-pr-modal]').includesText('Make a PR');
   });
 
   test('shows listing name in modal', async function (assert) {
@@ -51,9 +49,7 @@ module('Integration | components | create-pr-modal', function (hooks) {
 
     await waitFor('[data-test-create-pr-modal]');
 
-    assert
-      .dom('[data-test-create-pr-listing-name]')
-      .includesText('My Listing');
+    assert.dom('[data-test-create-pr-listing-name]').includesText('My Listing');
   });
 
   test('shows realm info in modal', async function (assert) {

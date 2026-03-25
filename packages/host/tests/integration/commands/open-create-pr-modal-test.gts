@@ -40,9 +40,7 @@ module('Integration | commands | open-create-pr-modal', function (hooks) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreatePRModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreatePRModalCommand(commandService.commandContext);
 
     await command.execute({
       realm: testRealmURL,
@@ -61,9 +59,7 @@ module('Integration | commands | open-create-pr-modal', function (hooks) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreatePRModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreatePRModalCommand(commandService.commandContext);
 
     await command.execute({
       realm: testRealmURL,
@@ -84,9 +80,7 @@ module('Integration | commands | open-create-pr-modal', function (hooks) {
     let commandService = getService('command-service');
     let operatorModeStateService = getService('operator-mode-state-service');
 
-    let command = new OpenCreatePRModalCommand(
-      commandService.commandContext,
-    );
+    let command = new OpenCreatePRModalCommand(commandService.commandContext);
 
     await command.execute({
       realm: testRealmURL,
