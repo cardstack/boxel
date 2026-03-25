@@ -506,7 +506,11 @@ export default function handleRequestForward({
         pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
       let costPromise: Promise<void>;
 
-      if (typeof costInUsd === 'number' && Number.isFinite(costInUsd) && costInUsd > 0) {
+      if (
+        typeof costInUsd === 'number' &&
+        Number.isFinite(costInUsd) &&
+        costInUsd > 0
+      ) {
         costPromise = previousPromise
           .then(() =>
             destinationConfig.creditStrategy.spendUsageCost(
