@@ -25,7 +25,7 @@ mkdir -p "$CATALOG_TEMP_PATH/Spec"
 cp -a "$CATALOG_SRC_PATH/Spec/grid.json" "$CATALOG_TEMP_PATH/Spec/"
 
 # Explicitly keep only the tested parts of the catalog
-KEEP_FOLDERS="fields catalog-app components commands tests"
+KEEP_FOLDERS="fields catalog-app components commands"
 for item in $KEEP_FOLDERS; do
   if [ -d "$CATALOG_SRC_PATH/$item" ]; then
     cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/"
