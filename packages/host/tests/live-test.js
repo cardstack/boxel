@@ -1,35 +1,25 @@
 import * as QUnit from 'qunit';
 
 /**
- * Recursively discovers all .gts module paths under a realm directory.
- * Returns paths relative to realmURL (without the .gts extension).
+ * Discovers all .gts/.ts module URLs in a realm using the _mtimes endpoint,
+ * which returns a flat map of every file URL in the realm in one request.
  *
  * @param {string} realmURL - The base realm URL (e.g. "http://localhost:4201/catalog/")
- * @param {string} prefix - Current directory prefix relative to realm root (e.g. "tests/")
- * @returns {Promise<string[]>}
+ * @returns {Promise<string[]>} Absolute module URLs (without the file extension)
  */
-async function discoverGtsModules(realmURL, prefix) {
-  const resp = await fetch(`${realmURL}${prefix}`, {
+async function discoverTestModules(realmURL) {
+  const resp = await fetch(`${realmURL}_mtimes`, {
     headers: { Accept: 'application/vnd.api+json' },
   });
-  const { data } = await resp.json();
-  const entries = Object.entries(data.relationships ?? {});
+  const {
+    data: {
+      attributes: { mtimes },
+    },
+  } = await resp.json();
 
-  /** @type {string[]} */
-  const modules = [];
-
-  await Promise.all(
-    entries.map(async ([name, entry]) => {
-      if (entry.meta?.kind === 'file' && name.endsWith('.gts')) {
-        modules.push(`${prefix}${name.slice(0, -4)}`);
-      } else if (entry.meta?.kind === 'directory') {
-        const nested = await discoverGtsModules(realmURL, `${prefix}${name}`);
-        modules.push(...nested);
-      }
-    }),
-  );
-
-  return modules;
+  return Object.keys(mtimes)
+    .filter((url) => url.endsWith('.gts') || url.endsWith('.ts'))
+    .map((url) => url.replace(/\.(gts|ts)$/, ''));
 }
 
 // eslint-disable-next-line ember/no-test-import-export
@@ -84,13 +74,15 @@ export async function loadRealmTests(application) {
       .filter(Boolean);
   } else {
     try {
-      testModuleNames = await discoverGtsModules(realmURL, '');
+      testModuleNames = await discoverTestModules(realmURL);
     } catch {
       testModuleNames = [];
     }
   }
 
-  const testModules = testModuleNames.map((name) => `${realmURL}${name}`);
+  const testModules = testModuleParam
+    ? testModuleNames.map((name) => `${realmURL}${name}`)
+    : testModuleNames;
 
   const capturedModules = new Set();
   const originalModule = QUnit.module;
