@@ -651,7 +651,7 @@ jobs:
       - name: Download blob reports from GitHub Actions Artifacts
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
         with:
-          path: packages/realm-server/vitest-reports
+          path: packages/realm-server/.vitest-reports
           pattern: blob-report-*
           merge-multiple: true
 
