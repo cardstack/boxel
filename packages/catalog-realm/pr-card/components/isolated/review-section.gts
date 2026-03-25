@@ -5,7 +5,10 @@ import type { ReviewState } from '../../utils';
 // ── Sub-components ──────────────────────────────────────────────────────
 
 interface ReviewStateBadgeSignature {
-  Args: { state: ReviewState };
+  Args: {
+    state: ReviewState;
+    reviewerName: string | null;
+  };
 }
 
 class ReviewStateBadge extends GlimmerComponent<ReviewStateBadgeSignature> {
@@ -34,7 +37,9 @@ class ReviewStateBadge extends GlimmerComponent<ReviewStateBadgeSignature> {
 
   <template>
     {{#if this.hasState}}
-      <span class='review-state-badge {{this.stateClass}}'>{{this.label}}</span>
+      <span class='review-state-badge {{this.stateClass}}'>{{this.label}}{{#if
+          @reviewerName
+        }} by {{@reviewerName}}{{/if}}</span>
     {{/if}}
 
     <style scoped>
@@ -88,7 +93,7 @@ class ReviewStateBadge extends GlimmerComponent<ReviewStateBadgeSignature> {
 interface ReviewSectionSignature {
   Args: {
     reviewState: ReviewState;
-    reviewerName: string;
+    reviewerName: string | null;
     comment: string;
     reviewUrl: string | undefined;
     hasReview: boolean;
@@ -113,7 +118,10 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
     <div class='review-section'>
       <div class='review-heading-row'>
         <h2 class='section-heading'>Reviews</h2>
-        <ReviewStateBadge @state={{@reviewState}} />
+        <ReviewStateBadge
+          @state={{@reviewState}}
+          @reviewerName={{@reviewerName}}
+        />
       </div>
 
       {{#if @hasReview}}
@@ -167,7 +175,6 @@ export class ReviewSection extends GlimmerComponent<ReviewSectionSignature> {
       .review-heading-row {
         display: flex;
         align-items: center;
-        justify-content: space-between;
         gap: var(--boxel-sp-xs);
       }
       .review-list {

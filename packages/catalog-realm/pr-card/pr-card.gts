@@ -30,6 +30,7 @@ import {
   buildLatestReviewByReviewer,
   computeLatestReviewState,
   findLatestChangesRequestedEvent,
+  findLatestApprovedEvent,
   buildGithubEventCardRef,
   searchEventQuery,
   buildRealmHrefs,
@@ -192,6 +193,17 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return !!this.latestPrReviewCommentEventInstance;
   }
 
+  get latestReviewerName() {
+    let state = this.latestReviewState;
+    let event: any = null;
+    if (state === 'changes_requested') {
+      event = findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+    } else if (state === 'approved') {
+      event = findLatestApprovedEvent(this.latestReviewByReviewer);
+    }
+    return event?.payload?.review?.user?.login ?? null;
+  }
+
   // ── Mergeability ──
   get isClosed() {
     let label = this.latestPrActionLabel;
@@ -256,7 +268,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           <hr class='status-divider' />
           <ReviewSection
             @reviewState={{this.latestReviewState}}
-            @reviewerName={{this.latestChangesRequestedReviewerName}}
+            @reviewerName={{this.latestReviewerName}}
             @comment={{this.latestChangesRequestedComment}}
             @reviewUrl={{this.latestChangesRequestedReviewUrl}}
             @hasReview={{this.hasReview}}
