@@ -1017,7 +1017,11 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
   }
 }
 
-function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+// Exported for testing (CS-10498 regression test)
+export function relativizeDocument(
+  doc: SingleCardDocument,
+  realmURL: URL,
+): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
     return;
@@ -1044,13 +1048,16 @@ function relativizeResource(
   primaryURL: URL,
   realmURL: URL,
 ) {
+  // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
+  // which is not a valid URL base. Resolve it to a URL for relative resolution.
+  let resourceURL = resource.id ? cardIdToURL(resource.id) : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
     if (isRegisteredPrefix(url)) {
       return;
     }
-    let urlObj = new URL(resolveCardReference(url, resource.id ?? primaryURL));
+    let urlObj = new URL(resolveCardReference(url, resourceURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
@@ -1060,7 +1067,7 @@ function relativizeResource(
       return;
     }
     let absoluteModuleURL = new URL(
-      resolveCardReference(moduleURL, resource.id ?? primaryURL),
+      resolveCardReference(moduleURL, resourceURL),
     );
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
