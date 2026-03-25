@@ -82,7 +82,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 201);
           assert.deepEqual(
             response.body['atomic:results'][0].data.id,
-            `${testRealmHref}place-modules/place.gts`,
+            `${testRealmHref}place-modules/place.gts-deliberate-error`,
           );
           let sourceResponse = await request
             .get('/place-modules/place.gts')
