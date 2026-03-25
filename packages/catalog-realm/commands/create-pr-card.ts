@@ -1,18 +1,10 @@
-import { Command, RealmPaths } from '@cardstack/runtime-common';
-import {
-  CardDef,
-  field,
-  contains,
-  type Theme,
-} from 'https://cardstack.com/base/card-api';
+import { Command } from '@cardstack/runtime-common';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import { PrCard } from '../pr-card/pr-card';
-
-const GITHUB_PR_THEME_PATH = 'Theme/github-pr-brand-guide';
 
 class CreatePrCardInput extends CardDef {
   @field realm = contains(StringField);
