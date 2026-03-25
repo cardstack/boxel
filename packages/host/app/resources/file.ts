@@ -343,7 +343,10 @@ class _FileResource extends Resource<Args> {
           clientRequestId: opts?.clientRequestId,
         },
       );
-      if (opts?.flushLoader) {
+      if (
+        opts?.flushLoader &&
+        this.loaderService.loader.isModuleLoaded(this._url)
+      ) {
         this.store.refreshReferencesForCodeChange('file write');
       }
       if (this.innerState.state === 'not-found') {
