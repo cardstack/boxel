@@ -99,6 +99,11 @@ module(basename(__filename), function () {
     });
 
     test('succeeds when resource ID is a registered prefix', async function (assert) {
+      // Build a SingleCardDocument that mirrors what the index returns for
+      // a card in a prefix-mapped realm:
+      // - links.self is a full URL (set by cardDocument)
+      // - data.id is in prefix form (set by unresolveResourceInstanceURLs)
+      // - meta.adoptsFrom.module is a relative URL (from serialization)
       let doc: SingleCardDocument = {
         data: {
           id: '@test-rel/realm/Card/my-instance',
