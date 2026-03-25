@@ -17,9 +17,5 @@ export default defineConfig({
     sequence: {
       hooks: 'list',
     },
-    reporters:
-      process.env.GITHUB_ACTIONS === 'true'
-        ? ['default', 'github-actions', 'blob']
-        : ['default'],
   },
 });
