@@ -47,6 +47,10 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     return this.args.model.roomId;
   }
 
+  get prNumber() {
+    return this.args.model.prCard?.prNumber;
+  }
+
   get listingImage() {
     return this.args.model.listing?.images?.[0];
   }
@@ -166,7 +170,12 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
                 aria-label='View PR card'
                 {{on 'click' this.openPrCard}}
               >
-                <GitPullRequestIcon width='14' height='14' />View PR
+                <GitPullRequestIcon width='14' height='14' />
+                {{#if this.prNumber}}
+                  View PR #{{this.prNumber}}
+                {{else}}
+                  View PR
+                {{/if}}
               </BoxelButton>
             {{/if}}
           </div>
@@ -453,4 +462,3 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     </style>
   </template>
 }
-
