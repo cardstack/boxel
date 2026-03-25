@@ -3,6 +3,7 @@ import * as QUnit from 'qunit';
 /**
  * Discovers all .gts/.ts module URLs in a realm using the _mtimes endpoint,
  * which returns a flat map of every file URL in the realm in one request.
+ * Only modules that export a `runTests` function will actually register tests.
  *
  * @param {string} realmURL - The base realm URL (e.g. "http://localhost:4201/catalog/")
  * @returns {Promise<string[]>} Absolute module URLs (without the file extension)
@@ -48,6 +49,8 @@ export async function loadRealmTests(application) {
     adapter,
     renderComponent,
     baseRealm,
+    universalEmberTestSupport,
+    emberOwner,
   ] = await Promise.all([
     import('@cardstack/host/tests/helpers'),
     import('@cardstack/host/tests/helpers/mock-matrix'),
@@ -55,6 +58,8 @@ export async function loadRealmTests(application) {
     import('@cardstack/host/tests/helpers/adapter'),
     import('@cardstack/host/tests/helpers/render-component'),
     import('@cardstack/host/tests/helpers/base-realm'),
+    import('@universal-ember/test-support'),
+    import('@ember/owner'),
   ]);
 
   const loaderInstance = application.buildInstance({
@@ -73,6 +78,8 @@ export async function loadRealmTests(application) {
     renderComponent,
   );
   loader.shimModule('@cardstack/host/tests/helpers/base-realm', baseRealm);
+  loader.shimModule('@universal-ember/test-support', universalEmberTestSupport);
+  loader.shimModule('@ember/owner', emberOwner);
 
   let testModuleNames;
   if (testModuleParam) {
