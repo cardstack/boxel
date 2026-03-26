@@ -169,23 +169,23 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get latestPrReviewCommentEventInstance() {
-    return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+    let state = this.latestReviewState;
+    if (state === 'changes_requested') {
+      return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+    }
+    if (state === 'approved') {
+      return findLatestApprovedEvent(this.latestReviewByReviewer);
+    }
+    return null;
   }
 
-  get latestChangesRequestedReviewerName() {
-    return (
-      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
-      'Unknown reviewer'
-    );
-  }
-
-  get latestChangesRequestedComment() {
+  get latestReviewComment() {
     let comment =
       this.latestPrReviewCommentEventInstance?.payload?.review?.body?.trim();
     return comment || '-';
   }
 
-  get latestChangesRequestedReviewUrl() {
+  get latestReviewCommentUrl() {
     return this.latestPrReviewCommentEventInstance?.payload?.review?.html_url;
   }
 
@@ -194,14 +194,10 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get latestReviewerName() {
-    let state = this.latestReviewState;
-    let event: any = null;
-    if (state === 'changes_requested') {
-      event = findLatestChangesRequestedEvent(this.latestReviewByReviewer);
-    } else if (state === 'approved') {
-      event = findLatestApprovedEvent(this.latestReviewByReviewer);
-    }
-    return event?.payload?.review?.user?.login ?? null;
+    return (
+      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
+      null
+    );
   }
 
   // ── Mergeability ──
@@ -269,8 +265,8 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           <ReviewSection
             @reviewState={{this.latestReviewState}}
             @reviewerName={{this.latestReviewerName}}
-            @comment={{this.latestChangesRequestedComment}}
-            @reviewUrl={{this.latestChangesRequestedReviewUrl}}
+            @comment={{this.latestReviewComment}}
+            @reviewUrl={{this.latestReviewCommentUrl}}
             @hasReview={{this.hasReview}}
           />
         </section>
