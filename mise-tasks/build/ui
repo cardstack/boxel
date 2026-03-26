@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Build boxel-icons and boxel-ui (in dependency order)"
+
+set -eu
+
+pnpm --dir packages/boxel-icons build
+pnpm --dir packages/boxel-ui/addon build
