@@ -292,8 +292,9 @@ module('Acceptance | host mode tests', function (hooks) {
     }) as StoreService['get'];
 
     let visitPromise = visit('/test/Pet/non-existent.json');
-    await waitFor('[data-test-host-loading]');
-    assert.dom('[data-test-host-loading]').exists();
+    assert
+      .dom('[data-test-host-loading]')
+      .doesNotExist('Loading screen is never shown on host mode');
     gate.fulfill();
 
     await visitPromise;

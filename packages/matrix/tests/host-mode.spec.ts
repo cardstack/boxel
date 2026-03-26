@@ -257,11 +257,6 @@ test.describe('Host mode', () => {
   }) => {
     await page.goto(publishedWhitePaperCardURL);
     await page.locator('[data-test-white-paper]').waitFor();
-    await waitUntil(
-      async () =>
-        (await page.locator('[data-test-host-loading]').count()) === 0,
-    );
-
     await page.emulateMedia({ media: 'print' });
     let pdf = await page.pdf({ format: 'Letter', printBackground: true });
     let pageCount =
