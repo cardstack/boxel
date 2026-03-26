@@ -2,6 +2,10 @@
 #MISE description="Serve test assets (boxel-icons + host dist) with readiness checks"
 #MISE dir="packages/realm-server"
 
+# start-server-and-test and run-p live in node_modules/.bin; ensure they're on
+# PATH when this task is invoked directly via `mise run` (not through pnpm).
+export PATH="./node_modules/.bin:$PATH"
+
 # Start both static servers and wait for them to be ready.
 # Useful for CI jobs that need icons + host-dist but not the full realm server stack.
 
