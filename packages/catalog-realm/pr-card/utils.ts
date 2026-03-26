@@ -301,8 +301,7 @@ export function findLatestChangesRequestedEvent(
   ].filter(
     (event: any) =>
       normalizeReviewState(event?.payload?.review?.state) ===
-        'changes_requested' &&
-      (event?.payload?.review?.body ?? '').trim().length > 0,
+        'changes_requested',
   );
   return activeChangesRequestedEvents[0] ?? null;
 }
