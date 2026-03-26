@@ -704,36 +704,12 @@ class Isolated extends Component<typeof Spec> {
 }
 
 class Fitted extends Component<typeof Spec> {
-  get defaultIcon() {
+  get icon() {
     if (!this.args.model) {
       return;
     }
     return this.args.model.constructor?.icon;
   }
-
-  get icon() {
-    return this.loadCardIcon.value;
-  }
-
-  @use private loadCardIcon = resource(() => {
-    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
-      value: undefined,
-    });
-    (async () => {
-      try {
-        if (this.args.model.ref && this.args.model.id) {
-          let card = await loadCardDef(this.args.model.ref, {
-            loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
-          });
-          icon.value = card.icon;
-        }
-      } catch (e) {
-        icon.value = undefined;
-      }
-    })();
-    return icon;
-  });
 
   <template>
     <BasicFitted
@@ -744,8 +720,6 @@ class Fitted extends Component<typeof Spec> {
       <:thumbnail>
         {{#if this.icon}}
           <this.icon width='35' height='35' role='presentation' />
-        {{else if this.defaultIcon}}
-          <this.defaultIcon width='35' height='35' role='presentation' />
         {{/if}}
       </:thumbnail>
       <:default>
