@@ -1,10 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import {
-  ensureFactoryRealmTemplate,
-  type FactoryRealmOptions,
-} from '../harness';
+import { ensureFactoryRealmTemplate } from '../harness';
+import { isFactorySupportContext } from '../harness/shared';
 import { readSupportContext } from '../runtime-metadata';
 
 async function main(): Promise<void> {
@@ -18,9 +16,15 @@ async function main(): Promise<void> {
   ];
   let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
 
-  let supportContext: FactoryRealmOptions['context'] = serializedSupportContext
-    ? (JSON.parse(serializedSupportContext) as FactoryRealmOptions['context'])
-    : (readSupportContext() as FactoryRealmOptions['context']);
+  let parsedEnvContext = serializedSupportContext
+    ? (JSON.parse(serializedSupportContext) as unknown)
+    : undefined;
+  let parsedMetadataContext = readSupportContext();
+  let supportContext = isFactorySupportContext(parsedEnvContext)
+    ? parsedEnvContext
+    : isFactorySupportContext(parsedMetadataContext)
+      ? parsedMetadataContext
+      : undefined;
 
   let preparedTemplates = [];
   for (let realmDir of realmDirs) {

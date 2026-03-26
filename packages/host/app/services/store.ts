@@ -1060,10 +1060,17 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let invalidations = event.invalidations as string[];
 
-    if (invalidations.find((i) => hasExecutableExtension(i))) {
-      // the invalidation included code changes too. in this case we
-      // need to flush the loader so that we can pick up any updated
-      // code before re-running the card
+    if (
+      invalidations.find(
+        (i) =>
+          hasExecutableExtension(i) &&
+          this.loaderService.loader.isModuleLoaded(i),
+      )
+    ) {
+      // the invalidation included code changes to modules that are already
+      // loaded. in this case we need to flush the loader so that we can pick
+      // up the updated code before re-running the card. net-new modules that
+      // have never been loaded don't require a loader reset.
       this.loaderService.resetLoader();
       this.store.reset();
       this.reestablishReferences.perform();
