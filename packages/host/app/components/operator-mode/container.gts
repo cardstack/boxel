@@ -56,6 +56,7 @@ interface Signature {
   Args: {
     onClose: () => void;
   };
+  Element: HTMLElement;
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
@@ -143,7 +144,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode'>
+    <div class='operator-mode' ...attributes>
       <ChooseFileModal />
       <CreateListingModal />
       <CreatePRModal />
