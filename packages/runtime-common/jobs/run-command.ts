@@ -9,10 +9,11 @@ export async function enqueueRunCommandJob(
   queue: QueuePublisher,
   _dbAdapter: DBAdapter,
   priority: number,
+  opts?: { concurrencyGroup?: string },
 ) {
   let job = await queue.publish<RunCommandResponse>({
     jobType: 'run-command',
-    concurrencyGroup: `command:${args.realmURL}`,
+    concurrencyGroup: opts?.concurrencyGroup ?? `command:${args.realmURL}`,
     timeout: RUN_COMMAND_JOB_TIMEOUT_SEC,
     priority,
     args,
