@@ -164,11 +164,12 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    // Point the prerender at the host app directly (not the isolated realm
-    // server) to avoid a deadlock: standby creation needs the host app shell,
-    // and the realm server's indexing needs the prerender to be ready.
+    // Point the prerender at the dev realm server for standby page creation.
+    // The dev realm server serves the host app shell at /standby and has
+    // the base realm indexed — avoiding the deadlock of pointing at the
+    // isolated realm server (which needs the prerender to finish indexing).
     BOXEL_HOST_URL: envMode
-      ? `http://host.${envSlug}.localhost`
+      ? `http://realm-server.${envSlug}.localhost`
       : (process.env.HOST_URL ?? 'http://localhost:4200'),
     // Use a distinct service name so it doesn't overwrite the dev prerender
     PRERENDER_SERVICE_NAME: ISOLATED_PRERENDER_SERVICE,

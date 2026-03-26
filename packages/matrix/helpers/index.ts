@@ -119,6 +119,17 @@ async function registerRealmRedirect(
   });
 }
 
+// In env mode, the test Synapse runs under a separate service name
+// (matrix-test) so it doesn't disrupt the dev Synapse. The Ember app's
+// baked-in config points to the dev Matrix URL, so we redirect those
+// calls to the test Synapse via Playwright page routes.
+export function getTestMatrixUrl(): string | undefined {
+  if (!isEnvironmentMode()) {
+    return undefined;
+  }
+  return `http://matrix-test.${getEnvironmentSlug()}.localhost`;
+}
+
 export async function setRealmRedirects(page: Page) {
   let baseServerUrl = isEnvironmentMode()
     ? `http://realm-server.${getEnvironmentSlug()}.localhost`
@@ -133,6 +144,28 @@ export async function setRealmRedirects(page: Page) {
     `${baseServerUrl}/base/`,
     `${serverIndexUrl}/base/`,
   );
+
+  // In env mode, rewrite the Ember app's baked-in matrixURL config to point
+  // to the test Synapse. This must happen before the app boots, and covers
+  // all connection types (fetch, WebSocket).
+  if (isEnvironmentMode()) {
+    let slug = getEnvironmentSlug();
+    let devMatrixUrl = `http://matrix.${slug}.localhost`;
+    let testMatrixUrl = `http://matrix-test.${slug}.localhost`;
+    await page.context().addInitScript(
+      ({ devUrl, testUrl }) => {
+        let meta = document.querySelector(
+          'meta[name="@cardstack/host/config/environment"]',
+        );
+        if (meta) {
+          let content = decodeURIComponent(meta.getAttribute('content') || '');
+          content = content.split(devUrl).join(testUrl);
+          meta.setAttribute('content', encodeURIComponent(content));
+        }
+      },
+      { devUrl: devMatrixUrl, testUrl: testMatrixUrl },
+    );
+  }
 }
 
 export async function registerRealmUsers(synapse: SynapseInstance) {

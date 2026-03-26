@@ -135,6 +135,10 @@ export async function synapseStart(
     (isEnvironmentMode()
       ? getSynapseContainerName()
       : path.basename(synCfg.configDir));
+
+  // Always clean up the target container in case a previous run was interrupted
+  await dockerStop({ containerId: containerName }).catch(() => {});
+
   console.log(
     `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
   );
