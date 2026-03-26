@@ -96,8 +96,7 @@ jobs:
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
       - name: Start test services (icons + host dist + realm servers)
-        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+        run: mise run test-services:host | tee -a /tmp/server.log &
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
@@ -159,8 +158,7 @@ jobs:
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
       - name: Start test services (icons + host dist + realm servers)
-        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+        run: mise run test-services:host | tee -a /tmp/server.log &
         env:
           SKIP_CATALOG: true
       - name: create realm users

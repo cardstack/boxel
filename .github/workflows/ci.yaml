@@ -315,8 +315,7 @@ jobs:
         run: pnpm exec playwright install
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
-        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
@@ -560,8 +559,7 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Start test services (icons + host dist + realm servers)
-        run: pnpm start:services-for-realm-server-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+        run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix

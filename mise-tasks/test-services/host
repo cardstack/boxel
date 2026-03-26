@@ -3,6 +3,7 @@
 #MISE dir="packages/realm-server"
 
 set -eu
+export PATH="./node_modules/.bin:$PATH"
 
 SCRIPTS_DIR="./scripts"
 CATALOG_SRC_PATH="$(cd "../../packages/catalog-realm" && pwd)"

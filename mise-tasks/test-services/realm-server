@@ -2,6 +2,8 @@
 #MISE description="Start services for realm-server test suite (icons + host-dist + dev-minimal services)"
 #MISE dir="packages/realm-server"
 
+export PATH="./node_modules/.bin:$PATH"
+
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
 NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
