@@ -6,7 +6,7 @@ import {
 import { createHash } from 'node:crypto';
 import { createServer as createNetServer } from 'node:net';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 
 import jwt from 'jsonwebtoken';
 import '../setup-logger';
@@ -19,6 +19,7 @@ export type RealmPermissions = Record<string, RealmAction[]>;
 export type FactorySupportContext = {
   matrixURL: string;
   matrixRegistrationSecret: string;
+  hostURL: string;
 };
 
 export type SynapseInstance = {
@@ -153,10 +154,11 @@ export const DEFAULT_REALM_DIR = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
-export const DEFAULT_HOST_URL =
-  process.env.HOST_URL ?? 'http://localhost:4200/';
 export const DEFAULT_ICONS_URL =
   process.env.ICONS_URL ?? 'http://localhost:4206/';
+export const CONFIGURED_HOST_URL = process.env.SOFTWARE_FACTORY_HOST_URL
+  ? new URL(process.env.SOFTWARE_FACTORY_HOST_URL)
+  : undefined;
 export const DEFAULT_ICONS_PROBE_URL = new URL(
   '@cardstack/boxel-icons/v1/icons/code.js',
   DEFAULT_ICONS_URL,
@@ -586,15 +588,40 @@ export function fileExists(path: string): boolean {
   }
 }
 
+export function findRootRepoCheckoutDir(): string | undefined {
+  let result = spawnSync(
+    'git',
+    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    {
+      cwd: workspaceRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    },
+  );
+
+  if (result.status !== 0) {
+    return undefined;
+  }
+
+  let commonDir = result.stdout.trim();
+  if (!commonDir.endsWith(`${join('.git')}`)) {
+    return undefined;
+  }
+
+  return dirname(commonDir);
+}
+
 export function findHostDistPackageDir(): string | undefined {
-  let siblingRoot = resolve(workspaceRoot, '..');
+  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
+  let rootRepoHostDir =
+    rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot
+      ? resolve(rootRepoCheckoutDir, 'packages', 'host')
+      : undefined;
+
   let candidates = [
     process.env.SOFTWARE_FACTORY_HOST_DIST_PACKAGE_DIR,
-    resolve(siblingRoot, 'boxel', 'packages', 'host'),
-    ...readdirSync(siblingRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => resolve(siblingRoot, entry.name, 'packages', 'host')),
     hostDir,
+    rootRepoHostDir,
   ]
     .filter((value): value is string => Boolean(value))
     .map((value) => resolve(value));
@@ -628,6 +655,21 @@ export function parseFactoryContext(): FactoryTestContext | undefined {
     return undefined;
   }
   return JSON.parse(raw) as FactoryTestContext;
+}
+
+export function isFactorySupportContext(
+  context: unknown,
+): context is FactorySupportContext {
+  return Boolean(
+    context &&
+    typeof context === 'object' &&
+    'matrixURL' in context &&
+    typeof context.matrixURL === 'string' &&
+    'matrixRegistrationSecret' in context &&
+    typeof context.matrixRegistrationSecret === 'string' &&
+    'hostURL' in context &&
+    typeof context.hostURL === 'string',
+  );
 }
 
 export function hasTemplateDatabaseName(

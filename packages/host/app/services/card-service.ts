@@ -239,7 +239,10 @@ export default class CardService extends Service {
       }
       this.subscriber?.(url, content);
 
-      if (options?.resetLoader) {
+      if (
+        options?.resetLoader &&
+        this.loaderService.loader.isModuleLoaded(url.href)
+      ) {
         this.loaderService.resetLoader();
       }
 
