@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Serve test assets (boxel-icons + host dist) with readiness checks"
+#MISE dir="packages/realm-server"
+
+# Start both static servers and wait for them to be ready.
+# Useful for CI jobs that need icons + host-dist but not the full realm server stack.
+
+WAIT_ON_TIMEOUT=180000 NODE_NO_WARNINGS=1 \
+  start-server-and-test \
+    'run-p -ln start:icons start:host-dist' \
+    "${ICONS_URL}|${HOST_URL}" \
+    'wait'

@@ -318,14 +318,7 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/matrix
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
+      - name: Start test services (icons + host dist + base realm)
         run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: Run Playwright tests
@@ -570,18 +563,8 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
-      - name: Serve boxel-icons
-        run: pnpm serve &
-        working-directory: packages/boxel-icons
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: pnpm start:skip-optional-realms | tee -a /tmp/server.log &
+      - name: Start test services (icons + host dist + realm servers)
+        run: pnpm start:services-for-realm-server-tests | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users
@@ -678,20 +661,12 @@ jobs:
       - name: Run Node tests
         run: pnpm test:node
         working-directory: packages/software-factory
-      - name: Serve host dist (test assets)
+      - name: Serve test assets (icons + host dist)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
+          run: mise run ci:serve-test-assets &
           wait-for: 3m
           wait-on: http-get://localhost:4200
-      - name: Serve boxel-icons
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve &
-          working-directory: packages/boxel-icons
-          wait-for: 3m
-          wait-on: http-get://localhost:4206/@cardstack/boxel-icons/v1/icons/code.js
       - name: Run Playwright tests
         run: pnpm test:playwright
         working-directory: packages/software-factory
@@ -776,11 +751,10 @@ jobs:
       - name: Build workspace-sync-cli
         run: pnpm build
         working-directory: packages/workspace-sync-cli
-      - name: Serve host dist (test assets)
+      - name: Serve test assets (icons + host dist)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
+          run: mise run ci:serve-test-assets &
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Start PostgreSQL for tests
