@@ -144,9 +144,8 @@ module(basename(__filename), function () {
       // This mirrors the real bug: a SkillPlusMarkdown card at
       // @cardstack/skills/Skill/source-code-editing has a linksTo
       // relationship with links.self = "./source-code-editing.md".
-      // processRelationships calls resolveCardReference("./source-code-editing.md",
-      // "@cardstack/skills/Skill/source-code-editing") which must resolve
-      // the prefix-form base before resolving the relative URL.
+      // relativizeDocument (via resolveCardReference) must resolve the
+      // prefix-form base before resolving the relative URL.
       let doc: SingleCardDocument = {
         data: {
           id: '@test-rel/realm/Skill/my-skill',
@@ -172,22 +171,20 @@ module(basename(__filename), function () {
       let realmURL = new URL('http://test-host/my-realm/');
       relativizeDocument(doc, realmURL);
 
-      // The relationship link should be relativized correctly
       let rel = doc.data.relationships?.instructionsSource as any;
       assert.ok(rel, 'relationship exists after relativization');
-      assert.ok(
+      assert.strictEqual(
         rel.links.self,
-        'relationship links.self is preserved (not thrown)',
+        './my-skill.md',
+        'relationship links.self is relativized relative to realm root',
       );
     });
 
     test('resolves linksTo relationship with absolute URL and prefix-form resource ID', async function (assert) {
       // This mirrors the bug where a card at @cardstack/skills/Skill/boxel-environment
       // has a relationship pointing to https://cardstack.com/base/Theme/brand-guide.
-      // processRelationships calls resolveCardReference(
-      //   "https://cardstack.com/base/Theme/brand-guide",
-      //   "@cardstack/skills/Skill/boxel-environment"
-      // ) which must handle the absolute URL without using the prefix-form base.
+      // relativizeDocument (via resolveCardReference) must handle the absolute
+      // URL without using the prefix-form base.
       let doc: SingleCardDocument = {
         data: {
           id: '@test-rel/realm/Skill/env',

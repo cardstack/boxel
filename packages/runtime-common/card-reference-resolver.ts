@@ -55,6 +55,14 @@ export function resolveCardReference(
         break;
       }
     }
+    // If relativeTo is still a non-URL-like string after attempting prefix
+    // resolution, provide a more actionable error instead of allowing
+    // new URL(reference, relativeTo) to throw a generic TypeError.
+    if (typeof relativeTo === 'string' && !isUrlLikeReference(relativeTo)) {
+      throw new Error(
+        `Cannot resolve "${reference}" relative to "${relativeTo}" — no matching prefix mapping registered for the base`,
+      );
+    }
   }
   return new URL(reference, relativeTo).href;
 }
