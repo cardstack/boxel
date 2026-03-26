@@ -76,6 +76,7 @@ mise-tasks/
   dev-all                      # Host app + full dev stack (single command)
   dev-minimal                  # Dev stack without optional realms
   dev-without-matrix           # Dev stack (expects Matrix already running)
+  build:ui                     # Build boxel-icons + boxel-ui (in dependency order)
   test-services:host           # Services for host test suite
   test-services:matrix         # Services for matrix test suite
   test-services:realm-server   # Services for realm-server test suite
