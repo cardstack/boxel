@@ -4,7 +4,11 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, Loader } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  Loader,
+  registerCardReferencePrefix,
+} from '@cardstack/runtime-common';
 
 import {
   testRealmURL,
@@ -227,6 +231,27 @@ module('Unit | loader', function (hooks) {
     }>(`${testRealmURL}foo`);
     assert.strictEqual(checkImportMeta(), `${testRealmURL}foo.js`);
     assert.strictEqual(myLoader(), loader, 'the loader instance is correct');
+  });
+
+  // Regression test for CS-10498: after the import-maps change, module
+  // identifiers can be in registered prefix form (e.g. @cardstack/catalog/...).
+  // getConsumedModules passed these directly to new URL() which throws
+  // TypeError: Invalid URL. The fix uses resolveCardReference() first.
+  test('can determine consumed modules using prefix-form module identifier', async function (assert) {
+    registerCardReferencePrefix('@test-loader/', testRealmURL);
+
+    // Import the module using its regular URL so it's in the loader cache
+    await loader.import(`${testRealmURL}f`);
+
+    // Now call getConsumedModules with the prefix-form identifier.
+    // Without the fix, this throws TypeError: Invalid URL because
+    // new URL('@test-loader/f') is not a valid URL.
+    let consumed = await loader.getConsumedModules(`@test-loader/f`);
+    assert.deepEqual(
+      consumed,
+      [`${testRealmURL}b`, `${testRealmURL}c`, `${testRealmURL}g`],
+      'consumed modules resolved correctly from prefix-form identifier',
+    );
   });
 
   test('identify preserves original module for reexports', function (assert) {

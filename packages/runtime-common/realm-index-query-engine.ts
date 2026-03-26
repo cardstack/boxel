@@ -9,6 +9,9 @@ import {
   maxLinkDepth,
   maybeURL,
   resolveCardReference,
+  isRegisteredPrefix,
+  cardIdToURL,
+  unresolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
   logger,
@@ -88,6 +91,11 @@ function absolutizeInstanceURL(
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
 ) {
+  // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+  // in their canonical portable form — don't resolve them.
+  if (isRegisteredPrefix(url)) {
+    return;
+  }
   if (!resourceId) {
     setURL(url);
     return;
@@ -239,7 +247,7 @@ export class RealmIndexQueryEngine {
     if (!resource.meta?.adoptsFrom) {
       return false;
     }
-    let relativeTo = resource.id ? new URL(resource.id) : this.realmURL;
+    let relativeTo = resource.id ? cardIdToURL(resource.id) : this.realmURL;
     let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
     if (!isResolvedCodeRef(codeRef)) {
       return false;
@@ -443,7 +451,7 @@ export class RealmIndexQueryEngine {
       return;
     }
 
-    let relativeTo = resource.id ? new URL(resource.id) : realmURL;
+    let relativeTo = resource.id ? cardIdToURL(resource.id) : realmURL;
     let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
     if (!isResolvedCodeRef(codeRef)) {
       return;
@@ -515,7 +523,7 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      relativeTo: resource.id ? new URL(resource.id) : realmURL,
+      relativeTo: resource.id ? cardIdToURL(resource.id) : realmURL,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
@@ -832,7 +840,7 @@ export class RealmIndexQueryEngine {
         let linkURL = new URL(
           resolveCardReference(
             relationship.links.self,
-            resource.id ? new URL(resource.id) : realmURL,
+            resource.id ? cardIdToURL(resource.id) : realmURL,
           ),
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
@@ -946,14 +954,17 @@ export class RealmIndexQueryEngine {
             `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
           );
         }
+        // Use prefix form (e.g. @cardstack/catalog/...) when available,
+        // so relationship data.id stays portable across environments.
+        let relationshipIdStr = unresolveCardReference(relationshipId.href);
         if (
           foundLinks ||
-          omit.includes(relationshipId.href) ||
-          included.find((i) => i.id === relationshipId!.href)
+          omit.includes(relationshipIdStr) ||
+          included.find((i) => i.id === relationshipIdStr)
         ) {
           relationship.data = {
             type: linkResource?.type ?? CardResourceType,
-            id: relationshipId.href,
+            id: relationshipIdStr,
           };
         } else if (!linkResource) {
           // Even when the linked resource is unavailable, ensure
@@ -1006,7 +1017,11 @@ function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
   }
 }
 
-function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+// Exported for testing (CS-10498 regression test)
+export function relativizeDocument(
+  doc: SingleCardDocument,
+  realmURL: URL,
+): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
     return;
@@ -1033,13 +1048,26 @@ function relativizeResource(
   primaryURL: URL,
   realmURL: URL,
 ) {
+  // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
+  // which is not a valid URL base. Resolve it to a URL for relative resolution.
+  let resourceURL = resource.id ? cardIdToURL(resource.id) : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
-    let urlObj = new URL(resolveCardReference(url, resource.id ?? primaryURL));
+    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+    // in their canonical portable form — don't resolve or relativize them.
+    if (isRegisteredPrefix(url)) {
+      return;
+    }
+    let urlObj = new URL(resolveCardReference(url, resourceURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
+    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+    // in their canonical portable form — don't resolve or relativize them.
+    if (isRegisteredPrefix(moduleURL)) {
+      return;
+    }
     let absoluteModuleURL = new URL(
-      resolveCardReference(moduleURL, resource.id ?? primaryURL),
+      resolveCardReference(moduleURL, resourceURL),
     );
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });

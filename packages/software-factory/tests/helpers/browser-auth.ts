@@ -24,11 +24,17 @@ type BoxelProfile = {
 
 type SupportContext = {
   matrixURL?: string;
+  realmServerURL?: string;
 };
 
 function getSupportMatrixURL(): string | undefined {
   let context = readSupportContext() as SupportContext | undefined;
   return context?.matrixURL;
+}
+
+function getSupportRealmServerURL(): string | undefined {
+  let context = readSupportContext() as SupportContext | undefined;
+  return context?.realmServerURL;
 }
 
 const defaultMatrixUrl = ensureTrailingSlash(
@@ -191,8 +197,13 @@ async function getRealmAuthTokens(
 
 export async function buildBrowserState(
   realmURL: string,
-  realmServerURL = new URL('/', realmURL).href,
+  realmServerURL = getSupportRealmServerURL(),
 ): Promise<FactoryBrowserState> {
+  if (!realmServerURL) {
+    throw new Error(
+      'A realmServerURL is required to build browser state for software-factory tests',
+    );
+  }
   let matrixAuth = await matrixLogin();
   let realmTokens = await getRealmAuthTokens(matrixAuth, realmServerURL);
 
@@ -219,16 +230,26 @@ export async function installBrowserState(
   state: FactoryBrowserState,
 ) {
   await target.addInitScript((payload: FactoryBrowserState) => {
-    window.localStorage.clear();
-    window.localStorage.setItem('auth', JSON.stringify(payload.auth));
-    window.localStorage.setItem(
-      'boxel-session',
-      JSON.stringify(payload.boxelSession),
-    );
+    try {
+      window.localStorage.clear();
+      window.localStorage.setItem('auth', JSON.stringify(payload.auth));
+      window.localStorage.setItem(
+        'boxel-session',
+        JSON.stringify(payload.boxelSession),
+      );
+    } catch {
+      // Init scripts also run on bootstrap documents where localStorage is not
+      // accessible yet (for example, the initial about:blank page). The script
+      // will run again for the actual realm page, where storage is available.
+    }
   }, state);
 }
 
-export async function seedBrowserSession(page: Page, realmURL: string) {
-  let state = await buildBrowserState(realmURL);
+export async function seedBrowserSession(
+  page: Page,
+  realmURL: string,
+  realmServerURL?: string,
+) {
+  let state = await buildBrowserState(realmURL, realmServerURL);
   await installBrowserState(page, state);
 }

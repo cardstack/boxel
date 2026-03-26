@@ -20,12 +20,18 @@ async function main(): Promise<void> {
   let runtime = await startFactoryRealmServer({
     realmDir,
     templateDatabaseName: process.env.SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME,
+    templateRealmServerURL: process.env
+      .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL
+      ? new URL(process.env.SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL)
+      : undefined,
   });
 
   let payload = {
     realmDir,
     realmURL: runtime.realmURL.href,
+    realmServerURL: runtime.realmServerURL.href,
     databaseName: runtime.databaseName,
+    ports: runtime.ports,
     sampleCardURL: runtime.cardURL('project-demo'),
     ownerBearerToken: runtime.createBearerToken(),
   };
@@ -39,16 +45,38 @@ async function main(): Promise<void> {
 
   console.log(JSON.stringify(payload, null, 2));
 
+  let cleanExit = false;
+  process.on('exit', () => {
+    if (!cleanExit) {
+      for (let pid of runtime.childPids) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // already dead
+        }
+      }
+    }
+  });
+
   let stop = async () => {
     await runtime.stop();
-    process.exit(0);
+    cleanExit = true;
   };
 
-  process.on('SIGINT', () => void stop());
-  process.on('SIGTERM', () => void stop());
+  await new Promise<void>((resolve, reject) => {
+    let handleSignal = () => {
+      process.removeListener('SIGINT', onSigint);
+      process.removeListener('SIGTERM', onSigterm);
+      void stop().then(resolve).catch(reject);
+    };
+    let onSigint = () => handleSignal();
+    let onSigterm = () => handleSignal();
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+  });
 }
 
 main().catch((error: unknown) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

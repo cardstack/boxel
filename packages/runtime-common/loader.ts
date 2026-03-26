@@ -2,7 +2,7 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformAsync } from '@babel/core';
 import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
-import { trimExecutableExtension, logger } from './index';
+import { executableExtensions, logger } from './index';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -10,6 +10,10 @@ import {
   trackRuntimeModuleDependency,
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker';
+import {
+  unresolveCardReference,
+  resolveCardReference,
+} from './card-reference-resolver';
 
 type FetchingModule = {
   state: 'fetching';
@@ -103,6 +107,11 @@ export class Loader {
 
   private moduleShims = new Map<string, Record<string, any>>();
   private moduleCanonicalURLs = new Map<string, string>();
+  // Cache the flattened dependency sets for evaluated modules. Once a module is
+  // evaluated its consumedModules never change, so the result of
+  // collectKnownModuleDependencies is stable and can be reused across repeated
+  // loader.import() calls (e.g. when deserializing 22 cards of the same type).
+  private knownDepsCache = new Map<string, Set<string>>();
   private identities = new WeakMap<
     Function,
     { module: string; name: string }
@@ -152,16 +161,25 @@ export class Loader {
     consumed: string[] = [],
     initialIdentifier = moduleIdentifier,
   ): Promise<string[]> {
-    if (consumed.includes(moduleIdentifier)) {
+    // Normalize to resolved URL href so that prefix-form identifiers
+    // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
+    // are treated as the same module for cycle detection and self-exclusion.
+    let resolvedHref = new URL(
+      resolveCardReference(moduleIdentifier, undefined),
+    ).href;
+    let resolvedInitial = new URL(
+      resolveCardReference(initialIdentifier, undefined),
+    ).href;
+
+    if (consumed.includes(resolvedHref)) {
       return [];
     }
     // you can't consume yourself
-    if (moduleIdentifier !== initialIdentifier) {
-      consumed.push(moduleIdentifier);
+    if (resolvedHref !== resolvedInitial) {
+      consumed.push(resolvedHref);
     }
 
-    let resolvedModuleIdentifier = new URL(moduleIdentifier);
-    let module = this.getModule(resolvedModuleIdentifier.href);
+    let module = this.getModule(resolvedHref);
 
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
@@ -253,8 +271,10 @@ export class Loader {
     let knownDependencies = this.collectKnownModuleDependencies(
       resolvedModuleIdentifier,
     );
-    knownDependencies.delete(resolvedModuleIdentifier);
-    return [...knownDependencies];
+    // Filter rather than delete to avoid mutating the cached Set
+    return [...knownDependencies].filter(
+      (dep) => dep !== resolvedModuleIdentifier,
+    );
   }
 
   private trackKnownModuleDependencies(
@@ -276,6 +296,11 @@ export class Loader {
   private collectKnownModuleDependencies(
     rootModuleIdentifier: string,
   ): Set<string> {
+    let cached = this.knownDepsCache.get(rootModuleIdentifier);
+    if (cached) {
+      return cached;
+    }
+
     let pending = [rootModuleIdentifier];
     let visited = new Set<string>();
 
@@ -285,6 +310,16 @@ export class Loader {
         continue;
       }
       visited.add(moduleIdentifier);
+
+      // If we already computed the full dep set for this subtree, merge it
+      // in and skip traversing its children.
+      let cachedSubtree = this.knownDepsCache.get(moduleIdentifier);
+      if (cachedSubtree) {
+        for (let dep of cachedSubtree) {
+          visited.add(dep);
+        }
+        continue;
+      }
 
       let module = this.getModule(moduleIdentifier);
       if (!module) {
@@ -321,6 +356,7 @@ export class Loader {
       }
     }
 
+    this.knownDepsCache.set(rootModuleIdentifier, visited);
     return visited;
   }
 
@@ -562,7 +598,9 @@ export class Loader {
     module: any,
     moduleIdentifier: string,
   ) {
-    let moduleId = trimExecutableExtension(new URL(moduleIdentifier)).href;
+    let moduleId = unresolveCardReference(
+      trimModuleIdentifier(moduleIdentifier),
+    );
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
@@ -850,8 +888,24 @@ function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
 }
 
+// Cache and use string operations to avoid expensive URL construction on every
+// getModule/setModule call. Module identifiers are always full URL strings so
+// we only need to strip executable extensions from the end.
+const trimCache = new Map<string, string>();
 function trimModuleIdentifier(moduleIdentifier: string): string {
-  return trimExecutableExtension(new URL(moduleIdentifier)).href;
+  let cached = trimCache.get(moduleIdentifier);
+  if (cached !== undefined) {
+    return cached;
+  }
+  let result = moduleIdentifier;
+  for (let ext of executableExtensions) {
+    if (moduleIdentifier.endsWith(ext)) {
+      result = moduleIdentifier.slice(0, -ext.length);
+      break;
+    }
+  }
+  trimCache.set(moduleIdentifier, result);
+  return result;
 }
 
 type ModuleState = Module['state'];

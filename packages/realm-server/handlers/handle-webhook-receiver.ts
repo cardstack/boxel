@@ -99,6 +99,7 @@ export default function handleWebhookReceiverRequest({
     }
 
     let executedCommands = 0;
+    let matchedCommands = 0;
     for (let commandRow of commandRows) {
       let commandFilter = commandRow.command_filter as Record<
         string,
@@ -115,6 +116,7 @@ export default function handleWebhookReceiverRequest({
         continue;
       }
 
+      matchedCommands++;
       let commandURL = commandRow.command as string;
       let realmURL: string;
       let commandInput: Record<string, any>;
@@ -133,23 +135,7 @@ export default function handleWebhookReceiverRequest({
         continue;
       }
 
-      // Run as the realm owner so they have write permissions in the target realm
       let runAs = webhook.username as string;
-      try {
-        let realmOwnerRows = await query(dbAdapter, [
-          `SELECT username FROM realm_user_permissions WHERE realm_url = `,
-          param(realmURL),
-          ` AND realm_owner = true LIMIT 1`,
-        ]);
-        if (realmOwnerRows[0]?.username) {
-          runAs = realmOwnerRows[0].username as string;
-        }
-      } catch (error) {
-        console.error(
-          `Failed to fetch realm owner for ${realmURL}, falling back to webhook user:`,
-          error,
-        );
-      }
 
       try {
         await enqueueRunCommandJob(
@@ -171,6 +157,23 @@ export default function handleWebhookReceiverRequest({
           error,
         );
       }
+    }
+
+    if (matchedCommands > 0 && executedCommands === 0) {
+      await setContextResponse(
+        ctxt,
+        new Response(
+          JSON.stringify({
+            status: 'error',
+            message: `All ${matchedCommands} matched commands failed to process`,
+          }),
+          {
+            status: 500,
+            headers: { 'content-type': 'application/json' },
+          },
+        ),
+      );
+      return;
     }
 
     await setContextResponse(

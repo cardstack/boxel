@@ -31,10 +31,18 @@ import {
   registerService,
   deregisterEnvironment,
 } from './lib/dev-service-registry';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 
 (globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 let log = logger('main');
+const runtimeMetadataFile =
+  process.env.SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE;
+
+function writeRuntimeMetadata(payload: unknown): void {
+  writeRuntimeMetadataFile(runtimeMetadataFile, 'realm-server', payload);
+}
+
 if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
@@ -386,6 +394,12 @@ const getIndexHTML = async () => {
 
   let httpServer = server.listen(port);
   httpServer.on('listening', () => {
+    let actualPort =
+      (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+    writeRuntimeMetadata({
+      pid: process.pid,
+      port: actualPort,
+    });
     if (isEnvironmentMode()) {
       registerService(httpServer, serviceName, { wildcardSubdomains: true });
     }

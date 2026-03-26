@@ -1,13 +1,21 @@
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
+import {
+  iconURLFor,
+  getRandomBackgroundURL,
+} from '@cardstack/runtime-common/realm-display-defaults';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
 import {
+  getAccessibleRealmTokens,
   getActiveProfile,
   getRealmServerToken,
   matrixLogin,
   type ActiveBoxelProfile,
+  type MatrixAuth,
 } from '../scripts/lib/boxel';
+import { formatErrorResponse, formatUnknownError } from './error-format';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
 export interface ResolveFactoryTargetRealmOptions {
@@ -23,11 +31,13 @@ export interface FactoryTargetRealmResolution {
 
 export interface FactoryTargetRealmBootstrapResult extends FactoryTargetRealmResolution {
   createdRealm: boolean;
+  authorization: string;
 }
 
 interface CreateRealmResult {
   createdRealm: boolean;
   url: string;
+  authorization: string;
 }
 
 export interface FactoryTargetRealmBootstrapActions {
@@ -35,6 +45,11 @@ export interface FactoryTargetRealmBootstrapActions {
     resolution: FactoryTargetRealmResolution,
   ) => Promise<CreateRealmResult>;
   fetch?: typeof globalThis.fetch;
+  waitForRealmReady?: (
+    realmUrl: string,
+    authorization: string,
+    fetchImpl: typeof globalThis.fetch,
+  ) => Promise<void>;
 }
 
 export function resolveFactoryTargetRealm(
@@ -60,6 +75,7 @@ export async function bootstrapFactoryTargetRealm(
     ((targetRealm) =>
       createRealm(targetRealm, {
         fetch: actions?.fetch,
+        waitForRealmReady: actions?.waitForRealmReady,
       }))
   )(resolution);
 
@@ -67,12 +83,16 @@ export async function bootstrapFactoryTargetRealm(
     ...resolution,
     url: createRealmResult.url,
     createdRealm: createRealmResult.createdRealm,
+    authorization: createRealmResult.authorization,
   };
 }
 
 async function createRealm(
   resolution: FactoryTargetRealmResolution,
-  dependencies?: { fetch?: typeof globalThis.fetch },
+  dependencies?: {
+    fetch?: typeof globalThis.fetch;
+    waitForRealmReady?: FactoryTargetRealmBootstrapActions['waitForRealmReady'];
+  },
 ): Promise<CreateRealmResult> {
   let fetchImpl = dependencies?.fetch ?? globalThis.fetch;
 
@@ -103,6 +123,8 @@ async function createRealm(
           attributes: {
             endpoint,
             name: endpoint,
+            iconURL: iconURLFor(endpoint),
+            backgroundURL: getRandomBackgroundURL(),
           },
         },
       }),
@@ -120,24 +142,140 @@ async function createRealm(
       resolution.url,
     );
 
+    await appendRealmToMatrixAccountData(
+      matrixAuth,
+      canonicalRealmUrl,
+      fetchImpl,
+    );
+    let authorization = await getRealmAuthorization(
+      matrixAuth,
+      canonicalRealmUrl,
+    );
+    await (dependencies?.waitForRealmReady ?? waitForRealmReady)(
+      canonicalRealmUrl,
+      authorization,
+      fetchImpl,
+    );
+
     return {
       createdRealm: true,
       url: canonicalRealmUrl,
+      authorization,
     };
   }
 
-  let text = await response.text();
+  let text = await formatErrorResponse(response);
 
   if (response.status === 400 && /already exists on this server/.test(text)) {
+    let authorization = await getRealmAuthorization(matrixAuth, resolution.url);
     return {
       createdRealm: false,
       url: resolution.url,
+      authorization,
     };
   }
 
   throw new Error(
     `Failed to create target realm ${resolution.url}: HTTP ${response.status} ${text}`.trim(),
   );
+}
+
+async function appendRealmToMatrixAccountData(
+  matrixAuth: MatrixAuth,
+  realmUrl: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let accountDataUrl = new URL(
+    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+    matrixAuth.credentials.matrixUrl,
+  ).href;
+
+  let existingRealms: string[] = [];
+
+  let getResponse = await fetchImpl(accountDataUrl, {
+    headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
+  });
+  if (getResponse.ok) {
+    let data = (await getResponse.json()) as { realms?: string[] };
+    existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
+  }
+
+  if (!existingRealms.includes(realmUrl)) {
+    existingRealms.push(realmUrl);
+  }
+
+  let putResponse = await fetchImpl(accountDataUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${matrixAuth.accessToken}`,
+    },
+    body: JSON.stringify({ realms: existingRealms }),
+  });
+
+  if (!putResponse.ok) {
+    let text = await formatErrorResponse(putResponse);
+    throw new Error(
+      `Failed to update Matrix account data with realm ${realmUrl}: HTTP ${putResponse.status} ${text}`.trim(),
+    );
+  }
+}
+
+async function waitForRealmReady(
+  realmUrl: string,
+  authorization: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let readinessUrl = new URL('_readiness-check', realmUrl).href;
+  let timeoutMs = 15_000;
+  let retryDelayMs = 250;
+  let startedAt = Date.now();
+  let lastError: string | undefined;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      let response = await fetchImpl(readinessUrl, {
+        headers: {
+          Accept: SupportedMimeType.RealmInfo,
+          Authorization: authorization,
+        },
+      });
+
+      if (response.ok) {
+        return;
+      }
+
+      lastError = `HTTP ${response.status} ${await formatErrorResponse(
+        response,
+      )}`.trim();
+    } catch (error) {
+      lastError = formatUnknownError(error);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+  }
+
+  throw new Error(
+    `Timed out waiting for target realm ${realmUrl} to become ready${
+      lastError ? `: ${lastError}` : ''
+    }`,
+  );
+}
+
+async function getRealmAuthorization(
+  matrixAuth: MatrixAuth,
+  realmUrl: string,
+): Promise<string> {
+  let realmTokens = await getAccessibleRealmTokens(matrixAuth);
+  let authorization = realmTokens[ensureTrailingSlash(realmUrl)];
+
+  if (!authorization) {
+    throw new Error(
+      `Realm auth lookup did not include ${ensureTrailingSlash(realmUrl)}`,
+    );
+  }
+
+  return authorization;
 }
 
 function resolveRealmServerProfile(

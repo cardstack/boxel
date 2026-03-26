@@ -8,6 +8,7 @@ import {
   runFactoryEntrypoint,
   wantsFactoryEntrypointHelp,
 } from '../src/factory-entrypoint';
+import type { FactoryBootstrapResult } from '../src/factory-bootstrap';
 import type { FactoryBrief } from '../src/factory-brief';
 import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
 
@@ -28,6 +29,20 @@ const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   serverUrl: 'https://realms.example.test/',
   ownerUsername: 'hassan',
   createdRealm: true,
+  authorization: 'Bearer token',
+};
+const mockBootstrapResult: FactoryBootstrapResult = {
+  project: { id: 'Project/sticky-note-mvp', status: 'created' },
+  knowledgeArticles: [
+    { id: 'KnowledgeArticle/sticky-note-brief-context', status: 'created' },
+    { id: 'KnowledgeArticle/sticky-note-agent-onboarding', status: 'created' },
+  ],
+  tickets: [
+    { id: 'Ticket/sticky-note-define-core', status: 'created' },
+    { id: 'Ticket/sticky-note-design-views', status: 'created' },
+    { id: 'Ticket/sticky-note-add-integration', status: 'created' },
+  ],
+  activeTicket: { id: 'Ticket/sticky-note-define-core', status: 'created' },
 };
 
 module('factory-entrypoint', function (hooks) {
@@ -91,6 +106,7 @@ module('factory-entrypoint', function (hooks) {
       },
       normalizedBrief,
       bootstrappedTargetRealm,
+      mockBootstrapResult,
     );
 
     assert.strictEqual(summary.command, 'factory:go');
@@ -113,8 +129,16 @@ module('factory-entrypoint', function (hooks) {
         'normalized-brief',
         'resolved-target-realm',
         'bootstrapped-target-realm',
+        'bootstrapped-project-artifacts',
       ],
     );
+    assert.strictEqual(summary.bootstrap.projectId, 'Project/sticky-note-mvp');
+    assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
+    assert.strictEqual(
+      summary.bootstrap.activeTicket.id,
+      'Ticket/sticky-note-define-core',
+    );
+    assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
     assert.deepEqual(summary.result, {
       status: 'ready',
       nextStep: 'bootstrap-target-realm',
@@ -162,6 +186,7 @@ module('factory-entrypoint', function (hooks) {
           serverUrl: resolution.serverUrl,
           createdRealm: false,
         }),
+        bootstrapArtifacts: async () => mockBootstrapResult,
         fetch: async (_input, init) => {
           assert.strictEqual(
             new Headers(init?.headers).get('Authorization'),
@@ -202,5 +227,60 @@ module('factory-entrypoint', function (hooks) {
       'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
     );
     assert.true(summary.brief.content.includes('structured drafting'));
+  });
+
+  test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory artifacts', async function (assert) {
+    process.env.MATRIX_USERNAME = 'hassan';
+
+    let capturedDarkfactoryModuleUrl: string | undefined;
+
+    await runFactoryEntrypoint(
+      {
+        briefUrl,
+        targetRealmUrl,
+        realmServerUrl: 'https://realms.example.test/app/',
+        mode: 'implement',
+      },
+      {
+        bootstrapTargetRealm: async (resolution) => ({
+          ...bootstrappedTargetRealm,
+          url: resolution.url,
+          serverUrl: resolution.serverUrl,
+          createdRealm: false,
+          authorization: 'Bearer target-realm-token',
+        }),
+        bootstrapArtifacts: async (_brief, _targetRealmUrl, options) => {
+          capturedDarkfactoryModuleUrl = options?.darkfactoryModuleUrl;
+          return mockBootstrapResult;
+        },
+        fetch: async () =>
+          new Response(
+            JSON.stringify({
+              data: {
+                attributes: {
+                  content: 'Brief content',
+                  cardInfo: {
+                    name: 'Sticky Note',
+                    summary:
+                      'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
+                  },
+                  tags: ['documents-content', 'sticky', 'note'],
+                },
+              },
+            }),
+            {
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+              },
+            },
+          ),
+      },
+    );
+
+    assert.strictEqual(
+      capturedDarkfactoryModuleUrl,
+      'https://realms.example.test/app/software-factory/darkfactory',
+    );
   });
 });

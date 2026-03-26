@@ -13,36 +13,20 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# Always include key config files so the realm loads correctly.
-for f in .realm.json package.json tsconfig.json .gitignore; do
-  if [ -e "$CATALOG_SRC_PATH/$f" ]; then
-    cp -a "$CATALOG_SRC_PATH/$f" "$CATALOG_TEMP_PATH/"
-  fi
-done
-
-# We need the Spec folder for one of the tests
-mkdir -p "$CATALOG_TEMP_PATH/Spec"
-cp -a "$CATALOG_SRC_PATH/Spec/grid.json" "$CATALOG_TEMP_PATH/Spec/"
-
-# Explicitly keep only the tested parts of the catalog
+# Copy required folders
 KEEP_FOLDERS="fields catalog-app components commands"
 for item in $KEEP_FOLDERS; do
   if [ -d "$CATALOG_SRC_PATH/$item" ]; then
     cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/"
   else
-    echo "ERROR: required catalog item not found: $item" >&2
+    echo "ERROR: required catalog folder not found: $item" >&2
     exit 1
   fi
 done
-# Explicitly keep some files needed for the tests
-KEEP_FILES="cloudflare-image.gts index.json Spec/f869024a-cdec-4a73-afca-d8d32f258ead.json"
-for item in $KEEP_FILES; do
-  if [ -f "$CATALOG_SRC_PATH/$item" ]; then
-    cp -a "$CATALOG_SRC_PATH/$item" "$CATALOG_TEMP_PATH/$item"
-  else
-    echo "ERROR: required catalog item not found: $item" >&2
-    exit 1
-  fi
+
+# Copy all root-level files (e.g. *.gts, *.json, config files)
+find "$CATALOG_SRC_PATH" -maxdepth 1 -type f | while read -r f; do
+  cp -a "$f" "$CATALOG_TEMP_PATH/"
 done
 
 export CATALOG_REALM_PATH="$CATALOG_TEMP_PATH"

@@ -1,9 +1,5 @@
 import { execSync } from 'child_process';
-import {
-  writeFileSync,
-  renameSync,
-  unlinkSync,
-} from 'fs';
+import { writeFileSync, renameSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import yaml from 'yaml';
 
@@ -70,9 +66,18 @@ export function setSynapseURL(url: string): void {
   _synapseURLOverride = url;
 }
 
-export function getSynapseURL(): string {
+export function getSynapseURL(synapse?: {
+  baseUrl?: string;
+  port?: number;
+}): string {
   if (_synapseURLOverride) {
     return _synapseURLOverride;
+  }
+  if (synapse?.baseUrl) {
+    return synapse.baseUrl;
+  }
+  if (synapse?.port != null) {
+    return `http://localhost:${synapse.port}`;
   }
   if (!isEnvironmentMode()) {
     return 'http://localhost:8008';

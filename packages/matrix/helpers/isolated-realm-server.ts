@@ -159,7 +159,6 @@ export async function startPrerenderServer(
   let preferredPort = envMode ? 0 : (options?.port ?? DEFAULT_PRERENDER_PORT);
   let port = await findAvailablePort(preferredPort);
   let localUrl = `http://localhost:${port}`;
-  let silent = process.env.SOFTWARE_FACTORY_PRERENDER_SILENT !== '0';
   let env = {
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
@@ -181,9 +180,6 @@ export async function startPrerenderServer(
     'prerender/prerender-server',
     `--port=${port}`,
   ];
-  if (silent) {
-    prerenderArgs.push('--silent');
-  }
 
   let child = spawn('ts-node', prerenderArgs, {
     cwd: realmServerDir,
