@@ -315,7 +315,13 @@ jobs:
         run: pnpm exec playwright install
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
-        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
+          wait-for: 5m
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
