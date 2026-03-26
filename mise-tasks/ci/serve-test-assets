@@ -9,6 +9,15 @@ export PATH="./node_modules/.bin:$PATH"
 # Start both static servers and wait for them to be ready.
 # Useful for CI jobs that need icons + host-dist but not the full realm server stack.
 
+# If both services are already running (e.g. local dev), skip startup entirely.
+# start-server-and-test fails if run-p exits immediately, which happens when
+# start:icons and start:host-dist both detect existing servers and exit 0.
+if curl --fail --silent "$ICONS_URL" >/dev/null 2>&1 && \
+   curl --fail --silent "$HOST_URL" >/dev/null 2>&1; then
+  echo "Icons and host already running, nothing to start"
+  exec sleep 100000000
+fi
+
 WAIT_ON_TIMEOUT=180000 NODE_NO_WARNINGS=1 \
   start-server-and-test \
     'run-p -ln start:icons start:host-dist' \
