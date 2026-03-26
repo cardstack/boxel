@@ -7,6 +7,10 @@ export function registerCardReferencePrefix(
   prefixMappings.set(prefix, targetURL);
 }
 
+export function unregisterCardReferencePrefix(prefix: string): void {
+  prefixMappings.delete(prefix);
+}
+
 export function isRegisteredPrefix(reference: string): boolean {
   for (let [prefix] of prefixMappings) {
     if (reference.startsWith(prefix)) {
@@ -38,6 +42,27 @@ export function resolveCardReference(
     throw new Error(
       `Cannot resolve bare package specifier "${reference}" — no matching prefix mapping registered`,
     );
+  }
+  if (reference.startsWith('http://') || reference.startsWith('https://')) {
+    return new URL(reference).href;
+  }
+  // If relativeTo is a prefix-form ID (e.g. @cardstack/skills/Foo/bar),
+  // resolve it to a real URL before using it as a base.
+  if (typeof relativeTo === 'string') {
+    for (let [prefix, target] of prefixMappings) {
+      if (relativeTo.startsWith(prefix)) {
+        relativeTo = new URL(relativeTo.slice(prefix.length), target).href;
+        break;
+      }
+    }
+    // If relativeTo is still a non-URL-like string after attempting prefix
+    // resolution, provide a more actionable error instead of allowing
+    // new URL(reference, relativeTo) to throw a generic TypeError.
+    if (typeof relativeTo === 'string' && !isUrlLikeReference(relativeTo)) {
+      throw new Error(
+        `Cannot resolve "${reference}" relative to "${relativeTo}" — no matching prefix mapping registered for the base`,
+      );
+    }
   }
   return new URL(reference, relativeTo).href;
 }

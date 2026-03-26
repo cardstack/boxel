@@ -178,6 +178,7 @@ export {
 export { validateWriteSize } from './write-size-validation';
 export {
   registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
   resolveCardReference,
   unresolveCardReference,
   isRegisteredPrefix,
