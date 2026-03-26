@@ -692,7 +692,9 @@ jobs:
         with:
           run: mise run ci:serve-test-assets &
           wait-for: 3m
-          wait-on: http-get://localhost:4200
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
       - name: Run Playwright tests
         run: pnpm test:playwright
         working-directory: packages/software-factory
