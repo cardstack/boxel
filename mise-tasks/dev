@@ -2,6 +2,9 @@
 #MISE description="Start full dev stack (realm server, workers, test realms)"
 #MISE dir="packages/realm-server"
 
+# Add node_modules/.bin to PATH (mise run bypasses pnpm which normally does this)
+PATH="$(pwd)/../../node_modules/.bin:$(pwd)/node_modules/.bin:$PATH"
+
 . "$(cd "$(dirname "$0")" && pwd)/lib/dev-common.sh"
 
 WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
