@@ -35,12 +35,8 @@ jobs:
             echo "unrecognized environment"
             exit 1;
           fi
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
-      - name: Build boxel-ui addon
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
+      - name: Build boxel-icons and boxel-ui
+        run: mise run build:ui
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0

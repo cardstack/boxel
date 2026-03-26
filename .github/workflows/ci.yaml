@@ -245,12 +245,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
+      - name: Build boxel-icons and boxel-ui
+        run: mise run build:ui
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui/test-app
@@ -318,16 +314,14 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/matrix
-      - name: Serve host dist (test assets) for realm server
+      - name: Start test services (icons + host dist + base realm)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+          run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
+          wait-for: 5m
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
@@ -340,6 +334,8 @@ jobs:
           grep -E '^\[start:worker-base|^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
+          grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
+          grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
@@ -367,6 +363,20 @@ jobs:
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
+          retention-days: 30
+      - name: Upload icon server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
+          path: /tmp/icon-server.log
+          retention-days: 30
+      - name: Upload host-dist log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
+          path: /tmp/host-dist.log
           retention-days: 30
 
       - name: Upload blob report to GitHub Actions Artifacts
@@ -571,19 +581,8 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
-      - name: Serve boxel-icons
-        run: pnpm serve &
-        working-directory: packages/boxel-icons
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: pnpm start:skip-optional-realms | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
@@ -609,6 +608,8 @@ jobs:
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:development' /tmp/server.log > /tmp/start-development.log || true
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
+          grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
+          grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
@@ -651,6 +652,20 @@ jobs:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
           retention-days: 30
+      - name: Upload icon server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-icon-server-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/icon-server.log
+          retention-days: 30
+      - name: Upload host-dist log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/host-dist.log
+          retention-days: 30
 
   software-factory-test:
     name: Software Factory Tests
@@ -679,20 +694,14 @@ jobs:
       - name: Run Node tests
         run: pnpm test:node
         working-directory: packages/software-factory
-      - name: Serve host dist (test assets)
+      - name: Serve test assets (icons + host dist)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
+          run: mise run ci:serve-test-assets &
           wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Serve boxel-icons
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve &
-          working-directory: packages/boxel-icons
-          wait-for: 3m
-          wait-on: http-get://localhost:4206/@cardstack/boxel-icons/v1/icons/code.js
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
       - name: Run Playwright tests
         run: pnpm test:playwright
         working-directory: packages/software-factory
@@ -777,13 +786,14 @@ jobs:
       - name: Build workspace-sync-cli
         run: pnpm build
         working-directory: packages/workspace-sync-cli
-      - name: Serve host dist (test assets)
+      - name: Serve test assets (icons + host dist)
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
+          run: mise run ci:serve-test-assets &
           wait-for: 3m
-          wait-on: http-get://localhost:4200
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
       - name: Start PostgreSQL for tests
         run: pnpm start:pg | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server
