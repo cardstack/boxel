@@ -2,7 +2,6 @@ import { parseArgs as parseNodeArgs } from 'node:util';
 
 import {
   bootstrapProjectArtifacts,
-  inferDarkfactoryModuleUrl,
   type FactoryBootstrapOptions,
   type FactoryBootstrapResult,
 } from './factory-bootstrap';
@@ -191,14 +190,19 @@ export async function runFactoryEntrypoint(
   )(targetRealmResolution);
 
   let realmFetch = createBoxelRealmFetch(targetRealm.url, {
+    authorization: targetRealm.authorization,
     fetch: dependencies?.fetch,
+    primeRealmURL: targetRealm.url,
   });
 
   let artifacts = await (
     dependencies?.bootstrapArtifacts ?? bootstrapProjectArtifacts
   )(brief, targetRealm.url, {
     fetch: realmFetch,
-    darkfactoryModuleUrl: inferDarkfactoryModuleUrl(targetRealm.url),
+    darkfactoryModuleUrl: new URL(
+      'software-factory/darkfactory',
+      targetRealm.serverUrl,
+    ).href,
   });
 
   return buildFactoryEntrypointSummary(options, brief, targetRealm, artifacts);

@@ -36,6 +36,7 @@ export interface CreateBoxelRealmFetchOptions {
   authorization?: string;
   fetch?: typeof globalThis.fetch;
   profile?: ActiveBoxelProfile | null;
+  primeRealmURL?: string;
 }
 
 export function createBoxelRealmFetch(
@@ -72,8 +73,27 @@ export function createBoxelRealmFetch(
     matrixClient,
     () => fetchImpl,
   );
+  let authedFetch = fetcher(fetchImpl, [
+    authorizationMiddleware(realmAuthDataSource),
+  ]);
+  let primedRealmURL = normalizeOptionalString(options?.primeRealmURL);
+  let primeRequest =
+    primedRealmURL != null
+      ? realmAuthDataSource.reauthenticate(
+          ensureTrailingSlash(
+            normalizeProfileUrl(primedRealmURL, 'primeRealmURL'),
+          ),
+        )
+      : undefined;
 
-  return fetcher(fetchImpl, [authorizationMiddleware(realmAuthDataSource)]);
+  if (!primeRequest) {
+    return authedFetch;
+  }
+
+  return async (input, init) => {
+    await primeRequest;
+    return await authedFetch(input, init);
+  };
 }
 
 function getOptionalActiveProfile(

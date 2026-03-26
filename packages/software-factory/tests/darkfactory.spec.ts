@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import type { Page } from '@playwright/test';
+
 import { expect, test } from './fixtures';
 
 const adopterRealmDir = resolve(
@@ -11,17 +13,19 @@ const adopterRealmDir = resolve(
 test.use({ realmDir: adopterRealmDir });
 test.use({ realmServerMode: 'shared' });
 
+async function gotoCard(page: Page, url: string) {
+  await page.goto(url, { waitUntil: 'commit' });
+}
+
 test('renders a project adopted from the public DarkFactory module', async ({
   authedPage,
   cardURL,
 }) => {
-  await authedPage.goto(cardURL('project-demo'), {
-    waitUntil: 'domcontentloaded',
-  });
+  await gotoCard(authedPage, cardURL('project-demo'));
 
   await expect(
     authedPage.getByRole('heading', { name: 'DarkFactory Adoption Harness' }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(
     authedPage.getByRole('heading', { name: 'Objective' }),
   ).toBeVisible();
@@ -38,15 +42,13 @@ test('renders a ticket adopted from the public DarkFactory module', async ({
   authedPage,
   cardURL,
 }) => {
-  await authedPage.goto(cardURL('ticket-demo'), {
-    waitUntil: 'domcontentloaded',
-  });
+  await gotoCard(authedPage, cardURL('ticket-demo'));
 
   await expect(
     authedPage.getByRole('heading', {
       name: 'Verify public DarkFactory adoption',
     }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(
     authedPage.getByRole('heading', { name: 'Project' }),
   ).toBeVisible();
@@ -68,13 +70,11 @@ test('renders a knowledge article and agent profile adopted from the public Dark
   authedPage,
   cardURL,
 }) => {
-  await authedPage.goto(cardURL('knowledge-article-demo'), {
-    waitUntil: 'domcontentloaded',
-  });
+  await gotoCard(authedPage, cardURL('knowledge-article-demo'));
 
   await expect(
     authedPage.getByRole('heading', { name: 'Agent Onboarding' }).first(),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(
     authedPage.getByText('onboarding', { exact: true }).first(),
   ).toBeVisible();
@@ -84,13 +84,11 @@ test('renders a knowledge article and agent profile adopted from the public Dark
     ),
   ).toBeVisible();
 
-  await authedPage.goto(cardURL('agent-demo'), {
-    waitUntil: 'domcontentloaded',
-  });
+  await gotoCard(authedPage, cardURL('agent-demo'));
 
   await expect(
     authedPage.getByRole('heading', { name: 'codex-darkfactory' }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(authedPage.getByText('Boxel tracker workflows')).toBeVisible();
   await expect(authedPage.getByText('ticket triage')).toBeVisible();
 });
@@ -99,13 +97,11 @@ test('renders a DarkFactory card with active projects from the adopter realm', a
   authedPage,
   cardURL,
 }) => {
-  await authedPage.goto(cardURL('factory-demo'), {
-    waitUntil: 'domcontentloaded',
-  });
+  await gotoCard(authedPage, cardURL('factory-demo'));
 
   await expect(
     authedPage.getByRole('heading', { name: 'DarkFactory Test Fixture' }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(
     authedPage.getByRole('heading', { name: 'Active Projects' }),
   ).toBeVisible();

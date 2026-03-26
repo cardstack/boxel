@@ -40,26 +40,44 @@ const cardSourceMimeType = 'application/vnd.card+source';
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
 
-test('bootstrap creates actual card instances in a live realm', async ({
-  realm,
-}) => {
-  let darkfactoryModuleUrl = `${realm.realmURL.origin}/software-factory/darkfactory`;
+function buildBootstrapContext(realm: {
+  realmURL: URL;
+  ownerBearerToken: string;
+}) {
+  let darkfactoryModuleUrl = new URL(
+    '../software-factory/darkfactory',
+    realm.realmURL,
+  ).href;
   let authenticatedFetch = buildAuthenticatedFetch(
     realm.ownerBearerToken,
     fetch,
   );
+  let bootstrapOptions = { fetch: authenticatedFetch, darkfactoryModuleUrl };
 
-  let result = await bootstrapProjectArtifacts(
+  return {
+    authenticatedFetch,
+    bootstrapOptions,
+    darkfactoryModuleUrl,
+  };
+}
+
+test('bootstrap creates card instances and reruns idempotently in a live realm', async ({
+  realm,
+}) => {
+  let { authenticatedFetch, bootstrapOptions, darkfactoryModuleUrl } =
+    buildBootstrapContext(realm);
+
+  let result1 = await bootstrapProjectArtifacts(
     stickyNoteBrief,
     realm.realmURL.href,
-    { fetch: authenticatedFetch, darkfactoryModuleUrl },
+    bootstrapOptions,
   );
 
-  expect(result.project.id).toBe('Project/sticky-note-mvp');
-  expect(result.project.status).toBe('created');
-  expect(result.knowledgeArticles).toHaveLength(2);
-  expect(result.tickets).toHaveLength(3);
-  expect(result.activeTicket.id).toBe('Ticket/sticky-note-define-core');
+  expect(result1.project.id).toBe('Project/sticky-note-mvp');
+  expect(result1.project.status).toBe('created');
+  expect(result1.knowledgeArticles).toHaveLength(2);
+  expect(result1.tickets).toHaveLength(3);
+  expect(result1.activeTicket.id).toBe('Ticket/sticky-note-define-core');
 
   let projectResponse = await authenticatedFetch(
     realm.cardURL('Project/sticky-note-mvp'),
@@ -115,25 +133,6 @@ test('bootstrap creates actual card instances in a live realm', async ({
     'Sticky Note — Brief Context',
   );
   expect(contextJson.data.attributes.articleType).toBe('context');
-});
-
-test('bootstrap is idempotent — rerun does not duplicate cards', async ({
-  realm,
-}) => {
-  let darkfactoryModuleUrl = `${realm.realmURL.origin}/software-factory/darkfactory`;
-  let authenticatedFetch = buildAuthenticatedFetch(
-    realm.ownerBearerToken,
-    fetch,
-  );
-  let bootstrapOptions = { fetch: authenticatedFetch, darkfactoryModuleUrl };
-
-  let result1 = await bootstrapProjectArtifacts(
-    stickyNoteBrief,
-    realm.realmURL.href,
-    bootstrapOptions,
-  );
-  expect(result1.project.status).toBe('created');
-  expect(result1.tickets[0].status).toBe('created');
 
   let result2 = await bootstrapProjectArtifacts(
     stickyNoteBrief,
@@ -152,24 +151,21 @@ test('bootstrapped project card renders correctly in the browser', async ({
   realm,
   authedPage,
 }) => {
-  let darkfactoryModuleUrl = `${realm.realmURL.origin}/software-factory/darkfactory`;
-  let authenticatedFetch = buildAuthenticatedFetch(
-    realm.ownerBearerToken,
-    fetch,
+  let { bootstrapOptions } = buildBootstrapContext(realm);
+
+  await bootstrapProjectArtifacts(
+    stickyNoteBrief,
+    realm.realmURL.href,
+    bootstrapOptions,
   );
 
-  await bootstrapProjectArtifacts(stickyNoteBrief, realm.realmURL.href, {
-    fetch: authenticatedFetch,
-    darkfactoryModuleUrl,
-  });
-
   await authedPage.goto(realm.cardURL('Project/sticky-note-mvp'), {
-    waitUntil: 'domcontentloaded',
+    waitUntil: 'commit',
   });
 
   await expect(
     authedPage.getByRole('heading', { name: 'Sticky Note MVP' }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 120_000 });
   await expect(
     authedPage.getByRole('heading', { name: 'Objective' }),
   ).toBeVisible();

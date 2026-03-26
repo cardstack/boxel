@@ -726,7 +726,6 @@ async function unregisterWithManager(serverURL: string) {
 
 export function createPrerenderHttpServer(options?: {
   maxPages?: number;
-  silent?: boolean;
   port?: number;
 }): Server {
   let draining = false;

@@ -11,7 +11,7 @@ import {
 
 let log = logger('prerender-server');
 
-let { port, silent } = yargs(process.argv.slice(2))
+let { port } = yargs(process.argv.slice(2))
   .usage('Start prerender server')
   .options({
     port: {
@@ -19,17 +19,11 @@ let { port, silent } = yargs(process.argv.slice(2))
       demandOption: true,
       type: 'number',
     },
-    silent: {
-      description: 'Disable forwarding Puppeteer console output to server logs',
-      type: 'boolean',
-      default: false,
-    },
   })
   .parseSync();
 
 let webServerInstance: Server | undefined;
 webServerInstance = createPrerenderHttpServer({
-  silent,
   port,
 }).listen(port);
 let actualPort = port;

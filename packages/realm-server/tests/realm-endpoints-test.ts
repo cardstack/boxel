@@ -40,7 +40,6 @@ import {
   testRealmInfo,
   waitUntil,
   testRealmHref,
-  testRealmURL,
   createJWT,
   cardInfo,
   getTestPrerenderer,
@@ -1214,37 +1213,12 @@ module(basename(__filename), function () {
   });
 
   module('Realm server with realm mounted at the origin', function (hooks) {
-    let testRealmServer: Server;
-
     let request: SuperTest<Test>;
 
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        let testRealmDir = join(dir.name, 'realm_server_3', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_3'),
-            realmURL: testRealmURL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      permissions: { '*': ['read'] },
+      onRealmSetup(args) {
+        request = args.request;
       },
     });
 
@@ -1728,38 +1702,13 @@ module(basename(__filename), function () {
   });
 
   module('Realm Server serving from a subdirectory', function (hooks) {
-    let testRealmServer: Server;
-
     let request: SuperTest<Test>;
 
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        dir = dirSync();
-        let testRealmDir = join(dir.name, 'realm_server_4', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_4'),
-            realmURL: new URL('http://127.0.0.1:4446/demo/'),
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      permissions: { '*': ['read'] },
+      realmURL: new URL('http://127.0.0.1:4446/demo/'),
+      onRealmSetup(args) {
+        request = args.request;
       },
     });
 

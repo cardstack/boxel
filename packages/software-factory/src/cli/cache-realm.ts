@@ -8,26 +8,55 @@ import {
 import { readSupportContext } from '../runtime-metadata';
 
 async function main(): Promise<void> {
-  let realmDir = resolve(
-    process.cwd(),
-    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
-  );
+  let realmDirs = [
+    ...new Set(
+      (process.argv.slice(2).length > 0
+        ? process.argv.slice(2)
+        : ['test-fixtures/darkfactory-adopter']
+      ).map((realmDir) => resolve(process.cwd(), realmDir)),
+    ),
+  ];
   let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
 
   let supportContext: FactoryRealmOptions['context'] = serializedSupportContext
     ? (JSON.parse(serializedSupportContext) as FactoryRealmOptions['context'])
     : (readSupportContext() as FactoryRealmOptions['context']);
 
-  let template = await ensureFactoryRealmTemplate({
-    realmDir,
-    context: supportContext,
-  });
+  let preparedTemplates = [];
+  for (let realmDir of realmDirs) {
+    let template = await ensureFactoryRealmTemplate({
+      realmDir,
+      context: supportContext,
+    });
+    preparedTemplates.push({
+      realmDir,
+      cacheKey: template.cacheKey,
+      templateDatabaseName: template.templateDatabaseName,
+      fixtureHash: template.fixtureHash,
+      cacheHit: template.cacheHit,
+      cacheMissReason: template.cacheMissReason,
+      realmURL: template.realmURL.href,
+      realmServerURL: template.realmServerURL.href,
+    });
+  }
+  let primaryTemplate = preparedTemplates[0];
   let payload = {
-    realmDir,
-    cacheKey: template.cacheKey,
-    templateDatabaseName: template.templateDatabaseName,
-    fixtureHash: template.fixtureHash,
-    cacheHit: template.cacheHit,
+    realmDir: primaryTemplate.realmDir,
+    cacheKey: primaryTemplate.cacheKey,
+    templateDatabaseName: primaryTemplate.templateDatabaseName,
+    fixtureHash: primaryTemplate.fixtureHash,
+    cacheHit: primaryTemplate.cacheHit,
+    cacheMissReason: primaryTemplate.cacheMissReason,
+    realmURL: primaryTemplate.realmURL,
+    realmServerURL: primaryTemplate.realmServerURL,
+    preparedTemplates: preparedTemplates.map((template) => ({
+      realmDir: template.realmDir,
+      templateDatabaseName: template.templateDatabaseName,
+      templateRealmURL: template.realmURL,
+      templateRealmServerURL: template.realmServerURL,
+      cacheHit: template.cacheHit,
+      cacheMissReason: template.cacheMissReason,
+    })),
   };
   if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
     mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {
@@ -43,5 +72,5 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   console.error(error);
-  process.exit(1);
+  process.exitCode = 1;
 });

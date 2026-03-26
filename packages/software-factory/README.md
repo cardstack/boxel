@@ -2,9 +2,9 @@
 
 Local card-development harness for fast Boxel iteration.
 
-This package gives you a cached local realm fixture, a fixed-port isolated realm
-server, and a Playwright loop that exercises cards in the real browser app
-shell.
+This package gives you a cached local realm fixture, an isolated realm server
+with harness-managed ports, and a Playwright loop that exercises cards in the
+real browser app shell.
 
 ## Prerequisites
 
@@ -29,9 +29,11 @@ isolated realm server. By default it serves the test realm and base realm from
 the same fixed realm-server origin. The skills realm can be enabled when needed
 with `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
 
-For the software-factory Playwright flow, the isolated realm stack is intended
-to be self-contained on `http://localhost:4205/`. The fixture realms and test
-startup do not require a separate external realm server on `http://localhost:4201/`.
+For the software-factory Playwright flow, the isolated realm stack is
+self-contained and writes its actual runtime URLs and ports to harness metadata.
+The fixture realms use the placeholder origin `https://sf.boxel.test/`, which
+the harness rewrites to the live source-realm URL at startup. The Playwright
+flow does not require a separate external realm server on `http://localhost:4201/`.
 
 ## Commands
 
@@ -40,7 +42,7 @@ startup do not require a separate external realm server on `http://localhost:420
 - `pnpm serve:support`
   - Starts shared support services and prepares a reusable runtime context in the background
 - `pnpm serve:realm`
-  - Starts the isolated realm server on `http://localhost:4205/test/`
+  - Starts the isolated realm server for `/test/` on a dynamically assigned realm-server URL
 - `pnpm smoke:realm`
   - Boots the isolated realm server, fetches `project-demo` as card JSON, and exits
 - `pnpm factory:go -- --brief-url <url> --target-realm-url <url>`

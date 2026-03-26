@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
+import { formatErrorResponse } from '../../src/error-format';
+
 const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');
 
 type BoxelStoredProfile = {
@@ -182,7 +184,7 @@ export async function getOpenIdToken(
   );
 
   if (!response.ok) {
-    let text = await response.text();
+    let text = await formatErrorResponse(response);
     throw new Error(`OpenID token request failed: ${response.status} ${text}`);
   }
 
@@ -206,7 +208,7 @@ export async function getRealmServerToken(
   );
 
   if (!response.ok) {
-    let text = await response.text();
+    let text = await formatErrorResponse(response);
     throw new Error(
       `Realm server session request failed: ${response.status} ${text}`,
     );
@@ -238,7 +240,7 @@ export async function getAccessibleRealmTokens(
   );
 
   if (!response.ok) {
-    let text = await response.text();
+    let text = await formatErrorResponse(response);
     throw new Error(`Realm auth lookup failed: ${response.status} ${text}`);
   }
 
@@ -291,7 +293,7 @@ export async function searchRealm(input: {
   );
 
   if (!response.ok) {
-    let text = await response.text();
+    let text = await formatErrorResponse(response);
     throw new Error(`Search failed: ${response.status} ${text}`);
   }
 

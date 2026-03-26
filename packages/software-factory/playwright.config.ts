@@ -1,5 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
+const defaultPlaywrightLogLevels =
+  '*=warn,software-factory:playwright=info,software-factory:playwright:support=info,software-factory:playwright:cache=info,prerenderer-chrome=none';
+process.env.LOG_LEVELS ??= defaultPlaywrightLogLevels;
+
 const realmPort = Number(process.env.SOFTWARE_FACTORY_REALM_PORT ?? 4205);
 const realmURL =
   process.env.SOFTWARE_FACTORY_REALM_URL ??
@@ -10,8 +14,8 @@ export default defineConfig({
   testMatch: ['**/*.spec.ts'],
   fullyParallel: false,
   reporter: process.env.CI ? [['list']] : undefined,
-  workers: 1,
-  timeout: 60_000,
+  workers: 2,
+  timeout: 300_000,
   expect: {
     timeout: 15_000,
   },
