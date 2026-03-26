@@ -2,6 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import type { FetcherMiddlewareHandler } from '@cardstack/runtime-common';
@@ -41,8 +42,10 @@ export default class LoaderService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
-    // this clears the fetch cache in between tests
-    this.resetState();
+    if (isTesting()) {
+      // clears the fetch cache and SSR-injected scoped styles in between tests
+      this.resetState();
+    }
     registerDestructor(this, () => this.resetState());
   }
 
