@@ -781,19 +781,36 @@ export async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
   if (proc.exitCode !== null) {
     return;
   }
-  let stopped = new Promise<void>((resolve) => {
+  let stopped = new Promise<boolean>((resolve) => {
     let onMessage = (message: unknown) => {
       if (message === 'stopped') {
         proc.off('message', onMessage);
-        resolve();
+        resolve(true);
       }
     };
     proc.on('message', onMessage);
   });
+  let exited = new Promise<void>((resolve) => {
+    let onExit = () => {
+      proc.off('exit', onExit);
+      proc.off('error', onExit);
+      resolve();
+    };
+    proc.on('exit', onExit);
+    proc.on('error', onExit);
+  });
   proc.send('stop');
-  await Promise.race([
+  let stoppedGracefully = await Promise.race([
     stopped,
-    new Promise<void>((resolve) => setTimeout(resolve, 15_000)),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000)),
   ]);
-  proc.send('kill');
+  if (!stoppedGracefully && proc.exitCode === null) {
+    proc.send('kill');
+  }
+  if (proc.exitCode === null) {
+    await Promise.race([
+      exited,
+      new Promise<void>((resolve) => setTimeout(resolve, 15_000)),
+    ]);
+  }
 }
