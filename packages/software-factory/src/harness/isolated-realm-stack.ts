@@ -339,6 +339,7 @@ export async function startIsolatedRealmStack({
     REALM_SERVER_SECRET_SEED,
     REALM_SECRET_SEED,
     GRAFANA_SECRET,
+    HOST_URL: context.hostURL,
     MATRIX_URL: context.matrixURL,
     MATRIX_REGISTRATION_SHARED_SECRET: context.matrixRegistrationSecret,
     REALM_SERVER_MATRIX_USERNAME: DEFAULT_MATRIX_SERVER_USERNAME,
