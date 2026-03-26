@@ -784,7 +784,9 @@ jobs:
         with:
           run: mise run ci:serve-test-assets &
           wait-for: 3m
-          wait-on: http-get://localhost:4200
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
       - name: Start PostgreSQL for tests
         run: pnpm start:pg | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server
