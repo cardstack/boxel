@@ -3,17 +3,28 @@
 #MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
 #MISE dir="packages/realm-server"
 
+# The base-only worker uses dedicated port/db that differ from the main
+# development worker (WORKER_PORT/PGDATABASE). In env mode, use the env
+# vars; in standard mode, use the base-specific defaults.
+if [ -n "$ENV_MODE" ]; then
+  WORKER_BASE_PORT="${WORKER_PORT}"
+  WORKER_BASE_DB="${PGDATABASE}"
+else
+  WORKER_BASE_PORT=4213
+  WORKER_BASE_DB=boxel_base
+fi
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   PGPORT="${PGPORT}" \
-  PGDATABASE="${PGDATABASE:-boxel_base}" \
+  PGDATABASE="${WORKER_BASE_DB}" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
   ts-node \
   --transpileOnly worker-manager \
-  --port="${WORKER_PORT:-4213}" \
+  --port="${WORKER_BASE_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
   \
