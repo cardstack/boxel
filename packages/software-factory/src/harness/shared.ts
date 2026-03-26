@@ -781,36 +781,53 @@ export async function stopManagedProcess(proc: SpawnedProcess): Promise<void> {
   if (proc.exitCode !== null) {
     return;
   }
-  let stopped = new Promise<boolean>((resolve) => {
+  let stopped = new Promise<'stopped'>((resolve) => {
     let onMessage = (message: unknown) => {
       if (message === 'stopped') {
         proc.off('message', onMessage);
-        resolve(true);
+        resolve('stopped');
       }
     };
     proc.on('message', onMessage);
   });
-  let exited = new Promise<void>((resolve) => {
+  let exited = new Promise<'exited'>((resolve) => {
     let onExit = () => {
       proc.off('exit', onExit);
       proc.off('error', onExit);
-      resolve();
+      resolve('exited');
     };
     proc.on('exit', onExit);
     proc.on('error', onExit);
   });
   proc.send('stop');
-  let stoppedGracefully = await Promise.race([
+  let stopResult = await Promise.race([
     stopped,
+    exited,
     new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000)),
   ]);
-  if (!stoppedGracefully && proc.exitCode === null) {
+  if (stopResult === false && proc.exitCode === null) {
     proc.send('kill');
   }
   if (proc.exitCode === null) {
-    await Promise.race([
+    let exitResult = await Promise.race([
       exited,
-      new Promise<void>((resolve) => setTimeout(resolve, 15_000)),
+      new Promise<false>((resolve) => setTimeout(() => resolve(false), 15_000)),
     ]);
+    if (exitResult === false && proc.exitCode === null) {
+      try {
+        proc.kill();
+      } catch {
+        // best effort hard-kill
+      }
+      exitResult = await Promise.race([
+        exited,
+        new Promise<false>((resolve) =>
+          setTimeout(() => resolve(false), 5_000),
+        ),
+      ]);
+      if (exitResult === false && proc.exitCode === null) {
+        throw new Error('Failed to stop managed process within timeout');
+      }
+    }
   }
 }

@@ -41,6 +41,7 @@ export interface SynapseInstance extends SynapseConfig {
 }
 
 const synapses = new Map<string, SynapseInstance>();
+const dynamicHostPortStartAttempts = 5;
 
 function findAvailablePort(preferred?: number): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -77,6 +78,11 @@ function findAvailablePort(preferred?: number): Promise<number> {
 
 function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
+}
+
+function isPortBindError(error: unknown): boolean {
+  let message = error instanceof Error ? error.message : String(error);
+  return /address already in use|port is already allocated/i.test(message);
 }
 
 export async function cfgDirFromTemplate(
@@ -180,53 +186,75 @@ export async function synapseStart(
   let useDynamicHostPort = Boolean(
     isEnvironmentMode() || opts?.dynamicHostPort,
   );
-  let hostPort = useDynamicHostPort ? await findAvailablePort() : SYNAPSE_PORT;
-  const synCfg = await cfgDirFromTemplate(
-    opts?.template ?? 'test',
-    opts?.dataDir,
-    {
+  await dockerCreateNetwork({ networkName: 'boxel' });
+
+  let hostPort = SYNAPSE_PORT;
+  let synCfg!: SynapseConfig;
+  let containerName!: string;
+  let synapseId!: string;
+  let attempts = useDynamicHostPort ? dynamicHostPortStartAttempts : 1;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    hostPort = useDynamicHostPort ? await findAvailablePort() : SYNAPSE_PORT;
+    synCfg = await cfgDirFromTemplate(opts?.template ?? 'test', opts?.dataDir, {
       host: useDynamicHostPort ? '127.0.0.1' : SYNAPSE_IP_ADDRESS,
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
-    },
-  );
-  let containerName =
-    opts?.containerName ||
-    (isEnvironmentMode()
-      ? getSynapseContainerName()
-      : path.basename(synCfg.configDir));
-  console.log(
-    `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
-  );
-  await dockerCreateNetwork({ networkName: 'boxel' });
-
-  let dockerParams: string[] = [
-    '--rm',
-    '-v',
-    `${synCfg.configDir}:/data`,
-    '-v',
-    `${path.join(__dirname, 'templates')}:/custom/templates/`,
-  ];
-  if (useDynamicHostPort) {
-    // In dynamic-host-port mode multiple harnesses may run concurrently, so
-    // we must not claim the shared fixed Synapse container IP.
-    dockerParams.push('-p', `${hostPort}:8008/tcp`, '--network=boxel');
-  } else {
-    dockerParams.push(
-      `--ip=${synCfg.host}`,
-      '-p',
-      `${synCfg.port}:8008/tcp`,
-      '--network=boxel',
+    });
+    containerName =
+      opts?.containerName ||
+      (isEnvironmentMode()
+        ? getSynapseContainerName()
+        : path.basename(synCfg.configDir));
+    console.log(
+      `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
     );
-  }
 
-  const synapseId = await dockerRun({
-    image: 'matrixdotorg/synapse:v1.126.0',
-    containerName,
-    dockerParams,
-    applicationParams: ['run'],
-    runAsUser: true,
-  });
+    let dockerParams: string[] = [
+      '--rm',
+      '-v',
+      `${synCfg.configDir}:/data`,
+      '-v',
+      `${path.join(__dirname, 'templates')}:/custom/templates/`,
+    ];
+    if (useDynamicHostPort) {
+      // In dynamic-host-port mode multiple harnesses may run concurrently, so
+      // we must not claim the shared fixed Synapse container IP.
+      dockerParams.push('-p', `${hostPort}:8008/tcp`, '--network=boxel');
+    } else {
+      dockerParams.push(
+        `--ip=${synCfg.host}`,
+        '-p',
+        `${synCfg.port}:8008/tcp`,
+        '--network=boxel',
+      );
+    }
+
+    try {
+      synapseId = await dockerRun({
+        image: 'matrixdotorg/synapse:v1.126.0',
+        containerName,
+        dockerParams,
+        applicationParams: ['run'],
+        runAsUser: true,
+      });
+      break;
+    } catch (error) {
+      if (
+        !useDynamicHostPort ||
+        !isPortBindError(error) ||
+        attempt === attempts
+      ) {
+        throw error;
+      }
+      console.warn(
+        `Synapse host port ${hostPort} was claimed before Docker bound it; retrying (${attempt}/${attempts})...`,
+      );
+      if (!opts?.dataDir) {
+        await fse.remove(synCfg.configDir);
+      }
+    }
+  }
 
   console.log(`Started synapse with id ${synapseId} on port ${hostPort}`);
 
