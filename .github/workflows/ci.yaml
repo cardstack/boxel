@@ -328,6 +328,8 @@ jobs:
           grep -E '^\[start:worker-base|^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
+          grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
+          grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
@@ -355,6 +357,20 @@ jobs:
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
+          retention-days: 30
+      - name: Upload icon server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
+          path: /tmp/icon-server.log
+          retention-days: 30
+      - name: Upload host-dist log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
+          path: /tmp/host-dist.log
           retention-days: 30
 
       - name: Upload blob report to GitHub Actions Artifacts
@@ -585,6 +601,8 @@ jobs:
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:development' /tmp/server.log > /tmp/start-development.log || true
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
+          grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
+          grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
@@ -626,6 +644,20 @@ jobs:
         with:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
+          retention-days: 30
+      - name: Upload icon server log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-icon-server-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/icon-server.log
+          retention-days: 30
+      - name: Upload host-dist log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/host-dist.log
           retention-days: 30
 
   software-factory-test:
