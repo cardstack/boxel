@@ -127,6 +127,9 @@ module('Unit | loader', function (hooks) {
           export function checkImportMeta() { return import.meta.url; }
           export function myLoader() { return import.meta.loader; }
         `,
+          'reexporter.js': `
+          export { g } from './g';
+        `,
         },
       }),
     );
@@ -251,6 +254,81 @@ module('Unit | loader', function (hooks) {
       consumed,
       [`${testRealmURL}b`, `${testRealmURL}c`, `${testRealmURL}g`],
       'consumed modules resolved correctly from prefix-form identifier',
+    );
+  });
+
+  test('isModuleLoaded returns false for a module that has not been imported', function (assert) {
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}a`),
+      'module a is not loaded before import',
+    );
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}nonexistent`),
+      'nonexistent module is not loaded',
+    );
+  });
+
+  test('isModuleLoaded returns true for a module that has been imported', async function (assert) {
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}a`),
+      'module a is not loaded before import',
+    );
+    await loader.import(`${testRealmURL}a`);
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}a`),
+      'module a is loaded after import',
+    );
+  });
+
+  test('isModuleLoaded returns true for dependencies of an imported module', async function (assert) {
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}b`),
+      'module b is not loaded before import',
+    );
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}c`),
+      'module c is not loaded before import',
+    );
+    await loader.import(`${testRealmURL}a`);
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}b`),
+      'module b is loaded as a dependency of a',
+    );
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}c`),
+      'module c is loaded as a transitive dependency of a',
+    );
+  });
+
+  test('isModuleLoaded works with executable extensions in the URL', async function (assert) {
+    await loader.import(`${testRealmURL}person`);
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}person`),
+      'loaded without extension',
+    );
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}person.gts`),
+      'loaded with .gts extension',
+    );
+  });
+
+  test('isModuleLoaded returns true for a re-exported module', async function (assert) {
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}reexporter`),
+      'reexporter is not loaded before import',
+    );
+    assert.false(
+      loader.isModuleLoaded(`${testRealmURL}g`),
+      're-exported module g is not loaded before import',
+    );
+    await loader.import(`${testRealmURL}reexporter`);
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}reexporter`),
+      'reexporter is loaded after import',
+    );
+    assert.true(
+      loader.isModuleLoaded(`${testRealmURL}g`),
+      're-exported module g is loaded as a dependency of reexporter',
     );
   });
 
