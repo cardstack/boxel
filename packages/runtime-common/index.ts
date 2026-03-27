@@ -782,7 +782,7 @@ export function unixTime(epochTimeMs: number) {
 }
 
 export function isLocalId(id: string) {
-  return !id.startsWith('http');
+  return !id.startsWith('http') && !id.startsWith('@');
 }
 
 export function isBrowserTestEnv() {
