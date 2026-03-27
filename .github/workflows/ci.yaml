@@ -499,86 +499,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - shard: 1
-            testModules:
-              - atomic-endpoints-test.ts
-              - request-forward-test.ts
-              - realm-endpoints/info-test.ts
-              - realm-endpoints/user-test.ts
-              - file-watcher-events-test.ts
-              - types-endpoint-test.ts
-              - prerender-manager-test.ts
-              - prerender-proxy-test.ts
-              - transpile-test.ts
-              - server-endpoints/authentication-test.ts
-              - server-endpoints/bot-commands-test.ts
-              - server-endpoints/bot-registration-test.ts
-              - server-endpoints/delete-realm-test.ts
-              - server-endpoints/download-realm-test.ts
-              - server-endpoints/info-test.ts
-              - server-endpoints/index-responses-test.ts
-              - server-endpoints/realm-lifecycle-test.ts
-          - shard: 2
-            testModules:
-              - card-endpoints-test.ts
-              - publish-unpublish-realm-test.ts
-              - realm-endpoints/lint-test.ts
-              - claim-boxel-domain-test.ts
-              - realm-endpoints/publishability-test.ts
-              - boxel-domain-availability-test.ts
-              - realm-endpoints/dependencies-test.ts
-              - queue-test.ts
-              - remote-prerenderer-test.ts
-              - permissions/permission-checker-test.ts
-              - server-endpoints/maintenance-endpoints-test.ts
-              - server-endpoints/queue-status-test.ts
-              - server-endpoints/stripe-session-test.ts
-              - server-endpoints/stripe-webhook-test.ts
-              - server-endpoints/user-and-catalog-test.ts
-              - command-parsing-utils-test.ts
-              - run-command-task-test.ts
-          - shard: 3
-            testModules:
-              - realm-endpoints-test.ts
-              - prerendering-test.ts
-              - search-prerendered-test.ts
-              - card-dependencies-endpoint-test.ts
-              - delete-boxel-claimed-domain-test.ts
-              - get-boxel-claimed-domain-test.ts
-              - realm-endpoints/mtimes-test.ts
-              - billing-test.ts
-              - virtual-network-test.ts
-              - module-syntax-test.ts
-              - card-reference-resolver-test.ts
-              - sanitize-head-html-test.ts
-              - server-config-test.ts
-              - server-endpoints/incoming-webhook-test.ts
-              - server-endpoints/webhook-commands-test.ts
-              - server-endpoints/webhook-receiver-test.ts
-              - server-endpoints/federated-types-test.ts
-              - session-room-queries-test.ts
-          - shard: 4
-            testModules:
-              - indexing-test.ts
-              - card-source-endpoints-test.ts
-              - realm-endpoints/search-test.ts
-              - server-endpoints/search-test.ts
-              - realm-endpoints/permissions-test.ts
-              - realm-endpoints/directory-test.ts
-              - definition-lookup-test.ts
-              - prerender-server-test.ts
-              - realm-auth-test.ts
-              - auth-client-test.ts
-              - queries-test.ts
-              - realm-endpoints/cancel-indexing-job-test.ts
-              - realm-endpoints/invalidate-urls-test.ts
-              - realm-endpoints/reindex-test.ts
-              - indexing-event-sink-test.ts
-              - runtime-dependency-tracker-test.ts
-              - node-realm-test.ts
-              - server-endpoints/search-prerendered-test.ts
-              - full-reindex-test.ts
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -592,6 +513,10 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
+      - name: Compute shard test modules
+        id: shard_modules
+        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shard }} 4)" >> "$GITHUB_OUTPUT"
+        working-directory: packages/realm-server
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
@@ -601,7 +526,7 @@ jobs:
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
         env:
-          TEST_MODULES: ${{ join(matrix.testModules, '|') }}
+          TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
