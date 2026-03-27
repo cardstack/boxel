@@ -6,7 +6,7 @@ READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
 NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
 
-WAIT_ON_TIMEOUT=900000 \
+WAIT_ON_TIMEOUT=7200000 \
   SKIP_EXPERIMENTS=true \
   SKIP_CATALOG=true \
   SKIP_BOXEL_HOMEPAGE=true \
