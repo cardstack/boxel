@@ -51,7 +51,13 @@ export class StackBackgroundsResource extends Resource<Args> {
         // Derive the realm URL from the card URL directly.
         // This avoids calling store.get() which would trigger loading the
         // card's full module graph via Babel compilation on the main thread.
-        let realmURL = this.realm.realmOfURL(new URL(bottomMostStackItem.id));
+        let realmURL;
+        try {
+          realmURL = this.realm.realmOfURL(new URL(bottomMostStackItem.id));
+        } catch {
+          // Non-URL ids (e.g. local-...) cannot be parsed; no background URL.
+          return undefined;
+        }
         if (realmURL) {
           await this.realm.ensureRealmMeta(realmURL.href);
           return this.realm.info(realmURL.href)?.backgroundURL;

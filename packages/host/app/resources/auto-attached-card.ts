@@ -101,11 +101,10 @@ export class AutoAttachment extends Resource<Args> {
         !removedCardIds?.has(cardId) &&
         !attachedCardIds?.includes(cardId)
       ) {
-        // In code mode, use store.peek() (synchronous, no compilation) to check
-        // if the card is already known to be errored. If it's not in the store
-        // at all, include it optimistically.
-        let existing = this.store.peek(cardId);
-        if (!existing || existing.constructor?.name !== 'CardError') {
+        // In code mode, use store.peekError() (synchronous, no compilation)
+        // to check if the card is already known to be errored. If there's no
+        // known error, include it optimistically.
+        if (!this.store.peekError(cardId)) {
           this.cardIds.add(cardId);
         }
       }
