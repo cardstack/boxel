@@ -7,6 +7,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import {
   GetCardCollectionContextName,
+  cardIdToURL,
   type getCardCollection,
   type Format,
 } from '@cardstack/runtime-common';
@@ -113,11 +114,13 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     () => {
       let cardUrls = this.autoAttachedCardIdsArray;
       // Only search realms that contain the requested cards to avoid
-      // unnecessary cross-realm federation queries.
+      // unnecessary cross-realm federation queries. Resolve card IDs
+      // first since they may use prefix form (e.g. @cardstack/catalog/foo).
+      let resolvedUrls = cardUrls.map((id) => cardIdToURL(id).href);
       let realms =
         cardUrls.length > 0
           ? this.realmServer.availableRealmURLs.filter((realmUrl) =>
-              cardUrls.some((cardUrl) => cardUrl.startsWith(realmUrl)),
+              resolvedUrls.some((url) => url.startsWith(realmUrl)),
             )
           : undefined;
       return {
