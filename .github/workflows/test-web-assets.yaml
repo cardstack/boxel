@@ -58,9 +58,15 @@ jobs:
             packages/host/dist
             .ci/test-web-assets/manifest.json
 
+      - name: Restore boxel-icons build cache
+        id: icons-cache
+        if: steps.restore.outputs.cache-hit != 'true'
+        uses: ./.github/actions/restore-icons-cache
       - name: Build boxel-icons and boxel-ui
         if: steps.restore.outputs.cache-hit != 'true'
         run: mise run build:ui
+        env:
+          SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
 
       - name: Build host dist (test assets)
         if: steps.restore.outputs.cache-hit != 'true'

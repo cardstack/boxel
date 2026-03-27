@@ -245,8 +245,13 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      - name: Restore boxel-icons build cache
+        id: icons-cache
+        uses: ./.github/actions/restore-icons-cache
       - name: Build boxel-icons and boxel-ui
         run: mise run build:ui
+        env:
+          SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui/test-app
@@ -533,6 +538,7 @@ jobs:
             "sanitize-head-html-test.ts",
             "search-prerendered-test.ts",
             "types-endpoint-test.ts",
+            "server-config-test.ts",
             "server-endpoints/authentication-test.ts",
             "server-endpoints/bot-commands-test.ts",
             "server-endpoints/bot-registration-test.ts",
@@ -545,7 +551,6 @@ jobs:
             "server-endpoints/search-test.ts",
             "server-endpoints/info-test.ts",
             "server-endpoints/search-prerendered-test.ts",
-            "server-config-test.ts",
             "server-endpoints/stripe-session-test.ts",
             "server-endpoints/stripe-webhook-test.ts",
             "server-endpoints/user-and-catalog-test.ts",
