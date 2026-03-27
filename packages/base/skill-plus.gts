@@ -214,8 +214,9 @@ export class TocSection extends GlimmerComponent<{
 
   private scrollToItem = (id: string, event: Event) => {
     event.preventDefault();
-    document
-      .querySelector(`#${id}`)
+    (event.currentTarget as HTMLElement)
+      .closest('.doc-layout')
+      ?.querySelector(`#${id}`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 }
@@ -614,8 +615,9 @@ export class DocLayout extends GlimmerComponent<{
 
   private scrollToTop = (event: Event) => {
     event.preventDefault();
-    document
-      .querySelector('#top')
+    (event.currentTarget as HTMLElement)
+      .closest('.doc-layout')
+      ?.querySelector('#top')
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 }
