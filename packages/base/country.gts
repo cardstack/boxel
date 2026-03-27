@@ -14,7 +14,7 @@ export class Country extends CardDef {
   static displayName = 'Country';
   static icon = World;
   @field name = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: Country) {
       return this.name;
     },

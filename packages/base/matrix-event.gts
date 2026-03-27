@@ -263,6 +263,7 @@ export interface ActiveLLMEvent extends RoomStateEvent {
     model: string;
     toolsSupported?: boolean;
     reasoningEffort?: string;
+    inputModalities?: string[];
   };
 }
 
@@ -282,6 +283,20 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_content?: any;
     prev_sender?: string;
   };
+}
+
+export const BOT_TRIGGER_EVENT_TYPE = 'app.boxel.bot-trigger';
+
+export interface BotTriggerContent {
+  type: string;
+  realm: string;
+  input: unknown;
+  userId: string;
+}
+
+export interface BotTriggerEvent extends BaseMatrixEvent {
+  type: typeof BOT_TRIGGER_EVENT_TYPE;
+  content: BotTriggerContent;
 }
 
 export interface CodePatchResultEvent extends BaseMatrixEvent {
@@ -354,6 +369,7 @@ export interface CodePatchResultContent {
     context?: BoxelContext;
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
+    lintIssues?: string[];
   };
 }
 
@@ -387,23 +403,27 @@ export interface IncrementalIndexEventContent {
   indexType: 'incremental';
   invalidations: string[];
   clientRequestId?: string | null;
+  realmURL: string;
 }
 
 interface FullIndexEventContent {
   eventName: 'index';
   indexType: 'full';
+  realmURL: string;
 }
 
 interface CopiedIndexEventContent {
   eventName: 'index';
   indexType: 'copy';
   sourceRealmURL: string;
+  realmURL: string;
 }
 
 export interface IncrementalIndexInitiationContent {
   eventName: 'index';
   indexType: 'incremental-index-initiation';
   updatedFile: string;
+  realmURL: string;
 }
 
 export type UpdateRealmEventContent =
@@ -414,17 +434,26 @@ export type UpdateRealmEventContent =
 export interface FileAddedEventContent {
   eventName: 'update';
   added: string;
+  realmURL: string;
 }
 
 export interface FileUpdatedEventContent {
   eventName: 'update';
   updated: string;
+  realmURL: string;
 }
 
 export interface FileRemovedEventContent {
   eventName: 'update';
   removed: string;
+  realmURL: string;
 }
+
+// File watcher events don't include realmURL - it gets added by the Realm
+export type FileWatcherEventContent =
+  | Omit<FileAddedEventContent, 'realmURL'>
+  | Omit<FileUpdatedEventContent, 'realmURL'>
+  | Omit<FileRemovedEventContent, 'realmURL'>;
 
 export interface StopGeneratingEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;
@@ -437,6 +466,7 @@ export type MatrixEventWithBoxelContext =
 
 export type MatrixEvent =
   | ActiveLLMEvent
+  | BotTriggerEvent
   | CardMessageEvent
   | CodePatchResultEvent
   | CommandResultEvent

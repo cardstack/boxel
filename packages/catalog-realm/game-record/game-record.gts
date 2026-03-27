@@ -10,7 +10,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateField from 'https://cardstack.com/base/date';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import UrlField from 'https://cardstack.com/base/url';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import enumField from 'https://cardstack.com/base/enum';
@@ -56,15 +56,15 @@ export class GameRecord extends CardDef {
   @field completedDate = contains(DateField);
   @field notes = contains(MarkdownField);
   @field screenshotUrls = containsMany(UrlField);
-  @field lastPlayedDate = contains(DatetimeField);
+  @field lastPlayedDate = contains(DateTimeField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameRecord) {
       if (!this.player || !this.game) {
         return undefined;
       }
 
-      return this.player.title + ' - ' + this.game.title;
+      return this.player.cardTitle + ' - ' + this.game.cardTitle;
     },
   });
 

@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Featured Image Field",
+      "cardTitle": "Featured Image Field",
       "specType": "field",
       "ref": {
         "module": "../../fields/featured-image",

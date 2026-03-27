@@ -83,7 +83,7 @@ module('Integration | card-catalog', function (hooks) {
 
     class BlogPost extends CardDef {
       static displayName = 'Blog Post';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
       @field body = contains(TextAreaField);
       @field authorBio = linksTo(Author);
     }
@@ -114,8 +114,8 @@ module('Integration | card-catalog', function (hooks) {
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
         'Spec/publishing-packet.json': new Spec({
-          title: 'Publishing Packet',
-          description: 'Spec for PublishingPacket',
+          cardTitle: 'Publishing Packet',
+          cardDescription: 'Spec for PublishingPacket',
           specType: 'card',
           ref: {
             module: `${testRealmURL}publishing-packet`,
@@ -123,8 +123,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/author.json': new Spec({
-          title: 'Author',
-          description: 'Spec for Author',
+          cardTitle: 'Author',
+          cardDescription: 'Spec for Author',
           specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
@@ -132,8 +132,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/person.json': new Spec({
-          title: 'Person',
-          description: 'Spec for Person',
+          cardTitle: 'Person',
+          cardDescription: 'Spec for Person',
           specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
@@ -141,8 +141,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/pet.json': new Spec({
-          title: 'Pet',
-          description: 'Spec for Pet',
+          cardTitle: 'Pet',
+          cardDescription: 'Spec for Pet',
           specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
@@ -150,8 +150,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/tree.json': new Spec({
-          title: 'Tree',
-          description: 'Spec for Tree',
+          cardTitle: 'Tree',
+          cardDescription: 'Spec for Tree',
           specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
@@ -159,8 +159,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/blog-post.json': new Spec({
-          title: 'BlogPost',
-          description: 'Spec for BlogPost',
+          cardTitle: 'BlogPost',
+          cardDescription: 'Spec for BlogPost',
           specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
@@ -168,8 +168,8 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/address.json': new Spec({
-          title: 'Address',
-          description: 'Spec for Address field',
+          cardTitle: 'Address',
+          cardDescription: 'Spec for Address field',
           specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
@@ -193,9 +193,7 @@ module('Integration | card-catalog', function (hooks) {
     });
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
@@ -207,7 +205,10 @@ module('Integration | card-catalog', function (hooks) {
 
   module('realm filters', function () {
     test('displays all realms by default', async function (assert) {
-      assert.dom('[data-test-realm]').exists({ count: 3 });
+      await waitFor(`[data-test-realm="${realmName}"]`);
+      await waitFor('[data-test-realm="Base Workspace"]');
+
+      assert.dom('[data-test-realm]').exists({ count: 2 });
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)
         .hasText('6 results');
@@ -217,7 +218,9 @@ module('Integration | card-catalog', function (hooks) {
       assert
         .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
         .exists();
-      assert.dom('[data-test-realm-filter-button]').hasText('Workspace: All');
+      assert
+        .dom('[data-test-realm-picker]')
+        .exists('realm picker is displayed');
 
       let localResults = [
         ...document.querySelectorAll(
@@ -236,28 +239,15 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test('can filter cards by selecting a realm', async function (assert) {
-      await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 4 }); // All realms are selected by default
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .includesText('Workspace: All');
+      // Open the realm picker and select only Base Workspace
+      await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+      await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
 
-      await click(`[data-test-boxel-menu-item-text="Local Workspace"]`); // Unselect Local Workspace
-      assert
-        .dom('[data-test-realm-filter-button]')
-        .hasText(`Workspace: Base Workspace, Cardstack Catalog, Boxel Skills`);
+      // Only Base Workspace results should be shown
       assert
         .dom(`[data-test-realm="Base Workspace"] [data-test-card-catalog-item]`)
         .exists();
-
       assert.dom(`[data-test-realm="${realmName}"]`).doesNotExist();
-
-      await click('[data-test-realm-filter-button]');
-      assert.dom('[data-test-boxel-menu-item-selected]').exists({ count: 3 });
-      assert
-        .dom('[data-test-boxel-menu-item-selected]')
-        .hasText('Base Workspace');
     });
 
     test('can paginate results from a realm', async function (assert) {
@@ -307,11 +297,15 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${card}"]`);
+      await waitFor(`[data-test-card-catalog-item="${card}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await triggerKeyEvent(`[data-test-select="${card}"]`, 'keydown', 'Enter');
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await triggerKeyEvent(
+        `[data-test-card-catalog-item="${card}"]`,
+        'keydown',
+        'Enter',
+      );
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -330,16 +324,20 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${card}"]`);
+      await waitFor(`[data-test-card-catalog-item="${card}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await click(`[data-test-select="${card}"`);
+      await click(`[data-test-card-catalog-item="${card}"]`);
       assert
         .dom(`[data-test-card-catalog-item="${card}"]`)
         .hasAttribute('data-test-card-catalog-item-selected');
 
-      await triggerKeyEvent(`[data-test-select="${card}"]`, 'keydown', 'Enter');
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await triggerKeyEvent(
+        `[data-test-card-catalog-item="${card}"]`,
+        'keydown',
+        'Enter',
+      );
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -359,22 +357,22 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${card1}"]`);
-      await waitFor(`[data-test-select="${card2}"]`);
+      await waitFor(`[data-test-card-catalog-item="${card1}"]`);
+      await waitFor(`[data-test-card-catalog-item="${card2}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await click(`[data-test-select="${card1}"`);
+      await click(`[data-test-card-catalog-item="${card1}"]`);
       assert
         .dom(`[data-test-card-catalog-item="${card1}"]`)
         .hasAttribute('data-test-card-catalog-item-selected');
 
-      await focus(`[data-test-select="${card2}"]`);
+      await focus(`[data-test-card-catalog-item="${card2}"]`);
       await triggerKeyEvent(
-        `[data-test-select="${card2}"]`,
+        `[data-test-card-catalog-item="${card2}"]`,
         'keydown',
         'Enter',
       );
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -393,11 +391,11 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${card}"]`);
+      await waitFor(`[data-test-card-catalog-item="${card}"]`);
       assert.dom(`[data-test-card-catalog-item-selected]`).doesNotExist();
 
-      await doubleClick(`[data-test-select="${card}"`);
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await doubleClick(`[data-test-card-catalog-item="${card}"]`);
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       await waitFor(`[data-test-stack-card-index="1"]`);
       assert
         .dom(
@@ -415,14 +413,14 @@ module('Integration | card-catalog', function (hooks) {
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
 
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select]`);
+      await waitFor(`[data-test-card-catalog-item]`);
 
       await triggerKeyEvent(
         `[data-test-card-catalog-modal]`,
         'keydown',
         'Escape',
       );
-      await waitFor('[data-test-card-catalog]', { count: 0 });
+      await waitFor('[data-test-card-catalog-modal]', { count: 0 });
       assert.dom(`[data-test-stack-card-index="0"]`).exists();
       assert.dom('[data-test-stack-card-index="1"]').doesNotExist();
     });

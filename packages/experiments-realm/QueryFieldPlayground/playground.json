@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Query Field Playground",
-        "description": "Interactively exercise linksTo and linksToMany query fields.",
-        "thumbnailURL": null
+        "name": "Query Field Playground",
+        "summary": "Interactively exercise linksTo and linksToMany query fields.",
+        "cardThumbnailURL": null
       },
       "pageSize": 3,
       "nameFilter": "ha",

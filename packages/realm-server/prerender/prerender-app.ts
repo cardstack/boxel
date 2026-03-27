@@ -5,10 +5,14 @@ import { createServer } from 'http';
 import * as Sentry from '@sentry/node';
 import {
   Deferred,
+  type AffinityType,
   logger,
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
+  type FileRenderResponse,
+  type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import {
   ecsMetadata,
@@ -18,11 +22,16 @@ import {
 } from '../middleware';
 import { Prerenderer } from './index';
 import { resolvePrerenderManagerURL } from './config';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from './prerender-constants';
+
+type PrerenderServer = Server & {
+  __stopPrerenderer?: () => Promise<void>;
+};
 
 let log = logger('prerender-server');
 const defaultPrerenderServerPort = 4221;
@@ -72,11 +81,32 @@ export function buildPrerenderApp(options: {
     ctxt.status = 200;
   });
 
-  type PrerenderArgs = {
-    realm: string;
-    url: string;
+  type RouteBaseArgs = {
     auth: string;
     renderOptions: RenderRouteOptions;
+  };
+
+  type PrerenderArgs = RouteBaseArgs & {
+    affinityType: AffinityType;
+    affinityValue: string;
+    realm: string;
+    url: string;
+  };
+
+  type RunCommandRouteArgs = RouteBaseArgs & {
+    affinityType: 'user';
+    affinityValue: string;
+    command: string;
+    commandInput?: unknown;
+  };
+
+  type RouteParseResult<A extends RouteBaseArgs> = {
+    args?: A;
+    missing: string[];
+    missingMessage: string;
+    logTarget: string;
+    responseId: string;
+    rejectionLogDetails: string;
   };
 
   type PrerenderExecResult<R> = {
@@ -84,23 +114,127 @@ export function buildPrerenderApp(options: {
     timings: { launchMs: number; renderMs: number };
     pool: {
       pageId: string;
-      realm: string;
+      affinityType: AffinityType;
+      affinityValue: string;
       reused: boolean;
       evicted: boolean;
       timedOut: boolean;
     };
   };
 
-  function registerPrerenderRoute<R>(
+  let isNonEmptyString = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+
+  let parseRenderOptions = (attrs: any): RenderRouteOptions =>
+    attrs.renderOptions &&
+    typeof attrs.renderOptions === 'object' &&
+    !Array.isArray(attrs.renderOptions)
+      ? (attrs.renderOptions as RenderRouteOptions)
+      : {};
+
+  let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
+    attrsToCheck
+      .filter(({ value }) => !isNonEmptyString(value))
+      .map(({ name }) => name);
+
+  let parseDefaultPrerenderAttributes = (
+    attrs: any,
+  ): RouteParseResult<PrerenderArgs> => {
+    let rawUrl = attrs.url;
+    let rawAuth = attrs.auth;
+    let rawRealm = attrs.realm;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
+    let renderOptions = parseRenderOptions(attrs);
+    let missing = missingAttrs([
+      { value: rawUrl, name: 'url' },
+      { value: rawRealm, name: 'realm' },
+      { value: rawAuth, name: 'auth' },
+      {
+        value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
+        name: 'affinityType',
+      },
+      { value: rawAffinityValue, name: 'affinityValue' },
+    ]);
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              affinityType: rawAffinityType as AffinityType,
+              affinityValue: rawAffinityValue as string,
+              realm: rawRealm as string,
+              url: rawUrl as string,
+              auth: rawAuth as string,
+              renderOptions,
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue',
+      logTarget: (rawUrl as string | undefined) ?? '<missing>',
+      responseId: (rawUrl as string | undefined) ?? 'unknown',
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} realm=${
+        (rawRealm as string | undefined) ?? '<missing>'
+      } url=${(rawUrl as string | undefined) ?? '<missing>'} authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      }`,
+    };
+  };
+
+  let parseRunCommandAttributes = (
+    attrs: any,
+  ): RouteParseResult<RunCommandRouteArgs> => {
+    let rawAuth = attrs.auth;
+    let rawAffinityType = attrs.affinityType;
+    let rawAffinityValue = attrs.affinityValue;
+    let command = attrs.command;
+    let commandInput = attrs.commandInput;
+    let renderOptions = parseRenderOptions(attrs);
+    let missing: string[] = [];
+    if (!isNonEmptyString(rawAuth)) missing.push('auth');
+    if (rawAffinityType !== 'user') missing.push('affinityType');
+    if (!isNonEmptyString(rawAffinityValue)) missing.push('affinityValue');
+    if (!isNonEmptyString(command)) missing.push('command');
+    let commandValue = isNonEmptyString(command) ? command : undefined;
+    return {
+      args:
+        missing.length > 0
+          ? undefined
+          : {
+              affinityType: rawAffinityType as 'user',
+              affinityValue: rawAffinityValue as string,
+              auth: rawAuth as string,
+              command: command as string,
+              commandInput,
+              renderOptions,
+            },
+      missing,
+      missingMessage:
+        'Missing or invalid required attributes: auth, command, affinityType, affinityValue',
+      logTarget: commandValue ?? '<unknown>',
+      responseId: commandValue ?? 'command',
+      rejectionLogDetails: `affinityType=${
+        (rawAffinityType as string | undefined) ?? '<missing>'
+      } affinityValue=${(rawAffinityValue as string | undefined) ?? '<missing>'} authProvided=${
+        typeof rawAuth === 'string' && rawAuth.trim().length > 0
+      } commandProvided=${Boolean(commandValue)}`,
+    };
+  };
+
+  function registerPrerenderRoute<R, A extends RouteBaseArgs = PrerenderArgs>(
     path: string,
     options: {
       requestDescription: string;
       responseType: string;
       infoLabel: string;
-      warnTimeoutMessage: (url: string) => string;
+      warnTimeoutMessage: (target: string) => string;
       errorContext: string;
-      execute: (args: PrerenderArgs) => Promise<PrerenderExecResult<R>>;
-      afterResponse?: (url: string, response: R) => void;
+      execute: (args: A) => Promise<PrerenderExecResult<R>>;
+      afterResponse?: (target: string, response: R) => void;
+      parseAttributes: (attrs: any) => RouteParseResult<A>;
+      errorMessage?: string | ((err: any) => string);
       drainingPromise?: Promise<void>;
     },
   ) {
@@ -125,67 +259,45 @@ export function buildPrerenderApp(options: {
         }
 
         let attrs = body?.data?.attributes ?? {};
-        let rawUrl = attrs.url;
-        let rawAuth = attrs.auth;
-        let rawRealm = attrs.realm;
-        let renderOptions: RenderRouteOptions =
-          attrs.renderOptions &&
-          typeof attrs.renderOptions === 'object' &&
-          !Array.isArray(attrs.renderOptions)
-            ? (attrs.renderOptions as RenderRouteOptions)
-            : {};
-
-        let isNonEmptyString = (value: unknown): value is string =>
-          typeof value === 'string' && value.trim().length > 0;
-
-        let missingAttrs = (attrsToCheck: { value: unknown; name: string }[]) =>
-          attrsToCheck
-            .filter(({ value }) => !isNonEmptyString(value))
-            .map(({ name }) => name);
-
-        let missing = missingAttrs([
-          { value: rawUrl, name: 'url' },
-          { value: rawRealm, name: 'realm' },
-          { value: rawAuth, name: 'auth' },
-        ]);
+        let parsed = options.parseAttributes(attrs);
+        let routeArgs = parsed.args;
+        let realmForLog =
+          (routeArgs as { realm?: string } | undefined)?.realm ??
+          (attrs.realm as string | undefined) ??
+          '<none>';
+        let affinityTypeForLog =
+          (routeArgs as { affinityType?: string } | undefined)?.affinityType ??
+          (attrs.affinityType as string);
+        let affinityValueForLog =
+          (routeArgs as { affinityValue?: string } | undefined)
+            ?.affinityValue ?? (attrs.affinityValue as string);
+        let renderOptionsForLog = routeArgs?.renderOptions ?? {};
 
         log.debug(
-          `received ${options.requestDescription} ${rawUrl}: realm=${rawRealm} options=${JSON.stringify(renderOptions)}`,
+          `received ${options.requestDescription} ${parsed.logTarget}: affinityType=${affinityTypeForLog} affinityValue=${affinityValueForLog} realm=${realmForLog} options=${JSON.stringify(renderOptionsForLog)}`,
         );
-        if (missing.length > 0) {
+        if (parsed.missing.length > 0 || !routeArgs) {
           log.warn(
-            'Rejecting %s due to missing attributes (%s); realm=%s url=%s authProvided=%s',
+            'Rejecting %s due to missing attributes (%s); %s',
             options.requestDescription,
-            missing.join(', '),
-            (rawRealm as string | undefined) ?? '<missing>',
-            (rawUrl as string | undefined) ?? '<missing>',
-            typeof rawAuth === 'string' && rawAuth.trim().length > 0,
+            parsed.missing.join(', '),
+            parsed.rejectionLogDetails,
           );
           ctxt.status = 400;
           ctxt.body = {
             errors: [
               {
                 status: 400,
-                message:
-                  'Missing or invalid required attributes: url, auth, realm',
+                message: parsed.missingMessage,
               },
             ],
           };
           return;
         }
 
-        let realm = rawRealm as string;
-        let url = rawUrl as string;
-        let auth = rawAuth as string;
-
         let start = Date.now();
         let execPromise = options
-          .execute({
-            realm,
-            url,
-            auth,
-            renderOptions,
-          })
+          .execute(routeArgs)
           .then((result) => ({ result }));
         let drainPromise = options.drainingPromise
           ? options.drainingPromise.then(() => ({ draining: true as const }))
@@ -226,14 +338,15 @@ export function buildPrerenderApp(options: {
         let poolFlagSuffix =
           poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
         log.info(
-          '%s %s total=%dms launch=%dms render=%dms pageId=%s realm=%s%s',
+          '%s %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
           options.infoLabel,
-          url,
+          parsed.logTarget,
           totalMs,
           timings.launchMs,
           timings.renderMs,
           pool.pageId,
-          pool.realm,
+          pool.affinityType,
+          pool.affinityValue,
           poolFlagSuffix,
         );
         ctxt.status = 201;
@@ -241,7 +354,7 @@ export function buildPrerenderApp(options: {
         ctxt.body = {
           data: {
             type: options.responseType,
-            id: url,
+            id: parsed.responseId,
             attributes: response,
           },
           meta: {
@@ -254,18 +367,22 @@ export function buildPrerenderApp(options: {
           },
         };
         if (pool.timedOut) {
-          log.warn(options.warnTimeoutMessage(url));
+          log.warn(options.warnTimeoutMessage(parsed.logTarget));
         }
-        options.afterResponse?.(url, response);
+        options.afterResponse?.(parsed.logTarget, response);
       } catch (err: any) {
         Sentry.captureException(err);
         log.error(`Unhandled error in ${options.errorContext}:`, err);
         ctxt.status = 500;
+        let message =
+          typeof options.errorMessage === 'function'
+            ? options.errorMessage(err)
+            : (options.errorMessage ?? err?.message ?? 'Unknown error');
         ctxt.body = {
           errors: [
             {
               status: 500,
-              message: err?.message ?? 'Unknown error',
+              message,
             },
           ],
         };
@@ -279,6 +396,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'prerendered',
     warnTimeoutMessage: (url) => `render of ${url} timed out`,
     errorContext: '/prerender-card',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderCard(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -301,6 +419,7 @@ export function buildPrerenderApp(options: {
     infoLabel: 'module prerendered',
     warnTimeoutMessage: (url) => `module render of ${url} timed out`,
     errorContext: '/prerender-module',
+    parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args) => prerenderer.prerenderModule(args),
     drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
@@ -311,6 +430,227 @@ export function buildPrerenderApp(options: {
         );
       }
     },
+  });
+
+  registerPrerenderRoute('/prerender-file-extract', {
+    requestDescription: 'file extract prerender request',
+    responseType: 'prerender-file-extract-result',
+    infoLabel: 'file extract prerendered',
+    warnTimeoutMessage: (url) => `file extract render of ${url} timed out`,
+    errorContext: '/prerender-file-extract',
+    parseAttributes: parseDefaultPrerenderAttributes,
+    execute: (args) => prerenderer.prerenderFileExtract(args),
+    drainingPromise: options.drainingPromise,
+    afterResponse: (url, response) => {
+      const fileResponse = response as FileExtractResponse;
+      if (fileResponse.status === 'error' && fileResponse.error) {
+        log.debug(
+          `file extract of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
+        );
+      }
+    },
+  });
+
+  registerPrerenderRoute<RunCommandResponse, RunCommandRouteArgs>(
+    '/run-command',
+    {
+      requestDescription: 'command-runner',
+      responseType: 'command-result',
+      infoLabel: 'command-runner',
+      warnTimeoutMessage: (target) => `command run of ${target} timed out`,
+      errorContext: '/run-command',
+      errorMessage: 'Error running command',
+      parseAttributes: parseRunCommandAttributes,
+      execute: (args) =>
+        prerenderer.runCommand({
+          userId: args.affinityValue,
+          auth: args.auth,
+          command: args.command,
+          commandInput: args.commandInput as Record<string, unknown> | null,
+        }),
+      drainingPromise: options.drainingPromise,
+    },
+  );
+
+  // File render route needs additional attributes (fileData, types)
+  // beyond what registerPrerenderRoute handles, so we register it directly.
+  router.post('/prerender-file-render', async (ctxt: Koa.Context) => {
+    try {
+      let request = await fetchRequestFromContext(ctxt);
+      let raw = await request.text();
+      let body: any;
+      try {
+        body = raw ? JSON.parse(raw) : {};
+      } catch (e) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [{ status: 400, message: 'Invalid JSON body' }],
+        };
+        return;
+      }
+
+      let attrs = body?.data?.attributes ?? {};
+      let rawUrl = attrs.url;
+      let rawAuth = attrs.auth;
+      let rawRealm = attrs.realm;
+      let rawAffinityType = attrs.affinityType;
+      let rawAffinityValue = attrs.affinityValue;
+      let renderOptions: RenderRouteOptions =
+        attrs.renderOptions &&
+        typeof attrs.renderOptions === 'object' &&
+        !Array.isArray(attrs.renderOptions)
+          ? (attrs.renderOptions as RenderRouteOptions)
+          : {};
+      let fileData = attrs.fileData;
+      let types = attrs.types;
+
+      let isNonEmptyString = (value: unknown): value is string =>
+        typeof value === 'string' && value.trim().length > 0;
+
+      let missing = [
+        { value: rawUrl, name: 'url' },
+        { value: rawRealm, name: 'realm' },
+        { value: rawAuth, name: 'auth' },
+        {
+          value: rawAffinityType === 'realm' ? rawAffinityType : undefined,
+          name: 'affinityType',
+        },
+        { value: rawAffinityValue, name: 'affinityValue' },
+      ]
+        .filter(({ value }) => !isNonEmptyString(value))
+        .map(({ name }) => name);
+
+      if (!fileData) {
+        missing.push('fileData');
+      }
+      if (!Array.isArray(types)) {
+        missing.push('types');
+      }
+
+      log.debug(
+        `received file render prerender request ${rawUrl}: affinityType=${rawAffinityType} affinityValue=${rawAffinityValue} realm=${rawRealm}`,
+      );
+      if (missing.length > 0) {
+        ctxt.status = 400;
+        ctxt.body = {
+          errors: [
+            {
+              status: 400,
+              message: `Missing or invalid required attributes: ${missing.join(', ')}`,
+            },
+          ],
+        };
+        return;
+      }
+
+      let realm = rawRealm as string;
+      let affinityType = rawAffinityType as AffinityType;
+      let affinityValue = rawAffinityValue as string;
+      let url = rawUrl as string;
+      let auth = rawAuth as string;
+
+      let start = Date.now();
+      let execPromise = prerenderer
+        .prerenderFileRender({
+          affinityType,
+          affinityValue,
+          realm,
+          url,
+          auth,
+          fileData,
+          types,
+          renderOptions,
+        })
+        .then((result) => ({ result }));
+      let drainPromise = options.drainingPromise
+        ? options.drainingPromise.then(() => ({ draining: true as const }))
+        : null;
+      let raceResult = drainPromise
+        ? await Promise.race([execPromise, drainPromise])
+        : await execPromise;
+      if ('draining' in raceResult) {
+        execPromise.catch((e) =>
+          log.debug(
+            'file render prerender execute settled after drain (ignored):',
+            e,
+          ),
+        );
+        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+        ctxt.set(
+          PRERENDER_SERVER_STATUS_HEADER,
+          PRERENDER_SERVER_STATUS_DRAINING,
+        );
+        ctxt.body = {
+          errors: [
+            {
+              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+              message: 'Prerender server draining',
+            },
+          ],
+        };
+        return;
+      }
+      let { response, timings, pool } = raceResult.result;
+      let totalMs = Date.now() - start;
+      let poolFlags = Object.entries({
+        reused: pool.reused,
+        evicted: pool.evicted,
+        timedOut: pool.timedOut,
+      })
+        .filter(([, value]) => value === true)
+        .map(([key]) => key)
+        .join(', ');
+      let poolFlagSuffix = poolFlags.length > 0 ? ` flags=[${poolFlags}]` : '';
+      log.info(
+        'file render prerendered %s total=%dms launch=%dms render=%dms pageId=%s affinityType=%s affinityValue=%s%s',
+        url,
+        totalMs,
+        timings.launchMs,
+        timings.renderMs,
+        pool.pageId,
+        pool.affinityType,
+        pool.affinityValue,
+        poolFlagSuffix,
+      );
+      ctxt.status = 201;
+      ctxt.set('Content-Type', 'application/vnd.api+json');
+      ctxt.body = {
+        data: {
+          type: 'prerender-file-render-result',
+          id: url,
+          attributes: response,
+        },
+        meta: {
+          timing: {
+            launchMs: timings.launchMs,
+            renderMs: timings.renderMs,
+            totalMs,
+          },
+          pool,
+        },
+      };
+      if (pool.timedOut) {
+        log.warn(`file render of ${url} timed out`);
+      }
+      const fileResponse = response as FileRenderResponse;
+      if (fileResponse.error) {
+        log.debug(
+          `file render of ${url} resulted in error doc:\n${JSON.stringify(fileResponse.error, null, 2)}`,
+        );
+      }
+    } catch (err: any) {
+      Sentry.captureException(err);
+      log.error('Unhandled error in /prerender-file-render:', err);
+      ctxt.status = 500;
+      ctxt.body = {
+        errors: [
+          {
+            status: 500,
+            message: err?.message ?? 'Unknown error',
+          },
+        ],
+      };
+    }
   });
 
   app
@@ -360,6 +700,9 @@ export function buildPrerenderApp(options: {
 }
 
 function resolvePrerenderServerURL(port?: number): string {
+  if (isEnvironmentMode()) {
+    return serviceURL('prerender');
+  }
   let hostname = process.env.HOSTNAME ?? 'localhost';
   let resolvedPort = port ?? defaultPrerenderServerPort;
   return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
@@ -383,7 +726,6 @@ async function unregisterWithManager(serverURL: string) {
 
 export function createPrerenderHttpServer(options?: {
   maxPages?: number;
-  silent?: boolean;
   port?: number;
 }): Server {
   let draining = false;
@@ -399,6 +741,24 @@ export function createPrerenderHttpServer(options?: {
     isDraining: () => draining,
     drainingPromise: drainingDeferred.promise,
   });
+  let stopPromise: Promise<void> | null = null;
+
+  async function stopPrerendererOnce(): Promise<void> {
+    if (!stopPromise) {
+      stopPromise = (async () => {
+        try {
+          await prerenderer.stop();
+        } catch (e: any) {
+          // Best-effort shutdown; log and continue
+          log.warn(
+            'Error stopping prerenderer on server close:',
+            e?.message ?? e,
+          );
+        }
+      })();
+    }
+    await stopPromise;
+  }
   const heartbeatIntervalMs = Math.max(
     1000,
     Number(process.env.PRERENDER_HEARTBEAT_INTERVAL_MS ?? 5000),
@@ -419,7 +779,7 @@ export function createPrerenderHttpServer(options?: {
             capacity,
             url: serverURL,
             status: status ?? (draining ? 'draining' : 'active'),
-            warmedRealms: prerenderer.getWarmRealms(),
+            warmedAffinities: prerenderer.getWarmAffinities(),
           },
         },
       };
@@ -458,15 +818,12 @@ export function createPrerenderHttpServer(options?: {
     }
   }
 
-  let server = createServer(app.callback());
+  let server = createServer(app.callback()) as PrerenderServer;
+  server.__stopPrerenderer = stopPrerendererOnce;
+
   server.on('close', async () => {
     stopHeartbeatLoop();
-    try {
-      await prerenderer.stop();
-    } catch (e: any) {
-      // Best-effort shutdown; log and continue
-      log.warn('Error stopping prerenderer on server close:', e?.message ?? e);
-    }
+    await stopPrerendererOnce();
     try {
       await unregisterWithManager(serverURL);
     } catch (e) {

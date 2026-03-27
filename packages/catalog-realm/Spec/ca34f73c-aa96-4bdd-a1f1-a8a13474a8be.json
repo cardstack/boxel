@@ -9,10 +9,10 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "GamingStatsField",
-      "description": null,
+      "cardTitle": "GamingStatsField",
+      "cardDescription": null,
       "cardInfo": {},
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

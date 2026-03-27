@@ -26,6 +26,7 @@ export interface Config {
   now?: () => number;
   directRooms?: string[];
   systemCardAccountData?: { id?: string };
+  uploadContentInterceptor?: () => Promise<void>;
 }
 
 export function setupMockMatrix(

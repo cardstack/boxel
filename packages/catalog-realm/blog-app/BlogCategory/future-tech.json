@@ -7,9 +7,9 @@
       "slug": "future-tech",
       "pillColor": "#000000",
       "cardInfo": {
-        "description": "Highlighting technology shaping tomorrow’s cities.",
-        "title": "Future Tech",
-        "thumbnailURL": null
+        "summary": "Highlighting technology shaping tomorrow\u2019s cities.",
+        "name": "Future Tech",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

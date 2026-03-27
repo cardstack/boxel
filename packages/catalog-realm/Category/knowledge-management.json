@@ -11,9 +11,9 @@
       "name": "Knowledge Management",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Knowledge bases, documentation systems, information taxonomies, search strategies, and learning repositories.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Knowledge bases, documentation systems, information taxonomies, search strategies, and learning repositories.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

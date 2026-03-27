@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "brandName": "Bupples Sparkling Water",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "featuredFlavors.0": {

@@ -9,9 +9,9 @@
       "taxPerMonth": 320,
       "insurancePerMonth": 50,
       "hoaFeesPerMonth": 750,
-      "title": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": null,
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

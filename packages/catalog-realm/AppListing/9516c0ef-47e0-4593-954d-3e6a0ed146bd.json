@@ -18,9 +18,9 @@
       "summary": "A comprehensive music creation and discovery platform with integrated tools for musicians",
       "cardInfo": {
         "notes": null,
-        "title": "Music Hub - Complete Music Platform",
-        "description": "An all-in-one music platform featuring album discovery, playlist management, song building tools, beat making, recording studio, chord progression player, and artist networking capabilities.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/thumbnail.png"
+        "name": "Music Hub - Complete Music Platform",
+        "summary": "An all-in-one music platform featuring album discovery, playlist management, song building tools, beat making, recording studio, chord progression player, and artist networking capabilities.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/music-hub-listing/thumbnail.png"
       }
     },
     "relationships": {

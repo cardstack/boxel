@@ -2,10 +2,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
 import { action } from '@ember/object';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
@@ -14,6 +17,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+  type CardErrorJSONAPI,
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
@@ -44,6 +48,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    isMostRecentMessage?: boolean;
     userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
@@ -58,7 +63,12 @@ interface Signature {
       element: HTMLElement;
       scrollTo: Element['scrollIntoView'];
     }) => void;
+    unregisterScroller?: (args: {
+      index: number;
+      element: HTMLElement;
+    }) => void;
     errorMessage?: string;
+    reloadBillingData?: boolean;
     isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
@@ -79,6 +89,10 @@ interface MessageScrollerSignature {
         element: HTMLElement;
         scrollTo: Element['scrollIntoView'];
       }) => void;
+      unregisterScroller?: (args: {
+        index: number;
+        element: HTMLElement;
+      }) => void;
     };
   };
 }
@@ -86,11 +100,38 @@ interface MessageScrollerSignature {
 class MessageScroller extends Modifier<MessageScrollerSignature> {
   private hasRegistered = false;
   private observer?: MutationObserver;
+  private element?: HTMLElement;
+  private index?: number;
+  private unregisterScroller?:
+    | MessageScrollerSignature['Args']['Named']['unregisterScroller']
+    | undefined;
+  private hasDestructor = false;
   modify(
     element: HTMLElement,
     _positional: [],
-    { index, registerScroller }: MessageScrollerSignature['Args']['Named'],
+    {
+      index,
+      registerScroller,
+      unregisterScroller,
+    }: MessageScrollerSignature['Args']['Named'],
   ) {
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => this.unregister());
+    }
+
+    if (
+      this.element !== element ||
+      this.index !== index ||
+      this.unregisterScroller !== unregisterScroller
+    ) {
+      this.unregister();
+      this.element = element;
+      this.index = index;
+      this.unregisterScroller = unregisterScroller;
+      this.hasRegistered = false;
+    }
+
     if (!this.hasRegistered) {
       this.hasRegistered = true;
       registerScroller({
@@ -101,7 +142,6 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
     }
 
     this.observer?.disconnect();
-
     this.observer = new MutationObserver(() => {
       registerScroller({
         index,
@@ -110,10 +150,21 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
       });
     });
     this.observer.observe(element, { childList: true, subtree: true });
+  }
 
-    registerDestructor(this, () => {
-      this.observer?.disconnect();
-    });
+  private unregister() {
+    this.observer?.disconnect();
+    this.observer = undefined;
+    this.hasRegistered = false;
+    if (this.element && this.index != null && this.unregisterScroller) {
+      this.unregisterScroller({
+        index: this.index,
+        element: this.element,
+      });
+    }
+    this.element = undefined;
+    this.index = undefined;
+    this.unregisterScroller = undefined;
   }
 }
 
@@ -133,7 +184,31 @@ interface ScrollPositionSignature {
 // be scrolled "all the way down"
 export const BOTTOM_THRESHOLD = 50;
 class ScrollPosition extends Modifier<ScrollPositionSignature> {
-  private hasRegistered = false;
+  private element?: HTMLElement;
+  private setScrollPosition?:
+    | ScrollPositionSignature['Args']['Named']['setScrollPosition']
+    | undefined;
+  private hasDestructor = false;
+  private detectPosition = throttle(() => {
+    let element = this.element;
+    let setScrollPosition = this.setScrollPosition;
+    if (!element || !setScrollPosition) {
+      return;
+    }
+    let isBottom =
+      Math.abs(
+        element.scrollHeight - element.clientHeight - element.scrollTop,
+      ) <= BOTTOM_THRESHOLD;
+    setScrollPosition({ isBottom });
+  }, 500);
+  private cleanup() {
+    if (this.element) {
+      this.element.removeEventListener('scroll', this.detectPosition);
+    }
+    this.detectPosition.cancel();
+    this.element = undefined;
+    this.setScrollPosition = undefined;
+  }
   modify(
     element: HTMLElement,
     _positional: [],
@@ -142,27 +217,59 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       registerConversationScroller,
     }: ScrollPositionSignature['Args']['Named'],
   ) {
-    if (!this.hasRegistered) {
-      this.hasRegistered = true;
-      registerConversationScroller(
-        () => element.scrollHeight > element.clientHeight,
-        () => {
-          element.scrollTop = element.scrollHeight - element.clientHeight;
-        },
-      );
+    if (!this.hasDestructor) {
+      this.hasDestructor = true;
+      registerDestructor(this, () => this.cleanup());
     }
 
-    let detectPosition = throttle(() => {
-      let isBottom =
-        Math.abs(
-          element.scrollHeight - element.clientHeight - element.scrollTop,
-        ) <= BOTTOM_THRESHOLD;
-      setScrollPosition({ isBottom });
-    }, 500);
-    element.addEventListener('scroll', detectPosition);
-    registerDestructor(this, () =>
-      element.removeEventListener('scroll', detectPosition),
+    this.setScrollPosition = setScrollPosition;
+    registerConversationScroller(
+      () => element.scrollHeight > element.clientHeight,
+      () => {
+        element.scrollTop = element.scrollHeight - element.clientHeight;
+      },
     );
+
+    if (this.element !== element) {
+      this.detectPosition.cancel();
+      this.element?.removeEventListener('scroll', this.detectPosition);
+      this.element = element;
+      element.addEventListener('scroll', this.detectPosition);
+    }
+  }
+}
+
+interface ReloadBillingOnInsertSignature {
+  Args: {
+    Named: {
+      shouldReloadBillingData: boolean;
+      reload: () => void;
+    };
+  };
+}
+
+// In the future if we implement subscription to credit consumption, we can remove this modifier
+// It's currently used to reload the billing data when an out of credits error message is shown so that we can
+// conditionally display the "buy more credits" button, or "credits added" message + retry button
+class ReloadBillingOnInsert extends Modifier<ReloadBillingOnInsertSignature> {
+  private hasReloaded = false;
+
+  private runReload(reload: () => void) {
+    reload();
+  }
+
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    {
+      shouldReloadBillingData,
+      reload,
+    }: ReloadBillingOnInsertSignature['Args']['Named'],
+  ) {
+    if (shouldReloadBillingData && !this.hasReloaded) {
+      this.hasReloaded = true;
+      scheduleOnce('afterRender', this, this.runReload, reload);
+    }
   }
 }
 
@@ -180,14 +287,54 @@ function isPresent(val: SafeString | string | null | undefined) {
   return val ? val !== '' : false;
 }
 
-function collectionResourceError(id: string | null | undefined) {
-  return 'Cannot render ' + id;
+export function attachedCardErrorMessages(errors: CardErrorJSONAPI[]) {
+  let unreachableCount = 0;
+  let runtimeErrorCount = 0;
+  let genericErrorCount = 0;
+
+  for (let error of errors) {
+    if (isUnreachableCardError(error)) {
+      unreachableCount++;
+    } else if (error.status >= 500) {
+      runtimeErrorCount++;
+    } else {
+      genericErrorCount++;
+    }
+  }
+
+  return [
+    ...(unreachableCount > 0
+      ? [
+          unreachableCount === 1
+            ? `The card is unreachable. It may have been deleted, or you don't have permission to see it.`
+            : `These cards are unreachable. They may have been deleted, or you don't have permission to see them.`,
+        ]
+      : []),
+    ...(runtimeErrorCount > 0
+      ? [
+          runtimeErrorCount === 1
+            ? `This card could not be displayed because it hit a runtime error.`
+            : `Some cards could not be displayed because they hit runtime errors.`,
+        ]
+      : []),
+    ...(genericErrorCount > 0
+      ? [
+          genericErrorCount === 1
+            ? `This card could not be displayed because it has an error.`
+            : `Some cards could not be displayed because they have errors.`,
+        ]
+      : []),
+  ];
+}
+
+function isUnreachableCardError(error: CardErrorJSONAPI) {
+  return [403, 404].includes(error.status);
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare billingService: BillingService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private billingService: BillingService;
 
   private get isReasoningExpandedByDefault() {
     let result =
@@ -220,6 +367,12 @@ export default class AiAssistantMessage extends Component<Signature> {
     }
   }
 
+  private reloadBillingDataTask = task(async () => {
+    if (!this.billingService.loadingSubscriptionData) {
+      await this.billingService.loadSubscriptionData();
+    }
+  });
+
   <template>
     <section
       class={{cn
@@ -227,7 +380,15 @@ export default class AiAssistantMessage extends Component<Signature> {
         meta-hidden=@hideMeta
         code-patch-correctness=@isCodePatchCorrectness
       }}
-      {{MessageScroller index=@index registerScroller=@registerScroller}}
+      {{MessageScroller
+        index=@index
+        registerScroller=@registerScroller
+        unregisterScroller=@unregisterScroller
+      }}
+      {{ReloadBillingOnInsert
+        shouldReloadBillingData=this.shouldReloadBillingData
+        reload=(perform this.reloadBillingDataTask)
+      }}
       data-test-ai-assistant-message
       data-test-ai-assistant-message-pending={{@isPending}}
       ...attributes
@@ -302,17 +463,25 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{else}}
             <Alert @type='error' as |Alert|>
               <Alert.Messages @messages={{this.errorMessages}} />
-              <div class='alert-action-buttons-row'>
-                {{#if @waitAction}}
-                  <Alert.Action
-                    @actionName='Wait longer'
-                    @action={{@waitAction}}
-                  />
-                {{/if}}
-                {{#if @retryAction}}
-                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
-                {{/if}}
-              </div>
+              {{#if this.hasAlertActions}}
+                <div
+                  class='alert-action-buttons-row'
+                  data-test-alert-action-buttons-row
+                >
+                  {{#if @waitAction}}
+                    <Alert.Action
+                      @actionName='Wait longer'
+                      @action={{@waitAction}}
+                    />
+                  {{/if}}
+                  {{#if @retryAction}}
+                    <Alert.Action
+                      @actionName='Retry'
+                      @action={{@retryAction}}
+                    />
+                  {{/if}}
+                </div>
+              {{/if}}
             </Alert>
           {{/if}}
         {{/if}}
@@ -412,10 +581,20 @@ export default class AiAssistantMessage extends Component<Signature> {
   private get errorMessages() {
     return [
       ...(this.args.errorMessage ? [this.args.errorMessage] : []),
-      ...(this.args.collectionResource?.cardErrors.map((error) =>
-        collectionResourceError(error.id),
-      ) ?? []),
+      ...attachedCardErrorMessages(
+        this.args.collectionResource?.cardErrors ?? [],
+      ),
     ];
+  }
+
+  private get hasAlertActions() {
+    return Boolean(this.args.waitAction || this.args.retryAction);
+  }
+
+  private get shouldReloadBillingData() {
+    return Boolean(
+      this.args.reloadBillingData && this.args.isMostRecentMessage,
+    );
   }
 
   private get isOutOfCreditsErrorMessage(): boolean {

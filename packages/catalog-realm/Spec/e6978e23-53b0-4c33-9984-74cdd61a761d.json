@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "LeaseCalculator",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "LeaseCalculator",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

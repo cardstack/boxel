@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Plant Info",
-      "description": "Spec for Plant Info card",
+      "cardTitle": "Plant Info",
+      "cardDescription": "Spec for Plant Info card",
       "specType": "card",
       "ref": {
         "module": "../plant-info",

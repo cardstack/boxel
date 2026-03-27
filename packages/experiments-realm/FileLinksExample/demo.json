@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Project Documentation",
+      "description": "Example demonstrating linksTo and linksToMany with FileDef"
+    },
+    "relationships": {
+      "primaryDocument": {
+        "links": {
+          "self": "./mango.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "./mango.png"
+        }
+      },
+      "attachments.0": {
+        "links": {
+          "self": "./mango.png"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "./mango.png"
+        }
+      },
+      "attachments.1": {
+        "links": {
+          "self": "./mango-news.md"
+        },
+        "data": {
+          "type": "file-meta",
+          "id": "./mango-news.md"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../file-links-example",
+        "name": "FileLinksExample"
+      }
+    }
+  }
+}

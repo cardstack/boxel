@@ -12,30 +12,30 @@ export class Player extends CardDef {
   @field avatar = contains(AvatarField, {
     description: 'Avatar for the player',
   });
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: Player) {
-      return this.avatar?.thumbnailURL;
+      return this.avatar?.cardThumbnailURL;
     },
   });
 
   static embedded = class Embedded extends Component<typeof Player> {
     get avatarAlt() {
-      return this.args.model.title || 'Player avatar';
+      return this.args.model.cardTitle || 'Player avatar';
     }
 
     get avatarFallback() {
-      return this.args.model.title || 'Player';
+      return this.args.model.cardTitle || 'Player';
     }
 
     get playerName() {
-      return this.args.model.title || 'Unknown Player';
+      return this.args.model.cardTitle || 'Unknown Player';
     }
 
     <template>
       <div class='player-embedded-card'>
         <div class='player-embedded-card__avatar'>
-          {{#if @model.thumbnailURL}}
-            <img src={{@model.thumbnailURL}} alt={{this.avatarAlt}} />
+          {{#if @model.cardThumbnailURL}}
+            <img src={{@model.cardThumbnailURL}} alt={{this.avatarAlt}} />
           {{else}}
             <span class='player-embedded-card__avatar-fallback'>
               {{this.avatarFallback}}

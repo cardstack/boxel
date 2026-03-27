@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "System Card",
-      "description": "Spec for System Card",
-      "thumbnailURL": null
+      "cardTitle": "System Card",
+      "cardDescription": "Spec for System Card",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples.0": {

@@ -3,7 +3,7 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   mtimes,
   testRealmHref,
   testRealmURL,
@@ -27,9 +27,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       request = args.request;
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         mary: ['read'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup,
     });

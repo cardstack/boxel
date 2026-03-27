@@ -8,6 +8,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarStatsIcon from '@cardstack/boxel-icons/calendar-stats';
 
 class QuarterFieldEdit extends Component<typeof QuarterField> {
@@ -69,6 +70,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
           @onChange={{this.updateQuarter}}
           @placeholder='Select quarter'
           @dropdownClass='data-test-quarter-select'
+          @disabled={{not @canEdit}}
           as |option|
         >
           {{option.label}}
@@ -80,6 +82,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
           @selected={{this.selectedYear}}
           @onChange={{this.updateYear}}
           @placeholder='Select year'
+          @disabled={{not @canEdit}}
           data-test-quarter-year-select
           as |option|
         >
@@ -107,7 +110,7 @@ class QuarterFieldEdit extends Component<typeof QuarterField> {
   </template>
 }
 
-export class QuarterField extends FieldDef {
+export default class QuarterField extends FieldDef {
   static displayName = 'Quarter';
   static icon = CalendarStatsIcon;
 
@@ -189,5 +192,3 @@ export class QuarterField extends FieldDef {
 
   static edit = QuarterFieldEdit;
 }
-
-export default QuarterField;

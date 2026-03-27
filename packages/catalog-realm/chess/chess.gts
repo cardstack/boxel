@@ -471,7 +471,7 @@ export class Chess extends CardDef {
   @field pgn = contains(StringField);
   @field analysis = contains(BooleanField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Chess) {
       return 'Chess Game';
     },

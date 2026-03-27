@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Solitaire",
-      "description": "Spec of Solitaire",
-      "thumbnailURL": null
+      "cardTitle": "Solitaire",
+      "cardDescription": "Spec of Solitaire",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

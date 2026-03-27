@@ -15,6 +15,7 @@ import {
   insertPlan,
   realmSecretSeed,
   createVirtualNetwork,
+  waitUntil,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import {
@@ -134,34 +135,20 @@ module(basename(__filename), function () {
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      // Mock OpenRouter response
+      // Mock OpenRouter response (includes usage.cost so credits can be
+      // deducted directly without polling the generation cost API)
       const mockOpenRouterResponse = {
         id: 'gen-test-123',
         choices: [{ text: 'Test response from OpenRouter' }],
-        usage: { total_tokens: 150 },
+        usage: { total_tokens: 150, cost: 0.003 },
       };
 
-      // Mock generation cost API response
-      const mockCostResponse = {
-        data: {
-          id: 'gen-test-123',
-          total_cost: 0.003,
-          total_tokens: 150,
-          model: 'openai/gpt-3.5-turbo',
-        },
-      };
-
-      // Set up fetch to return different responses based on URL
+      // Set up fetch to return OpenRouter response
       mockFetch.callsFake(
         async (input: string | URL | Request, _init?: RequestInit) => {
           const url = typeof input === 'string' ? input : input.toString();
 
-          if (url.includes('/generation?id=')) {
-            return new Response(JSON.stringify(mockCostResponse), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            });
-          } else if (url.includes('/chat/completions')) {
+          if (url.includes('/chat/completions')) {
             return new Response(JSON.stringify(mockOpenRouterResponse), {
               status: 200,
               headers: { 'content-type': 'application/json' },
@@ -205,42 +192,40 @@ module(basename(__filename), function () {
           'Should return OpenRouter response',
         );
 
-        // Verify fetch was called correctly
-        assert.true(mockFetch.calledTwice, 'Fetch should be called twice');
+        // Verify fetch was called correctly (allowing unrelated fetches)
         const calls = mockFetch.getCalls();
+        const chatCall = calls.find((call) => {
+          const url = call.args[0];
+          const href = typeof url === 'string' ? url : url?.toString();
+          return Boolean(href && href.includes('/chat/completions'));
+        });
 
-        // First call should be to chat completions
-        const firstCallUrl = calls[0].args[0];
-        const firstUrl =
-          typeof firstCallUrl === 'string'
-            ? firstCallUrl
-            : firstCallUrl.toString();
-        assert.true(
-          firstUrl.includes('/chat/completions'),
-          'First call should be to chat completions',
-        );
-
-        // Second call should be to generation cost API
-        const secondCallUrl = calls[1].args[0];
-        const secondUrl =
-          typeof secondCallUrl === 'string'
-            ? secondCallUrl
-            : secondCallUrl.toString();
-        assert.true(
-          secondUrl.includes('/generation?id='),
-          'Second call should be to generation cost API',
-        );
+        assert.ok(chatCall, 'Fetch should call chat completions');
 
         // Verify authorization header was set correctly
-        const firstCallHeaders = calls[0].args[1]?.headers as Record<
+        const chatCallHeaders = chatCall!.args[1]?.headers as Record<
           string,
           string
         >;
-        // Note: The actual authorization header will include the JWT token, not the API key
-        // The API key is added by the proxy handler, not the test
         assert.true(
-          firstCallHeaders?.Authorization?.startsWith('Bearer '),
+          chatCallHeaders?.Authorization?.startsWith('Bearer '),
           'Should set authorization header',
+        );
+
+        // Verify credits were deducted (0.003 USD * 1000 = 3 credits)
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 47;
+          },
+          { timeoutMessage: 'Credits should be deducted (50 - 3 = 47)' },
         );
       } finally {
         mockFetch.restore();
@@ -525,7 +510,7 @@ module(basename(__filename), function () {
       const mockGoogleResponse = {
         items: [
           {
-            title: 'Test Image 1',
+            cardTitle: 'Test Image 1',
             link: 'https://example.com/image1.jpg',
             image: {
               thumbnailLink: 'https://example.com/thumb1.jpg',

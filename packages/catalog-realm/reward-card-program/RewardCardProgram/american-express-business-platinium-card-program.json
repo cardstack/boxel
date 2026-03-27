@@ -13,9 +13,9 @@
       "network": "American Express",
       "cardInfo": {
         "notes": null,
-        "title": "American Express Business Platinum Card",
-        "description": "Premium business credit card with extensive travel and business benefits",
-        "thumbnailURL": "https://icm.aexp-static.com/Internet/Acquisition/US_en/AppContent/OneSite/open/aurora/aurora-hero-card.jpg"
+        "name": "American Express Business Platinum Card",
+        "summary": "Premium business credit card with extensive travel and business benefits",
+        "cardThumbnailURL": "https://icm.aexp-static.com/Internet/Acquisition/US_en/AppContent/OneSite/open/aurora/aurora-hero-card.jpg"
       },
       "cardName": "American Express Business Platinum Card",
       "annualFee": {

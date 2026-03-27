@@ -142,7 +142,7 @@ class EditTemplate extends Component<typeof LeafletMapConfigField> {
   </template>
 }
 
-export class LeafletMapConfigField extends FieldDef {
+export default class LeafletMapConfigField extends FieldDef {
   static displayName = 'Map Configuration';
 
   @field tileserverUrl = contains(StringField);

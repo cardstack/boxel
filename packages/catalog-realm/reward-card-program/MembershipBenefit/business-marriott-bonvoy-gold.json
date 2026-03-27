@@ -11,11 +11,11 @@
       "partner": "Marriott International",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "conditions": "As a Platinum Card Member, you can receive Marriott Bonvoy® Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply. Must maintain active cardmembership to retain status.",
+      "conditions": "As a Platinum Card Member, you can receive Marriott Bonvoy\u00ae Gold Elite Status without meeting any stay requirements. Enrollment required. Terms and limitations apply. Must maintain active cardmembership to retain status.",
       "statusLevel": "Gold Elite",
       "benefitsList": [
         "Earn 25% bonus points on eligible stays",

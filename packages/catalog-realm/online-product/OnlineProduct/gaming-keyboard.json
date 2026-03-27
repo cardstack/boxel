@@ -11,15 +11,15 @@
       "inventory": 18,
       "inStock": true,
       "imageUrl": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=800&q=80",
-      "title": "RGB Mechanical Gaming Keyboard",
+      "cardTitle": "RGB Mechanical Gaming Keyboard",
       "cardInfo": {
-        "title": "RGB Mechanical Gaming Keyboard",
-        "description": "Premium mechanical gaming keyboard with Cherry MX Blue switches and customizable RGB backlighting. Category: Electronics. SKU: GMK-RGB87",
-        "thumbnailURL": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=400&q=80",
+        "name": "RGB Mechanical Gaming Keyboard",
+        "summary": "Premium mechanical gaming keyboard with Cherry MX Blue switches and customizable RGB backlighting. Category: Electronics. SKU: GMK-RGB87",
+        "cardThumbnailURL": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=400&q=80",
         "notes": null
       },
-      "description": "Premium mechanical gaming keyboard with Cherry MX Blue switches and customizable RGB backlighting. Category: Electronics. SKU: GMK-RGB87",
-      "thumbnailURL": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=400&q=80"
+      "cardDescription": "Premium mechanical gaming keyboard with Cherry MX Blue switches and customizable RGB backlighting. Category: Electronics. SKU: GMK-RGB87",
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1541140532154-b024d705b90a?auto=format&fit=crop&w=400&q=80"
     },
     "relationships": {
       "cardInfo.theme": {

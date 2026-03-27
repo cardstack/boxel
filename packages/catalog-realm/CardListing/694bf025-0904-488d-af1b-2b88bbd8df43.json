@@ -16,9 +16,9 @@
       "summary": "A theme creation tool that enables users to generate, preview, and manage AI-driven theme cards across different realms, leveraging language models and customizable prompts for diverse design systems. Its primary purpose is to facilitate automated theme generation and curation within a digital environment.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ai-theme-generator-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/ai-theme-generator-listing/thumbnail.png"
       }
     },
     "relationships": {

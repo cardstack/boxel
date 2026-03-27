@@ -11,9 +11,9 @@
       "name": "HR & People Management",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Human resources management, employee onboarding, performance reviews, payroll processing, and team development tools.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Human resources management, employee onboarding, performance reviews, payroll processing, and team development tools.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

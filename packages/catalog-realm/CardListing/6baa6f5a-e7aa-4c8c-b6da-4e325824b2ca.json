@@ -15,9 +15,9 @@
       "summary": "Premium tennis camp website with vibrant youth-focused design - configure camp details, pricing, and schedules while viewing animated marketing presentations. Features animated gradient backgrounds, floating tennis elements, comprehensive pricing cards, parent testimonials integration, and energetic color schemes optimized for child enrollment experiences.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/tennis-camp-listing/thumbnail.png"
       }
     },
     "relationships": {

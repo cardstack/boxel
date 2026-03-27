@@ -23,7 +23,7 @@ export class CommandField extends FieldDef {
   static displayName = 'CommandField';
   static icon = CommandIcon;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CommandField) {
       let moduleRef = this.codeRef?.module;
       if (!moduleRef) {
@@ -61,7 +61,7 @@ export class CommandField extends FieldDef {
       <div class='command-compact'>
         <CommandIcon class='command-icon' />
         <div class='command-info'>
-          <div class='command-title'>{{@model.title}}</div>
+          <div class='command-title'>{{@model.cardTitle}}</div>
           <div class='command-meta'>
             <code
               class='command-path'
@@ -124,8 +124,8 @@ export class Skill extends CardDef {
   static icon = RobotIcon;
   [isSkillCard] = true;
 
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field instructions = contains(MarkdownField);
   @field commands = containsMany(CommandField);
 
@@ -133,7 +133,7 @@ export class Skill extends CardDef {
     typeof this
   > {
     <template>
-      <@fields.title />
+      <@fields.cardTitle />
     </template>
   };
 }

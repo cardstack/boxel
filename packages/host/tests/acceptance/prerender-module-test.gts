@@ -15,11 +15,13 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   testRealmURL,
   captureModuleResult,
   createPrerenderAuth,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -30,6 +32,7 @@ module('Acceptance | prerender | module', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -58,7 +61,7 @@ module('Acceptance | prerender | module', function (hooks) {
 
     export class Parent extends CardDef {
       static displayName = 'Parent';
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
   `;
   const CHILD_MODULE = `
@@ -73,16 +76,18 @@ module('Acceptance | prerender | module', function (hooks) {
   const BROKEN_MODULE = `export const Broken = ;`;
 
   hooks.beforeEach(async function () {
-    ({ adapter, realm } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': PERSON_MODULE,
-        'parent.gts': PARENT_MODULE,
-        'child.gts': CHILD_MODULE,
-        'broken.gts': BROKEN_MODULE,
-      },
-    }));
+    ({ adapter, realm } = await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': PERSON_MODULE,
+          'parent.gts': PARENT_MODULE,
+          'child.gts': CHILD_MODULE,
+          'broken.gts': BROKEN_MODULE,
+        },
+      }),
+    ));
   });
 
   test('captures module metadata when module loads successfully', async function (assert) {
@@ -231,6 +236,8 @@ module('Acceptance | prerender | module', function (hooks) {
     let auth = createPrerenderAuth('@testuser:localhost', permissions);
 
     let response = await prerenderer.prerenderModule({
+      affinityType: 'realm',
+      affinityValue: testRealmURL,
       realm: testRealmURL,
       url: moduleURL,
       auth,
@@ -260,6 +267,8 @@ module('Acceptance | prerender | module', function (hooks) {
     let auth = createPrerenderAuth('@testuser:localhost', permissions);
 
     let response = await prerenderer.prerenderModule({
+      affinityType: 'realm',
+      affinityValue: testRealmURL,
       realm: testRealmURL,
       url: moduleURL,
       auth,

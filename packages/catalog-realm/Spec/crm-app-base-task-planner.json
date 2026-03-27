@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Base Task Planner",
-      "description": "Spec for Base Task Planner component",
-      "thumbnailURL": null
+      "cardTitle": "Base Task Planner",
+      "cardDescription": "Spec for Base Task Planner component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

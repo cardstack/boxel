@@ -29,6 +29,7 @@ import { testRealmURL } from './index';
 const defaultIndexEntry = {
   realm_version: 1,
   realm_url: testRealmURL,
+  has_error: false,
 };
 
 let typesCache = new WeakMap<typeof CardDef, Promise<string[]>>();

@@ -38,9 +38,9 @@
           "distance": 63
         }
       ],
-      "title": "Tour de France Alpine Classic",
-      "description": "Iconic alpine climbs from the Tour de France, featuring some of cycling's most legendary ascents including the famous 21 hairpins of Alpe d'Huez.",
-      "thumbnailURL": null
+      "cardTitle": "Tour de France Alpine Classic",
+      "cardDescription": "Iconic alpine climbs from the Tour de France, featuring some of cycling's most legendary ascents including the famous 21 hairpins of Alpe d'Huez.",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

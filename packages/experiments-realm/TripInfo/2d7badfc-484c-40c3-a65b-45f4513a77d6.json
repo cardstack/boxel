@@ -9,8 +9,8 @@
           "progress": 0.5
         }
       },
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "destinations.0": {

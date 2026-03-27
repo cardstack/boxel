@@ -12,6 +12,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { getService } from '@universal-ember/test-support';
 
+import QUnit from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
 import {
@@ -24,11 +25,13 @@ import {
   Loader,
   MatrixClient,
   Realm,
+  simpleHash,
   testHostModeRealmURL,
   testRealmInfo,
   testRealmURL,
-  testRealmURLToUsername,
   Worker,
+  DEFAULT_CARD_SIZE_LIMIT_BYTES,
+  DEFAULT_FILE_SIZE_LIMIT_BYTES,
   type DefinitionLookup,
   type LooseSingleCardDocument,
   type Prerenderer,
@@ -41,7 +44,10 @@ import {
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
-import { render as renderIntoElement } from '@cardstack/host/lib/isolated-render';
+import {
+  render as renderIntoElement,
+  teardown as teardownIsolatedRender,
+} from '@cardstack/host/lib/isolated-render';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
@@ -57,9 +63,10 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
-import { testRealmServerMatrixUsername } from './mock-matrix';
+import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
 import { setupAuthEndpoints } from './realm-server-mock';
+import { setupRenderingTest } from './setup';
 import { createJWT, testRealmSecretSeed } from './test-auth';
 import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
@@ -97,6 +104,9 @@ export {
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type ModuleHooks = {
+  after: (callback: () => void | Promise<void>) => void;
+};
 
 const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
@@ -156,6 +166,111 @@ export async function getDbAdapter() {
   return dbAdapter;
 }
 
+const realmCacheTeardownRegistrations = new WeakMap<ModuleHooks, Set<string>>();
+
+export function setupRealmCacheTeardown(
+  hooks: ModuleHooks,
+  moduleCacheKey?: string,
+): void {
+  let resolvedModuleCacheKey = moduleCacheKey ?? getCurrentModuleCacheKey();
+  let snapshotPrefix = snapshotPrefixForModule(resolvedModuleCacheKey);
+  let registrations = realmCacheTeardownRegistrations.get(hooks);
+  if (!registrations) {
+    registrations = new Set<string>();
+    realmCacheTeardownRegistrations.set(hooks, registrations);
+  }
+  if (registrations.has(snapshotPrefix)) {
+    return;
+  }
+  registrations.add(snapshotPrefix);
+  hooks.after(async () => {
+    let dbAdapter = await getDbAdapter();
+    await dbAdapter.deleteSnapshotsByPrefix(snapshotPrefix);
+  });
+}
+
+export async function withCachedRealmSetup<T>(
+  setupOrAdditionalKey: (() => Promise<T>) | string,
+  maybeSetup?: () => Promise<T>,
+): Promise<T> {
+  let moduleCacheKey = getCurrentModuleCacheKey();
+  let additionalKey: string | undefined;
+  let setup: () => Promise<T>;
+
+  if (typeof setupOrAdditionalKey === 'function') {
+    setup = setupOrAdditionalKey;
+  } else {
+    if (!maybeSetup) {
+      throw new Error(
+        'withCachedRealmSetup(additionalKey, setup) requires a setup callback',
+      );
+    }
+    additionalKey = setupOrAdditionalKey;
+    setup = maybeSetup;
+  }
+
+  let snapshotName = snapshotNameForCacheKey(moduleCacheKey, additionalKey);
+  let dbAdapter = await getDbAdapter();
+  if (dbAdapter.hasSnapshot(snapshotName)) {
+    await dbAdapter.importSnapshot(snapshotName);
+    return setup();
+  }
+  let result = await setup();
+  await dbAdapter.exportSnapshot(snapshotName);
+  return result;
+}
+
+function getCurrentModuleCacheKey(): string {
+  let config = QUnit.config as QUnit['config'] & {
+    currentModule?: { name?: string };
+  };
+  let moduleName =
+    QUnit.config.current?.module?.name ?? config.currentModule?.name;
+  if (moduleName?.trim()) {
+    return moduleName;
+  }
+  throw new Error(
+    'withCachedRealmSetup() was called without an explicit cacheKey, but no active QUnit module name was available',
+  );
+}
+
+function snapshotNameForCacheKey(
+  moduleCacheKey: string,
+  additionalKey?: string,
+): string {
+  let trimmedModuleCacheKey = moduleCacheKey.trim();
+  if (!trimmedModuleCacheKey) {
+    throw new Error('snapshotNameForCacheKey() requires a non-empty cache key');
+  }
+
+  let trimmedAdditionalKey = additionalKey?.trim();
+  let effectiveCacheKey = trimmedAdditionalKey
+    ? `${trimmedModuleCacheKey}::${trimmedAdditionalKey}`
+    : trimmedModuleCacheKey;
+
+  let slug = (trimmedAdditionalKey ?? trimmedModuleCacheKey)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+
+  if (!slug) {
+    slug = 'module';
+  }
+
+  return `${snapshotPrefixForModule(trimmedModuleCacheKey)}${simpleHash(
+    effectiveCacheKey,
+  )}_${slug}`;
+}
+
+function snapshotPrefixForModule(moduleCacheKey: string): string {
+  let trimmedModuleCacheKey = moduleCacheKey.trim();
+  if (!trimmedModuleCacheKey) {
+    throw new Error('snapshotPrefixForModule() requires a non-empty cache key');
+  }
+  return `snapshot_${simpleHash(trimmedModuleCacheKey)}_`;
+}
+
 export async function withSlowSave(
   delayMs: number,
   cb: () => Promise<void>,
@@ -209,13 +324,15 @@ export async function waitForSyntaxHighlighting(
   );
 }
 export async function showSearchResult(realmName: string, id: string) {
-  await waitFor(`[data-test-realm="${realmName}"] [data-test-select]`);
+  await waitFor(
+    `[data-test-realm="${realmName}"] [data-test-card-catalog-item]`,
+  );
   while (
     document.querySelector(
       `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
     ) &&
     !document.querySelector(
-      `[data-test-realm="${realmName}"] [data-test-select="${id}"]`,
+      `[data-test-realm="${realmName}"] [data-test-card-catalog-item="${id}"]`,
     )
   ) {
     await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
@@ -303,6 +420,332 @@ export async function capturePrerenderResult(
   return { status: 'ready', value: container.children[0][capture]! };
 }
 
+export interface WaitForLoadedImageOptions {
+  timeout?: number;
+  timeoutMessage?: string;
+}
+
+export async function waitForLoadedImage(
+  selector: string,
+  options: WaitForLoadedImageOptions = {},
+): Promise<HTMLImageElement> {
+  let {
+    timeout = 5000,
+    timeoutMessage = 'Image failed to load - naturalWidth remained 0. This likely indicates an authentication issue preventing the browser from fetching the image.',
+  } = options;
+
+  try {
+    await waitUntil(
+      () => {
+        let currentImg = findLatestMatchingImage(selector);
+        return Boolean(currentImg && currentImg.complete);
+      },
+      {
+        timeout,
+        timeoutMessage,
+      },
+    );
+  } catch (originalError) {
+    let currentImg = findLatestMatchingImage(selector);
+    if (currentImg) {
+      throw new Error(
+        await buildImageLoadErrorMessage(
+          selector,
+          currentImg,
+          timeoutMessage,
+          originalError,
+        ),
+      );
+    }
+    throw originalError;
+  }
+
+  let loadedImg = findLatestMatchingImage(selector);
+  if (!loadedImg) {
+    throw new Error(
+      `waitForLoadedImage: missing image element matching selector ${selector} after wait`,
+    );
+  }
+  if (loadedImg.naturalWidth === 0) {
+    throw new Error(
+      await buildImageLoadErrorMessage(selector, loadedImg, timeoutMessage),
+    );
+  }
+  return loadedImg;
+}
+
+function findLatestMatchingImage(selector: string): HTMLImageElement | null {
+  let candidates = Array.from(document.querySelectorAll(selector)).filter(
+    (element): element is HTMLImageElement =>
+      element instanceof HTMLImageElement,
+  );
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    let candidate = candidates[i];
+    if (candidate.isConnected) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function buildImageLoadErrorMessage(
+  selector: string,
+  img: HTMLImageElement,
+  baseMessage: string,
+  originalError?: unknown,
+): Promise<string> {
+  let srcAttr = img.getAttribute('src') ?? '';
+  let currentSrc = img.currentSrc ?? '';
+  let targetURL = currentSrc || img.src || srcAttr;
+  let probe = await probeImageURL(targetURL);
+  let imgDecodeProbe = await probeImgDecode(img);
+  let extra =
+    originalError instanceof Error && originalError.message
+      ? `waitUntil=${originalError.message}`
+      : originalError
+        ? `waitUntil=${String(originalError)}`
+        : 'waitUntil=none';
+
+  return [
+    baseMessage,
+    `selector=${selector}`,
+    `srcAttr=${srcAttr || '<empty>'}`,
+    `currentSrc=${currentSrc || '<empty>'}`,
+    `complete=${String(img.complete)}`,
+    `naturalWidth=${String(img.naturalWidth)}`,
+    `naturalHeight=${String(img.naturalHeight)}`,
+    imgDecodeProbe,
+    probe,
+    extra,
+  ].join(' | ');
+}
+
+async function probeImageURL(url: string): Promise<string> {
+  if (!url) {
+    return 'fetchProbe=skipped (missing URL)';
+  }
+  try {
+    let response = await fetch(url, { cache: 'no-store' });
+    let contentType = response.headers.get('content-type') ?? '<missing>';
+    let contentLength = response.headers.get('content-length') ?? '<missing>';
+    let swClientId =
+      response.headers.get('x-test-realm-sw-client-id') ?? '<missing>';
+    let swClientURL =
+      response.headers.get('x-test-realm-sw-client-url') ?? '<missing>';
+    let swClientFocused =
+      response.headers.get('x-test-realm-sw-client-focused') ?? '<missing>';
+    let swClientVisibility =
+      response.headers.get('x-test-realm-sw-client-visibility') ?? '<missing>';
+    let responseBuffer = await response.clone().arrayBuffer();
+    let bytes = new Uint8Array(responseBuffer);
+    let checksum = checksum32(bytes);
+    let magic = bytesToHexPrefix(bytes, 16);
+    let inferredKind = inferImageKind(bytes, contentType);
+    let bitmapProbe = await probeCreateImageBitmap(responseBuffer, contentType);
+    let virtualNetworkProbe = await probeVirtualNetworkImageURL(url, checksum);
+
+    return [
+      `fetchProbe=${response.status} ${response.statusText || ''}`.trim(),
+      `contentType=${contentType}`,
+      `contentLength=${contentLength}`,
+      `swClientId=${swClientId}`,
+      `swClientFocused=${swClientFocused}`,
+      `swClientVisibility=${swClientVisibility}`,
+      `swClientURL=${swClientURL}`,
+      `bodyBytes=${String(bytes.byteLength)}`,
+      `checksum=${checksum}`,
+      `magic=${magic}`,
+      `inferredKind=${inferredKind}`,
+      bitmapProbe,
+      virtualNetworkProbe,
+    ].join(' | ');
+  } catch (error) {
+    let reason = normalizeErrorMessage(error);
+    return `fetchProbe=error (${reason})`;
+  }
+}
+
+async function probeVirtualNetworkImageURL(
+  url: string,
+  browserFetchChecksum: string,
+): Promise<string> {
+  try {
+    let network = getService('network') as {
+      virtualNetwork: { fetch: typeof fetch };
+    };
+    let response = await network.virtualNetwork.fetch(url);
+    let contentType = response.headers.get('content-type') ?? '<missing>';
+    let buffer = await response.arrayBuffer();
+    let bytes = new Uint8Array(buffer);
+    let checksum = checksum32(bytes);
+    let magic = bytesToHexPrefix(bytes, 16);
+    let inferredKind = inferImageKind(bytes, contentType);
+    let matchesBrowserFetch = checksum === browserFetchChecksum ? 'yes' : 'no';
+
+    return [
+      `virtualProbe=${response.status} ${response.statusText || ''}`.trim(),
+      `virtualContentType=${contentType}`,
+      `virtualBodyBytes=${String(bytes.byteLength)}`,
+      `virtualChecksum=${checksum}`,
+      `virtualMagic=${magic}`,
+      `virtualInferredKind=${inferredKind}`,
+      `virtualMatchesFetch=${matchesBrowserFetch}`,
+    ].join(' | ');
+  } catch (error) {
+    return `virtualProbe=error (${normalizeErrorMessage(error)})`;
+  }
+}
+
+async function probeImgDecode(img: HTMLImageElement): Promise<string> {
+  if (typeof img.decode !== 'function') {
+    return 'imgDecode=unsupported';
+  }
+  try {
+    await img.decode();
+    return 'imgDecode=ok';
+  } catch (error) {
+    return `imgDecode=error (${normalizeErrorMessage(error)})`;
+  }
+}
+
+async function probeCreateImageBitmap(
+  bytes: ArrayBuffer,
+  contentType: string,
+): Promise<string> {
+  if (typeof createImageBitmap !== 'function') {
+    return 'bitmapDecode=unsupported';
+  }
+  try {
+    let blob = new Blob([bytes], {
+      type:
+        contentType === '<missing>' ? 'application/octet-stream' : contentType,
+    });
+    let bitmap = await createImageBitmap(blob);
+    let dimensions = `${bitmap.width}x${bitmap.height}`;
+    bitmap.close();
+    return `bitmapDecode=ok(${dimensions})`;
+  } catch (error) {
+    return `bitmapDecode=error (${normalizeErrorMessage(error)})`;
+  }
+}
+
+function bytesToHexPrefix(bytes: Uint8Array, count: number): string {
+  let prefix = bytes.slice(0, count);
+  if (!prefix.length) {
+    return '<empty>';
+  }
+  return Array.from(prefix)
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function inferImageKind(bytes: Uint8Array, contentType: string): string {
+  let loweredContentType = contentType.toLowerCase();
+  if (loweredContentType.includes('svg')) {
+    return 'svg';
+  }
+  if (isJpegBytes(bytes)) {
+    return 'jpeg';
+  }
+  if (isPngBytes(bytes)) {
+    return 'png';
+  }
+  if (isGifBytes(bytes)) {
+    return 'gif';
+  }
+  if (isWebpBytes(bytes)) {
+    return 'webp';
+  }
+  if (isAvifBytes(bytes)) {
+    return 'avif';
+  }
+  if (looksLikeSvgText(bytes)) {
+    return 'svg-text';
+  }
+  return 'unknown';
+}
+
+function isJpegBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 3 &&
+    bytes[0] === 0xff &&
+    bytes[1] === 0xd8 &&
+    bytes[2] === 0xff
+  );
+}
+
+function isPngBytes(bytes: Uint8Array): boolean {
+  let signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  return signature.every((byte, index) => bytes[index] === byte);
+}
+
+function isGifBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x38 &&
+    (bytes[4] === 0x39 || bytes[4] === 0x37) &&
+    bytes[5] === 0x61
+  );
+}
+
+function isWebpBytes(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  );
+}
+
+function isAvifBytes(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) {
+    return false;
+  }
+  let hasFtyp =
+    bytes[4] === 0x66 &&
+    bytes[5] === 0x74 &&
+    bytes[6] === 0x79 &&
+    bytes[7] === 0x70;
+  if (!hasFtyp) {
+    return false;
+  }
+  let brand = String.fromCharCode(
+    bytes[8] ?? 0,
+    bytes[9] ?? 0,
+    bytes[10] ?? 0,
+    bytes[11] ?? 0,
+  ).toLowerCase();
+  return brand.startsWith('avi');
+}
+
+function looksLikeSvgText(bytes: Uint8Array): boolean {
+  let sample = new TextDecoder().decode(bytes.slice(0, 256)).toLowerCase();
+  return sample.includes('<svg');
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message
+    ? error.message
+    : String(error ?? 'unknown');
+}
+
+function checksum32(bytes: Uint8Array): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i]!;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
 function normalizeCapturedErrorText(errorText: string): string {
   let normalized = formatCapturedRenderError(errorText);
   return normalized ?? errorText;
@@ -383,6 +826,7 @@ export function captureModuleResult(): {
 type RenderingContextWithPrerender = TestContext & {
   owner: Owner;
   __cardPrerenderElement?: HTMLElement;
+  __hasMountedCardPrerender?: boolean;
 };
 
 export async function makeRenderer() {
@@ -400,15 +844,22 @@ export async function makeRenderer() {
     context.__cardPrerenderElement = element;
   }
 
+  if (context.__hasMountedCardPrerender) {
+    // Rendering tests can set up multiple realms in one test context. Reusing a
+    // single CardPrerender instance for the whole test avoids tearing down an
+    // in-flight prerender between realm setups, which would cancel the same
+    // background work we are intentionally emulating from the server.
+    return;
+  }
+
   renderIntoElement(
     class CardPrerenderHost extends GlimmerComponent {
-      <template>
-        <CardPrerender />
-      </template>
+      <template><CardPrerender /></template>
     },
     element as unknown as SimpleElement,
     owner,
   );
+  context.__hasMountedCardPrerender = true;
 }
 
 class MockLocalIndexer extends Service {
@@ -419,10 +870,16 @@ class MockLocalIndexer extends Service {
   #indexWriter: IndexWriter | undefined;
   #prerenderer: Prerenderer | undefined;
   setup(prerenderer: Prerenderer) {
-    if (this.#prerenderer) {
+    if (this.#prerenderer === prerenderer) {
       return;
     }
     this.#prerenderer = prerenderer;
+  }
+  teardown(prerenderer?: Prerenderer) {
+    if (prerenderer && this.#prerenderer !== prerenderer) {
+      return;
+    }
+    this.#prerenderer = undefined;
   }
   async configureRunner(adapter: RealmAdapter, indexWriter: IndexWriter) {
     this.#adapter = adapter;
@@ -472,8 +929,14 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     await store.flushSaves();
     await store.loaded();
     let context = this as RenderingContextWithPrerender;
-    context.__cardPrerenderElement?.remove();
+    if (context.__cardPrerenderElement) {
+      teardownIsolatedRender(
+        context.__cardPrerenderElement as unknown as SimpleElement,
+      );
+      context.__cardPrerenderElement.remove();
+    }
     context.__cardPrerenderElement = undefined;
+    context.__hasMountedCardPrerender = undefined;
     // reference counts should balance out automatically as components are destroyed
     store.resetCache({ preserveReferences: true });
     let renderStore = getService('render-store');
@@ -483,6 +946,7 @@ export function setupLocalIndexing(hooks: NestedHooks) {
       clearFetchCache: true,
       reason: 'test teardown',
     });
+    getTestRealmRegistry().clear();
   });
 }
 
@@ -501,7 +965,8 @@ interface RealmContents {
     | LooseSingleCardDocument
     | RealmInfo
     | Record<string, unknown>
-    | string;
+    | string
+    | Uint8Array;
 }
 
 export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
@@ -510,9 +975,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'OpenAI: GPT-5',
-          description: 'Test fixture model configuration referencing GPT-5.',
-          thumbnailURL: null,
+          cardTitle: 'OpenAI: GPT-5',
+          cardDescription:
+            'Test fixture model configuration referencing GPT-5.',
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'openai/gpt-5',
@@ -534,15 +1000,44 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
     },
   },
+  'ModelConfiguration/test-claude-sonnet-46.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardInfo: {
+          cardTitle: 'Anthropic: Claude Sonnet 4.6',
+          cardDescription:
+            'Test fixture model configuration referencing Claude Sonnet 4.6.',
+          cardThumbnailURL: null,
+          notes: null,
+        },
+        modelId: 'anthropic/claude-sonnet-4.6',
+        toolsSupported: true,
+      },
+      relationships: {
+        'cardInfo.theme': {
+          links: {
+            self: null,
+          },
+        },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/system-card',
+          name: 'ModelConfiguration',
+        },
+      },
+    },
+  },
   'ModelConfiguration/test-claude-sonnet-45.json': {
     data: {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude Sonnet 4.5',
-          description:
+          cardTitle: 'Anthropic: Claude Sonnet 4.5',
+          cardDescription:
             'Test fixture model configuration referencing Claude Sonnet 4.5.',
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'anthropic/claude-sonnet-4.5',
@@ -568,10 +1063,10 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       type: 'card',
       attributes: {
         cardInfo: {
-          title: 'Anthropic: Claude 3.7 Sonnet',
-          description:
+          cardTitle: 'Anthropic: Claude 3.7 Sonnet',
+          cardDescription:
             'Test fixture model configuration referencing Claude 3.7 Sonnet.',
-          thumbnailURL: null,
+          cardThumbnailURL: null,
           notes: null,
         },
         modelId: 'anthropic/claude-3.7-sonnet',
@@ -599,7 +1094,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       relationships: {
         defaultModelConfiguration: {
           links: {
-            self: '../ModelConfiguration/test-claude-sonnet-45',
+            self: '../ModelConfiguration/test-claude-sonnet-46',
           },
         },
         'modelConfigurations.0': {
@@ -609,10 +1104,15 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
         },
         'modelConfigurations.1': {
           links: {
-            self: '../ModelConfiguration/test-claude-sonnet-45',
+            self: '../ModelConfiguration/test-claude-sonnet-46',
           },
         },
         'modelConfigurations.2': {
+          links: {
+            self: '../ModelConfiguration/test-claude-sonnet-45',
+          },
+        },
+        'modelConfigurations.3': {
           links: {
             self: '../ModelConfiguration/test-claude-37-sonnet',
           },
@@ -632,11 +1132,15 @@ export async function setupAcceptanceTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -648,6 +1152,8 @@ export async function setupAcceptanceTestRealm({
     isAcceptanceTest: true,
     permissions,
     mockMatrixUtils,
+    startMatrix,
+    fileSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -661,11 +1167,15 @@ export async function setupIntegrationTestRealm({
   realmURL,
   permissions,
   mockMatrixUtils,
+  startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let resolvedRealmURL = ensureTrailingSlash(realmURL ?? testRealmURL);
   setupAuthEndpoints({
@@ -677,6 +1187,8 @@ export async function setupIntegrationTestRealm({
     isAcceptanceTest: false,
     permissions: permissions as RealmPermissions,
     mockMatrixUtils,
+    startMatrix,
+    fileSizeLimitBytes,
   });
   getTestRealmRegistry().set(result.realm.url, {
     realm: result.realm,
@@ -701,18 +1213,23 @@ export const createPrerenderAuth = (
   // Host tests prerender via the in-app card-prerender component, so we don't need real JWT auth.
   return JSON.stringify({});
 };
+
 async function setupTestRealm({
   contents,
   realmURL,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
   mockMatrixUtils,
+  startMatrix = true,
+  fileSizeLimitBytes,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
+  startMatrix?: boolean;
+  fileSizeLimitBytes?: number;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = getService('network');
@@ -761,7 +1278,6 @@ async function setupTestRealm({
       'definition-lookup:main',
     ) as DefinitionLookup;
   }
-
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
   let worker = new Worker({
     indexWriter: new IndexWriter(dbAdapter),
@@ -779,21 +1295,32 @@ async function setupTestRealm({
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: {
-      ...baseTestMatrix,
-      username: testRealmURLToUsername(realmURL),
-    },
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
-    realmServerMatrixClient: new MatrixClient({
+    matrixClient: new MatrixClient({
       matrixURL: baseTestMatrix.url,
       username: testRealmServerMatrixUsername,
       seed: testRealmSecretSeed,
     }),
     realmServerURL: ensureTrailingSlash(ENV.realmServerURL),
     definitionLookup,
+    cardSizeLimitBytes: Number(
+      process.env.CARD_SIZE_LIMIT_BYTES ?? DEFAULT_CARD_SIZE_LIMIT_BYTES,
+    ),
+    fileSizeLimitBytes:
+      fileSizeLimitBytes ??
+      Number(
+        process.env.FILE_SIZE_LIMIT_BYTES ?? DEFAULT_FILE_SIZE_LIMIT_BYTES,
+      ),
+  });
+
+  // Register the realm early so realm-server mock _info lookups can resolve
+  // without falling back to real network fetches.
+  getTestRealmRegistry().set(realm.url, {
+    realm,
+    adapter,
   });
 
   // we use this to run cards that were added to the test filesystem
@@ -803,14 +1330,16 @@ async function setupTestRealm({
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
-  await mockMatrixUtils.start();
   await adapter.ready;
   await worker.run();
   await realm.start();
+  if (startMatrix) {
+    await mockMatrixUtils.start();
+  }
 
   let realmServer = getService('realm-server');
   if (!realmServer.availableRealmURLs.includes(realmURL)) {
-    realmServer.setAvailableRealmURLs([realmURL]);
+    await realmServer.setAvailableRealmURLs([realmURL]);
   }
 
   return { realm, adapter };
@@ -971,10 +1500,87 @@ export function setupCardLogs(
   });
 }
 
+export function setupCardTest(hooks: NestedHooks): {
+  mockMatrixUtils: MockUtils;
+} {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
+  setupCardLogs(hooks, async () =>
+    (getService('loader-service') as any).loader.import(
+      `${baseRealm.url}card-api`,
+    ),
+  );
+  return {
+    mockMatrixUtils: setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+      autostart: true,
+    }),
+  };
+}
+
 export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
+}
+
+// Create minimal valid PNG bytes for testing (1x1 pixel by default)
+export function makeMinimalPng(width = 1, height = 1): Uint8Array {
+  let signature = [137, 80, 78, 71, 13, 10, 26, 10];
+  let ihdrData = new Uint8Array(13);
+  let ihdrView = new DataView(ihdrData.buffer);
+  ihdrView.setUint32(0, width);
+  ihdrView.setUint32(4, height);
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 2; // color type (RGB)
+  ihdrData[10] = 0; // compression
+  ihdrData[11] = 0; // filter
+  ihdrData[12] = 0; // interlace
+  let ihdrChunk = buildPngChunk('IHDR', ihdrData);
+  let idatData = new Uint8Array([
+    0x08, 0xd7, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x01, 0x00, 0x01,
+  ]);
+  let idatChunk = buildPngChunk('IDAT', idatData);
+  let iendChunk = buildPngChunk('IEND', new Uint8Array(0));
+  let totalLength =
+    signature.length + ihdrChunk.length + idatChunk.length + iendChunk.length;
+  let png = new Uint8Array(totalLength);
+  let offset = 0;
+  png.set(signature, offset);
+  offset += signature.length;
+  png.set(ihdrChunk, offset);
+  offset += ihdrChunk.length;
+  png.set(idatChunk, offset);
+  offset += idatChunk.length;
+  png.set(iendChunk, offset);
+  return png;
+}
+
+function buildPngChunk(type: string, data: Uint8Array): Uint8Array {
+  let chunk = new Uint8Array(4 + 4 + data.length + 4);
+  let view = new DataView(chunk.buffer);
+  view.setUint32(0, data.length);
+  for (let i = 0; i < 4; i++) {
+    chunk[4 + i] = type.charCodeAt(i);
+  }
+  chunk.set(data, 8);
+  let crc = crc32Png(chunk.slice(4, 8 + data.length));
+  view.setUint32(8 + data.length, crc);
+  return chunk;
+}
+
+function crc32Png(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i]!;
+    for (let j = 0; j < 8; j++) {
+      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 // --- Created-at test utilities ---
@@ -1172,12 +1778,13 @@ export function setupRealmServerEndpoints(
   ];
 
   let handleRealmServerRequest = async (req: Request) => {
-    let endpoint = endpoints?.find((e) => req.url.includes(e.route));
+    let pathname = new URL(req.url).pathname;
+    let endpoint = endpoints?.find((e) => pathname === `/${e.route}`);
     if (endpoint) {
       return await endpoint.getResponse(req);
     }
 
-    endpoint = defaultEndpoints.find((e) => req.url.includes(e.route));
+    endpoint = defaultEndpoints.find((e) => pathname === `/${e.route}`);
     if (endpoint) {
       return await endpoint.getResponse(req);
     }
@@ -1195,7 +1802,7 @@ export async function assertMessages(
   messages: {
     from: string;
     message?: string;
-    cards?: { id: string; title?: string; realmIconUrl?: string }[];
+    cards?: { id: string; cardTitle?: string; realmIconUrl?: string }[];
     files?: { name: string; sourceUrl: string }[];
   }[],
 ) {
@@ -1219,17 +1826,17 @@ export async function assertMessages(
         .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
         .exists({ count: cards.length });
       cards.map((card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
+        if (card.cardTitle) {
+          if (message != null && card.cardTitle.includes(message)) {
             throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
+              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.cardTitle}'`,
             );
           }
           assert
             .dom(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
             )
-            .containsText(card.title);
+            .containsText(card.cardTitle);
         }
 
         if (card.realmIconUrl) {
@@ -1267,9 +1874,9 @@ export async function assertMessages(
 }
 
 export const cardInfo = Object.freeze({
-  title: null,
-  description: null,
-  thumbnailURL: null,
+  name: null,
+  summary: null,
+  cardThumbnailURL: null,
   notes: null,
 });
 

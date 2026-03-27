@@ -10,6 +10,8 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { BOT_TRIGGER_EVENT_TYPE } from '@cardstack/runtime-common';
+import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -24,10 +26,6 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type {
-  FileDefManager,
-  PrivilegedFileDefManager,
-} from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
@@ -59,15 +57,17 @@ type Plural<T> = {
 
 const publicRealmURLs = [
   baseRealm.url,
-  ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
+  ENV.resolvedCatalogRealmURL &&
+    ensureTrailingSlash(ENV.resolvedCatalogRealmURL),
   ensureTrailingSlash(ENV.resolvedSkillsRealmURL),
-];
+].filter(Boolean) as string[];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
+  private stopServerStateSubscriptions: Array<() => void> = [];
 
   private txnCtr = 0;
-  private fileDefManager: FileDefManager;
+  private fileDefManager: FileDefManagerImpl;
   slidingSyncInstance: any;
 
   constructor(
@@ -110,24 +110,30 @@ export class MockClient implements ExtendedClient {
   async startClient(
     opts?: MatrixSDK.IStartClientOpts | undefined,
   ): Promise<void> {
+    this.stopClient();
+
     if (opts?.slidingSync) {
       this.slidingSyncInstance = opts.slidingSync;
       await opts.slidingSync.start();
     }
 
-    this.serverState.onEvent((serverEvent: IEvent) => {
-      this.emitEvent(new MatrixEvent(serverEvent));
-    });
+    this.stopServerStateSubscriptions.push(
+      this.serverState.onEvent((serverEvent: IEvent) => {
+        this.emitEvent(new MatrixEvent(serverEvent));
+      }),
+    );
 
-    this.serverState.onSlidingSyncEvent((roomId, roomName) => {
-      if (this.slidingSyncInstance) {
-        this.slidingSyncInstance.triggerRoomSync(
-          roomId,
-          roomName,
-          this.serverState,
-        );
-      }
-    });
+    this.stopServerStateSubscriptions.push(
+      this.serverState.onSlidingSyncEvent((roomId, roomName) => {
+        if (this.slidingSyncInstance) {
+          this.slidingSyncInstance.triggerRoomSync(
+            roomId,
+            roomName,
+            this.serverState,
+          );
+        }
+      }),
+    );
 
     this.emitEvent(
       new MatrixEvent({
@@ -345,11 +351,27 @@ export class MockClient implements ExtendedClient {
   }
 
   invite(
-    _roomId: string,
-    _userId: string,
+    roomId: string,
+    userId: string,
     _reason?: string | undefined,
   ): Promise<{}> {
-    throw new Error('Method not implemented.');
+    let sender =
+      this.loggedInAs ?? this.clientOpts.userId ?? '@test_user:localhost';
+    let timestamp = Date.now();
+    this.serverState.setRoomState(
+      sender,
+      roomId,
+      'm.room.member',
+      {
+        displayname: userId,
+        membership: 'invite',
+        membershipTs: timestamp,
+        membershipInitiator: sender,
+      },
+      userId,
+      timestamp,
+    );
+    return Promise.resolve({});
   }
 
   joinRoom(
@@ -392,6 +414,9 @@ export class MockClient implements ExtendedClient {
   }
 
   logout(_stopClient?: boolean | undefined): Promise<{}> {
+    if (_stopClient) {
+      this.stopClient();
+    }
     this.clientOpts.userId = undefined;
     return Promise.resolve({});
   }
@@ -606,6 +631,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
+      case BOT_TRIGGER_EVENT_TYPE:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':
@@ -708,14 +734,32 @@ export class MockClient implements ExtendedClient {
   }
 
   off<T extends MatrixSDK.EmittedEvents | MatrixSDK.EventEmitterEvents>(
-    _event: T,
-    _listener: MatrixSDK.Listener<
+    event: T,
+    listener: MatrixSDK.Listener<
       MatrixSDK.EmittedEvents,
       MatrixSDK.ClientEventHandlerMap,
       T
     >,
   ): MatrixSDK.MatrixClient {
+    // @ts-expect-error haven't got the types right yet
+    let list = this.listeners[event];
+    if (!list) {
+      return this as unknown as MatrixSDK.MatrixClient;
+    }
+    let index = list.indexOf(listener as never);
+    if (index > -1) {
+      list.splice(index, 1);
+    }
     return this as unknown as MatrixSDK.MatrixClient;
+  }
+
+  stopClient(): void {
+    for (let stop of this.stopServerStateSubscriptions) {
+      stop();
+    }
+    this.stopServerStateSubscriptions = [];
+    this.slidingSyncInstance?.stop?.();
+    this.slidingSyncInstance = undefined;
   }
 
   async setPowerLevel(
@@ -808,46 +852,86 @@ export class MockClient implements ExtendedClient {
   }
 
   async cacheContentHashIfNeeded(event: DiscreteMatrixEvent): Promise<void> {
-    this.fileDefManager.cacheContentHashIfNeeded(event);
+    await this.fileDefManager.cacheContentHashIfNeeded(event);
   }
 
   async recacheContentHash(contentHash: string, url: string): Promise<void> {
-    const fileDefManager = this.fileDefManager as PrivilegedFileDefManager;
-    if (fileDefManager.invalidUrlCache.has(url)) {
+    const canonicalKey = canonicalizeMatrixMediaKey(url) || url;
+    if (this.fileDefManager.invalidUrlCache.has(canonicalKey)) {
       // Skipping re-caching for this url as it was previously checked and is invalid
       return;
     }
 
-    // Update the cache with the new URL for the content hash
-    fileDefManager.contentHashCache.set(contentHash, url);
+    let normalizedUrl = url;
+    if (canonicalKey.startsWith('mxc://')) {
+      normalizedUrl = this.mxcUrlToHttp(canonicalKey);
+    }
 
-    let contentArrayBuffer = this.serverState.getContent(url);
-    let content = contentArrayBuffer?.toString();
-    if (!content) {
+    let contentArrayBuffer =
+      this.serverState.getContent(normalizedUrl) ||
+      this.serverState.getContent(url);
+    if (!contentArrayBuffer) {
       throw new Error('No content found for URL: ' + url);
     }
-    const fetchedContentHash = await fileDefManager.getContentHash(content);
+    let content = new Uint8Array(contentArrayBuffer);
+    const fetchedContentHash =
+      await this.fileDefManager.getContentHash(content);
     if (fetchedContentHash !== contentHash) {
       console.warn(
         `Content hash mismatch for URL: ${url}, skipping re-caching step`,
       );
-      fileDefManager.invalidUrlCache.add(url);
+      this.fileDefManager.invalidUrlCache.add(canonicalKey);
       return;
     }
 
-    // Update the cache with the new URL for the content hash
-    fileDefManager.contentHashCache.set(contentHash, url);
+    // Update the cache with the canonical matrix media URL when possible.
+    this.fileDefManager.contentHashCache.set(contentHash, normalizedUrl);
+  }
+
+  async prefetchFileContent(file: FileDef): Promise<void> {
+    return await this.fileDefManager.prefetchFileContent(file);
+  }
+
+  async prefetchLocalFileContent(
+    file: FileDef,
+    bytes: Uint8Array,
+    contentType: string,
+  ): Promise<void> {
+    return await this.fileDefManager.prefetchLocalFileContent(
+      file,
+      bytes,
+      contentType,
+    );
+  }
+
+  clearPrefetchedContent(): void {
+    this.fileDefManager.clearPrefetchedContent();
   }
 
   async uploadContent(
-    _content: string,
-    _opts?: { type?: string; name?: string },
-  ): Promise<any> {
+    file: XMLHttpRequestBodyInit,
+    _opts?: MatrixSDK.UploadOpts,
+  ): Promise<MatrixSDK.UploadResponse> {
+    if (this.sdkOpts.uploadContentInterceptor) {
+      await this.sdkOpts.uploadContentInterceptor();
+    }
     let contentUri = `mxc://mock-server/${Math.random()}`;
-    this.serverState.addContent(
-      this.mxcUrlToHttp(contentUri),
-      _content as unknown as ArrayBuffer,
-    );
+    let buffer: ArrayBuffer;
+    if (file instanceof Uint8Array) {
+      buffer = (file.buffer as ArrayBuffer).slice(
+        file.byteOffset,
+        file.byteOffset + file.byteLength,
+      );
+    } else if (file instanceof ArrayBuffer) {
+      buffer = file;
+    } else if (typeof file === 'string') {
+      buffer = new TextEncoder().encode(file).buffer as ArrayBuffer;
+    } else {
+      throw new Error(
+        `MockClient.uploadContent: unsupported file type ${typeof file}`,
+      );
+    }
+    this.serverState.addContent(this.mxcUrlToHttp(contentUri), buffer);
     return { content_uri: contentUri };
   }
 
@@ -858,7 +942,8 @@ export class MockClient implements ExtendedClient {
     if (!content) {
       throw new Error(`content not found for ${serializedFile.url}`);
     }
-    return JSON.parse(content.toString()) as LooseSingleCardDocument;
+    let text = new TextDecoder().decode(content);
+    return JSON.parse(text) as LooseSingleCardDocument;
   }
 
   async downloadAsFileInBrowser(
@@ -868,7 +953,12 @@ export class MockClient implements ExtendedClient {
   }
 
   mxcUrlToHttp(mxcUrl: string): string {
-    return mxcUrl.replace('mxc://', 'http://mock-server/');
+    // Produce URLs that include /_matrix/media/ so they are recognized as
+    // Matrix media URLs by isMatrixMediaUrl and canonicalizeMatrixMediaKey.
+    // mxc://mock-server/id → http://mock-server/_matrix/media/v3/download/mock-server/id
+    let [serverName, ...rest] = mxcUrl.replace('mxc://', '').split('/');
+    let mediaId = rest.join('/');
+    return `http://mock-server/_matrix/media/v3/download/${serverName}/${mediaId}`;
   }
 
   async slidingSync(

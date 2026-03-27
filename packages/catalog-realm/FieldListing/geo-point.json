@@ -16,9 +16,9 @@
       "summary": "The Geo Point Field is a powerful component that enables you to capture, store, and display geographical coordinates in your application. Perfect for location-based features, mapping applications, and any scenario where you need to work with latitude and longitude data.\n\nKey Features\n- Coordinate Storage: Store precise latitude and longitude values with decimal precision.\n- Interactive Map Integration: Visualize coordinates on an interactive map with click-to-set functionality.\n- Real-time Updates: Coordinates update instantly when modified through the map interface.\n\nDisplay Options\n- Text Format: Display coordinates as simple text (e.g., \"37.7749, -122.4194\").\n- Map Format: Show coordinates on an interactive map with markers and popups.\n- Edit Mode: Direct input fields for precise coordinate entry.\n\nUse Cases\n- Store business locations and addresses\n- Track user positions and preferences\n- Create location-based content\n- Build mapping and navigation features\n- Geotag photos, events, or other content",
       "cardInfo": {
         "notes": null,
-        "title": "Geo Point",
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/thumbnail.png"
+        "name": "Geo Point",
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/geo-point-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -39,7 +39,7 @@
       },
       "specs.0": {
         "links": {
-          "self": "../Spec/geo-point"
+          "self": "../field-spec/GeoPointFieldSpec/d1f2c3b4-a5e6-4f7a-8b9c-0d1e2f3a4b5c"
         }
       },
       "specs.1": {
@@ -54,7 +54,7 @@
       },
       "examples.0": {
         "links": {
-          "self": "../fields-preview/GeoPointPreview/ef3d6b85-cc8b-46fb-9447-a329d2ab270c"
+          "self": "../field-spec/GeoPointFieldSpec/d1f2c3b4-a5e6-4f7a-8b9c-0d1e2f3a4b5c"
         }
       },
       "categories.0": {

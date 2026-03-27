@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Color Field",
-      "description": "A field that captures color values.",
+      "cardTitle": "Color Field",
+      "cardDescription": "A field that captures color values.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/color",

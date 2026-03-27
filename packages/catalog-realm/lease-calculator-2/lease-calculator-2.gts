@@ -64,7 +64,7 @@ class Isolated extends Component<typeof LeaseFinanceCalculator> {
             stroke-width='1.5'
           />
           <div class='vehicle-info'>
-            <h1>{{@model.title}}</h1>
+            <h1>{{@model.cardTitle}}</h1>
             <div class='vehicle-meta'>{{@model.vehicleMake}}
               {{@model.rateFindrModel}}
               {{@model.rateFindrTrim}}</div>

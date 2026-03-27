@@ -8,7 +8,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import { Button, Pill } from '@cardstack/boxel-ui/components'; // ² Enhanced UI components
 import {
   formatDateTime,
@@ -213,7 +213,7 @@ class FocusTimerIsolated extends Component<typeof FocusTimerCard> {
       if (this.args?.model) {
         this.args.model.isActive = true;
         this.args.model.currentPhase = 'focus';
-        // ⁷⁵ FIXED: Don't modify DatetimeFields to prevent serialization errors
+        // ⁷⁵ FIXED: Don't modify DateTimeFields to prevent serialization errors
         this.args.model.timeRemaining = this.currentTime;
       }
 
@@ -275,7 +275,7 @@ class FocusTimerIsolated extends Component<typeof FocusTimerCard> {
         this.args.model.isActive = false;
         this.args.model.currentPhase = 'ready';
         this.args.model.timeRemaining = 0;
-        // ⁷⁶ FIXED: Don't modify DatetimeFields to prevent serialization errors
+        // ⁷⁶ FIXED: Don't modify DateTimeFields to prevent serialization errors
         // this.args.model.startTime = null;
       }
     } catch (e) {
@@ -314,7 +314,7 @@ class FocusTimerIsolated extends Component<typeof FocusTimerCard> {
         this.args.model.isActive = false;
         this.args.model.currentPhase = 'ready';
         this.args.model.timeRemaining = 0;
-        // ⁷⁹ CRITICAL: Don't modify DatetimeFields to prevent serialization errors
+        // ⁷⁹ CRITICAL: Don't modify DateTimeFields to prevent serialization errors
         // this.args.model.completedAt = null;
         // this.args.model.startTime = null;
       }
@@ -370,12 +370,12 @@ class FocusTimerIsolated extends Component<typeof FocusTimerCard> {
       this.isRunning = false;
       this.timerTask.cancelAll();
 
-      // Mark session as complete - don't modify DatetimeFields
+      // Mark session as complete - don't modify DateTimeFields
       if (this.args?.model) {
         this.args.model.isActive = false;
         this.args.model.currentPhase = 'completed';
         this.args.model.timeRemaining = 0;
-        // ⁷⁴ SAFE: Don't modify DatetimeFields to prevent serialization issues
+        // ⁷⁴ SAFE: Don't modify DateTimeFields to prevent serialization issues
       }
     } catch (e) {
       console.error('FocusTimer: Error completing all sessions', e);
@@ -1580,8 +1580,8 @@ export class FocusTimerCard extends CardDef {
 
   // ¹⁷ Session state management
   @field isActive = contains(BooleanField);
-  @field startTime = contains(DatetimeField); // ¹⁸ When the session began
-  @field completedAt = contains(DatetimeField); // ¹⁹ When all sessions finished
+  @field startTime = contains(DateTimeField); // ¹⁸ When the session began
+  @field completedAt = contains(DateTimeField); // ¹⁹ When all sessions finished
 
   // ²⁰ Computed completion percentage with enhanced error handling
   @field completionPercentage = contains(NumberField, {
@@ -1600,7 +1600,7 @@ export class FocusTimerCard extends CardDef {
   });
 
   // ²¹ Enhanced computed title with subject context
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: FocusTimerCard) {
       try {
         const session = this.sessionName || 'Focus Session';

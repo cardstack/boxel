@@ -22,6 +22,10 @@ interface SubscriptionData {
   extraCreditsAvailableInBalance: number | null;
   stripeCustomerId: string | null;
   stripeCustomerEmail: string | null;
+  lowCreditThreshold: number | null;
+  lastDailyCreditGrantAt: number | null;
+  nextDailyCreditGrantAt: number | null;
+  dailyCreditGrantCount: number;
 }
 
 export default class BillingService extends Service {
@@ -146,6 +150,14 @@ export default class BillingService extends Service {
       let stripeCustomerId = json.data?.attributes?.stripeCustomerId ?? null;
       let stripeCustomerEmail =
         json.data?.attributes?.stripeCustomerEmail ?? null;
+      let lowCreditThreshold =
+        json.data?.attributes?.lowCreditThreshold ?? null;
+      let lastDailyCreditGrantAt =
+        json.data?.attributes?.lastDailyCreditGrantAt ?? null;
+      let nextDailyCreditGrantAt =
+        json.data?.attributes?.nextDailyCreditGrantAt ?? null;
+      let dailyCreditGrantCount =
+        json.data?.attributes?.dailyCreditGrantCount ?? 0;
 
       this._subscriptionData = {
         plan,
@@ -154,6 +166,10 @@ export default class BillingService extends Service {
         extraCreditsAvailableInBalance,
         stripeCustomerId,
         stripeCustomerEmail,
+        lowCreditThreshold,
+        lastDailyCreditGrantAt,
+        nextDailyCreditGrantAt,
+        dailyCreditGrantCount,
       };
     } finally {
       this._loadingSubscriptionData = false;

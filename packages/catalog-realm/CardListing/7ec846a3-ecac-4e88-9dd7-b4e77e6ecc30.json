@@ -17,9 +17,9 @@
       "summary": "Professional cocktail recipe manager with authentic speakeasy design - configure ingredients, garnishes, and preparation methods while viewing Waldorf-inspired presentations. Features difficulty ratings, preparation timers, bartender notes, cocktail origin stories, and luxurious dark theme styling for immersive mixology experiences.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cocktail-recipe-listing/thumbnail.png"
       }
     },
     "relationships": {

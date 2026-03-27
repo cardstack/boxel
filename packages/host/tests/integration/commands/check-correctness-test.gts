@@ -1,7 +1,15 @@
+import { waitUntil } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { CommandContext } from '@cardstack/runtime-common';
+
+import {
+  REPLACE_MARKER,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+} from '@cardstack/runtime-common';
 
 import CheckCorrectnessCommand from '@cardstack/host/commands/check-correctness';
 import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
@@ -11,6 +19,8 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -26,11 +36,14 @@ module('Integration | commands | check-correctness', function (hooks) {
     activeRealms: [testRealmURL],
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'pet.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'pet.gts': `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import BooleanField from "https://cardstack.com/base/boolean";
@@ -48,23 +61,24 @@ module('Integration | commands | check-correctness', function (hooks) {
             });
           }
         `,
-        'Pet/billy.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              name: 'Billy',
-              hasError: false,
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../pet',
-                name: 'Pet',
+          'Pet/billy.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Billy',
+                hasError: false,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../pet',
+                  name: 'Pet',
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+    );
     let realmService = getService('realm');
     let messageService = getService('message-service');
     messageService.register();
@@ -237,5 +251,134 @@ module('Integration | commands | check-correctness', function (hooks) {
     });
 
     assert.true(thirdResult.correct, 'third run reports no errors');
+  });
+
+  test('skips correctness checks for empty files', async function (assert) {
+    let commandService = getService('command-service') as {
+      commandContext: CommandContext;
+    };
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let roomId = '!room:example.com';
+    let emptyFileUrl = `${testRealmURL}empty.gts`;
+    let cardService = getService('card-service');
+
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    await patchCodeCommand.execute({
+      fileUrl: emptyFileUrl,
+      codeBlocks: [codeBlock],
+      roomId,
+    });
+
+    await waitUntil(async () => {
+      let { status, content } = await cardService.getSource(
+        new URL(emptyFileUrl),
+      );
+      return status === 200 && content.trim() === '';
+    });
+
+    let result = await command.execute({
+      targetType: 'file',
+      targetRef: emptyFileUrl,
+      roomId,
+    });
+
+    assert.true(result.correct, 'empty file reports as correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+  });
+
+  test('reports size limit errors for file writes', async function (assert) {
+    let commandService = getService('command-service') as {
+      commandContext: CommandContext;
+    };
+    let environmentService = getService('environment-service') as any;
+    let cardService = getService('card-service');
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let roomId = '!room:example.com';
+    let fileUrl = `${testRealmURL}pet.gts`;
+
+    let originalMaxSize = environmentService.fileSizeLimitBytes;
+    environmentService.fileSizeLimitBytes = 20;
+
+    try {
+      let { content } = await cardService.getSource(new URL(fileUrl));
+      const codeBlock = `${SEARCH_MARKER}
+${content}
+${SEPARATOR_MARKER}
+${'x'.repeat(21)}
+${REPLACE_MARKER}`;
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: [codeBlock],
+        roomId,
+      });
+
+      let result = await command.execute({
+        targetType: 'file',
+        targetRef: fileUrl,
+        roomId,
+      });
+
+      assert.false(result.correct, 'size limit error reports incorrect');
+      assert.ok(
+        result.errors[0]?.includes('exceeds maximum allowed size (20 bytes)'),
+        'error mentions size limit',
+      );
+    } finally {
+      environmentService.fileSizeLimitBytes = originalMaxSize;
+    }
+  });
+
+  test('reports size limit errors for card writes via PatchCardInstanceCommand', async function (assert) {
+    let commandService = getService('command-service') as {
+      commandContext: CommandContext;
+    };
+    let environmentService = getService('environment-service') as any;
+    let loader = getService('loader-service').loader as any;
+    let store = getService('store') as any;
+    let command = new CheckCorrectnessCommand(commandService.commandContext);
+    let roomId = '!room:example.com';
+    let { Pet } = await loader.import(`${testRealmURL}pet`);
+    let cardId = `${testRealmURL}Pet/billy`;
+
+    store.addReference(cardId);
+    await store.waitForCardLoad(cardId);
+
+    let originalMaxSize = environmentService.cardSizeLimitBytes;
+    environmentService.cardSizeLimitBytes = 1000;
+
+    try {
+      let patchCommand = new PatchCardInstanceCommand(
+        commandService.commandContext,
+        { cardType: Pet },
+      );
+
+      await patchCommand.execute({
+        cardId,
+        patch: {
+          attributes: {
+            name: 'x'.repeat(2000),
+          },
+        },
+        roomId,
+      });
+
+      let result = await command.execute({
+        targetType: 'card',
+        targetRef: cardId,
+        roomId,
+      });
+      assert.false(result.correct, 'size limit error reports incorrect');
+      assert.ok(
+        result.errors[0]?.includes('exceeds maximum allowed size (1000 bytes)'),
+        'error mentions size limit',
+      );
+    } finally {
+      environmentService.cardSizeLimitBytes = originalMaxSize;
+    }
   });
 });

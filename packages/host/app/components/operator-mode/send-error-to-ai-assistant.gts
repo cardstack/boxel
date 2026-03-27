@@ -28,9 +28,9 @@ interface Signature {
 }
 
 export default class SendErrorToAIAssistant extends Component<Signature> {
-  @service private declare matrixService: MatrixService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
-  @service private declare commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private commandService: CommandService;
 
   private get errorMessage() {
     let { error, errorType } = this.args;

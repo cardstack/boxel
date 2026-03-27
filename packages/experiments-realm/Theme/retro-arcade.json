@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": "Retro Arcade",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Retro Arcade",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "cssImports": [
         "https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap"

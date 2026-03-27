@@ -138,6 +138,7 @@ export async function getUserById(
     stripeCustomerId: results[0].stripe_customer_id,
     stripeCustomerEmail: results[0].stripe_customer_email,
     matrixRegistrationToken: results[0].matrix_registration_token,
+    sessionRoomId: results[0].session_room_id ?? null,
   } as User;
 }
 
@@ -159,6 +160,7 @@ export async function getUserByStripeId(
     matrixUserId: results[0].matrix_user_id,
     stripeCustomerId: results[0].stripe_customer_id,
     matrixRegistrationToken: results[0].matrix_registration_token,
+    sessionRoomId: results[0].session_room_id ?? null,
   } as User;
 }
 
@@ -181,6 +183,7 @@ export async function getUserByMatrixUserId(
     stripeCustomerId: results[0].stripe_customer_id,
     stripeCustomerEmail: results[0].stripe_customer_email,
     matrixRegistrationToken: results[0].matrix_registration_token,
+    sessionRoomId: results[0].session_room_id ?? null,
   } as User;
 }
 
@@ -331,6 +334,37 @@ export async function sumUpCreditsLedger(
 
   // Sum can be null if there are no matching rows in the credits_ledger table
   return results[0].sum === null ? 0 : parseInt(results[0].sum as string);
+}
+
+export async function getDailyCreditGrantInfo(
+  dbAdapter: DBAdapter,
+  userId: string,
+): Promise<{
+  lastDailyCreditGrantAt: number | null;
+  dailyCreditGrantCount: number;
+}> {
+  let results = await query(dbAdapter, [
+    `SELECT MAX(created_at) AS last_grant_at, COUNT(*) AS grant_count FROM credits_ledger WHERE user_id = `,
+    param(userId),
+    ` AND credit_type = 'daily_credit'`,
+  ]);
+
+  let lastGrantAt = results[0]?.last_grant_at;
+  let parsed: number | null = null;
+  if (lastGrantAt != null) {
+    parsed =
+      typeof lastGrantAt === 'number'
+        ? lastGrantAt
+        : parseInt(lastGrantAt as string);
+    if (Number.isNaN(parsed)) {
+      parsed = null;
+    }
+  }
+
+  return {
+    lastDailyCreditGrantAt: parsed,
+    dailyCreditGrantCount: parseInt(results[0]?.grant_count as string) || 0,
+  };
 }
 
 export async function getCurrentActiveSubscription(
@@ -541,14 +575,17 @@ export async function spendCredits(
   if (!subscriptionCycle) {
     throw new Error('subscription cycle not found');
   }
-  let availablePlanAllowanceCredits = await sumUpCreditsLedger(dbAdapter, {
-    creditType: [
-      'plan_allowance',
-      'plan_allowance_used',
-      'plan_allowance_expired',
-    ],
-    userId,
-  });
+  let availablePlanAllowanceCredits = Math.max(
+    0,
+    await sumUpCreditsLedger(dbAdapter, {
+      creditType: [
+        'plan_allowance',
+        'plan_allowance_used',
+        'plan_allowance_expired',
+      ],
+      subscriptionCycleId: subscriptionCycle.id,
+    }),
+  );
 
   if (availablePlanAllowanceCredits >= creditsToSpend) {
     await addToCreditsLedger(dbAdapter, {

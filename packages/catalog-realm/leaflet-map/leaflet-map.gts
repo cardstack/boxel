@@ -8,7 +8,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 
-import { GeoPointField } from '../fields/geo-point';
+import GeoPointField from '../fields/geo-point';
 import { MapRender } from '../components/map-render';
 
 export class LeafletMap extends CardDef {

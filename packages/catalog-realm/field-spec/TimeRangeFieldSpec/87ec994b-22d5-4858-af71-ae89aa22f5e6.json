@@ -1,0 +1,48 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimeRangeFieldSpec",
+        "module": "../time-range-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/time/time-range"
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "standard": {
+        "end": {
+          "value": "22:20"
+        },
+        "start": {
+          "value": "20:20"
+        }
+      },
+      "cardTitle": "Time Range Field",
+      "cardDescription": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

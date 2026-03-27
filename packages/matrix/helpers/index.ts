@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
+import type { Credentials } from '../docker/synapse';
 import {
-  Credentials,
   loginUser,
   getAllRoomEvents,
   getJoinedRooms,
@@ -11,7 +11,8 @@ import {
   type UpdateUserOptions,
 } from '../docker/synapse';
 import { realmPassword } from './realm-credentials';
-import { appURL, BasicSQLExecutor, SQLExecutor } from './isolated-realm-server';
+import type { SQLExecutor } from './isolated-realm-server';
+import { appURL, BasicSQLExecutor } from './isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from './matrix-constants';
 import { randomUUID } from 'crypto';
 
@@ -122,31 +123,6 @@ export async function setRealmRedirects(page: Page) {
 export async function registerRealmUsers(synapse: SynapseInstance) {
   await registerUser(
     synapse,
-    'base_realm',
-    await realmPassword('base_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'experiments_realm',
-    await realmPassword('experiments_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'catalog_realm',
-    await realmPassword('catalog_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'skills_realm',
-    await realmPassword('skills_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
-    'test_realm',
-    await realmPassword('test_realm', realmSecretSeed),
-  );
-  await registerUser(
-    synapse,
     'node-test_realm',
     await realmPassword('node-test_realm', realmSecretSeed),
   );
@@ -154,6 +130,16 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
     synapse,
     'realm_server',
     await realmPassword('realm_server', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'submission_realm',
+    await realmPassword('submission_realm', realmSecretSeed),
+  );
+  await registerUser(
+    synapse,
+    'software_factory_realm',
+    await realmPassword('software_factory_realm', realmSecretSeed),
   );
 }
 
@@ -390,6 +376,13 @@ export async function showAllCards(page: Page) {
 }
 
 export async function logout(page: Page) {
+  await page
+    .locator('[data-test-room-settled]')
+    .waitFor({ state: 'attached', timeout: 5000 })
+    .catch(() => undefined);
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
   await page.locator('[data-test-profile-icon-button]').click();
   await page.locator('[data-test-signout-button]').click();
 }
@@ -480,7 +473,10 @@ export async function selectCardFromCatalog(page: Page, cardId: string) {
   await page
     .locator('[data-test-card-catalog-modal] [data-test-search-field]')
     .fill(cardId);
-  await page.locator(`[data-test-select="${cardId}"]`).click();
+  await page
+    .locator(`[data-test-card-catalog-item="${cardId}"]`)
+    .first()
+    .click();
   await page.locator('[data-test-card-catalog-go-button]').click();
 }
 
@@ -529,10 +525,22 @@ export async function sendMessage(
       await selectCardFromCatalog(page, cardId);
     }
   }
-  // can we check it's higher than before?
+  let messageCountBeforeSend = await page
+    .locator('[data-test-message-idx]')
+    .count();
   await page.waitForSelector(`[data-test-room-settled]`);
   await page.waitForSelector(`[data-test-can-send-msg]`);
   await page.locator('[data-test-send-message-btn]').click();
+  await expect(
+    page.locator(`[data-test-message-field="${roomId}"]`),
+  ).toHaveValue('');
+  await expect(
+    page.locator('[data-test-ai-assistant-message-pending="true"]'),
+  ).toHaveCount(0);
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+    messageCountBeforeSend + 1,
+  );
+  await page.waitForSelector(`[data-test-room-settled]`);
 }
 
 export async function assertMessages(
@@ -906,11 +914,29 @@ export async function waitUntil<T>(
   throw new Error('Timeout waiting for condition');
 }
 
+async function waitForRealmToken(page: Page, realmURL: string): Promise<void> {
+  await page.waitForFunction(
+    (url) => {
+      try {
+        let session = JSON.parse(
+          window.localStorage.getItem('boxel-session') ?? '{}',
+        ) as Record<string, string | undefined>;
+        return Boolean(session[url]);
+      } catch {
+        return false;
+      }
+    },
+    realmURL,
+    { timeout: 30000 },
+  );
+}
+
 export async function postNewCard(
   page: Page,
   realmURL: string,
   cardData: any,
 ): Promise<string> {
+  await waitForRealmToken(page, realmURL);
   const cardId = await page.evaluate(
     async ({ realmURL, cardData }) => {
       let token = JSON.parse(localStorage['boxel-session'])[realmURL];
@@ -941,6 +967,7 @@ export async function postCardSource(
   filePath: string,
   source: string,
 ): Promise<void> {
+  await waitForRealmToken(page, realmURL);
   await page.evaluate(
     async ({ realmURL, filePath, source }) => {
       let token = JSON.parse(localStorage['boxel-session'])[realmURL];
@@ -966,6 +993,7 @@ export async function patchCardInstance(
   cardURL: string,
   cardData: any,
 ): Promise<void> {
+  await waitForRealmToken(page, realmURL);
   await page.evaluate(
     async ({ realmURL, cardURL, cardData }) => {
       let token = JSON.parse(localStorage['boxel-session'])[realmURL];

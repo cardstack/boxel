@@ -38,8 +38,8 @@
           "value": "@DrEmilyPaws"
         }
       ],
-      "description": "Owner and lead veterinarian at Paws Pet Clinic",
-      "thumbnailURL": "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg"
+      "cardDescription": "Owner and lead veterinarian at Paws Pet Clinic",
+      "cardThumbnailURL": "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg"
     },
     "relationships": {
       "crmApp": {

@@ -19,8 +19,8 @@
       "phone": 12065551234,
       "website": "https://sweettoothseattle.com",
       "stockSymbol": null,
-      "description": "Family-owned bakery specializing in custom cakes and artisanal pastries. Looking to expand online ordering and social media presence.",
-      "thumbnailURL": "https://example.com/sweet-tooth-logo.png"
+      "cardDescription": "Family-owned bakery specializing in custom cakes and artisanal pastries. Looking to expand online ordering and social media presence.",
+      "cardThumbnailURL": "https://example.com/sweet-tooth-logo.png"
     },
     "relationships": {
       "crmApp": {

@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Kanban Resource",
-      "description": "Spec for Kanban Resource",
-      "thumbnailURL": null
+      "cardTitle": "Kanban Resource",
+      "cardDescription": "Spec for Kanban Resource",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

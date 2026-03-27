@@ -108,10 +108,12 @@ module.exports = {
         './.template-lintrc.js',
         './ember-cli-build.js',
         './testem.js',
+        './testem-live.js',
         './blueprints/*/index.js',
         './config/**/*.js',
         './lib/**/*.js',
         './server/**/*.js',
+        './scripts/**/*.js',
       ],
       parserOptions: {
         sourceType: 'script',
@@ -123,6 +125,8 @@ module.exports = {
       extends: ['plugin:n/recommended'],
       rules: {
         '@typescript-eslint/no-var-requires': 'off',
+        'n/no-process-exit': 'off',
+        'n/hashbang': 'off',
       },
     },
     {

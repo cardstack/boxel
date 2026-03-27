@@ -11,9 +11,9 @@
       "name": "DevOps & Infrastructure",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "CI/CD pipelines, cloud infrastructure, server management, deployment automation, and system monitoring.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "CI/CD pipelines, cloud infrastructure, server management, deployment automation, and system monitoring.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

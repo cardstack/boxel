@@ -90,9 +90,11 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .includesText('Card found at http://test-realm/test/');
+        .includesText('1 result from 1 realm');
       assert
-        .dom('[data-test-card="http://test-realm/test/index"]')
+        .dom(
+          '[data-test-search-result="http://test-realm/test/index"], [data-test-card="http://test-realm/test/index"]',
+        )
         .exists({ count: 1 });
     });
 
@@ -628,7 +630,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
-      await click(`[data-test-card-catalog-go-button]`);
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );
@@ -989,13 +990,14 @@ module('Acceptance | interact submode tests', function (hooks) {
       const inputSelector =
         '[data-test-contains-many="names"] [data-test-item="0"] input';
 
-      messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+      const unsubscribe = messageService.subscribe(testRealmURL, (e) => {
         if (
           e.eventName === 'index' &&
           e.indexType === 'incremental-index-initiation'
         ) {
           return; // ignore the index initiation event
         }
+        unsubscribe();
         receivedEventDeferred.fulfill();
       });
 
@@ -1066,21 +1068,19 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       const waitForIndexEvent = () => {
         const receivedEventDeferred = new Deferred<void>();
-        const callbacks = messageService.listenerCallbacks.get(testRealmURL)!;
-        const callback = (e: RealmEventContent) => {
-          if (
-            e.eventName === 'index' &&
-            e.indexType === 'incremental-index-initiation'
-          ) {
-            return; // ignore the index initiation event
-          }
-          const index = callbacks.indexOf(callback);
-          if (index !== -1) {
-            callbacks.splice(index, 1);
-          }
-          receivedEventDeferred.fulfill();
-        };
-        callbacks.push(callback);
+        const unsubscribe = messageService.subscribe(
+          testRealmURL,
+          (e: RealmEventContent) => {
+            if (
+              e.eventName === 'index' &&
+              e.indexType === 'incremental-index-initiation'
+            ) {
+              return; // ignore the index initiation event
+            }
+            unsubscribe();
+            receivedEventDeferred.fulfill();
+          },
+        );
         return receivedEventDeferred;
       };
 
@@ -1158,6 +1158,42 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists('linksToMany field has a linked card');
       assert.dom(withLinksSelector).hasValue('With Pet');
       await assertFocusPreserved(withLinksSelector, `With Pet${typedText}`);
+    });
+  });
+
+  module('size limit errors', function () {
+    test('edit view shows size limit error when save exceeds limit', async function (assert) {
+      let environmentService = getService('environment-service') as any;
+      let originalMaxSize = environmentService.cardSizeLimitBytes;
+      environmentService.cardSizeLimitBytes = 1000;
+
+      try {
+        await visitOperatorMode({
+          stacks: [
+            [
+              {
+                id: `${testRealmURL}Pet/mango`,
+                format: 'edit',
+              },
+            ],
+          ],
+        });
+
+        await fillIn(
+          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-field="name"] input`,
+          'x'.repeat(5000),
+        );
+
+        assert
+          .dom(
+            `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-auto-save-indicator]`,
+          )
+          .includesText(
+            `exceeds maximum allowed size (${environmentService.cardSizeLimitBytes} bytes)`,
+          );
+      } finally {
+        environmentService.cardSizeLimitBytes = originalMaxSize;
+      }
     });
   });
 });

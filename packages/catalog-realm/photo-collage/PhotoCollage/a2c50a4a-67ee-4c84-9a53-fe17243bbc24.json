@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Minimalist Photography Collection",
+      "cardTitle": "Minimalist Photography Collection",
       "photos": [
         {
           "url": "https://images.unsplash.com/photo-1507608616759-54f48f0af0ee",
@@ -81,8 +81,8 @@
         }
       ],
       "darkMode": false,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

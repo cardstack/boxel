@@ -23,9 +23,9 @@
       },
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "gamerTag": "PhoenixRise_Maya",
       "isOnline": false,

@@ -3,7 +3,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -14,11 +14,9 @@ import {
   IconButton,
 } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { FailureBordered, IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
-
-import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -32,6 +30,8 @@ interface CardPillSignature {
     cardId: string;
     urlForRealmLookup: string;
     borderType?: 'dashed' | 'solid';
+    displayTitle?: string;
+    showErrorIcon?: boolean;
     onClick?: () => void;
     onRemove?: () => void;
     isEnabled?: boolean;
@@ -41,16 +41,20 @@ interface CardPillSignature {
 }
 
 export default class CardPill extends Component<CardPillSignature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @service private declare realm: RealmService;
-  @tracked private cardResource: ReturnType<getCard> | undefined;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @service declare private realm: RealmService;
 
-  private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.cardId);
-  };
+  @cached
+  private get cardResource(): ReturnType<getCard> {
+    return this.getCard(this, () => this.args.cardId);
+  }
 
   private get cardTitle() {
-    return this.card?.title || this.cardError?.meta.cardTitle;
+    return (
+      this.args.displayTitle ||
+      this.card?.cardTitle ||
+      this.cardError?.meta.cardTitle
+    );
   }
 
   private get card() {
@@ -94,8 +98,6 @@ export default class CardPill extends Component<CardPillSignature> {
   }
 
   <template>
-    {{consumeContext this.makeCardResource}}
-
     {{#if this.isCreating}}
       <LoadingIndicator />
     {{else}}
@@ -107,7 +109,16 @@ export default class CardPill extends Component<CardPillSignature> {
         ...attributes
       >
         <:iconLeft>
-          <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+          {{#if @showErrorIcon}}
+            <FailureBordered
+              class='fallback-card-icon'
+              width='18'
+              height='18'
+              aria-hidden='true'
+            />
+          {{else}}
+            <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+          {{/if}}
         </:iconLeft>
         <:default>
           <div class='card-content' title={{this.cardTitle}}>
@@ -151,6 +162,12 @@ export default class CardPill extends Component<CardPillSignature> {
       }
       .border-solid {
         border-style: solid;
+      }
+      .fallback-card-icon {
+        display: block;
+        flex-shrink: 0;
+        --icon-background-color: var(--boxel-error-500);
+        --icon-color: var(--boxel-light);
       }
       .card-content {
         max-width: 100px;

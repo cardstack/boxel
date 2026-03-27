@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "orderDate": "2024-12-28T09:15:00.000Z",
       "orderTotal": 156.9,

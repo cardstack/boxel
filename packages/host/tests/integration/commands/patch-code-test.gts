@@ -20,6 +20,8 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -34,13 +36,18 @@ module('Integration | commands | patch-code', function (hooks) {
 
   const testFileName = 'task.gts';
   const fileUrl = `${testRealmURL}${testFileName}`;
+  const jsonFileName = 'task.json';
+  const jsonFileUrl = `${testRealmURL}${jsonFileName}`;
   let adapter: any;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    let realmSetup = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        [testFileName]: `import {
+    let realmSetup = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          [testFileName]: `import {
   contains,
   field,
   CardDef,
@@ -50,12 +57,18 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field priority = contains(NumberField);
 }`,
-      },
-    });
+          [jsonFileName]: `{
+  "title": "Old title",
+  "count": 1
+}
+`,
+        },
+      }),
+    );
     adapter = realmSetup.adapter;
     adapter.lintStub = async (
       request: Request,
@@ -127,8 +140,8 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 export class Task extends CardDef {
   static displayName = 'Task';
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field priority = contains(NumberField);
   <template>
     {{#if (eq priority 1)}}
@@ -211,5 +224,64 @@ ${REPLACE_MARKER}`;
       cardService.saveSource = originalSaveSource;
       operatorModeStateService.restore({ stacks: [[]] });
     }
+  });
+
+  test('allows empty search and replace blocks via patch-code for new files', async function (assert) {
+    let commandService = getService('command-service');
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+    let emptyFileUrl = `${testRealmURL}empty.gts`;
+
+    adapter.lintStub = async (request: Request): Promise<LintResult> => {
+      return {
+        output: await request.text(),
+        fixed: false,
+        messages: [],
+      };
+    };
+
+    const codeBlock = `${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+${REPLACE_MARKER}`;
+
+    let result = await patchCodeCommand.execute({
+      fileUrl: emptyFileUrl,
+      codeBlocks: [codeBlock],
+    });
+
+    assert.strictEqual(result.finalFileUrl, emptyFileUrl);
+    assert.strictEqual(result.patchedContent, '');
+    assert.strictEqual(result.results[0]?.status, 'applied');
+  });
+
+  test('skips linting for non-gts/ts files', async function (assert) {
+    let commandService = getService('command-service');
+    let patchCodeCommand = new PatchCodeCommand(commandService.commandContext);
+
+    adapter.lintStub = async () => {
+      assert.ok(false, 'lint should not run for json files');
+      return { output: '', fixed: false, messages: [] };
+    };
+
+    const codeBlock = `${SEARCH_MARKER}
+  "title": "Old title",
+${SEPARATOR_MARKER}
+  "title": "New title",
+${REPLACE_MARKER}`;
+
+    let result = await patchCodeCommand.execute({
+      fileUrl: jsonFileUrl,
+      codeBlocks: [codeBlock],
+    });
+
+    assert.strictEqual(
+      result.patchedContent,
+      `{
+  "title": "New title",
+  "count": 1
+}
+`,
+      'json file is patched without linting',
+    );
+    assert.strictEqual(result.results[0]?.status, 'applied');
   });
 });

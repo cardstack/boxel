@@ -3,9 +3,12 @@ import './setup-logger'; // This should be first
 import {
   Worker,
   VirtualNetwork,
+  isUrlLike,
   logger,
   IndexWriter,
+  registerCardReferencePrefix,
   type StatusArgs,
+  type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -98,12 +101,15 @@ if (fromUrls.length !== toUrls.length) {
 }
 
 let virtualNetwork = new VirtualNetwork();
-let urlMappings = fromUrls.map((fromUrl, i) => [
-  new URL(String(fromUrl)),
-  new URL(String(toUrls[i])),
-]);
-for (let [from, to] of urlMappings) {
-  virtualNetwork.addURLMapping(from, to);
+for (let i = 0; i < fromUrls.length; i++) {
+  let from = String(fromUrls[i]);
+  let to = new URL(String(toUrls[i]));
+  if (isUrlLike(from)) {
+    virtualNetwork.addURLMapping(new URL(from), to);
+  } else {
+    registerCardReferencePrefix(from, to.href);
+    virtualNetwork.addImportMap(from, (rest) => new URL(rest, to).href);
+  }
 }
 let autoMigrate = migrateDB || undefined;
 
@@ -116,6 +122,12 @@ let autoMigrate = migrateDB || undefined;
     }
   }
 
+  function reportProgress(event: IndexingProgressEvent) {
+    if (!ECS_CONTAINER_METADATA_URI && process.send) {
+      process.send(`progress|${JSON.stringify(event)}`);
+    }
+  }
+
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueueRunner({ adapter: dbAdapter, workerId, priority });
   let worker = new Worker({
@@ -125,6 +137,7 @@ let autoMigrate = migrateDB || undefined;
     matrixURL: new URL(matrixURL),
     secretSeed: REALM_SECRET_SEED,
     reportStatus,
+    reportProgress,
     realmServerMatrixUsername: REALM_SERVER_MATRIX_USERNAME,
     dbAdapter,
     queuePublisher: new PgQueuePublisher(dbAdapter),
@@ -153,6 +166,7 @@ let autoMigrate = migrateDB || undefined;
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  process.on('disconnect', shutdown);
   process.on('message', (message) => {
     if (message === 'stop') {
       shutdown(); // warning this is async

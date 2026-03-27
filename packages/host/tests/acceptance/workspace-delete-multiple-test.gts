@@ -8,11 +8,13 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   setupLocalIndexing,
   setupAcceptanceTestRealm,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAuthEndpoints,
   setupUserSubscription,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupBaseRealm, CardsGrid } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -21,6 +23,7 @@ import { setupApplicationTest } from '../helpers/setup';
 module('Acceptance | workspace-delete-multiple', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -52,7 +55,7 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       static displayName = 'Pet';
       @field name = contains(StringField);
       @field species = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -68,30 +71,32 @@ module('Acceptance | workspace-delete-multiple', function (hooks) {
       };
     }
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        'pet.gts': { Pet },
-        'Pet/1.json': new Pet({
-          name: 'Fluffy',
-          species: 'Cat',
-        }),
-        'Pet/2.json': new Pet({
-          name: 'Buddy',
-          species: 'Dog',
-        }),
-        'Pet/3.json': new Pet({
-          name: 'Charlie',
-          species: 'Bird',
-        }),
-        '.realm.json': {
-          name: 'Test Realm',
-          backgroundURL: null,
-          iconURL: null,
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          'pet.gts': { Pet },
+          'Pet/1.json': new Pet({
+            name: 'Fluffy',
+            species: 'Cat',
+          }),
+          'Pet/2.json': new Pet({
+            name: 'Buddy',
+            species: 'Dog',
+          }),
+          'Pet/3.json': new Pet({
+            name: 'Charlie',
+            species: 'Bird',
+          }),
+          '.realm.json': {
+            name: 'Test Realm',
+            backgroundURL: null,
+            iconURL: null,
+          },
         },
-      },
+      });
     });
   });
 

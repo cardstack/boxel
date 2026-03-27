@@ -15,6 +15,8 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -31,6 +33,7 @@ module('Integration | commands | search', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -57,23 +60,25 @@ module('Integration | commands | search', function (hooks) {
       static displayName = 'Author';
       @field firstName = contains(StringField);
       @field lastName = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Author) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
       });
     }
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'author.gts': { Author },
-        'Author/r2.json': new Author({ firstName: 'R2-D2' }),
-        'Author/mark.json': new Author({
-          firstName: 'Mark',
-          lastName: 'Jackson',
-        }),
-        '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
-      },
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'author.gts': { Author },
+          'Author/r2.json': new Author({ firstName: 'R2-D2' }),
+          'Author/mark.json': new Author({
+            firstName: 'Mark',
+            lastName: 'Jackson',
+          }),
+          '.realm.json': `{ "name": "${realmName}", "iconURL": "https://boxel-images.boxel.ai/icons/Letter-o.png" }`,
+        },
+      });
     });
   });
 
@@ -83,7 +88,7 @@ module('Integration | commands | search', function (hooks) {
       commandService.commandContext,
     );
     let result = await searchCommand.execute({
-      title: 'Mark Jackson',
+      cardTitle: 'Mark Jackson',
       cardType: undefined,
     });
     assert.strictEqual(result.cardIds.length, 1);
@@ -97,7 +102,7 @@ module('Integration | commands | search', function (hooks) {
     );
     let result = await searchCommand.execute({
       cardType: 'Author',
-      title: undefined,
+      cardTitle: undefined,
     });
     assert.ok(result.cardIds.length > 0, 'Should return at least one result');
     assert.ok(

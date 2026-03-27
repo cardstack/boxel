@@ -13,6 +13,8 @@ import {
   setupLocalIndexing,
   testRealmURL,
   testRealmInfo,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -40,13 +42,17 @@ module('Integration | commands | read-file-for-ai-assistant', function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
   });
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'files/test.txt': 'This is a test file for AI assistant.',
-      },
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'files/test.txt': 'This is a test file for AI assistant.',
+        },
+      }),
+    );
   });
 
   test('read file', async function (assert) {
@@ -59,10 +65,7 @@ module('Integration | commands | read-file-for-ai-assistant', function (hooks) {
       fileUrl: `${testRealmURL}files/test.txt`,
     });
     assert.true(!!result.fileForAttachment.contentHash);
-    assert.strictEqual(
-      result.fileForAttachment.contentType,
-      'text/plain; charset=utf-8',
-    );
+    assert.strictEqual(result.fileForAttachment.contentType, 'text/plain');
     assert.strictEqual(result.fileForAttachment.name, 'test.txt');
     assert.strictEqual(
       result.fileForAttachment.sourceUrl,

@@ -44,7 +44,7 @@ export class ProductRotationImage extends CardDef {
   @field angleLabel = contains(StringField);
   @field angleDegrees = contains(NumberField);
   @field image = contains(ImageField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ProductRotationImage) {
       return this.angleLabel
         ? 'Product Rotation Image ' + this.angleLabel
@@ -52,7 +52,7 @@ export class ProductRotationImage extends CardDef {
     },
   });
 
-  @field thumbnailURL = contains(StringField, {
+  @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: ProductRotationImage) {
       return this.image?.url ?? '';
     },

@@ -3,8 +3,8 @@
     "type": "card",
     "attributes": {
       "name": "Malaysia",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

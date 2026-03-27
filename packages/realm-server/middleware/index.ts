@@ -6,7 +6,7 @@ import {
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import mime from 'mime-types';
-import { nodeStreamToText } from '../stream';
+import { nodeStreamToText, nodeStreamToBuffer } from '../stream';
 import { retrieveTokenClaim } from '../utils/jwt';
 import {
   AuthenticationError,
@@ -14,7 +14,10 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common/router';
 
+const REQUEST_BODY_STATE = 'requestBody';
+
 interface ProxyOptions {
+  requestHeaders?: Record<string, string>;
   responseHeaders?: Record<string, string>;
 }
 
@@ -31,6 +34,11 @@ export function proxyAsset(
       return `/${filename}`;
     },
     events: {
+      proxyReq: (proxyReq) => {
+        for (let [key, value] of Object.entries(opts?.requestHeaders ?? {})) {
+          proxyReq.setHeader(key, value);
+        }
+      },
       proxyRes: (_proxyRes, _req, res) => {
         for (let [key, value] of Object.entries(opts?.responseHeaders ?? {})) {
           res.setHeader(key, value);
@@ -100,25 +108,65 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   return next();
 }
 
+function isLoopbackAddress(address: string | undefined): boolean {
+  return (
+    address === '127.0.0.1' ||
+    address === '::1' ||
+    address === '::ffff:127.0.0.1'
+  );
+}
+
 export function fullRequestURL(ctxt: Koa.Context): URL {
   let protocol =
     ctxt.req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-  return new URL(`${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`);
+  let computedURL = new URL(
+    `${protocol}://${ctxt.req.headers.host}${ctxt.req.url}`,
+  );
+  let forwardedURL = ctxt.req.headers['x-boxel-forwarded-url'];
+  if (
+    process.env.BOXEL_TRUST_FORWARDED_URL === 'true' &&
+    typeof forwardedURL === 'string' &&
+    forwardedURL.trim() !== '' &&
+    isLoopbackAddress(ctxt.req.socket?.remoteAddress)
+  ) {
+    try {
+      let parsed = new URL(forwardedURL);
+      if (
+        parsed.pathname === computedURL.pathname &&
+        parsed.search === computedURL.search
+      ) {
+        return parsed;
+      }
+    } catch {
+      // Ignore malformed forwarded URLs and fall back to the computed request.
+    }
+  }
+  return computedURL;
 }
 
 export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
-  let reqBody: string | undefined;
-  if (['POST', 'PATCH', 'PUT', 'QUERY'].includes(ctxt.method)) {
-    reqBody = await nodeStreamToText(ctxt.req);
+  let reqBody: string | Buffer | undefined;
+  if (['POST', 'PATCH', 'PUT', 'QUERY', 'DELETE'].includes(ctxt.method)) {
+    let state = ctxt.state as Record<string, unknown>;
+    if (REQUEST_BODY_STATE in state) {
+      reqBody = state[REQUEST_BODY_STATE] as string | Buffer;
+    } else {
+      let isBinary =
+        ctxt.req.headers['content-type'] === 'application/octet-stream';
+      reqBody = isBinary
+        ? await nodeStreamToBuffer(ctxt.req)
+        : await nodeStreamToText(ctxt.req);
+      state[REQUEST_BODY_STATE] = reqBody;
+    }
   }
 
   let url = fullRequestURL(ctxt).href;
   return new Request(url, {
     method: ctxt.method,
     headers: ctxt.req.headers as { [name: string]: string },
-    ...(reqBody ? { body: reqBody } : {}),
+    ...(reqBody !== undefined ? { body: reqBody as BodyInit } : {}),
   });
 }
 

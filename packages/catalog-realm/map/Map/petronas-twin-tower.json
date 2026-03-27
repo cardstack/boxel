@@ -16,9 +16,9 @@
       },
       "mapWidth": 600,
       "mapHeight": 400,
-      "description": null,
-      "thumbnailURL": null,
-      "title": "Petronas Twin Towers"
+      "cardDescription": null,
+      "cardThumbnailURL": null,
+      "cardTitle": "Petronas Twin Towers"
     },
     "meta": {
       "adoptsFrom": {

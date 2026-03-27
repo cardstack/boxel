@@ -6,6 +6,8 @@ import type { Model } from '../../routes/render/meta';
 
 const { stringify } = JSON;
 
-export default RouteTemplate(<template>
-  <pre>{{stringify @model null 2}}</pre>
-</template> satisfies TemplateOnlyComponent<{ Args: { model: Model } }>);
+export default RouteTemplate(
+  <template>
+    <pre>{{stringify @model null 2}}</pre>
+  </template> satisfies TemplateOnlyComponent<{ Args: { model: Model } }>,
+);

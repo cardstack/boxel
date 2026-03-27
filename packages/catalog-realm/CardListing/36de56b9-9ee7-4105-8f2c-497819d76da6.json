@@ -17,9 +17,9 @@
       "summary": "This listing provides a comprehensive visual editor for creating and customizing YouTube thumbnails, enabling users to add, manipulate, and layer text and shape elements, and export high-quality images for online sharing. Its primary purpose is to simplify thumbnail design with intuitive drag-and-drop and property editing features.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/youtube-thumbnail-composer-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -70,7 +70,7 @@
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/16320d37-fac6-417c-ae20-c583ea0c8a2e"
+          "self": "../field-spec/ImageFieldSpec/7c9e416c-e6c8-45b2-81c3-4eb6ddd219dc"
         }
       },
       "specs.6": {

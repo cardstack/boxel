@@ -18,8 +18,8 @@
       },
       "name": "Build Date Range Card",
       "details": "✅ Task: Build Date Range Component\nDescription:\nCreate a reusable DateRangePicker component that allows users to select a start date and an end date. The component should ensure that:\n\n- The end date cannot be before the start date.\n- Both dates are displayed clearly.\n- Optionally, a default range (e.g., today to 7 days later) is shown initially.\n- Emits a dateRangeChanged event (or equivalent binding) when either date changes.\n\nThe component should support:\n- Mobile responsiveness\n- Accessibility (keyboard navigation, screen reader labels)\n- Optional min/max date restrictions",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

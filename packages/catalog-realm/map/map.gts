@@ -26,7 +26,7 @@ export class Map extends CardDef {
   });
   @field mapWidth = contains(NumberField);
   @field mapHeight = contains(NumberField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Map) {
       return this.address.fullAddress ?? 'Map Address';
     },

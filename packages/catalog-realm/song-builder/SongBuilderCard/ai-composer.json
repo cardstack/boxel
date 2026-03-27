@@ -64,9 +64,9 @@
       ],
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "sections": [
         {
@@ -352,7 +352,7 @@
         }
       ],
       "songTitle": "Digital Dreams",
-      "description": "A complete electronic pop song showcasing the Song Builder's professional features",
+      "cardDescription": "A complete electronic pop song showcasing the Song Builder's professional features",
       "masterVolume": 85,
       "timeSignature": "4/4"
     },

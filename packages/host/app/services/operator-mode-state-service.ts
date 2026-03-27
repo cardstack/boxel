@@ -15,6 +15,7 @@ import type { CodeRef } from '@cardstack/runtime-common';
 import {
   RealmPaths,
   type LocalPath,
+  cardIdToURL,
   isResolvedCodeRef,
   isCardInstance,
   isLocalId,
@@ -27,7 +28,7 @@ import {
 
 import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import { StackItem } from '@cardstack/host/lib/stack-item';
+import { StackItem, type StackItemType } from '@cardstack/host/lib/stack-item';
 
 import {
   file,
@@ -49,7 +50,7 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import type { BoxelContext } from 'https://cardstack.com/base/matrix-event';
 
-import { removeFileExtension } from '../components/search-sheet/utils';
+import { removeFileExtension } from '../components/card-search/utils';
 
 import { ModuleInspectorSelections } from '../utils/local-storage-keys';
 
@@ -67,6 +68,18 @@ import type StoreService from './store';
 import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
+
+export interface CreateListingModalPayload {
+  codeRef: CodeRef;
+  targetRealm: string;
+  openCardIds?: string[];
+}
+
+export interface CreatePRModalPayload {
+  realm: string;
+  listingId: string;
+  listingName?: string;
+}
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -91,7 +104,8 @@ export interface OperatorModeState {
 
 interface CardItem {
   id: string;
-  format: 'isolated' | 'edit';
+  format: 'isolated' | 'edit' | 'head';
+  type?: StackItemType;
 }
 
 export type FileView = 'inspector' | 'browser';
@@ -141,6 +155,8 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
+  @tracked createListingModalPayload?: CreateListingModalPayload;
+  @tracked createPRModalPayload?: CreatePRModalPayload;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -209,6 +225,22 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   };
 
+  showCreateListingModal = (payload: CreateListingModalPayload) => {
+    this.createListingModalPayload = payload;
+  };
+
+  dismissCreateListingModal = () => {
+    this.createListingModalPayload = undefined;
+  };
+
+  showCreatePRModal = (payload: CreatePRModalPayload) => {
+    this.createPRModalPayload = payload;
+  };
+
+  dismissCreatePRModal = () => {
+    this.createPRModalPayload = undefined;
+  };
+
   setNewFileDropdownOpen = () => {
     this._state.newFileDropdownOpen = true;
     this.schedulePersist();
@@ -219,6 +251,8 @@ export default class OperatorModeStateService extends Service {
   };
 
   resetState() {
+    this.getOpenCards.cancelAll();
+    this.setCardTitleTask.cancelAll();
     this._state = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
@@ -234,6 +268,12 @@ export default class OperatorModeStateService extends Service {
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
+    this.cardTitles = new TrackedMap();
+    this.moduleInspectorHistory = {};
+    this.profileSettingsOpen = false;
+    this.createListingModalPayload = undefined;
+    this.createPRModalPayload = undefined;
+    window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
 
@@ -413,6 +453,9 @@ export default class OperatorModeStateService extends Service {
 
   editCardOnStack(stackIndex: number, card: CardDef): void {
     let item = this.findCardInStack(card, stackIndex);
+    if (item.type === 'file') {
+      return;
+    }
     this.replaceItemInStack(
       item,
       item.clone({
@@ -483,7 +526,7 @@ export default class OperatorModeStateService extends Service {
 
   private getRealmURLFromItemId(itemId: string): string {
     try {
-      const url = new URL(itemId);
+      const url = cardIdToURL(itemId);
       return this.realm.realmOfURL(url)?.href ?? this.realmURL;
     } catch (error) {
       return this.realmURL;
@@ -867,15 +910,22 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this._state.stacks) {
       let serializedStack: SerializedStack = [];
       for (let item of stack) {
-        if (item.format !== 'isolated' && item.format !== 'edit') {
+        if (
+          item.format !== 'isolated' &&
+          item.format !== 'edit' &&
+          item.format !== 'head'
+        ) {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.id) {
-          let instance = this.store.peek(item.id);
+          let instance =
+            this.store.peek(item.id) ??
+            this.store.peek(item.id, { type: 'file-meta' });
           if (!isLocalId(item.id) || instance?.id) {
             serializedStack.push({
               id: instance?.id ?? item.id,
               format: item.format,
+              type: item.type === 'card' ? undefined : item.type,
             });
           }
         }
@@ -899,12 +949,14 @@ export default class OperatorModeStateService extends Service {
       fieldName?: string;
       fieldType?: 'linksTo' | 'linksToMany';
     },
+    type?: StackItemType,
   ) {
     let stackItem = new StackItem({
       id,
       stackIndex,
       format,
       relationshipContext,
+      type,
     });
     return stackItem;
   }
@@ -957,6 +1009,7 @@ export default class OperatorModeStateService extends Service {
             id: item.id,
             format,
             stackIndex,
+            type: item.type,
           }),
         );
       }
@@ -1125,7 +1178,11 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  openCardInInteractMode(id: string, format: Format = 'isolated') {
+  openCardInInteractMode(
+    id: string,
+    format: Format = 'isolated',
+    type: StackItemType = 'card',
+  ) {
     this.clearStacks();
     // Determine realm URL. If id is a localId, look up the instance in the store to read its realm.
     let realmHref: string | undefined;
@@ -1148,11 +1205,13 @@ export default class OperatorModeStateService extends Service {
       id: `${realmHref}index`,
       stackIndex: 0,
       format: 'isolated',
+      type: 'card',
     });
     let newItem = new StackItem({
       id, // keep provided id (may be localId) so later replacement on save works
       stackIndex: 0,
       format,
+      type,
     });
     this.addItemToStack(indexItem);
     this.addItemToStack(newItem);
@@ -1179,6 +1238,7 @@ export default class OperatorModeStateService extends Service {
       id,
       format: 'isolated',
       stackIndex: 0,
+      type: 'card',
     });
     this.clearStacks();
     this.addItemToStack(stackItem);

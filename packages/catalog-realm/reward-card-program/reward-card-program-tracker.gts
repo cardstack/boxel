@@ -954,7 +954,7 @@ class BenefitUsageTrackingEdit extends Component<typeof BenefitUsageTracking> {
         <@fields.benefit />
       </FieldContainer>
       <FieldContainer @label='Title'>
-        <@fields.title />
+        <@fields.cardTitle />
       </FieldContainer>
       <FieldContainer @label='Last Used Date'>
         <@fields.lastUsedDate />
@@ -1057,7 +1057,7 @@ export class BenefitUsageTracking extends FieldDef {
 
   @field notes = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BenefitUsageTracking) {
       try {
         return this.benefit?.name ?? 'Benefit Usage Tracking';
@@ -1081,7 +1081,7 @@ export class RewardCardProgramTracker extends CardDef {
 
   @field notes = contains(MarkdownField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: RewardCardProgramTracker) {
       try {
         const cardName = this.cardProgram?.cardName ?? 'Unknown Card';
@@ -1256,7 +1256,7 @@ export class RewardCardProgramTracker extends CardDef {
     }
 
     get cardThumbnail() {
-      return this.args.model?.cardProgram?.thumbnailURL ?? null;
+      return this.args.model?.cardProgram?.cardThumbnailURL ?? null;
     }
 
     get currencyCode() {

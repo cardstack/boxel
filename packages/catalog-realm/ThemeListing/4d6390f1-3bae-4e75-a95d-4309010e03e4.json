@@ -1,0 +1,73 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "ThemeListing",
+        "module": "../catalog-app/listing/listing"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "name": "Boxel Brand Guide",
+      "images": [
+        "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/47b743a2-3a61-4c85-5277-39d764fea100/public",
+        "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/5de76ce4-d7f6-4203-1b22-009031a0bc00/public",
+        "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/96e9cc96-484c-4dd4-ea9f-5a6d1fad6a00/public"
+      ],
+      "summary": "Boxel\u2019s official brand guide featuring IBM Plex typography, a high-density Box Element design system, vibrant Teal/Lime/Purple accents, and complete light/dark CSS tokens\u2014covering logo usage, spacing rules, motion principles, and component patterns for a consistent Boxel visual identity.",
+      "cardInfo": {
+        "notes": null,
+        "name": "Boxel Brand Guide",
+        "summary": "Official Boxel brand guide with IBM Plex typography, Box Element design system, and light/dark color tokens.",
+        "cardThumbnailURL": "https://imagedelivery.net/TB1OM65i5Go9UkT2wcBzeA/96e9cc96-484c-4dd4-ea9f-5a6d1fad6a00/public"
+      }
+    },
+    "relationships": {
+      "specs": {
+        "links": {
+          "self": null
+        }
+      },
+      "skills": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/b793225c-32f9-404c-b2a9-b4041b93090c"
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/9d3ca05b-684b-408f-8d8c-dd353d9956e0"
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/ui-components-design"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

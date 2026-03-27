@@ -95,6 +95,28 @@ jobs:
       image: ${{ needs.build-ai-bot.outputs.image }}
       wait-for-service-stability: false
 
+  build-bot-runner:
+    name: Build bot-runner Docker image
+    uses: cardstack/gh-actions/.github/workflows/docker-ecr.yml@main
+    secrets: inherit
+    with:
+      repository: "boxel-bot-runner-${{ inputs.environment }}"
+      environment: ${{ inputs.environment }}
+      dockerfile: "packages/bot-runner/Dockerfile"
+
+  deploy-bot-runner:
+    needs: [build-bot-runner, post-migrate-db]
+    name: Deploy bot-runner to AWS ECS
+    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    secrets: inherit
+    with:
+      container-name: "boxel-bot-runner"
+      environment: ${{ inputs.environment }}
+      cluster: ${{ inputs.environment }}
+      service-name: "boxel-bot-runner-${{ inputs.environment }}"
+      image: ${{ needs.build-bot-runner.outputs.image }}
+      wait-for-service-stability: false
+
   build-host:
     name: Build host
     uses: ./.github/workflows/build-host.yml
@@ -109,14 +131,6 @@ jobs:
     secrets: inherit
     with:
       environment: ${{ inputs.environment }}
-
-  deploy-motion:
-    name: Deploy boxel-motion
-    if: inputs.environment == 'staging'
-    uses: ./.github/workflows/deploy-motion.yml
-    secrets: inherit
-    with:
-      environment: staging
 
   deploy-ui:
     name: Deploy boxel-ui
@@ -307,6 +321,8 @@ jobs:
         create-deployment,
         build-ai-bot,
         deploy-ai-bot,
+        build-bot-runner,
+        deploy-bot-runner,
         build-host,
         deploy-host,
         build-realm-server,

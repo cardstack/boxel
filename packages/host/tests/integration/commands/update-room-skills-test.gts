@@ -20,13 +20,14 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import {
-  envSkillId,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   setupOnSave,
   testRealmInfo,
   testRealmURL,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm, CommandField, Skill } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -40,6 +41,8 @@ class StubRealmService extends RealmService {
     };
   }
 }
+
+const decoder = new TextDecoder();
 
 module('Integration | Command | update-room-skills', function (hooks) {
   setupRenderingTest(hooks);
@@ -124,12 +127,15 @@ module('Integration | Command | update-room-skills', function (hooks) {
 
   let matrixRoomId: string;
   module('run', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
     hooks.beforeEach(async function () {
-      await setupIntegrationTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+      await withCachedRealmSetup(async () =>
+        setupIntegrationTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            'test-command.gts': `import { Command } from '@cardstack/runtime-common';
 
 export class DoThing extends Command {
   static displayName = 'Test Command';
@@ -137,26 +143,41 @@ export class DoThing extends Command {
     return undefined;
   }
 }`,
-          'skill-with-commands.json': new Skill({
-            title: 'Skill with invalid command',
-            description: 'test',
-            instructions: 'test',
-            commands: [
-              new CommandField({
-                codeRef: { module: '', name: '' },
-                requiresApproval: false,
-              }),
-              new CommandField({
-                codeRef: {
-                  module: `${testRealmURL}test-command.gts`,
-                  name: 'DoThing',
-                },
-                requiresApproval: false,
-              }),
-            ],
-          }),
-        },
-      });
+            'skill-with-commands.json': new Skill({
+              cardTitle: 'Skill with invalid command',
+              cardDescription: 'test',
+              instructions: 'test',
+              commands: [
+                new CommandField({
+                  codeRef: { module: '', name: '' },
+                  requiresApproval: false,
+                }),
+                new CommandField({
+                  codeRef: {
+                    module: `${testRealmURL}test-command.gts`,
+                    name: 'DoThing',
+                  },
+                  requiresApproval: false,
+                }),
+              ],
+            }),
+            'Skill/boxel-environment.json': new Skill({
+              title: 'Boxel Environment',
+              description: 'Test environment skill',
+              instructions: 'Test skill card for environment commands',
+              commands: [
+                new CommandField({
+                  codeRef: {
+                    module: `${testRealmURL}test-command.gts`,
+                    name: 'DoThing',
+                  },
+                  requiresApproval: false,
+                }),
+              ],
+            }),
+          },
+        }),
+      );
       let matrixService = getService('matrix-service') as any;
       await matrixService.ready;
       matrixRoomId = mockMatrixUtils.createAndJoinRoom({
@@ -168,7 +189,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = envSkillId;
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
@@ -200,7 +221,7 @@ export class DoThing extends Command {
       );
       assert.strictEqual(
         [...uploadedContents.values()]
-          .map((s) => JSON.parse(s as any))
+          .map((s) => JSON.parse(decoder.decode(s)))
           .filter((json) => json.data?.type === 'card').length,
         1,
         'one skill card uploaded',
@@ -211,7 +232,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = envSkillId;
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       mockMatrixUtils.setRoomState(
         matrixRoomId,
         APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -259,7 +280,7 @@ export class DoThing extends Command {
       let command = new UpdateRoomSkillsCommand(
         getService('command-service').commandContext,
       );
-      let skillCardId = envSkillId;
+      let skillCardId = `${testRealmURL}Skill/boxel-environment`;
       await command.execute({
         roomId: matrixRoomId,
         skillCardIdsToActivate: [skillCardId],
@@ -325,7 +346,7 @@ export class DoThing extends Command {
         'skill plus one command definitions were uploaded',
       );
       let commandDefJson = JSON.parse(
-        [...uploadedContents.values()][1] as unknown as string,
+        decoder.decode([...uploadedContents.values()][1]),
       );
       assert.deepEqual(
         commandDefJson.codeRef.name,

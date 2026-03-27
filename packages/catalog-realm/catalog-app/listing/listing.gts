@@ -9,7 +9,7 @@ import {
   Component,
   instanceOf,
   realmURL,
-  type GetCardMenuItemParams,
+  type GetMenuItemParams,
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -34,6 +34,7 @@ import {
 import { eq, type MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 import Refresh from '@cardstack/boxel-icons/refresh';
 import Wand from '@cardstack/boxel-icons/wand';
+import Package from '@cardstack/boxel-icons/package';
 
 import AppListingHeader from '../components/app-listing-header';
 import ChooseRealmAction from '../components/choose-realm-action';
@@ -44,8 +45,9 @@ import { listingActions, isReady } from '../resources/listing-actions';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
+import OpenCreatePRModalCommand from '@cardstack/boxel-host/commands/open-create-pr-modal';
 
-import { getCardMenuItems } from '@cardstack/runtime-common';
+import { getMenuItems } from '@cardstack/runtime-common';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -66,8 +68,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get writableRealms(): { name: string; url: string; iconURL?: string }[] {
     const commandResource = this.allRealmsInfoResource;
-    if (commandResource?.isSuccess && commandResource.value) {
-      const result = commandResource.value as GetAllRealmMetasResult;
+    if (commandResource?.isSuccess && commandResource.cardResult) {
+      const result = commandResource.cardResult as GetAllRealmMetasResult;
       if (result.results) {
         return result.results
           .filter(
@@ -180,9 +182,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
-        @thumbnailUrl={{@model.thumbnailURL}}
+        @thumbnailUrl={{@model.cardThumbnailURL}}
         @name={{this.appName}}
-        @description={{@model.description}}
+        @description={{@model.cardDescription}}
         @publisher={{this.publisherName}}
       >
         <:action>
@@ -562,6 +564,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#6638ff';
+  static isListingDef = true;
+
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
   @field specs = linksToMany(() => Spec);
@@ -573,14 +577,14 @@ export class Listing extends CardDef {
   @field examples = linksToMany(() => CardDef);
   @field skills = linksToMany(() => Skill);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: Listing) {
       return this.name;
     },
   });
 
   protected getGenerateExampleMenuItem(
-    params: GetCardMenuItemParams,
+    params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
     if (!params.commandContext) {
       return undefined;
@@ -593,7 +597,7 @@ export class Listing extends CardDef {
       return undefined;
     }
     return {
-      label: 'Generate example with AI',
+      label: 'Generate Example with AI',
       action: async () => {
         const command = new ListingGenerateExampleCommand(
           params.commandContext,
@@ -613,7 +617,7 @@ export class Listing extends CardDef {
   }
 
   private getUpdateSpecsMenuItem(
-    params: GetCardMenuItemParams,
+    params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
     if (params.menuContext !== 'interact') {
       return;
@@ -635,10 +639,10 @@ export class Listing extends CardDef {
     };
   }
 
-  [getCardMenuItems](params: GetCardMenuItemParams): MenuItemOptions[] {
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super
-      [getCardMenuItems](params)
-      .filter((item) => item.label?.toLowerCase() !== 'create listing with ai');
+      [getMenuItems](params)
+      .filter((item) => item.label?.toLowerCase() !== 'create listing');
     if (params.menuContext === 'interact') {
       const extra = this.getGenerateExampleMenuItem(params);
       if (extra) {
@@ -648,8 +652,39 @@ export class Listing extends CardDef {
       if (updateSpecs) {
         menuItems = [...menuItems, updateSpecs];
       }
+      const createPRMenuItem = this.getCreatePRMenuItem(params);
+      if (createPRMenuItem) {
+        menuItems = [...menuItems, createPRMenuItem];
+      }
     }
     return menuItems;
+  }
+
+  private getCreatePRMenuItem(
+    params: GetMenuItemParams,
+  ): MenuItemOptions | undefined {
+    if (params.menuContext !== 'interact') {
+      return;
+    }
+    if (!this[realmURL]?.href) {
+      return;
+    }
+    const commandContext = params.commandContext;
+    if (!commandContext) {
+      return;
+    }
+
+    return {
+      label: 'Make a PR',
+      action: async () => {
+        await new OpenCreatePRModalCommand(commandContext).execute({
+          listingId: this.id,
+          realm: this[realmURL]!.href,
+          listingName: this.name,
+        });
+      },
+      icon: Package,
+    };
   }
 
   static isolated = EmbeddedTemplate;

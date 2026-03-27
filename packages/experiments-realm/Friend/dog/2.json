@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "firstName": "Dog in a Cup",
-      "thumbnailURL": "https://images.pexels.com/photos/39317/chihuahua-dog-puppy-cute-39317.jpeg"
+      "cardThumbnailURL": "https://images.pexels.com/photos/39317/chihuahua-dog-puppy-cute-39317.jpeg"
     },
     "relationships": {
       "friend": {

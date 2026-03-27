@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Contact",
-      "description": "Spec for Contact",
-      "thumbnailURL": null
+      "cardTitle": "Contact",
+      "cardDescription": "Spec for Contact",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

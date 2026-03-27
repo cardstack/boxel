@@ -6,8 +6,8 @@
       "modelName": "Gemini 2.5 Pro",
       "displayName": "Gemini 2.5 Pro",
       "forAssistantUse": true,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

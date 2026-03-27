@@ -17,3 +17,4 @@ The [BoxelUI preview app](https://boxel-ui.stack.cards) contains a preview of al
 ## Local Development
 
 `pnpm serve` in this directory starts a local webserver. You can point `host` at it by setting ICONS_URL=http://localhost:4206.
+The server includes CORS headers for `Authorization` and `X-Boxel-Assume-User` so host-side authenticated icon fetches work in local dev.

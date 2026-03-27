@@ -9,6 +9,7 @@ interface PushOptions {
 }
 
 class RealmPusher extends RealmSyncBase {
+  hasError = false;
   constructor(
     private pushOptions: PushOptions,
     matrixUrl: string,
@@ -49,6 +50,7 @@ class RealmPusher extends RealmSyncBase {
       try {
         await this.uploadFile(relativePath, localPath);
       } catch (error) {
+        this.hasError = true;
         console.error(`Error uploading ${relativePath}:`, error);
       }
     }
@@ -163,7 +165,12 @@ async function main() {
     await pusher.initialize();
     await pusher.sync();
 
-    console.log('Push completed successfully');
+    if (pusher.hasError) {
+      console.log('Push did not complete successfully. view logs for details');
+      process.exit(2);
+    } else {
+      console.log('Push completed successfully');
+    }
   } catch (error) {
     console.error('Push failed:', error);
     process.exit(1);

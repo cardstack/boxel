@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 import StringField from 'https://cardstack.com/base/string';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 import { RadioInput, FieldContainer } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
@@ -75,7 +75,7 @@ export class PlayerOutcomeField extends FieldDef {
   > {
     <template>
       <div class='player-outcome'>
-        <span class='player-name'>{{@model.player.title}}</span>
+        <span class='player-name'>{{@model.player.cardTitle}}</span>
         <span class='outcome-badge'>{{@model.outcome.label}}</span>
       </div>
     </template>
@@ -202,15 +202,15 @@ export class GameResult extends CardDef {
   @field game = linksTo(() => CardDef);
   @field outcome = contains(PlayerOutcomeField);
   @field ref = contains(AbsoluteCodeRefField);
-  @field createdAt = contains(DatetimeField, {
+  @field createdAt = contains(DateTimeField, {
     computeVia: function (this: GameResult) {
       let lastModified = getCardMeta(this, 'lastModified');
       return lastModified ? new Date(lastModified * 1000) : undefined;
     },
   });
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GameResult) {
-      return this.game.title ?? 'Untitled Game Result';
+      return this.game.cardTitle ?? 'Untitled Game Result';
     },
   });
 
@@ -241,11 +241,11 @@ export class GameResult extends CardDef {
           <div class='game-section'>
             <div class='game-header'>
               <GamepadIcon class='game-icon' />
-              <h1 class='game-title'>{{@model.game.title}}</h1>
+              <h1 class='game-title'>{{@model.game.cardTitle}}</h1>
             </div>
             <div class='player-info'>
               <span class='player-label'>Player:</span>
-              <span class='player-name'>{{@model.outcome.player.title}}</span>
+              <span class='player-name'>{{@model.outcome.player.cardTitle}}</span>
             </div>
           </div>
 
@@ -541,11 +541,11 @@ export class GameResult extends CardDef {
         <div class='game-section'>
           <div class='game-header'>
             <GamepadIcon class='game-icon' />
-            <div class='game-title'>{{@model.game.title}}</div>
+            <div class='game-title'>{{@model.game.cardTitle}}</div>
           </div>
           <div class='player-info'>
             <span class='player-label'>Player:</span>
-            <span class='player-name'>{{@model.outcome.player.title}}</span>
+            <span class='player-name'>{{@model.outcome.player.cardTitle}}</span>
           </div>
           <div class='game-meta'>
             <span class='game-id-label'>Game ID:</span>

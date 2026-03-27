@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Tag",
-      "description": "Spec for Tag",
+      "cardTitle": "Tag",
+      "cardDescription": "Spec for Tag",
       "ref": {
         "name": "Tag",
         "module": "../tag"

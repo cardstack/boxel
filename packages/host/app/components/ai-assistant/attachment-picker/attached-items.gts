@@ -15,8 +15,18 @@ import {
   isCardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import {
+  requiredModality,
+  modalityLabel,
+  isTextBasedContentType,
+} from '@cardstack/runtime-common/ai/modality';
+
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import type {
+  FileUploadState,
+  FileUploadStatus,
+} from '@cardstack/host/lib/file-upload-state';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -33,20 +43,23 @@ interface Signature {
   Args: {
     items: (CardDef | FileDef | CardErrorJSONAPI)[];
     autoAttachedCardIds?: TrackedSet<string>;
-    autoAttachedFile?: FileDef;
+    autoAttachedFiles?: FileDef[];
     removeCard: (cardId: string) => void;
     removeFile: (file: FileDef) => void;
     chooseCard?: (cardId: string) => void;
     chooseFile?: (file: FileDef) => void;
     isLoaded: boolean;
     autoAttachedCardTooltipMessage?: string;
+    fileUploadStates?: ReadonlyMap<string, FileUploadState>;
+    retryFileUpload?: (file: FileDef) => void;
+    inputModalities?: string[];
   };
 }
 
 export default class AttachedItems extends Component<Signature> {
   @tracked areAllItemsDisplayed = false;
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   get itemsToDisplay() {
     return this.areAllItemsDisplayed
@@ -63,16 +76,16 @@ export default class AttachedItems extends Component<Signature> {
   };
 
   private isAutoAttachedFile = (file: FileDef): boolean => {
-    return this.args.autoAttachedFile?.sourceUrl === file.sourceUrl;
+    return (
+      this.args.autoAttachedFiles?.some(
+        (autoFile) => autoFile.sourceUrl === file.sourceUrl,
+      ) ?? false
+    );
   };
 
   @action
   private toggleViewAllAttachedCards() {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
-  }
-
-  private getCardErrorId(cardError: CardErrorJSONAPI) {
-    return cardError.id ?? '';
   }
 
   private getCardErrorRealm(cardError: CardErrorJSONAPI) {
@@ -103,50 +116,66 @@ export default class AttachedItems extends Component<Signature> {
     this.args.removeFile(file);
   }
 
+  private getUploadStatus = (file: FileDef): FileUploadStatus | undefined => {
+    let sourceUrl = file.sourceUrl;
+    if (!sourceUrl) {
+      return undefined;
+    }
+    return this.args.fileUploadStates?.get(sourceUrl)?.status;
+  };
+
+  private getModalityWarning = (file: FileDef): string | undefined => {
+    let modality = requiredModality(file.contentType);
+    if (modality) {
+      // Multimodal type — warn only if model doesn't support it
+      let modalities = this.args.inputModalities;
+      if (modalities && !modalities.includes(modality)) {
+        return `Model does not support ${modalityLabel(modality)}. Only metadata will be sent.`;
+      }
+      return undefined;
+    }
+    // Non-multimodal, non-text files only get metadata sent
+    if (!isTextBasedContentType(file.contentType)) {
+      return 'File type not supported. Will send file metadata only.';
+    }
+    return undefined;
+  };
+
   <template>
     <div class='attached-items' ...attributes>
       {{#if @isLoaded}}
         {{#each this.itemsToDisplay as |item|}}
           {{#if (isCardErrorJSONAPI item)}}
-            {{#if (this.isAutoAttachedCard (this.getCardErrorId item))}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <CardPill
-                    @cardId={{this.getCardErrorId item}}
-                    @borderType='dashed'
-                    @onClick={{fn
-                      this.handleChooseCard
-                      (this.getCardErrorId item)
-                    }}
-                    @onRemove={{fn
-                      this.handleRemoveCard
-                      (this.getCardErrorId item)
-                    }}
-                    @urlForRealmLookup={{this.getCardErrorRealm item}}
-                    data-test-autoattached-card={{this.getCardErrorId item}}
-                  />
-                </:trigger>
+            {{#if item.id}}
+              {{#if (this.isAutoAttachedCard item.id)}}
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <CardPill
+                      @cardId={{item.id}}
+                      @borderType='dashed'
+                      @onClick={{fn this.handleChooseCard item.id}}
+                      @onRemove={{fn this.handleRemoveCard item.id}}
+                      @urlForRealmLookup={{this.getCardErrorRealm item}}
+                      data-test-autoattached-card={{item.id}}
+                    />
+                  </:trigger>
 
-                <:content>
-                  {{#if @autoAttachedCardTooltipMessage}}
-                    {{@autoAttachedCardTooltipMessage}}
-                  {{else if
-                    (this.isAutoAttachedCard (this.getCardErrorId item))
-                  }}
-                    Topmost card is shared automatically
-                  {{/if}}
-                </:content>
-              </Tooltip>
-            {{else}}
-              <CardPill
-                @cardId={{this.getCardErrorId item}}
-                @borderType='solid'
-                @onRemove={{fn
-                  this.handleRemoveCard
-                  (this.getCardErrorId item)
-                }}
-                @urlForRealmLookup={{this.getCardErrorRealm item}}
-              />
+                  <:content>
+                    {{#if @autoAttachedCardTooltipMessage}}
+                      {{@autoAttachedCardTooltipMessage}}
+                    {{else if (this.isAutoAttachedCard item.id)}}
+                      Topmost card is shared automatically
+                    {{/if}}
+                  </:content>
+                </Tooltip>
+              {{else}}
+                <CardPill
+                  @cardId={{item.id}}
+                  @borderType='solid'
+                  @onRemove={{fn this.handleRemoveCard item.id}}
+                  @urlForRealmLookup={{this.getCardErrorRealm item}}
+                />
+              {{/if}}
             {{/if}}
           {{else if (this.isCard item)}}
             {{#if (this.isAutoAttachedCard item.id)}}
@@ -187,6 +216,9 @@ export default class AttachedItems extends Component<Signature> {
                     @borderType='dashed'
                     @onClick={{fn this.handleChooseFile item}}
                     @onRemove={{fn this.handleRemoveFile item}}
+                    @uploadStatus={{this.getUploadStatus item}}
+                    @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
+                    @warningMessage={{this.getModalityWarning item}}
                     data-test-autoattached-file={{item.sourceUrl}}
                   />
                 </:trigger>
@@ -199,6 +231,9 @@ export default class AttachedItems extends Component<Signature> {
                 @file={{item}}
                 @borderType='solid'
                 @onRemove={{fn this.handleRemoveFile item}}
+                @uploadStatus={{this.getUploadStatus item}}
+                @onRetry={{if @retryFileUpload (fn @retryFileUpload item)}}
+                @warningMessage={{this.getModalityWarning item}}
               />
             {{/if}}
           {{/if}}

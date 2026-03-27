@@ -1,14 +1,37 @@
-import type { CardResource, LooseCardResource, Meta } from './resource-types';
-import type { ResolvedCodeRef } from './code-ref';
+import type {
+  CardResource,
+  FileMetaResource,
+  LinkableResource,
+  LooseLinkableResource,
+  Meta,
+  Saved,
+} from './resource-types';
+import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
+import type { SerializedError } from './error';
+import {
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+} from './card-reference-resolver';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-import type { ErrorEntry } from './index-writer';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
+export interface LooseSingleResourceDocument<T extends LinkableResource> {
+  data: LooseLinkableResource<T>;
+  included?: LooseLinkableResource<LinkableResource>[];
+}
 
 export interface LooseSingleCardDocument {
-  data: LooseCardResource;
-  included?: CardResource[];
+  data: LooseLinkableResource<CardResource>;
+  included?: LinkableResource[];
+}
+
+export interface LooseSingleFileMetaDocument {
+  data: LooseLinkableResource<FileMetaResource>;
+  included?: LinkableResource[];
 }
 
 export type PatchData = {
@@ -39,9 +62,47 @@ export interface RenderResponse extends PrerenderMeta {
   error?: RenderError;
 }
 
+export interface ErrorEntry {
+  type: 'instance-error' | 'module-error' | 'file-error';
+  error: SerializedError;
+  types?: string[];
+  searchData?: Record<string, any>;
+  cardType?: string;
+}
+
 export interface RenderError extends ErrorEntry {
   evict?: boolean;
 }
+
+export interface FileExtractResponse {
+  id: string;
+  nonce: string;
+  status: 'ready' | 'error';
+  searchDoc: Record<string, any> | null;
+  resource?: FileMetaResource | null;
+  types?: string[] | null;
+  deps: string[];
+  error?: RenderError;
+  mismatch?: true;
+}
+
+export interface FileRenderResponse {
+  isolatedHTML: string | null;
+  headHTML: string | null;
+  atomHTML: string | null;
+  embeddedHTML: Record<string, string> | null;
+  fittedHTML: Record<string, string> | null;
+  iconHTML: string | null;
+  error?: RenderError;
+}
+
+export type FileRenderArgs = ModulePrerenderArgs & {
+  fileData: {
+    resource: FileMetaResource;
+    fileDefCodeRef: ResolvedCodeRef;
+  };
+  types: string[];
+};
 
 export interface ModuleDefinitionResult {
   type: 'definition';
@@ -64,7 +125,16 @@ export interface ModulePrerenderModel {
 
 export interface ModuleRenderResponse extends ModulePrerenderModel {}
 
+export type AffinityType = 'realm' | 'user';
+
+export type AffinityArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
+};
+
 export type ModulePrerenderArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
   realm: string;
   url: string;
   auth: string;
@@ -73,9 +143,25 @@ export type ModulePrerenderArgs = {
 
 export type PrerenderCardArgs = ModulePrerenderArgs;
 
+export type RunCommandArgs = {
+  userId: string;
+  auth: string;
+  command: string;
+  commandInput?: Record<string, any> | null;
+};
+
+export type RunCommandResponse = {
+  status: 'ready' | 'error' | 'unusable';
+  cardResultString?: string | null;
+  error?: string | null;
+};
+
 export interface Prerenderer {
   prerenderCard(args: PrerenderCardArgs): Promise<RenderResponse>;
   prerenderModule(args: ModulePrerenderArgs): Promise<ModuleRenderResponse>;
+  prerenderFileExtract(args: ModulePrerenderArgs): Promise<FileExtractResponse>;
+  prerenderFileRender(args: FileRenderArgs): Promise<FileRenderResponse>;
+  runCommand(args: RunCommandArgs): Promise<RunCommandResponse>;
 }
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
@@ -89,10 +175,20 @@ export {
   CardError,
   isCardError,
   formattedError,
+  type SerializedError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,
 } from './error';
+export { validateWriteSize } from './write-size-validation';
+export {
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+  cardIdToURL,
+} from './card-reference-resolver';
 
 export interface ResourceObject {
   type: string;
@@ -137,7 +233,7 @@ export interface RealmPrerenderedCards {
 // on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths';
-import type { CardTypeFilter, Query, EveryFilter } from './query';
+import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
 export * from './cached-fetch';
@@ -145,13 +241,16 @@ export * from './definition-lookup';
 export * from './definitions';
 export * from './catalog';
 export * from './commands';
+export * from './card-reference-resolver';
 export * from './constants';
 export * from './helpers/const';
 export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
+export * from './job-utils';
 export * from './expression';
+export * from './infer-content-type';
 export * from './index-query-engine';
 export * from './index-writer';
 export * from './definitions';
@@ -170,9 +269,12 @@ export * from './authorization-middleware';
 export * from './resource-types';
 export * from './query';
 export * from './search-utils';
+export * from './prerendered-html-format';
 export * from './query-field-utils';
 export * from './relationship-utils';
 export * from './formats';
+export * from './dependency-tracker';
+export * from './github-submissions';
 export { getCreatedTime } from './file-meta';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
@@ -183,9 +285,16 @@ export {
   getFieldIcon,
 } from './helpers/card-type-display-name';
 export * from './helpers/ensure-extension';
+export {
+  sanitizeHeadHTML,
+  sanitizeHeadHTMLToString,
+  findDisallowedHeadTags,
+} from './helpers/sanitize-head-html';
 export * from './url';
 export * from './render-route-options';
 export * from './publishability';
+export * from './pr-manifest';
+export * from './file-def-code-ref';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -217,19 +326,21 @@ export type {
   RealmSession,
 } from './realm';
 
-import type { CodeRef } from './code-ref';
-export type { CodeRef };
-
 export * from './code-ref';
+export * from './command-parsing-utils';
 export * from './serializers';
 
 export type {
   CardDocument,
   SingleCardDocument,
+  SingleFileMetaDocument,
   CardCollectionDocument,
+  FileMetaCollectionDocument,
+  LinkableCollectionDocument,
 } from './document-types';
 export type {
   CardResource,
+  FileMetaResource,
   ModuleResource,
   CardResourceMeta,
   ResourceID,
@@ -237,11 +348,15 @@ export type {
   Saved,
   Relationship,
   CardFields,
+  LooseLinkableResource,
 } from './resource-types';
 export {
   isCardDocument,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
+  isFileMetaCollectionDocument,
+  isLinkableCollectionDocument,
   isCardDocumentString,
 } from './document-types';
 export {
@@ -295,40 +410,51 @@ export type CreateNewCard = (
   },
 ) => Promise<string | undefined>;
 
+interface CardChooserOpts {
+  offerToCreate?: {
+    ref: CodeRef;
+    relativeTo: URL | undefined;
+    realmURL: URL | undefined;
+  };
+  createNewCard?: CreateNewCard;
+  consumingRealm?: URL;
+}
+
 export interface CardChooser {
   chooseCard(
     query: CardCatalogQuery,
-    opts?: {
-      offerToCreate?: {
-        ref: CodeRef;
-        relativeTo: URL | undefined;
-        realmURL: URL | undefined;
-      };
-      multiSelect?: boolean;
-      createNewCard?: CreateNewCard;
-      consumingRealm?: URL;
-    },
-  ): Promise<undefined | string>;
+    opts?: CardChooserOpts & { multiSelect?: boolean },
+  ): Promise<undefined | string | string[]>;
 }
 
 export interface FileChooser {
-  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
+  chooseFile<T>(opts?: {
+    fileType?: CodeRef;
+    fileTypeName?: string;
+  }): Promise<undefined | T>;
 }
 
 export async function chooseCard(
   query: CardCatalogQuery,
-  opts?: {
-    offerToCreate?: {
-      ref: CodeRef;
-      relativeTo: URL | undefined;
-      realmURL: URL | undefined;
-    };
-    multiSelect?: boolean;
-    createNewCard?: CreateNewCard;
+  opts: CardChooserOpts & {
+    multiSelect: true;
     preselectedCardTypeQuery?: Query;
-    consumingRealm?: URL;
   },
-): Promise<undefined | string> {
+): Promise<undefined | string[]>;
+export async function chooseCard(
+  query: CardCatalogQuery,
+  opts?: CardChooserOpts & {
+    multiSelect?: false;
+    preselectedCardTypeQuery?: Query;
+  },
+): Promise<undefined | string>;
+export async function chooseCard(
+  query: CardCatalogQuery,
+  opts?: CardChooserOpts & {
+    multiSelect?: boolean;
+    preselectedCardTypeQuery?: Query;
+  },
+): Promise<undefined | string | string[]> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
@@ -340,9 +466,10 @@ export async function chooseCard(
   return await chooser.chooseCard(query, opts);
 }
 
-export async function chooseFile<T extends FieldDef>(): Promise<
-  undefined | any
-> {
+export async function chooseFile<T extends FileDef>(opts?: {
+  fileType?: CodeRef;
+  fileTypeName?: string;
+}): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_FILE_CHOOSER) {
     throw new Error(
@@ -351,7 +478,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   }
   let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
 
-  return await chooser.chooseFile<T>();
+  return await chooser.chooseFile<T>(opts);
 }
 
 import type { CardErrorJSONAPI } from './error';
@@ -363,9 +490,10 @@ export type AutoSaveState = {
   lastSaveError: CardErrorJSONAPI | Error | undefined;
   lastSavedErrorMsg: string | undefined;
 };
-export type getCard<T extends CardDef = CardDef> = (
+export type getCard<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   id: () => string | undefined,
+  opts?: { type?: StoreReadType },
 ) => // This is a duck type of the CardResource
 {
   id: string | undefined;
@@ -400,6 +528,18 @@ export type getCards<T extends CardDef = CardDef> = (
   meta: QueryResultsMeta;
 };
 
+// Duck type of the SearchDataResource
+export type getSearchData = (
+  parent: object,
+  getQuery: () => DataQuery | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: { isLive?: boolean },
+) => {
+  resources: (CardResource<Saved> | FileMetaResource)[];
+  isLoading: boolean;
+  meta: QueryResultsMeta;
+};
+
 export interface CreateOptions {
   realm?: string;
   localDir?: LocalPath;
@@ -410,6 +550,8 @@ export interface AddOptions extends CreateOptions {
   doNotPersist?: boolean;
   doNotWaitForPersist?: boolean;
 }
+
+export type StoreReadType = 'card' | 'file-meta';
 
 export interface Store {
   save(id: string): void;
@@ -429,10 +571,27 @@ export interface Store {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
-  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
-  peekError(id: string): CardErrorJSONAPI | undefined;
-  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): T | CardErrorJSONAPI | undefined;
+  peek<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): T | CardErrorJSONAPI | undefined;
+  peekError(id: string, opts?: { type?: 'card' }): CardErrorJSONAPI | undefined;
+  peekError(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(
+    id: string,
+    opts?: { type?: 'card' },
+  ): Promise<T | CardErrorJSONAPI>;
+  get<T extends FileDef>(
+    id: string,
+    opts: { type: 'file-meta' },
+  ): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
@@ -443,9 +602,9 @@ export interface Store {
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
-export interface CardCatalogQuery extends Query {
+export type CardCatalogQuery = Query & {
   filter?: CardTypeFilter | EveryFilter;
-}
+};
 
 export interface CardCreator {
   create(
@@ -517,7 +676,11 @@ export function internalKeyFor(
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
-    let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;
+    let resolved = resolveCardReference(ref.module, relativeTo);
+    let module = trimExecutableExtension(new URL(resolved)).href;
+    // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
+    // internal key when a registered prefix mapping matches
+    module = unresolveCardReference(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
@@ -620,7 +783,7 @@ export function unixTime(epochTimeMs: number) {
 }
 
 export function isLocalId(id: string) {
-  return !id.startsWith('http');
+  return !id.startsWith('http') && !isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {
@@ -628,4 +791,11 @@ export function isBrowserTestEnv() {
 }
 
 export * from './prerendered-card-search';
+export { isBotTriggerEvent } from './bot-trigger';
+export {
+  assertIsBotCommandFilter,
+  isBotCommandFilter,
+  type BotCommandFilter,
+  type BotCommandMatrixFilter,
+} from './bot-command';
 export { DEFAULT_LLM_ID_TO_NAME } from './matrix-constants';

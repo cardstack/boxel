@@ -4,8 +4,8 @@
     "attributes": {
       "name": "Richard",
       "email": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "team": {

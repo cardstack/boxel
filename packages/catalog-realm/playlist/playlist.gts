@@ -95,8 +95,8 @@ class PlaylistEmbedded extends Component<typeof PlaylistCard> {
             'Untitled Playlist'
           }}</h4>
 
-        {{#if @model.description}}
-          <p class='compact-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='compact-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         <div class='compact-stats'>
@@ -487,8 +487,8 @@ class PlaylistIsolated extends Component<typeof PlaylistCard> {
                 'Untitled Playlist'
               }}</h1>
 
-            {{#if @model.description}}
-              <p class='playlist-description'>{{@model.description}}</p>
+            {{#if @model.cardDescription}}
+              <p class='playlist-description'>{{@model.cardDescription}}</p>
             {{/if}}
 
             <div class='playlist-meta'>
@@ -1020,7 +1020,7 @@ export class PlaylistCard extends CardDef {
   static icon = MusicIcon;
 
   @field playlistName = contains(StringField);
-  @field description = contains(TextAreaField);
+  @field cardDescription = contains(TextAreaField);
   @field coverImageUrl = contains(UrlField);
   @field songCount = contains(NumberField, {
     computeVia: function (this: PlaylistCard) {
@@ -1069,7 +1069,7 @@ export class PlaylistCard extends CardDef {
   @field averageEnergy = contains(NumberField); // Computed from songs
   @field averageDanceability = contains(NumberField); // Computed from songs
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PlaylistCard) {
       try {
         return this.playlistName ?? 'Untitled Playlist';

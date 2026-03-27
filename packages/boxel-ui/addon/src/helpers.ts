@@ -1,3 +1,4 @@
+import { addClassToSVG } from './helpers/add-class-to-svg.ts';
 import { copyCardURLToClipboard } from './helpers/clipboard.ts';
 import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
@@ -61,9 +62,11 @@ import type { EmailFormatValidationError } from './helpers/validate-email-format
 import type { NormalizePhoneFormatResult } from './helpers/validate-phone-format.ts';
 
 export * from './helpers/color-tools.ts';
+export * from './utils/fitted-formats.ts';
 
 export {
   add,
+  addClassToSVG,
   and,
   bool,
   buildCssGroups,

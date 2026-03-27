@@ -11,9 +11,9 @@
       "name": "Web Development",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Website creation, web applications, frontend frameworks, backend services, and web performance optimization.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Website creation, web applications, frontend frameworks, backend services, and web performance optimization.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

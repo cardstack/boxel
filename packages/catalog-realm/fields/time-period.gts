@@ -91,7 +91,7 @@ class TimePeriodFieldEdit extends Component<typeof TimePeriodField> {
   </template>
 }
 
-export class TimePeriodField extends FieldDef {
+export default class TimePeriodField extends FieldDef {
   static displayName = 'Time Period';
   static icon = CalendarRangeIcon;
 
@@ -530,5 +530,3 @@ export class TimePeriodField extends FieldDef {
 
   static edit = TimePeriodFieldEdit;
 }
-
-export default TimePeriodField;

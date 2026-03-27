@@ -92,9 +92,9 @@
           "width": null
         }
       ],
-      "title": "Custom Field Preview",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Custom Field Preview",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

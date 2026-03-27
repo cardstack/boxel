@@ -7,29 +7,36 @@ import { service } from '@ember/service';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, isFileDefInstance } from '@cardstack/runtime-common';
+
+import type { StoreReadType } from '@cardstack/runtime-common';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type StoreService from '../services/store';
 
 interface Args {
   named: {
     id: string | undefined;
+    type?: StoreReadType;
   };
 }
 
 export class CardResource extends Resource<Args> {
   #id: string | undefined;
+  #type: StoreReadType | undefined;
   #hasRegisteredDestructor = false;
   #hasReference = false;
   @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
-    let { id } = named;
-    if (id !== this.#id) {
+    let { id, type } = named;
+    if (id !== this.#id || type !== this.#type) {
       this.dropReferenceIfHeld();
       this.#id = id;
+      this.#type = type;
       if (this.#id) {
-        this.store.addReference(this.#id);
+        this.store.addReference(this.#id, { type: this.#type });
         this.#hasReference = true;
       }
     }
@@ -48,23 +55,46 @@ export class CardResource extends Resource<Args> {
     }
   }
 
-  // Note that this will return a stale instance when the server state for this
-  // id becomes an error. use this.cardError to see the live server state for
-  // this instance.
-  get card() {
+  private get readType(): StoreReadType {
+    return this.#type ?? 'card';
+  }
+
+  private peekForType(type: StoreReadType): unknown {
     if (!this.#id) {
       return undefined;
     }
-    let maybeCard = this.store.peek(this.#id);
-    return maybeCard && isCardInstance(maybeCard) ? maybeCard : undefined;
+    return type === 'file-meta'
+      ? (this.store.peek(this.#id, { type: 'file-meta' }) as unknown)
+      : (this.store.peek(this.#id) as unknown);
+  }
+
+  private peekErrorForType(type: StoreReadType) {
+    if (!this.#id) {
+      return undefined;
+    }
+    return type === 'file-meta'
+      ? this.store.peekError(this.#id, { type: 'file-meta' })
+      : this.store.peekError(this.#id);
+  }
+
+  // Note that this will return a stale instance when the server state for this
+  // id becomes an error. use this.cardError to see the live server state for
+  // this instance.
+  get card(): BaseDef | undefined {
+    if (!this.#id) {
+      return undefined;
+    }
+    let maybeCard = this.peekForType(this.readType);
+    return isCardInstance(maybeCard) || isFileDefInstance(maybeCard)
+      ? (maybeCard as BaseDef)
+      : undefined;
   }
 
   get cardError() {
     if (!this.#id) {
       return undefined;
     }
-    let maybeError = this.store.peekError(this.#id);
-    return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
+    return this.peekErrorForType(this.readType);
   }
 
   get id() {
@@ -75,7 +105,8 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return false;
     }
-    return Boolean(this.store.peek(this.#id));
+    let maybeInstanceOrError = this.peekForType(this.readType);
+    return Boolean(maybeInstanceOrError);
   }
 
   get autoSaveState() {
@@ -96,10 +127,15 @@ export class CardResource extends Resource<Args> {
 // ```
 // If you need to use `getCard()` in something that is not a Component, then
 // let's talk.
-export function getCard(parent: object, id: () => string | undefined) {
+export function getCard(
+  parent: object,
+  id: () => string | undefined,
+  opts?: { type?: StoreReadType },
+) {
   return CardResource.from(parent, () => ({
     named: {
       id: id(),
+      type: opts?.type,
     },
   }));
 }

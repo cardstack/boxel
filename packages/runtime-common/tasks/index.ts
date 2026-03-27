@@ -6,13 +6,15 @@ import type {
   Prerenderer,
   Reader,
   RealmPermissions,
+  DefinitionLookup,
 } from '../index';
-import type { JobInfo } from '../worker';
+import type { JobInfo, IndexingProgressEvent } from '../worker';
 export * from './lint';
 export * from './full-reindex';
 export * from './daily-credit-grant';
 export * from './copy';
 export * from './indexer';
+export * from './run-command';
 
 type LoggerInstance = ReturnType<typeof import('../index').logger>;
 
@@ -21,12 +23,14 @@ export interface TaskArgs {
   queuePublisher: QueuePublisher;
   indexWriter: IndexWriter;
   prerenderer: Prerenderer;
+  definitionLookup: DefinitionLookup;
   log: LoggerInstance;
   matrixURL: string;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
+  reportProgress?(event: IndexingProgressEvent): void;
 }
 
 export type Task<T, K> = (

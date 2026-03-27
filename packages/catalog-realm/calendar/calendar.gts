@@ -10,7 +10,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateField from 'https://cardstack.com/base/date';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
 import { fn, concat } from '@ember/helper';
@@ -95,10 +95,10 @@ export class CalendarEvent extends CardDef {
   static displayName = 'Calendar Event';
   static icon = CalendarIcon;
 
-  @field title = contains(StringField); // ⁴ Event details
-  @field description = contains(TextAreaField);
-  @field startTime = contains(DatetimeField);
-  @field endTime = contains(DatetimeField);
+  @field cardTitle = contains(StringField); // ⁴ Event details
+  @field cardDescription = contains(TextAreaField);
+  @field startTime = contains(DateTimeField);
+  @field endTime = contains(DateTimeField);
   @field location = contains(StringField);
   @field isAllDay = contains(StringField); // "true" or "false"
   @field eventType = contains(StringField); // meeting, appointment, reminder, etc.
@@ -120,8 +120,8 @@ export class CalendarEvent extends CardDef {
           {{/if}}
         </div>
         <div class='event-title'>{{if
-            @model.title
-            @model.title
+            @model.cardTitle
+            @model.cardTitle
             'Untitled Event'
           }}</div>
         {{#if @model.location}}
@@ -169,8 +169,8 @@ export class CalendarEvent extends CardDef {
                 (formatCalendarDate @model.startTime 'time')
               }}</div>
             <div class='event-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Event'
               }}</div>
           </div>
@@ -184,8 +184,8 @@ export class CalendarEvent extends CardDef {
                 (formatCalendarDate @model.startTime 'time')
               }}</span>
             <span class='title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Event'
               }}</span>
             {{#if @model.location}}<span class='location'>📍
@@ -208,15 +208,15 @@ export class CalendarEvent extends CardDef {
                 }}</span>
             </div>
             <div class='tile-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Event'
               }}</div>
             {{#if @model.location}}<div class='tile-location'>📍
                 {{@model.location}}</div>{{/if}}
-            {{#if @model.description}}<div
+            {{#if @model.cardDescription}}<div
                 class='tile-desc'
-              >{{@model.description}}</div>{{/if}}
+              >{{@model.cardDescription}}</div>{{/if}}
           </div>
         </div>
 
@@ -235,15 +235,15 @@ export class CalendarEvent extends CardDef {
                 }}</div>
             </div>
             <div class='card-title'>{{if
-                @model.title
-                @model.title
+                @model.cardTitle
+                @model.cardTitle
                 'Untitled Event'
               }}</div>
             {{#if @model.location}}<div class='card-location'>📍
                 {{@model.location}}</div>{{/if}}
-            {{#if @model.description}}<div
+            {{#if @model.cardDescription}}<div
                 class='card-description'
-              >{{@model.description}}</div>{{/if}}
+              >{{@model.cardDescription}}</div>{{/if}}
           </div>
         </div>
       </div>
@@ -1017,18 +1017,18 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                                 )
                               )
                             }}
-                            title={{event.title}}
+                            title={{event.cardTitle}}
                             {{on 'click' (fn this.handleEventClick event)}}
                           >
                             <span class='event-text'>
                               {{#if event.isAllDay}}
-                                {{event.title}}
+                                {{event.cardTitle}}
                               {{else}}
                                 <span class='event-time'>{{formatCalendarDate
                                     event.startTime
                                     'time'
                                   }}</span>
-                                <span class='event-title'>{{event.title}}</span>
+                                <span class='event-title'>{{event.cardTitle}}</span>
                               {{/if}}
                             </span>
                           </div>
@@ -1130,8 +1130,8 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                               {{/if}}
                             </div>
                             <div class='event-title'>{{if
-                                event.title
-                                event.title
+                                event.cardTitle
+                                event.cardTitle
                                 'Untitled Event'
                               }}</div>
                             {{#if event.location}}
@@ -1232,8 +1232,8 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                               {{/if}}
                             </div>
                             <div class='event-title'>{{if
-                                event.title
-                                event.title
+                                event.cardTitle
+                                event.cardTitle
                                 'Untitled Event'
                               }}</div>
                             {{#if event.location}}
@@ -1343,8 +1343,8 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
                   </div>
 
                   <div class='modal-event-title'>{{if
-                      event.title
-                      event.title
+                      event.cardTitle
+                      event.cardTitle
                       'Untitled Event'
                     }}</div>
 
@@ -3014,7 +3014,7 @@ export class CalendarCard extends CardDef {
   @field calendarName = contains(StringField); // ⁷ Calendar identification
 
   // ⁹ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CalendarCard) {
       try {
         const name = this.calendarName || 'Calendar';
@@ -3146,8 +3146,8 @@ export class CalendarCard extends CardDef {
                       'time'
                     }}{{/if}}</span>
                 <span class='event-title'>{{if
-                    event.title
-                    event.title
+                    event.cardTitle
+                    event.cardTitle
                     'Untitled Event'
                   }}</span>
               </div>
@@ -3373,8 +3373,8 @@ export class CalendarCard extends CardDef {
                       (formatCalendarDate event.startTime 'time')
                     }}</span>
                   <span class='event-title'>{{if
-                      event.title
-                      event.title
+                      event.cardTitle
+                      event.cardTitle
                       'Untitled Event'
                     }}</span>
                 </div>
@@ -3419,8 +3419,8 @@ export class CalendarCard extends CardDef {
                           (formatCalendarDate event.startTime 'time')
                         }}</span>
                       <span class='title'>{{if
-                          event.title
-                          event.title
+                          event.cardTitle
+                          event.cardTitle
                           'Untitled Event'
                         }}</span>
                     </div>

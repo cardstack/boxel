@@ -22,6 +22,8 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -50,6 +52,7 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -82,7 +85,7 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -99,15 +102,17 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
       };
     }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-        }),
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+          }),
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
     });
   });
 
@@ -137,9 +142,7 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();

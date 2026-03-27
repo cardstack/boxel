@@ -21,9 +21,9 @@
       },
       "cardInfo": {
         "notes": null,
-        "title": "Mary Hu",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Mary Hu",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     }
   }

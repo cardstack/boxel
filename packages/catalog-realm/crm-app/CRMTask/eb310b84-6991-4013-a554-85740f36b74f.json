@@ -18,8 +18,8 @@
       },
       "name": "TechFlow Content Calendar Review",
       "details": "Review and approve Q2 content marketing calendar for TechFlow's digital presence",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

@@ -21,7 +21,7 @@ import { bool, cn, eq, not, toMenuItems } from '@cardstack/boxel-ui/helpers';
 import {
   cardTypeDisplayName,
   cardTypeIcon,
-  getCardMenuItems,
+  getMenuItems,
 } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
@@ -59,10 +59,10 @@ interface Signature {
 }
 
 export default class RoomMessageCommand extends Component<Signature> {
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare realm: RealmService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private commandService: CommandService;
+  @service declare private matrixService: MatrixService;
+  @service declare private realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
@@ -135,9 +135,11 @@ export default class RoomMessageCommand extends Component<Signature> {
   }
 
   private get shouldDisplayResultCard() {
+    let commandName = this.args.messageCommand.name ?? '';
     return (
       !!this.commandResultCard.card &&
-      this.args.messageCommand.name !== 'checkCorrectness'
+      commandName !== 'checkCorrectness' &&
+      !commandName.startsWith('switch-submode')
     );
   }
 
@@ -159,7 +161,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get moreOptionsMenuItems() {
     let menuItems =
-      this.commandResultCard.card?.[getCardMenuItems]?.({
+      this.commandResultCard.card?.[getMenuItems]?.({
         canEdit: false,
         cardCrudFunctions: {},
         menuContext: 'ai-assistant',

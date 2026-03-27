@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "category": "Other Purchases",
       "appliesTo": "All other eligible purchases",
@@ -22,7 +22,7 @@
           "code": "USD"
         }
       },
-      "conditions": "1X POINTS On Other Eligible Purchases Terms and limitations apply.‡",
+      "conditions": "1X POINTS On Other Eligible Purchases Terms and limitations apply.\u2021",
       "rateMultiplier": 1
     },
     "relationships": {

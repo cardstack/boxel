@@ -51,7 +51,7 @@ export class ThreejsCarCustomizer extends CardDef {
   static displayName = 'Threejs Car Customizer';
   static prefersWideFormat = true;
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: ThreejsCarCustomizer) {
       return 'Threejs Car Customizer';
     },

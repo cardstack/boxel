@@ -1,15 +1,14 @@
 import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import type { Realm } from '@cardstack/runtime-common';
-import { stringify } from 'qs';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { setupPermissionedRealm, createJWT } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  createJWT,
+  testRealmURLFor,
+} from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-
-function buildQueryParam(query: Query) {
-  return encodeURIComponent(stringify(query, { encode: false }));
-}
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _search', function () {
@@ -44,22 +43,35 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       };
     }
 
-    module('GET request', function (_hooks) {
+    function buildFileDefQuery(): Query {
+      return {
+        filter: {
+          type: {
+            module: `${baseRealm.url}file-api`,
+            name: 'FileDef',
+          },
+        },
+      };
+    }
+
+    module('QUERY request (public realm)', function (_hooks) {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
-        test('serves a /_search GET request', async function (assert) {
+        test('serves a /_search QUERY request', async function (assert) {
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query());
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
@@ -100,8 +112,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(unknownTypeQuery)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(unknownTypeQuery);
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
@@ -137,8 +151,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           };
 
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(paginationQuery)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(paginationQuery);
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           let json = response.body;
@@ -151,8 +167,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           // Get the second page
           paginationQuery.page = { number: 1, size: 1 };
           response = await request
-            .get(`${searchPath}?query=${buildQueryParam(paginationQuery)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(paginationQuery);
 
           assert.strictEqual(
             response.status,
@@ -175,65 +193,567 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             'different pages should return different results',
           );
         });
+
+        test('serves file-meta results when querying for FileDef', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildFileDefQuery());
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.ok(json.data.length > 0, 'file-meta results are returned');
+          assert.ok(
+            json.data.every((entry) => entry.type === 'file-meta'),
+            'all results are file-meta resources',
+          );
+          assert.ok(
+            json.data.some((entry) => entry.id === `${realmHref}dir/foo.txt`),
+            'expected file-meta entry is present',
+          );
+        });
+
+        test('filters file-meta results by url', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: {
+                  module: `${baseRealm.url}file-api`,
+                  name: 'FileDef',
+                },
+                eq: {
+                  url: `${realmHref}dir/foo.txt`,
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.deepEqual(
+            json.data.map((entry) => entry.id),
+            [`${realmHref}dir/foo.txt`],
+            'url filter returns matching file-meta entry',
+          );
+          assert.strictEqual(
+            json.data[0]?.type,
+            'file-meta',
+            'url filter returns file-meta resource',
+          );
+        });
+
+        test('filters file-meta results by FileDef subclass type', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                type: {
+                  module: `${baseRealm.url}markdown-file-def`,
+                  name: 'MarkdownDef',
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as { data: { id?: string; type: string }[] };
+
+          assert.ok(
+            json.data.some((entry) => entry.id === `${realmHref}sample.md`),
+            'returns file-meta entries for subclass FileDef type',
+          );
+        });
+
+        test('sparse fieldsets: empty fields returns resources with no attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': [] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+              meta?: Record<string, any>;
+              links?: Record<string, any>;
+            }[];
+          };
+
+          assert.ok(json.data.length > 0, 'results are returned');
+          for (let entry of json.data) {
+            assert.strictEqual(
+              entry.type,
+              'file-meta',
+              'resource type is preserved',
+            );
+            assert.ok(entry.id, 'resource id is preserved');
+            assert.ok(entry.meta, 'resource meta is preserved');
+            assert.deepEqual(
+              entry.attributes,
+              {},
+              'attributes are empty when fields is empty array',
+            );
+          }
+        });
+
+        test('sparse fieldsets: specific fields returns only those attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': ['name', 'url'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.ok(json.data.length > 0, 'results are returned');
+          for (let entry of json.data) {
+            let attrKeys = Object.keys(entry.attributes ?? {});
+            assert.ok(
+              attrKeys.every((k) => ['name', 'url'].includes(k)),
+              `attributes only contain requested fields, got: ${attrKeys.join(', ')}`,
+            );
+            assert.notStrictEqual(
+              entry.attributes?.name,
+              undefined,
+              'name attribute is present',
+            );
+            assert.notStrictEqual(
+              entry.attributes?.url,
+              undefined,
+              'url attribute is present',
+            );
+          }
+        });
+
+        test('sparse fieldsets: invalid fields value returns 400', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': 'not-an-array' },
+              asData: true,
+            });
+
+          assert.strictEqual(
+            response.status,
+            400,
+            'returns 400 for invalid fields value',
+          );
+        });
+
+        test('sparse fieldsets: fields without asData returns 400', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFileDefQuery(),
+              fields: { 'file-meta': ['name'] },
+            });
+
+          assert.strictEqual(
+            response.status,
+            400,
+            'returns 400 when fields is specified without asData: true',
+          );
+        });
+
+        test('query without fields returns all attributes (backward compat)', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildFileDefQuery());
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.ok(json.data.length > 0, 'results are returned');
+          let entry = json.data.find((e) => e.id === `${realmHref}dir/foo.txt`);
+          assert.ok(entry, 'expected entry is present');
+          assert.ok(entry!.attributes, 'attributes are present');
+          assert.ok(
+            Object.keys(entry!.attributes!).length > 0,
+            'attributes are populated when fields is not specified',
+          );
+          assert.notStrictEqual(
+            entry!.attributes?.name,
+            undefined,
+            'name attribute is present',
+          );
+          assert.notStrictEqual(
+            entry!.attributes?.url,
+            undefined,
+            'url attribute is present',
+          );
+        });
+
+        test('sparse fieldsets for cards: empty fields returns card resources with no attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildPersonQuery('Mango'),
+              fields: { card: [] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+              meta?: Record<string, any>;
+              links?: Record<string, any>;
+            }[];
+          };
+
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          let entry = json.data[0];
+          assert.strictEqual(entry.type, 'card', 'resource type is preserved');
+          assert.ok(entry.id, 'resource id is preserved');
+          assert.ok(entry.meta, 'resource meta is preserved');
+          assert.deepEqual(
+            entry.attributes,
+            {},
+            'attributes are empty when fields is empty array',
+          );
+        });
+
+        test('sparse fieldsets for cards: specific fields returns only those attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildPersonQuery('Mango'),
+              fields: { card: ['firstName'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          let entry = json.data[0];
+          let attrKeys = Object.keys(entry.attributes ?? {});
+          assert.deepEqual(
+            attrKeys,
+            ['firstName'],
+            'only requested field is present',
+          );
+          assert.strictEqual(
+            entry.attributes?.firstName,
+            'Mango',
+            'firstName value is correct',
+          );
+        });
+
+        test('sparse fieldsets for cards: query without fields returns all attributes', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(buildPersonQuery('Mango'));
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body as {
+            data: {
+              id?: string;
+              type: string;
+              attributes?: Record<string, any>;
+            }[];
+          };
+
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          let entry = json.data[0];
+          assert.ok(entry!.attributes, 'attributes are present');
+          assert.ok(
+            Object.keys(entry!.attributes!).length > 0,
+            'attributes are populated when fields is not specified',
+          );
+          assert.strictEqual(
+            entry.attributes?.firstName,
+            'Mango',
+            'firstName attribute is present',
+          );
+        });
       });
 
-      module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+      module('fields-based link loading', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
-            john: ['read'],
+            '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
+          fileSystem: {
+            'friend.gts': `
+              import {
+                contains,
+                linksTo,
+                linksToMany,
+                field,
+                CardDef,
+                Component,
+              } from 'https://cardstack.com/base/card-api';
+              import StringField from 'https://cardstack.com/base/string';
+
+              export class Friend extends CardDef {
+                @field firstName = contains(StringField);
+                @field friend = linksTo(() => Friend);
+                @field friends = linksToMany(() => Friend);
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template>
+                    <@fields.firstName />
+                  </template>
+                };
+              }
+            `,
+            'friend-1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Alice',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './friend-2',
+                    },
+                  },
+                  'friends.0': {
+                    links: {
+                      self: './friend-2',
+                    },
+                  },
+                  'friends.1': {
+                    links: {
+                      self: './friend-3',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+            'friend-2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Bob',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: './friend-3',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+            'friend-3.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Charlie',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+            },
+          },
           onRealmSetup,
         });
 
-        test('401 with invalid JWT', async function (assert) {
+        function buildFriendQuery(firstName: string): Query {
+          return {
+            filter: {
+              on: {
+                module: `${realmHref}friend`,
+                name: 'Friend',
+              },
+              eq: {
+                firstName,
+              },
+            },
+          };
+        }
+
+        test('fields with relationship field name loads that relationship into included', async function (assert) {
           let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json');
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('401 without a JWT', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json'); // no Authorization header
-
-          assert.strictEqual(response.status, 401, 'HTTP 401 status');
-        });
-
-        test('403 without permission', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
-            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
-
-          assert.strictEqual(response.status, 403, 'HTTP 403 status');
-        });
-
-        test('200 with permission', async function (assert) {
-          let response = await request
-            .get(`${searchPath}?query=${buildQueryParam(query())}`)
-            .set('Accept', 'application/vnd.card+json')
-            .set(
-              'Authorization',
-              `Bearer ${createJWT(testRealm, 'john', ['read'])}`,
-            );
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['firstName', 'friend'] },
+              asData: true,
+            });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.strictEqual(
+            json.data[0].attributes.firstName,
+            'Alice',
+            'correct card returned',
+          );
+          assert.ok(json.included, 'included array is present');
+          assert.ok(json.included.length > 0, 'included has resources');
+          let includedIds = json.included.map((r: { id: string }) => r.id);
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-2')),
+            'linked friend resource is in included',
+          );
+        });
+
+        test('fields with only attribute field names does not load links', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['firstName'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.strictEqual(
+            json.data[0].attributes.firstName,
+            'Alice',
+            'correct card returned',
+          );
+          assert.strictEqual(
+            json.included,
+            undefined,
+            'no included array when fields has no relationship names',
+          );
+        });
+
+        test('fields filter applies only at root level - nested relationships are fully loaded', async function (assert) {
+          // Alice links to Bob via `friend`, and Bob links to Charlie via
+          // `friend`. When we request only `friend` in fields, Bob's nested
+          // link to Charlie should also be included because linkFields is
+          // cleared for recursive link loading.
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['friend'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.ok(json.included, 'included array is present');
+          let includedIds = json.included.map((r: { id: string }) => r.id);
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-2')),
+            'directly linked friend (Bob) is in included',
+          );
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-3')),
+            "Bob's nested friend (Charlie) is also in included",
+          );
+        });
+
+        test('fields with linksToMany relationship loads those links', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              ...buildFriendQuery('Alice'),
+              fields: { card: ['friends'] },
+              asData: true,
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          let json = response.body;
+          assert.strictEqual(json.data.length, 1, 'one result is returned');
+          assert.ok(json.included, 'included array is present');
+          let includedIds = json.included.map((r: { id: string }) => r.id);
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-2')),
+            'first linked friend is in included',
+          );
+          assert.ok(
+            includedIds.some((id: string) => id.includes('friend-3')),
+            'second linked friend is in included',
+          );
         });
       });
     });
 
-    module('QUERY request', function (_hooks) {
+    module('QUERY request (permissioned realm)', function (_hooks) {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -305,11 +825,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -361,11 +882,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('search query validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 

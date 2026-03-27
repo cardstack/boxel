@@ -53,7 +53,7 @@ export const SORT_OPTIONS: SortOption[] = [
           module: `${baseRealm.url}card-api`,
           name: 'CardDef',
         },
-        by: 'title',
+        by: 'cardTitle',
         direction: 'asc',
       },
     ],

@@ -1,5 +1,6 @@
 import {
   visitModuleDeps,
+  resolveCardReference,
   type LooseCardResource,
   type Loader,
 } from '@cardstack/runtime-common';
@@ -10,12 +11,12 @@ export function directModuleDeps(
 ): string[] {
   let result: string[] = [];
   visitModuleDeps(resource, (moduleURL) => {
-    result.push(new URL(moduleURL, instanceURL).href);
+    result.push(resolveCardReference(moduleURL, instanceURL));
   });
   return result;
 }
 
-export async function recursiveModuleDeps(
+export async function transitiveModuleDeps(
   directDeps: string[],
   loader: Loader,
 ) {

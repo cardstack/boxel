@@ -53,7 +53,11 @@ import {
 
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 
-import { StackItem } from '@cardstack/host/lib/stack-item';
+import {
+  detectStackItemTypeForTarget,
+  StackItem,
+  type StackItemType,
+} from '@cardstack/host/lib/stack-item';
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
@@ -118,20 +122,20 @@ interface CardToDelete {
 }
 
 export default class InteractSubmode extends Component {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-  @consume(CardContextName) private declare cardContext: CardContext;
+  declare private getCardCollection: getCardCollection;
+  @consume(CardContextName) declare private cardContext: CardContext;
 
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare store: StoreService;
-  @service private declare realm: Realm;
-  @service private declare realmServer: RealmServer;
-  @service private declare recentCardsService: RecentCardsService;
-  @service private declare loaderService: LoaderService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private store: StoreService;
+  @service declare private realm: Realm;
+  @service declare private realmServer: RealmServer;
+  @service declare private recentCardsService: RecentCardsService;
+  @service declare private loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
@@ -186,6 +190,7 @@ export default class InteractSubmode extends Component {
       request: new Deferred(),
       closeAfterSaving: opts?.closeAfterCreating,
       stackIndex,
+      type: 'card',
     });
     this.addToStack(newItem);
     return localId;
@@ -196,6 +201,7 @@ export default class InteractSubmode extends Component {
     cardOrURL: CardDef | URL | string,
     format: Format | Event = 'isolated',
     opts?: {
+      type?: StackItemType;
       openCardInRightMostStack?: boolean;
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
@@ -210,8 +216,11 @@ export default class InteractSubmode extends Component {
       typeof cardOrURL === 'string'
         ? cardOrURL
         : cardOrURL instanceof URL
-        ? cardOrURL.href
-        : cardOrURL.id;
+          ? cardOrURL.href
+          : cardOrURL.id;
+    if (!cardId) {
+      return;
+    }
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
     } else if (typeof opts?.stackIndex === 'number') {
@@ -229,10 +238,12 @@ export default class InteractSubmode extends Component {
       }
       stackIndex = opts.stackIndex;
     }
+    let stackItemType = opts?.type ?? this.getStackItemType(cardOrURL, cardId);
     let newItem = new StackItem({
       id: cardId,
       format,
       stackIndex,
+      type: stackItemType,
       relationshipContext: opts?.fieldName
         ? {
             fieldName: opts.fieldName,
@@ -250,6 +261,13 @@ export default class InteractSubmode extends Component {
   private editCard = (stackIndex: number, card: CardDef): void => {
     this.operatorModeStateService.editCardOnStack(stackIndex, card);
   };
+
+  private getStackItemType(
+    cardOrURL: CardDef | URL | string,
+    cardId: string,
+  ): StackItemType {
+    return detectStackItemTypeForTarget(cardOrURL, cardId, this.store);
+  }
 
   private saveCard = (id: string): void => {
     this.store.save(id);
@@ -354,7 +372,7 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
-        sources.sort((a, b) => a.title.localeCompare(b.title));
+        sources.sort((a, b) => a.cardTitle.localeCompare(b.cardTitle));
         let scrollToCardId: string | undefined;
         let newCardId: string | undefined;
         let targetStackIndex = destinationItem.stackIndex;
@@ -403,7 +421,7 @@ export default class InteractSubmode extends Component {
       let loadedCard = card as CardDef;
       cardToDelete = {
         id: loadedCard.id,
-        title: loadedCard.title,
+        title: loadedCard.cardTitle,
       };
     } else {
       let cardUrl = card instanceof URL ? card : new URL(card as string);
@@ -411,7 +429,7 @@ export default class InteractSubmode extends Component {
       if (isCardInstance(loadedCard)) {
         cardToDelete = {
           id: loadedCard.id,
-          title: loadedCard.title,
+          title: loadedCard.cardTitle,
         };
       } else {
         let error = loadedCard;
@@ -500,6 +518,7 @@ export default class InteractSubmode extends Component {
             id: url.href,
             format: 'isolated',
             stackIndex: 0,
+            type: this.getStackItemType(url, url.href),
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
@@ -542,6 +561,7 @@ export default class InteractSubmode extends Component {
                   id: url.href,
                   format: 'isolated',
                   stackIndex,
+                  type: this.getStackItemType(url, url.href),
                 });
                 // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(

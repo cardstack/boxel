@@ -7,9 +7,9 @@
       "slug": "city-design",
       "pillColor": "#1EDF67",
       "cardInfo": {
-        "description": "Showcasing architecture and urban planning brilliance.",
-        "title": "City Design",
-        "thumbnailURL": null
+        "summary": "Showcasing architecture and urban planning brilliance.",
+        "name": "City Design",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

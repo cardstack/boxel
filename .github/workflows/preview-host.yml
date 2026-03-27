@@ -7,6 +7,7 @@ on:
       - "packages/boxel-ui/**"
       - "packages/boxel-icons/**"
       - ".github/workflows/pr-boxel-host.yml"
+      - ".github/workflows/preview-host.yml"
       - "package.json"
       - "pnpm-lock.yaml"
 
@@ -22,10 +23,13 @@ jobs:
   check-if-requires-preview:
     name: Check if a preview deploy is required
     runs-on: ubuntu-latest
+    concurrency:
+      group: check-if-requires-preview-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     outputs:
       boxel-host-files-changed: ${{ steps.boxel-host-files-that-changed.outputs.any_changed }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Get boxel-host files that changed
         id: boxel-host-files-that-changed
         uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 # 46.0.1
@@ -34,6 +38,7 @@ jobs:
             .github/workflows/build-host.yml
             .github/workflows/deploy-host.yml
             .github/workflows/pr-boxel-host.yml
+            .github/workflows/preview-host.yml
             packages/host/**
             packages/boxel-ui/**
             packages/boxel-icons/**
@@ -45,30 +50,26 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-host-preview-staging-${{ github.head_ref || github.run_id }}
+    concurrency:
+      group: deploy-host-preview-staging-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
         with:
           role-to-assume: arn:aws:iam::680542703984:role/boxel-host
           aws-region: us-east-1
+      - name: Load app environment variables
+        shell: bash
+        run: cat packages/host/config/staging.env >> $GITHUB_ENV
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          REALM_SERVER_ROOT: https://realms-staging.stack.cards/
-          RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
-          RESOLVED_CATALOG_REALM_URL: https://realms-staging.stack.cards/catalog/
-          RESOLVED_SKILLS_REALM_URL: https://realms-staging.stack.cards/skills/
-          MATRIX_URL: https://matrix-staging.stack.cards
-          MATRIX_SERVER_NAME: stack.cards
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
-          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: staging.boxel.dev
-          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: staging.boxel.build
-        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
           environment: staging
@@ -80,30 +81,26 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-host-preview-production-${{ github.head_ref || github.run_id }}
+    concurrency:
+      group: deploy-host-preview-production-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
         with:
           role-to-assume: arn:aws:iam::120317779495:role/boxel-host
           aws-region: us-east-1
+      - name: Load app environment variables
+        shell: bash
+        run: cat packages/host/config/production.env >> $GITHUB_ENV
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          REALM_SERVER_ROOT: https://app.boxel.ai/
-          RESOLVED_BASE_REALM_URL: https://app.boxel.ai/base/
-          RESOLVED_CATALOG_REALM_URL: https://app.boxel.ai/catalog/
-          RESOLVED_SKILLS_REALM_URL: https://app.boxel.ai/skills/
-          MATRIX_URL: https://matrix.boxel.ai
-          MATRIX_SERVER_NAME: boxel.ai
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.boxel.ai
           AWS_S3_BUCKET: boxel-host-preview.boxel.ai
           AWS_REGION: us-east-1
           AWS_CLOUDFRONT_DISTRIBUTION: E2PZR9CIAW093B
-          PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: boxel.space
-          PUBLISHED_REALM_BOXEL_SITE_DOMAIN: boxel.site
-        # If you change these, change the equivalent line in preview-comment.yml
         with:
           package: boxel-host
           environment: production
@@ -113,7 +110,7 @@ jobs:
     needs:
       - deploy-host-preview-staging
       - deploy-host-preview-production
-    if: ${{ always() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
+    if: ${{ !cancelled() && (needs.deploy-host-preview-staging.result == 'success' || needs.deploy-host-preview-production.result == 'success') }}
     uses: ./.github/workflows/preview-comment.yml
     with:
       pr-number: ${{ github.event.pull_request.number }}

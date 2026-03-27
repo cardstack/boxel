@@ -6,6 +6,7 @@ import {
   findAll,
   waitUntil,
   settled,
+  visit,
 } from '@ember/test-helpers';
 
 import { fillIn } from '@ember/test-helpers';
@@ -28,6 +29,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_LLM_MODE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -76,6 +78,7 @@ import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
+let savedMeetingCardId: string | undefined;
 
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -98,6 +101,7 @@ module('Acceptance | Commands tests', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
+    savedMeetingCardId = undefined;
     matrixRoomId = await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
@@ -110,7 +114,7 @@ module('Acceptance | Commands tests', function (hooks) {
       @field name = contains(StringField);
       @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -125,15 +129,15 @@ module('Acceptance | Commands tests', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2><@fields.title /></h2>
+            <h2><@fields.cardTitle /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
                 {{#if @canEdit}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is editable.
                 {{else}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is NOT editable.
                 {{/if}}
               </div>
@@ -167,10 +171,11 @@ module('Acceptance | Commands tests', function (hooks) {
           participants: input.participants,
         });
         let saveCardCommand = new SaveCardCommand(this.commandContext);
-        await saveCardCommand.execute({
+        let savedMeeting = await saveCardCommand.execute({
           card: meeting,
           realm: testRealmURL,
         });
+        savedMeetingCardId = savedMeeting?.id;
 
         let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
@@ -251,6 +256,26 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
+    class GreetingCard extends CardDef {
+      static displayName = 'GreetingCard';
+      @field message = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <h2 data-test-command-runner-greeting><@fields.message /></h2>
+        </template>
+      };
+    }
+
+    class HelloCommand extends Command<undefined, typeof GreetingCard> {
+      static displayName = 'HelloCommand';
+      async getInputType() {
+        return undefined;
+      }
+      protected async run(): Promise<GreetingCard> {
+        return new GreetingCard({ message: 'Hello from command runner' });
+      }
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -265,7 +290,7 @@ module('Acceptance | Commands tests', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
@@ -390,6 +415,10 @@ module('Acceptance | Commands tests', function (hooks) {
           friends: [mangoPet],
         }),
         'maybe-boom-command.ts': { default: MaybeBoomCommand },
+        'command-runner-hello-command.ts': {
+          GreetingCard,
+          default: HelloCommand,
+        },
         'search-and-open-card-command.ts': {
           default: SearchAndOpenCardCommand,
         },
@@ -429,9 +458,9 @@ module('Acceptance | Commands tests', function (hooks) {
                   requiresApproval: true,
                 },
               ],
-              title: 'Useful Commands',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
             },
             meta: {
               adoptsFrom: skillCardRef,
@@ -464,6 +493,77 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-ai-message-content]')
       .includesText('Change the topic of the meeting to "Meeting with Hassan"');
+  });
+
+  module('command-runner', function () {
+    function setCommandRunnerRequest(
+      requestId: string,
+      nonce: string,
+      command: string,
+      input: Record<string, unknown> | null,
+    ) {
+      window.localStorage.setItem(
+        `boxel-command-request:${requestId}`,
+        JSON.stringify({
+          command,
+          input,
+          nonce,
+          createdAt: Date.now(),
+        }),
+      );
+    }
+
+    test('route renders command result card', async function (assert) {
+      let requestId = 'command-runner-test-success';
+      let nonce = '1';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}command-runner-hello-command/default`,
+        null,
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
+
+      await waitFor('[data-prerender][data-prerender-status="ready"]');
+      assert
+        .dom('[data-test-command-runner-greeting]')
+        .includesText('Hello from command runner');
+    });
+
+    test('route captures command runtime error', async function (assert) {
+      maybeBoomShouldBoom = true;
+      let requestId = 'command-runner-test-error';
+      let nonce = '2';
+      setCommandRunnerRequest(
+        requestId,
+        nonce,
+        `${testRealmURL}maybe-boom-command/default`,
+        null,
+      );
+      await visit(`/command-runner/${requestId}/${nonce}`);
+
+      await waitFor('[data-prerender][data-prerender-status="error"]');
+      assert.dom('[data-prerender-error]').includesText('Boom!');
+      assert.dom('[data-test-command-runner-greeting]').doesNotExist();
+    });
+  });
+
+  test('SaveCardCommand returns the saved card with its id set', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    const testCard = `${testRealmURL}Person/hassan`;
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await click(
+      `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"] .field-component-card`,
+    );
+    await click('[data-test-schedule-meeting-button]');
+    await waitUntil(() => savedMeetingCardId !== undefined);
+    assert.ok(savedMeetingCardId, 'SaveCardCommand returned the saved card');
+    assert.true(
+      savedMeetingCardId!.startsWith(testRealmURL),
+      'saved card id is a URL within the test realm',
+    );
   });
 
   test('a scripted command can create a card, update it and show it', async function (assert) {
@@ -660,7 +760,7 @@ module('Acceptance | Commands tests', function (hooks) {
           arguments: JSON.stringify({
             description: 'Finding and opening Hassan card',
             attributes: {
-              title: 'Hassan',
+              cardTitle: 'Hassan',
             },
           }),
         },
@@ -817,6 +917,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
 
     // Need to create a new room so this new room will include skills card
+    await waitFor('[data-test-message-field]');
     await fillIn(
       '[data-test-message-field]',
       'Test message to enable new session button',
@@ -840,7 +941,7 @@ module('Acceptance | Commands tests', function (hooks) {
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardId: 'http://test-realm/test/Person/hassan',
-              cardInfo: { title: 'Asclepias' },
+              cardInfo: { name: 'Asclepias' },
             },
           }),
         },
@@ -877,7 +978,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(
       message.content.msgtype,
-      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
@@ -907,6 +1008,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await waitFor('[data-test-message-field]');
 
     // Need to create a new room so this new room will include skills card
+    await waitFor('[data-test-message-field]');
     await fillIn(
       '[data-test-message-field]',
       'Test message to enable new session button',
@@ -929,7 +1031,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
+              id: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),
@@ -1218,7 +1320,7 @@ module('Acceptance | Commands tests', function (hooks) {
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
-              cardId: 'http://test-realm/test/Person/hassan',
+              id: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
           }),

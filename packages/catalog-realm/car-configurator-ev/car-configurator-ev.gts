@@ -40,7 +40,7 @@ export class ConfigOptionField extends FieldDef {
   static displayName = 'Configuration Option';
   @field name = contains(StringField);
   @field price = contains(NumberField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field imageUrl = contains(UrlField);
   @field colorValue = contains(StringField);
   @field isSelected = contains(BooleanField);
@@ -66,7 +66,7 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
   }
 
   getColorOptionClass(
-    colorOption: ConfigOption,
+    colorOption: ConfigOptionField,
     selectedColorName: string,
   ): string {
     return `color-option ${
@@ -74,7 +74,7 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
     }`;
   }
 
-  getOptionCardClass(option: ConfigOption, selectedValue: string): string {
+  getOptionCardClass(option: ConfigOptionField, selectedValue: string): string {
     return `option-card ${option.name === selectedValue ? 'selected' : ''}`;
   }
 
@@ -287,7 +287,7 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
                       }}
                     >
                       <span class='option-title'>{{trimOption.name}}</span>
-                      <p>{{trimOption.description}}</p>
+                      <p>{{trimOption.cardDescription}}</p>
                       <span class='price'>{{this.getPriceDisplay
                           trimOption.price
                         }}</span>
@@ -317,7 +317,7 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
                       }}
                     >
                       <span class='option-title'>{{rangeOption.name}}</span>
-                      <p>{{rangeOption.description}}</p>
+                      <p>{{rangeOption.cardDescription}}</p>
                       <span class='price'>{{this.getPriceDisplay
                           rangeOption.price
                         }}</span>
@@ -347,7 +347,7 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
                       }}
                     >
                       <span class='option-title'>{{wheelOption.name}}</span>
-                      <p>{{wheelOption.description}}</p>
+                      <p>{{wheelOption.cardDescription}}</p>
                       <span class='price'>{{this.getPriceDisplay
                           wheelOption.price
                         }}</span>
@@ -381,7 +381,7 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
                       }}
                     >
                       <span class='option-title'>{{interiorOption.name}}</span>
-                      <p>{{interiorOption.description}}</p>
+                      <p>{{interiorOption.cardDescription}}</p>
                       <span class='price'>{{this.getPriceDisplay
                           interiorOption.price
                         }}</span>
@@ -865,19 +865,19 @@ class CarConfiguratorEVIsolated extends Component<typeof CarConfiguratorEV> {
 class CardConfiguratorEvEdit extends Component<typeof CarConfiguratorEV> {
   @tracked isOptionsPanelCollapsed = true;
 
-  get colorOptions(): ConfigOption[] {
+  get colorOptions(): ConfigOptionField[] {
     return this.args.model.colorOptions || [];
   }
-  get trimOptions(): ConfigOption[] {
+  get trimOptions(): ConfigOptionField[] {
     return this.args.model.trimOptions || [];
   }
-  get rangeOptions(): ConfigOption[] {
+  get rangeOptions(): ConfigOptionField[] {
     return this.args.model.rangeOptions || [];
   }
-  get wheelOptions(): ConfigOption[] {
+  get wheelOptions(): ConfigOptionField[] {
     return this.args.model.wheelOptions || [];
   }
-  get interiorOptions(): ConfigOption[] {
+  get interiorOptions(): ConfigOptionField[] {
     return this.args.model.interiorOptions || [];
   }
 
@@ -916,7 +916,7 @@ class CardConfiguratorEvEdit extends Component<typeof CarConfiguratorEV> {
     this.isOptionsPanelCollapsed = !this.isOptionsPanelCollapsed;
   }
 
-  get selectedColorOption(): ConfigOption | null {
+  get selectedColorOption(): ConfigOptionField | null {
     let selected = this.args.model.selectedColor;
     if (!selected || !selected.name) {
       return null;
@@ -924,7 +924,7 @@ class CardConfiguratorEvEdit extends Component<typeof CarConfiguratorEV> {
     return selected;
   }
 
-  get selectedTrimOption(): ConfigOption | null {
+  get selectedTrimOption(): ConfigOptionField | null {
     let selected = this.args.model.selectedTrim;
     if (!selected || !selected.name) {
       return null;
@@ -932,7 +932,7 @@ class CardConfiguratorEvEdit extends Component<typeof CarConfiguratorEV> {
     return selected;
   }
 
-  get selectedRangeOption(): ConfigOption | null {
+  get selectedRangeOption(): ConfigOptionField | null {
     let selected = this.args.model.selectedRange;
     if (!selected || !selected.name) {
       return null;
@@ -940,7 +940,7 @@ class CardConfiguratorEvEdit extends Component<typeof CarConfiguratorEV> {
     return selected;
   }
 
-  get selectedWheelOption(): ConfigOption | null {
+  get selectedWheelOption(): ConfigOptionField | null {
     let selected = this.args.model.selectedWheels;
     if (!selected || !selected.name) {
       return null;
@@ -948,7 +948,7 @@ class CardConfiguratorEvEdit extends Component<typeof CarConfiguratorEV> {
     return selected;
   }
 
-  get selectedInteriorOption(): ConfigOption | null {
+  get selectedInteriorOption(): ConfigOptionField | null {
     let selected = this.args.model.selectedInterior;
     if (!selected || !selected.name) {
       return null;

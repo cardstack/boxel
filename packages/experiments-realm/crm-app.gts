@@ -563,9 +563,9 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     >
       <:sidebar>
         <TitleGroup
-          @title={{@model.title}}
-          @tagline={{@model.description}}
-          @thumbnailURL={{@model.thumbnailURL}}
+          @title={{@model.cardTitle}}
+          @tagline={{@model.cardDescription}}
+          @thumbnailURL={{@model.cardThumbnailURL}}
           @element='header'
           aria-label='Sidebar Header'
         />
@@ -647,6 +647,8 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
             @searchFilter={{this.searchFilter}}
             @taskFilter={{this.taskFilter}}
             @sort={{this.taskSort}}
+            @createCard={{@createCard}}
+            @saveCard={{@saveCard}}
           />
         {{else if this.query}}
           {{#if (eq this.selectedView 'card')}}

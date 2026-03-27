@@ -1,9 +1,13 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
+import { resolveCardReference } from './card-reference-resolver';
 
+export const CardResourceType = 'card';
+export const FileMetaResourceType = 'file-meta';
 // resource
 export type Resource = ModuleResource | CardResource | PrerenderedCardResource;
 export type ResourceMeta = ModuleMeta | Meta;
+export type LinkableResource = CardResource | FileMetaResource;
 
 //modules
 export type ModuleMeta = {};
@@ -57,10 +61,15 @@ export type CardResourceMeta = Meta & {
   realmURL?: string;
 };
 
+export type FileMetaResourceResourceMeta = Meta & {
+  realmInfo?: RealmInfo;
+  realmURL?: string;
+};
+
 export interface CardResource<Identity extends Unsaved = Saved> {
   id?: Identity;
   lid?: string;
-  type: 'card';
+  type: typeof CardResourceType;
   attributes?: Record<string, any>;
   relationships?: {
     [fieldName: string]: Relationship | Relationship[];
@@ -71,10 +80,29 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   };
 }
 
-export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
-  type?: 'card';
+export interface FileMetaResource {
+  id?: Saved;
+  type: typeof FileMetaResourceType;
+  attributes?: Record<string, any>;
+  relationships?: {
+    [fieldName: string]: Relationship | Relationship[];
+  };
+  meta: FileMetaResourceResourceMeta;
+  links?: {
+    self?: string;
+  };
+}
+
+export type LooseLinkableResource<T extends LinkableResource> = Omit<
+  T,
+  'id' | 'type'
+> & {
+  type?: T['type'];
   id?: string;
 };
+
+export type LooseCardResource = LooseLinkableResource<CardResource>;
+export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
 
 //prerendered cards
 export interface PrerenderedCardResource {
@@ -82,6 +110,8 @@ export interface PrerenderedCardResource {
   type: 'prerendered-card';
   attributes: {
     html: string;
+    cardType?: string;
+    iconHtml?: string;
     isError?: true;
   };
   relationships: {
@@ -114,7 +144,58 @@ export function isCardResource(resource: any): resource is CardResource {
   if ('lid' in resource && typeof resource.lid !== 'string') {
     return false;
   }
-  if ('type' in resource && resource.type !== 'card') {
+  if ('type' in resource && resource.type !== CardResourceType) {
+    return false;
+  }
+  if ('attributes' in resource && typeof resource.attributes !== 'object') {
+    return false;
+  }
+  if ('relationships' in resource) {
+    let { relationships } = resource;
+    if (typeof relationships !== 'object' || relationships == null) {
+      return false;
+    }
+    for (let [fieldName, relationship] of Object.entries(relationships)) {
+      if (typeof fieldName !== 'string') {
+        return false;
+      }
+      if (Array.isArray(relationship)) {
+        if (relationship.some((entry) => !isRelationship(entry))) {
+          return false;
+        }
+      } else if (!isRelationship(relationship)) {
+        return false;
+      }
+    }
+  }
+  if (!('meta' in resource) || typeof resource.meta !== 'object') {
+    return false;
+  }
+  let { meta } = resource;
+
+  if ('fields' in meta) {
+    if (!isCardFields(meta.fields)) {
+      return false;
+    }
+  }
+
+  if (!('adoptsFrom' in meta) || typeof meta.adoptsFrom !== 'object') {
+    return false;
+  }
+  let { adoptsFrom } = meta;
+  return isCodeRef(adoptsFrom);
+}
+
+export function isFileMetaResource(
+  resource: any,
+): resource is FileMetaResource {
+  if (typeof resource !== 'object' || resource == null) {
+    return false;
+  }
+  if ('id' in resource && typeof resource.id !== 'string') {
+    return false;
+  }
+  if (!('type' in resource) || resource.type !== FileMetaResourceType) {
     return false;
   }
   if ('attributes' in resource && typeof resource.attributes !== 'object') {
@@ -155,6 +236,7 @@ export function isCardResource(resource: any): resource is CardResource {
   let { adoptsFrom } = meta;
   return isCodeRef(adoptsFrom);
 }
+
 export function isCardFields(fields: any): fields is CardFields {
   if (typeof fields !== 'object') {
     return false;
@@ -260,7 +342,7 @@ export function extractRelationshipIds(
   }
   let resolveId = (id: string) => {
     try {
-      return new URL(id, baseUrl).href;
+      return resolveCardReference(id, baseUrl);
     } catch {
       return id;
     }

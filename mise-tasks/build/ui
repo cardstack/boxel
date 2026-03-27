@@ -1,0 +1,12 @@
+#!/bin/sh
+#MISE description="Build boxel-icons and boxel-ui (in dependency order)"
+
+set -eu
+
+if [ "${SKIP_ICONS_BUILD:-}" = "true" ]; then
+  echo "Skipping boxel-icons build (cache hit)"
+else
+  pnpm --dir packages/boxel-icons build
+fi
+
+pnpm --dir packages/boxel-ui/addon build

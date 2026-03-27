@@ -9,9 +9,9 @@
       },
       "specType": "command",
       "containedExamples": [],
-      "title": "Generate Daily Report",
-      "description": "Spec for Generate Daily Report command",
-      "thumbnailURL": null
+      "cardTitle": "Generate Daily Report",
+      "cardDescription": "Spec for Generate Daily Report command",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

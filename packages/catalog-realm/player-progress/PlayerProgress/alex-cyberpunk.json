@@ -13,9 +13,9 @@
       "status": "completed",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "startDate": "2024-11-15",
       "hoursPlayed": 85,

@@ -1,0 +1,43 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimePeriodFieldSpec",
+        "module": "../time-period-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/time-period"
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "standard": {
+        "periodLabel": "Week 12"
+      },
+      "cardTitle": "Time Period Field",
+      "cardDescription": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

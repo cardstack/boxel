@@ -24,6 +24,8 @@ import {
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -53,6 +55,7 @@ import {
 
 import {
   CardDef,
+  FileDef,
   contains,
   field,
   linksTo,
@@ -169,6 +172,10 @@ module('Integration | Store', function (hooks) {
     await realmService.login(testRealmURL);
   });
 
+  hooks.afterEach(function () {
+    unregisterCardReferencePrefix('@test-prefix/');
+  });
+
   test('can peek a card instance', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
@@ -253,6 +260,81 @@ module('Integration | Store', function (hooks) {
   test('peek for an uncached returns undefined', async function (assert) {
     let instance = storeService.peek(`${testRealmURL}Person/does-not-exist`);
     assert.strictEqual(instance, undefined, 'instance is undefined');
+  });
+
+  test<TestContextWithSave>('can use registered prefix ids across store APIs', async function (assert) {
+    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+
+    storeService.addReference('@test-prefix/Person/hassan');
+    await storeService.flush();
+
+    let byPrefix = storeService.peek('@test-prefix/Person/hassan');
+    let byUrl = storeService.peek(`${testRealmURL}Person/hassan`);
+
+    assert.true(isCardInstance(byPrefix), 'prefix id resolves to a card');
+    assert.strictEqual(
+      byPrefix,
+      byUrl,
+      'prefix id and resolved URL return the same instance',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount('@test-prefix/Person/hassan'),
+      1,
+      'prefix id and resolved URL share a single reference count',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+      1,
+      'resolved URL sees the same reference count',
+    );
+
+    storeService.dropReference('@test-prefix/Person/hassan');
+
+    assert.strictEqual(
+      storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+      0,
+      'dropping a prefix reference clears the resolved URL reference count',
+    );
+
+    let saveFinished = new Deferred<void>();
+    this.onSave((url) => {
+      if (url.href === `${testRealmURL}Person/hassan`) {
+        assert.strictEqual(url.href, `${testRealmURL}Person/hassan`);
+        assert.strictEqual(
+          storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+          0,
+          'save() does not create a separate resolved-url reference count',
+        );
+        assert.strictEqual(
+          storeService.getReferenceCount('@test-prefix/Person/hassan'),
+          0,
+          'save() does not create a separate prefix reference count',
+        );
+        saveFinished.fulfill();
+      }
+    });
+
+    storeService.save('@test-prefix/Person/hassan');
+    await saveFinished;
+
+    storeService.addReference('@test-prefix/Person/boris');
+    await storeService.flush();
+
+    await storeService.delete('@test-prefix/Person/boris');
+
+    assert.strictEqual(
+      storeService.peek('@test-prefix/Person/boris'),
+      undefined,
+      'delete() clears the prefix-form card identity from the store',
+    );
+    assert.strictEqual(
+      storeService.peek(`${testRealmURL}Person/boris`),
+      undefined,
+      'delete() clears the resolved card identity from the store',
+    );
+
+    let file = await testRealmAdapter.openFile(`Person/boris.json`);
+    assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {
@@ -374,6 +456,118 @@ module('Integration | Store', function (hooks) {
       peekedInstance,
       undefined,
       'instance is garbage collected',
+    );
+  });
+
+  test('file-meta instance is retained when referenced', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+
+    let fileInstance = await storeService.get(fileUrl, { type: 'file-meta' });
+    assert.ok(fileInstance, 'file meta instance is loaded');
+    assert.ok(
+      (fileInstance as any).constructor?.isFileDef,
+      'file meta instance is a FileDef',
+    );
+
+    storeService.addReference(fileUrl);
+    forceGC();
+
+    let peekedInstance = cardStore.getFileMeta(fileUrl) as unknown;
+    assert.strictEqual(
+      peekedInstance,
+      fileInstance,
+      'file meta instance is retained after GC with reference',
+    );
+  });
+
+  test('file-meta instance is garbage collected when references drop', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+
+    await storeService.get(fileUrl, { type: 'file-meta' });
+    storeService.addReference(fileUrl);
+    storeService.dropReference(fileUrl);
+    forceGC();
+
+    assert.strictEqual(
+      cardStore.getFileMeta(fileUrl),
+      undefined,
+      'file meta instance is garbage collected after reference drop',
+    );
+  });
+
+  test('realm subscription is removed when file-meta reference count drops to zero', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+    let subscriptions = (storeService as any).subscriptions as Map<
+      string,
+      { unsubscribe: () => void }
+    >;
+
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm is not subscribed before adding file-meta reference',
+    );
+
+    storeService.addReference(fileUrl, { type: 'file-meta' });
+    assert.true(
+      subscriptions.has(testRealmURL),
+      'realm subscription is created for file-meta reference',
+    );
+
+    storeService.dropReference(fileUrl);
+    assert.false(
+      subscriptions.has(testRealmURL),
+      'realm subscription is removed when file-meta reference reaches zero',
+    );
+  });
+
+  test('add stores FileDef dependencies', async function (assert) {
+    class FileCard extends CardDef {
+      @field attachment = linksTo(FileDef);
+    }
+
+    let fileUrl = `${testRealmURL}hero.png`;
+    let fileDef = new FileDef({
+      id: fileUrl,
+      sourceUrl: fileUrl,
+      url: fileUrl,
+      name: 'hero.png',
+      contentType: 'image/png',
+    });
+    let card = new FileCard({ attachment: fileDef });
+
+    await storeService.add(card, { doNotPersist: true });
+
+    assert.strictEqual(
+      storeService.peek(fileUrl, { type: 'file-meta' }),
+      fileDef,
+      'file meta dependency is cached in file-meta store',
+    );
+  });
+
+  test('file-meta reads do not reuse card errors for the same id', async function (assert) {
+    await testRealm.write('hero.png', 'mock hero image');
+    let fileUrl = `${testRealmURL}hero.png`;
+
+    let cardError = await storeService.get(fileUrl);
+    assert.false(
+      isCardInstance(cardError),
+      'card read returns an error for file url',
+    );
+
+    let fileInstance = await storeService.get(fileUrl, { type: 'file-meta' });
+    assert.ok(
+      (fileInstance as any).constructor?.isFileDef,
+      'file meta instance is a FileDef',
+    );
+
+    assert.ok(storeService.peekError(fileUrl), 'card error remains cached');
+    assert.strictEqual(
+      storeService.peekError(fileUrl, { type: 'file-meta' }),
+      undefined,
+      'file-meta error cache remains clear',
     );
   });
 
@@ -854,9 +1048,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1021,6 +1213,219 @@ module('Integration | Store', function (hooks) {
       (instance as any).friends,
       [germaine],
       'the linksToMany field was patched',
+    );
+  });
+
+  test('loads FileDef links from included resources', async function (assert) {
+    await testRealm.writeMany(
+      new Map<string, string>([
+        [
+          'gallery.gts',
+          `
+            import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import { FileDef } from "https://cardstack.com/base/file-api";
+
+            export class Gallery extends CardDef {
+              @field hero = linksTo(FileDef);
+              @field attachments = linksToMany(FileDef);
+            }
+          `,
+        ],
+        [
+          'Gallery/hero.json',
+          JSON.stringify({
+            data: {
+              attributes: {
+                cardInfo: {},
+              },
+              relationships: {
+                hero: {
+                  links: {
+                    self: `${testRealmURL}hero.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}hero.png` },
+                },
+                'attachments.0': {
+                  links: {
+                    self: `${testRealmURL}first.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}first.png` },
+                },
+                'attachments.1': {
+                  links: {
+                    self: `${testRealmURL}second.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}second.png` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}gallery`,
+                  name: 'Gallery',
+                },
+              },
+            },
+            included: [
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}hero.png`,
+                attributes: {
+                  name: 'hero.png',
+                  url: `${testRealmURL}hero.png`,
+                  sourceUrl: `${testRealmURL}hero.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}first.png`,
+                attributes: {
+                  name: 'first.png',
+                  url: `${testRealmURL}first.png`,
+                  sourceUrl: `${testRealmURL}first.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+              {
+                type: 'file-meta',
+                id: `${testRealmURL}second.png`,
+                attributes: {
+                  name: 'second.png',
+                  url: `${testRealmURL}second.png`,
+                  sourceUrl: `${testRealmURL}second.png`,
+                  contentType: 'image/png',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/file-api',
+                    name: 'FileDef',
+                  },
+                },
+              },
+            ],
+          }),
+        ],
+        ['hero.png', 'mock hero image'],
+        ['first.png', 'mock first image'],
+        ['second.png', 'mock second image'],
+      ]),
+    );
+
+    let gallery = (await storeService.get(
+      `${testRealmURL}Gallery/hero`,
+    )) as CardDefType;
+
+    assert.ok((gallery as any).hero, 'hero is loaded from included resources');
+    assert.strictEqual(
+      (gallery as any).hero?.id,
+      `${testRealmURL}hero.png`,
+      'hero FileDef has id set from file meta',
+    );
+    assert.strictEqual(
+      (gallery as any).hero?.name,
+      'hero.png',
+      'hero FileDef uses file meta name',
+    );
+    assert.strictEqual(
+      (gallery as any).hero?.url,
+      `${testRealmURL}hero.png`,
+      'hero FileDef uses file meta url',
+    );
+
+    let attachments = (gallery as any).attachments ?? [];
+    assert.strictEqual(
+      attachments.length,
+      2,
+      'attachments are loaded from included resources',
+    );
+    assert.strictEqual(
+      attachments[0]?.id,
+      `${testRealmURL}first.png`,
+      'first attachment has id set from file meta',
+    );
+    assert.strictEqual(
+      attachments[0]?.name,
+      'first.png',
+      'first attachment uses file meta name',
+    );
+    assert.strictEqual(
+      attachments[1]?.id,
+      `${testRealmURL}second.png`,
+      'second attachment has id set from file meta',
+    );
+    assert.strictEqual(
+      attachments[1]?.name,
+      'second.png',
+      'second attachment uses file meta name',
+    );
+  });
+
+  test('uses cached FileDef for links.self when field expects FileDef', async function (assert) {
+    await testRealm.writeMany(
+      new Map<string, string>([
+        [
+          'gallery.gts',
+          `
+            import { CardDef, field, linksTo } from "https://cardstack.com/base/card-api";
+            import { FileDef } from "https://cardstack.com/base/file-api";
+
+            export class Gallery extends CardDef {
+              @field hero = linksTo(FileDef);
+            }
+          `,
+        ],
+        [
+          'Gallery/cached.json',
+          JSON.stringify({
+            data: {
+              attributes: {
+                cardInfo: {},
+              },
+              relationships: {
+                hero: {
+                  links: {
+                    self: `${testRealmURL}hero.png`,
+                  },
+                  data: { type: 'file-meta', id: `${testRealmURL}hero.png` },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}gallery`,
+                  name: 'Gallery',
+                },
+              },
+            },
+          }),
+        ],
+        ['hero.png', 'mock hero image'],
+      ]),
+    );
+
+    let cachedFile = (await storeService.get(`${testRealmURL}hero.png`, {
+      type: 'file-meta',
+    })) as unknown as FileDef;
+
+    let gallery = (await storeService.get(
+      `${testRealmURL}Gallery/cached`,
+    )) as CardDefType;
+
+    assert.strictEqual(
+      (gallery as any).hero,
+      cachedFile,
+      'links.self resolves to cached FileDef for FileDef fields',
     );
   });
 
@@ -1207,13 +1612,16 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('an instance live updates from indexing events for an instance update', async function (assert) {
+  test<TestContextWithSave>('an instance live updates from indexing events for an instance update', async function (assert) {
+    assert.expect(2);
+    let didSave = false;
+    this.onSave(() => {
+      didSave = true;
+    });
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1238,18 +1646,18 @@ module('Integration | Store', function (hooks) {
         (storeService.peek(`${testRealmURL}Person/hassan`) as any)?.name ===
         'Hassan updated',
     );
+    await storeService.flushSaves();
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
       .containsText('Hassan updated', 'card live updated');
+    assert.false(didSave, 'indexing updates do not auto save instances');
   });
 
   test('an instance live updates from indexing events for a code update', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let instance = (await storeService.get(
@@ -1289,9 +1697,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1351,9 +1757,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     assert
@@ -1392,9 +1796,7 @@ module('Integration | Store', function (hooks) {
     setCardInOperatorModeState(newInstance[localId]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     assert
@@ -1548,15 +1950,85 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('reference count is balanced when used with CardResource for file-meta that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+    let firstFile = `${testRealmURL}notes.txt`;
+    let secondFile = `${testRealmURL}README.txt`;
+    await testRealm.write('notes.txt', 'notes');
+    await testRealm.write('README.txt', 'readme');
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id, { type: 'file-meta' });
+      <template>
+        {{#if this.resource.card}}
+          <div data-test-rendered-file={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    driver.id = firstFile;
+    await waitFor(`[data-test-rendered-file="${firstFile}"]`);
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      1,
+      `reference count for ${firstFile} is 1`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      0,
+      `reference count for ${secondFile} is 0`,
+    );
+
+    driver.id = secondFile;
+    await waitFor(`[data-test-rendered-file="${secondFile}"]`);
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      0,
+      `reference count for ${firstFile} is 0`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      1,
+      `reference count for ${secondFile} is 1`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-file]`, { count: 0 });
+    assert.strictEqual(
+      storeService.getReferenceCount(firstFile),
+      0,
+      `reference count for ${firstFile} is 0`,
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(secondFile),
+      0,
+      `reference count for ${secondFile} is 0`,
+    );
+  });
+
   test<TestContextWithSave>('reference count is balanced during auto saving', async function (assert) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     setCardInOperatorModeState(hassan, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -1690,12 +2162,11 @@ module('Integration | Store', function (hooks) {
       get card() {
         return this.resource.instances[0];
       }
-      get renderedCard() {
-        return this.card?.constructor.getComponent(this.card);
-      }
       <template>
         {{#if this.card}}
-          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+          <div data-test-rendered-card={{this.card.id}}>
+            {{this.card.id}}
+          </div>
         {{/if}}
       </template>
     }
@@ -1715,7 +2186,12 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(hassan) === 1 &&
+        storeService.getReferenceCount(jade) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -1728,7 +2204,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(jade) === 1 &&
+        storeService.getReferenceCount(hassan) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,
@@ -1741,7 +2222,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.showComponent = false;
-    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    await waitUntil(
+      () =>
+        storeService.getReferenceCount(jade) === 0 &&
+        storeService.getReferenceCount(hassan) === 0,
+      { timeout: 10_000 },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -1797,9 +2283,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -1814,13 +2298,15 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    getService('message-service')
-      .listenerCallbacks.get(testRealmURL)!
-      .push((ev: RealmEventContent) => {
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
           deferred.fulfill();
         }
-      });
+      },
+    );
 
     await testRealm.write(
       'Person/hassan.json',
@@ -1891,9 +2377,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -1908,13 +2392,15 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    getService('message-service')
-      .listenerCallbacks.get(testRealmURL)!
-      .push((ev: RealmEventContent) => {
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
           deferred.fulfill();
         }
-      });
+      },
+    );
 
     await testRealm.write(
       'Person/hassan.json',
@@ -1982,9 +2468,7 @@ module('Integration | Store', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <ResourceConsumer />
-        </template>
+        <template><ResourceConsumer /></template>
       },
     );
 
@@ -1999,13 +2483,15 @@ module('Integration | Store', function (hooks) {
     );
 
     let deferred = new Deferred<void>();
-    getService('message-service')
-      .listenerCallbacks.get(testRealmURL)!
-      .push((ev: RealmEventContent) => {
+    let unsubscribe = getService('message-service').subscribe(
+      testRealmURL,
+      (ev: RealmEventContent) => {
         if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          unsubscribe();
           deferred.fulfill();
         }
-      });
+      },
+    );
 
     await testRealm.write(
       'Person/hassan.json',

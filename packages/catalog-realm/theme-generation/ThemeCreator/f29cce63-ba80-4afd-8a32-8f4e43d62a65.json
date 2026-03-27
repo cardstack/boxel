@@ -16,9 +16,9 @@
       },
       "cardInfo": {
         "notes": null,
-        "title": "Boxel Theme Creator",
-        "description": null,
-        "thumbnailURL": null
+        "name": "Boxel Theme Creator",
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "llmModel": "anthropic/claude-sonnet-4.5",
       "numberOfVariants": null

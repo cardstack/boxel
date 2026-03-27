@@ -1,3 +1,5 @@
+import { isOwnField } from '@cardstack/runtime-common';
+
 import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -5,12 +7,6 @@ import {
 import type { Type } from '@cardstack/host/services/card-type-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
-export function isOwnField(card: typeof BaseDef, fieldName: string): boolean {
-  return Object.keys(Object.getOwnPropertyDescriptors(card.prototype)).includes(
-    fieldName,
-  );
-}
 
 export function calculateTotalOwnFields(
   card: typeof BaseDef,

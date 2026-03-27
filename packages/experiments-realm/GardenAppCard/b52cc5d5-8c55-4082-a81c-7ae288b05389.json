@@ -29,9 +29,9 @@
         "width": null,
         "base64": null
       },
-      "title": "Garden App",
-      "description": "A mini-app for garden design.",
-      "thumbnailURL": ""
+      "cardTitle": "Garden App",
+      "cardDescription": "A mini-app for garden design.",
+      "cardThumbnailURL": ""
     },
     "meta": {
       "adoptsFrom": {

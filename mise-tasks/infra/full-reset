@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Full database reset, clear dynamic realms, and restart matrix"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+exec ./scripts/full-reset.sh

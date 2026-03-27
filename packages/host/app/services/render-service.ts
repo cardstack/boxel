@@ -13,10 +13,15 @@ import { tokenize } from 'simple-html-tokenizer';
 
 import type { RealmPaths } from '@cardstack/runtime-common';
 import {
-  loadDocument,
+  isLocalId,
+  loadCardDocument,
+  loadFileMetaDocument,
+  resolveCardReference,
   type CardError,
   type CodeRef,
+  type RuntimeDependencyTrackingContext,
   type SingleCardDocument,
+  type SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -27,8 +32,9 @@ import type {
   CardStore,
   BoxComponent,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import { render } from '../lib/isolated-render';
+import { render, teardown } from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -37,48 +43,89 @@ import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';
 
 const ELEMENT_NODE_TYPE = 1;
+const MAX_ASYNC_RENDER_PASSES = 3;
 const { environment } = config;
 
 export class CardStoreWithErrors implements CardStore {
   #cards = new Map<string, CardDef>();
+  #fileMetaInstances = new Map<string, FileDef>();
   #fetch: typeof globalThis.fetch;
   #inFlight: Promise<unknown>[] = [];
-  #docsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
+  #cardDocsInFlight: Map<string, Promise<SingleCardDocument | CardError>> =
     new Map();
+  #fileMetaDocsInFlight: Map<
+    string,
+    Promise<SingleFileMetaDocument | CardError>
+  > = new Map();
 
   constructor(fetch: typeof globalThis.fetch) {
     this.#fetch = fetch;
   }
 
-  get(id: string): CardDef | undefined {
-    id = id.replace(/\.json$/, '');
+  getCard(id: string): CardDef | undefined {
+    id = normalizeCardStoreKey(id);
     return this.#cards.get(id);
   }
-  set(id: string, instance: CardDef): void {
-    id = id.replace(/\.json$/, '');
+  getFileMeta(id: string): FileDef | undefined {
+    id = normalizeCardStoreKey(id);
+    return this.#fileMetaInstances.get(id);
+  }
+  setCard(id: string, instance: CardDef): void {
+    id = normalizeCardStoreKey(id);
     this.#cards.set(id, instance);
   }
-  setNonTracked(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
+  setFileMeta(id: string, instance: FileDef): void {
+    id = normalizeCardStoreKey(id);
+    this.#fileMetaInstances.set(id, instance);
+  }
+  setCardNonTracked(id: string, instance: CardDef) {
+    id = normalizeCardStoreKey(id);
     return this.#cards.set(id, instance);
+  }
+  setFileMetaNonTracked(id: string, instance: FileDef) {
+    id = normalizeCardStoreKey(id);
+    return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
 
   readonly errors = new Set<string>();
 
-  async loadDocument(url: string) {
-    let promise = this.#docsInFlight.get(url);
+  async loadCardDocument(
+    url: string,
+    _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
+    url = normalizeCardStoreURL(url);
+    let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
     }
     try {
-      promise = loadDocument(this.#fetch, url);
-      this.#docsInFlight.set(url, promise);
+      promise = loadCardDocument(this.#fetch, url);
+      this.#cardDocsInFlight.set(url, promise);
       return await promise;
     } finally {
-      this.#docsInFlight.delete(url);
+      this.#cardDocsInFlight.delete(url);
     }
   }
+
+  async loadFileMetaDocument(
+    url: string,
+    _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
+  ) {
+    url = normalizeCardStoreURL(url);
+    let promise = this.#fileMetaDocsInFlight.get(url);
+    if (promise) {
+      return await promise;
+    }
+    try {
+      promise = loadFileMetaDocument(this.#fetch, url);
+      this.#fileMetaDocsInFlight.set(url, promise);
+      return await promise;
+    } finally {
+      this.#fileMetaDocsInFlight.delete(url);
+    }
+  }
+
   trackLoad(load: Promise<unknown>) {
     this.#inFlight.push(load);
   }
@@ -99,6 +146,15 @@ export class CardStoreWithErrors implements CardStore {
       errors: undefined,
     } as any;
   }
+}
+
+function normalizeCardStoreKey(id: string): string {
+  return normalizeCardStoreURL(id).replace(/\.json$/, '');
+}
+
+function normalizeCardStoreURL(id: string): string {
+  let key = id.replace(/\.json$/, '');
+  return isLocalId(key) ? id : resolveCardReference(id, undefined);
 }
 
 export interface RenderCardParams {
@@ -128,9 +184,16 @@ export default class RenderService extends Service {
   ): Promise<string> {
     let element = getIsolatedRenderElement(this.document);
     try {
-      render(component, element, this.owner, format);
-      await waitForAsync?.();
-      // re-render after we have waited for the links to finish loading
+      if (waitForAsync) {
+        // Additional settle passes are needed because rendering can start new
+        // async work (for example nested query-backed relationships).
+        for (let i = 0; i < MAX_ASYNC_RENDER_PASSES; i++) {
+          render(component, element, this.owner, format);
+          await waitForAsync();
+        }
+      }
+      // Final render after waiting for async work so captured HTML reflects the
+      // latest loaded state.
       render(component, element, this.owner, format);
       let serializer = new Serializer(voidMap);
       let html = serializer.serialize(element);
@@ -259,10 +322,5 @@ export function getIsolatedRenderElement(
 }
 
 function clearIsolatedRenderElement(element: SimpleElement) {
-  let child = element.firstChild;
-  while (child) {
-    let next = child.nextSibling;
-    element.removeChild(child);
-    child = next;
-  }
+  teardown(element);
 }

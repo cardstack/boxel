@@ -11,9 +11,9 @@
       "name": "Skills & Training",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Professional skill development, training programs, competency tracking, workshop attendance, and career advancement.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Professional skill development, training programs, competency tracking, workshop attendance, and career advancement.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

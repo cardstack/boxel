@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Cards Grid",
-      "description": "Spec for Cards Grid component",
-      "thumbnailURL": null
+      "cardTitle": "Cards Grid",
+      "cardDescription": "Spec for Cards Grid component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

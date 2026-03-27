@@ -1,3 +1,4 @@
+import Helper from '@ember/component/helper';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
@@ -5,14 +6,16 @@ import { provide } from 'ember-provide-consume-context';
 
 import { gt, not } from '@cardstack/boxel-ui/helpers';
 
-import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
+import {
+  CardCrudFunctionsContextName,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 import { meta } from '@cardstack/runtime-common/constants';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import type {
+  CardDef,
   ViewCardFn,
   CardCrudFunctions,
 } from 'https://cardstack.com/base/card-api';
@@ -56,19 +59,21 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   get isWideCard() {
-    if (!this.primaryCard) {
+    let primaryCard = this.primaryCard;
+    if (!primaryCard || !isCardInstance(primaryCard)) {
       return false;
     }
 
-    return (this.primaryCard.constructor as typeof CardDef).prefersWideFormat;
+    return (primaryCard.constructor as typeof CardDef).prefersWideFormat;
   }
 
   get backgroundImageStyle() {
-    if (!this.primaryCard || this.isWideCard) {
+    let primaryCard = this.primaryCard;
+    if (!primaryCard || !isCardInstance(primaryCard) || this.isWideCard) {
       return htmlSafe('');
     }
 
-    let backgroundImageUrl = this.primaryCard?.[meta]?.realmInfo?.backgroundURL;
+    let backgroundImageUrl = primaryCard[meta]?.realmInfo?.backgroundURL;
 
     if (backgroundImageUrl) {
       return htmlSafe(`background-image: url(${backgroundImageUrl});`);
@@ -86,6 +91,8 @@ export default class HostModeContent extends Component<Signature> {
   }
 
   <template>
+    {{bodyClass 'boxel-ready'}}
+
     <div
       class='host-mode-content {{if this.isWideCard "is-wide"}}'
       data-test-host-mode-content
@@ -103,6 +110,7 @@ export default class HostModeContent extends Component<Signature> {
       <HostModeCard
         @cardId={{@primaryCardId}}
         @displayBoundaries={{not this.isWideCard}}
+        @isPrimary={{true}}
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
       />
@@ -121,7 +129,6 @@ export default class HostModeContent extends Component<Signature> {
         align-items: center;
         justify-content: center;
         width: 100%;
-        max-height: 100vh;
         overflow: hidden;
         padding: var(--boxel-sp);
         position: relative;
@@ -129,6 +136,19 @@ export default class HostModeContent extends Component<Signature> {
         background-position: center;
         background-size: cover;
         background-repeat: no-repeat;
+      }
+
+      @media screen {
+        .host-mode-content {
+          height: 100%;
+          overscroll-behavior: none;
+        }
+      }
+
+      @media print {
+        .host-mode-content {
+          min-height: 100vh;
+        }
       }
 
       .breadcrumb-container {
@@ -159,4 +179,17 @@ export default class HostModeContent extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+interface BodyClassSignature {
+  Args: {
+    Positional: [string];
+  };
+  Return: void;
+}
+
+class bodyClass extends Helper<BodyClassSignature> {
+  compute([className]: [string]) {
+    document.body.classList.add(className);
+  }
 }

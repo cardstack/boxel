@@ -16,6 +16,7 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -25,6 +26,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -53,7 +55,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -65,7 +67,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -196,7 +198,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -206,7 +208,7 @@ const friendCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -248,6 +250,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -266,94 +269,96 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': indexCardSource,
-        'empty.gts': ' ',
-        'pet-person.gts': personCardSource,
-        'person.gts': personCardSource,
-        'friend.gts': friendCardSource,
-        'employee.gts': employeeCardSource,
-        'in-this-file.gts': inThisFileSource,
-        'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': indexCardSource,
+          'empty.gts': ' ',
+          'pet-person.gts': personCardSource,
+          'person.gts': personCardSource,
+          'friend.gts': friendCardSource,
+          'employee.gts': employeeCardSource,
+          'in-this-file.gts': inThisFileSource,
+          'ambiguous-display-names.gts': ambiguousDisplayNamesCardSource,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './index',
-                name: 'Index',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'not-json.json': 'I am not JSON.',
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './index',
+                  name: 'Index',
+                },
               },
             },
           },
+          'not-json.json': 'I am not JSON.',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          'z00.json': '{}',
+          'z01.json': '{}',
+          'z02.json': '{}',
+          'z03.json': '{}',
+          'z04.json': '{}',
+          'z05.json': '{}',
+          'z06.json': '{}',
+          'z07.json': '{}',
+          'z08.json': '{}',
+          'z09.json': '{}',
+          'z10.json': '{}',
+          'z11.json': '{}',
+          'z12.json': '{}',
+          'z13.json': '{}',
+          'z14.json': '{}',
+          'z15.json': '{}',
+          'z16.json': '{}',
+          'z17.json': '{}',
+          'z18.json': '{}',
+          'z19.json': '{}',
+          'zzz/zzz/file.json': '{}',
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        'z00.json': '{}',
-        'z01.json': '{}',
-        'z02.json': '{}',
-        'z03.json': '{}',
-        'z04.json': '{}',
-        'z05.json': '{}',
-        'z06.json': '{}',
-        'z07.json': '{}',
-        'z08.json': '{}',
-        'z09.json': '{}',
-        'z10.json': '{}',
-        'z11.json': '{}',
-        'z12.json': '{}',
-        'z13.json': '{}',
-        'z14.json': '{}',
-        'z15.json': '{}',
-        'z16.json': '{}',
-        'z17.json': '{}',
-        'z18.json': '{}',
-        'z19.json': '{}',
-        'zzz/zzz/file.json': '{}',
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
+      });
     });
 
     monacoService = getService('monaco-service');
@@ -385,17 +390,17 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="cardTitle"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-field-types]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="cardTitle"] [data-test-field-types]`,
       )
       .hasText('Override, Computed');
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-computed-icon]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="cardTitle"] [data-test-computed-icon]`,
       )
       .exists();
 
@@ -431,23 +436,23 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .containsText('+ 4 Fields');
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-overridden-field-link]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardTitle"] [data-test-overridden-field-link]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardTitle"] [data-test-field-types]`,
       )
       .hasText('Overridden, Computed');
 
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardDescription"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="thumbnailURL"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="cardThumbnailURL"] [data-test-card-display-name="String"]`,
       )
       .exists();
 
@@ -616,10 +621,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click(
-      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -643,11 +648,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-search-field]', 'Date');
 
     await waitFor(
-      '[data-test-select="https://cardstack.com/base/fields/date-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
     );
 
     await click(
-      '[data-test-select="https://cardstack.com/base/fields/date-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -717,10 +722,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click(
-      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
@@ -752,8 +757,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
-    await waitFor('[data-test-select="http://test-realm/test/person-entry"]');
-    await click('[data-test-select="http://test-realm/test/person-entry"]');
+    await waitFor(
+      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+    );
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPerson');
     await click('[data-test-boxel-radio-option-id="one"]');
@@ -779,10 +788,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-select="http://test-realm/test/person-entry"]',
+      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
       waitForOpts,
     );
-    await click('[data-test-select="http://test-realm/test/person-entry"]');
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/person-entry"]',
+    );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPeople');
     await click('[data-test-boxel-radio-option-id="many"]');
@@ -891,10 +902,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Edit the field to be a "contains" BigInteger field, named friendCount
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click(
-      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'friendCount');
@@ -932,7 +943,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-selected-type="Supervisor"]').exists();
 
     await click('[data-test-choose-card-button]');
-    await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}person-entry"]`);
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'supervisedBy');
     await click('[data-test-boxel-radio-option-id="many"]');
@@ -981,7 +992,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -994,7 +1005,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -1045,7 +1056,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     static displayName = 'Person';
     @field givenName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -1057,7 +1068,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -1161,14 +1172,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       codePath: `${testRealmURL}empty.gts`,
     });
 
-    await waitFor('[data-test-error-details]');
-
-    assert.dom('[data-test-boxel-copy-button]').exists();
-    await triggerEvent(`[data-test-boxel-copy-button]`, 'mouseenter');
-    assert.dom('[data-test-tooltip-content]').hasText('Copy to clipboard');
+    await waitFor('[data-test-empty-file-message]');
     assert
-      .dom('[data-test-error-details]')
-      .hasText('Stack trace: File is empty');
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - tools like schema inspector, and file preview, are unavailable.',
+      );
   });
 
   test<TestContextWithSave>('updates cursor position in monaco editor when field row clicked', async function (assert) {
@@ -1203,10 +1212,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.true(monacoService.getLineCursorOn()?.includes('@field address'));
 
     await click(
-      `[data-test-card-schema="Card"] [data-test-field-name-button="title"]`,
+      `[data-test-card-schema="Card"] [data-test-field-name-button="cardTitle"]`,
     );
     assert.dom('[data-test-current-module-name="person.gts"]').doesNotExist();
     assert.dom('[data-test-current-module-name="card-api.gts"]').exists();
-    assert.true(monacoService.getLineCursorOn()?.includes('@field title'));
+    assert.true(monacoService.getLineCursorOn()?.includes('@field cardTitle'));
   });
 });

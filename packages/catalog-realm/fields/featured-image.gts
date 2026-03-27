@@ -52,7 +52,7 @@ function cssForFeaturedImage({
   return htmlSafe(css.join(' '));
 }
 
-export class FeaturedImageField extends FieldDef {
+export default class FeaturedImageField extends FieldDef {
   static displayName = 'Featured Image';
   static icon = PhotoIcon;
   @field imageUrl = contains(UrlField);

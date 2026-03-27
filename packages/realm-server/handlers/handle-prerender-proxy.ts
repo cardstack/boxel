@@ -23,7 +23,7 @@ export default function handlePrerenderProxy({
   dbAdapter,
   createPrerenderAuth,
 }: {
-  kind: 'card' | 'module';
+  kind: 'card' | 'module' | 'file-extract';
   prerenderer?: Prerenderer;
   dbAdapter: DBAdapter;
   createPrerenderAuth: (
@@ -105,17 +105,30 @@ export default function handlePrerenderProxy({
       prerenderResponse =
         kind === 'card'
           ? await prerenderer.prerenderCard({
+              affinityType: 'realm',
+              affinityValue: attrs.realm,
               realm: attrs.realm,
               url: attrs.url,
               auth,
               renderOptions: attrs.renderOptions,
             })
-          : await prerenderer.prerenderModule({
-              realm: attrs.realm,
-              url: attrs.url,
-              auth,
-              renderOptions: attrs.renderOptions,
-            });
+          : kind === 'module'
+            ? await prerenderer.prerenderModule({
+                affinityType: 'realm',
+                affinityValue: attrs.realm,
+                realm: attrs.realm,
+                url: attrs.url,
+                auth,
+                renderOptions: attrs.renderOptions,
+              })
+            : await prerenderer.prerenderFileExtract({
+                affinityType: 'realm',
+                affinityValue: attrs.realm,
+                realm: attrs.realm,
+                url: attrs.url,
+                auth,
+                renderOptions: attrs.renderOptions,
+              });
     } catch (err) {
       await sendResponseForSystemError(
         ctxt,
@@ -124,7 +137,12 @@ export default function handlePrerenderProxy({
       return;
     }
 
-    let type = kind === 'card' ? 'prerender-result' : 'prerender-module-result';
+    let type =
+      kind === 'card'
+        ? 'prerender-result'
+        : kind === 'module'
+          ? 'prerender-module-result'
+          : 'prerender-file-extract-result';
 
     await setContextResponse(
       ctxt,

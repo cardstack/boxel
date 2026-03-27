@@ -10,21 +10,26 @@ import {
 
 import {
   createJWT,
-  setupPermissionedRealm,
-  setupPermissionedRealms,
+  setupPermissionedRealmCached,
+  setupPermissionedRealmsCached,
+  testRealmURLFor,
+  type RealmRequest,
+  withRealmPath,
 } from '../helpers';
 
 const ownerUserId = '@mango:localhost';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('with a publishable realm', function (hooks) {
-    let request: SuperTest<Test>;
+    let realmURL = testRealmURLFor('test/');
+    let request: RealmRequest;
     let testRealm: Realm;
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         [ownerUserId]: ['read', 'write', 'realm-owner'],
       },
+      realmURL,
       fileSystem: {
         'source-card.gts': `
               import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
@@ -65,7 +70,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       },
       onRealmSetup({ testRealm: realm, request: req }) {
         testRealm = realm;
-        request = req;
+        request = withRealmPath(req, realmURL);
       },
     });
 
@@ -104,7 +109,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let sourceRealmURL = new URL('http://127.0.0.1:4800/source/');
     let dbAdapter: import('@cardstack/postgres').PgAdapter;
 
-    setupPermissionedRealms(hooks, {
+    setupPermissionedRealmsCached(hooks, {
       realms: [
         {
           realmURL: sourceRealmURL.href,
@@ -125,7 +130,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
               data: {
                 type: 'card',
                 attributes: {
-                  title: 'Broken',
+                  cardTitle: 'Broken',
                 },
                 meta: {
                   adoptsFrom: {
@@ -164,8 +169,8 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       for (let table of ['boxel_index', 'boxel_index_working']) {
         await dbAdapter.execute(
           `UPDATE ${table}
-           SET type = 'instance-error', error_doc = $1::jsonb
-           WHERE url = $2`,
+           SET has_error = TRUE, error_doc = $1::jsonb
+           WHERE url = $2 AND type = 'instance'`,
           {
             bind: [JSON.stringify(errorDoc), cardURL],
           },
@@ -213,10 +218,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let sourceRealm: Realm;
       let privateRealm: Realm;
       let request: SuperTest<Test>;
-      let sourceRealmURL = new URL('http://127.0.0.1:4700/');
-      let privateRealmURL = new URL('http://127.0.0.1:4701/');
+      let sourceRealmURL = new URL('http://127.0.0.1:4700/source/');
+      let privateRealmURL = new URL('http://127.0.0.1:4701/private/');
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         realms: [
           {
             realmURL: privateRealmURL.href,
@@ -345,7 +350,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         let sourceRealmURL = new URL('http://127.0.0.1:4462/source/');
         let privateRealmURL = new URL('http://127.0.0.1:4463/private/');
 
-        setupPermissionedRealms(hooks, {
+        setupPermissionedRealmsCached(hooks, {
           realms: [
             {
               realmURL: privateRealmURL.href,
@@ -476,7 +481,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         let sourceRealmURL = new URL('http://127.0.0.1:4464/source/');
         let remoteRealmURL = new URL('http://127.0.0.1:4465/remote/');
 
-        setupPermissionedRealms(hooks, {
+        setupPermissionedRealmsCached(hooks, {
           realms: [
             {
               realmURL: remoteRealmURL.href,
@@ -589,7 +594,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let sourceRealmURL = new URL('http://127.0.0.1:4466/source/');
       let privateRealmURL = new URL('http://127.0.0.1:4467/private/');
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         realms: [
           {
             realmURL: privateRealmURL.href,
@@ -711,7 +716,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let sourceRealmURL = new URL('http://127.0.0.1:4468/source/');
       let privateRealmURL = new URL('http://127.0.0.1:4469/private/');
 
-      setupPermissionedRealms(hooks, {
+      setupPermissionedRealmsCached(hooks, {
         realms: [
           {
             realmURL: privateRealmURL.href,

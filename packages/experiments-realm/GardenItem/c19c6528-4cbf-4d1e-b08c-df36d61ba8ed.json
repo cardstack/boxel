@@ -5,8 +5,8 @@
       "gardenItemId": "black-eyed-susan",
       "name": "Black-Eyed Susan",
       "symbol": "D",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

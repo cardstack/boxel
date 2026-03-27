@@ -9,3 +9,7 @@ node_modules
 .eslintcache
 schema_tmp.sql
 test-results/.last-run.json
+.claude/settings.local.json
+traefik/dynamic/*.yml
+.mise.local.toml
+packages/openrouter-realm/OpenRouterModel/

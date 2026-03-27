@@ -1,47 +1,45 @@
 import { setComponentTemplate } from '@ember/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { isDestroyed, isDestroying } from '@ember/destroyable';
-import { service } from '@ember/service';
+import { getOwner } from '@ember/owner';
 import { precompileTemplate } from '@ember/template-compilation';
-import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
-import { didCancel, restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
-import { flatMap, isEqual } from 'lodash';
-import { trackedFunction } from 'reactiveweb/function';
-
-import { TrackedSet } from 'tracked-built-ins';
 
 import { CardContainer } from '@cardstack/boxel-ui/components';
 
-import type { QueryResultsMeta } from '@cardstack/runtime-common';
 import {
-  type Query,
   RealmPaths,
+  CardContextName,
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
-  CardContextName,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
-import type { PrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
-import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 
-import type { CardContext, Format } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
-import SubscribeToRealms from '../helpers/subscribe-to-realms';
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
+import { getLivePrerenderedSearch } from '../resources/live-prerendered-search';
+import { getPrerenderedSearch } from '../resources/prerendered-search';
+import { getSearch } from '../resources/search';
 
-import type CardService from '../services/card-service';
-import type LoaderService from '../services/loader-service';
-
-const waiter = buildWaiter('prerendered-card-search:waiter');
 const OWNER_DESTROYED_ERROR =
   "Cannot call `.lookup('renderer:-dom')` after the owner has been destroyed";
+
+// Internal registry of URLs known to be file-meta from prerendered search.
+// Used by the overlay system to correctly identify FileDef cards when they
+// haven't been loaded into the store yet (prerendered results are HTML-only).
+export const knownFileMetaUrls = new Set<string>();
+
+export function clearKnownFileMetaUrls() {
+  knownFileMetaUrls.clear();
+}
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
@@ -49,6 +47,9 @@ export class PrerenderedCard implements PrerenderedCardLike {
     public data: PrerenderedCardData,
     cardComponentModifier?: CardContext['cardComponentModifier'],
   ) {
+    if (data.isFileMeta) {
+      knownFileMetaUrls.add(data.url);
+    }
     if (data.isError && !data.html) {
       this.component = wrapWithModifier(
         getErrorComponent(data.realmUrl, data.url),
@@ -75,6 +76,15 @@ export class PrerenderedCard implements PrerenderedCardLike {
   }
   get realmUrl(): string {
     return this.data.realmUrl;
+  }
+  get cardType(): string | undefined {
+    return this.data.cardType;
+  }
+  get iconHtml(): string | undefined {
+    return this.data.iconHtml;
+  }
+  get usedRenderType(): ResolvedCodeRef | undefined {
+    return this.data.usedRenderType;
   }
 }
 function getErrorComponent(realmURL: string, url: string) {
@@ -130,17 +140,6 @@ function getErrorComponent(realmURL: string, url: string) {
   return DefaultErrorResultComponent as unknown as HTMLComponent;
 }
 
-const normalizeRealms = (realms: string[]) => {
-  return realms.map((r) => {
-    return new RealmPaths(new URL(r)).url;
-  });
-};
-
-interface SearchResult {
-  instances: PrerenderedCard[];
-  meta: QueryResultsMeta;
-}
-
 function wrapWithModifier(
   innerComponent: HTMLComponent,
   modifier: CardContext['cardComponentModifier'] | undefined,
@@ -178,16 +177,7 @@ function wrapWithModifier(
 }
 
 export default class PrerenderedCardSearch extends Component<PrerenderedCardComponentSignature> {
-  @consume(CardContextName) private declare cardContext?: CardContext;
-  @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
-  _lastSearchQuery: Query | null = null;
-  _lastCardUrls: string[] | undefined;
-  _lastSearchResults: SearchResult | undefined;
-  _lastRealms: string[] | undefined;
-  realmsNeedingRefresh = new TrackedSet<string>(
-    normalizeRealms(this.args.realms),
-  );
+  @consume(CardContextName) declare private cardContext?: CardContext;
 
   private get cardComponentModifier() {
     if (isDestroying(this) || isDestroyed(this)) {
@@ -207,212 +197,62 @@ export default class PrerenderedCardSearch extends Component<PrerenderedCardComp
     }
   }
 
-  async searchPrerendered(
-    query: Query,
-    format: Format,
-    cardUrls: string[],
-    realmURL: string,
-  ): Promise<SearchResult> {
-    let json = (await this.cardService.fetchJSON(
-      `${realmURL}_search-prerendered`,
-      {
-        method: 'QUERY',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...query,
-          prerenderedHtmlFormat: format,
-          cardUrls,
-        }),
-      },
-    )) as unknown as PrerenderedCardCollectionDocument;
+  private prerenderedSearchResource = getPrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => ({
+      query: this.shouldUseRenderContextSearch ? undefined : this.args.query,
+      format: this.shouldUseRenderContextSearch ? undefined : this.args.format,
+      realms: this.args.realms,
+      cardUrls: this.args.cardUrls,
+      isLive: this.args.isLive ?? false,
+      cardComponentModifier: this.cardComponentModifier,
+    }),
+  );
 
-    if (!isPrerenderedCardCollectionDocument(json)) {
-      throw new Error(
-        `The realm search response was not a prerendered-card collection document:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
+  private renderContextSearchResource = getSearch<CardDef | FileDef>(
+    this,
+    getOwner(this)!,
+    () => (this.shouldUseRenderContextSearch ? this.args.query : undefined),
+    () => this.args.realms,
+    {
+      isLive: false,
+      storeService: getOwner(this)!.lookup('service:render-store') as any,
+    },
+  );
 
-    await Promise.all(
-      (json.meta.scopedCssUrls ?? []).map((cssModuleUrl) =>
-        this.loaderService.loader.import(cssModuleUrl),
-      ),
-    );
+  private renderContextPrerenderedSearchResource = getLivePrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => ({
+      instances: this.renderContextSearchResource.instances,
+      isLoading: this.renderContextSearchResource.isLoading,
+      meta: this.renderContextSearchResource.meta,
+      format: this.shouldUseRenderContextSearch ? this.args.format : undefined,
+      realms: this.args.realms,
+      cardComponentModifier: this.cardComponentModifier,
+    }),
+  );
 
-    if (isDestroying(this) || isDestroyed(this)) {
-      return { instances: [], meta: json.meta };
-    }
+  private get shouldUseRenderContextSearch() {
+    return Boolean((globalThis as any).__boxelRenderContext) && !isTesting();
+  }
 
-    let modifier = this.cardComponentModifier;
+  private get searchResource() {
+    return this.shouldUseRenderContextSearch
+      ? this.renderContextPrerenderedSearchResource
+      : this.prerenderedSearchResource;
+  }
 
+  private get searchResults() {
     return {
-      instances: json.data.filter(Boolean).map((r) => {
-        return new PrerenderedCard(
-          {
-            url: r.id,
-            realmUrl: realmURL,
-            html: r.attributes?.html,
-            isError: !!r.attributes?.isError,
-          },
-          modifier,
-        );
-      }),
-      meta: json.meta,
+      instances: this.searchResource.instances,
+      isLoading: this.searchResource.isLoading,
+      meta: this.searchResource.meta,
     };
   }
 
-  private runSearch = trackedFunction(this, async () => {
-    let { query, format, cardUrls, realms } = this.args;
-    realms = normalizeRealms(realms);
-
-    let realmsChanged = !isEqual(realms, this._lastRealms);
-    let queryChanged = !isEqual(query, this._lastSearchQuery);
-    let cardUrlsChanged = !isEqual(cardUrls, this._lastSearchQuery);
-    if (realmsChanged) {
-      if (this._lastSearchResults) {
-        this._lastSearchResults = {
-          instances: this._lastSearchResults.instances.filter((r) =>
-            realms.some((realm) => r.url.startsWith(realm)),
-          ),
-          meta: this._lastSearchResults.meta,
-        };
-      }
-      this.realmsNeedingRefresh = new TrackedSet(realms);
-    }
-    this._lastRealms = realms;
-
-    if (
-      // we want to only run the search when there is a deep equality
-      // difference, not a strict equality difference
-      !realmsChanged &&
-      !queryChanged &&
-      !cardUrlsChanged &&
-      (!this.args.isLive ||
-        (this.args.isLive && this.realmsNeedingRefresh.size === 0))
-    ) {
-      return (
-        this.runSearchTask.lastSuccessful?.value ?? {
-          instances: [],
-          isLoading: true,
-          meta: {
-            page: { total: 0 },
-          },
-        }
-      );
-    }
-
-    if (query && format) {
-      try {
-        await this.runSearchTask.perform(query, format, cardUrls);
-      } catch (e) {
-        if (!didCancel(e)) {
-          // re-throw the non-cancelation error
-          throw e;
-        }
-      }
-    }
-
-    return (
-      this.runSearchTask.lastSuccessful?.value ?? {
-        instances: [],
-        isLoading: true,
-        meta: {
-          page: { total: 0 },
-        },
-      }
-    );
-  });
-
-  runSearchTask = restartableTask(async (query, format, cardUrls) => {
-    if (!isEqual(query, this._lastSearchQuery)) {
-      this._lastSearchResults = undefined;
-      this._lastSearchQuery = query;
-    }
-    if (!isEqual(cardUrls, this._lastCardUrls)) {
-      this._lastCardUrls = cardUrls;
-    }
-
-    let results = this._lastSearchResults?.instances || [];
-    let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
-    let token = waiter.beginAsync();
-    try {
-      for (let realmNeedingRefresh of realmsNeedingRefresh) {
-        results = results.filter((r) => !r.url.startsWith(realmNeedingRefresh));
-      }
-
-      let searchPromises = Array.from(realmsNeedingRefresh).map(
-        async (realm) => {
-          try {
-            return await this.searchPrerendered(
-              query,
-              format,
-              cardUrls ?? [],
-              realm,
-            );
-          } catch (error) {
-            console.error(
-              `Failed to search prerendered for realm ${realm}:`,
-              error,
-            );
-            return { instances: [], meta: { page: { total: 0 } } };
-          }
-        },
-      );
-
-      const searchResults = await Promise.all(searchPromises);
-      const allInstances = flatMap(
-        searchResults,
-        (result) => result.instances || [],
-      );
-      results.push(...allInstances);
-
-      const combinedMeta: QueryResultsMeta = searchResults.reduce(
-        (acc, result) => {
-          if (result.meta?.page?.total !== undefined) {
-            acc.page = acc.page || { total: 0 };
-            acc.page.total = (acc.page.total || 0) + result.meta.page.total;
-          }
-          return acc;
-        },
-        { page: { total: 0 } } as QueryResultsMeta,
-      );
-
-      this._lastSearchResults = { instances: results, meta: combinedMeta };
-      return { instances: results, isLoading: false, meta: combinedMeta };
-    } finally {
-      waiter.endAsync(token);
-    }
-  });
-
-  private get searchResults() {
-    if (this.runSearch.value) {
-      return this.runSearch.value;
-    } else if (this._lastSearchResults) {
-      return {
-        instances: this._lastSearchResults.instances,
-        isLoading: false,
-        meta: this._lastSearchResults.meta,
-      };
-    } else {
-      return { instances: [], isLoading: true, meta: { page: { total: 0 } } };
-    }
-  }
-
-  private markRealmNeedsRefreshing = (ev: RealmEventContent, realm: string) => {
-    if (ev.eventName === 'index' && ev.indexType === 'incremental') {
-      this.realmsNeedingRefresh.add(realm);
-    }
-  };
-
   <template>
-    {{#if @isLive}}
-      {{SubscribeToRealms
-        (normalizeRealms @realms)
-        this.markRealmNeedsRefreshing
-      }}
-    {{/if}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}

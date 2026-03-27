@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "PhotoCollage",
-      "description": "Spec of PhotoCollage",
-      "thumbnailURL": null
+      "cardTitle": "PhotoCollage",
+      "cardDescription": "Spec of PhotoCollage",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

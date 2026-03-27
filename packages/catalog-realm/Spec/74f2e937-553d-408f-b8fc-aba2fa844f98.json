@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "CyclingMileageLog",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "CyclingMileageLog",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

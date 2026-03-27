@@ -5,7 +5,7 @@ export class BigCard extends CardDef {
   static displayName = 'Big Card';
   @field name = contains(StringField);
   @field picture = contains(StringField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BigCard) {
       return this.name;
     },

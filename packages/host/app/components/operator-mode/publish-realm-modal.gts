@@ -22,7 +22,10 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { IconX, Warning as WarningIcon } from '@cardstack/boxel-ui/icons';
+
+import { ensureTrailingSlash } from '@cardstack/runtime-common';
+import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/constants';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
@@ -64,10 +67,10 @@ interface Signature {
 }
 
 export default class PublishRealmModal extends Component<Signature> {
-  @service private declare hostModeService: HostModeService;
-  @service private declare matrixService: MatrixService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private matrixService: MatrixService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
 
   @tracked selectedPublishedRealmURLs: string[] = [];
   @tracked private customSubdomainSelection: CustomSubdomainSelection | null =
@@ -219,6 +222,65 @@ export default class PublishRealmModal extends Component<Signature> {
 
   get customSubdomainBase() {
     return config.publishedRealmBoxelSiteDomain;
+  }
+
+  // TODO: Remove with CS-9061 once published realm domain overrides are removed.
+  private getPublishedRealmOverrideUrl(
+    publishedRealmURL: string | null,
+  ): string | null {
+    let overrideDomain = getPublishedRealmDomainOverrides(
+      config.publishedRealmDomainOverrides,
+    )[ensureTrailingSlash(this.currentRealmURL)];
+    if (!overrideDomain) {
+      return null;
+    }
+
+    if (!publishedRealmURL) {
+      return null;
+    }
+
+    let overriddenURL = new URL(publishedRealmURL);
+    overriddenURL.host = overrideDomain;
+    return ensureTrailingSlash(overriddenURL.toString());
+  }
+
+  get customSubdomainOverrideUrl() {
+    let publishedRealmURL =
+      this.claimedDomainPublishedUrl ??
+      this.buildPublishedRealmUrl(
+        `${this.customSubdomainDisplay}.${this.customSubdomainBase}`,
+      );
+    return this.getPublishedRealmOverrideUrl(publishedRealmURL);
+  }
+
+  get shouldShowCustomSubdomainOverride() {
+    return (
+      !!this.customSubdomainOverrideUrl &&
+      this.realm.canWrite(this.currentRealmURL)
+    );
+  }
+
+  get isCustomSubdomainOverrideSelected() {
+    if (!this.customSubdomainOverrideUrl) {
+      return false;
+    }
+    return this.selectedPublishedRealmURLs.includes(
+      this.customSubdomainOverrideUrl,
+    );
+  }
+
+  get isCustomSubdomainOverridePublished() {
+    if (!this.customSubdomainOverrideUrl) {
+      return false;
+    }
+    return this.hostModeService.isPublished(this.customSubdomainOverrideUrl);
+  }
+
+  get customSubdomainOverrideLastPublishedTime() {
+    if (!this.customSubdomainOverrideUrl) {
+      return null;
+    }
+    return this.getFormattedLastPublishedTime(this.customSubdomainOverrideUrl);
   }
 
   get customSubdomainDisplay() {
@@ -458,6 +520,20 @@ export default class PublishRealmModal extends Component<Signature> {
     }
   }
 
+  @action
+  toggleCustomSubdomainOverride(event: Event) {
+    const overrideUrl = this.customSubdomainOverrideUrl;
+    if (!overrideUrl) {
+      return;
+    }
+    const input = event.target as HTMLInputElement;
+    if (input.checked) {
+      this.addPublishedRealmUrl(overrideUrl);
+    } else {
+      this.removePublishedRealmUrl(overrideUrl);
+    }
+  }
+
   private addPublishedRealmUrl(url: string) {
     if (!this.selectedPublishedRealmURLs.includes(url)) {
       this.selectedPublishedRealmURLs = [
@@ -619,6 +695,13 @@ export default class PublishRealmModal extends Component<Signature> {
     return this.getPublishErrorForUrl(this.claimedDomainPublishedUrl);
   }
 
+  get publishErrorForCustomSubdomainOverride() {
+    if (!this.customSubdomainOverrideUrl) {
+      return null;
+    }
+    return this.getPublishErrorForUrl(this.customSubdomainOverrideUrl);
+  }
+
   ensureInitialSelectionsTask = restartableTask(
     async (claim: ClaimedDomain | null = null) => {
       await this.realm.ensureRealmMeta(this.currentRealmURL);
@@ -678,36 +761,58 @@ export default class PublishRealmModal extends Component<Signature> {
           </div>
         {{else}}
           {{#if this.shouldShowPrivateDependencyWarning}}
-            <div class='publish-warning' data-test-private-dependency-warning>
-              <div>
-                This workspace will have rendering errors when published because
-                of private external dependencies.
+            <div
+              class='publish-warning warning'
+              data-test-private-dependency-warning
+            >
+              <WarningIcon
+                class='publish-warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='publish-warning-body'>
+                <div>
+                  This workspace will have rendering errors when published
+                  because of private external dependencies.
+                </div>
+                <ul class='violation-list'>
+                  {{#each this.privateDependencyViolations as |violation|}}
+                    <PrivateDependencyViolationComponent
+                      @violation={{violation}}
+                      @privateRealmURLs={{this.privateRealmURLsForViolation
+                        violation
+                      }}
+                    />
+                  {{/each}}
+                </ul>
               </div>
-              <ul class='violation-list'>
-                {{#each this.privateDependencyViolations as |violation|}}
-                  <PrivateDependencyViolationComponent
-                    @violation={{violation}}
-                    @privateRealmURLs={{this.privateRealmURLsForViolation
-                      violation
-                    }}
-                  />
-                {{/each}}
-              </ul>
             </div>
           {{/if}}
           {{#if this.shouldShowErrorDocumentWarning}}
-            <div class='publish-warning' data-test-error-document-warning>
-              <div>
-                This workspace contains cards that failed to index and cannot be
-                safely published.
+            <div
+              class='publish-warning warning'
+              data-test-error-document-warning
+            >
+              <WarningIcon
+                class='publish-warning-icon'
+                width='20'
+                height='20'
+                role='presentation'
+              />
+              <div class='publish-warning-body'>
+                <div>
+                  This workspace contains cards that failed to index and cannot
+                  be safely published.
+                </div>
+                <ul class='violation-list'>
+                  {{#each this.errorDocumentViolations as |violation|}}
+                    <li>
+                      {{violation.resource}}
+                    </li>
+                  {{/each}}
+                </ul>
               </div>
-              <ul class='violation-list'>
-                {{#each this.errorDocumentViolations as |violation|}}
-                  <li>
-                    {{violation.resource}}
-                  </li>
-                {{/each}}
-              </ul>
             </div>
           {{/if}}
         {{/if}}
@@ -1005,6 +1110,99 @@ export default class PublishRealmModal extends Component<Signature> {
               </div>
             {{/if}}
           </div>
+
+          {{#if this.shouldShowCustomSubdomainOverride}}
+            {{#let this.customSubdomainOverrideUrl as |overrideUrl|}}
+              {{#if overrideUrl}}
+                <div class='domain-option'>
+                  <input
+                    type='checkbox'
+                    id='custom-subdomain-override-checkbox'
+                    class='domain-checkbox'
+                    checked={{this.isCustomSubdomainOverrideSelected}}
+                    {{on 'change' this.toggleCustomSubdomainOverride}}
+                    data-test-custom-subdomain-override-checkbox
+                    disabled={{this.isUnpublishingAnyRealms}}
+                  />
+                  <label
+                    class='option-title'
+                    for='custom-subdomain-override-checkbox'
+                  >Custom Domain Override</label>
+                  <div class='domain-details'>
+                    <WithLoadedRealm
+                      @realmURL={{this.currentRealmURL}}
+                      as |realm|
+                    >
+                      <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                    </WithLoadedRealm>
+                    <div class='domain-url-container'>
+                      <span class='domain-url'>{{overrideUrl}}</span>
+                      {{#if this.isCustomSubdomainOverridePublished}}
+                        <div class='domain-info'>
+                          {{#if this.customSubdomainOverrideLastPublishedTime}}
+                            <span class='last-published-at'>Published
+                              {{this.customSubdomainOverrideLastPublishedTime}}</span>
+                          {{/if}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            @disabled={{this.isUnpublishingRealm overrideUrl}}
+                            class='unpublish-button'
+                            {{on 'click' (fn @handleUnpublish overrideUrl)}}
+                            data-test-unpublish-custom-subdomain-override-button
+                          >
+                            {{#if (this.isUnpublishingRealm overrideUrl)}}
+                              <LoadingIndicator />
+                              Unpublishing…
+                            {{else}}
+                              <Undo2
+                                width='11'
+                                height='11'
+                                class='unpublish-icon'
+                              />
+                              Unpublish
+                            {{/if}}
+                          </BoxelButton>
+                        </div>
+                      {{else}}
+                        <span class='not-published-yet'>Not published yet</span>
+                      {{/if}}
+                    </div>
+                  </div>
+                  {{#if this.isCustomSubdomainOverridePublished}}
+                    <BoxelButton
+                      @as='anchor'
+                      @kind='secondary-light'
+                      @size='small'
+                      @href={{overrideUrl}}
+                      @disabled={{this.isUnpublishingAnyRealms}}
+                      class='action'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      data-test-open-custom-subdomain-override-button
+                    >
+                      <ExternalLink
+                        width='16'
+                        height='16'
+                        class='button-icon'
+                      />
+                      Open Site
+                    </BoxelButton>
+                  {{/if}}
+                  {{#if this.publishErrorForCustomSubdomainOverride}}
+                    <div
+                      class='domain-publish-error'
+                      data-test-domain-publish-error={{overrideUrl}}
+                    >
+                      <span
+                        class='error-text'
+                      >{{this.publishErrorForCustomSubdomainOverride}}</span>
+                    </div>
+                  {{/if}}
+                </div>
+              {{/if}}
+            {{/let}}
+          {{/if}}
         </div>
       </:content>
 
@@ -1067,20 +1265,36 @@ export default class PublishRealmModal extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         margin-bottom: var(--boxel-sp);
         padding: var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-warning-200);
-        background-color: rgb(from var(--boxel-warning-200) r g b / 12%);
         border-radius: var(--boxel-border-radius-lg);
         font-size: var(--boxel-font-size-sm);
       }
 
+      .publish-warning.warning {
+        flex-direction: row;
+        align-items: flex-start;
+        gap: var(--boxel-sp-sm);
+        background-color: var(--boxel-warning-200);
+        color: var(--boxel-dark);
+      }
+
+      .publish-warning-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+
+      .publish-warning-icon {
+        flex-shrink: 0;
+      }
+
       .publish-warning.error {
-        border-color: var(--boxel-error-200);
+        border: 1px solid var(--boxel-error-200);
         background-color: rgb(from var(--boxel-error-200) r g b / 8%);
         color: var(--boxel-error-200);
       }
 
       .publish-warning.info {
-        border-color: var(--boxel-300);
+        border: 1px solid var(--boxel-300);
         background-color: var(--boxel-50);
         color: var(--boxel-500);
         align-items: center;

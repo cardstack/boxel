@@ -1,5 +1,7 @@
+import { registerDestructor } from '@ember/destroyable';
 import { array } from '@ember/helper';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
@@ -48,10 +50,21 @@ interface OverlaySignature {
   };
 }
 
-let boundRenderedCardElement = new WeakSet<HTMLElement>();
-
 export default class Overlays extends Component<OverlaySignature> {
   @tracked overlayClassName = this.args.overlayClassName ?? 'base-overlay';
+  private boundRenderedCardElements = new Map<
+    HTMLElement,
+    {
+      mouseenter: (ev: MouseEvent) => void;
+      mouseleave: (ev: MouseEvent) => void;
+      click: (ev: MouseEvent) => void;
+    }
+  >();
+
+  constructor(owner: Owner, args: OverlaySignature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => this.teardownBoundRenderedCards());
+  }
 
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
@@ -88,8 +101,8 @@ export default class Overlays extends Component<OverlaySignature> {
     </style>
   </template>
 
-  @service protected declare cardService: CardService;
-  @service protected declare realm: RealmService;
+  @service declare protected cardService: CardService;
+  @service declare protected realm: RealmService;
 
   @tracked
   protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
@@ -117,27 +130,37 @@ export default class Overlays extends Component<OverlaySignature> {
   // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
   // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
   // detect hover state and click event.
+  // This must stay coupled to render-time reconciliation because the set of rendered card elements
+  // is only known once the template has produced them. We use this getter as the single place that
+  // synchronizes imperative DOM listeners with the current rendered-card set, and we also tear down
+  // listeners for elements that are no longer present. A pure getter would leak stale listeners here.
+  /* eslint-disable ember/no-side-effects */
   protected get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
+    let currentElements = new Set(renderedCards.map((card) => card.element));
+    for (let [element, handlers] of this.boundRenderedCardElements) {
+      if (!currentElements.has(element)) {
+        this.unbindRenderedCardElement(element, handlers);
+      }
+    }
     for (const renderedCard of renderedCards) {
-      if (boundRenderedCardElement.has(renderedCard.element)) {
+      if (this.boundRenderedCardElements.has(renderedCard.element)) {
         continue;
       }
-      boundRenderedCardElement.add(renderedCard.element);
-      renderedCard.element.addEventListener('mouseenter', (_ev: MouseEvent) => {
+      let mouseenter = (_ev: MouseEvent) => {
         if (this.currentlyHoveredCard === renderedCard) {
           return;
         }
         this.setCurrentlyHoveredCard(renderedCard);
-      });
-      renderedCard.element.addEventListener('mouseleave', (ev: MouseEvent) => {
+      };
+      let mouseleave = (ev: MouseEvent) => {
         let relatedTarget = ev.relatedTarget as HTMLElement;
         if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
           return;
         }
         this.setCurrentlyHoveredCard(null);
-      });
-      renderedCard.element.addEventListener('click', (e: MouseEvent) => {
+      };
+      let click = (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
@@ -147,6 +170,14 @@ export default class Overlays extends Component<OverlaySignature> {
           renderedCard.fieldType,
           renderedCard.fieldName,
         );
+      };
+      renderedCard.element.addEventListener('mouseenter', mouseenter);
+      renderedCard.element.addEventListener('mouseleave', mouseleave);
+      renderedCard.element.addEventListener('click', click);
+      this.boundRenderedCardElements.set(renderedCard.element, {
+        mouseenter,
+        mouseleave,
+        click,
       });
       renderedCard.element.style.cursor = 'pointer';
       renderedCard.overlayZIndexStyle = this.zIndexStyle(
@@ -157,6 +188,7 @@ export default class Overlays extends Component<OverlaySignature> {
 
     return renderedCards;
   }
+  /* eslint-enable ember/no-side-effects */
 
   @action protected shouldRenderOverlay(
     renderedCard: RenderedCardForOverlayActions,
@@ -230,13 +262,31 @@ export default class Overlays extends Component<OverlaySignature> {
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
       if (this.args.viewCard) {
-        await this.args.viewCard(new URL(cardId), format, {
-          fieldType,
-          fieldName,
-        });
+        let target =
+          typeof cardDefOrId === 'string' ? new URL(cardId) : cardDefOrId;
+        await this.args.viewCard(
+          target,
+          format,
+          this.buildViewCardOpts(cardDefOrId, fieldType, fieldName),
+        );
       }
     },
   );
+
+  protected buildViewCardOpts(
+    _cardDefOrId: CardDefOrId,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string,
+  ): {
+    type?: 'card' | 'file';
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+    fieldName?: string;
+  } {
+    return {
+      fieldType,
+      fieldName,
+    };
+  }
 
   protected zIndexStyle(element: HTMLElement, overlayZIndexStyle?: SafeString) {
     if (overlayZIndexStyle) {
@@ -264,5 +314,26 @@ export default class Overlays extends Component<OverlaySignature> {
   ): Format {
     // Default implementation - prefer stackItem.format if available, otherwise use direct format
     return (renderedCard.format || 'isolated') as Format;
+  }
+
+  private unbindRenderedCardElement(
+    element: HTMLElement,
+    handlers: {
+      mouseenter: (ev: MouseEvent) => void;
+      mouseleave: (ev: MouseEvent) => void;
+      click: (ev: MouseEvent) => void;
+    },
+  ) {
+    element.removeEventListener('mouseenter', handlers.mouseenter);
+    element.removeEventListener('mouseleave', handlers.mouseleave);
+    element.removeEventListener('click', handlers.click);
+    this.boundRenderedCardElements.delete(element);
+  }
+
+  private teardownBoundRenderedCards() {
+    for (let [element, handlers] of this.boundRenderedCardElements) {
+      this.unbindRenderedCardElement(element, handlers);
+    }
+    this.currentlyHoveredCard = null;
   }
 }

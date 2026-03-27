@@ -19,15 +19,15 @@ export class PetPerson extends CardDef {
   @field firstName = contains(StringField);
   @field friend = linksTo(Person);
   @field pets = linksToMany(Pet);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;
     },
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: () => 'A person with pets',
   });
-  @field thumbnailURL = contains(StringField, { computeVia: () => null });
+  @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
@@ -46,15 +46,15 @@ export class PetPersonField extends FieldDef {
   @field firstName = contains(StringField);
   @field friend = linksTo(Person);
   @field pets = linksToMany(Pet);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PetPersonField) {
       return `${this.firstName} Pet Person`;
     },
   });
-  @field description = contains(StringField, {
+  @field cardDescription = contains(StringField, {
     computeVia: () => 'A person with pets',
   });
-  @field thumbnailURL = contains(StringField, { computeVia: () => null });
+  @field cardThumbnailURL = contains(StringField, { computeVia: () => null });
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <GridContainer>

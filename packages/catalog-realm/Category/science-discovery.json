@@ -11,9 +11,9 @@
       "name": "Science & Discovery",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Scientific experiments, discovery projects, STEM learning, nature observation, and scientific method applications.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Scientific experiments, discovery projects, STEM learning, nature observation, and scientific method applications.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -1,0 +1,5 @@
+experiment_1/
+playwright-report/
+prompts/
+test-results/
+.eslintcache

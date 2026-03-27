@@ -7,7 +7,7 @@ import {
 import BaseDateField from 'https://cardstack.com/base/date';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { gt, eq } from '@cardstack/boxel-ui/helpers';
+import { gt, eq, not } from '@cardstack/boxel-ui/helpers';
 import { formatDateTime } from '@cardstack/boxel-ui/helpers';
 import { DateRangePicker } from '@cardstack/boxel-ui/components';
 
@@ -79,6 +79,7 @@ class DateRangeFieldEdit extends Component<typeof DateRangeField> {
       <DateRangePicker
         @selected={{this.selectedRange}}
         @onSelect={{this.onSelect}}
+        @disabled={{not @canEdit}}
         data-test-date-range-picker
       />
       {{#if (gt this.daysDuration 0)}}
@@ -102,7 +103,7 @@ class DateRangeFieldEdit extends Component<typeof DateRangeField> {
   </template>
 }
 
-export class DateRangeField extends FieldDef {
+export default class DateRangeField extends FieldDef {
   static displayName = 'Date Range';
   static icon = CalendarStatsIcon;
 
@@ -224,5 +225,3 @@ export class DateRangeField extends FieldDef {
 
   static edit = DateRangeFieldEdit;
 }
-
-export default DateRangeField;

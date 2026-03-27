@@ -8,7 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api'; // ¹ Core imports
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import UrlField from 'https://cardstack.com/base/url';
 import {
@@ -558,11 +558,11 @@ export class StudyResource extends CardDef {
   @field completionStatus = contains(StringField); // not_started, in_progress, completed
   @field tags = containsMany(StringField); // ²²² Individual tag fields
   @field notes = contains(MarkdownField);
-  @field lastAccessed = contains(DatetimeField);
+  @field lastAccessed = contains(DateTimeField);
   @field progressPercentage = contains(NumberField); // ²²³ 0-100 completion percentage
 
   // ⁷ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: StudyResource) {
       try {
         return this.resourceTitle ?? 'Untitled Resource';

@@ -5,8 +5,8 @@
       "modelId": "anthropic/claude-opus-4",
       "modelName": "Claude Opus 4",
       "displayName": "Claude Opus 4",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

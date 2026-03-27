@@ -4,9 +4,9 @@
     "attributes": {
       "website": "www.cinereview.com",
       "cardInfo": {
-        "title": "CineReview",
-        "description": null,
-        "thumbnailURL": null
+        "name": "CineReview",
+        "summary": null,
+        "cardThumbnailURL": null
       }
     },
     "meta": {

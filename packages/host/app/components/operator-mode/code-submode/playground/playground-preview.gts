@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { get } from '@ember/helper';
 
 import { CardContainer, CardHeader } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -11,7 +12,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-renderer-panel/fitted-format-gallery';
+import FittedFormatGallery from '@cardstack/host/components/operator-mode/preview-panel/fitted-format-gallery';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import type {
@@ -19,12 +20,14 @@ import type {
   FieldDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 interface Signature {
   Args: {
     format: Format;
-    card: CardDef | FieldDef;
+    card: CardDef | FieldDef | FileDef;
     isFieldDef?: boolean;
+    isFileDef?: boolean;
     realmInfo?: EnhancedRealmInfo;
     contextMenuItems?: MenuItem[];
     onEdit?: () => void;
@@ -45,7 +48,11 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
           class='preview-header'
           @cardTypeDisplayName={{cardTypeDisplayName @card}}
           @cardTypeIcon={{cardTypeIcon @card}}
-          @cardTitle={{if (isCardInstance @card) @card.title undefined}}
+          @cardTitle={{if
+            (isCardInstance @card)
+            @card.cardTitle
+            (if @isFileDef (get @card 'name') undefined)
+          }}
           @realmInfo={{@realmInfo}}
           @onEdit={{@onEdit}}
           @onFinishEditing={{@onFinishEditing}}

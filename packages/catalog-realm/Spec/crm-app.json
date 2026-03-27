@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "CRM App",
-      "description": "Spec for CRM App",
-      "thumbnailURL": null
+      "cardTitle": "CRM App",
+      "cardDescription": "Spec for CRM App",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

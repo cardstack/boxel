@@ -1,0 +1,49 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "TimeFieldSpec",
+        "module": "../time-field-spec"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "ref": {
+        "name": "default",
+        "module": "../../fields/time"
+      },
+      "hour24": {
+        "value": "11:25"
+      },
+      "readMe": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "specType": "field",
+      "standard": {
+        "value": "06:20"
+      },
+      "cardTitle": "Time Field",
+      "longStyle": {
+        "value": "11:25"
+      },
+      "cardDescription": null,
+      "containedExamples": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

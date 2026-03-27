@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Annual Fall Festival",
+      "cardTitle": "Annual Fall Festival",
       "startDateTime": "2024-10-15T14:00:00.000Z",
       "endDateTime": "2024-10-15T20:00:00.000Z",
-      "description": "Join us for our Annual Fall Festival featuring seasonal activities, food, games, and entertainment for the whole family. Highlights include pumpkin carving contests, hayrides, apple cider, and festive decorations throughout the venue.",
+      "cardDescription": "Join us for our Annual Fall Festival featuring seasonal activities, food, games, and entertainment for the whole family. Highlights include pumpkin carving contests, hayrides, apple cider, and festive decorations throughout the venue.",
       "location": "Community Park, Main Pavilion",
       "isAllDay": false,
       "requiresRsvp": false,
-      "thumbnailURL": "https://images.unsplash.com/photo-1508995476428-43d70c3d0042?q=80&w=2070&auto=format&fit=crop"
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1508995476428-43d70c3d0042?q=80&w=2070&auto=format&fit=crop"
     },
     "relationships": {
       "rsvp": {

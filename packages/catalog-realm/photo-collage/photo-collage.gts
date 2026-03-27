@@ -22,14 +22,14 @@ export class PhotoCollage extends CardDef {
   static displayName = 'Photo Collage';
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field photos = containsMany(PhotoItem);
   @field darkMode = contains(BooleanField);
 
   static isolated = class Isolated extends Component<typeof PhotoCollage> {
     <template>
       <div class='photo-collage {{if @model.darkMode "dark-mode"}}'>
-        <h1 class='title'>{{@model.title}}</h1>
+        <h1 class='title'>{{@model.cardTitle}}</h1>
 
         <div class='photo-grid'>
           {{#each @model.photos as |photo index|}}

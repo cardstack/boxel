@@ -11,9 +11,9 @@
       "subject": "Computer Science",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "quizTitle": "Data Structures Quick Check",
       "timeLimit": 10,
@@ -28,7 +28,7 @@
             "O(log n)",
             "O(n)",
             "O(n log n)",
-            "O(n²)"
+            "O(n\u00b2)"
           ],
           "correctAnswer": "A"
         },
@@ -56,7 +56,7 @@
           "question": "What is the best case time complexity for quicksort?",
           "choices": [
             "O(n log n)",
-            "O(n²)",
+            "O(n\u00b2)",
             "O(log n)",
             "O(n)"
           ],

@@ -19,21 +19,23 @@ module('Integration | Component | dropdown', function (hooks) {
 
     // Scenario 1
     // Test with autoClose enabled
-    await render(<template>
-      <BoxelDropdown @autoClose={{true}}>
-        <:trigger as |dd|>
-          <button data-test-dropdown-trigger-1 {{dd}}>Open</button>
-        </:trigger>
-        <:content as |dd|>
-          <div
-            data-test-boxel-dropdown-content-1
-            class='boxel-dropdown__content'
-          >
-            <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
-          </div>
-        </:content>
-      </BoxelDropdown>
-    </template>);
+    await render(
+      <template>
+        <BoxelDropdown @autoClose={{true}}>
+          <:trigger as |dd|>
+            <button data-test-dropdown-trigger-1 {{dd}}>Open</button>
+          </:trigger>
+          <:content as |dd|>
+            <div
+              data-test-boxel-dropdown-content-1
+              class='boxel-dropdown__content'
+            >
+              <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
+            </div>
+          </:content>
+        </BoxelDropdown>
+      </template>,
+    );
 
     await click('[data-test-dropdown-trigger-1]');
     await waitFor('[data-test-boxel-dropdown-content-1]');
@@ -48,21 +50,23 @@ module('Integration | Component | dropdown', function (hooks) {
 
     // Scenario 2
     // Test with autoClose disabled
-    await render(<template>
-      <BoxelDropdown @autoClose={{false}}>
-        <:trigger as |dd|>
-          <button data-test-dropdown-trigger-2 {{dd}}>Open</button>
-        </:trigger>
-        <:content as |dd|>
-          <div
-            data-test-boxel-dropdown-content-2
-            class='boxel-dropdown__content'
-          >
-            <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
-          </div>
-        </:content>
-      </BoxelDropdown>
-    </template>);
+    await render(
+      <template>
+        <BoxelDropdown @autoClose={{false}}>
+          <:trigger as |dd|>
+            <button data-test-dropdown-trigger-2 {{dd}}>Open</button>
+          </:trigger>
+          <:content as |dd|>
+            <div
+              data-test-boxel-dropdown-content-2
+              class='boxel-dropdown__content'
+            >
+              <BoxelMenu @closeMenu={{dd.close}} @items={{menuOptions}} />
+            </div>
+          </:content>
+        </BoxelDropdown>
+      </template>,
+    );
 
     await click('[data-test-dropdown-trigger-2]');
     await waitFor('[data-test-boxel-dropdown-content-2]');

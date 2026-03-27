@@ -172,7 +172,7 @@ module('Integration | commands | commands-calling', function (hooks) {
     let output = await exampleCommand.execute({
       inputField1: 'World',
       inputField2: '!',
-      title: 'test',
+      cardTitle: 'test',
     });
     assert.strictEqual(output.outputField, 'Hello World!');
   });

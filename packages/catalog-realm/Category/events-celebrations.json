@@ -10,10 +10,10 @@
     "attributes": {
       "name": "Events & Celebrations",
       "cardInfo": {
+        "name": null,
         "notes": null,
-        "title": null,
-        "description": "Event planning, party themes, guest lists, venue details, celebration timelines, and memorable moments.",
-        "thumbnailURL": null
+        "summary": "Event planning, party themes, guest lists, venue details, celebration timelines, and memorable moments.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

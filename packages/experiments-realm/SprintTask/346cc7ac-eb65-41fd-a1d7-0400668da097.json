@@ -18,8 +18,8 @@
       },
       "name": "Make fitted / embeddedd view for task",
       "details": "Implement a responsive task view that adapts to its container size using container queries (@container), allowing tasks to be embedded in different contexts while maintaining proper layout and readability. This will ensure consistent display whether tasks appear in boards, lists, or as embedded components.",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

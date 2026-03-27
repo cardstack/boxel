@@ -2,9 +2,26 @@
 
 ## Tooling prerequisites
 
-- We pin the toolchain with Volta (`.volta`), using the versions of Node.js and pnpm specified in package.json. Install Volta and set `VOLTA_FEATURE_PNPM=1` so pnpm is managed automatically—avoid global installs outside Volta.
+- We pin the toolchain with [mise](https://mise.jdx.dev/) (`.mise.toml`), which manages Node.js and pnpm versions. Run `mise install` from the repo root to get the correct versions—avoid global installs outside mise.
 - pnpm is required for all scripts; use the pinned version as specified above.
 - Docker is required (Postgres, Synapse, SMTP, Stripe CLI container). Ensure the daemon is running and you can run `docker` without sudo.
+
+## GitHub Actions failure triage helper
+
+- Use `pnpm ci:failures -- ...` to quickly summarize failed jobs and extract actionable test failures from GitHub Actions logs.
+- This command requires GitHub CLI (`gh`) to be installed and authenticated.
+- Common usage:
+  - `pnpm ci:failures -- --run <run-id-or-url>`
+  - `pnpm ci:failures -- --pr <pr-number-or-url>`
+  - `pnpm ci:failures -- --branch <branch-name>`
+- Useful flags:
+  - `--repo <owner/repo>` to target a specific repository
+  - `--workflow <name>` to focus on a specific workflow (for example `CI Host`)
+  - `--max-lines <n>` to limit extracted failure lines
+  - `--context-lines <n>` to include surrounding stack/assertion context for each failure
+  - `--no-progress` to suppress progress updates if you only want final output
+  - `--json` for machine-readable output
+  - `--fail-on-findings` to exit non-zero when failed jobs are found
 
 ## Testing instructions by package
 
@@ -55,6 +72,15 @@
   `ember test --path dist --filter "some text that appears in module name or test name"`  
   Note that the filter is matched against the module name and test name, not the file name! Try to avoid using pipe characters in the filter, since they can confuse auto-approval tool use filters set up by the user.
 - run `pnpm lint` in this directory to lint changes made to this package
+- run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
+- the host tests report this error:
+  ```
+  Missing symlinked npm packages: 
+  Package: @cardstack/local-types
+    * Specified: workspace:*
+    * Symlinked: (not available)
+  ```
+  This is a red herring. Just ignore this error.
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -75,10 +101,11 @@
     `pnpm stop:synapse`
   - Ensure that host and realm server are running:
     `cd ../host && pnpm start`
-    `cd ../realm-server && MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests`
+    `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
   - Run tests:
     `pnpm test`
 - Focusing on single test or module:
+- make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
 
 ### packages/realm-server
@@ -93,16 +120,54 @@
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
   Make sure not to commit `.only` to source control
+- make sure to kill previously running realm-server tests if they are still running before starting a new test run.
 - run `pnpm lint` directly in this directory to lint changes made to this package
+- run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
+
+### packages/postgres
+- If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.
+- **After creating or modifying a migration, you MUST regenerate the SQLite schema file.** Run `pnpm make-schema` from this directory. This creates a new SQLite schema in `packages/host/config/schema/` with a timestamp matching the latest migration file. The old schema file is automatically removed. If you skip this step, the host app will fail to start with an "SQLite schema is out of date" error.
+  - This script requires Docker (it uses the `boxel-pg` container to dump the Postgres schema). Ensure Docker is running before executing.
+
 
 ### packages/runtime-common
 
 - Functionality is tested via host and/or realm-server tests
-- run `pnpm lint` directly in packages/host or directly in packages/realm-server to lint for changes made in this package. This package will be linted since both packages/host and package/realm-server consume this package.
+- run `pnpm lint` directly in this directory to lint changes made to this package
+- run `pnpm lint:js:fix` directly in this directory to apply fixes for js lint failures made to this package that can be automatically fixed.
 
 ## PR Instructions
 
 - Always run `pnpm lint` in modified packages before committing
+
+## Production-safe selectors
+
+- `data-test-*` attributes are stripped from production builds. Never use them for runtime behavior or styling in app code.
+- For production hooks, use classes or non-test `data-*` attributes (for example `data-path`, `data-kind`) and keep `data-test-*` only for tests.
+
+## `.gts` file gotcha: regex literals can break content-tag
+
+The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
+
+**1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
+```ts
+// BROKEN — backticks in regex confuse content-tag
+.replace(/`([^`]+)`/g, '$1')
+
+// FIX — use new RegExp() with a string instead
+const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
+.replace(INLINE_CODE_RE, '$1')
+```
+
+**2. `!/regex/` (negation before regex literal)** — content-tag misreads the `/` after `!`:
+```ts
+// BROKEN
+lines.some((line) => !/^\s*#{1,6}\s+/.test(line));
+
+// FIX — extract the regex to a variable
+const HEADING_RE = /^\s*#{1,6}\s+/;
+lines.some((line) => !HEADING_RE.test(line));
+```
 
 ## Base realm imports
 

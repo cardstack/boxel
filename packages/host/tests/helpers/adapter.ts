@@ -28,10 +28,8 @@ import type {
 } from '@cardstack/runtime-common/realm';
 
 import type {
-  FileAddedEventContent,
-  FileUpdatedEventContent,
+  FileWatcherEventContent,
   RealmEventContent,
-  UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
@@ -39,6 +37,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type ms from 'ms';
 
 interface Dir {
   kind: 'directory';
@@ -47,7 +46,7 @@ interface Dir {
 
 interface File {
   kind: 'file';
-  content: string | object;
+  content: string | object | Uint8Array;
 }
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -56,7 +55,7 @@ class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}
 
 interface TestAdapterContents {
-  [path: string]: string | object;
+  [path: string]: string | object | Uint8Array;
 }
 
 let shimmedModuleIndicator = '// this file is shimmed';
@@ -65,7 +64,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = { kind: 'directory', contents: {} };
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber: ((message: UpdateRealmEventContent) => void) | undefined;
+  #subscriber: ((message: FileWatcherEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
@@ -127,8 +126,13 @@ export class TestRealmAdapter implements RealmAdapter {
       rid.replace('test-session-room-realm-', '').startsWith(realmUrl),
     );
 
+    const eventWithRealmURL: RealmEventContent = {
+      ...event,
+      realmURL: realmUrl,
+    };
+
     for (let roomId of targetRoomIds) {
-      simulateRemoteMessage(roomId, realmMatrixUsername, event, {
+      simulateRemoteMessage(roomId, realmMatrixUsername, eventWithRealmURL, {
         type: APP_BOXEL_REALM_EVENT_TYPE,
       });
     }
@@ -169,7 +173,7 @@ export class TestRealmAdapter implements RealmAdapter {
     this.prepareInstances();
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string) {
+  createJWT(claims: TokenClaims, expiration: ms.StringValue, secret: string) {
     return createJWT(claims, expiration, secret);
   }
 
@@ -220,30 +224,12 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async exists(path: LocalPath): Promise<boolean> {
-    let maybeFilename = path.split('/').pop()!;
     try {
-      // a quirk of our test file system's traverse is that it creates
-      // directories as it goes--so do our best to determine if we are checking for
-      // a file that exists (because of this behavior directories always exist)
-      await this.#traverse(
-        path.split('/'),
-        maybeFilename.includes('.') ? 'file' : 'directory',
-      );
+      this.#traverseExisting(path.split('/'));
       return true;
     } catch (err: any) {
-      if (err.name === 'NotFoundError') {
+      if (['NotFoundError', 'TypeMismatchError'].includes(err.name)) {
         return false;
-      }
-      if (err.name === 'TypeMismatchError') {
-        try {
-          await this.#traverse(path.split('/'), 'file');
-          return true;
-        } catch (err: any) {
-          if (err.name === 'NotFoundError') {
-            return false;
-          }
-          throw err;
-        }
       }
       throw err;
     }
@@ -253,7 +239,7 @@ export class TestRealmAdapter implements RealmAdapter {
     await this.#ready.promise;
     let content;
     try {
-      content = this.#traverse(path.split('/'), 'file');
+      content = this.#traverseExisting(path.split('/'));
     } catch (err: any) {
       if (['TypeMismatchError', 'NotFoundError'].includes(err.name)) {
         return undefined;
@@ -270,9 +256,11 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let value = content.content;
 
-    let fileRefContent = '';
+    let fileRefContent: string | Uint8Array = '';
 
-    if (path.endsWith('.json')) {
+    if (value instanceof Uint8Array) {
+      fileRefContent = value;
+    } else if (path.endsWith('.json')) {
       let cardApi = await this.#loader.import<CardAPI>(
         `${baseRealm.url}card-api`,
       );
@@ -308,7 +296,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
   async write(
     path: LocalPath,
-    contents: string | object,
+    contents: string | object | Uint8Array,
   ): Promise<AdapterWriteResult> {
     let segments = path.split('/');
     let name = segments.pop()!;
@@ -323,7 +311,7 @@ export class TestRealmAdapter implements RealmAdapter {
       );
     }
 
-    let updateEvent: FileAddedEventContent | FileUpdatedEventContent;
+    let updateEvent: FileWatcherEventContent;
 
     let lastModified = unixTime(Date.now());
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
@@ -343,9 +331,11 @@ export class TestRealmAdapter implements RealmAdapter {
     dir.contents[name] = {
       kind: 'file',
       content:
-        typeof contents === 'string'
+        contents instanceof Uint8Array
           ? contents
-          : JSON.stringify(contents, null, 2),
+          : typeof contents === 'string'
+            ? contents
+            : JSON.stringify(contents, null, 2),
     };
 
     this.postUpdateEvent(updateEvent);
@@ -356,7 +346,7 @@ export class TestRealmAdapter implements RealmAdapter {
     };
   }
 
-  postUpdateEvent(data: UpdateRealmEventContent) {
+  postUpdateEvent(data: FileWatcherEventContent) {
     this.#subscriber?.(data);
   }
 
@@ -406,6 +396,31 @@ export class TestRealmAdapter implements RealmAdapter {
     return dir;
   }
 
+  #traverseExisting(
+    segments: string[],
+    originalPath = segments.join('/'),
+  ): File | Dir {
+    let dir: Dir | File = this.#files;
+    while (segments.length > 0) {
+      if (dir.kind === 'file') {
+        let err = new Error(`tried to use file as directory`);
+        err.name = 'TypeMismatchError';
+        throw err;
+      }
+      let name = segments.shift()!;
+      if (name === '') {
+        return dir;
+      }
+      if (dir.contents[name] === undefined) {
+        let err = new Error(`${originalPath} not found`);
+        err.name = 'NotFoundError';
+        throw err;
+      }
+      dir = dir.contents[name];
+    }
+    return dir;
+  }
+
   createStreamingResponse(
     _request: Request,
     requestContext: RequestContext,
@@ -427,7 +442,7 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
+    cb: (message: FileWatcherEventContent) => void,
   ): Promise<void> {
     this.#subscriber = cb;
   }

@@ -1,4 +1,4 @@
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import {
   FieldDef,
   Component,
@@ -354,6 +354,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @hasPendingUpload={{this.hasPendingUpload}}
             @isReading={{this.isReading}}
             @readProgress={{this.readProgress}}
+            @disabled={{not @canEdit}}
           />
         {{else if (eq this.variant 'dropzone')}}
           <ImageDropzonePreview
@@ -365,6 +366,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @isReading={{this.isReading}}
             @readProgress={{this.readProgress}}
             @previewImageFit={{this.previewImageFit}}
+            @disabled={{not @canEdit}}
           />
         {{else}}
           <ImageBrowsePreview
@@ -376,6 +378,7 @@ class ImageFieldEdit extends Component<typeof ImageField> {
             @isReading={{this.isReading}}
             @readProgress={{this.readProgress}}
             @previewImageFit={{this.previewImageFit}}
+            @disabled={{not @canEdit}}
           />
         {{/if}}
 
@@ -404,15 +407,22 @@ class ImageFieldEdit extends Component<typeof ImageField> {
       {{else}}
         {{! Upload trigger components }}
         {{#if (eq this.variant 'avatar')}}
-          <ImageAvatarUpload @onFileSelect={{this.handleFileSelect}} />
+          <ImageAvatarUpload
+            @onFileSelect={{this.handleFileSelect}}
+            @disabled={{not @canEdit}}
+          />
         {{else if (eq this.variant 'dropzone')}}
           <ImageDropzoneUpload
             @onFileSelect={{this.handleFileSelect}}
             @onDragOver={{this.handleDragOver}}
             @onDrop={{this.handleDrop}}
+            @disabled={{not @canEdit}}
           />
         {{else}}
-          <ImageBrowseUpload @onFileSelect={{this.handleFileSelect}} />
+          <ImageBrowseUpload
+            @onFileSelect={{this.handleFileSelect}}
+            @disabled={{not @canEdit}}
+          />
         {{/if}}
       {{/if}}
 

@@ -15,6 +15,8 @@ import {
   setupLocalIndexing,
   setupAuthEndpoints,
   setupRealmServerEndpoints,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -73,42 +75,51 @@ module('Integration | Command | create-specs', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
     setupAuthEndpoints();
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
   @field name = contains(StringField);
 }`,
-        'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
+          'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
 
 export class TestField extends FieldDef {
   static displayName = 'Test Field';
 }`,
-        'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
+          'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
 
 export class AppCard extends CardDef {
   static displayName = 'App Card';
 }`,
-        'test-component.gts': `import Component from '@glimmer/component';
+          'test-component.gts': `import Component from '@glimmer/component';
 
 export default class TestComponent extends Component {
   static displayName = 'Test Component';
 }`,
-        'test-command.gts': `import { Command } from '@cardstack/runtime-common';
+          'test-command.gts': `import { Command } from '@cardstack/runtime-common';
 
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
 }`,
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
+          'test-spec.gts': `import { Spec } from 'https://cardstack.com/base/spec';
+
+export class TestSpec extends Spec {
+  static displayName = 'Test Spec';
+}`,
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      }),
+    );
   });
 
   test('creates spec with correct type for card definition', async function (assert) {
@@ -129,7 +140,7 @@ export default class TestCommand extends Command {
 
     assert.strictEqual(savedSpec.specType, 'card', 'Spec type is card');
     assert.strictEqual(
-      savedSpec.title,
+      savedSpec.cardTitle,
       'Test Card',
       'Spec title matches display name',
     );
@@ -216,7 +227,7 @@ export default class TestCommand extends Command {
 
     assert.strictEqual(savedSpec.specType, 'command', 'Spec type is command');
     assert.strictEqual(
-      savedSpec.title,
+      savedSpec.cardTitle,
       'TestCommand',
       'Spec title falls back to export name for commands',
     );
@@ -243,6 +254,27 @@ export default class TestCommand extends Command {
     }
   });
 
+  test('throws error when creating a spec from another spec', async function (assert) {
+    try {
+      await createSpecCommand.execute({
+        codeRef: {
+          module: `${testRealmURL}test-spec.gts`,
+          name: 'TestSpec',
+        },
+        targetRealm: testRealmURL,
+      });
+      assert.ok(false, 'Should have thrown an error');
+    } catch (error) {
+      assert.ok(error instanceof Error, 'Error is thrown');
+      if (error instanceof Error) {
+        assert.strictEqual(
+          error.message,
+          'Cannot create a spec from another spec',
+        );
+      }
+    }
+  });
+
   test('creates multiple specs when codeRef.name is not provided', async function (assert) {
     const result = await createSpecCommand.execute({
       module: `${testRealmURL}test-card.gts`,
@@ -260,7 +292,7 @@ export default class TestCommand extends Command {
       assert.ok(spec.id, 'Spec has an ID');
       const savedSpec = (await store.get(spec.id!)) as Spec;
       assert.ok(savedSpec.specType, 'Spec has a type');
-      assert.ok(savedSpec.title, 'Spec has a title');
+      assert.ok(savedSpec.cardTitle, 'Spec has a title');
       assert.ok(savedSpec.ref?.module, 'Spec has a module reference');
     }
   });

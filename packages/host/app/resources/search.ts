@@ -5,26 +5,31 @@ import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { didCancel, restartableTask, task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
 import difference from 'lodash/difference';
 import isEqual from 'lodash/isEqual';
 import { TrackedArray } from 'tracked-built-ins';
 
-import type { QueryResultsMeta, ErrorEntry } from '@cardstack/runtime-common';
+import type {
+  QueryResultsMeta,
+  ErrorEntry,
+  RuntimeDependencyTrackingContext,
+} from '@cardstack/runtime-common';
 import {
   subscribeToRealm,
-  isCardCollectionDocument,
-  isCardInstance,
+  isFileDefInstance,
   logger as runtimeLogger,
   normalizeQueryForSignature,
   buildQueryParamValue,
   parseSearchURL,
+  runtimeDependencyContextWithSource,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type RealmServerService from '../services/realm-server';
@@ -32,7 +37,7 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
-export interface Args<T extends CardDef = CardDef> {
+export interface Args<T extends CardDef | FileDef = CardDef> {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
@@ -47,21 +52,29 @@ export interface Args<T extends CardDef = CardDef> {
           realms?: string[];
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
+          queryErrors?: Array<{
+            realm: string;
+            type: string;
+            message: string;
+            status?: number;
+          }>;
         }
       | undefined;
+    dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
     owner: Owner;
   };
 }
-export class SearchResource<T extends CardDef = CardDef> extends Resource<
-  Args<T>
-> {
+export class SearchResource<
+  T extends CardDef | FileDef = CardDef,
+> extends Resource<Args<T>> {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
+  #storeServiceOverride: StoreService | undefined;
   @tracked private realmsToSearch: string[] = [];
   // Resist the urge to expose this property publicly as that may entice
-  // consumers of this resource  to use it in a non-reactive manner (pluck off
+  // consumers of this resource to use it in a non-reactive manner (pluck off
   // the instances and throw away the resource).
-  // @ts-ignore we use this.loaded for test instrumentation.
+  // Kept private for tests/internal load bookkeeping.
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<T>();
@@ -73,13 +86,57 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
   #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;
   #previousRealms: string[] | undefined;
+  #dependencyTracking: RuntimeDependencyTrackingContext | undefined;
   #log = runtimeLogger('search-resource');
+  #trackedLoadCount = 0;
+
+  private get runtimeStore(): StoreService {
+    return this.#storeServiceOverride ?? this.store;
+  }
+
+  private trackStoreLoad(
+    load: Promise<void> | undefined,
+    source: 'seed' | 'search' | 'live-refresh',
+  ): void {
+    if (!load) {
+      return;
+    }
+    this.loaded = load;
+    let loadNumber = ++this.#trackedLoadCount;
+    this.#log.info(
+      `trackStoreLoad start #${loadNumber} source=${source} query=${this.#previousQueryString ?? '(unknown)'}`,
+    );
+    this.runtimeStore.trackLoad(load);
+    void load
+      .finally(() => {
+        // Ignore stale completions from superseded loads; keep test-facing
+        // `loaded` aligned with the most recent request.
+        if (this.loaded !== load) {
+          return;
+        }
+        this.#log.info(
+          `trackStoreLoad settled #${loadNumber} source=${source}`,
+        );
+      })
+      .catch((error) => {
+        if (didCancel(error)) {
+          this.#log.debug(
+            `trackStoreLoad canceled #${loadNumber} source=${source}`,
+          );
+          return;
+        }
+        this.#log.error(
+          `trackStoreLoad rejected #${loadNumber} source=${source}`,
+          error,
+        );
+      });
+  }
 
   constructor(owner: object) {
     super(owner);
     registerDestructor(this, () => {
       for (let instance of this._instances) {
-        this.store.dropReference(instance.id);
+        this.runtimeStore.dropReference(instance.id);
       }
       for (let subscription of this.subscriptions) {
         subscription.unsubscribe();
@@ -88,9 +145,22 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
   }
 
   modify(_positional: never[], named: Args<T>['named']) {
-    let { query, realms, isLive, doWhileRefreshing, seed, owner } = named;
+    let {
+      query,
+      realms,
+      isLive,
+      doWhileRefreshing,
+      seed,
+      owner,
+      storeService,
+    } = named;
 
     setOwner(this, owner); // works around problem where lifetime parent is used as owner when they should be allowed to differ
+    // Keep the previously provided override when optional args are omitted on
+    // subsequent modify() calls.
+    if (storeService !== undefined) {
+      this.#storeServiceOverride = storeService;
+    }
 
     if (query === undefined) {
       return;
@@ -101,6 +171,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     );
     this.#isLive = isLive;
     this.#doWhileRefreshing = doWhileRefreshing;
+    this.#dependencyTracking = named.dependencyTracking;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -109,9 +180,10 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
       `modify: prepared realms for subscription=${this.realmsToSearch.join(',')}`,
     );
     if (seed && !this.#seedApplied) {
-      this.loaded = this.applySeed.perform(seed);
+      this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
       this.#seedApplied = true;
-      if (seed.searchURL) {
+      let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
+      if (seed.searchURL && !hasQueryErrors) {
         let { query: seedQuery } = parseSearchURL(seed.searchURL);
         this.#previousQueryString = buildQueryParamValue(
           normalizeQueryForSignature(seedQuery),
@@ -156,7 +228,10 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
             ) {
               return;
             }
-            this.search.perform(this.#previousQuery);
+            this.trackStoreLoad(
+              this.search.perform(this.#previousQuery),
+              'live-refresh',
+            );
           }),
         };
       });
@@ -180,7 +255,7 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     this.#previousRealms = realms;
     this.#previousQuery = query;
     this.#previousQueryString = queryString;
-    this.loaded = this.search.perform(query);
+    this.trackStoreLoad(this.search.perform(query), 'search');
   }
   get isLoading() {
     return this.search.isRunning;
@@ -209,7 +284,10 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     return this._errors;
   }
 
-  private async updateInstances(newInstances: T[]) {
+  private async updateInstances(
+    newInstances: T[],
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+  ) {
     let oldReferences = this._instances.map((i) => i.id);
     // Please note 3 things there:
     // 1. we are mutating this._instances, not replacing it
@@ -228,34 +306,58 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     }
     let newReferences = this._instances.map((i) => i.id);
     for (let card of this._instances) {
-      let maybeInstance = card?.id ? this.store.peek(card.id) : undefined;
+      let isFileMeta = isFileDefInstance(card);
+      let maybeInstance = card?.id
+        ? isFileMeta
+          ? this.runtimeStore.peek(card.id, { type: 'file-meta' })
+          : this.runtimeStore.peek(card.id)
+        : undefined;
       if (
         !maybeInstance &&
         (card as unknown as { type?: string })?.type !== 'not-loaded' // TODO: under what circumstances could this happen?
       ) {
-        await this.store.add(
-          card,
-          { doNotPersist: true }, // search results always have id's
-        );
+        if (isFileMeta) {
+          await this.runtimeStore.get(card.id, {
+            type: 'file-meta',
+            dependencyTrackingContext,
+          });
+        } else {
+          await this.runtimeStore.add(
+            card as CardDef,
+            {
+              doNotPersist: true,
+              dependencyTrackingContext,
+            }, // search results always have id's
+          );
+        }
       }
     }
     let referencesToDrop = difference(oldReferences, newReferences);
     for (let id of referencesToDrop) {
-      this.store.dropReference(id);
+      this.runtimeStore.dropReference(id);
     }
     let referencesToAdd = difference(newReferences, oldReferences);
     for (let id of referencesToAdd) {
-      this.store.addReference(id);
+      this.runtimeStore.addReference(id);
     }
-    return this.store.flush();
+    return this.runtimeStore.flush();
+  }
+
+  private dependencyTrackingContext(
+    source: string,
+  ): RuntimeDependencyTrackingContext | undefined {
+    return runtimeDependencyContextWithSource(this.#dependencyTracking, source);
   }
 
   private applySeed = task(
     async (seed: NonNullable<Args<T>['named']['seed']>) => {
+      let dependencyTrackingContext = this.dependencyTrackingContext(
+        'search-resource:applySeed',
+      );
       await Promise.resolve();
       this._meta = seed.meta ?? { page: { total: seed.cards.length } };
       this._errors = seed.errors;
-      await this.updateInstances(seed.cards);
+      await this.updateInstances(seed.cards, dependencyTrackingContext);
     },
   );
 
@@ -267,62 +369,26 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
-    let realmServerURLs = this.realmServer.getRealmServersForRealms(
-      this.realmsToSearch,
-    );
-    // TODO remove this assertion after multi-realm serer/federated identity is supported
-    this.realmServer.assertOwnRealmServer(realmServerURLs);
-    let [realmServerURL] = realmServerURLs;
     try {
-      let searchURL = new URL('_search', realmServerURL);
-      for (let realm of this.realmsToSearch) {
-        searchURL.searchParams.append('realms', realm);
-      }
-      let response = await this.realmServer.maybeAuthedFetch(searchURL.href, {
-        method: 'QUERY',
-        headers: {
-          Accept: 'application/vnd.card+json',
+      let dependencyTrackingContext = this.dependencyTrackingContext(
+        'search-resource:search',
+      );
+      let { instances, meta } = await this.runtimeStore.search<T>(
+        query,
+        this.realmsToSearch,
+        {
+          includeMeta: true,
+          dependencyTrackingContext,
         },
-        body: JSON.stringify(query),
-      });
-      if (!response.ok) {
-        let responseText = await response.text();
-        let err = new Error(
-          `status: ${response.status} - ${response.statusText}. ${responseText}`,
-        ) as any;
-        err.status = response.status;
-        err.responseText = responseText;
-        err.responseHeaders = response.headers;
-        throw err;
-      }
-      let json = await response.json();
-      if (!isCardCollectionDocument(json)) {
-        throw new Error(
-          `The realm search response was not a card collection document:
-        ${JSON.stringify(json, null, 2)}`,
-        );
-      }
-      let collectionDoc = json;
-      for (let data of collectionDoc.data) {
-        let maybeInstance = this.store.peek(data.id!);
-        if (!maybeInstance) {
-          await this.store.add(
-            { data },
-            { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-          );
-        }
-      }
-      let results = collectionDoc.data
-        .map((r) => this.store.peek(r.id!)) // all results will have id's
-        .filter((i) => isCardInstance(i)) as T[];
+      );
       this.#log.info(
-        `search task complete; total instances=${results.length}; refs=${results
+        `search task complete; total instances=${instances.length}; refs=${instances
           .map((r) => r.id)
           .join(',')}`,
       );
-      this._meta = collectionDoc.meta;
+      this._meta = meta;
       this._errors = undefined;
-      await this.updateInstances(results);
+      await this.updateInstances(instances, dependencyTrackingContext);
     } finally {
       waiter.endAsync(token);
     }
@@ -338,13 +404,14 @@ export class SearchResource<T extends CardDef = CardDef> extends Resource<
 // ```
 // If you need to use `getSearch()`/`getCards()` in something that is not a Component, then
 // let's talk.
-export function getSearch<T extends CardDef = CardDef>(
+export function getSearch<T extends CardDef | FileDef = CardDef>(
   parent: object,
   owner: Owner,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: boolean;
+    storeService?: StoreService;
     doWhileRefreshing?: (() => void) | undefined;
     seed?:
       | {
@@ -352,8 +419,15 @@ export function getSearch<T extends CardDef = CardDef>(
           searchURL?: string;
           meta?: QueryResultsMeta;
           errors?: ErrorEntry[];
+          queryErrors?: Array<{
+            realm: string;
+            type: string;
+            message: string;
+            status?: number;
+          }>;
         }
       | undefined;
+    dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
   },
 ) {
   let resource = SearchResource.from(parent, () => ({
@@ -361,9 +435,11 @@ export function getSearch<T extends CardDef = CardDef>(
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
       isLive: opts?.isLive != null ? opts.isLive : false,
+      storeService: opts?.storeService,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
       seed: opts?.seed,
+      dependencyTracking: opts?.dependencyTracking,
       owner,
     },
   }));

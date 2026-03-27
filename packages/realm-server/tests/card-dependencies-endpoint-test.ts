@@ -5,7 +5,11 @@ import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealm, testRealmHref, createJWT } from './helpers';
+import {
+  setupPermissionedRealmCached,
+  testRealmHref,
+  createJWT,
+} from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(basename(__filename), function () {
@@ -25,7 +29,7 @@ module(basename(__filename), function () {
 
     module('card dependencies GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
@@ -34,7 +38,7 @@ module(basename(__filename), function () {
 
         test('serves the request', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}person`)
+            .get(`/_card-dependencies?url=${testRealm.url}person`)
             .set('Accept', 'application/json')
             .set(
               'Authorization',
@@ -56,14 +60,18 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
+            result.includes('https://cardstack.com/base/card-api'),
+            'card-api is a dependency',
+          );
+          assert.false(
             result.includes('http://127.0.0.1:4444/person'),
-            'person.gts is a dependency',
+            'self module is excluded from dependencies',
           );
         });
 
         test('serves the request with a .json extension', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}person.json`)
+            .get(`/_card-dependencies?url=${testRealm.url}person.json`)
             .set('Accept', 'application/json')
             .set(
               'Authorization',
@@ -72,14 +80,18 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
+            result.includes('https://cardstack.com/base/card-api'),
+            'card-api is a dependency',
+          );
+          assert.false(
             result.includes('http://127.0.0.1:4444/person'),
-            'person.gts is a dependency',
+            'self module is excluded from dependencies',
           );
         });
 
         test('gives 404 for a non-existent card', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}non-existent-card`)
+            .get(`/_card-dependencies?url=${testRealm.url}non-existent-card`)
             .set('Accept', 'application/json');
 
           assert.strictEqual(response.status, 404, 'HTTP 404 status');
@@ -87,16 +99,17 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}person`)
+            .get(`/_card-dependencies?url=${testRealm.url}person`)
             .set('Accept', 'application/json')
             .set('Authorization', `Bearer invalid-token`);
 
@@ -105,7 +118,7 @@ module(basename(__filename), function () {
 
         test('401 without a JWT', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}person`)
+            .get(`/_card-dependencies?url=${testRealm.url}person`)
             .set('Accept', 'application/json'); // no Authorization header
 
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -113,7 +126,7 @@ module(basename(__filename), function () {
 
         test('403 without permission', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}person`)
+            .get(`/_card-dependencies?url=${testRealm.url}person`)
             .set('Accept', 'application/json')
             .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
 
@@ -122,7 +135,7 @@ module(basename(__filename), function () {
 
         test('200 with permission', async function (assert) {
           let response = await request
-            .get(`/_dependencies?url=${testRealm.url}person`)
+            .get(`/_card-dependencies?url=${testRealm.url}person`)
             .set('Accept', 'application/json')
             .set(
               'Authorization',

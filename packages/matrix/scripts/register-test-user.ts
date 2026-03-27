@@ -1,6 +1,7 @@
 import * as childProcess from 'child_process';
 
 import { loginUser } from '../docker/synapse';
+import { getSynapseContainerName } from '../helpers/environment-config';
 export const adminUsername = 'admin';
 export const adminPassword = 'password';
 
@@ -73,7 +74,7 @@ async function ensureUserRecord(matrixUserId: string) {
       ? username
       : `@${username}:localhost`;
     const shouldEnsureUserRecord = isAdmin !== 'TRUE';
-    const command = `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${username} -p ${password} ${
+    const command = `docker exec ${getSynapseContainerName()} register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${username} -p ${password} ${
       isAdmin === 'TRUE' ? `--admin` : `--no-admin`
     }`;
     childProcess.exec(command, async (err, stdout) => {

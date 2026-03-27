@@ -11,11 +11,11 @@
       "hubName": "Harmony Central",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "description": "A comprehensive music platform bringing together discovery, creation, and community. Explore new sounds, create your own music, and connect with fellow artists and music enthusiasts."
+      "cardDescription": "A comprehensive music platform bringing together discovery, creation, and community. Explore new sounds, create your own music, and connect with fellow artists and music enthusiasts."
     },
     "relationships": {
       "beatMaker": {

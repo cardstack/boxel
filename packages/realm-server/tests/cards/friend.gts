@@ -12,7 +12,7 @@ export class Friend extends CardDef {
   @field firstName = contains(StringField);
   @field friend = linksTo(() => Friend);
   @field friends = linksToMany(() => Friend);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Friend) {
       return this.firstName;
     },

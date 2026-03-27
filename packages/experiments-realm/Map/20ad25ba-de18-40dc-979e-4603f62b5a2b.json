@@ -16,9 +16,9 @@
       },
       "mapWidth": 600,
       "mapHeight": 400,
-      "title": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": null,
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

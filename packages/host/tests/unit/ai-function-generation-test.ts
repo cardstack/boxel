@@ -60,10 +60,10 @@ module('Unit | ai-function-generation-test', function (hooks) {
     {
       cardInfo: {
         properties: {
-          description: { type: 'string' },
+          summary: { type: 'string' },
           notes: { type: 'string' },
-          thumbnailURL: { type: 'string' },
-          title: { type: 'string' },
+          cardThumbnailURL: { type: 'string' },
+          name: { type: 'string' },
         },
         type: 'object',
       },
@@ -657,7 +657,9 @@ module('Unit | ai-function-generation-test', function (hooks) {
       static displayName = 'TestCard';
       @field linkedCard = linksTo(OtherCard);
       @field simpleField = contains(StringField);
-      @field linkedCard2 = linksTo(OtherCard, { description: 'linked card' });
+      @field linkedCard2 = linksTo(OtherCard, {
+        description: 'linked card',
+      });
     }
 
     let schema = generateJsonSchemaForCardType(TestCard, cardApi, mappings);

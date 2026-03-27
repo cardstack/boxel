@@ -8,7 +8,7 @@ import {
 
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import UrlField from 'https://cardstack.com/base/url';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
@@ -24,19 +24,19 @@ export class Tournament extends CardDef {
 
   @field name = contains(StringField);
   @field game = linksTo(() => VideoGame);
-  @field startDate = contains(DatetimeField);
-  @field endDate = contains(DatetimeField);
+  @field startDate = contains(DateTimeField);
+  @field endDate = contains(DateTimeField);
   @field participants = contains(NumberField);
   @field prizePool = contains(NumberField);
   @field status = contains(StringField);
-  @field registrationDeadline = contains(DatetimeField);
+  @field registrationDeadline = contains(DateTimeField);
   @field format = contains(StringField);
   @field organizer = contains(StringField);
   @field rules = contains(MarkdownField);
   @field streamUrl = contains(UrlField);
   @field bracketImageUrl = contains(UrlField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Tournament) {
       return this.name ?? 'Untitled Tournament';
     },
@@ -1075,7 +1075,7 @@ export class Tournament extends CardDef {
                 'Untitled Tournament'
               }}</h4>
             {{#if @model.game}}
-              <div class='tournament-game-compact'>{{@model.game.title}}</div>
+              <div class='tournament-game-compact'>{{@model.game.cardTitle}}</div>
             {{/if}}
           </div>
           <div class='tournament-status-compact status-{{@model.status}}'>

@@ -246,6 +246,7 @@ export default class Menu extends Component<Signature> {
           display: flex;
           align-items: center;
           gap: var(--boxel-menu-item-gap);
+          text-transform: capitalize;
         }
         .menu-item__icon-url {
           flex-shrink: 0;

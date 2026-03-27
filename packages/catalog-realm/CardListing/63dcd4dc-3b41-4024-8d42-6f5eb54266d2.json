@@ -15,9 +15,9 @@
       "summary": "Pixelated Minecraft-themed birthday invitation with authentic game aesthetics - customize celebrant details, party information, and background imagery while viewing pixel-perfect retro styling. Features blocky typography, vibrant color schemes, game-inspired iconography, responsive mobile layouts, and nostalgic gaming visual elements for immersive birthday party invitations.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/minecraft-birthday-party-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/minecraft-birthday-party-listing/thumbnail.png"
       }
     },
     "relationships": {

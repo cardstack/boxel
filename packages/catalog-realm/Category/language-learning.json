@@ -11,9 +11,9 @@
       "name": "Language Learning",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": "Foreign language study, vocabulary building, grammar exercises, pronunciation practice, and cultural immersion activities.",
-        "thumbnailURL": null
+        "name": null,
+        "summary": "Foreign language study, vocabulary building, grammar exercises, pronunciation practice, and cultural immersion activities.",
+        "cardThumbnailURL": null
       }
     },
     "relationships": {

@@ -10,9 +10,9 @@
     "attributes": {
       "cardInfo": {
         "notes": "Business delivery - processing large order for fitness center expansion",
-        "title": "Fitness Equipment Order",
-        "description": "Large wellness equipment order for Wright Fitness Training Center including specialized gym equipment",
-        "thumbnailURL": null
+        "name": "Fitness Equipment Order",
+        "summary": "Large wellness equipment order for Wright Fitness Training Center including specialized gym equipment",
+        "cardThumbnailURL": null
       },
       "orderDate": "2025-01-04T11:45:00.000Z",
       "orderTotal": 324.78,

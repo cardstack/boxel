@@ -1,6 +1,6 @@
 import DOMPurify from 'dompurify';
 
-let domPurify: DOMPurify.DOMPurifyI;
+let domPurify: typeof DOMPurify;
 
 function getDOMPurify() {
   if (!domPurify) {

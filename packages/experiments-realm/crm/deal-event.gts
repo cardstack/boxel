@@ -46,10 +46,10 @@ class IsolatedTemplate extends Component<typeof DealEvent> {
         <@fields.eventType />
       </FieldContainer>
       <FieldContainer @label='Description'>
-        <@fields.description />
+        <@fields.cardDescription />
       </FieldContainer>
       <FieldContainer @label='Title'>
-        <@fields.title />
+        <@fields.cardTitle />
       </FieldContainer>
       <FieldContainer @label='Assigned to'>
         <@fields.assignee />
@@ -191,10 +191,10 @@ class EditTemplate extends Component<typeof DealEvent> {
         </BoxelSelect>
       </FieldContainer>
       <FieldContainer @label='Description'>
-        <@fields.description />
+        <@fields.cardDescription />
       </FieldContainer>
       <FieldContainer @label='Title'>
-        <@fields.title />
+        <@fields.cardTitle />
       </FieldContainer>
       <FieldContainer @label='Attendees'>
         <@fields.attendees />
@@ -239,9 +239,9 @@ export class DealEvent extends CardDef {
   @field startDateTime = contains(DateTimeField);
   @field endDateTime = contains(DateTimeField);
   @field eventType = contains(StringField);
-  @field description = contains(TextAreaField);
+  @field cardDescription = contains(TextAreaField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: DealEvent) {
       if (!this.eventType || !this.location || !this.startDateTime) {
         return '';

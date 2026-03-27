@@ -44,9 +44,9 @@
           "distance": 21
         }
       ],
-      "title": "Boston Metropolitan Discovery",
-      "description": "A collection of Boston's most scenic and historically significant cycling routes, featuring the iconic Charles River Path, historic Battle Road Trail, and the beautiful Emerald Necklace park system.",
-      "thumbnailURL": null
+      "cardTitle": "Boston Metropolitan Discovery",
+      "cardDescription": "A collection of Boston's most scenic and historically significant cycling routes, featuring the iconic Charles River Path, historic Battle Road Trail, and the beautiful Emerald Necklace park system.",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

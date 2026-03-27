@@ -8,8 +8,8 @@
       "startDateTime": "2025-01-16T04:40:00.000Z",
       "endDateTime": null,
       "eventType": "Meeting",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "assignee": {

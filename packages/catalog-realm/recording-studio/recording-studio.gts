@@ -1138,7 +1138,7 @@ export class RecordingStudioCard extends CardDef {
   @field inputGain = contains(NumberField); // Basic gain control
   @field outputVolume = contains(NumberField); // Playback volume
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: RecordingStudioCard) {
       try {
         return this.studioName ?? 'Recording Studio';

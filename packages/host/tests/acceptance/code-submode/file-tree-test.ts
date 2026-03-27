@@ -21,15 +21,20 @@ import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 import {
   elementIsVisible,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
   setupAuthEndpoints,
   setupUserSubscription,
+  withCachedRealmSetup,
 } from '../../helpers';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
+import type { TestRealmAdapter } from '../../helpers/adapter';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -55,7 +60,7 @@ import WriteTextFileCommand from '../../../app/commands/write-text-file';
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -67,7 +72,7 @@ import WriteTextFileCommand from '../../../app/commands/write-text-file';
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -164,7 +169,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -174,7 +179,7 @@ const friendCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -198,8 +203,11 @@ const realmInfo = {
 };
 
 module('Acceptance | code submode | file-tree tests', function (hooks) {
+  let adapter: TestRealmAdapter;
+
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -226,69 +234,71 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': indexCardSource,
-        'pet-person.gts': personCardSource,
-        'person.gts': personCardSource,
-        'friend.gts': friendCardSource,
-        'employee.gts': employeeCardSource,
-        'in-this-file.gts': inThisFileSource,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+    ({ adapter } = await withCachedRealmSetup(async () => {
+      return setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': indexCardSource,
+          'pet-person.gts': personCardSource,
+          'person.gts': personCardSource,
+          'friend.gts': friendCardSource,
+          'employee.gts': employeeCardSource,
+          'in-this-file.gts': inThisFileSource,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './index',
-                name: 'Index',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'not-json.json': 'I am not JSON.',
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './index',
+                  name: 'Index',
+                },
               },
             },
           },
+          'not-json.json': 'I am not JSON.',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          },
+          ...stubFiles,
+          'zzz/zzz/file.json': '{}',
+          '.realm.json': realmInfo,
         },
-        ...stubFiles,
-        'zzz/zzz/file.json': '{}',
-        '.realm.json': realmInfo,
-      },
-    });
+      });
+    }));
   });
 
   test('can navigate file tree, file view mode is persisted in query parameter', async function (assert) {
@@ -393,6 +403,27 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
       await waitFor('[data-test-realm-name]');
       assert.dom('[data-test-realm-read-only]').exists();
+    });
+
+    test('file tree does not show context menu in read-only realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealmURL}friend.gts`,
+      });
+
+      await waitFor('[data-test-file="friend.gts"]');
+      assert
+        .dom('[data-test-file-row="friend.gts"] .file-menu-trigger')
+        .doesNotExist('no context menu trigger shown in read-only realm');
     });
   });
 
@@ -1068,5 +1099,145 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert
       .dom(`[data-test-file="${newDirName}/${newFileName}"]`)
       .hasText(newFileName, 'New file is created with the correct name');
+  });
+
+  test('can delete a file from file tree context menu', async function (assert) {
+    let recentFilesService = getService('recent-files-service');
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}friend.gts`,
+    });
+
+    await waitFor('[data-test-file="friend.gts"]');
+    assert.dom('[data-test-file="friend.gts"]').exists('friend.gts is in tree');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+
+    // Open the "..." context menu for friend.gts
+    // triggerEvent bypasses visibility check (button is hidden until hover)
+    await triggerEvent(
+      '[data-test-file-row="friend.gts"] .file-menu-trigger',
+      'click',
+    );
+
+    await waitFor('[data-test-boxel-menu-item-text="Delete"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete"]')
+      .exists('Delete menu item is present');
+
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+
+    await waitFor(`[data-test-delete-modal="${testRealmURL}friend.gts"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}friend.gts"]`)
+      .exists('Delete confirmation modal appears');
+
+    await click('[data-test-confirm-delete-button]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-file="friend.gts"]'),
+    );
+    assert
+      .dom('[data-test-file="friend.gts"]')
+      .doesNotExist('friend.gts is removed from file tree');
+    assert
+      .dom('[data-test-delete-modal-container]')
+      .doesNotExist('Delete modal is dismissed');
+
+    let notFound = await adapter.openFile('friend.gts');
+    assert.strictEqual(notFound, undefined, 'friend.gts file is deleted');
+
+    assert.notOk(
+      recentFilesService.recentFiles.some(
+        (f) => `${f.realmURL}${f.filePath}` === `${testRealmURL}friend.gts`,
+      ),
+      'deleted file is removed from recent files',
+    );
+  });
+
+  test('can cancel delete from file tree context menu', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}friend.gts`,
+    });
+
+    await waitFor('[data-test-file="friend.gts"]');
+
+    await triggerEvent(
+      '[data-test-file-row="friend.gts"] .file-menu-trigger',
+      'click',
+    );
+
+    await waitFor('[data-test-boxel-menu-item-text="Delete"]');
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+
+    await waitFor(`[data-test-delete-modal="${testRealmURL}friend.gts"]`);
+    await click('[data-test-confirm-cancel-button]');
+
+    assert
+      .dom('[data-test-delete-modal-container]')
+      .doesNotExist('Delete modal is dismissed');
+    assert
+      .dom('[data-test-file="friend.gts"]')
+      .exists('friend.gts is still in the file tree after cancel');
+
+    let fileContent = await adapter.openFile('friend.gts');
+    assert.notStrictEqual(
+      fileContent,
+      undefined,
+      'friend.gts still exists in the realm',
+    );
+  });
+
+  test('can delete a file via right-click in file tree', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}friend.gts`,
+    });
+
+    await waitFor('[data-test-file="friend.gts"]');
+    assert.dom('[data-test-delete-modal-container]').doesNotExist();
+
+    // Right-click on the file row opens the context menu
+    await triggerEvent('[data-test-file-row="friend.gts"]', 'contextmenu');
+
+    await waitFor('[data-test-boxel-menu-item-text="Delete"]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete"]')
+      .exists('Delete menu item appears on right-click');
+
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+
+    await waitFor(`[data-test-delete-modal="${testRealmURL}friend.gts"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}friend.gts"]`)
+      .exists('Delete confirmation modal appears');
   });
 });

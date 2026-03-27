@@ -3,15 +3,19 @@ import Service from '@ember/service';
 
 import config from '@cardstack/host/config/environment';
 
-const { autoSaveDelayMs } = config;
+const { autoSaveDelayMs, cardSizeLimitBytes, fileSizeLimitBytes } = config;
 
 // we use this service to help instrument environment settings in tests
 export default class EnvironmentService extends Service {
   autoSaveDelayMs: number;
+  cardSizeLimitBytes: number;
+  fileSizeLimitBytes: number;
 
   constructor(owner: Owner) {
     super(owner);
     this.autoSaveDelayMs = autoSaveDelayMs;
+    this.cardSizeLimitBytes = cardSizeLimitBytes;
+    this.fileSizeLimitBytes = fileSizeLimitBytes;
   }
 }
 

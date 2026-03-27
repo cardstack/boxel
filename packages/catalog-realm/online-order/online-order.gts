@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import EmailField from 'https://cardstack.com/base/email';
 import AddressField from 'https://cardstack.com/base/address';
 
@@ -1356,12 +1356,12 @@ export class OnlineOrder extends CardDef {
   @field customerEmail = contains(EmailField);
   @field orderStatus = contains(StringField);
   @field orderTotal = contains(NumberField);
-  @field orderDate = contains(DatetimeField);
+  @field orderDate = contains(DateTimeField);
   @field shippingAddress = contains(AddressField);
   @field paymentMethod = contains(StringField);
   @field trackingNumber = contains(StringField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineOrder) {
       try {
         const number = this.orderNumber ?? 'Order';

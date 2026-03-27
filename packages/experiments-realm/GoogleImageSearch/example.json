@@ -4,8 +4,8 @@
     "attributes": {
       "searchQuery": "cute puppies",
       "maxResults": 6,
-      "title": "Google Image Search Example",
-      "description": "A demonstration of the Google Image Search functionality"
+      "cardTitle": "Google Image Search Example",
+      "cardDescription": "A demonstration of the Google Image Search functionality"
     },
     "meta": {
       "adoptsFrom": {

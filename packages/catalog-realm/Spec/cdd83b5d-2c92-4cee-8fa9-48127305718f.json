@@ -16,9 +16,9 @@
           "isDisabled": false
         }
       ],
-      "title": "ModelSettingsField",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "ModelSettingsField",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -10,11 +10,13 @@ import type {
   LooseCardResource,
   Query,
   QueryWithInterpolations,
+  RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import {
   getField,
   getSingularRelationship,
   identifyCard,
+  isCardInstance,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
   realmURL as realmURLSymbol,
@@ -25,14 +27,26 @@ import {
   normalizeQueryDefinition,
 } from '@cardstack/runtime-common';
 import { logger as runtimeLogger } from '@cardstack/runtime-common';
+import { runtimeQueryDependencyContext } from '@cardstack/runtime-common';
 import { initSharedState } from './shared-state';
 
 interface QueryFieldState {
   seedSearchURL?: string | null;
   seedRecords?: CardDef[];
   seedRealms?: string[];
+  seedErrors?: Array<{
+    realm: string;
+    type: string;
+    message: string;
+    status?: number;
+  }>;
   searchResource?: StoreSearchResource;
+  renderCycleBarrier?: Promise<void>;
 }
+
+const queryFieldSeedFromSearchSymbol = Symbol.for(
+  'cardstack-query-field-seed-from-search',
+);
 
 const queryFieldStates = initSharedState(
   'queryFieldStates',
@@ -45,6 +59,7 @@ export function ensureQueryFieldSearchResource(
   store: CardStore,
   instance: BaseDef,
   field: Field,
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext,
 ): ReturnType<CardStore['getSearchResource']> | undefined {
   if (!field.queryDefinition) {
     log.info(`field ${field.name} is not a query field, skipping`);
@@ -55,11 +70,28 @@ export function ensureQueryFieldSearchResource(
     log.warn(`field ${field.name} missing fieldDefinition, skipping`);
     return undefined;
   }
+  let trackingContext =
+    dependencyTrackingContext ??
+    runtimeQueryDependencyContext({
+      queryField: field.name,
+      consumer: (instance as CardDef).id,
+      source: 'query-field-support:ensure-search-resource',
+    });
+
   let queryFieldState = queryFieldStates.get(instance);
-  let fieldState = queryFieldState?.get(field.name);
-  let searchResource = fieldState?.searchResource;
+  if (!queryFieldState) {
+    queryFieldState = new Map<string, QueryFieldState>();
+    queryFieldStates.set(instance, queryFieldState);
+  }
+  let fieldState = queryFieldState.get(field.name);
+  if (!fieldState) {
+    fieldState = {};
+    queryFieldState.set(field.name, fieldState);
+  }
+  let searchResource = fieldState.searchResource;
   if (searchResource) {
-    log.info(
+    trackQueryFieldLoads(store, field.name, fieldState);
+    log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
     return searchResource;
@@ -67,7 +99,6 @@ export function ensureQueryFieldSearchResource(
 
   let seedRecords = fieldState?.seedRecords;
   let seedSearchURL = fieldState?.seedSearchURL;
-
   let args = () => resolveQueryAndRealm(instance, field, fieldDefinition);
 
   log.info(
@@ -82,26 +113,47 @@ export function ensureQueryFieldSearchResource(
     },
     {
       isLive: true,
+      dependencyTracking: trackingContext,
       seed: seedRecords
         ? {
             cards: seedRecords,
             searchURL: seedSearchURL ?? undefined,
             realms: fieldState?.seedRealms,
+            queryErrors: fieldState?.seedErrors,
           }
         : undefined,
     },
   );
-  if (!queryFieldState) {
-    queryFieldState = new Map<string, QueryFieldState>();
-    queryFieldStates.set(instance, queryFieldState);
-  }
-  if (!fieldState) {
-    fieldState = {};
-    queryFieldState.set(field.name, fieldState);
-  }
   fieldState.searchResource = searchResource;
+  trackQueryFieldLoads(store, field.name, fieldState);
 
   return searchResource;
+}
+
+function trackQueryFieldLoads(
+  store: CardStore,
+  fieldName: string,
+  fieldState: QueryFieldState,
+) {
+  if (!fieldState.renderCycleBarrier) {
+    // Query resources can kick off their load after the getter returns
+    // (via resource modify scheduling). This microtask barrier keeps
+    // render-route settle from completing in the same frame before query
+    // loads can join.
+    log.debug(`tracking query field render barrier for field=${fieldName}`);
+    let barrier = waitForNextMicrotaskTurn();
+    fieldState.renderCycleBarrier = barrier;
+    store.trackLoad(barrier);
+    void barrier.finally(() => {
+      if (fieldState.renderCycleBarrier === barrier) {
+        fieldState.renderCycleBarrier = undefined;
+      }
+    });
+  }
+}
+
+function waitForNextMicrotaskTurn(): Promise<void> {
+  return Promise.resolve().then(() => Promise.resolve());
 }
 
 export function validateRelationshipQuery(
@@ -255,12 +307,36 @@ export function captureQueryFieldSeedData(
     fieldState = {};
     queryFieldState.set(fieldName, fieldState);
   }
-  fieldState.seedRecords = value;
+  // Query-field deserialize can contain unresolved placeholders in some paths;
+  // only persist concrete card instances as seed records.
+  fieldState.seedRecords = value.filter((entry) => isCardInstance(entry));
   let relationship = getSingularRelationship(resource.relationships, fieldName);
-  fieldState.seedSearchURL = relationship?.links?.search ?? null;
+  let seedComesFromSearch = Boolean(
+    (resource as any)[queryFieldSeedFromSearchSymbol],
+  );
+  let relationshipHasUnhydratedTargets =
+    fieldState.seedRecords.length === 0 &&
+    (Array.isArray(relationship?.data)
+      ? relationship.data.length > 0
+      : Boolean(relationship?.data));
+  // Empty query-backed relationships arriving on search result resources are
+  // not guaranteed to be fully resolved (for example nested query fields on
+  // each result). In that case we should still run the client-side query
+  // fallback instead of treating the empty seed as authoritative.
+  //
+  // Likewise, when relationship data advertises one-or-more targets but none
+  // of those targets are hydrated instances in this document, we should not
+  // suppress fallback search based on links.search alone.
+  let shouldTreatEmptySeedAsUnresolved =
+    fieldState.seedRecords.length === 0 &&
+    (seedComesFromSearch || relationshipHasUnhydratedTargets);
+  fieldState.seedSearchURL = shouldTreatEmptySeedAsUnresolved
+    ? null
+    : (relationship?.links?.search ?? null);
   fieldState.seedRealms = fieldState.seedSearchURL
     ? [parseSearchURL(new URL(fieldState.seedSearchURL)).realm.href]
     : [];
+  fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
 }
 
 function resolveQueryAndRealm(

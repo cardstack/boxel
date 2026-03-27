@@ -64,7 +64,7 @@ export default class UserProfile extends Component {
     </style>
   </template>
 
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
   @tracked private displayName: string | undefined;
   @tracked private email: string | undefined;
 

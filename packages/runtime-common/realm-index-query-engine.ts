@@ -3,34 +3,51 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import cloneDeep from 'lodash/cloneDeep';
 import {
   SupportedMimeType,
+  baseRealm,
+  inferContentType,
+  unixTime,
   maxLinkDepth,
   maybeURL,
+  resolveCardReference,
+  isRegisteredPrefix,
+  cardIdToURL,
+  unresolveCardReference,
   IndexQueryEngine,
   codeRefWithAbsoluteURL,
   logger,
+  CardResourceType,
+  FileMetaResourceType,
   type LooseCardResource,
   type DBAdapter,
   type QueryOptions,
-  type IndexedModuleOrError,
   type InstanceOrError,
   type IndexedFile,
   type DefinitionLookup,
+  type ResolvedCodeRef,
+  internalKeyFor,
   visitInstanceURLs,
   maybeRelativeURL,
+  codeRefFromInternalKey,
 } from '.';
 import type { Realm } from './realm';
+import { FILE_META_RESERVED_KEYS } from './realm';
 import { RealmPaths } from './paths';
-import type { Query } from './query';
+import type { Filter, Query } from './query';
 import { CardError, type SerializedError } from './error';
-import { isResolvedCodeRef, visitModuleDeps } from './code-ref';
 import {
-  isCardCollectionDocument,
+  isCodeRef,
+  isResolvedCodeRef,
+  visitModuleDeps,
+  type CodeRef,
+} from './code-ref';
+import {
   isSingleCardDocument,
   type SingleCardDocument,
-  type CardCollectionDocument,
+  type LinkableCollectionDocument,
+  isLinkableCollectionDocument,
 } from './document-types';
 import { relationshipEntries } from './relationship-utils';
-import type { CardResource, Saved } from './resource-types';
+import type { CardResource, FileMetaResource, Saved } from './resource-types';
 import type { FieldDefinition } from './definitions';
 import {
   normalizeQueryDefinition,
@@ -40,6 +57,7 @@ import {
 
 type Options = {
   loadLinks?: true;
+  linkFields?: string[];
 } & QueryOptions;
 
 type SearchResult = SearchResultDoc | SearchResultError;
@@ -73,11 +91,16 @@ function absolutizeInstanceURL(
   resourceId: string | undefined,
   setURL: (newURL: string) => void,
 ) {
+  // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+  // in their canonical portable form — don't resolve them.
+  if (isRegisteredPrefix(url)) {
+    return;
+  }
   if (!resourceId) {
     setURL(url);
     return;
   }
-  setURL(new URL(url, resourceId).href);
+  setURL(resolveCardReference(url, resourceId));
 }
 
 export class RealmIndexQueryEngine {
@@ -114,27 +137,62 @@ export class RealmIndexQueryEngine {
     return new URL(this.#realm.url);
   }
 
-  async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
-    let doc: CardCollectionDocument;
-    let { cards: data, meta } = await this.#indexQueryEngine.search(
-      new URL(this.#realm.url),
-      query,
-      opts,
-    );
-    doc = {
-      data: data.map((resource) => ({
+  async searchCards(
+    query: Query,
+    opts?: Options,
+  ): Promise<LinkableCollectionDocument> {
+    let doc: LinkableCollectionDocument;
+    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
+
+    if (isFileMetaQuery) {
+      let { files, meta } = await this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        opts,
+      );
+      let resources = files.map((fileEntry) =>
+        fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+      );
+      if (query.fields?.['file-meta'] !== undefined) {
+        resources = resources.map((r) =>
+          applySparseFieldset(r, query.fields!['file-meta']),
+        );
+      }
+      doc = {
+        data: resources,
+        meta,
+      };
+    } else {
+      let { cards, meta } = await this.#indexQueryEngine.searchCards(
+        new URL(this.#realm.url),
+        query,
+        opts,
+      );
+      let cardResources = cards.map((resource) => ({
         ...resource,
         ...{ links: { self: resource.id } },
-      })),
-      meta,
-    };
+      }));
+      if (query.fields?.['card'] !== undefined) {
+        cardResources = cardResources.map((r) =>
+          applySparseFieldset(r, query.fields!['card']),
+        );
+      }
+      doc = {
+        data: cardResources,
+        meta,
+      };
+    }
 
-    let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
     if (opts?.loadLinks) {
-      let included: CardResource<Saved>[] = [];
+      let linkFields = isFileMetaQuery
+        ? query.fields?.['file-meta']
+        : query.fields?.['card'];
+      let linkOpts = linkFields ? { ...opts, linkFields } : opts;
+      let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
+      let included: (CardResource<Saved> | FileMetaResource)[] = [];
       for (let resource of doc.data) {
         included = await this.loadLinks(
           {
@@ -143,7 +201,7 @@ export class RealmIndexQueryEngine {
             omit,
             included,
           },
-          opts,
+          linkOpts,
         );
       }
       if (included.length > 0) {
@@ -151,6 +209,74 @@ export class RealmIndexQueryEngine {
       }
     }
     return doc;
+  }
+
+  private async queryTargetsFileMeta(
+    filter: Filter | undefined,
+    opts?: Options,
+  ): Promise<boolean> {
+    if (!filter) {
+      return false;
+    }
+    let refs: CodeRef[] = [];
+    collectFilterRefs(filter, refs);
+    let fileMatch = false;
+    let instanceMatch = false;
+    for (let ref of refs) {
+      if (await this.#indexQueryEngine.hasFileType(this.realmURL, ref, opts)) {
+        fileMatch = true;
+      }
+      if (
+        await this.#indexQueryEngine.hasInstanceType(this.realmURL, ref, opts)
+      ) {
+        instanceMatch = true;
+      }
+    }
+    return fileMatch && !instanceMatch;
+  }
+
+  // When a relationship in the pristine_doc is missing data.type (stale
+  // index data from before the fix that added data to NotLoadedValue
+  // serialization), we need to consult the field definition to determine
+  // whether the relationship targets a FileDef or a CardDef.
+  private async fieldExpectsFileMeta(
+    resource: LooseCardResource | FileMetaResource,
+    fieldKey: string,
+    opts?: Options,
+  ): Promise<boolean> {
+    if (!resource.meta?.adoptsFrom) {
+      return false;
+    }
+    let relativeTo = resource.id ? cardIdToURL(resource.id) : this.realmURL;
+    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    if (!isResolvedCodeRef(codeRef)) {
+      return false;
+    }
+    try {
+      let definition = await this.#definitionLookup.lookupDefinition(codeRef);
+      // Strip the linksToMany index suffix (e.g., "friends.0" -> "friends")
+      let fieldName = fieldKey.includes('.')
+        ? fieldKey.slice(0, fieldKey.indexOf('.'))
+        : fieldKey;
+      let fieldDefinition = definition.fields[fieldName];
+      if (!fieldDefinition) {
+        return false;
+      }
+      let fieldCardRef = fieldDefinition.fieldOrCard;
+      let isFileType = await this.#indexQueryEngine.hasFileType(
+        this.realmURL,
+        fieldCardRef,
+        opts,
+      );
+      let isInstanceType = await this.#indexQueryEngine.hasInstanceType(
+        this.realmURL,
+        fieldCardRef,
+        opts,
+      );
+      return isFileType && !isInstanceType;
+    } catch {
+      return false;
+    }
   }
 
   async fetchCardTypeSummary() {
@@ -162,13 +288,90 @@ export class RealmIndexQueryEngine {
   }
 
   async searchPrerendered(query: Query, opts?: Options) {
-    let results = await this.#indexQueryEngine.searchPrerendered(
+    let isFileMetaQuery = await this.queryTargetsFileMeta(query.filter, opts);
+    if (isFileMetaQuery) {
+      // File-meta prerendered search currently returns non-error rows.
+      let { includeErrors: _includeErrors, ...fileSearchOpts } = opts ?? {};
+      let { files, meta } = await this.#indexQueryEngine.searchFiles(
+        new URL(this.#realm.url),
+        query,
+        fileSearchOpts,
+      );
+
+      let scopedCssUrls = new Set<string>();
+      let prerenderedCards = files.map((file) => {
+        (file.deps ?? []).forEach((dep) => {
+          if (isScopedCSSRequest(dep)) {
+            scopedCssUrls.add(dep);
+          }
+        });
+        return this.fileEntryToPrerenderedCard(file, opts);
+      });
+
+      return {
+        prerenderedCards,
+        scopedCssUrls: [...scopedCssUrls],
+        meta: { ...meta, isFileMeta: true as const },
+      };
+    }
+    return await this.#indexQueryEngine.searchPrerendered(
       new URL(this.#realm.url),
       query,
       opts,
     );
+  }
 
-    return results;
+  private fileEntryToPrerenderedCard(file: IndexedFile, opts?: Options) {
+    let html: string | null = null;
+    let usedRenderTypeKey: string | undefined;
+    switch (opts?.htmlFormat) {
+      case 'head':
+        html = file.headHtml;
+        break;
+      case 'embedded':
+      case 'fitted': {
+        let htmlByType =
+          opts.htmlFormat === 'embedded' ? file.embeddedHtml : file.fittedHtml;
+        if (htmlByType) {
+          if (opts.renderType) {
+            let renderTypeKey = internalKeyFor(opts.renderType, undefined);
+            if (htmlByType[renderTypeKey] != null) {
+              html = htmlByType[renderTypeKey];
+              usedRenderTypeKey = renderTypeKey;
+            }
+          }
+          if (html == null) {
+            let defaultTypeKey = file.types?.[0];
+            if (defaultTypeKey && htmlByType[defaultTypeKey] != null) {
+              html = htmlByType[defaultTypeKey];
+              usedRenderTypeKey = defaultTypeKey;
+            }
+          }
+        }
+        break;
+      }
+      case 'atom':
+      default:
+        html = file.atomHtml;
+    }
+
+    if (!usedRenderTypeKey) {
+      usedRenderTypeKey = file.types?.[0];
+    }
+
+    let usedRenderType: ResolvedCodeRef | undefined;
+    if (usedRenderTypeKey) {
+      let codeRef = codeRefFromInternalKey(usedRenderTypeKey);
+      if (isResolvedCodeRef(codeRef)) {
+        usedRenderType = codeRef;
+      }
+    }
+
+    return {
+      url: file.canonicalURL,
+      html,
+      ...(usedRenderType ? { usedRenderType } : {}),
+    };
   }
 
   async getCardDependencies(url: URL): Promise<string[]> {
@@ -199,7 +402,7 @@ export class RealmIndexQueryEngine {
           errorDetail: instance.error,
           scopedCssUrls,
           lastKnownGoodHtml: instance.isolatedHtml ?? null,
-          cardTitle: instance.searchDoc?.title ?? null,
+          cardTitle: instance.searchDoc?.cardTitle ?? null,
         },
       };
     }
@@ -228,13 +431,6 @@ export class RealmIndexQueryEngine {
     return { type: 'doc', doc };
   }
 
-  async module(
-    url: URL,
-    opts?: Options,
-  ): Promise<IndexedModuleOrError | undefined> {
-    return await this.#indexQueryEngine.getModule(url, opts);
-  }
-
   async instance(
     url: URL,
     opts?: QueryOptions,
@@ -247,7 +443,7 @@ export class RealmIndexQueryEngine {
   }
 
   private async populateQueryFields(
-    resource: LooseCardResource,
+    resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
     opts?: Options,
   ): Promise<void> {
@@ -255,7 +451,7 @@ export class RealmIndexQueryEngine {
       return;
     }
 
-    let relativeTo = resource.id ? new URL(resource.id) : realmURL;
+    let relativeTo = resource.id ? cardIdToURL(resource.id) : realmURL;
     let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
     if (!isResolvedCodeRef(codeRef)) {
       return;
@@ -271,6 +467,10 @@ export class RealmIndexQueryEngine {
           fieldDefinition.type !== 'linksToMany') ||
         !queryDefinition
       ) {
+        continue;
+      }
+
+      if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
         continue;
       }
 
@@ -304,11 +504,11 @@ export class RealmIndexQueryEngine {
     fieldDefinition: FieldDefinition;
     fieldName: string;
     queryDefinition: Query;
-    resource: LooseCardResource;
+    resource: LooseCardResource | FileMetaResource;
     realmURL: URL;
     opts?: Options;
   }): Promise<{
-    results: CardResource<Saved>[];
+    results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
   }> {
@@ -323,7 +523,7 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      relativeTo: resource.id ? new URL(resource.id) : realmURL,
+      relativeTo: resource.id ? cardIdToURL(resource.id) : realmURL,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
@@ -331,19 +531,32 @@ export class RealmIndexQueryEngine {
 
     let { query, realm } = normalized;
     let searchURL = buildQuerySearchURL(realm, query);
-    let aggregated: CardResource<Saved>[] = [];
+    let aggregated: (CardResource<Saved> | FileMetaResource)[] = [];
     let seen = new Set<string>();
     let errors: QueryFieldErrorDetail[] = [];
 
-    let realmResults: CardResource<Saved>[] = [];
+    let realmResults: (CardResource<Saved> | FileMetaResource)[] = [];
     if (realm === this.realmURL.href) {
       try {
-        let collection = await this.#indexQueryEngine.search(
-          this.realmURL,
-          query,
-          opts,
-        );
-        realmResults = Array.isArray(collection.cards) ? collection.cards : [];
+        if (await this.queryTargetsFileMeta(query.filter, opts)) {
+          let { files } = await this.#indexQueryEngine.searchFiles(
+            this.realmURL,
+            query,
+            opts,
+          );
+          realmResults = files.map((fileEntry) =>
+            fileResourceFromIndex(new URL(fileEntry.canonicalURL), fileEntry),
+          );
+        } else {
+          let collection = await this.#indexQueryEngine.searchCards(
+            this.realmURL,
+            query,
+            opts,
+          );
+          realmResults = Array.isArray(collection.cards)
+            ? collection.cards
+            : [];
+        }
       } catch (err: unknown) {
         let message =
           err instanceof Error ? err.message : String(err ?? 'unknown error');
@@ -367,12 +580,12 @@ export class RealmIndexQueryEngine {
       realmResults = remoteResult.cards;
     }
 
-    for (let card of realmResults) {
-      if (!card?.id || seen.has(card.id)) {
+    for (let result of realmResults) {
+      if (!result?.id || seen.has(result.id)) {
         continue;
       }
-      seen.add(card.id);
-      aggregated.push(card);
+      seen.add(result.id);
+      aggregated.push(result);
     }
 
     if (
@@ -407,8 +620,8 @@ export class RealmIndexQueryEngine {
   }: {
     fieldDefinition: FieldDefinition;
     fieldName: string;
-    resource: LooseCardResource;
-    results: CardResource<Saved>[];
+    resource: LooseCardResource | FileMetaResource;
+    results: (CardResource<Saved> | FileMetaResource)[];
     errors: QueryFieldErrorDetail[];
     searchURL: string;
   }): void {
@@ -447,7 +660,7 @@ export class RealmIndexQueryEngine {
       if (first && first.id) {
         relationship.links.self = first.id;
         if (searchURL) {
-          relationship.data = { type: 'card', id: first.id };
+          relationship.data = { type: first.type ?? 'card', id: first.id };
         }
       } else {
         relationship.links.self = null;
@@ -473,7 +686,7 @@ export class RealmIndexQueryEngine {
               (card): card is CardResource<Saved> & { id: string } =>
                 typeof card.id === 'string',
             )
-            .map((card) => ({ type: 'card', id: card.id }))
+            .map((card) => ({ type: card.type ?? 'card', id: card.id }))
         : undefined;
 
     resource.relationships[fieldName] = {
@@ -488,7 +701,7 @@ export class RealmIndexQueryEngine {
       }
       resource.relationships![`${fieldName}.${index}`] = {
         links: { self: card.id },
-        data: { type: 'card', id: card.id },
+        data: { type: card.type ?? 'card', id: card.id },
       };
     });
   }
@@ -496,11 +709,23 @@ export class RealmIndexQueryEngine {
   private async fetchRemoteQueryResults(
     realmHref: string,
     query: Query,
-  ): Promise<{ cards: CardResource<Saved>[]; error?: QueryFieldErrorDetail }> {
+  ): Promise<{
+    cards: (CardResource<Saved> | FileMetaResource)[];
+    error?: QueryFieldErrorDetail;
+  }> {
     try {
       let searchURL = buildQuerySearchURL(realmHref, query);
+      let { realm, realms, ...queryWithoutRealm } = query as Query & {
+        realm?: string;
+        realms?: string[];
+      };
+      let realmList = realms ?? (realm ? [realm] : [realmHref]);
       let response = await this.#fetch(searchURL, {
-        headers: { Accept: SupportedMimeType.CardJson },
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.CardJson,
+        },
+        body: JSON.stringify({ ...queryWithoutRealm, realms: realmList }),
       });
       if (!response.ok) {
         let type: QueryFieldErrorType =
@@ -521,7 +746,7 @@ export class RealmIndexQueryEngine {
         };
       }
       let json = await response.json();
-      if (!isCardCollectionDocument(json)) {
+      if (!isLinkableCollectionDocument(json)) {
         return {
           cards: [],
           error: {
@@ -559,14 +784,14 @@ export class RealmIndexQueryEngine {
       stack = [],
     }: {
       realmURL: URL;
-      resource: LooseCardResource;
+      resource: LooseCardResource | FileMetaResource;
       omit?: string[];
-      included?: CardResource<Saved>[];
+      included?: (CardResource<Saved> | FileMetaResource)[];
       visited?: string[];
       stack?: string[];
     },
     opts?: Options,
-  ): Promise<CardResource<Saved>[]> {
+  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
     if (resource.id != null) {
       if (visited.includes(resource.id)) {
         return [];
@@ -577,26 +802,69 @@ export class RealmIndexQueryEngine {
     let processedRelationships = new Set<string>();
     let processRelationships = async () => {
       for (let entry of relationshipEntries(resource.relationships)) {
-        let { relationship, key } = entry;
+        let { relationship, key, fieldName } = entry;
         if (processedRelationships.has(key)) {
+          continue;
+        }
+        if (opts?.linkFields && !opts.linkFields.includes(fieldName)) {
           continue;
         }
         if (!relationship.links?.self) {
           continue;
         }
-        processedRelationships.add(key);
-        let linkURL = new URL(
-          relationship.links.self,
-          resource.id ? new URL(resource.id) : realmURL,
-        );
-        let linkResource: CardResource<Saved> | undefined;
-        if (realmPath.inRealm(linkURL)) {
-          let maybeResult = await this.#indexQueryEngine.getInstance(
-            linkURL,
+        if (Array.isArray(relationship.data)) {
+          throw new Error(
+            `bug: relationship ${key} cannot be a list when loading links`,
+          );
+        }
+        let relationshipType = relationship.data?.type;
+        let expectsFileMeta = relationshipType === FileMetaResourceType;
+        let expectsCard = relationshipType === CardResourceType;
+        // Stale index payloads can incorrectly record file relationships as
+        // type "card" (or omit type entirely) when linked files were indexed
+        // after instances. In that case, trust the field declaration.
+        if (
+          !expectsFileMeta &&
+          (relationshipType === CardResourceType || !relationshipType)
+        ) {
+          expectsFileMeta = await this.fieldExpectsFileMeta(
+            resource,
+            key,
             opts,
           );
-          linkResource =
-            maybeResult?.type === 'instance' ? maybeResult.instance : undefined;
+          if (expectsFileMeta) {
+            expectsCard = false;
+          }
+        }
+        processedRelationships.add(key);
+        let linkURL = new URL(
+          resolveCardReference(
+            relationship.links.self,
+            resource.id ? cardIdToURL(resource.id) : realmURL,
+          ),
+        );
+        let linkResource: CardResource<Saved> | FileMetaResource | undefined;
+        if (realmPath.inRealm(linkURL)) {
+          if (expectsCard || (!relationshipType && !expectsFileMeta)) {
+            let maybeResult = await this.#indexQueryEngine.getInstance(
+              linkURL,
+              opts,
+            );
+            if (maybeResult?.type === 'instance') {
+              linkResource = maybeResult.instance;
+            }
+          }
+          if (!linkResource) {
+            if (expectsFileMeta) {
+              let fileEntry = await this.#indexQueryEngine.getFile(
+                linkURL,
+                opts,
+              );
+              if (fileEntry) {
+                linkResource = fileResourceFromIndex(linkURL, fileEntry);
+              }
+            }
+          }
         } else {
           let response = await this.#fetch(linkURL, {
             headers: { Accept: SupportedMimeType.CardJson },
@@ -630,6 +898,14 @@ export class RealmIndexQueryEngine {
         // index based on keeping track of the rendered fields and invalidate the
         // index as consumed cards change
         if (linkResource && stack.length <= maxLinkDepth) {
+          // When linkFields is set, we only apply it at the first level of
+          // link loading. For nested relationships, we clear linkFields so
+          // that all deeper relationships are fully loaded (up to
+          // maxLinkDepth). This means linkFields only constrains the
+          // immediate relationships of the root card.
+          let recursiveOpts = opts?.linkFields
+            ? { ...opts, linkFields: undefined }
+            : opts;
           for (let includedResource of await this.loadLinks(
             {
               realmURL,
@@ -639,7 +915,7 @@ export class RealmIndexQueryEngine {
               visited,
               stack: [...(resource.id != null ? [resource.id] : []), ...stack],
             },
-            opts,
+            recursiveOpts,
           )) {
             foundLinks = true;
             if (
@@ -661,19 +937,54 @@ export class RealmIndexQueryEngine {
             }
           }
         }
-        let relationshipId = maybeURL(relationship.links.self, resource.id);
+        let resolvedSelf: string;
+        try {
+          resolvedSelf = resolveCardReference(
+            relationship.links.self!,
+            resource.id,
+          );
+        } catch {
+          throw new Error(
+            `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
+          );
+        }
+        let relationshipId = maybeURL(resolvedSelf);
         if (!relationshipId) {
           throw new Error(
             `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
           );
         }
+        // Use prefix form (e.g. @cardstack/catalog/...) when available,
+        // so relationship data.id stays portable across environments.
+        let relationshipIdStr = unresolveCardReference(relationshipId.href);
         if (
           foundLinks ||
-          omit.includes(relationshipId.href) ||
-          included.find((i) => i.id === relationshipId!.href)
+          omit.includes(relationshipIdStr) ||
+          included.find((i) => i.id === relationshipIdStr)
         ) {
           relationship.data = {
-            type: 'card',
+            type: linkResource?.type ?? CardResourceType,
+            id: relationshipIdStr,
+          };
+        } else if (!linkResource) {
+          // Even when the linked resource is unavailable, ensure
+          // relationship.data has the correct type so stale
+          // pristine_doc entries (missing data.type) for file
+          // relationships are not misidentified as card links.
+          let fallbackRelationshipType:
+            | typeof CardResourceType
+            | typeof FileMetaResourceType;
+          if (expectsFileMeta) {
+            fallbackRelationshipType = FileMetaResourceType;
+          } else {
+            fallbackRelationshipType =
+              (relationshipType as
+                | typeof CardResourceType
+                | typeof FileMetaResourceType
+                | undefined) ?? CardResourceType;
+          }
+          relationship.data = {
+            type: fallbackRelationshipType,
             id: relationshipId.href,
           };
         }
@@ -687,7 +998,30 @@ export class RealmIndexQueryEngine {
   }
 }
 
-function relativizeDocument(doc: SingleCardDocument, realmURL: URL): void {
+function collectFilterRefs(filter: Filter, refs: CodeRef[]) {
+  let filterWithType = filter as { type?: CodeRef; on?: CodeRef };
+  if (filterWithType.type) {
+    refs.push(filterWithType.type);
+  }
+  if (filterWithType.on) {
+    refs.push(filterWithType.on);
+  }
+  if ('every' in filter) {
+    filter.every.forEach((inner) => collectFilterRefs(inner, refs));
+  }
+  if ('any' in filter) {
+    filter.any.forEach((inner) => collectFilterRefs(inner, refs));
+  }
+  if ('not' in filter) {
+    collectFilterRefs(filter.not, refs);
+  }
+}
+
+// Exported for testing (CS-10498 regression test)
+export function relativizeDocument(
+  doc: SingleCardDocument,
+  realmURL: URL,
+): void {
   let primarySelf = doc.data.links?.self ?? doc.data.id;
   if (!primarySelf) {
     return;
@@ -714,12 +1048,110 @@ function relativizeResource(
   primaryURL: URL,
   realmURL: URL,
 ) {
+  // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
+  // which is not a valid URL base. Resolve it to a URL for relative resolution.
+  let resourceURL = resource.id ? cardIdToURL(resource.id) : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
-    let urlObj = new URL(url, resource.id ?? primaryURL);
+    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+    // in their canonical portable form — don't resolve or relativize them.
+    if (isRegisteredPrefix(url)) {
+      return;
+    }
+    let urlObj = new URL(resolveCardReference(url, resourceURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
-    let absoluteModuleURL = new URL(moduleURL, resource.id ?? primaryURL);
+    // Registered prefix references (e.g. @cardstack/catalog/foo) are already
+    // in their canonical portable form — don't resolve or relativize them.
+    if (isRegisteredPrefix(moduleURL)) {
+      return;
+    }
+    let absoluteModuleURL = new URL(
+      resolveCardReference(moduleURL, resourceURL),
+    );
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
+}
+
+function applySparseFieldset<T extends CardResource<Saved> | FileMetaResource>(
+  resource: T,
+  fields: string[],
+): T {
+  // Per JSON:API spec, id, type, links, meta are always preserved.
+  // Only filter attributes.
+  if (fields.length === 0) {
+    return { ...resource, attributes: {} };
+  }
+  let filtered: Record<string, any> = {};
+  for (let field of fields) {
+    if (resource.attributes?.[field] !== undefined) {
+      filtered[field] = resource.attributes[field];
+    }
+  }
+  return { ...resource, attributes: filtered };
+}
+
+function fileResourceFromIndex(
+  fileURL: URL,
+  fileEntry: IndexedFile,
+): FileMetaResource {
+  let name = fileURL.pathname.split('/').pop() ?? fileURL.pathname;
+  let inferredContentType = inferContentType(name);
+  let searchDoc = fileEntry.searchDoc ?? {};
+  let contentHash =
+    typeof searchDoc.contentHash === 'string'
+      ? searchDoc.contentHash
+      : undefined;
+  let lastModified = fileEntry.lastModified ?? unixTime(Date.now());
+  let createdAt = fileEntry.resourceCreatedAt ?? lastModified;
+  let adoptsFrom =
+    codeRefFromInternalKey(fileEntry.types?.[0]) ??
+    (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
+      ? fileEntry.resource?.meta?.adoptsFrom
+      : {
+          module: `${baseRealm.url}file-api`,
+          name: 'FileDef',
+        });
+  let resourceAttributes = fileEntry.resource?.attributes ?? {};
+  let baseAttributes = {
+    name: resourceAttributes.name ?? searchDoc.name ?? name,
+    url: resourceAttributes.url ?? searchDoc.url ?? fileURL.href,
+    sourceUrl:
+      resourceAttributes.sourceUrl ?? searchDoc.sourceUrl ?? fileURL.href,
+    contentType:
+      resourceAttributes.contentType ??
+      searchDoc.contentType ??
+      inferredContentType,
+    contentHash: resourceAttributes.contentHash ?? contentHash,
+    lastModified,
+    createdAt,
+  };
+  let attributes: Record<string, unknown> = { ...baseAttributes };
+  for (let [key, value] of Object.entries(resourceAttributes)) {
+    if (value !== undefined && !(key in attributes)) {
+      attributes[key] = value;
+    }
+  }
+  for (let [key, value] of Object.entries(searchDoc)) {
+    if (
+      key in baseAttributes ||
+      FILE_META_RESERVED_KEYS.has(key) ||
+      value === undefined
+    ) {
+      continue;
+    }
+    attributes[key] = value;
+  }
+  return {
+    id: fileURL.href,
+    type: 'file-meta',
+    attributes: {
+      ...attributes,
+    },
+    meta: {
+      adoptsFrom,
+      realmURL: fileEntry.realmURL,
+    },
+    links: { self: fileURL.href },
+  };
 }

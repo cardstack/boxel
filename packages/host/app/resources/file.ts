@@ -334,6 +334,11 @@ class _FileResource extends Resource<Args> {
         clientRequestId?: string;
       },
     ) => {
+      // Capture before saveSource which may call resetLoader(), replacing
+      // the loader with a fresh clone that has no loaded modules.
+      let moduleWasLoaded =
+        opts?.flushLoader &&
+        this.loaderService.loader.isModuleLoaded(this._url);
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,
@@ -343,7 +348,7 @@ class _FileResource extends Resource<Args> {
           clientRequestId: opts?.clientRequestId,
         },
       );
-      if (opts?.flushLoader) {
+      if (moduleWasLoaded) {
         this.store.refreshReferencesForCodeChange('file write');
       }
       if (this.innerState.state === 'not-found') {

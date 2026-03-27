@@ -81,7 +81,7 @@ export class CardCollectionResource<
       );
       this.cardErrors.splice(
         0,
-        this.cards.length,
+        this.cardErrors.length,
         ...((this.#ids ?? [])
           .map((id) => this.store.peek(id))
           .filter((i) => i && !isCardInstance(i)) as CardError[]),

@@ -5,6 +5,7 @@ import { cached } from '@glimmer/tracking';
 import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import CardError from '@cardstack/host/components/operator-mode/card-error';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 interface Signature {
@@ -12,6 +13,7 @@ interface Signature {
   Args: {
     cardId: string | null;
     displayBoundaries?: boolean;
+    isPrimary?: boolean;
     openInteractSubmode?: () => void;
   };
 }
@@ -30,43 +32,46 @@ export default class HostModeCard extends Component<Signature> {
     return this.cardResource?.card;
   }
 
-  get isError() {
-    return this.cardResource?.cardError;
-  }
-
-  get isLoading() {
-    return Boolean(this.args.cardId) && !this.card && !this.isError;
-  }
-
   get cardError() {
     return this.cardResource?.cardError;
   }
 
-  get errorMessage() {
-    return this.cardError?.message;
+  get cardErrorMessage() {
+    if (this.cardError?.status === 404) {
+      return 'Card not found.';
+    }
+    return undefined;
+  }
+
+  get isLoading() {
+    return Boolean(this.args.cardId) && !this.card && !this.cardError;
   }
 
   get shouldShowEmptyMessage() {
-    return !this.args.cardId && !this.card && !this.isError && !this.isLoading;
+    return (
+      !this.args.cardId && !this.card && !this.cardError && !this.isLoading
+    );
   }
 
   <template>
     <CardContainer
-      class='host-mode-card'
+      class='host-mode-card {{if @isPrimary "is-primary"}}'
       displayBoundaries={{@displayBoundaries}}
       ...attributes
     >
-      {{#if this.card}}
+      {{#if this.cardError}}
+        <CardError
+          @error={{this.cardError}}
+          @hideHeader={{true}}
+          @message={{this.cardErrorMessage}}
+        />
+      {{else if this.card}}
         <CardRenderer
           class='card'
           @card={{this.card}}
           @format='isolated'
           data-test-host-mode-card={{@cardId}}
         />
-      {{else if this.isError}}
-        <div class='message message--error' data-test-host-mode-error>
-          <p>{{this.errorMessage}}</p>
-        </div>
       {{else if this.isLoading}}
         <div class='message'>
           <p>Loading card…</p>
@@ -93,7 +98,9 @@ export default class HostModeCard extends Component<Signature> {
         padding: var(--host-mode-card-padding);
         border-radius: var(--host-mode-card-border-radius, 20px);
         flex: 1;
+        z-index: 0;
         overflow: auto;
+        position: relative;
       }
 
       .message {
@@ -105,10 +112,6 @@ export default class HostModeCard extends Component<Signature> {
         gap: var(--boxel-sp);
       }
 
-      .message--error {
-        color: var(--boxel-error-100);
-      }
-
       .non-publishable-message {
         display: flex;
         flex-direction: column;
@@ -117,6 +120,17 @@ export default class HostModeCard extends Component<Signature> {
         min-height: 16rem;
         text-align: center;
         gap: var(--boxel-sp);
+      }
+
+      @media print {
+        .host-mode-card.is-primary {
+          display: contents;
+        }
+
+        .host-mode-card.is-primary .card {
+          max-height: none;
+          overflow: visible;
+        }
       }
     </style>
   </template>

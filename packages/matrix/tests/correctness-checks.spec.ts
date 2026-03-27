@@ -525,7 +525,7 @@ export class ImportCheck extends CardDef {
   @field title = contains(StringField);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      Hello <@fields.title />
+      Hello <@fields.cardTitle />
     </template>
   };
 }

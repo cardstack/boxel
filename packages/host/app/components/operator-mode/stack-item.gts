@@ -43,6 +43,7 @@ import {
   type getCard,
   type getCards,
   type getCardCollection,
+  isFileDefInstance,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
@@ -54,10 +55,13 @@ import {
   localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
-  getCardMenuItems,
+  getMenuItems,
 } from '@cardstack/runtime-common';
 
-import type { StackItem } from '@cardstack/host/lib/stack-item';
+import {
+  stackItemTypeToStoreReadType,
+  type StackItem,
+} from '@cardstack/host/lib/stack-item';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type {
@@ -110,24 +114,23 @@ interface Signature {
 
 export type CardDefOrId = CardDef | string;
 
-export interface StackItemRenderedCardForOverlayActions
-  extends RenderedCardForOverlayActions {
+export interface StackItemRenderedCardForOverlayActions extends RenderedCardForOverlayActions {
   stackItem: StackItem;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
-  private declare getCardCollection: getCardCollection;
-  @consume(CardContextName) private declare cardContext: CardContext;
+  declare private getCardCollection: getCardCollection;
+  @consume(CardContextName) declare private cardContext: CardContext;
   @consume(CardCrudFunctionsContextName)
-  private declare cardCrudFunctions: CardCrudFunctions;
+  declare private cardCrudFunctions: CardCrudFunctions;
 
-  @service private declare cardService: CardService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
-  @service private declare store: StoreService;
+  @service declare private cardService: CardService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private store: StoreService;
 
   @tracked private selectedCards = new TrackedSet<string>();
 
@@ -179,7 +182,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.id);
+    this.cardResource = this.getCard(this, () => this.args.item.id, {
+      type: stackItemTypeToStoreReadType(this.args.item.type),
+    });
   };
 
   private get url() {
@@ -442,7 +447,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerTitle() {
-    let cardTitle = this.card?.title;
+    let cardTitle = this.card?.cardTitle;
     if (this.card && cardTitle?.startsWith('Untitled ')) {
       let strippedTitle = cardTitle.slice('Untitled '.length);
       if (strippedTitle === cardTypeDisplayName(this.card)) {
@@ -454,7 +459,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get cardTitle() {
-    return this.card ? this.card.title : undefined;
+    return this.card ? this.card.cardTitle : undefined;
   }
 
   private get moreOptionsMenuItemsForErrorCard() {
@@ -480,7 +485,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
 
     return toMenuItems(
-      this.card?.[getCardMenuItems]?.({
+      this.card?.[getMenuItems]?.({
         canEdit: this.url ? this.realm.canWrite(this.url as string) : false,
         cardCrudFunctions: this.cardCrudFunctions,
         menuContext: 'interact',
@@ -515,8 +520,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let { constructor } = this.card;
     return Boolean(
       constructor &&
-        'prefersWideFormat' in constructor &&
-        constructor.prefersWideFormat,
+      'prefersWideFormat' in constructor &&
+      constructor.prefersWideFormat,
     );
   }
 
@@ -655,12 +660,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.card[realmURL] &&
       !this.isBuried &&
       !this.isEditing &&
+      !this.isFileCard &&
       this.realm.canWrite(this.card[realmURL].href)
     );
   }
 
   private get isEditing() {
-    return !this.isBuried && this.args.item.format === 'edit';
+    return (
+      !this.isBuried && !this.isFileCard && this.args.item.format === 'edit'
+    );
+  }
+
+  private get isFileCard() {
+    return (
+      this.args.item.type === 'file' ||
+      (this.card ? isFileDefInstance(this.card) : false)
+    );
+  }
+
+  private get cardFormat() {
+    return this.isFileCard ? 'isolated' : this.args.item.format;
   }
 
   private get showError() {
@@ -832,7 +851,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <CardRenderer
               class='stack-item-preview'
               @card={{this.card}}
-              @format={{@item.format}}
+              @format={{this.cardFormat}}
             />
             <OperatorModeOverlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}

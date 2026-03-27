@@ -21,7 +21,12 @@ import {
   type RenderResponse,
   type RenderError,
   type ModuleRenderResponse,
+  type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   type Prerenderer,
+  type RunCommandArgs,
+  type RunCommandResponse,
   type Format,
   type PrerenderMeta,
   type RenderRouteOptions,
@@ -60,12 +65,12 @@ import type RenderStoreService from '../services/render-store';
 
 // This component is used to perform rendering for indexing in Ember test contexts
 export default class CardPrerender extends Component {
-  @service('render-store') private declare store: RenderStoreService;
-  @service private declare network: NetworkService;
-  @service private declare router: RouterService;
-  @service private declare renderService: RenderService;
-  @service private declare localIndexer: LocalIndexer;
-  @service private declare loaderService: LoaderService;
+  @service('render-store') declare private store: RenderStoreService;
+  @service declare private network: NetworkService;
+  @service declare private router: RouterService;
+  @service declare private renderService: RenderService;
+  @service declare private localIndexer: LocalIndexer;
+  @service declare private loaderService: LoaderService;
   #nonce = 0;
   #shouldClearCacheForNextRender = true;
   #prerendererDelegate!: Prerenderer;
@@ -91,6 +96,9 @@ export default class CardPrerender extends Component {
     this.#prerendererDelegate = {
       prerenderCard: this.prerender.bind(this),
       prerenderModule: this.prerenderModule.bind(this),
+      prerenderFileExtract: this.prerenderFileExtract.bind(this),
+      prerenderFileRender: this.prerenderFileRenderPublic.bind(this),
+      runCommand: this.runCommand.bind(this),
     };
     this.localIndexer.setup(this.#prerendererDelegate);
     window.addEventListener('boxel-render-error', this.#handleRenderErrorEvent);
@@ -99,7 +107,11 @@ export default class CardPrerender extends Component {
         'boxel-render-error',
         this.#handleRenderErrorEvent,
       );
+      this.localIndexer.teardown(this.#prerendererDelegate);
       this.#cardTypeTracker.clear();
+      this.#moduleTypesCache = new WeakMap() as ModuleTypesCache;
+      this.#moduleLastStoreResetKey = undefined;
+      this.#currentContext = undefined;
       this.#moduleAuthGuard.unregister();
     });
   }
@@ -167,6 +179,63 @@ export default class CardPrerender extends Component {
         `card-prerender component is missing or being destroyed before module prerender of url ${url} was completed`,
       );
     });
+  }
+
+  private async prerenderFileExtract({
+    url,
+    realm,
+    auth,
+    renderOptions,
+  }: {
+    realm: string;
+    url: string;
+    auth: string;
+    renderOptions?: RenderRouteOptions;
+  }): Promise<FileExtractResponse> {
+    return await withRenderContext(async () => {
+      try {
+        let run = () =>
+          this.fileExtractPrerenderTask.perform({
+            url,
+            realm,
+            auth,
+            renderOptions,
+          });
+        return isTesting() ? await run() : await withTimersBlocked(run);
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
+      }
+      throw new Error(
+        `card-prerender component is missing or being destroyed before file extract prerender of url ${url} was completed`,
+      );
+    });
+  }
+
+  private async prerenderFileRenderPublic(
+    args: FileRenderArgs,
+  ): Promise<FileRenderResponse> {
+    return await withRenderContext(async () => {
+      try {
+        let run = () => this.fileRenderPrerenderTask.perform(args);
+        return isTesting() ? await run() : await withTimersBlocked(run);
+      } catch (e: any) {
+        if (!didCancel(e)) {
+          throw e;
+        }
+      }
+      throw new Error(
+        `card-prerender component is missing or being destroyed before file render prerender of url ${args.url} was completed`,
+      );
+    });
+  }
+
+  private async runCommand(_args: RunCommandArgs): Promise<RunCommandResponse> {
+    return {
+      status: 'error',
+      error: 'runCommand is not supported by the card-prerender delegate',
+    };
   }
 
   // This emulates the job of the Prerenderer that runs in the server
@@ -332,6 +401,146 @@ export default class CardPrerender extends Component {
         this.#moduleModelContext(),
       );
       return result as ModuleRenderResponse;
+    },
+  );
+
+  private fileExtractPrerenderTask = enqueueTask(
+    async ({
+      url,
+      renderOptions,
+    }: {
+      realm: string;
+      url: string;
+      auth: string;
+      renderOptions?: RenderRouteOptions;
+    }): Promise<FileExtractResponse> => {
+      this.#nonce++;
+      let shouldClearCache = this.#consumeClearCacheForRender(
+        Boolean(renderOptions?.clearCache),
+      );
+      let initialRenderOptions: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+        fileExtract: true,
+      };
+      if (shouldClearCache) {
+        initialRenderOptions.clearCache = true;
+      } else {
+        delete initialRenderOptions.clearCache;
+      }
+
+      let routeInfo = await this.router.recognizeAndLoad(
+        `${this.#renderBasePath(url, initialRenderOptions)}/file-extract`,
+      );
+      if (this.localIndexer.renderError) {
+        throw new Error(this.localIndexer.renderError);
+      }
+      await this.#ensureRenderReady(routeInfo);
+      return routeInfo.attributes as FileExtractResponse;
+    },
+  );
+
+  private fileRenderPrerenderTask = enqueueTask(
+    async ({
+      url,
+      fileData,
+      types,
+      renderOptions,
+    }: FileRenderArgs): Promise<FileRenderResponse> => {
+      this.#nonce++;
+      let shouldClearCache = this.#consumeClearCacheForRender(
+        Boolean(renderOptions?.clearCache),
+      );
+      let initialRenderOptions: RenderRouteOptions = {
+        ...(renderOptions ?? {}),
+        fileRender: true,
+        fileDefCodeRef: fileData.fileDefCodeRef,
+      };
+      if (shouldClearCache) {
+        initialRenderOptions.clearCache = true;
+        this.loaderService.resetLoader({
+          clearFetchCache: true,
+          reason: 'card-prerender file render clearCache',
+        });
+        this.store.resetCache();
+      } else {
+        delete initialRenderOptions.clearCache;
+      }
+
+      // Stash file data for the render route to consume
+      (globalThis as any).__boxelFileRenderData = fileData;
+
+      let error: RenderError | undefined;
+      let isolatedHTML: string | null = null;
+      let headHTML: string | null = null;
+      let atomHTML: string | null = null;
+      let iconHTML: string | null = null;
+      let embeddedHTML: Record<string, string> | null = null;
+      let fittedHTML: Record<string, string> | null = null;
+
+      try {
+        let subsequentRenderOptions = omitOneTimeOptions(initialRenderOptions);
+        isolatedHTML = await this.renderHTML.perform(
+          url,
+          'isolated',
+          0,
+          initialRenderOptions,
+        );
+        headHTML = await this.renderHTML.perform(
+          url,
+          'head',
+          0,
+          subsequentRenderOptions,
+        );
+        atomHTML = await this.renderHTML.perform(
+          url,
+          'atom',
+          0,
+          subsequentRenderOptions,
+        );
+        iconHTML = await this.renderIcon.perform(url, subsequentRenderOptions);
+        if (types?.length) {
+          embeddedHTML = await this.renderAncestors.perform(
+            url,
+            'embedded',
+            types,
+            subsequentRenderOptions,
+          );
+          fittedHTML = await this.renderAncestors.perform(
+            url,
+            'fitted',
+            types,
+            subsequentRenderOptions,
+          );
+        }
+      } catch (e: any) {
+        try {
+          error = { ...JSON.parse(e.message), type: 'file-error' };
+        } catch (_err) {
+          let cardErr = new CardError(e.message);
+          cardErr.stack = e.stack;
+          error = {
+            error: {
+              ...cardErr.toJSON(),
+              deps: [url],
+              additionalErrors: null,
+            },
+            type: 'file-error',
+          };
+        }
+        this.store.resetCache();
+      } finally {
+        delete (globalThis as any).__boxelFileRenderData;
+      }
+
+      return {
+        isolatedHTML,
+        headHTML,
+        atomHTML,
+        embeddedHTML,
+        fittedHTML,
+        iconHTML,
+        ...(error ? { error } : {}),
+      };
     },
   );
 

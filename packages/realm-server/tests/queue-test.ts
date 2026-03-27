@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { prepareTestDB } from './helpers';
+import { createTestPgAdapter, prepareTestDB } from './helpers';
 
 import {
   PgAdapter,
@@ -7,8 +7,29 @@ import {
   PgQueueRunner,
 } from '@cardstack/postgres';
 
-import type { QueuePublisher, QueueRunner } from '@cardstack/runtime-common';
+import type {
+  QueueCoalesceContext,
+  QueuePublisher,
+  QueueRunner,
+} from '@cardstack/runtime-common';
+import {
+  Deferred,
+  registerQueueJobDefinition,
+  userInitiatedPriority,
+} from '@cardstack/runtime-common';
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  makeIncrementalArgsWithCallerMetadata,
+  mapIncrementalDoneResult,
+  type IncrementalIndexEnqueueArgs,
+} from '@cardstack/runtime-common/jobs/indexing';
+import {
+  FROM_SCRATCH_JOB_TIMEOUT_SEC,
+  type FromScratchArgs,
+  type FromScratchResult,
+  type IncrementalDoneResult,
+} from '@cardstack/runtime-common/tasks/indexer';
 import queueTests from '@cardstack/runtime-common/tests/queue-test';
 import { basename } from 'path';
 
@@ -20,7 +41,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      adapter = new PgAdapter({ autoMigrate: true });
+      adapter = await createTestPgAdapter();
       publisher = new PgQueuePublisher(adapter);
       runner = new PgQueueRunner({ adapter, workerId: 'q1', maxTimeoutSec: 2 });
       await runner.start();
@@ -32,6 +53,38 @@ module(basename(__filename), function () {
       await adapter.close();
     });
 
+    async function publishFromScratchIndexJob(args: {
+      args: FromScratchArgs;
+      priority: number;
+    }) {
+      return await publisher.publish<FromScratchResult>({
+        jobType: 'from-scratch-index',
+        concurrencyGroup: `indexing:${args.args.realmURL}`,
+        timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+        priority: args.priority,
+        args: args.args,
+      });
+    }
+
+    async function publishIncrementalIndexJob(args: {
+      args: IncrementalIndexEnqueueArgs;
+      clientRequestId: string | null;
+      priority?: number;
+    }) {
+      let priority = args.priority ?? userInitiatedPriority;
+      return await publisher.publish<IncrementalDoneResult>({
+        jobType: 'incremental-index',
+        concurrencyGroup: `indexing:${args.args.realmURL}`,
+        timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        priority,
+        args: makeIncrementalArgsWithCallerMetadata(
+          args.args,
+          args.clientRequestId,
+        ),
+        mapResult: mapIncrementalDoneResult(args.clientRequestId),
+      });
+    }
+
     test('it can run a job', async function (assert) {
       await runSharedTest(queueTests, assert, { runner, publisher });
     });
@@ -42,6 +95,373 @@ module(basename(__filename), function () {
 
     test('jobs are processed serially within a particular queue', async function (assert) {
       await runSharedTest(queueTests, assert, { runner, publisher });
+    });
+
+    test('coalesce can join pending jobs and map waiter-specific results', async function (assert) {
+      await runSharedTest(queueTests, assert, { runner, publisher });
+    });
+
+    test('coalesce can join pending jobs and map waiter-specific rejected results', async function (assert) {
+      await runSharedTest(queueTests, assert, { runner, publisher });
+    });
+
+    test('coalesce does not join pending jobs that already have an active reservation', async function (assert) {
+      await runner.destroy();
+
+      let existingJob = await publisher.publish<number>({
+        jobType: 'reserved-candidate',
+        concurrencyGroup: 'reserved-group',
+        timeout: 30,
+        args: 1,
+      });
+
+      await adapter.execute(
+        `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+         VALUES ($1, NOW() + INTERVAL '30 seconds', 'test-worker')`,
+        { bind: [existingJob.id] },
+      );
+
+      let seenCandidateIds: number[] | undefined;
+      registerQueueJobDefinition({
+        jobType: 'reserved-candidate',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) => {
+          seenCandidateIds = candidates.map((candidate) => candidate.id);
+          let candidate = candidates[0];
+          if (!candidate) {
+            return { type: 'insert', job: incoming } as const;
+          }
+          return { type: 'join', jobId: candidate.id } as const;
+        },
+      });
+      let joinedJob = await publisher.publish<number>({
+        jobType: 'reserved-candidate',
+        concurrencyGroup: 'reserved-group',
+        timeout: 30,
+        args: 2,
+      });
+
+      assert.deepEqual(
+        seenCandidateIds,
+        [],
+        'reserved pending job is excluded from coalesce candidates',
+      );
+      assert.notStrictEqual(
+        joinedJob.id,
+        existingJob.id,
+        'coalesce inserts a new canonical job instead of joining reserved job',
+      );
+    });
+
+    test('coalesce does not join a currently running job in same concurrency group', async function (assert) {
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+      runner.register('blocking-job', async (arg: number) => {
+        started.fulfill();
+        await release.promise;
+        return arg;
+      });
+
+      let runningJob = await publisher.publish<number>({
+        jobType: 'blocking-job',
+        concurrencyGroup: 'running-group',
+        timeout: 30,
+        args: 1,
+      });
+      await started.promise;
+
+      registerQueueJobDefinition({
+        jobType: 'blocking-job',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) => {
+          let candidate = candidates[0];
+          if (!candidate) {
+            return { type: 'insert', job: incoming } as const;
+          }
+          return { type: 'join', jobId: candidate.id } as const;
+        },
+      });
+      let coalescedJob = await publisher.publish<number>({
+        jobType: 'blocking-job',
+        concurrencyGroup: 'running-group',
+        timeout: 30,
+        args: 2,
+      });
+
+      assert.notStrictEqual(
+        coalescedJob.id,
+        runningJob.id,
+        'coalesce does not join currently running/reserved job',
+      );
+
+      release.fulfill();
+      let [runningResult, coalescedResult] = await Promise.all([
+        runningJob.done,
+        coalescedJob.done,
+      ]);
+      assert.strictEqual(runningResult, 1, 'running job result preserved');
+      assert.strictEqual(
+        coalescedResult,
+        2,
+        'newly inserted coalesced job result preserved',
+      );
+    });
+
+    test('concurrent coalesce attempts converge to one canonical pending job', async function (assert) {
+      await runner.destroy();
+
+      registerQueueJobDefinition({
+        jobType: 'coalesce-target',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) => {
+          let candidate = candidates[0];
+          if (!candidate) {
+            return { type: 'insert', job: incoming } as const;
+          }
+          return { type: 'join', jobId: candidate.id } as const;
+        },
+      });
+
+      let jobs = await Promise.all(
+        [...new Array(20)].map((_, index) =>
+          publisher.publish<number>({
+            jobType: 'coalesce-target',
+            concurrencyGroup: 'coalesce-convergence-group',
+            timeout: 30,
+            args: index,
+          }),
+        ),
+      );
+
+      let uniqueJobIds = [...new Set(jobs.map((job) => job.id))];
+      assert.strictEqual(
+        uniqueJobIds.length,
+        1,
+        'all concurrent coalesce calls converge to one canonical job id',
+      );
+
+      let rows = (await adapter.execute(
+        `SELECT id
+         FROM jobs
+         WHERE concurrency_group='coalesce-convergence-group'
+           AND status='unfulfilled'`,
+      )) as { id: number }[];
+      assert.strictEqual(
+        rows.length,
+        1,
+        'only one pending job row exists for the converged coalesce group',
+      );
+    });
+
+    test('incremental coalesce merges mixed operations and persists per-caller metadata', async function (assert) {
+      await runner.destroy();
+
+      let realmURL = 'http://example.com/coalesced/';
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [
+            { url: `${realmURL}a`, operation: 'update' },
+            { url: `${realmURL}b`, operation: 'update' },
+          ],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [
+            { url: `${realmURL}b`, operation: 'delete' },
+            { url: `${realmURL}c`, operation: 'update' },
+          ],
+        },
+      });
+
+      assert.strictEqual(
+        first.id,
+        second.id,
+        'incremental enqueues coalesce onto one canonical pending job',
+      );
+
+      let [row] = (await adapter.execute(
+        `SELECT job_type, args
+         FROM jobs
+         WHERE id = $1`,
+        { bind: [first.id] },
+      )) as {
+        job_type: string;
+        args: {
+          changes: { url: string; operation: 'update' | 'delete' }[];
+          coalescedCallers: {
+            waiterId: string;
+            clientRequestId: string | null;
+          }[];
+        };
+      }[];
+      assert.strictEqual(row.job_type, 'incremental-index');
+
+      let operationByUrl = new Map(
+        row.args.changes.map((change) => [change.url, change.operation]),
+      );
+      assert.deepEqual(
+        [...operationByUrl.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+        [
+          [`${realmURL}a`, 'update'],
+          [`${realmURL}b`, 'delete'],
+          [`${realmURL}c`, 'update'],
+        ],
+        'changes are unioned and delete dominates update for duplicate URL',
+      );
+      assert.deepEqual(
+        row.args.coalescedCallers
+          .map((caller) => caller.clientRequestId)
+          .sort(),
+        ['request-1', 'request-2'],
+        'canonical job args persist coalesced per-caller request metadata',
+      );
+    });
+
+    test('from-scratch does not coalesce onto pending incremental in same group', async function (assert) {
+      await runner.destroy();
+
+      let realmURL = 'http://example.com/no-mixed-coalesce/';
+      let incremental = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let fromScratch = await publishFromScratchIndexJob({
+        priority: 123,
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+        },
+      });
+
+      assert.notStrictEqual(
+        fromScratch.id,
+        incremental.id,
+        'mixed job types do not share canonical rows',
+      );
+
+      let rows = (await adapter.execute(
+        `SELECT job_type
+         FROM jobs
+         WHERE concurrency_group = $1
+           AND status = 'unfulfilled'
+         ORDER BY created_at, id`,
+        { bind: [`indexing:${realmURL}`] },
+      )) as { job_type: string }[];
+      assert.deepEqual(
+        rows.map((row) => row.job_type),
+        ['incremental-index', 'from-scratch-index'],
+        'both pending rows are retained when job types differ',
+      );
+    });
+
+    test('coalesced incremental waiters each receive their own clientRequestId in done payload', async function (assert) {
+      await runner.destroy();
+
+      let realmURL = 'http://example.com/done-shape/';
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}b`, operation: 'delete' }],
+        },
+      });
+
+      let worker = new PgQueueRunner({ adapter, workerId: 'coalesce-worker' });
+      try {
+        worker.register(
+          'incremental-index',
+          async (args: { changes: { url: string }[] }) => ({
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          }),
+        );
+        await worker.start();
+        let [firstResult, secondResult] = await Promise.all([
+          first.done,
+          second.done,
+        ]);
+
+        assert.strictEqual(firstResult.clientRequestId, 'request-1');
+        assert.strictEqual(secondResult.clientRequestId, 'request-2');
+        assert.deepEqual(
+          firstResult.invalidations.sort(),
+          secondResult.invalidations.sort(),
+          'coalesced waiters share canonical execution result payload',
+        );
+      } finally {
+        await worker.destroy();
+      }
+    });
+
+    test('incremental does not coalesce onto pending from-scratch in same group', async function (assert) {
+      await runner.destroy();
+
+      let realmURL = 'http://example.com/no-mixed-coalesce-reverse/';
+      let fromScratch = await publishFromScratchIndexJob({
+        priority: 123,
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+        },
+      });
+      let incremental = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+
+      assert.notStrictEqual(
+        incremental.id,
+        fromScratch.id,
+        'mixed job types do not share canonical rows regardless of enqueue order',
+      );
+
+      let rows = (await adapter.execute(
+        `SELECT job_type
+         FROM jobs
+         WHERE concurrency_group = $1
+           AND status = 'unfulfilled'
+         ORDER BY created_at, id`,
+        { bind: [`indexing:${realmURL}`] },
+      )) as { job_type: string }[];
+      assert.deepEqual(
+        rows.map((row) => row.job_type),
+        ['from-scratch-index', 'incremental-index'],
+        'both pending rows are retained when types differ (reverse enqueue order)',
+      );
     });
 
     test('worker stops waiting for job after its been running longer than max time-out', async function (assert) {
@@ -83,13 +503,12 @@ module(basename(__filename), function () {
       let runner2: QueueRunner;
       let adapter2: PgAdapter;
       nestedHooks.beforeEach(async function () {
-        adapter2 = new PgAdapter({ autoMigrate: true });
+        adapter2 = new PgAdapter();
         runner2 = new PgQueueRunner({ adapter: adapter2, workerId: 'q2' });
         await runner2.start();
 
-        // Because we need tight timing control for this test, we don't want any
-        // concurrent migrations and their retries altering the timing. This
-        // ensures both adapters have gotten fully past that and are quiescent.
+        // Because we need tight timing control for this test, ensure both
+        // adapters have active DB connections before measuring behavior.
         await adapter.execute('select 1');
         await adapter2.execute('select 1');
       });
@@ -220,7 +639,7 @@ module(basename(__filename), function () {
 
     hooks.beforeEach(async function () {
       prepareTestDB();
-      adapter = new PgAdapter({ autoMigrate: true });
+      adapter = await createTestPgAdapter();
       publisher = new PgQueuePublisher(adapter);
       runner = new PgQueueRunner({
         adapter,
@@ -293,8 +712,8 @@ module(basename(__filename), function () {
 
       hooks.beforeEach(async function () {
         prepareTestDB();
-        adapter = new PgAdapter({ autoMigrate: true });
-        adapter2 = new PgAdapter({ autoMigrate: true });
+        adapter = await createTestPgAdapter();
+        adapter2 = new PgAdapter();
         publisher = new PgQueuePublisher(adapter);
         allPriorityRunner = new PgQueueRunner({
           adapter,
@@ -310,9 +729,8 @@ module(basename(__filename), function () {
         await allPriorityRunner.start();
         await highPriorityRunner.start();
 
-        // Because we need tight timing control for this test, we don't want any
-        // concurrent migrations and their retries altering the timing. This
-        // ensures both adapters have gotten fully past that and are quiescent.
+        // Because we need tight timing control for this test, ensure both
+        // adapters have active DB connections before measuring behavior.
         await adapter.execute('select 1');
         await adapter2.execute('select 1');
       });

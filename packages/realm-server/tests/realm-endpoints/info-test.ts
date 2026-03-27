@@ -6,17 +6,18 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   closeServer,
   testRealmInfo,
-  testRealmHref,
   createJWT,
+  testRealmURLFor,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET _info', function (hooks) {
+  module('Realm-specific Endpoints | QUERY _info', function (hooks) {
+    let realmURL = testRealmURLFor('test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
@@ -45,22 +46,25 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           '*': ['read'],
         },
+        realmURL,
         onRealmSetup,
       });
 
       test('serves the request', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
-          testRealmHref,
+          realmURL.href,
           'realm url header is correct',
         );
         assert.strictEqual(
@@ -73,11 +77,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           json,
           {
             data: {
-              id: testRealmHref,
+              id: realmURL.href,
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
@@ -87,45 +90,54 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
-          john: ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
+        realmURL,
         onRealmSetup,
       });
 
       test('401 with invalid JWT', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json');
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('401 without a JWT', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json'); // no Authorization header
 
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('403 without permission', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
-          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
+          .set('Authorization', `Bearer ${createJWT(testRealm, 'not-a-user')}`);
 
         assert.strictEqual(response.status, 403, 'HTTP 403 status');
       });
 
       test('200 with permission', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+            `Bearer ${createJWT(testRealm, '@node-test_realm:localhost', ['read', 'realm-owner'])}`,
           );
 
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
@@ -134,12 +146,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           json,
           {
             data: {
-              id: testRealmHref,
+              id: realmURL.href,
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
                 visibility: 'private',
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },
@@ -151,16 +162,20 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     module(
       'shared realm because there is `users` permission',
       function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             users: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
+          realmURL,
           onRealmSetup,
         });
 
         test('200 with permission', async function (assert) {
+          let infoPath = new URL('_info', realmURL).pathname;
           let response = await request
-            .get(`/_info`)
+            .post(infoPath)
+            .set('X-HTTP-Method-Override', 'QUERY')
             .set('Accept', 'application/vnd.api+json')
             .set(
               'Authorization',
@@ -173,12 +188,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             json,
             {
               data: {
-                id: testRealmHref,
+                id: realmURL.href,
                 type: 'realm-info',
                 attributes: {
                   ...testRealmInfo,
                   visibility: 'shared',
-                  realmUserId: '@node-test_realm:localhost',
                 },
               },
             },
@@ -189,18 +203,22 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     );
 
     module('shared realm because there are multiple users', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           bob: ['read'],
           jane: ['read'],
           john: ['read', 'write'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
+        realmURL,
         onRealmSetup,
       });
 
       test('200 with permission', async function (assert) {
+        let infoPath = new URL('_info', realmURL).pathname;
         let response = await request
-          .get(`/_info`)
+          .post(infoPath)
+          .set('X-HTTP-Method-Override', 'QUERY')
           .set('Accept', 'application/vnd.api+json')
           .set(
             'Authorization',
@@ -213,12 +231,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           json,
           {
             data: {
-              id: testRealmHref,
+              id: realmURL.href,
               type: 'realm-info',
               attributes: {
                 ...testRealmInfo,
                 visibility: 'shared',
-                realmUserId: '@node-test_realm:localhost',
               },
             },
           },

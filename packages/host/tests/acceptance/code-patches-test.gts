@@ -1,4 +1,11 @@
-import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  find,
+  findAll,
+  waitUntil,
+  settled,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
@@ -23,6 +30,7 @@ import {
 import {
   setupLocalIndexing,
   setupOnSave,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -30,6 +38,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   getMonacoContent,
+  withCachedRealmSetup,
 } from '../helpers';
 
 import { CardsGrid, setupBaseRealm } from '../helpers/base-realm';
@@ -49,13 +58,13 @@ export class TestCard extends CardDef {
   static displayName = 'Test Card';
 
   @field name = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div data-test-test-card>
         <h1>{{@model.name}}</h1>
-        <p>{{@model.description}}</p>
+        <p>{{@model.cardDescription}}</p>
       </div>
     </template>
   };
@@ -66,6 +75,7 @@ module('Acceptance | Code patches tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -93,59 +103,62 @@ module('Acceptance | Code patches tests', function (hooks) {
     setupUserSubscription();
     setupAuthEndpoints();
 
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.json': new CardsGrid(),
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-        'hello.txt': 'Hello, world!',
-        'hi.txt': 'Hi, world!\nHow are you?',
-        'test-card.gts': testCardContent,
-        'Skill/useful-commands.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              instructions:
-                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
-              commands: [
-                {
-                  codeRef: {
-                    name: 'SearchCardsByTypeAndTitleCommand',
-                    module: '@cardstack/boxel-host/commands/search-cards',
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.json': new CardsGrid(),
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
+          'hello.txt': 'Hello, world!',
+          'hi.txt': 'Hi, world!\nHow are you?',
+          'empty-file.gts': '',
+          'test-card.gts': testCardContent,
+          'Skill/useful-commands.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                instructions:
+                  'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * search-cards-by-type-and-title: search for cards by name or description.',
+                commands: [
+                  {
+                    codeRef: {
+                      name: 'SearchCardsByTypeAndTitleCommand',
+                      module: '@cardstack/boxel-host/commands/search-cards',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/switch-submode',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: '@cardstack/boxel-host/commands/switch-submode',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-                {
-                  codeRef: {
-                    name: 'default',
-                    module: '@cardstack/boxel-host/commands/show-card',
+                  {
+                    codeRef: {
+                      name: 'default',
+                      module: '@cardstack/boxel-host/commands/show-card',
+                    },
+                    requiresApproval: true,
                   },
-                  requiresApproval: true,
-                },
-              ],
-              title: 'Useful Commands',
-              description: null,
-              thumbnailURL: null,
-            },
-            meta: {
-              adoptsFrom: skillCardRef,
+                ],
+                cardTitle: 'Useful Commands',
+                cardDescription: null,
+                cardThumbnailURL: null,
+              },
+              meta: {
+                adoptsFrom: skillCardRef,
+              },
             },
           },
         },
-      },
+      });
     });
   });
 
@@ -397,7 +410,7 @@ ${REPLACE_MARKER}
           id: 'abc123',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            description: 'Showing skill card',
+            cardDescription: 'Showing skill card',
             attributes: {
               cardId: `${testRealmURL}Skill/useful-commands`,
             },
@@ -412,6 +425,14 @@ ${REPLACE_MARKER}
         timeout: 4000,
       },
     );
+    await waitUntil(
+      () => findAll('[data-test-code-diff-editor]').length === 3,
+      {
+        timeout: 5000,
+        timeoutMessage: 'timed out waiting for all code diff editors to render',
+      },
+    );
+    await settled();
     // Intentionally not using await here to test the loading state of the button
     click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
     await waitFor(
@@ -652,7 +673,7 @@ ${REPLACE_MARKER}
           id: 'abc123',
           name: 'show-card_566f',
           arguments: JSON.stringify({
-            description: 'Showing skill card',
+            cardDescription: 'Showing skill card',
             attributes: {
               cardId: `${testRealmURL}Skill/useful-commands`,
             },
@@ -1121,6 +1142,141 @@ ${REPLACE_MARKER}
     );
   });
 
+  test('empty file shows generating content while streaming a new file patch', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-empty-file-message]');
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - tools like schema inspector, and file preview, are unavailable.',
+      );
+
+    await click('[data-test-open-ai-assistant]');
+    let matrixService = getService('matrix-service');
+    await waitFor('[data-room-settled]');
+
+    let codeBlock = `\`\`\`
+${testRealmURL}empty-file.gts (new)
+${SEARCH_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(matrixService.currentRoomId!, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+
+    await waitUntil(() =>
+      find('[data-test-empty-file-message]')?.textContent?.includes(
+        'being generated by the AI Assistant',
+      ),
+    );
+
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - its content is currently being generated by the AI Assistant.',
+      );
+  });
+
+  test('empty file shows generating content while waiting for patch acceptance', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-empty-file-message]');
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - tools like schema inspector, and file preview, are unavailable.',
+      );
+
+    await click('[data-test-open-ai-assistant]');
+    let matrixService = getService('matrix-service');
+    await waitFor('[data-room-settled]');
+
+    let codeBlock = `\`\`\`
+${testRealmURL}empty-file.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+Generated content
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(matrixService.currentRoomId!, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitUntil(() =>
+      find('[data-test-empty-file-message]')?.textContent?.includes(
+        'being generated by the AI Assistant',
+      ),
+    );
+
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - its content is currently being generated by the AI Assistant.',
+      );
+  });
+
+  test('empty file stops showing generating content after canceling patch', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}empty-file.gts`,
+    });
+
+    await waitFor('[data-test-empty-file-message]');
+    await click('[data-test-open-ai-assistant]');
+    let matrixService = getService('matrix-service');
+    await waitFor('[data-room-settled]');
+
+    let codeBlock = `\`\`\`
+${testRealmURL}empty-file.gts (new)
+${SEARCH_MARKER}
+${SEPARATOR_MARKER}
+Generated content
+${REPLACE_MARKER}
+\`\`\``;
+
+    simulateRemoteMessage(matrixService.currentRoomId!, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitUntil(() =>
+      find('[data-test-empty-file-message]')?.textContent?.includes(
+        'being generated by the AI Assistant',
+      ),
+    );
+
+    await waitFor('[data-test-ai-assistant-action-bar] [data-test-cancel]');
+    await click('[data-test-ai-assistant-action-bar] [data-test-cancel]');
+
+    await waitUntil(() => {
+      let messageText =
+        find('[data-test-empty-file-message]')?.textContent ?? '';
+      return !messageText.includes('being generated by the AI Assistant');
+    });
+
+    assert
+      .dom('[data-test-empty-file-message]')
+      .hasText(
+        'File is empty - tools like schema inspector, and file preview, are unavailable.',
+      );
+  });
+
   test('when code patch is historic (user moved on to the next message), or it was applied, it will render the code (replace portion of the search/replace block) in a standard (non-diff) editor', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -1550,7 +1706,7 @@ ${REPLACE_MARKER}
 
     // Assert that the spinner disappears after automatic execution completes
     assert
-      .dom('[data-test-loading-indicator]')
+      .dom('[data-test-ai-assistant-action-bar] [data-test-loading-indicator]')
       .doesNotExist(
         'Loading indicator disappears after automatic execution completes',
       );
@@ -1591,7 +1747,7 @@ ${REPLACE_MARKER}
       .exists('Initial name field exists');
     assert
       .dom(
-        '[data-test-card-schema="Test Card"] [data-test-field-name="description"]',
+        '[data-test-card-schema="Test Card"] [data-test-field-name="cardDescription"]',
       )
       .exists('Initial description field exists');
 
@@ -1603,9 +1759,9 @@ ${REPLACE_MARKER}
     let codeBlock = `\`\`\`
 http://test-realm/test/test-card.gts
 ${SEARCH_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 ${SEPARATOR_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field email = contains(StringField);
 ${REPLACE_MARKER}\n\`\`\``;
 
@@ -1693,9 +1849,9 @@ ${REPLACE_MARKER}\n\`\`\``;
     let codeBlock = `\`\`\`
 http://test-realm/test/test-card.gts
 ${SEARCH_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
 ${SEPARATOR_MARKER}
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field email = contains(StringField);
 ${REPLACE_MARKER}\n\`\`\``;
 

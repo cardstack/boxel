@@ -229,8 +229,7 @@ export async function fetchAllRealmsWithOwners(
     realmOwners.get(row.realm_url)!.push(row.username);
   }
 
-  // Process each realm to get the final owner
-  const results: { realm_url: string; owner_username: string }[] = [];
+  let ownerByRealm = new Map<string, string>();
   for (const [realmUrl, owners] of realmOwners) {
     let finalOwner = owners[0];
 
@@ -242,13 +241,33 @@ export async function fetchAllRealmsWithOwners(
       }
     }
 
-    const ownerUsername = getMatrixUsername(finalOwner);
-
-    results.push({
-      realm_url: realmUrl,
-      owner_username: ownerUsername,
-    });
+    ownerByRealm.set(realmUrl, getMatrixUsername(finalOwner));
   }
 
-  return results;
+  // Published realms may not have realm_user_permissions entries in older data.
+  // Fall back to the published realm's owner (or source realm owner) when missing.
+  const publishedRealms = (await query(dbAdapter, [
+    `SELECT published_realm_url, source_realm_url, owner_username FROM published_realms`,
+  ])) as {
+    published_realm_url: string;
+    source_realm_url: string;
+    owner_username: string;
+  }[];
+
+  for (const publishedRealm of publishedRealms) {
+    if (ownerByRealm.has(publishedRealm.published_realm_url)) {
+      continue;
+    }
+    const sourceOwner = ownerByRealm.get(publishedRealm.source_realm_url);
+    const fallbackOwner = getMatrixUsername(publishedRealm.owner_username);
+    ownerByRealm.set(
+      publishedRealm.published_realm_url,
+      sourceOwner ?? fallbackOwner,
+    );
+  }
+
+  return [...ownerByRealm].map(([realm_url, owner_username]) => ({
+    realm_url,
+    owner_username,
+  }));
 }

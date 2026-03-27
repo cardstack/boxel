@@ -3687,7 +3687,7 @@ export class AnnotationCard extends CardDef {
   @field annotationData = contains(StringField); // JSON string containing all annotations
 
   // ⁵ Computed title
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: AnnotationCard) {
       try {
         const docTitle = this.documentTitle || 'Document';

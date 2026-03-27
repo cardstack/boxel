@@ -1,4 +1,4 @@
-import { QRField } from '../fields/qr-code';
+import QRField from '../fields/qr-code';
 import {
   CardDef,
   field,

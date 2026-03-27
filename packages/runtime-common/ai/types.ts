@@ -4,8 +4,8 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 import type { ReasoningEffort } from 'openai/resources/shared';
-import type { LooseCardResource } from '../index';
 import type { ToolChoice } from '../helpers/ai';
+import type { CardResource } from '../resource-types';
 
 export interface ChatCompletionMessageToolCall {
   id: string;
@@ -35,7 +35,7 @@ export type TextContent = {
     type: 'ephemeral';
   };
 };
-type ImageContentPart = {
+export type ImageContentPart = {
   type: 'image_url';
   image_url: {
     url: string; // URL or base64 encoded image data
@@ -45,7 +45,41 @@ type ImageContentPart = {
     type: 'ephemeral';
   };
 };
-type ContentPart = TextContent | ImageContentPart;
+export type FileContentPart = {
+  type: 'file';
+  file: {
+    filename: string;
+    file_data: string; // base64 data URL (data:application/pdf;base64,...) or public URL
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+export type InputAudioContentPart = {
+  type: 'input_audio';
+  input_audio: {
+    data: string; // raw base64 string (no data: prefix)
+    format: string; // wav | mp3 | aiff | aac | ogg | flac | m4a | pcm16 | pcm24
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+export type VideoContentPart = {
+  type: 'video_url';
+  video_url: {
+    url: string; // base64 data URL or public URL
+  };
+  cache_control?: {
+    type: 'ephemeral';
+  };
+};
+export type ContentPart =
+  | TextContent
+  | ImageContentPart
+  | FileContentPart
+  | InputAudioContentPart
+  | VideoContentPart;
 
 export interface OpenAIPromptMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
@@ -56,13 +90,14 @@ export interface OpenAIPromptMessage {
 }
 
 export interface RelevantCards {
-  mostRecentlyAttachedCard: LooseCardResource | undefined;
-  attachedCards: LooseCardResource[];
+  mostRecentlyAttachedCard: CardResource | undefined;
+  attachedCards: CardResource[];
 }
 
 export interface CodePatchCorrectnessFile {
   sourceUrl: string;
   displayName: string;
+  lintIssues?: string[];
 }
 
 export interface CodePatchCorrectnessCard {

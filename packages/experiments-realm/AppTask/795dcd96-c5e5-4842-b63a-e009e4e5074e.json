@@ -8,12 +8,12 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Med Task",
+      "cardTitle": "Med Task",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "priority": "Medium"
     },

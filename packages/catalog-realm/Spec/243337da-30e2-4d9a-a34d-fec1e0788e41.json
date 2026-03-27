@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "SchoolCalendar",
-      "description": "Spec of School Calendar",
-      "thumbnailURL": null
+      "cardTitle": "SchoolCalendar",
+      "cardDescription": "Spec of School Calendar",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -18,8 +18,8 @@
       },
       "name": "Move cards-grid fitted template into a component that can be re-used",
       "details": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

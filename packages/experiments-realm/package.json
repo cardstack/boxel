@@ -8,6 +8,9 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "@ember/test-helpers": "catalog:",
+    "@types/qunit": "catalog:",
+    "@universal-ember/test-support": "catalog:",
     "@cardstack/view-transitions": "catalog:",
     "@types/lodash": "catalog:",
     "ember-animated": "catalog:",
@@ -25,8 +28,5 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix"
-  },
-  "volta": {
-    "extends": "../../package.json"
   }
 }

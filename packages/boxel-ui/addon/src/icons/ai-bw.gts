@@ -13,7 +13,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   ><path
       fill='currentColor'
-      d='M12 2v4a6 6 0 0 1 6 6h4A10 10 0 0 0 12 2zm0 20v-4a6 6 0 0 1-6-6H2a10 10 0 0 0 10 10zm10-10h-4a6 6 0 0 1-6 6v4a10 10 0 0 0 10-10zM2 12h4a6 6 0 0 1 6-6V2A10 10 0 0 0 2 12z'
+      d='M12 2v4a6 6 0 0 1 6 6h4A10 10 0 0 0 12 2m0 20v-4a6 6 0 0 1-6-6H2a10 10 0 0 0 10 10m10-10h-4a6 6 0 0 1-6 6v4a10 10 0 0 0 10-10M2 12h4a6 6 0 0 1 6-6V2A10 10 0 0 0 2 12'
     /></svg>
 </template>;
 

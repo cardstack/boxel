@@ -13,9 +13,9 @@
       "audioUrl": "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Sergio%2527s%20Magic%20Dustbin.mp3",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "duration": "2:31",
       "songTitle": "Sergio's Magic Dustbin",

@@ -10,8 +10,10 @@ import {
   type Field,
   type FieldDef,
   type Format,
+  type LinkableDefConstructor,
   CreateCardFn,
   CardCrudFunctions,
+  isFileDef,
 } from './card-api';
 import {
   BoxComponentSignature,
@@ -26,6 +28,7 @@ import {
 } from 'ember-concurrency';
 import {
   chooseCard,
+  chooseFile,
   baseCardRef,
   identifyCard,
   getPlural,
@@ -37,6 +40,7 @@ import {
   type ResolvedCodeRef,
   uuidv4,
   CardCrudFunctionsContextName,
+  CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import {
   IconMinusCircle,
@@ -60,7 +64,7 @@ interface Signature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -109,6 +113,20 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   };
 
   private chooseCard = restartableTask(async () => {
+    if (isFileDef(this.args.field.card)) {
+      let fileType = identifyCard(this.args.field.card);
+      let fileTypeName = this.args.field.card.displayName;
+      let file = await chooseFile(
+        fileType ? { fileType, fileTypeName } : undefined,
+      );
+      if (file) {
+        let selectedCards =
+          (this.args.model.value as any)[this.args.field.name] ?? [];
+        selectedCards = [...selectedCards, file];
+        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      }
+      return;
+    }
     let selectedCards = (this.args.model.value as any)[this.args.field.name];
     let selectedCardsQuery =
       selectedCards
@@ -137,9 +155,14 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (cardId) {
-      let card = await this.cardContext.store.get(cardId);
-      if (isCardInstance(card)) {
-        selectedCards = [...selectedCards, card];
+      let cardsOrCardErrors = (await Promise.all(
+        cardId.map((id: string) => this.cardContext.store.get(id)),
+      )) as (CardDef | CardErrorJSONAPI)[];
+      let newCards = cardsOrCardErrors.filter((card) =>
+        isCardInstance(card),
+      ) as CardDef[];
+      if (newCards.length > 0) {
+        selectedCards = [...selectedCards, ...newCards];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;
       }
     }
@@ -157,7 +180,7 @@ interface LinksToManyStandardEditorSignature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -351,7 +374,7 @@ interface LinksToManyCompactEditorSignature {
   Args: {
     model: Box<CardDef>;
     arrayField: Box<CardDef[]>;
-    field: Field<typeof CardDef>;
+    field: Field<LinkableDefConstructor>;
     cardTypeFor(
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
@@ -456,11 +479,16 @@ function getEditorChildFormat(
   return 'fitted';
 }
 
-function getPluralChildFormat(effectiveFormat: Format, model: Box<FieldDef>) {
+function getPluralChildFormat(
+  effectiveFormat: Format,
+  model: Box<FieldDef>,
+  isFileDef: boolean,
+) {
   if (
     effectiveFormat === 'edit' &&
-    'isCardDef' in model.value.constructor &&
-    model.value.constructor.isCardDef
+    (('isCardDef' in model.value.constructor &&
+      model.value.constructor.isCardDef) ||
+      isFileDef)
   ) {
     return 'fitted';
   }
@@ -491,7 +519,7 @@ export function getLinksToManyComponent({
 }: {
   model: Box<CardDef>;
   arrayField: Box<CardDef[]>;
-  field: Field<typeof CardDef>;
+  field: Field<LinkableDefConstructor>;
   cardTypeFor(
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
@@ -507,6 +535,7 @@ export function getLinksToManyComponent({
       getBoxComponent(cardTypeFor(field, child), child, field),
     ); // Wrap the the components in a function so that the template is reactive to changes in the model (this is essentially a helper)
   let isComputed = !!field.computeVia || !!field.queryDefinition;
+  let isFileDefField = isFileDef(field.card);
   let linksToManyComponent = class LinksToManyComponent extends GlimmerComponent<BoxComponentSignature> {
     <template>
       <DefaultFormatsConsumer as |defaultFormats|>
@@ -543,7 +572,11 @@ export function getLinksToManyComponent({
               {{#each (getComponents) as |Item i|}}
                 <div class='linksToMany-itemContainer'>
                   <Item
-                    @format={{getPluralChildFormat effectiveFormat model}}
+                    @format={{getPluralChildFormat
+                      effectiveFormat
+                      model
+                      isFileDefField
+                    }}
                     @displayContainer={{@displayContainer}}
                     class='linksToMany-item'
                     data-test-plural-view-item={{i}}

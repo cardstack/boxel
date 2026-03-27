@@ -1,54 +1,39 @@
 import ignore, { type Ignore } from 'ignore';
 
-import merge from 'lodash/merge';
-
 import { Memoize } from 'typescript-memoize';
 
 import {
   logger,
-  isCardResource,
   hasExecutableExtension,
   SupportedMimeType,
-  unixTime,
   jobIdentity,
-  modulesConsumedInMeta,
   Deferred,
   RealmPaths,
-  isIgnored,
   type IndexWriter,
-  type RenderResponse,
-  type ModuleRenderResponse,
-  type ResolvedCodeRef,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
-  type ErrorEntry,
+  type InstanceErrorIndexEntry,
   type RealmInfo,
   type FromScratchResult,
   type IncrementalResult,
-  type CardResource,
   type LastModifiedTimes,
   type JobInfo,
   type Prerenderer,
-  type RenderRouteOptions,
   type LocalPath,
   type Reader,
   type Stats,
 } from './index';
-import { inferContentType } from './infer-content-type';
-import { CardError, isCardError, serializableError } from './error';
-
-function canonicalURL(url: string, relativeTo?: string): string {
-  try {
-    let parsed = new URL(url, relativeTo);
-    parsed.search = '';
-    parsed.hash = '';
-    return parsed.href;
-  } catch (_e) {
-    let stripped = url.split('#')[0] ?? url;
-    return stripped.split('?')[0] ?? stripped;
-  }
-}
+import { moduleFrom } from './code-ref';
+import type { CacheScope, DefinitionLookup } from './definition-lookup';
+import { resolveCardReference } from './card-reference-resolver';
+import { isCardError } from './error';
+import type { IndexingProgressEvent } from './worker';
+import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
+import { discoverInvalidations } from './index-runner/discover-invalidations';
+import { visitFileForIndexing } from './index-runner/visit-file';
+import { performCardIndexing } from './index-runner/card-indexer';
+import { performFileIndexing } from './index-runner/file-indexer';
 
 export class IndexRunner {
   #indexingInstances = new Map<string, Promise<void>>();
@@ -64,16 +49,25 @@ export class IndexRunner {
   #auth: string;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
+  #moduleCacheContext?: {
+    resolvedRealmURL: string;
+    cacheScope: CacheScope;
+    authUserId: string;
+  };
+  #realmOwnerUserId: string;
+  #definitionLookup: DefinitionLookup;
   #jobInfo: JobInfo;
+  #dependencyResolver: IndexRunnerDependencyManager;
   #reportStatus?: (
     jobInfo: JobInfo | undefined,
     status: 'start' | 'finish',
   ) => void;
+  #onProgress?: (event: IndexingProgressEvent) => void;
   readonly stats: Stats = {
     instancesIndexed: 0,
-    modulesIndexed: 0,
+    filesIndexed: 0,
     instanceErrors: 0,
-    moduleErrors: 0,
+    fileErrors: 0,
     totalIndexEntries: 0,
   };
   #shouldClearCacheForNextRender = true;
@@ -82,25 +76,31 @@ export class IndexRunner {
     realmURL,
     reader,
     indexWriter,
+    definitionLookup,
     ignoreData = {},
     jobInfo,
     reportStatus,
+    onProgress,
     prerenderer,
     auth,
     fetch,
+    realmOwnerUserId,
   }: {
     realmURL: URL;
     reader: Reader;
     indexWriter: IndexWriter;
+    definitionLookup: DefinitionLookup;
     ignoreData?: Record<string, string>;
     prerenderer: Prerenderer;
     auth: string;
     fetch: typeof globalThis.fetch;
+    realmOwnerUserId: string;
     jobInfo?: JobInfo;
     reportStatus?(
       jobInfo: JobInfo | undefined,
       status: 'start' | 'finish',
     ): void;
+    onProgress?(event: IndexingProgressEvent): void;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL);
@@ -109,12 +109,35 @@ export class IndexRunner {
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1 };
     this.#reportStatus = reportStatus;
+    this.#onProgress = onProgress;
     this.#prerenderer = prerenderer;
     this.#auth = auth;
     this.#fetch = fetch;
+    this.#realmOwnerUserId = realmOwnerUserId;
+    this.#definitionLookup = definitionLookup;
+    this.#dependencyResolver = new IndexRunnerDependencyManager({
+      realmURL: this.#realmURL,
+      readModuleCacheEntries: async (moduleIds) => {
+        if (moduleIds.length === 0) {
+          return {};
+        }
+        let { resolvedRealmURL, cacheScope, authUserId } =
+          await this.getModuleCacheContext();
+        return await this.#definitionLookup.getModuleCacheEntries({
+          moduleUrls: moduleIds,
+          cacheScope,
+          authUserId,
+          resolvedRealmURL,
+        });
+      },
+      getDependencyRows: async (urls) =>
+        await this.batch.getDependencyRows(urls),
+      getInvalidations: () => this.#batch?.invalidations ?? [],
+    });
   }
 
   static async fromScratch(current: IndexRunner): Promise<FromScratchResult> {
+    current.#dependencyResolver.reset();
     let start = Date.now();
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
@@ -142,18 +165,49 @@ export class IndexRunner {
 
     let visitStart = Date.now();
     invalidations = sortInvalidations(invalidations);
-    for (let invalidation of invalidations) {
-      await current.tryToVisit(invalidation);
+    invalidations =
+      await current.#dependencyResolver.orderInvalidationsByDependencies(
+        invalidations,
+      );
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'from-scratch',
+      totalFiles: invalidations.length,
+      files: invalidations.map((u) => u.href),
+    });
+    try {
+      let filesCompleted = 0;
+      for (let invalidation of invalidations) {
+        await current.tryToVisit(invalidation);
+        filesCompleted++;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: invalidation.href,
+          filesCompleted,
+          totalFiles: invalidations.length,
+        });
+      }
+      current.#perfLog.debug(
+        `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
+      );
+      let finalizeStart = Date.now();
+      let { totalIndexEntries } = await current.batch.done();
+      current.#perfLog.debug(
+        `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
+      );
+      current.stats.totalIndexEntries = totalIndexEntries;
+    } finally {
+      current.#onProgress?.({
+        type: 'indexing-finished',
+        realmURL: current.realmURL.href,
+        jobId: current.#jobInfo.jobId,
+        stats: current.stats,
+      });
     }
-    current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
-    );
-    let finalizeStart = Date.now();
-    let { totalIndexEntries } = await current.batch.done();
-    current.#perfLog.debug(
-      `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
-    );
-    current.stats.totalIndexEntries = totalIndexEntries;
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
     );
@@ -163,6 +217,7 @@ export class IndexRunner {
       } in ${Date.now() - start} ms`,
     );
     return {
+      invalidations: [...invalidations].map((url) => url.href),
       ignoreData: current.#ignoreData,
       stats: current.stats,
     };
@@ -171,14 +226,22 @@ export class IndexRunner {
   static async incremental(
     current: IndexRunner,
     {
-      urls,
-      operation,
+      changes,
     }: {
-      urls: URL[];
-      operation: 'update' | 'delete';
+      changes: { url: URL; operation: 'update' | 'delete' }[];
     },
   ): Promise<IncrementalResult> {
+    current.#dependencyResolver.reset();
     let start = Date.now();
+    let operations = new Map<string, 'update' | 'delete'>();
+    for (let { url, operation } of changes) {
+      if (operation === 'delete') {
+        operations.set(url.href, 'delete');
+      } else if (!operations.has(url.href)) {
+        operations.set(url.href, 'update');
+      }
+    }
+    let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
     );
@@ -187,10 +250,17 @@ export class IndexRunner {
       current.realmURL,
       current.#jobInfo,
     );
+    urls.forEach((url) =>
+      current.#dependencyResolver.invalidateRelationshipDependencyRowCache(url),
+    );
     await current.batch.invalidate(urls);
     let invalidations = sortInvalidations(
       current.batch.invalidations.map((href) => new URL(href)),
     );
+    invalidations =
+      await current.#dependencyResolver.orderInvalidationsByDependencies(
+        invalidations,
+      );
     let hasExecutableInvalidation = invalidations.some((url) =>
       hasExecutableExtension(url.href),
     );
@@ -204,16 +274,46 @@ export class IndexRunner {
     }
 
     let hrefs = urls.map((u) => u.href);
-    for (let invalidation of invalidations) {
-      if (operation === 'delete' && hrefs.includes(invalidation.href)) {
-        // file is deleted, there is nothing to visit
-      } else {
-        await current.tryToVisit(invalidation);
+    current.#onProgress?.({
+      type: 'indexing-started',
+      realmURL: current.realmURL.href,
+      jobId: current.#jobInfo.jobId,
+      jobType: 'incremental',
+      totalFiles: invalidations.length,
+      files: invalidations.map((u) => u.href),
+    });
+    try {
+      let filesCompleted = 0;
+      for (let invalidation of invalidations) {
+        if (
+          operations.get(invalidation.href) === 'delete' &&
+          hrefs.includes(invalidation.href)
+        ) {
+          // file is deleted, there is nothing to visit
+        } else {
+          await current.tryToVisit(invalidation);
+        }
+        filesCompleted++;
+        current.#onProgress?.({
+          type: 'file-visited',
+          realmURL: current.realmURL.href,
+          jobId: current.#jobInfo.jobId,
+          url: invalidation.href,
+          filesCompleted,
+          totalFiles: invalidations.length,
+        });
       }
-    }
 
-    let { totalIndexEntries } = await current.batch.done();
-    current.stats.totalIndexEntries = totalIndexEntries;
+      let { totalIndexEntries } = await current.batch.done();
+      current.stats.totalIndexEntries = totalIndexEntries;
+    } finally {
+      current.#onProgress?.({
+        type: 'indexing-finished',
+        realmURL: current.realmURL.href,
+        jobId: current.#jobInfo.jobId,
+        stats: current.stats,
+      });
+    }
 
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} completed incremental indexing for ${urls.map((u) => u.href).join()} in ${
@@ -252,6 +352,60 @@ export class IndexRunner {
     return this.#realmURL;
   }
 
+  private async ensureRealmInfo(): Promise<RealmInfo> {
+    if (!this.#realmInfo) {
+      let realmInfoURL = `${this.realmURL}_info`;
+      let realmInfoResponse = await this.#fetch(realmInfoURL, {
+        method: 'QUERY',
+        headers: { Accept: SupportedMimeType.RealmInfo },
+      });
+      if (!realmInfoResponse.ok) {
+        let body = '<unable to read response body>';
+        try {
+          body = await realmInfoResponse.text();
+        } catch (_err) {
+          // fall back to placeholder body text
+        }
+        throw new Error(
+          `Failed to load realm info for indexing from ${realmInfoURL}: ` +
+            `${realmInfoResponse.status} ${realmInfoResponse.statusText}. ` +
+            `Response body: ${body}`,
+        );
+      }
+      let payload: unknown;
+      try {
+        payload = await realmInfoResponse.json();
+      } catch (err: unknown) {
+        throw new Error(
+          `Failed to parse realm info response from ${realmInfoURL} as JSON: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+      this.#realmInfo = (
+        payload as { data?: { attributes?: RealmInfo } }
+      )?.data?.attributes;
+    }
+    if (!this.#realmInfo) {
+      throw new Error('Unable to load realm info for indexing');
+    }
+    return this.#realmInfo;
+  }
+
+  private async getModuleCacheContext() {
+    if (this.#moduleCacheContext) {
+      return this.#moduleCacheContext;
+    }
+    let realmInfo = await this.ensureRealmInfo();
+    let isPublic = realmInfo.visibility === 'public';
+    this.#moduleCacheContext = {
+      resolvedRealmURL: this.realmURL.href,
+      cacheScope: isPublic ? 'public' : 'realm-auth',
+      authUserId: isPublic ? '' : this.#realmOwnerUserId,
+    };
+    return this.#moduleCacheContext;
+  }
+
   #scheduleClearCacheForNextRender() {
     this.#shouldClearCacheForNextRender = true;
   }
@@ -277,211 +431,33 @@ export class IndexRunner {
     url: URL,
     indexMtimes: LastModifiedTimes,
   ): Promise<string[]> {
-    this.#log.debug(
-      `${jobIdentity(this.#jobInfo)} discovering invalidations in dir ${url.href}`,
-    );
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} discovering invalidations in dir ${url.href}`,
-    );
-    let mtimesStart = Date.now();
-    let filesystemMtimes = await this.#reader.mtimes();
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} time to get file system mtimes ${Date.now() - mtimesStart} ms`,
-    );
-
-    let ignoreFile = new URL('.gitignore', url).href;
-    // it costs about 10 sec to try to get the ignore file when it doesn't
-    // exist, so don't get it if it's not there.
-    if (filesystemMtimes[ignoreFile]) {
-      let ignoreStart = Date.now();
-      let ignorePatterns = await this.#reader.readFile(new URL(ignoreFile));
-      this.#perfLog.debug(
-        `time to get ignore rules ${Date.now() - ignoreStart} ms`,
-      );
-      if (ignorePatterns && ignorePatterns.content) {
-        this.ignoreMap.set(url.href, ignore().add(ignorePatterns.content));
-        this.#ignoreData[url.href] = ignorePatterns.content;
-      }
-    } else {
-      this.#perfLog.debug(
-        `${jobIdentity(this.#jobInfo)} skip getting the ignore file--there is nothing to ignore`,
-      );
-    }
-
-    let invalidationList: string[] = [];
-    let skipList: string[] = [];
-    for (let [url, lastModified] of Object.entries(filesystemMtimes)) {
-      let indexEntry = indexMtimes.get(url);
-
-      if (
-        !indexEntry ||
-        indexEntry.type.endsWith('-error') ||
-        indexEntry.lastModified == null ||
-        lastModified !== indexEntry.lastModified
-      ) {
-        invalidationList.push(url);
-      } else {
-        skipList.push(url);
-      }
-    }
-    if (skipList.length === 0) {
-      // the whole realm needs to be visited, no need to calculate
-      // invalidations--it's everything
-      return invalidationList;
-    }
-
-    // Check for deleted files - files that exist in index but not on filesystem
-    let indexedUrls = [...indexMtimes.keys()];
-    let deletedUrls = indexedUrls.filter((url) => !filesystemMtimes[url]);
-    if (deletedUrls.length > 0) {
-      this.#perfLog.debug(
-        `${jobIdentity(this.#jobInfo)} found ${deletedUrls.length} deleted files to add to invalidations: ${deletedUrls.join(', ')}`,
-      );
-      invalidationList.push(...deletedUrls);
-    }
-
-    let invalidationStart = Date.now();
-    await this.batch.invalidate(invalidationList.map((u) => new URL(u)));
-    this.#perfLog.debug(
-      `${jobIdentity(this.#jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
-    );
-    return this.batch.invalidations;
+    return await discoverInvalidations({
+      url,
+      indexMtimes,
+      reader: this.#reader,
+      batch: this.batch,
+      ignoreMap: this.ignoreMap,
+      ignoreData: this.#ignoreData,
+      jobInfo: this.#jobInfo,
+      logDebug: (message) => this.#log.debug(message),
+      perfDebug: (message) => this.#perfLog.debug(message),
+    });
   }
 
   private async visitFile(url: URL): Promise<void> {
-    if (isIgnored(this.#realmURL, this.ignoreMap, url)) {
-      return;
-    }
-    let start = Date.now();
-    this.#log.debug(
-      `${jobIdentity(this.#jobInfo)} begin visiting file ${url.href}`,
-    );
-    let localPath: string;
-    try {
-      localPath = this.#realmPaths.local(url);
-    } catch (e) {
-      // until we have cross realm invalidation, if our invalidation
-      // graph cross a realm just skip over the file. it will be out
-      // of date, but such is life...
-      this.#log.debug(
-        `${jobIdentity(this.#jobInfo)} Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
-      );
-      return;
-    }
-
-    let fileRef = await this.#reader.readFile(url);
-    if (!fileRef) {
-      fileRef = await this.#reader.readFile(new URL(encodeURI(localPath), url));
-    }
-    if (!fileRef) {
-      let error = new CardError(`missing file ${url.href}`, { status: 404 });
-      error.deps = [url.href];
-      throw error;
-    }
-    let { content, lastModified } = fileRef;
-    // ensure created_at exists for this file and use it for resourceCreatedAt
-    let resourceCreatedAt = await this.batch.ensureFileCreatedAt(localPath);
-    if (hasExecutableExtension(url.href)) {
-      await this.indexModule(url);
-    } else {
-      if (url.href.endsWith('.json')) {
-        let resource;
-
-        try {
-          let { data } = JSON.parse(content);
-          resource = data;
-        } catch (e) {
-          this.#log.warn(
-            `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
-          );
-        }
-
-        if (resource && isCardResource(resource)) {
-          if (lastModified == null) {
-            this.#log.warn(
-              `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-            );
-            lastModified = unixTime(Date.now());
-          }
-          await this.indexCard({
-            path: localPath,
-            lastModified,
-            resourceCreatedAt,
-            resource,
-          });
-          return;
-        }
-      }
-
-      if (lastModified == null) {
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
-        );
-        lastModified = unixTime(Date.now());
-      }
-      await this.indexFile({
-        path: localPath,
-        lastModified,
-        resourceCreatedAt,
-      });
-    }
-    this.#log.debug(
-      `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
-    );
-  }
-
-  private async indexModule(url: URL): Promise<void> {
-    let clearCache = this.#consumeClearCacheForRender();
-    let prerenderOptions: RenderRouteOptions | undefined = clearCache
-      ? { clearCache }
-      : undefined;
-    let moduleResult: ModuleRenderResponse;
-    try {
-      moduleResult = await this.#prerenderer.prerenderModule({
-        url: url.href,
-        realm: this.#realmURL.href,
-        auth: this.#auth,
-        renderOptions: prerenderOptions,
-      });
-    } catch (err: any) {
-      this.stats.moduleErrors++;
-      this.#log.warn(
-        `${jobIdentity(this.#jobInfo)} encountered error rendering module "${url.href}": ${err.message}`,
-      );
-      await this.batch.updateEntry(url, {
-        type: 'module-error',
-        error: {
-          status: err.status ?? 500,
-          message: `encountered error rendering module "${url.href}": ${err.message}`,
-          additionalErrors: [serializableError(err)],
-        },
-      });
-      return;
-    }
-
-    let {
-      isShimmed,
-      error,
-      lastModified,
-      createdAt: resourceCreatedAt,
-      deps,
-    } = moduleResult;
-
-    if (error) {
-      this.stats.moduleErrors++;
-      await this.batch.updateEntry(url, { ...error, type: 'module-error' });
-      return;
-    }
-
-    if (!isShimmed) {
-      await this.batch.updateEntry(url, {
-        type: 'module',
-        lastModified,
-        resourceCreatedAt,
-        deps: new Set(deps),
-      });
-      this.stats.modulesIndexed++;
-    }
+    await visitFileForIndexing({
+      url,
+      realmURL: this.#realmURL,
+      ignoreMap: this.ignoreMap,
+      realmPaths: this.#realmPaths,
+      reader: this.#reader,
+      batch: this.batch,
+      jobInfo: this.#jobInfo,
+      logDebug: (message) => this.#log.debug(message),
+      logWarn: (message) => this.#log.warn(message),
+      indexCard: async (args) => await this.indexCard(args),
+      indexFile: async (args) => await this.indexFile(args),
+    });
   }
 
   private reportStatus(
@@ -494,10 +470,7 @@ export class IndexRunner {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [
-          new URL((resource.meta.adoptsFrom as ResolvedCodeRef).module, url)
-            .href,
-        ],
+        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
       },
       status,
     );
@@ -527,150 +500,24 @@ export class IndexRunner {
       }
       deferred = new Deferred<void>();
       this.#indexingInstances.set(fileURL, deferred.promise);
-      let uncaughtError: Error | undefined;
-      let renderResult: RenderResponse | undefined;
-      try {
-        let clearCache = this.#consumeClearCacheForRender();
-        let prerenderOptions: RenderRouteOptions | undefined = clearCache
-          ? { clearCache }
-          : undefined;
-        renderResult = await this.#prerenderer.prerenderCard({
-          url: fileURL,
-          realm: this.#realmURL.href,
-          auth: this.#auth,
-          renderOptions: prerenderOptions,
-        });
-
-        // we tack on data that can only be determined via access to underlying filesystem/DB
-        if (!this.#realmInfo) {
-          let realmInfoResponse = await this.#fetch(`${this.realmURL}_info`, {
-            headers: { Accept: SupportedMimeType.RealmInfo },
-          });
-          this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
-        }
-
-        let serialized = renderResult?.serialized;
-        if (serialized) {
-          merge(serialized, {
-            data: {
-              meta: {
-                lastModified,
-                resourceCreatedAt,
-                realmInfo: { ...this.#realmInfo },
-                realmURL: this.realmURL.href,
-              },
-            },
-          });
-        }
-      } catch (err: any) {
-        uncaughtError = err;
-      }
-
-      if (!renderResult || ('error' in renderResult && renderResult.error)) {
-        let renderError = renderResult?.error;
-
-        /**
-         * Normalize any combination of an optional ErrorEntry and thrown value
-         * into a well-formed ErrorEntry. Handles the common case of a provided
-         * entry with an error, rejects malformed entries missing error payloads,
-         * and synthesizes an ErrorEntry from either a CardError or generic Error.
-         */
-        let normalizeToErrorEntry = (
-          entry: ErrorEntry | undefined,
-          err: unknown,
-        ): ErrorEntry => {
-          if (entry?.error) {
-            let normalizedError = { ...entry.error };
-            normalizedError.additionalErrors =
-              normalizedError.additionalErrors ?? null;
-            normalizedError.status = normalizedError.status ?? 500;
-            return {
-              ...entry,
-              error: normalizedError,
-            };
-          }
-          if (entry && !entry.error) {
-            throw new CardError('ErrorEntry missing error payload', {
-              status: 500,
-            });
-          }
-          if (isCardError(err)) {
-            return { type: 'instance-error', error: serializableError(err) };
-          }
-          let fallback = new CardError(
-            (err as Error)?.message ?? 'unknown render error',
-            { status: 500 },
-          );
-          fallback.stack = (err as Error)?.stack;
-          return { type: 'instance-error', error: serializableError(fallback) };
-        };
-
-        renderError = normalizeToErrorEntry(renderError, uncaughtError);
-
-        if (
-          renderError.error.id &&
-          renderError.error.id.replace(/\.json$/, '') !== instanceURL.href
-        ) {
-          renderError.error.deps = renderError.error.deps ?? [];
-          renderError.error.deps.push(
-            canonicalURL(renderError.error.id, instanceURL.href),
-          );
-        }
-
-        // always include the modules that we see in serialized as deps
-        renderError.error.deps = renderError.error.deps ?? [];
-        renderError.error.deps.push(
-          ...modulesConsumedInMeta(resource.meta).map((m) =>
-            canonicalURL(m, instanceURL.href),
-          ),
-        );
-        renderError.error.deps = [...new Set(renderError.error.deps)];
-
-        if (renderError.cardType) {
-          renderError.searchData = {
-            ...(renderError.searchData ?? {}),
-            _cardType:
-              renderError.searchData?._cardType ?? renderError.cardType,
-          };
-        }
-
-        this.#log.warn(
-          `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${renderError.error.message}`,
-        );
-        await this.updateEntry(instanceURL, renderError);
-        return;
-      } else {
-        let {
-          serialized,
-          searchDoc,
-          displayNames,
-          deps,
-          types,
-          isolatedHTML,
-          headHTML,
-          atomHTML,
-          embeddedHTML,
-          fittedHTML,
-          iconHTML,
-        } = renderResult;
-        await this.updateEntry(instanceURL, {
-          type: 'instance',
-          resource: serialized!.data as CardResource,
-          searchData: searchDoc!,
-          isolatedHtml: isolatedHTML ?? undefined,
-          headHtml: headHTML ?? undefined,
-          atomHtml: atomHTML ?? undefined,
-          embeddedHtml: embeddedHTML ?? undefined,
-          fittedHtml: fittedHTML ?? undefined,
-          iconHTML: iconHTML ?? undefined,
-          lastModified,
-          resourceCreatedAt,
-          types: types!,
-          displayNames: displayNames ?? [],
-          deps: new Set(deps ?? []),
-        });
-        return;
-      }
+      await performCardIndexing({
+        path,
+        lastModified,
+        resourceCreatedAt,
+        resource,
+        fileURL,
+        instanceURL,
+        realmURL: this.#realmURL,
+        auth: this.#auth,
+        jobInfo: this.#jobInfo,
+        prerenderer: this.#prerenderer,
+        consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+        ensureRealmInfo: () => this.ensureRealmInfo(),
+        dependencyResolver: this.#dependencyResolver,
+        updateEntry: async (entryURL, entry) =>
+          await this.updateEntry(entryURL, entry),
+        logWarn: (message) => this.#log.warn(message),
+      });
     } finally {
       deferred?.fulfill();
       this.reportStatus('finish', fileURL, resource);
@@ -681,36 +528,51 @@ export class IndexRunner {
     path,
     lastModified,
     resourceCreatedAt,
+    hasModulePrerender,
   }: {
     path: LocalPath;
     lastModified: number;
     resourceCreatedAt: number;
+    hasModulePrerender?: boolean;
   }): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
-    let name = path.split('/').pop() ?? path;
-    let contentType = inferContentType(name);
-    await this.batch.updateEntry(new URL(fileURL), {
-      // Temporary: will be replaced once FileDef extractors populate richer metadata.
-      type: 'file',
+    let result = await performFileIndexing({
+      path,
+      fileURL,
       lastModified,
       resourceCreatedAt,
-      deps: new Set(),
-      searchData: {
-        url: fileURL,
-        sourceUrl: fileURL,
-        name,
-        contentType,
+      hasModulePrerender,
+      realmURL: this.#realmURL,
+      auth: this.#auth,
+      jobInfo: this.#jobInfo,
+      prerenderer: this.#prerenderer,
+      consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
+      dependencyResolver: this.#dependencyResolver,
+      updateEntry: async (entryURL, entry) => {
+        await this.batch.updateEntry(entryURL, entry);
+        this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
+          entryURL,
+        );
       },
-      types: [],
-      displayNames: [],
+      logWarn: (message) => this.#log.warn(message),
     });
+
+    if (result === 'indexed') {
+      this.stats.filesIndexed++;
+    } else {
+      this.stats.fileErrors++;
+    }
   }
 
   private async updateEntry(
     instanceURL: URL,
-    entry: InstanceEntry | ErrorEntry,
+    entry: InstanceEntry | InstanceErrorIndexEntry,
   ) {
-    await this.batch.updateEntry(assertURLEndsWithJSON(instanceURL), entry);
+    let normalizedURL = assertURLEndsWithJSON(instanceURL);
+    await this.batch.updateEntry(normalizedURL, entry);
+    this.#dependencyResolver.invalidateRelationshipDependencyRowCache(
+      normalizedURL,
+    );
     if (entry.type === 'instance') {
       this.stats.instancesIndexed++;
     } else {
@@ -727,12 +589,15 @@ function assertURLEndsWithJSON(url: URL): URL {
 }
 
 function sortInvalidations(urls: URL[]): URL[] {
+  // sort invalidations so that .json files are visited after their non-.json counterparts,
+  // which allows us to have the file entry in place before we visit the card JSON and need to render it.
+  // among URLs that both do or both don't end with .json, sort lexically by href for consistency.
   return urls.sort((a, b) => {
-    let aExec = hasExecutableExtension(a.href);
-    let bExec = hasExecutableExtension(b.href);
-    if (aExec === bExec) {
+    let aJson = a.href.endsWith('.json');
+    let bJson = b.href.endsWith('.json');
+    if (aJson === bJson) {
       return a.href.localeCompare(b.href);
     }
-    return aExec ? -1 : 1;
+    return aJson ? 1 : -1;
   });
 }

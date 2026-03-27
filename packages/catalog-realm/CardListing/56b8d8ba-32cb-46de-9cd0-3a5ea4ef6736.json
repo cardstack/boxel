@@ -16,9 +16,9 @@
       "summary": "Interactive flashcard application for studying and memorizing information across various subjects",
       "cardInfo": {
         "notes": "Perfect for students, professionals, and anyone looking to improve their memory and learning efficiency",
-        "title": "Flashcard",
-        "description": "A comprehensive flashcard application that helps users create, organize, and study flashcards with features for tracking difficulty levels, subjects, and tags for better learning organization.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/flashcard-listing/thumbnail.png"
+        "name": "Flashcard",
+        "summary": "A comprehensive flashcard application that helps users create, organize, and study flashcards with features for tracking difficulty levels, subjects, and tags for better learning organization.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/flashcard-listing/thumbnail.png"
       }
     },
     "relationships": {

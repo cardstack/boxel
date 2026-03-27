@@ -1,16 +1,21 @@
 import {
   type Prerenderer,
+  type AffinityType,
   type RenderResponse,
   type ModuleRenderResponse,
+  type FileExtractResponse,
+  type FileRenderResponse,
+  type FileRenderArgs,
   type RenderRouteOptions,
+  type RunCommandResponse,
   logger,
 } from '@cardstack/runtime-common';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
+  resolvePrerenderManagerRequestTimeoutMs,
 } from './prerender-constants';
-import { renderTimeoutMs } from './utils';
 
 const log = logger('remote-prerenderer');
 const jsonApiHeaders = {
@@ -46,19 +51,19 @@ export function createRemotePrerenderer(
     1000,
     Number(process.env.PRERENDER_MANAGER_MAX_DELAY_MS ?? 180_000),
   );
-  const requestTimeoutMs = Math.max(
-    1000,
-    Number(process.env.PRERENDER_MANAGER_REQUEST_TIMEOUT_MS ?? renderTimeoutMs),
-  );
+  const requestTimeoutMs = resolvePrerenderManagerRequestTimeoutMs();
 
   async function requestWithRetry<T>(
     path: string,
     type: string,
     attributes: {
-      realm: string;
-      url: string;
+      affinityType: AffinityType;
+      affinityValue: string;
+      realm?: string;
+      url?: string;
       auth: string;
       renderOptions?: RenderRouteOptions;
+      [key: string]: any;
     },
   ): Promise<T> {
     validatePrerenderAttributes(type, attributes);
@@ -132,17 +137,25 @@ export function createRemotePrerenderer(
             `Prerender request to ${endpoint.href} aborted after ${requestTimeoutMs}ms`,
           );
         }
+        // Node.js fetch() wraps network errors in TypeError with the
+        // underlying error (ECONNREFUSED, ECONNRESET, etc.) in e.cause.
+        // Check both e.code and e.cause.code to catch these.
+        let code = e?.code ?? e?.cause?.code;
         let retryable =
           e instanceof RetryablePrerenderError ||
-          e?.code === 'ECONNREFUSED' ||
-          e?.code === 'ETIMEDOUT' ||
-          e?.name === 'AbortError';
+          code === 'ECONNREFUSED' ||
+          code === 'ETIMEDOUT' ||
+          code === 'ECONNRESET' ||
+          (e instanceof TypeError && e.message === 'fetch failed');
         if (!retryable || attempts >= maxAttempts) {
           throw e;
         }
         let delayMs = Math.min(
           baseDelayMs * Math.pow(2, attempts - 1),
           maxDelayMs,
+        );
+        log.warn(
+          `Prerender request to ${endpoint.href} failed (attempt ${attempts}/${maxAttempts}), retrying in ${delayMs}ms: ${e.message}`,
         );
         await delay(delayMs);
       }
@@ -156,6 +169,8 @@ export function createRemotePrerenderer(
         'prerender-card',
         'prerender-request',
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url,
           auth,
@@ -168,10 +183,62 @@ export function createRemotePrerenderer(
         'prerender-module',
         'prerender-module-request',
         {
+          affinityType: 'realm',
+          affinityValue: realm,
           realm,
           url,
           auth,
           renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async prerenderFileExtract({ realm, url, auth, renderOptions }) {
+      return await requestWithRetry<FileExtractResponse>(
+        'prerender-file-extract',
+        'prerender-file-extract-request',
+        {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url,
+          auth,
+          renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async prerenderFileRender({
+      realm,
+      url,
+      auth,
+      fileData,
+      types,
+      renderOptions,
+    }: FileRenderArgs) {
+      return await requestWithRetry<FileRenderResponse>(
+        'prerender-file-render',
+        'prerender-file-render-request',
+        {
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url,
+          auth,
+          fileData,
+          types,
+          renderOptions: renderOptions ?? {},
+        },
+      );
+    },
+    async runCommand({ userId, auth, command, commandInput }) {
+      return await requestWithRetry<RunCommandResponse>(
+        'run-command',
+        'run-command-request',
+        {
+          affinityType: 'user',
+          affinityValue: userId,
+          auth,
+          command,
+          commandInput,
         },
       );
     },
@@ -181,26 +248,53 @@ export function createRemotePrerenderer(
 function validatePrerenderAttributes(
   requestType: string,
   attrs: {
+    affinityType?: unknown;
+    affinityValue?: string;
     realm?: string;
     url?: string;
     auth?: string;
+    command?: unknown;
   },
 ) {
-  let missing: string[] = [];
+  let missing = new Set<string>();
 
-  if (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0) {
-    missing.push('realm');
+  if (
+    typeof attrs.affinityValue !== 'string' ||
+    attrs.affinityValue.trim().length === 0
+  ) {
+    missing.add('affinityValue');
   }
-  if (typeof attrs.url !== 'string' || attrs.url.trim().length === 0) {
-    missing.push('url');
+  if (
+    requestType !== 'run-command-request' &&
+    (typeof attrs.realm !== 'string' || attrs.realm.trim().length === 0)
+  ) {
+    missing.add('realm');
+  }
+  if (
+    requestType !== 'run-command-request' &&
+    (typeof attrs.url !== 'string' || attrs.url.trim().length === 0)
+  ) {
+    missing.add('url');
   }
   if (typeof attrs.auth !== 'string' || attrs.auth.trim().length === 0) {
-    missing.push('auth');
+    missing.add('auth');
+  }
+  if (requestType === 'run-command-request' && attrs.affinityType !== 'user') {
+    missing.add('affinityType');
+  }
+  if (requestType !== 'run-command-request' && attrs.affinityType !== 'realm') {
+    missing.add('affinityType');
+  }
+  if (
+    requestType === 'run-command-request' &&
+    (typeof attrs.command !== 'string' || attrs.command.trim().length === 0)
+  ) {
+    missing.add('command');
   }
 
-  if (missing.length > 0) {
+  if (missing.size > 0) {
     throw new Error(
-      `Missing prerender ${requestType} attributes: ${missing.join(', ')}`,
+      `Missing prerender ${requestType} attributes: ${[...missing].join(', ')}`,
     );
   }
 }

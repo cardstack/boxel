@@ -6,9 +6,12 @@ import { service } from '@ember/service';
 import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 
+import Package from '@cardstack/boxel-icons/package';
 import { use, resource } from 'ember-resources';
 
 import startCase from 'lodash/startCase';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   LoadingIndicator,
@@ -28,12 +31,17 @@ import {
   isCardDocumentString,
   isCardDef,
   isFieldDef,
+  isFileDef,
   isBaseDef,
+  isCardErrorJSONAPI,
+  isListingDef,
+  isListingInstance,
   internalKeyFor,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
@@ -45,7 +53,9 @@ import {
 } from '@cardstack/host/resources/module-contents';
 
 import { getResolvedCodeRefFromType } from '@cardstack/host/services/card-type-service';
+import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -100,8 +110,10 @@ interface Signature {
 }
 
 export default class DetailPanel extends Component<Signature> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
+  @service declare private commandService: CommandService;
+  @service declare private store: StoreService;
 
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -112,6 +124,50 @@ export default class DetailPanel extends Component<Signature> {
   @use private cardInstanceType = resource(() => {
     if (this.args.cardInstance !== undefined) {
       let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
+    }
+    return undefined;
+  });
+
+  @use private fileDefResource = resource(() => {
+    let state = new TrackedObject<{
+      value: BaseDef | undefined;
+      isLoading: boolean;
+      error: unknown;
+    }>({
+      value: undefined,
+      isLoading: false,
+      error: undefined,
+    });
+    if (!this.isNonModuleFile) {
+      return state;
+    }
+    let fileUrl = this.args.readyFile.url;
+    state.isLoading = true;
+    (async () => {
+      try {
+        let result = await this.store.get(fileUrl, { type: 'file-meta' });
+        if (isCardErrorJSONAPI(result)) {
+          state.error = result;
+          state.value = undefined;
+        } else {
+          state.value = result as unknown as BaseDef;
+          state.error = undefined;
+        }
+      } catch (e) {
+        state.error = e;
+        state.value = undefined;
+      } finally {
+        state.isLoading = false;
+      }
+    })();
+    return state;
+  });
+
+  @use private fileDefInstanceType = resource(() => {
+    let fileDefInstance = this.fileDefResource?.value;
+    if (fileDefInstance !== undefined) {
+      let cardDefinition = fileDefInstance.constructor as typeof BaseDef;
       return getCardType(this, () => cardDefinition);
     }
     return undefined;
@@ -139,13 +195,15 @@ export default class DetailPanel extends Component<Signature> {
         this.args.selectedDeclaration &&
         (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
           isReexportCardOrField(this.args.selectedDeclaration))) ||
-      this.isCardInstance
+      this.isCardInstance ||
+      this.isFileDefInstance
     );
   }
 
   private get showDetailsPanel() {
     return (
       this.args.cardError ||
+      this.args.moduleAnalysis.moduleError ||
       (!this.isModule && !isCardDocumentString(this.args.readyFile.content))
     );
   }
@@ -170,7 +228,11 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get isLoading() {
-    return this.cardInstanceType?.isLoading;
+    return (
+      this.cardInstanceType?.isLoading ||
+      this.fileDefResource?.isLoading ||
+      this.fileDefInstanceType?.isLoading
+    );
   }
 
   private get definitionActions() {
@@ -194,7 +256,18 @@ export default class DetailPanel extends Component<Signature> {
             },
           ]
         : []),
-      // the inherit feature performs in the inheritance in a new module,
+      ...(this.realm.canWrite(this.args.readyFile.url) &&
+      this.args.selectedDeclaration?.exportName &&
+      !isListingDef(this.args.selectedDeclaration?.cardOrField)
+        ? [
+            {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListing,
+            },
+          ]
+        : []),
+      // the inherit feature performs the inheritance in a new module,
       // this means that the Card/Field that we are inheriting must be exported
       ...(this.args.selectedDeclaration?.exportName
         ? [
@@ -228,6 +301,16 @@ export default class DetailPanel extends Component<Signature> {
         icon: Copy,
         handler: this.duplicateInstance,
       },
+      ...(this.realm.canWrite(this.args.readyFile.url) &&
+      !isListingInstance(this.args.cardInstance)
+        ? [
+            {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListing,
+            },
+          ]
+        : []),
       ...(this.realm.canWrite(this.args.readyFile.url)
         ? [
             {
@@ -306,10 +389,14 @@ export default class DetailPanel extends Component<Signature> {
     )
       ? 'card-definition'
       : isFieldDef(this.args.selectedDeclaration.cardOrField)
-      ? 'field-definition'
-      : undefined;
+        ? 'field-definition'
+        : isFileDef(this.args.selectedDeclaration.cardOrField)
+          ? 'file-definition'
+          : undefined;
     if (!id) {
-      throw new Error(`Can only call inherit() on card def or field def`);
+      throw new Error(
+        `Can only call inherit() on card def, field def, or file def`,
+      );
     }
     let ref = this.selectedDeclarationAsCodeRef;
     let displayName = this.args.selectedDeclaration.cardOrField.displayName;
@@ -341,6 +428,38 @@ export default class DetailPanel extends Component<Signature> {
     this.args.openSearch(`carddef:${refURL}`);
   }
 
+  @action private async createListing() {
+    const command = new OpenCreateListingModalCommand(
+      this.commandService.commandContext,
+    );
+    const targetRealm = this.operatorModeStateService.realmURL;
+    if (!targetRealm) {
+      throw new Error('targetRealm is required to create listing');
+    }
+    if (this.isCardInstance) {
+      const openCardIds = this.args.cardInstance?.id
+        ? [this.args.cardInstance.id]
+        : [];
+      const codeRef = this.cardInstanceType?.type
+        ? getResolvedCodeRefFromType(this.cardInstanceType.type)
+        : undefined;
+      if (!codeRef) {
+        throw new Error('Cannot create listing: card type not yet loaded');
+      }
+      await command.execute({ openCardIds, codeRef, targetRealm });
+    } else {
+      const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      const openCardIds = this.args.cardInstance?.id
+        ? [this.args.cardInstance.id]
+        : [];
+      await command.execute({
+        codeRef,
+        openCardIds,
+        targetRealm,
+      });
+    }
+  }
+
   private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
@@ -368,6 +487,30 @@ export default class DetailPanel extends Component<Signature> {
 
   private get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
+  }
+
+  private get inheritancePanelHeader() {
+    if (this.isFileDefInstance) {
+      return 'File Inheritance';
+    }
+    if (
+      this.args.selectedDeclaration &&
+      (isCardOrFieldDeclaration(this.args.selectedDeclaration) ||
+        isReexportCardOrField(this.args.selectedDeclaration))
+    ) {
+      if (isFileDef(this.args.selectedDeclaration.cardOrField)) {
+        return 'File Def Inheritance';
+      }
+    }
+    return 'Card Inheritance';
+  }
+
+  private get isNonModuleFile() {
+    return !this.isModule && !isCardDocumentString(this.args.readyFile.content);
+  }
+
+  private get isFileDefInstance() {
+    return this.fileDefResource?.value !== undefined;
   }
 
   private get fileExtension() {
@@ -479,13 +622,13 @@ export default class DetailPanel extends Component<Signature> {
             aria-label='Inheritance Panel Header'
             data-test-inheritance-panel-header
           >
-            Card Inheritance
+            {{this.inheritancePanelHeader}}
           </PanelHeader>
           {{#if this.isCardInstance}}
             {{! JSON case when visting, eg Author/1.json }}
             <InstanceDefinitionContainer
               @fileURL={{@readyFile.url}}
-              @name={{@cardInstance.title}}
+              @name={{@cardInstance.cardTitle}}
               @fileExtension='.JSON'
               @infoText={{this.lastModified.value}}
               @actions={{this.instanceActions}}
@@ -501,6 +644,31 @@ export default class DetailPanel extends Component<Signature> {
                   @fileURL={{this.cardInstanceType.type.module}}
                   @name={{this.cardInstanceType.type.displayName}}
                   @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
+                  @goToDefinition={{@goToDefinition}}
+                  @codeRef={{codeRef}}
+                />
+              {{/let}}
+            {{/if}}
+          {{else if this.isFileDefInstance}}
+            <InstanceDefinitionContainer
+              @title='File Instance'
+              @fileURL={{@readyFile.url}}
+              @name={{@readyFile.name}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{this.miscFileActions}}
+            />
+            <Divider @label='Adopts From' />
+            {{#if this.fileDefInstanceType.type}}
+              {{#let
+                (getResolvedCodeRefFromType this.fileDefInstanceType.type)
+                as |codeRef|
+              }}
+                <ClickableModuleDefinitionContainer
+                  @title='File Definition'
+                  @fileURL={{this.fileDefInstanceType.type.module}}
+                  @name={{this.fileDefInstanceType.type.displayName}}
+                  @fileExtension={{this.fileDefInstanceType.type.moduleInfo.extension}}
                   @goToDefinition={{@goToDefinition}}
                   @codeRef={{codeRef}}
                 />
@@ -626,6 +794,8 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
       return 'Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
       return 'Field Definition';
+    } else if (isFileDef(declaration.cardOrField)) {
+      return 'File Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
       return 'Base Definition';
     }
@@ -635,6 +805,8 @@ function getDefinitionTitle(declaration: ModuleDeclaration) {
       return 'Re-exported Card Definition';
     } else if (isFieldDef(declaration.cardOrField)) {
       return 'Re-exported Field Definition';
+    } else if (isFileDef(declaration.cardOrField)) {
+      return 'Re-exported File Definition';
     } else if (isBaseDef(declaration.cardOrField)) {
       return 'Re-exported Base Definition';
     }

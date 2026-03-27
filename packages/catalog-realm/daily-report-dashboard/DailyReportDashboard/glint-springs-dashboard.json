@@ -2,9 +2,9 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Glint Springs Dashboard",
-      "description": "Operations dashboard displaying daily reports and key metrics with automated report generation capabilities",
-      "thumbnailURL": null
+      "cardTitle": "Glint Springs Dashboard",
+      "cardDescription": "Operations dashboard displaying daily reports and key metrics with automated report generation capabilities",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "policyManual": {

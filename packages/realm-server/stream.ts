@@ -8,3 +8,11 @@ export async function nodeStreamToText(stream: Readable): Promise<string> {
   }
   return Buffer.concat(chunks).toString('utf-8');
 }
+
+export async function nodeStreamToBuffer(stream: Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream as any) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}

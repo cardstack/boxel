@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Document",
-      "description": "Spec for Document",
-      "thumbnailURL": null
+      "cardTitle": "Document",
+      "cardDescription": "Spec for Document",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

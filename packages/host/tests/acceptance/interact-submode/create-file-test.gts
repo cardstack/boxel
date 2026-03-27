@@ -7,6 +7,7 @@ import { baseRealm, specRef } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
@@ -15,6 +16,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   type TestContextWithSave,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -36,7 +38,7 @@ const testRealmFiles: Record<string, any> = {
       static displayName = 'Pet';
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span data-test-pet><@fields.title /></span>
+          <span data-test-pet><@fields.cardTitle /></span>
         </template>
       }
     }
@@ -61,8 +63,8 @@ const testRealmFiles: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Person',
-        description: 'Spec for Person',
+        cardTitle: 'Person',
+        cardDescription: 'Spec for Person',
         specType: 'card',
         ref: { module: `../person`, name: 'Person' },
       },
@@ -71,7 +73,7 @@ const testRealmFiles: Record<string, any> = {
   },
   'Pet/mango.json': {
     data: {
-      attributes: { title: 'Mango' },
+      attributes: { cardTitle: 'Mango' },
       meta: {
         adoptsFrom: {
           module: `../pet`,
@@ -82,7 +84,7 @@ const testRealmFiles: Record<string, any> = {
   },
   'Pet/van-gogh.json': {
     data: {
-      attributes: { title: 'Van Gogh' },
+      attributes: { cardTitle: 'Van Gogh' },
       meta: {
         adoptsFrom: {
           module: `../pet`,
@@ -93,7 +95,7 @@ const testRealmFiles: Record<string, any> = {
   },
   'Person/hassan.json': {
     data: {
-      attributes: { title: 'Hassan' },
+      attributes: { cardTitle: 'Hassan' },
       relationships: {
         pet: {
           links: {
@@ -111,7 +113,7 @@ const testRealmFiles: Record<string, any> = {
   },
   'Author/hassan.json': {
     data: {
-      attributes: { title: 'Hassan' },
+      attributes: { cardTitle: 'Hassan' },
       relationships: {
         pet: {
           links: {
@@ -129,7 +131,7 @@ const testRealmFiles: Record<string, any> = {
   },
   'Author/tom.json': {
     data: {
-      attributes: { title: 'Tom' },
+      attributes: { cardTitle: 'Tom' },
       relationships: {
         pet: {
           links: {
@@ -171,7 +173,7 @@ const userRealmFiles: Record<string, any> = {
   'Garden/edible-garden.json': {
     data: {
       attributes: {
-        title: 'Edible Plant Garden',
+        cardTitle: 'Edible Plant Garden',
       },
       relationships: {
         'plants.0': {
@@ -207,6 +209,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -220,26 +223,28 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     let { CardsGrid } = cardsGrid;
 
-    await Promise.all([
-      setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          ...testRealmFiles,
-        },
-      }),
-      setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: userRealm,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          ...userRealmFiles,
-        },
-      }),
-    ]);
+    await withCachedRealmSetup(async () => {
+      await Promise.all([
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            ...testRealmFiles,
+          },
+        }),
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: userRealm,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            ...userRealmFiles,
+          },
+        }),
+      ]);
+    });
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -309,7 +314,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-select="${testRealmURL}spec/person"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 0, 1);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
@@ -341,7 +346,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
 
     await click('[data-test-new-file-button]');
     await click('[data-test-boxel-menu-item-text="Choose a card type..."]');
-    await click(`[data-test-select="${testRealmURL}spec/person"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
     await click('[data-test-card-catalog-go-button]');
     await assertCardCreated(assert, 'Person', testRealmURL, 1, 2);
     assert

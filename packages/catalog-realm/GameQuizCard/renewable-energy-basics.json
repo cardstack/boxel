@@ -11,9 +11,9 @@
       "subject": "Environmental Science & Sustainability",
       "cardInfo": {
         "notes": "An introductory quiz suitable for students beginning to explore environmental science and clean energy technologies.",
-        "title": "Green Energy Quiz",
-        "description": "Learn and test your understanding of renewable energy sources, their benefits, and their role in sustainable development.",
-        "thumbnailURL": null
+        "name": "Green Energy Quiz",
+        "summary": "Learn and test your understanding of renewable energy sources, their benefits, and their role in sustainable development.",
+        "cardThumbnailURL": null
       },
       "gameScore": 0,
       "quizTitle": "Renewable Energy Fundamentals",

@@ -34,8 +34,8 @@
           "value": "linkedin.com/in/alexmartinez"
         }
       ],
-      "description": "Manages accounts in the Seattle region",
-      "thumbnailURL": "https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg"
+      "cardDescription": "Manages accounts in the Seattle region",
+      "cardThumbnailURL": "https://images.pexels.com/photos/2379005/pexels-photo-2379005.jpeg"
     },
     "relationships": {
       "crmApp": {

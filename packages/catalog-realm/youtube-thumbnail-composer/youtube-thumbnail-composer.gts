@@ -468,7 +468,7 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${this.args.model?.title || 'youtube-thumbnail'}.png`;
+      link.download = `${this.args.model?.cardTitle || 'youtube-thumbnail'}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2239,7 +2239,7 @@ export class YouTubeThumbnailComposer extends CardDef {
   static icon = ImageIcon;
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field width = contains(NumberField);
   @field height = contains(NumberField);
   @field background = contains(BackgroundElement);

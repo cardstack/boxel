@@ -362,7 +362,7 @@ const ButtonComponent: TemplateOnlyComponent<Signature> = <template>
         --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
         --boxel-button-min-height: var(--boxel-button-xs);
         --boxel-button-min-width: 5rem;
-        --boxel-button-loading-icon-size: var(--boxel-icon-xxs);
+        --boxel-button-loading-icon-size: var(--boxel-icon-2xs);
         --boxel-button-font: 700 var(--boxel-font-xs);
         --boxel-button-letter-spacing: var(--boxel-lsp-lg);
       }

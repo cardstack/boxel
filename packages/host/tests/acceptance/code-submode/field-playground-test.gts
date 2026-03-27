@@ -9,12 +9,14 @@ import ENV from '@cardstack/host/config/environment';
 import {
   assertMessages,
   percySnapshot,
+  setupRealmCacheTeardown,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAuthEndpoints,
   setupLocalIndexing,
   setupUserSubscription,
   testRealmURL,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -47,7 +49,7 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
     @field bio = contains(MarkdownField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -56,7 +58,7 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
     <template>
       <article>
         <header>
-          <h1 data-test-author-title><@fields.title /></h1>
+          <h1 data-test-author-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-author-bio><@fields.bio /></div>
       </article>
@@ -99,7 +101,7 @@ const authorCard = `import { contains, field, CardDef, Component, FieldDef } fro
 }`;
 
 const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import DatetimeField from 'https://cardstack.com/base/datetime';
+  import DateTimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
   import { Author } from './author';
@@ -112,14 +114,14 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
   export class Comment extends FieldDef {
     static displayName = 'Comment';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
     @field name = contains(StringField);
     @field message = contains(StringField);
 
     static embedded = class Embedded extends Component<typeof this> {
       <template>
         <div data-test-embedded-comment>
-          <h4 data-test-embedded-comment-title><@fields.title /></h4>
+          <h4 data-test-embedded-comment-title><@fields.cardTitle /></h4>
           <p><@fields.message /> - by <@fields.name /></p>
         </div>
       </template>
@@ -127,7 +129,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
     static fitted = class Fitted extends Component<typeof this> {
       <template>
-        <div data-test-fitted-comment><@fields.title /> - by <@fields.name /></div>
+        <div data-test-fitted-comment><@fields.cardTitle /> - by <@fields.name /></div>
       </template>
     }
   }
@@ -154,8 +156,8 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
-    @field title = contains(StringField)
-    @field publishDate = contains(DatetimeField);
+    @field cardTitle = contains(StringField)
+    @field publishDate = contains(DateTimeField);
     @field author = linksTo(Author);
     @field comments = containsMany(Comment);
     @field localComments = containsMany(LocalCommentField);
@@ -177,7 +179,7 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
     <template>
       <article>
         <header>
-          <h1 data-test-post-title><@fields.title /></h1>
+          <h1 data-test-post-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-byline><@fields.author /></div>
         <div data-test-post-body><@fields.body /></div>
@@ -194,11 +196,11 @@ const blogPostCard = `import { contains, containsMany, field, linksTo, CardDef, 
 const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
   export class ToyField extends FieldDef {
     static displayName = 'Toy';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
   }
   export class TreatField extends FieldDef {
     static displayName = 'Treat';
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
   }
   export class PetCard extends CardDef {
     static displayName = 'Pet';
@@ -220,10 +222,10 @@ const commentSpec2 = {
       specType: 'field',
       containedExamples: [
         {
-          title: 'Spec 2 Example 1',
+          cardTitle: 'Spec 2 Example 1',
         },
       ],
-      title: 'Comment spec II',
+      cardTitle: 'Comment spec II',
     },
     meta: {
       fields: {
@@ -255,17 +257,17 @@ const commentSpec1 = {
       specType: 'field',
       containedExamples: [
         {
-          title: 'Terrible product',
+          cardTitle: 'Terrible product',
           name: 'Marco',
           message: 'I would give 0 stars if I could. Do not buy!',
         },
         {
-          title: 'Needs better packaging',
+          cardTitle: 'Needs better packaging',
           name: 'Harry',
           message: 'Arrived broken',
         },
       ],
-      title: 'Comment spec',
+      cardTitle: 'Comment spec',
     },
     meta: {
       fields: {
@@ -297,6 +299,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     let realm: Realm;
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
+    setupRealmCacheTeardown(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -314,175 +317,180 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       setupUserSubscription();
       setupAuthEndpoints();
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author.gts': authorCard,
-          'blog-post.gts': blogPostCard,
-          'pet.gts': petCard,
-          'Author/jane-doe.json': {
-            data: {
-              attributes: {
-                firstName: 'Jane',
-                lastName: 'Doe',
-                bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}author`,
-                  name: 'Author',
+      ({ realm } = await withCachedRealmSetup(async () =>
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author.gts': authorCard,
+            'blog-post.gts': blogPostCard,
+            'pet.gts': petCard,
+            'Author/jane-doe.json': {
+              data: {
+                attributes: {
+                  firstName: 'Jane',
+                  lastName: 'Doe',
+                  bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
                 },
-              },
-            },
-          },
-          'BlogPost/remote-work.json': {
-            data: {
-              attributes: {
-                title: 'The Ultimate Guide to Remote Work',
-                description:
-                  'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
+            },
+            'BlogPost/remote-work.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'The Ultimate Guide to Remote Work',
+                  cardDescription:
+                    'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
                 },
               },
             },
-          },
-          'Spec/comment-alt.json': clone(commentSpec2),
-          'Spec/comment-main.json': clone(commentSpec1),
-          'Spec/full-name.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'FullNameField',
-                  module: '../author',
+            'Spec/comment-alt.json': clone(commentSpec2),
+            'Spec/comment-main.json': clone(commentSpec1),
+            'Spec/full-name.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'FullNameField',
+                    module: '../author',
+                  },
+                  specType: 'field',
+                  containedExamples: [],
+                  cardTitle: 'FullNameField spec',
                 },
-                specType: 'field',
-                containedExamples: [],
-                title: 'FullNameField spec',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'Spec/contact-info.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'ContactInfo',
-                  module: '../blog-post',
-                },
-                specType: 'field',
-                containedExamples: [
-                  { email: 'marcelius@email.com' },
-                  { email: 'lilian@email.com' },
-                  { email: 'susie@email.com' },
-                ],
-                title: 'Contact Info',
-              },
-              meta: {
-                fields: {
+            'Spec/contact-info.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'ContactInfo',
+                    module: '../blog-post',
+                  },
+                  specType: 'field',
                   containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'ContactInfo',
+                    { email: 'marcelius@email.com' },
+                    { email: 'lilian@email.com' },
+                    { email: 'susie@email.com' },
+                  ],
+                  cardTitle: 'Contact Info',
+                },
+                meta: {
+                  fields: {
+                    containedExamples: [
+                      {
+                        adoptsFrom: {
+                          module: '../blog-post',
+                          name: 'ContactInfo',
+                        },
                       },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'ContactInfo',
+                      {
+                        adoptsFrom: {
+                          module: '../blog-post',
+                          name: 'ContactInfo',
+                        },
                       },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../blog-post',
-                        name: 'ContactInfo',
+                      {
+                        adoptsFrom: {
+                          module: '../blog-post',
+                          name: 'ContactInfo',
+                        },
                       },
-                    },
+                    ],
+                  },
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
+                },
+              },
+            },
+            'Spec/toy.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'ToyField',
+                    module: '../pet',
+                  },
+                  specType: 'field',
+                  containedExamples: [
+                    { cardTitle: 'Tug rope' },
+                    { cardTitle: 'Lambchop' },
+                  ],
+                  cardTitle: 'Toy',
+                },
+                meta: {
+                  fields: {
+                    containedExamples: [
+                      {
+                        adoptsFrom: {
+                          module: '../pet',
+                          name: 'ToyField',
+                        },
+                      },
+                      {
+                        adoptsFrom: {
+                          module: '../pet',
+                          name: 'ToyField',
+                        },
+                      },
+                    ],
+                  },
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
+                },
+              },
+            },
+            'Pet/mango.json': {
+              data: {
+                attributes: {
+                  firstName: 'Mango',
+                  cardTitle: 'Mango',
+                  favoriteToys: [
+                    { cardTitle: 'Tug rope' },
+                    { cardTitle: 'Lambchop' },
                   ],
                 },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}pet`,
+                    name: 'PetCard',
+                  },
                 },
               },
             },
           },
-          'Spec/toy.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'ToyField',
-                  module: '../pet',
-                },
-                specType: 'field',
-                containedExamples: [
-                  { title: 'Tug rope' },
-                  { title: 'Lambchop' },
-                ],
-                title: 'Toy',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../pet',
-                        name: 'ToyField',
-                      },
-                    },
-                    {
-                      adoptsFrom: {
-                        module: '../pet',
-                        name: 'ToyField',
-                      },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Pet/mango.json': {
-            data: {
-              attributes: {
-                firstName: 'Mango',
-                title: 'Mango',
-                favoriteToys: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}pet`,
-                  name: 'PetCard',
-                },
-              },
-            },
-          },
-        },
-      }));
+        }),
+      ));
       await realm.delete('Spec/comment-main.json');
       await realm.write('Spec/comment-main.json', JSON.stringify(commentSpec1));
       setRecentFiles([
@@ -750,7 +758,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       await toggleSpecPanel();
       assert
         .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
+          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="cardTitle"] input',
         )
         .hasValue('Needs better packaging');
       await click(
@@ -841,7 +849,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
       await createNewInstance();
       assert
-        .dom('[data-test-field-preview-card] [data-test-field="title"] input')
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="cardTitle"] input',
+        )
         .hasNoValue();
       selection =
         getPlaygroundSelections()?.[`${testRealmURL}blog-post/Comment`];
@@ -858,7 +868,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         .exists({ count: 3 });
       assert
         .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="2"] [data-test-field="title"] input',
+          '[data-test-contains-many="containedExamples"] [data-test-item="2"] [data-test-field="cardTitle"] input',
         )
         .hasNoValue();
 
@@ -994,7 +1004,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       const originalEmbeddedBlock = `    static embedded = class Embedded extends Component<typeof this> {
       <template>
         <div data-test-embedded-comment>
-          <h4 data-test-embedded-comment-title><@fields.title /></h4>
+          <h4 data-test-embedded-comment-title><@fields.cardTitle /></h4>
           <p><@fields.message /> - by <@fields.name /></p>
         </div>
       </template>
@@ -1031,7 +1041,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can request AI assistant to fill in sample data', async function (assert) {
       const prompt = `Fill in sample data for this example on the card's spec.`;
-      const menuItem = 'Fill in sample data with AI';
+      const menuItem = 'Fill in Sample Data with AI';
       const commandMessage = {
         from: 'testuser',
         message: prompt,
@@ -1082,6 +1092,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
+    setupRealmCacheTeardown(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -1095,85 +1106,87 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         name: 'room-test',
       });
       setupUserSubscription();
-      setupAuthEndpoints();
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: personalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author.gts': authorCard,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+      ({ realm } = await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: personalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author.gts': authorCard,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
           },
-        },
-      });
+        });
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: additionalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author.gts': authorCard,
-          'pet.gts': petCard,
-          'Spec/toy.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'ToyField',
-                  module: '../pet',
+        return setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: additionalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author.gts': authorCard,
+            'pet.gts': petCard,
+            'Spec/toy.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'ToyField',
+                    module: '../pet',
+                  },
+                  specType: 'field',
+                  containedExamples: [{ cardTitle: 'Tug rope' }],
+                  cardTitle: 'Toy',
                 },
-                specType: 'field',
-                containedExamples: [{ title: 'Tug rope' }],
-                title: 'Toy',
-              },
-              meta: {
-                fields: {
-                  containedExamples: [
-                    {
-                      adoptsFrom: {
-                        module: '../pet',
-                        name: 'ToyField',
+                meta: {
+                  fields: {
+                    containedExamples: [
+                      {
+                        adoptsFrom: {
+                          module: '../pet',
+                          name: 'ToyField',
+                        },
                       },
-                    },
-                  ],
-                },
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'Spec/full-name.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                ref: {
-                  name: 'FullNameField',
-                  module: '../author',
-                },
-                specType: 'field',
-                containedExamples: [],
-                title: 'FullNameField spec',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'https://cardstack.com/base/spec',
-                  name: 'Spec',
+                    ],
+                  },
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
                 },
               },
             },
+            'Spec/full-name.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  ref: {
+                    name: 'FullNameField',
+                    module: '../author',
+                  },
+                  specType: 'field',
+                  containedExamples: [],
+                  cardTitle: 'FullNameField spec',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/spec',
+                    name: 'Spec',
+                  },
+                },
+              },
+            },
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
           },
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
-          },
-        },
+        });
       }));
 
       setRealmPermissions({
@@ -1184,13 +1197,13 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
     test('can autogenerate new Spec and field instance (no preexisting Spec)', async function (assert) {
       let queryEngine = realm.realmIndexQueryEngine;
-      let { data: matching } = await queryEngine.search({
+      let { data: matching } = await queryEngine.searchCards({
         filter: {
           on: specRef,
           eq: {
             specType: 'field',
             isField: true,
-            title: 'Quote',
+            cardTitle: 'Quote',
             moduleHref: `${additionalRealmURL}author`,
           },
         },
@@ -1206,13 +1219,13 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assertFieldExists(assert, 'edit');
       assert.dom('[data-test-field="quote"] input').hasNoValue();
 
-      ({ data: matching } = await queryEngine.search({
+      ({ data: matching } = await queryEngine.searchCards({
         filter: {
           on: specRef,
           eq: {
             specType: 'field',
             isField: true,
-            title: 'Quote',
+            cardTitle: 'Quote',
             moduleHref: `${additionalRealmURL}author`,
           },
         },
@@ -1265,7 +1278,9 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
 
       await createNewInstance();
       assert
-        .dom('[data-test-field-preview-card] [data-test-field="title"] input')
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="cardTitle"] input',
+        )
         .hasNoValue();
       selection =
         getPlaygroundSelections()?.[`${additionalRealmURL}pet/ToyField`];
@@ -1282,7 +1297,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         .exists({ count: 2 });
       assert
         .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
+          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="cardTitle"] input',
         )
         .hasNoValue();
 

@@ -12,14 +12,14 @@
       "tags": [
         "combat"
       ],
-      "title": "Temporal Paradox",
+      "cardTitle": "Temporal Paradox",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
-      "description": "Your machine misfires, stranding you with knowledge from the future.",
+      "cardDescription": "Your machine misfires, stranding you with knowledge from the future.",
       "imageStyles": [
         "time-relevant"
       ]

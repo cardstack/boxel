@@ -5,15 +5,12 @@ import {
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
+import { prerenderRenderTimeoutMs } from './prerender-constants';
 
 import type { Page } from 'puppeteer';
 
 const log = logger('prerenderer');
-const DEFAULT_CARD_RENDER_TIMEOUT_MS = 30_000;
-
-export const cardRenderTimeout = Number(
-  process.env.RENDER_TIMEOUT_MS ?? DEFAULT_CARD_RENDER_TIMEOUT_MS,
-);
+export const cardRenderTimeout = prerenderRenderTimeoutMs;
 export const renderTimeoutMs = cardRenderTimeout;
 
 export type RenderStatus = 'ready' | 'error' | 'unusable';
@@ -31,6 +28,7 @@ export interface CaptureOptions {
   expectedId?: string;
   expectedNonce?: string;
   simulateTimeoutMs?: number;
+  timeoutMs?: number;
 }
 
 export interface ModuleCapture {
@@ -40,10 +38,23 @@ export interface ModuleCapture {
   nonce?: string;
 }
 
+export interface FileExtractCapture {
+  status: 'ready' | 'error';
+  value: string;
+  id?: string;
+  nonce?: string;
+}
+
+type TransitionParam =
+  | string
+  | {
+      queryParams?: Record<string, string>;
+    };
+
 export async function transitionTo(
   page: Page,
   routeName: string,
-  ...params: string[]
+  ...params: TransitionParam[]
 ): Promise<void> {
   await page.evaluate(
     (routeName, params) => {
@@ -54,21 +65,55 @@ export async function transitionTo(
   );
 }
 
+export function buildCommandRunnerURL(
+  page: Page,
+  nonce: string,
+  requestId: string,
+): string {
+  let origin = page.url();
+  try {
+    origin = new URL(origin).origin;
+  } catch (error) {
+    let detail =
+      error instanceof Error ? error.message : 'Unknown URL parsing error';
+    throw new Error(
+      `Could not build command-runner URL from page URL "${origin}": ${detail}`,
+    );
+  }
+  return `${origin}/command-runner/${encodeURIComponent(requestId)}/${encodeURIComponent(
+    nonce,
+  )}`;
+}
+
 export async function renderHTML(
   page: Page,
   format: string,
   ancestorLevel: number,
   opts?: CaptureOptions,
 ): Promise<string | RenderError> {
+  log.debug(
+    `renderHTML start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
+  );
   await transitionTo(page, 'render.html', format, String(ancestorLevel));
+  await waitForRoutePathSuffix(page, `/html/${format}/${ancestorLevel}`, opts);
+  await waitForPrerenderSettle(page);
+  log.debug(
+    `renderHTML capture format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
+  );
   let result = await captureResult(
     page,
     ['isolated', 'atom', 'head'].includes(format) ? 'innerHTML' : 'outerHTML',
     opts,
   );
+  log.debug(
+    `renderHTML captured format=${format} ancestorLevel=${ancestorLevel} status=${result.status} id=${result.id} nonce=${result.nonce}`,
+  );
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.html');
   }
+  log.debug(
+    `renderHTML success format=${format} ancestorLevel=${ancestorLevel} length=${result.value.length}`,
+  );
   return cleanCapturedHTML(result.value);
 }
 
@@ -76,11 +121,19 @@ export async function renderIcon(
   page: Page,
   opts?: CaptureOptions,
 ): Promise<string | RenderError> {
+  log.debug(`renderIcon start url=${page.url()}`);
   await transitionTo(page, 'render.icon');
+  await waitForRoutePathSuffix(page, '/icon', opts);
+  await waitForPrerenderSettle(page);
+  log.debug(`renderIcon capture url=${page.url()}`);
   let result = await captureResult(page, 'outerHTML', opts);
+  log.debug(
+    `renderIcon captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
+  );
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.icon');
   }
+  log.debug(`renderIcon success length=${result.value.length}`);
   return cleanCapturedHTML(result.value);
 }
 
@@ -88,8 +141,15 @@ export async function renderMeta(
   page: Page,
   opts?: CaptureOptions,
 ): Promise<PrerenderMeta | RenderError> {
+  log.debug(`renderMeta start url=${page.url()}`);
   await transitionTo(page, 'render.meta');
+  await waitForRoutePathSuffix(page, '/meta', opts);
+  await waitForPrerenderSettle(page);
+  log.debug(`renderMeta capture url=${page.url()}`);
   let result = await captureResult(page, 'textContent', opts);
+  log.debug(
+    `renderMeta captured status=${result.status} id=${result.id} nonce=${result.nonce}`,
+  );
   if (result.status === 'error' || result.status === 'unusable') {
     return renderCaptureToError(page, result, 'render.meta');
   }
@@ -128,6 +188,192 @@ export async function renderMeta(
   }
 }
 
+async function waitForRoutePathSuffix(
+  page: Page,
+  suffix: string,
+  opts?: CaptureOptions,
+): Promise<void> {
+  let waitTimeoutMs = effectiveRouteWaitTimeoutMs(opts);
+  log.debug(`waitForRoutePathSuffix start suffix=${suffix} url=${page.url()}`);
+  await page.waitForFunction(
+    (
+      targetSuffix: string,
+      expectedId: string | null,
+      expectedNonce: string | null,
+    ) => {
+      if (window.location.pathname.endsWith(targetSuffix)) {
+        return true;
+      }
+
+      // If the render has already entered a terminal state (error/unusable),
+      // do not wait for a route suffix that may never arrive.
+      let elements = Array.from(
+        document.querySelectorAll('[data-prerender]'),
+      ) as HTMLElement[];
+      if (!elements.length) {
+        let errorElement = document.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        if (!errorElement) {
+          return false;
+        }
+        let raw = errorElement.textContent ?? errorElement.innerHTML ?? '';
+        return raw.trim().length > 0;
+      }
+      for (let element of elements) {
+        let status = element.dataset.prerenderStatus ?? '';
+        let errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let errorText = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        let isTerminal =
+          status === 'error' || status === 'unusable' || errorText.length > 0;
+        if (!isTerminal) {
+          continue;
+        }
+        if (
+          expectedId &&
+          element.dataset.prerenderId &&
+          element.dataset.prerenderId !== expectedId
+        ) {
+          continue;
+        }
+        if (
+          expectedNonce &&
+          element.dataset.prerenderNonce &&
+          element.dataset.prerenderNonce !== expectedNonce
+        ) {
+          continue;
+        }
+        return true;
+      }
+      return false;
+    },
+    { timeout: waitTimeoutMs },
+    suffix,
+    opts?.expectedId ?? null,
+    opts?.expectedNonce ?? null,
+  );
+  let matchedByPath = false;
+  try {
+    matchedByPath = new URL(page.url()).pathname.endsWith(suffix);
+  } catch {
+    matchedByPath = false;
+  }
+  log.debug(
+    `waitForRoutePathSuffix done suffix=${suffix} url=${page.url()} matchedByPath=${matchedByPath}`,
+  );
+}
+
+function effectiveRouteWaitTimeoutMs(opts?: CaptureOptions): number {
+  if (typeof opts?.timeoutMs !== 'number') {
+    return cardRenderTimeout;
+  }
+
+  // Keep the inner Puppeteer wait close to the caller timeout so it cannot
+  // linger for the full cardRenderTimeout after withTimeout resolves, while
+  // still allowing withTimeout to win the race and produce our canonical error.
+  let withGrace = Math.ceil(opts.timeoutMs + 250);
+  return Math.max(1, Math.min(cardRenderTimeout, withGrace));
+}
+
+async function waitForPrerenderSettle(page: Page): Promise<void> {
+  log.debug(`waitForPrerenderSettle start url=${page.url()}`);
+  let settleState = await page.evaluate(async () => {
+    let hasTerminalPrerenderState = () => {
+      let elements = Array.from(
+        document.querySelectorAll('[data-prerender]'),
+      ) as HTMLElement[];
+      for (let element of elements) {
+        let status = element.dataset.prerenderStatus ?? '';
+        if (status === 'error' || status === 'unusable') {
+          return true;
+        }
+        let errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let errorText = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        if (errorText.length > 0) {
+          return true;
+        }
+      }
+      let detachedErrorElement = document.querySelector(
+        '[data-prerender-error]',
+      ) as HTMLElement | null;
+      if (!detachedErrorElement) {
+        return false;
+      }
+      let detachedErrorText = (
+        detachedErrorElement.textContent ??
+        detachedErrorElement.innerHTML ??
+        ''
+      ).trim();
+      return detachedErrorText.length > 0;
+    };
+
+    if (hasTerminalPrerenderState()) {
+      return 'terminal-before-settle';
+    }
+
+    let settle = (globalThis as any).__waitForRenderLoadStability;
+    if (typeof settle === 'function') {
+      let stopPolling = false;
+      let settleOutcome = settle()
+        .then(() => ({ type: 'settled' as const }))
+        .catch((error: unknown) => ({
+          type: 'settle-rejected' as const,
+          error,
+        }))
+        .finally(() => {
+          stopPolling = true;
+        });
+      let waitForTerminal = async () => {
+        while (!stopPolling) {
+          if (hasTerminalPrerenderState()) {
+            return 'terminal-during-settle';
+          }
+          await new Promise<void>((resolve) =>
+            requestAnimationFrame(() => resolve()),
+          );
+        }
+        return 'polling-stopped';
+      };
+
+      let winner = await Promise.race([settleOutcome, waitForTerminal()]);
+
+      if (winner === 'terminal-during-settle') {
+        return 'terminal-during-settle';
+      }
+
+      let finalOutcome = winner;
+      if (winner === 'polling-stopped') {
+        finalOutcome = await settleOutcome;
+      }
+
+      if (finalOutcome.type === 'settled') {
+        return 'settled';
+      }
+
+      if (hasTerminalPrerenderState()) {
+        return 'settle-rejected-terminal';
+      }
+      throw finalOutcome.error;
+    }
+    return 'missing-settle-hook';
+  });
+  log.debug(
+    `waitForPrerenderSettle done url=${page.url()} state=${settleState}`,
+  );
+}
+
 function renderCaptureToError(
   page: Page,
   capture: RenderCapture,
@@ -162,10 +408,11 @@ function buildInvalidRenderResponseError(
   try {
     let pathname = new URL(page.url()).pathname;
     let match = /\/render\/([^/]+)\//.exec(pathname);
-    id = match?.[1] ?? null;
+    id = match?.[1] ? decodeURIComponent(match[1]) : null;
   } catch {
     id = null;
   }
+  let deps = fallbackRenderDeps(id);
   return {
     type: 'instance-error',
     error: {
@@ -174,9 +421,23 @@ function buildInvalidRenderResponseError(
       title: options?.title ?? 'Invalid render response',
       message,
       additionalErrors: null,
+      deps,
     },
     ...(options?.evict ? { evict: true } : {}),
   };
+}
+
+function fallbackRenderDeps(id: string | null): string[] {
+  if (!id) {
+    return [];
+  }
+  let deps = new Set<string>([id]);
+  if (id.endsWith('.json')) {
+    deps.add(id.replace(/\.json$/, ''));
+  } else {
+    deps.add(`${id}.json`);
+  }
+  return [...deps];
 }
 
 export function buildInvalidModuleResponseError(
@@ -312,6 +573,126 @@ export async function captureModule(
   }
 
   return capture;
+}
+
+export async function captureFileExtract(
+  page: Page,
+  opts?: CaptureOptions,
+): Promise<FileExtractCapture | RenderError> {
+  try {
+    await page.waitForFunction(
+      (expectedId: string | null, expectedNonce: string | null) => {
+        let container = document.querySelector(
+          '[data-prerender-file-extract]',
+        ) as HTMLElement | null;
+        if (!container) {
+          return false;
+        }
+        let status = container.dataset.prerenderFileExtractStatus ?? '';
+        let id = container.dataset.prerenderFileExtractId ?? null;
+        let nonce = container.dataset.prerenderFileExtractNonce ?? null;
+        if (expectedId && id !== expectedId) {
+          return false;
+        }
+        if (expectedNonce && nonce !== expectedNonce) {
+          return false;
+        }
+        if (!status) {
+          return false;
+        }
+        if (!id || !nonce) {
+          return false;
+        }
+        let pre = container.querySelector('pre');
+        let value = pre?.textContent ?? '';
+        return value.trim().length > 0;
+      },
+      { timeout: cardRenderTimeout },
+      opts?.expectedId ?? null,
+      opts?.expectedNonce ?? null,
+    );
+  } catch (_e) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      'file extract timed out waiting for output',
+      { title: 'File extract capture timeout', evict: true },
+    );
+  }
+
+  let capture = await page.evaluate(() => {
+    let container = document.querySelector(
+      '[data-prerender-file-extract]',
+    ) as HTMLElement | null;
+    if (!container) {
+      return null;
+    }
+    let pre = container.querySelector('pre');
+    let value = pre?.textContent ?? '';
+    let status = (container.dataset.prerenderFileExtractStatus ?? 'ready') as
+      | 'ready'
+      | 'error';
+    return {
+      status,
+      value,
+      id: container.dataset.prerenderFileExtractId ?? undefined,
+      nonce: container.dataset.prerenderFileExtractNonce ?? undefined,
+    } satisfies FileExtractCapture;
+  });
+
+  if (!capture) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      'file extract did not produce output',
+      { title: 'Invalid file extract response' },
+    );
+  }
+
+  if (opts?.expectedId && capture.id !== opts.expectedId) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      `file extract captured stale output for ${capture.id ?? 'unknown id'} (expected ${opts.expectedId})`,
+      { title: 'Stale file extract response', evict: true },
+    );
+  }
+  if (opts?.expectedNonce && capture.nonce !== opts.expectedNonce) {
+    return buildInvalidFileExtractResponseError(
+      page,
+      `file extract captured stale nonce ${capture.nonce ?? 'unknown'} (expected ${opts.expectedNonce})`,
+      { title: 'Stale file extract response', evict: true },
+    );
+  }
+
+  if (opts?.simulateTimeoutMs) {
+    await delay(opts.simulateTimeoutMs);
+  }
+
+  return capture;
+}
+
+export function buildInvalidFileExtractResponseError(
+  page: Page,
+  message: string,
+  options?: { title?: string; evict?: boolean },
+): RenderError {
+  let id: string | null = null;
+  try {
+    let pathname = new URL(page.url()).pathname;
+    let match = /\/render\/([^/]+)\//.exec(pathname);
+    id = match?.[1] ? decodeURIComponent(match[1]) : null;
+  } catch {
+    id = null;
+  }
+  return {
+    type: 'file-error',
+    error: {
+      id,
+      status: 500,
+      title: options?.title ?? 'Invalid file extract response',
+      message,
+      additionalErrors: null,
+    },
+    ...(options?.evict ? { evict: true } : {}),
+  };
 }
 
 // captureResult is only used by card prerenders. Cards surface their id/nonce
@@ -583,6 +964,24 @@ export async function captureResult(
             undefined,
         } as RenderCapture;
       } else {
+        if (capture === 'innerHTML') {
+          return {
+            status: finalStatus,
+            value: resolvedElement.innerHTML ?? '',
+            alive,
+            id: resolvedElement.dataset.prerenderId ?? undefined,
+            nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
+          } as RenderCapture;
+        }
+        if (capture === 'textContent') {
+          return {
+            status: finalStatus,
+            value: resolvedElement.textContent ?? '',
+            alive,
+            id: resolvedElement.dataset.prerenderId ?? undefined,
+            nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
+          } as RenderCapture;
+        }
         const firstChild = resolvedElement.children[0] as
           | (HTMLElement & {
               textContent: string;
@@ -591,17 +990,28 @@ export async function captureResult(
             })
           | undefined;
         if (!firstChild) {
+          let cardId = resolvedElement.dataset.prerenderId ?? null;
+          let deps = cardId
+            ? Array.from(
+                new Set(
+                  cardId.endsWith('.json')
+                    ? [cardId, cardId.replace(/\.json$/, '')]
+                    : [cardId, `${cardId}.json`],
+                ),
+              )
+            : [];
           return {
             status: 'error',
             value: JSON.stringify({
               type: 'instance-error',
               error: {
-                id: resolvedElement.dataset.prerenderId ?? null,
+                id: cardId,
                 status: 500,
                 title: 'Invalid render response',
                 message:
                   '[data-prerender] has no child element to capture (render produced no root element)',
                 additionalErrors: null,
+                deps,
               },
             }),
             alive,
@@ -652,35 +1062,47 @@ export async function withTimeout<T>(
     let [_a, _b, encodedId] = url.pathname.split('/');
     let id = encodedId ? decodeURIComponent(encodedId) : undefined;
 
-    let dom = await page.evaluate(() => {
-      let el = document.querySelector('[data-prerender]');
-      if (el) {
-        return el.outerHTML;
-      }
-      let err = document.querySelector('[data-prerender-error]');
-      return err?.outerHTML ?? null;
-    });
-    let docsInFlight = await page.evaluate(() => {
+    // Capture diagnostics only if the page is still alive; timeouts can close the target.
+    let dom: string | null = null;
+    let docsInFlight: number | null = null;
+    let timerSummary: string | null = null;
+    if (!page.isClosed()) {
       try {
-        return (globalThis as any).__docsInFlight();
-      } catch (error) {
-        return null;
-      }
-    });
-    let timerSummary: string | null = await page.evaluate(() => {
-      try {
-        let summary = (globalThis as any).__boxelRenderTimerSummary;
-        if (typeof summary === 'function') {
-          return summary();
-        }
-        if (typeof summary === 'string') {
-          return summary;
-        }
+        dom = await page.evaluate(() => {
+          let el = document.querySelector('[data-prerender]');
+          if (el) {
+            return el.outerHTML;
+          }
+          let err = document.querySelector('[data-prerender-error]');
+          return err?.outerHTML ?? null;
+        });
+        docsInFlight = await page.evaluate(() => {
+          try {
+            return (globalThis as any).__docsInFlight();
+          } catch (error) {
+            return null;
+          }
+        });
+        timerSummary = await page.evaluate(() => {
+          try {
+            let summary = (globalThis as any).__boxelRenderTimerSummary;
+            if (typeof summary === 'function') {
+              return summary();
+            }
+            if (typeof summary === 'string') {
+              return summary;
+            }
+          } catch {
+            return null;
+          }
+          return null;
+        });
       } catch {
-        return null;
+        dom = null;
+        docsInFlight = null;
+        timerSummary = null;
       }
-      return null;
-    });
+    }
     log.warn(
       `render of ${id} timed out with DOM:\n${dom?.trim()}\nDocs in flight: ${docsInFlight}`,
     );

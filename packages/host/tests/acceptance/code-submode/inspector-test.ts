@@ -33,8 +33,10 @@ import { CodeModePanelHeights } from '@cardstack/host/utils/local-storage-keys';
 import {
   elementIsVisible,
   getMonacoContent,
+  makeMinimalPng,
   percySnapshot,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -44,6 +46,7 @@ import {
   setupUserSubscription,
   type TestContextWithSave,
   setMonacoContent,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -97,7 +100,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -109,7 +112,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -130,7 +133,7 @@ const petCardSource = `
   export class Pet extends CardDef {
     static displayName = 'Pet';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -167,6 +170,8 @@ const employeeCardSource = `
     };
   }
 `;
+
+const erroringModuleSource = `throw new Error('boom');`;
 
 const inThisFileSource = `
   import {
@@ -245,7 +250,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -255,7 +260,7 @@ const friendCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -383,6 +388,24 @@ const reExportSource = `
   export { default as Date } from 'https://cardstack.com/base/date';
 `;
 
+const fileDefSource = `
+  import { FileDef } from 'https://cardstack.com/base/file-api';
+  import {
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class CustomFileDef extends FileDef {
+    static displayName = 'custom file';
+    @field customTag = contains(StringField);
+  }
+`;
+
+const pngDefModuleSource = `
+  export { PngDef } from 'https://cardstack.com/base/png-image-def';
+`;
+
 const localInheritSource = `
   import {
     contains,
@@ -422,6 +445,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -446,133 +470,141 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
-      realmURL: testRealmURL2,
-    });
-    ({ adapter } = await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'index.gts': indexCardSource,
-        'pet-person.gts': personCardSource,
-        'person.gts': personCardSource,
-        'pet.gts': petCardSource,
-        'friend.gts': friendCardSource,
-        'employee.gts': employeeCardSource,
-        'in-this-file.gts': inThisFileSource,
-        'exports.gts': exportsSource,
-        'special-exports.gts': specialExportsSource,
-        'imports.gts': importsSource,
-        're-export.gts': reExportSource,
-        'local-inherit.gts': localInheritSource,
-        'command-module.gts': commandModuleSource,
-        'empty-file.gts': '',
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+    ({ adapter } = await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...realmAFiles },
+        realmURL: testRealmURL2,
+      });
+      return setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'index.gts': indexCardSource,
+          'pet-person.gts': personCardSource,
+          'person.gts': personCardSource,
+          'pet.gts': petCardSource,
+          'friend.gts': friendCardSource,
+          'employee.gts': employeeCardSource,
+          'in-this-file.gts': inThisFileSource,
+          'exports.gts': exportsSource,
+          'special-exports.gts': specialExportsSource,
+          'imports.gts': importsSource,
+          're-export.gts': reExportSource,
+          'local-inherit.gts': localInheritSource,
+          'file-def.gts': fileDefSource,
+          'png-def-module.gts': pngDefModuleSource,
+          'images/sample.png': makeMinimalPng(),
+          'images/logo.png': makeMinimalPng(2, 2),
+          'command-module.gts': commandModuleSource,
+          'erroring-module.gts': erroringModuleSource,
+          'empty-file.gts': '',
+          'sample-styles.css': 'body { color: red; }',
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'index.json': {
-          data: {
-            type: 'card',
-            attributes: {},
-            meta: {
-              adoptsFrom: {
-                module: './index',
-                name: 'Index',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'léame.md': 'hola mundo',
-        'readme.md': 'hello world',
-        'not-json.json': 'I am not JSON.',
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './index',
+                  name: 'Index',
+                },
               },
             },
           },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'léame.md': 'hola mundo',
+          'readme.md': 'hello world',
+          'not-json.json': 'I am not JSON.',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
               },
             },
           },
-        },
-        'Pet/vangogh.json': {
-          data: {
-            attributes: {
-              name: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
               },
             },
           },
+          'Pet/vangogh.json': {
+            data: {
+              attributes: {
+                name: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'z00.json': '{}',
+          'z01.json': '{}',
+          'z02.json': '{}',
+          'z03.json': '{}',
+          'z04.json': '{}',
+          'z05.json': '{}',
+          'z06.json': '{}',
+          'z07.json': '{}',
+          'z08.json': '{}',
+          'z09.json': '{}',
+          'z10.json': '{}',
+          'z11.json': '{}',
+          'z12.json': '{}',
+          'z13.json': '{}',
+          'z14.json': '{}',
+          'z15.json': '{}',
+          'z16.json': '{}',
+          'z17.json': '{}',
+          'z18.json': '{}',
+          'z19.json': '{}',
+          'zzz/zzz/file.json': '{}',
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
         },
-        'z00.json': '{}',
-        'z01.json': '{}',
-        'z02.json': '{}',
-        'z03.json': '{}',
-        'z04.json': '{}',
-        'z05.json': '{}',
-        'z06.json': '{}',
-        'z07.json': '{}',
-        'z08.json': '{}',
-        'z09.json': '{}',
-        'z10.json': '{}',
-        'z11.json': '{}',
-        'z12.json': '{}',
-        'z13.json': '{}',
-        'z14.json': '{}',
-        'z15.json': '{}',
-        'z16.json': '{}',
-        'z17.json': '{}',
-        'z18.json': '{}',
-        'z19.json': '{}',
-        'zzz/zzz/file.json': '{}',
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
+      });
     }));
 
     monacoService = getService('monaco-service');
@@ -729,12 +761,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'ExportedClass class',
       'ExportedClassInheritLocalClass class',
       'exportedFunction function',
-      'LocalCard card',
-      'ExportedCard card',
-      'ExportedCardInheritLocalCard card',
-      'LocalField field',
-      'ExportedField field',
-      'ExportedFieldInheritLocalField field',
+      'LocalCard card def',
+      'ExportedCard card def',
+      'ExportedCardInheritLocalCard card def',
+      'LocalField field def',
+      'ExportedField field def',
+      'ExportedFieldInheritLocalField field def',
       'default (DefaultClass) class',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
@@ -754,7 +786,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} card`);
+      .hasText(`${elementName} card def`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
@@ -777,7 +809,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} field`);
+      .hasText(`${elementName} field def`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert
@@ -1259,7 +1291,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codeSelection: elementName,
     });
-    let selected = 'AncestorCard2 card';
+    let selected = 'AncestorCard2 card def';
     await waitFor(`[data-test-clickable-definition-container]`);
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -1274,7 +1306,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codeSelection: elementName,
     });
-    selected = 'default (DefaultAncestorCard) card';
+    selected = 'default (DefaultAncestorCard) card def';
     await waitFor(`[data-test-clickable-definition-container]`);
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -1289,7 +1321,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codeSelection: elementName,
     });
-    selected = 'RenamedAncestorCard (AncestorCard) card';
+    selected = 'RenamedAncestorCard (AncestorCard) card def';
     await waitFor(`[data-test-clickable-definition-container]`);
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -1304,7 +1336,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codeSelection: elementName,
     });
-    selected = 'AncestorCard3 card';
+    selected = 'AncestorCard3 card def';
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
@@ -1318,7 +1350,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codeSelection: elementName,
     });
-    selected = 'ChildCard2 card';
+    selected = 'ChildCard2 card def';
     await waitFor(`[data-test-clickable-definition-container]`);
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -1333,7 +1365,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.operatorModeParametersMatch(currentURL(), {
       codeSelection: elementName,
     });
-    selected = 'AncestorField1 field';
+    selected = 'AncestorField1 field def';
     await click(`[data-test-clickable-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
@@ -1364,7 +1396,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} card`);
+      .hasText(`${elementName} card def`);
 
     //click normal field
     await visitOperatorMode(operatorModeState);
@@ -1381,7 +1413,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} field`);
+      .hasText(`${elementName} field def`);
 
     //click linksTo card
     await visitOperatorMode(operatorModeState);
@@ -1400,7 +1432,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} card`);
+      .hasText(`${elementName} card def`);
     //click linksTo card in the same file
     await visitOperatorMode(operatorModeState);
 
@@ -1417,7 +1449,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} card`);
+      .hasText(`${elementName} card def`);
 
     //click linksTo many card
     await click('[data-boxel-selector-item-text="ChildCard1"]');
@@ -1435,7 +1467,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} card`);
+      .hasText(`${elementName} card def`);
   });
 
   test('in-this-file panel displays re-exports', async function (assert) {
@@ -1449,7 +1481,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
-    let elementName = 'StrCard (StringField) field';
+    let elementName = 'StrCard (StringField) field def';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
@@ -1459,13 +1491,13 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
-      'StrCard (StringField) field',
-      'FDef (FieldDef) field',
-      'CardDef card',
-      'BDef base',
-      'default (NumberField) field',
-      'Human (Person) card',
-      'Date (default) field',
+      'StrCard (StringField) field def',
+      'FDef (FieldDef) field def',
+      'CardDef card def',
+      'BDef base def',
+      'default (NumberField) field def',
+      'Human (Person) card def',
+      'Date (default) field def',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -1483,7 +1515,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} base`);
+      .hasText(`${elementName} base def`);
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
     assert
@@ -1499,7 +1531,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`Human (${elementName}) card`);
+      .hasText(`Human (${elementName}) card def`);
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
     assert
@@ -1508,6 +1540,286 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-module-definition]').includesText('Card');
     assert.true(monacoService.getLineCursorOn()?.includes('Human'));
     assert.dom('[data-test-file-incompatibility-message]').doesNotExist();
+  });
+
+  test('"in-this-file" panel displays FileDef declarations with correct labeling', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}file-def.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 1 });
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText('CustomFileDef file def');
+
+    // clicking on a file def shows inheritance panel
+    let elementName = 'CustomFileDef';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} file def`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert
+      .dom('[data-test-inheritance-panel-header]')
+      .hasText('File Def Inheritance');
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert.dom('[data-test-definition-header]').includesText('File Definition');
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText('custom file');
+
+    // Inherit action should be available for exported file defs
+    assert
+      .dom('[data-test-action-button="Inherit"]')
+      .exists('Inherit action is shown for exported FileDef declarations');
+  });
+
+  test('Schema/Playground/Spec panes render for a focused FileDef declaration', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}file-def.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    // Select the FileDef declaration
+    let elementName = 'CustomFileDef';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+
+    // Schema pane should render with the adoption chain
+    await waitFor('[data-test-card-schema="custom file"]');
+    assert.dom('[data-test-card-schema="custom file"]').exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-card-schema="custom file"] [data-test-field-name="customTag"] [data-test-card-display-name="String"]`,
+      )
+      .exists('customTag field is shown in schema');
+
+    // The 3-pane tab header should be visible
+    assert
+      .dom('[data-test-module-inspector="card-or-field"]')
+      .exists('module inspector 3-pane view renders for FileDef');
+
+    // Switch to Playground pane - should not crash
+    await click('[data-test-module-inspector-view="preview"]');
+    assert
+      .dom('[data-test-active-module-inspector-view="preview"]')
+      .exists('playground pane renders for FileDef');
+
+    // CustomFileDef has no matching file instances, so "no instances" message should show
+    await waitFor('[data-test-playground-filedef-message]');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .includesText(
+        'No file instances found',
+        'shows no-instances message for FileDef with no matching files',
+      );
+    assert
+      .dom('[data-test-instance-chooser]')
+      .doesNotExist(
+        'instance chooser is not shown when there are no file instances',
+      );
+    assert
+      .dom('[data-test-playground-format-chooser]')
+      .doesNotExist(
+        'format chooser is not shown when there are no file instances',
+      );
+
+    // Switch to Spec pane - should not crash
+    await click('[data-test-module-inspector-view="spec"]');
+    assert
+      .dom('[data-test-active-module-inspector-view="spec"]')
+      .exists('spec pane renders for FileDef');
+
+    // Switch back to schema to verify it still works
+    await click('[data-test-module-inspector-view="schema"]');
+    assert
+      .dom('[data-test-active-module-inspector-view="schema"]')
+      .exists('schema pane renders for FileDef');
+    assert.dom('[data-test-card-schema="custom file"]').exists();
+  });
+
+  test('Playground displays file-meta instances for PngDef with preview, instance chooser, and format chooser', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+
+    // Select the PngDef declaration
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+
+    // Switch to Playground pane
+    await click('[data-test-module-inspector-view="preview"]');
+
+    // Wait for file-meta search to complete and render the instance chooser
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Core layout: preview + instance chooser + format chooser all present
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('playground panel renders');
+    assert
+      .dom('[data-test-instance-chooser]')
+      .exists('instance chooser is shown');
+    assert
+      .dom('[data-test-playground-format-chooser]')
+      .exists('format chooser is shown');
+    assert
+      .dom('[data-test-playground-filedef-message]')
+      .doesNotExist('no-instances message is NOT shown when instances exist');
+
+    // Instance title shows the filename
+    assert
+      .dom('[data-test-selected-item]')
+      .exists('selected item is displayed');
+    assert
+      .dom('[data-test-selected-item]')
+      .containsText('.png', 'selected item title contains filename');
+
+    // CardHeader shows the file type display name
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .exists('card header renders for file preview');
+
+    // Format chooser has the correct formats (isolated, embedded, fitted, atom — NO edit)
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="isolated"]',
+      )
+      .exists('isolated format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="embedded"]',
+      )
+      .exists('embedded format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="fitted"]',
+      )
+      .exists('fitted format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="atom"]',
+      )
+      .exists('atom format available');
+    assert
+      .dom(
+        '[data-test-playground-format-chooser] [data-test-format-chooser="edit"]',
+      )
+      .doesNotExist('edit format is NOT available for FileDef');
+
+    // Default format is isolated
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasClass('active', 'isolated is the default active format');
+  });
+
+  test('Playground FileDef format switching renders different formats', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Default: isolated is active
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasClass('active', 'starts in isolated format');
+
+    // Switch to embedded
+    await click('[data-test-format-chooser="embedded"]');
+    assert
+      .dom('[data-test-format-chooser="isolated"]')
+      .hasNoClass('active', 'isolated no longer active');
+    assert
+      .dom('[data-test-format-chooser="embedded"]')
+      .hasClass('active', 'embedded is now active');
+
+    // Switch to atom
+    await click('[data-test-format-chooser="atom"]');
+    assert
+      .dom('[data-test-format-chooser="embedded"]')
+      .hasNoClass('active', 'embedded no longer active');
+    assert
+      .dom('[data-test-format-chooser="atom"]')
+      .hasClass('active', 'atom is now active');
+    assert
+      .dom('[data-test-atom-preview]')
+      .exists('atom preview container renders');
+
+    // Switch to fitted
+    await click('[data-test-format-chooser="fitted"]');
+    assert
+      .dom('[data-test-format-chooser="atom"]')
+      .hasNoClass('active', 'atom no longer active');
+    assert
+      .dom('[data-test-format-chooser="fitted"]')
+      .hasClass('active', 'fitted is now active');
+  });
+
+  test('Playground FileDef instance selection switches the displayed file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}png-def-module.gts`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    await click('[data-test-boxel-selector-item-text="PngDef"]');
+    await click('[data-test-module-inspector-view="preview"]');
+    await waitFor('[data-test-instance-chooser]', { timeout: 10000 });
+
+    // Capture the initial selected item title
+    let initialTitle =
+      document
+        .querySelector('[data-test-selected-item]')
+        ?.textContent?.trim() ?? '';
+    assert.ok(initialTitle.length > 0, 'initial selection has a title');
+
+    // Open the dropdown and verify there are multiple options (we added 2 PNGs)
+    await click('[data-test-instance-chooser]');
+    assert
+      .dom('[data-option-index="0"]')
+      .exists('first dropdown option exists');
+    assert
+      .dom('[data-option-index="1"]')
+      .exists('second dropdown option exists');
+
+    // Select the second option using the data-option-index selector
+    await click('[data-option-index="1"]');
+
+    let newTitle =
+      document
+        .querySelector('[data-test-selected-item]')
+        ?.textContent?.trim() ?? '';
+    assert.ok(newTitle.length > 0, 'new selection has a title');
+    assert.notEqual(
+      newTitle,
+      initialTitle,
+      'selected instance changed after clicking a different option',
+    );
   });
 
   test('"in-this-file" panel displays local grandfather card. selection will move cursor and display card or field schema', async function (assert) {
@@ -1522,7 +1834,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-in-this-file-selector]');
     //default is the last index
     await click(`[data-test-boxel-selector-item-text="GrandParent"]`);
-    let elementName = 'GrandParent card';
+    let elementName = 'GrandParent card def';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
@@ -1530,12 +1842,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.true(monacoService.getLineCursorOn()?.includes('CardDef'));
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
-      'GrandParent card',
-      'Parent card',
-      'Activity field',
-      'Hobby field',
-      'Sport field',
-      'Child card',
+      'GrandParent card def',
+      'Parent card def',
+      'Activity field def',
+      'Hobby field def',
+      'Sport field def',
+      'Child card def',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -1551,7 +1863,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} card`);
+      .hasText(`${elementName} card def`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
@@ -1574,7 +1886,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText(`${elementName} field`);
+      .hasText(`${elementName} field def`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
@@ -1595,7 +1907,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
-      .hasText('Hobby field');
+      .hasText('Hobby field def');
     await waitFor('[data-test-card-schema="my hobby"]');
     assert.dom(`[data-test-card-schema="my hobby"]`).exists({ count: 1 });
     assert.dom(`[data-test-card-schema="my activity"]`).exists({ count: 1 });
@@ -1627,20 +1939,20 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(elementName);
     assert.true(monacoService.getLineCursorOn()?.includes('DefaultClass'));
     // elements must be ordered by the way they appear in the source code
-    const expectedElementNames = [
+    const expectedElementNames2 = [
       'AClassWithExportName (LocalClass) class',
       'ExportedClass class',
       'ExportedClassInheritLocalClass class',
       'exportedFunction function',
-      'LocalCard card',
-      'ExportedCard card',
-      'ExportedCardInheritLocalCard card',
-      'LocalField field',
-      'ExportedField field',
-      'ExportedFieldInheritLocalField field',
+      'LocalCard card def',
+      'ExportedCard card def',
+      'ExportedCardInheritLocalCard card def',
+      'LocalField field def',
+      'ExportedField field def',
+      'ExportedFieldInheritLocalField field def',
       'default (DefaultClass) class',
     ];
-    expectedElementNames.forEach(async (elementName, index) => {
+    expectedElementNames2.forEach(async (elementName, index) => {
       await waitFor(
         `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
       );
@@ -1822,6 +2134,53 @@ export class TestField extends ExportedField {
   static displayName = "Test Field";
 }`.trim(),
         'the source is correct',
+      );
+      deferred.fulfill();
+    });
+    await click('[data-test-create-definition]');
+    await waitFor('[data-test-create-file-modal]', { count: 0 });
+    await deferred.promise;
+  });
+
+  test<TestContextWithSave>('can inherit from an exported file def declaration', async function (assert) {
+    assert.expect(2);
+    let expectedSrc = `
+import { CustomFileDef } from './file-def';
+export class TestFileDef extends CustomFileDef {
+  static displayName = "Test File Def";
+}`.trim();
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}file-def.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="CustomFileDef"]');
+
+    await click('[data-boxel-selector-item-text="CustomFileDef"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Inherit"]');
+    await waitFor(
+      `[data-test-create-file-modal][data-test-ready] [data-test-realm-name="Test Workspace B"]`,
+    );
+
+    assert
+      .dom('[data-test-inherits-from-field] .pill')
+      .includesText('custom file', 'the inherits from is correct');
+
+    await fillIn('[data-test-display-name-field]', 'Test File Def');
+    await fillIn('[data-test-file-name-field]', '/test-file-def');
+
+    let deferred = new Deferred<void>();
+    this.onSave((_, content) => {
+      if (typeof content !== 'string') {
+        throw new Error(`expected string save data`);
+      }
+      assert.strictEqual(
+        content,
+        expectedSrc,
+        'the source is correct - no Component import for file defs',
       );
       deferred.fulfill();
     });
@@ -2083,6 +2442,59 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('field defs do not display a create instance button');
   });
 
+  test('Create listing action is displayed for exported card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('exported card defs display a Create Listing button');
+  });
+
+  test('Create listing action is displayed for exported field definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedField"]');
+
+    await click('[data-boxel-selector-item-text="ExportedField"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .exists('exported field defs display a Create Listing button');
+  });
+
+  test('Create listing action is not displayed for non-exported Card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="LocalCard"]');
+
+    await click('[data-boxel-selector-item-text="LocalCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .doesNotExist(
+        'non-exported card defs do not display a Create Listing button',
+      );
+  });
+
   test('can find instances of an exported card definition', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
@@ -2100,9 +2512,12 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom('[data-test-search-field]')
       .hasValue(`carddef:${testRealmURL}pet/Pet`);
-    assert
-      .dom('[data-test-search-label]')
-      .hasText(`2 Results for “carddef:${testRealmURL}pet/Pet”`);
+    await waitUntil(() =>
+      (
+        document.querySelector('[data-test-search-label]') as HTMLElement
+      )?.innerText.includes('2 results'),
+    );
+    assert.dom('[data-test-search-label]').includesText('2 results');
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
@@ -2161,6 +2576,27 @@ export class ExportedCard extends ExportedCardParent {
     assert.dom('[data-test-delete-module-button]').exists();
   });
 
+  test('can delete an erroring module file', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}erroring-module.gts`,
+    });
+
+    await waitFor('[data-test-syntax-error]');
+    await waitFor('[data-test-action-button="Delete"]');
+
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(
+      `[data-test-delete-modal="${testRealmURL}erroring-module.gts"]`,
+    );
+    await click('[data-test-confirm-delete-button]');
+    await waitFor('[data-test-empty-code-mode]');
+
+    let notFound = await adapter.openFile('erroring-module.gts');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
   module('when the user lacks write permissions', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({ [testRealmURL]: ['read'] });
@@ -2201,5 +2637,130 @@ export class ExportedCard extends ExportedCardParent {
       await waitFor('[data-test-current-module-name="empty-file.gts"]');
       assert.dom('[data-test-delete-module-button]').doesNotExist();
     });
+
+    test('Create listing action is not displayed when user does not have permission to write to realm', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}in-this-file.gts`,
+      });
+
+      await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+
+      await click('[data-boxel-selector-item-text="ExportedCard"]');
+      await waitFor('[data-test-card-module-definition]');
+
+      assert
+        .dom('[data-test-action-button="Create Listing"]')
+        .doesNotExist(
+          'Create Listing button is not displayed when user lacks write permissions',
+        );
+    });
+
+    test('inspector shows file inheritance panel for non-module files', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[]],
+        submode: 'code',
+        codePath: `${testRealmURL}sample-styles.css`,
+      });
+
+      await waitFor('[data-test-card-inspector-panel]');
+      await waitFor('[data-test-inheritance-panel-header]');
+
+      assert
+        .dom('[data-test-inheritance-panel-header]')
+        .hasText('File Inheritance');
+
+      assert
+        .dom('[data-test-card-instance-definition]')
+        .exists('file instance definition is shown');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-header]',
+        )
+        .includesText('File Instance');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.css');
+
+      assert
+        .dom('[data-test-card-module-definition]')
+        .exists('file definition (adopts from) is shown');
+      assert
+        .dom('[data-test-card-module-definition]')
+        .includesText('File Definition');
+    });
+  });
+
+  test('clicking "Create Listing" opens confirmation modal for card definition', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .exists('confirmation modal appears after clicking Create Listing');
+  });
+
+  test('clicking "Create Listing" on a card instance opens modal with instance pre-selected', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-card-instance-definition]');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .exists('confirmation modal appears after clicking Create Listing');
+
+    await waitFor('[data-test-create-listing-examples]');
+    assert
+      .dom(
+        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
+      )
+      .exists({ count: 1 }, 'the opened instance is pre-selected');
+    assert
+      .dom(
+        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
+      )
+      .containsText('Mango', 'mango instance is pre-selected');
+  });
+
+  test('cancel button in Create Listing modal closes the modal', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    });
+
+    await waitFor('[data-boxel-selector-item-text="ExportedCard"]');
+    await click('[data-boxel-selector-item-text="ExportedCard"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Create Listing"]');
+    await waitFor('[data-test-create-listing-modal]');
+
+    await click('[data-test-create-listing-cancel-button]');
+
+    assert
+      .dom('[data-test-create-listing-modal]')
+      .doesNotExist('modal is dismissed after clicking Cancel');
   });
 });

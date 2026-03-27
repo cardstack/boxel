@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Thanksgiving Food Drive",
+      "cardTitle": "Thanksgiving Food Drive",
       "startDateTime": "2024-11-18T08:00:00.000Z",
       "endDateTime": "2024-11-22T16:00:00.000Z",
-      "description": "Annual food drive supporting local families in need. Students are encouraged to bring non-perishable food items to donate. Collection bins will be located at all building entrances. The class that collects the most items will receive a special class party.",
+      "cardDescription": "Annual food drive supporting local families in need. Students are encouraged to bring non-perishable food items to donate. Collection bins will be located at all building entrances. The class that collects the most items will receive a special class party.",
       "location": "Main Entrance & Classrooms",
       "isAllDay": true,
-      "thumbnailURL": "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1974&auto=format&fit=crop"
+      "cardThumbnailURL": "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1974&auto=format&fit=crop"
     },
     "relationships": {
       "rsvp": {

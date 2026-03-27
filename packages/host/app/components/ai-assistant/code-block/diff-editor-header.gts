@@ -158,9 +158,9 @@ export default class CodeBlockDiffEditorHeader extends Component<CodeBlockDiffEd
     </style>
   </template>
 
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare cardService: CardService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private cardService: CardService;
 
   private get showStats() {
     return !!this.args.diffEditorStats && !this.args.codePatchErrorMessage;

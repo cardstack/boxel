@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "GolfScorecard",
-      "description": "Spec of GolfScorecard",
-      "thumbnailURL": null
+      "cardTitle": "GolfScorecard",
+      "cardDescription": "Spec of GolfScorecard",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

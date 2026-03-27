@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "LinkTree",
-      "description": "Spec of LinkTree",
-      "thumbnailURL": null
+      "cardTitle": "LinkTree",
+      "cardDescription": "Spec of LinkTree",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

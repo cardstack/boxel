@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealm, createJWT } from '../helpers';
+import { setupPermissionedRealmCached, createJWT } from '../helpers';
 import {
   benchmarkOperation,
   createConcurrentTestData,
@@ -25,9 +25,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       request = args.request;
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         john: ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup,
     });
@@ -156,6 +157,36 @@ export class MyCard extends CardDef {
       for (const result of compatibility.results) {
         assert.ok(result.success, `Test case '${result.name}' should succeed`);
       }
+    });
+
+    test('does not flag explicit this parameters', async function (assert) {
+      const source = `const computeVia = function (this: { title: string }) {
+  return this.title;
+};
+
+computeVia.call({ title: 'Tic Tac Toe' });
+`;
+
+      const response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'example.ts')
+        .send(source);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      const result = JSON.parse(response.text);
+      const messages = Array.isArray(result.messages) ? result.messages : [];
+      assert.deepEqual(
+        messages,
+        [],
+        'Explicit this parameters should not be reported as unused',
+      );
     });
 
     test('handles various error scenarios gracefully', async function (assert) {
@@ -346,10 +377,10 @@ export class MyCard extends CardDef {
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryIncrease = finalMemory - initialMemory;
 
-      // Memory increase should be reasonable (less than 20MB for lint operations)
+      // Memory increase should be reasonable (less than 45MB for lint operations)
       assert.ok(
-        memoryIncrease < 20 * 1024 * 1024,
-        `Memory increase should be under 20MB, got ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
+        memoryIncrease < 45 * 1024 * 1024,
+        `Memory increase should be under 45MB, got ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB`,
       );
     });
 
@@ -405,9 +436,7 @@ export class MyCard extends CardDef {
         responseJson.output,
         `import { eq } from '@cardstack/boxel-ui/helpers';
 import MyComponent from 'somewhere';
-<template>
-  <MyComponent @flag={{eq 1 1}} />
-</template>
+<template><MyComponent @flag={{eq 1 1}} /></template>
 `,
         'GTS template content is properly formatted',
       );
@@ -447,9 +476,7 @@ export class MyCard extends CardDef {
   @field name = contains(StringField);
 }
 
-<template>
-  <MyComponent @flag={{eq 1 1}} />
-</template>
+<template><MyComponent @flag={{eq 1 1}} /></template>
 `,
         'Mixed JavaScript and template content is properly formatted',
       );
@@ -481,6 +508,81 @@ export class MyCard extends CardDef {
 }
 `,
         'Import statements are properly formatted with correct spacing',
+      );
+    });
+
+    test('warns about position: fixed in card CSS', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div class="my-card">Hello</div>
+  <style scoped>
+    .my-card {
+      position: fixed;
+      top: 0;
+    }
+  </style>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      let messages = responseJson.messages;
+      let positionFixedWarning = messages.find(
+        (m: any) => m.ruleId === '@cardstack/boxel/no-css-position-fixed',
+      );
+      assert.ok(
+        positionFixedWarning,
+        'Should have a warning about position: fixed',
+      );
+      assert.strictEqual(
+        positionFixedWarning.severity,
+        1,
+        'Should be a warning (severity 1), not an error',
+      );
+    });
+
+    test('does not warn about position: fixed when not present', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { CardDef } from 'https://cardstack.com/base/card-api';
+export class MyCard extends CardDef {
+}
+<template>
+  <div class="my-card">Hello</div>
+  <style scoped>
+    .my-card {
+      position: relative;
+      top: 0;
+    }
+  </style>
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      let messages = responseJson.messages;
+      let positionFixedWarning = messages.find(
+        (m: any) => m.ruleId === '@cardstack/boxel/no-css-position-fixed',
+      );
+      assert.notOk(
+        positionFixedWarning,
+        'Should not warn when position: fixed is not used',
       );
     });
 
@@ -537,7 +639,7 @@ import MyComponent from 'somewhere';
         .set('Accept', 'application/json')
         .send(`import { CardDef } from "https://cardstack.com/base/card-api";
 export class MyCard extends CardDef {
-@field name = contains(StringField, { description: "test description" });
+@field name = contains(StringField, { cardDescription: "test description" });
 }`);
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');

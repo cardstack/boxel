@@ -1,15 +1,23 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import {
+  BoxelDropdown,
+  ContextButton,
+  Menu,
+  type BoxelDropdownAPI,
+} from '@cardstack/boxel-ui/components';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import { DropdownArrowDown, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -25,6 +33,7 @@ interface Args {
     openDirs?: LocalPath[];
     onFileSelected?: (entryPath: LocalPath) => void;
     onDirectorySelected?: (entryPath: LocalPath) => void;
+    onDeleteFile?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
   };
 }
@@ -35,19 +44,35 @@ export default class Directory extends Component<Args> {
       <div class='level' data-test-directory-level>
         {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
-            <button
-              data-test-file={{entryPath}}
-              title={{entry.name}}
-              {{on 'click' (fn this.selectFile entryPath)}}
-              {{scrollIntoViewModifier
-                (this.isSelectedFile entryPath)
-                container='file-tree'
-                key=@scrollPositionKey
-              }}
-              class='file {{if (this.isSelectedFile entryPath) "selected"}}'
+            <div
+              class='file-row {{if (this.isSelectedFile entryPath) "selected"}}'
+              data-test-file-row={{entryPath}}
+              {{on 'contextmenu' (fn this.onFileRowContextMenu entryPath)}}
             >
-              {{entry.name}}
-            </button>
+              <button
+                data-test-file={{entryPath}}
+                title={{entry.name}}
+                {{on 'click' (fn this.selectFile entryPath)}}
+                {{scrollIntoViewModifier
+                  (this.isSelectedFile entryPath)
+                  container='file-tree'
+                  key=@scrollPositionKey
+                }}
+                class='file {{if (this.isSelectedFile entryPath) "selected"}}'
+              >
+                {{entry.name}}
+              </button>
+              {{#if @onDeleteFile}}
+                <ContextButton
+                  class='file-menu-trigger'
+                  @icon='context-menu'
+                  @size='extra-small'
+                  @label='File options'
+                  @variant='ghost'
+                  {{on 'click' (fn this.openFileMenu entryPath)}}
+                />
+              {{/if}}
+            </div>
           {{else}}
             <button
               data-test-directory={{entryPath}}
@@ -74,6 +99,7 @@ export default class Directory extends Component<Args> {
                 @openDirs={{if @openDirs @openDirs this.openDirs}}
                 @onFileSelected={{this.selectFile}}
                 @onDirectorySelected={{this.selectDirectory}}
+                @onDeleteFile={{@onDeleteFile}}
                 @scrollPositionKey={{@scrollPositionKey}}
               />
             {{/if}}
@@ -81,6 +107,30 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
+    {{#if @onDeleteFile}}
+      <BoxelDropdown
+        @registerAPI={{this.registerDropdownApi}}
+        @onClose={{this.clearFileMenu}}
+        @contentClass='file-tree-context-menu'
+      >
+        <:trigger as |bindings|>
+          <button
+            type='button'
+            class='file-tree-menu-anchor'
+            aria-hidden='true'
+            tabindex='-1'
+            {{bindings}}
+          ></button>
+        </:trigger>
+        <:content as |dd|>
+          <Menu
+            class='file-tree-context-menu-list'
+            @items={{this.menuItems}}
+            @closeMenu={{dd.close}}
+          />
+        </:content>
+      </BoxelDropdown>
+    {{/if}}
     <style scoped>
       .level {
         --icon-length: 14px;
@@ -93,8 +143,58 @@ export default class Directory extends Component<Args> {
         padding-left: 1em;
       }
 
-      .directory,
-      .file {
+      .file-row {
+        display: flex;
+        align-items: center;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .file-row:hover,
+      .file-row:focus-within {
+        background-color: var(--boxel-200);
+      }
+
+      .file-row.selected {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
+      }
+
+      .file-row .file {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        padding: var(--boxel-sp-xxxs);
+        padding-left: calc(var(--icon-length) + var(--icon-margin));
+        text-align: start;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: inherit;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .file-menu-trigger {
+        flex-shrink: 0;
+        visibility: hidden;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .file-row:hover .file-menu-trigger,
+      .file-row:focus-within .file-menu-trigger {
+        visibility: visible;
+      }
+      .file-tree-menu-anchor {
+        position: fixed;
+        width: 0;
+        height: 0;
+        padding: 0;
+        border: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .directory {
         border-radius: var(--boxel-border-radius-xs);
         background: transparent;
         border: 0;
@@ -104,21 +204,11 @@ export default class Directory extends Component<Args> {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-      }
-
-      .directory:hover,
-      .file:hover {
-        background-color: var(--boxel-200);
-      }
-
-      .file.selected,
-      .file:active {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
-      }
-
-      .directory {
         padding-left: 0;
+      }
+
+      .directory:hover {
+        background-color: var(--boxel-200);
       }
 
       .directory :deep(.icon) {
@@ -131,10 +221,6 @@ export default class Directory extends Component<Args> {
       .directory :deep(.icon.closed) {
         transform: rotate(-90deg);
       }
-
-      .file {
-        padding-left: calc(var(--icon-length) + var(--icon-margin));
-      }
     </style>
   </template>
 
@@ -146,6 +232,16 @@ export default class Directory extends Component<Args> {
 
   @tracked private selectedFile?: LocalPath;
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
+  private dropdownApi?: BoxelDropdownAPI;
+  private menuEntryPath?: LocalPath;
+
+  constructor(owner: Owner, args: Args['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      this.dropdownApi = undefined;
+      this.menuEntryPath = undefined;
+    });
+  }
 
   @action
   private selectFile(entryPath: LocalPath) {
@@ -180,5 +276,53 @@ export default class Directory extends Component<Args> {
     let openDirs = this.args.openDirs ?? this.openDirs;
 
     return openDirs.includes(dirPath);
+  }
+
+  @action
+  private registerDropdownApi(api: BoxelDropdownAPI) {
+    this.dropdownApi = api;
+  }
+
+  private get menuItems() {
+    if (!this.menuEntryPath) {
+      return [];
+    }
+    return [
+      new MenuItem({
+        label: 'Delete',
+        action: () => this.deleteFileEntry(this.menuEntryPath!),
+        icon: IconTrash,
+        dangerous: true,
+      }),
+    ];
+  }
+
+  @action
+  private clearFileMenu() {
+    this.menuEntryPath = undefined;
+  }
+
+  @action
+  private openFileMenu(entryPath: LocalPath, e: MouseEvent) {
+    if (!this.args.onDeleteFile) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    this.menuEntryPath = entryPath;
+    this.dropdownApi?.actions.open(e);
+  }
+
+  @action
+  private onFileRowContextMenu(entryPath: LocalPath, e: MouseEvent) {
+    if (!this.args.onDeleteFile) {
+      return;
+    }
+    this.openFileMenu(entryPath, e);
+  }
+
+  @action
+  private deleteFileEntry(entryPath: LocalPath) {
+    this.args.onDeleteFile?.(entryPath);
   }
 }

@@ -28,6 +28,7 @@ export default function handleFetchCatalogRealmsRequest({
           catalogRealmURLs.map(async ({ realm_url: realmURL }) => {
             let realmInfoResponse = await virtualNetwork.handle(
               new Request(`${realmURL}_info`, {
+                method: 'QUERY',
                 headers: {
                   Accept: SupportedMimeType.RealmInfo,
                 },

@@ -77,6 +77,7 @@ export type NewFileType =
   | 'card-instance'
   | 'card-definition'
   | 'field-definition'
+  | 'file-definition'
   | 'text-file'
   | 'spec-instance';
 
@@ -100,6 +101,12 @@ export const newFileTypes: {
     id: 'field-definition',
     icon: Field,
     description: 'For structuring data input',
+    extension: '.gts',
+  },
+  {
+    id: 'file-definition',
+    icon: File,
+    description: 'For defining file types',
     extension: '.gts',
   },
   {
@@ -192,7 +199,7 @@ export default class CreateFileModal extends Component<Signature> {
                       {{else}}
                         {{#if this.selectedSpecResource.card}}
                           <SelectedTypePill
-                            @title={{this.selectedSpecResource.card.title}}
+                            @title={{this.selectedSpecResource.card.cardTitle}}
                             @id={{this.selectedSpecResource.card.id}}
                           />
                         {{/if}}
@@ -241,6 +248,7 @@ export default class CreateFileModal extends Component<Signature> {
                   (or
                     (eq this.fileType.id 'card-definition')
                     (eq this.fileType.id 'field-definition')
+                    (eq this.fileType.id 'file-definition')
                   )
                 }}
                   <FieldContainer
@@ -253,7 +261,11 @@ export default class CreateFileModal extends Component<Signature> {
                       placeholder={{if
                         (eq this.fileType.id 'card-definition')
                         'My Card'
-                        'My Field'
+                        (if
+                          (eq this.fileType.id 'field-definition')
+                          'My Field'
+                          'My File Def'
+                        )
                       }}
                       @value={{this.displayName}}
                       @onInput={{this.setDisplayName}}
@@ -269,7 +281,11 @@ export default class CreateFileModal extends Component<Signature> {
                       placeholder={{if
                         (eq this.fileType.id 'card-definition')
                         'my-card.gts'
-                        'my-field.gts'
+                        (if
+                          (eq this.fileType.id 'field-definition')
+                          'my-field.gts'
+                          'my-file-def.gts'
+                        )
                       }}
                       @value={{this.fileName}}
                       @state={{this.fileNameInputState}}
@@ -329,6 +345,7 @@ export default class CreateFileModal extends Component<Signature> {
                     (or
                       (eq this.fileType.id 'card-definition')
                       (eq this.fileType.id 'field-definition')
+                      (eq this.fileType.id 'file-definition')
                     )
                   }}
                     <Button
@@ -434,12 +451,12 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard<Spec>;
+  @consume(GetCardContextName) declare private getCard: getCard<Spec>;
 
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare network: NetworkService;
-  @service private declare store: StoreService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private network: NetworkService;
+  @service declare private store: StoreService;
 
   @tracked private defaultSpecResource: ReturnType<getCard<Spec>> | undefined;
   @tracked private chosenSpecResource: ReturnType<getCard<Spec>> | undefined;
@@ -472,8 +489,8 @@ export default class CreateFileModal extends Component<Signature> {
     return this.maybeFileType?.id === 'card-instance'
       ? 'Adopted From'
       : this.maybeFileType?.id === 'spec-instance'
-      ? 'Code Ref'
-      : 'Inherits From';
+        ? 'Code Ref'
+        : 'Inherits From';
   }
 
   // public API for callers to use this component
@@ -532,7 +549,10 @@ export default class CreateFileModal extends Component<Signature> {
         sourceInstance,
       };
       if (!this.definitionClass) {
-        if (this.fileType.id !== 'text-file') {
+        if (
+          this.fileType.id !== 'text-file' &&
+          this.fileType.id !== 'file-definition'
+        ) {
           let specEntryPath =
             this.fileType.id === 'field-definition'
               ? 'fields/field'
@@ -627,6 +647,7 @@ export default class CreateFileModal extends Component<Signature> {
       case 'card-instance':
       case 'card-definition':
       case 'field-definition':
+      case 'file-definition':
       case 'duplicate-instance':
         return '.create-file-modal .realm-dropdown-trigger';
       case 'text-file':
@@ -724,11 +745,14 @@ export default class CreateFileModal extends Component<Signature> {
   private chooseType = restartableTask(async () => {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
+    let isFile = this.fileType.id === 'file-definition';
 
     let specId = await chooseCard({
       filter: {
         on: specRef,
-        every: [{ eq: { specType: isField ? 'field' : 'card' } }],
+        every: [
+          { eq: { specType: isFile ? 'file' : isField ? 'field' : 'card' } },
+        ],
       },
     });
     this.chosenSpecResource = this.getCard(this, () => specId);
@@ -761,6 +785,7 @@ export default class CreateFileModal extends Component<Signature> {
     }
 
     let isField = this.fileType.id === 'field-definition';
+    let isFileDef = this.fileType.id === 'file-definition';
 
     let realmPath = new RealmPaths(new URL(this.selectedRealmURL));
     // assert that filename is a GTS file and is a LocalPath
@@ -803,12 +828,15 @@ export default class CreateFileModal extends Component<Signature> {
     );
     let src: string[] = [];
 
+    let componentImport = isFileDef
+      ? ''
+      : `\nimport { Component } from 'https://cardstack.com/base/card-api';`;
+
     // There is actually only one possible declaration collision: `className` and `parent`,
     // reconcile that particular collision as necessary.
     if (className === exportName) {
       src.push(`
-import { ${exportName} as ${exportName}Parent } from '${moduleURL}';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { ${exportName} as ${exportName}Parent } from '${moduleURL}';${componentImport}
 export class ${className} extends ${exportName}Parent {
   static displayName = "${this.displayName}";`);
     } else if (exportName === 'default') {
@@ -822,14 +850,12 @@ export class ${className} extends ${exportName}Parent {
       // check for parent/className declaration collision
       parent = parent === className ? `${parent}Parent` : parent;
       src.push(`
-import ${parent} from '${moduleURL}';
-import { Component } from 'https://cardstack.com/base/card-api';
+import ${parent} from '${moduleURL}';${componentImport}
 export class ${className} extends ${parent} {
   static displayName = "${this.displayName}";`);
     } else {
       src.push(`
-import { ${exportName} } from '${moduleURL}';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { ${exportName} } from '${moduleURL}';${componentImport}
 export class ${className} extends ${exportName} {
   static displayName = "${this.displayName}";`);
     }
@@ -843,8 +869,8 @@ export class ${className} extends ${exportName} {
       );
       this.currentRequest.newFileDeferred.fulfill(url);
     } catch (e: any) {
-      let fieldOrCard = isField ? 'field' : 'card';
-      console.log(`Error saving ${fieldOrCard} definition`, e);
+      let typeLabel = isFileDef ? 'file' : isField ? 'field' : 'card';
+      console.log(`Error saving ${typeLabel} definition`, e);
       this.saveError = e;
     }
   });
@@ -1016,7 +1042,7 @@ interface SelectedTypePillSignature {
 }
 
 export class SelectedTypePill extends Component<SelectedTypePillSignature> {
-  @service private declare realm: RealmService;
+  @service declare private realm: RealmService;
 
   <template>
     <Pill class='selected-type' data-test-selected-type={{@title}}>

@@ -5,19 +5,27 @@ import * as UseAiAssistantCommandModule from './ai-assistant';
 import * as ApplyMarkdownEditCommandModule from './apply-markdown-edit';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as AskAiCommandModule from './ask-ai';
+import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
+import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
+import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
+import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as CreateSpecCommandModule from './create-specs';
+import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as GetUserSystemCardCommandModule from './get-user-system-card';
+import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
+import * as InviteUserToRoomCommandModule from './invite-user-to-room';
 import * as LintAndFixCommandModule from './lint-and-fix';
 import * as ListingBuildCommandModule from './listing-action-build';
 import * as ListingInitCommandModule from './listing-action-init';
@@ -29,6 +37,8 @@ import * as ListingUpdateSpecsCommandModule from './listing-update-specs';
 import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
+import * as OpenCreateListingModalCommandModule from './open-create-listing-modal';
+import * as OpenCreatePRModalCommandModule from './open-create-pr-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
@@ -41,18 +51,24 @@ import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assista
 import * as ReadFileForAiAssistantCommandModule from './read-file-for-ai-assistant';
 import * as ReadSourceCommandModule from './read-source';
 import * as ReadTextFileCommandModule from './read-text-file';
+import * as RegisterBotCommandModule from './register-bot';
+import * as ReindexRealmCommandModule from './reindex-realm';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
 import * as SendRequestViaProxyCommandModule from './send-request-via-proxy';
+import * as SerializeCardCommandModule from './serialize-card';
 import * as SetActiveLlmModule from './set-active-llm';
 import * as SetUserSystemCardCommandModule from './set-user-system-card';
 import * as ShowCardCommandModule from './show-card';
+import * as ShowFileCommandModule from './show-file';
 import * as SummarizeSessionCommandModule from './summarize-session';
 import * as SwitchSubmodeCommandModule from './switch-submode';
+import * as SyncOpenRouterModelsCommandModule from './sync-openrouter-models';
 import * as TransformCardsCommandModule from './transform-cards';
+import * as UnregisterBotCommandModule from './unregister-bot';
 import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-with-selection';
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateRoomSkillsCommandModule from './update-room-skills';
@@ -87,6 +103,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CopyCardToStackCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-file-to-realm',
+    CopyFileToRealmCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/copy-source',
     CopySourceCommandModule,
   );
@@ -107,12 +127,28 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CheckCorrectnessCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/cancel-indexing-job',
+    CancelIndexingJobCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-theme-example',
     GenerateThemeExampleCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/full-reindex-realm',
+    FullReindexRealmCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-events-from-room',
     GetEventsFromRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/invite-user-to-room',
+    InviteUserToRoomCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/invalidate-realm-urls',
+    InvalidateRealmUrlsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/lint-and-fix',
@@ -145,6 +181,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-update-specs',
     ListingUpdateSpecsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/create-listing-pr-request',
+    CreateListingPRRequestCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/listing-generate-example',
@@ -191,8 +231,20 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ReadTextFileCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/reindex-realm',
+    ReindexRealmCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/register-bot',
+    RegisterBotCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',
     SaveCardCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/serialize-card',
+    SerializeCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-cards',
@@ -207,12 +259,24 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     OpenAiAssistantRoomCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/open-create-listing-modal',
+    OpenCreateListingModalCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/open-create-pr-modal',
+    OpenCreatePRModalCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-workspace',
     OpenWorkspaceCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/send-ai-assistant-message',
     SendAiAssistantMessageModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/send-bot-trigger-event',
+    SendBotTriggerEventCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/set-active-llm',
@@ -223,12 +287,20 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     ShowCardCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/show-file',
+    ShowFileCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/switch-submode',
     SwitchSubmodeCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/transform-cards',
     TransformCardsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/unregister-bot',
+    UnregisterBotCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/update-code-path-with-selection',
@@ -249,6 +321,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/summarize-session',
     SummarizeSessionCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/sync-openrouter-models',
+    SyncOpenRouterModelsCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ai-assistant',
@@ -283,6 +359,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetAllRealmMetasCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-user-system-card',
+    GetUserSystemCardCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/search-google-images',
     SearchGoogleImagesCommandModule,
   );
@@ -308,15 +388,20 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   AskAiCommandModule.default,
   CopyCardToRealmModule.default,
   CopyCardToStackCommandModule.default,
+  CopyFileToRealmCommandModule.default,
   CopySourceCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
+  FullReindexRealmCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetCardCommandModule.default,
+  GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
+  InviteUserToRoomCommandModule.default,
+  InvalidateRealmUrlsCommandModule.default,
   LintAndFixCommandModule.default,
   ListingBuildCommandModule.default,
   ListingInitCommandModule.default,
@@ -324,10 +409,13 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ListingGenerateExampleCommandModule.default,
   ListingInstallCommandModule.default,
   ListingRemixCommandModule.default,
+  CreateListingPRRequestCommandModule.default,
   ListingUpdateSpecsCommandModule.default,
   ListingUseCommandModule.default,
   OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
+  OpenCreateListingModalCommandModule.default,
+  OpenCreatePRModalCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
   GenerateThemeExampleCommandModule.default,
@@ -340,19 +428,27 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   ReadFileForAiAssistantCommandModule.default,
   ReadSourceCommandModule.default,
   ReadTextFileCommandModule.default,
+  RegisterBotCommandModule.default,
+  ReindexRealmCommandModule.default,
   SaveCardCommandModule.default,
+  SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,
   SearchCardsCommandModule.SearchCardsByTypeAndTitleCommand,
   SearchGoogleImagesCommandModule.default,
   SendAiAssistantMessageModule.default,
+  SendBotTriggerEventCommandModule.default,
   SendRequestViaProxyCommandModule.default,
   SetActiveLlmModule.default,
   SetUserSystemCardCommandModule.default,
   ShowCardCommandModule.default,
+  ShowFileCommandModule.default,
   SummarizeSessionCommandModule.default,
   SwitchSubmodeCommandModule.default,
+  SyncOpenRouterModelsCommandModule.default,
   TransformCardsCommandModule.default,
+  UnregisterBotCommandModule.default,
+  CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,

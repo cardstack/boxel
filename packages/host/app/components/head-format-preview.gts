@@ -1,7 +1,10 @@
+import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { modifier } from 'ember-modifier';
+
+import { findDisallowedHeadTags } from '@cardstack/runtime-common';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -28,11 +31,58 @@ export default class HeadFormatPreview extends Component<Signature> {
   @tracked private headMarkup = '';
 
   captureHeadMarkup = modifier((element: HTMLElement) => {
-    let container =
-      element.querySelector<HTMLElement>('[data-test-boxel-card-container]') ??
-      element.firstElementChild;
-    let markupSource = container ?? element;
-    this.headMarkup = markupSource.innerHTML.trim();
+    let pendingUpdate = false;
+
+    let getMarkupSource = () => {
+      // Remove the noise of the card container in the raw head preview
+      return (
+        element.querySelector<HTMLElement>(
+          '[data-test-boxel-card-container]',
+        ) ??
+        element.firstElementChild ??
+        element
+      );
+    };
+
+    let updateHeadMarkup = () => {
+      pendingUpdate = false;
+
+      let markupSource = getMarkupSource();
+      let nextMarkup = markupSource.innerHTML.trim();
+
+      if (nextMarkup !== this.headMarkup) {
+        this.headMarkup = nextMarkup;
+      }
+    };
+
+    let scheduleUpdate = () => {
+      if (pendingUpdate) {
+        return;
+      }
+
+      pendingUpdate = true;
+
+      // Prevent updating this.headMarkup twice in one render
+      scheduleOnce('afterRender', this, updateHeadMarkup);
+    };
+
+    scheduleUpdate();
+
+    if (typeof MutationObserver === 'undefined') {
+      return;
+    }
+
+    // Watch for updates to head format HTML, update tracked property
+    let observer = new MutationObserver(scheduleUpdate);
+
+    observer.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    return () => observer.disconnect();
   });
 
   private get urlBase() {
@@ -102,6 +152,14 @@ export default class HeadFormatPreview extends Component<Signature> {
   }
 
   @cached
+  private get parsedHeadDocument(): Document | undefined {
+    if (!this.headMarkup) {
+      return undefined;
+    }
+    return this.parseHead(this.headMarkup);
+  }
+
+  @cached
   private get headPreviewData(): HeadPreviewData {
     let defaults: HeadPreviewData = {
       title: 'Untitled page',
@@ -118,7 +176,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       return defaults;
     }
 
-    let doc = this.parseHead(this.headMarkup);
+    let doc = this.parsedHeadDocument;
     if (!doc) {
       return defaults;
     }
@@ -197,6 +255,24 @@ export default class HeadFormatPreview extends Component<Signature> {
       .map((line) => line.trimStart())
       .join('\n')
       .trim();
+  }
+
+  @cached
+  private get disallowedTags(): string[] {
+    if (!this.headMarkup) {
+      return [];
+    }
+    let doc =
+      this.parsedHeadDocument ??
+      (typeof document !== 'undefined' ? document : undefined);
+    if (!doc) {
+      return [];
+    }
+    return findDisallowedHeadTags(this.headMarkup, doc);
+  }
+
+  private get disallowedTagList(): string {
+    return this.disallowedTags.join('>, <');
   }
 
   @cached
@@ -293,6 +369,17 @@ export default class HeadFormatPreview extends Component<Signature> {
     </div>
 
     <div class='social-preview-container'>
+      {{#if this.disallowedTags.length}}
+        <div class='head-warning' data-test-head-warning>
+          <span class='head-warning-icon'>&#x26A0;</span>
+          <div>
+            <strong>Disallowed tags detected:</strong>
+            &lt;{{this.disallowedTagList}}&gt; tags are not permitted in the
+            head template. Only &lt;title&gt;, &lt;meta&gt;, and &lt;link&gt;
+            are allowed. Disallowed tags will be stripped when rendering.
+          </div>
+        </div>
+      {{/if}}
       <header class='preview-header'>
         <h1 class='preview-title'>Social Media Preview</h1>
         <p class='preview-subtitle'>
@@ -427,6 +514,23 @@ export default class HeadFormatPreview extends Component<Signature> {
         font: 400 var(--boxel-font-sm);
         color: var(--boxel-500);
         margin: 0;
+      }
+
+      .head-warning {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm) var(--boxel-sp-lg);
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: var(--boxel-border-radius);
+        color: #664d03;
+        font: 400 var(--boxel-font-sm);
+        line-height: 1.5;
+      }
+
+      .head-warning-icon {
+        flex-shrink: 0;
+        font-size: 1.2em;
       }
 
       .platform-section,

@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "URL Field",
-      "description": "A field that validates URL addresses and provides a suitable editor.",
+      "cardTitle": "URL Field",
+      "cardDescription": "A field that validates URL addresses and provides a suitable editor.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/url",

@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "Tag",
-      "description": "Spec of Tag",
-      "thumbnailURL": null
+      "cardTitle": "Tag",
+      "cardDescription": "Spec of Tag",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

@@ -14,12 +14,12 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   setupMatrixRoom,
-  testRealmHref,
-  testRealmURL,
   createJWT,
   cardInfo,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import { query, param } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -32,9 +32,13 @@ import isEqual from 'lodash/isEqual';
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card source requests', function () {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealmHref = realmURL.href;
+    let testRealmURL = realmURL;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
@@ -47,7 +51,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -57,6 +62,7 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
@@ -64,9 +70,11 @@ module(basename(__filename), function () {
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -239,7 +247,10 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person.gts');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person.gts', realmURL).pathname,
+          );
         });
 
         test('serves a card instance GET request with card-source accept header that results in redirect', async function (assert) {
@@ -258,7 +269,10 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person-1.json');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person-1.json', realmURL).pathname,
+          );
         });
 
         test('serves source of a card module that is in error state', async function (assert) {
@@ -268,8 +282,8 @@ module(basename(__filename), function () {
 
           assert.strictEqual(
             response.headers['content-type'],
-            'text/plain; charset=utf-8',
-            'content type is correct',
+            'text/typescript+glimmer',
+            'content type is correct for .gts source',
           );
           assert.strictEqual(
             readFileSync(
@@ -301,7 +315,10 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person', realmURL).pathname,
+          );
         });
 
         test('serves a module GET request', async function (assert) {
@@ -335,9 +352,11 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -384,9 +403,11 @@ module(basename(__filename), function () {
 
     module('card source HEAD request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -426,16 +447,42 @@ module(basename(__filename), function () {
             'true',
             'realm is public readable',
           );
-          assert.strictEqual(response.headers['location'], '/person.gts');
+          assert.strictEqual(
+            response.headers['location'],
+            new URL('person.gts', realmURL).pathname,
+          );
+        });
+
+        test('serves a card-source HEAD request for a regular file without redirect', async function (assert) {
+          await testRealm.write('notes.md', '# Notes\n');
+
+          let response = await request
+            .head('/notes.md')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          assert.notOk(response.headers['location'], 'no redirect location');
         });
       });
     });
 
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -505,9 +552,11 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -546,9 +595,11 @@ module(basename(__filename), function () {
 
     module('card-source POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -761,9 +812,9 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: null,
-              title: 'Untitled Card',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Untitled Card',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             });
           }
@@ -804,9 +855,9 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: 'Untitled Card',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Untitled Card',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             });
           }
@@ -863,9 +914,9 @@ module(basename(__filename), function () {
             assert.deepEqual(json.data.attributes, {
               field1: 'a',
               field2a: 'c',
-              title: 'Untitled Card',
-              description: null,
-              thumbnailURL: null,
+              cardTitle: 'Untitled Card',
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             });
           }
@@ -879,6 +930,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${testRealmURL}test-card.gts`,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -888,6 +940,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`],
                 clientRequestId: null,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -896,6 +949,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${testRealmURL}test-card.gts`,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -905,6 +959,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [`${testRealmURL}test-card.gts`, id],
                 clientRequestId: null,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -913,6 +968,7 @@ module(basename(__filename), function () {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
                 updatedFile: `${id}.json`,
+                realmURL: testRealmURL.href,
               },
             },
             {
@@ -922,6 +978,7 @@ module(basename(__filename), function () {
                 indexType: 'incremental',
                 invalidations: [id],
                 clientRequestId: null,
+                realmURL: testRealmURL.href,
               },
             },
           ];
@@ -939,10 +996,48 @@ module(basename(__filename), function () {
         });
       });
 
+      module('public writable realm with size limit', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
+          permissions: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          fileSizeLimitBytes: 512,
+          onRealmSetup,
+        });
+
+        test('returns 413 when source payload exceeds size limit', async function (assert) {
+          let oversized = 'a'.repeat(2048);
+          let response = await request
+            .post('/too-large.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(oversized);
+
+          assert.strictEqual(response.status, 413, 'HTTP 413 status');
+          assert.strictEqual(
+            response.body.errors[0].title,
+            'Payload Too Large',
+            'error title is correct',
+          );
+          assert.strictEqual(
+            response.body.errors[0].status,
+            413,
+            'error status is correct',
+          );
+          assert.ok(
+            response.body.errors[0].message.includes('File size'),
+            'error message mentions file size',
+          );
+        });
+      });
+
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           onRealmSetup,
         });
@@ -981,6 +1076,270 @@ module(basename(__filename), function () {
             .post('/unused-card.gts')
             .set('Accept', 'application/vnd.card+source')
             .send(`//TEST UPDATE\n${cardSrc}`)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+            );
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+        });
+      });
+    });
+
+    module('binary file POST request', function (_hooks) {
+      module('public writable realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
+          permissions: {
+            '*': ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
+
+        test('serves a binary file POST request', async function (assert) {
+          let bytes = new Uint8Array([
+            0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe,
+          ]);
+          let response = await request
+            .post('/test-image.png')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          assert.strictEqual(response.status, 204, 'HTTP 204 status');
+          assert.ok(
+            response.headers['x-created'],
+            'created date should be set for new binary file',
+          );
+
+          let filePath = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'test-image.png',
+          );
+          assert.ok(existsSync(filePath), 'binary file exists on disk');
+          let fileBytes = readFileSync(filePath);
+          assert.deepEqual(
+            new Uint8Array(fileBytes),
+            bytes,
+            'file bytes match uploaded bytes',
+          );
+        });
+
+        test('card source GET returns correct content-type for image files', async function (assert) {
+          let bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+          await request
+            .post('/photo.png')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/photo.png')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'image/png',
+            'content-type is image/png for .png files',
+          );
+        });
+
+        test('card source GET returns correct content-type for PDF files', async function (assert) {
+          let bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]); // %PDF
+          await request
+            .post('/report.pdf')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/report.pdf')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'application/pdf',
+            'content-type is application/pdf for .pdf files',
+          );
+        });
+
+        test('card source GET returns correct content-type for audio files', async function (assert) {
+          let bytes = new Uint8Array([0x49, 0x44, 0x33]); // ID3
+          await request
+            .post('/clip.mp3')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/clip.mp3')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'audio/mpeg',
+            'content-type is audio/mpeg for .mp3 files',
+          );
+        });
+
+        test('card source GET returns correct content-type for video files', async function (assert) {
+          let bytes = new Uint8Array([0x00, 0x00, 0x00, 0x1c]);
+          await request
+            .post('/demo.mp4')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let response = await request
+            .get('/demo.mp4')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.headers['content-type'],
+            'video/mp4',
+            'content-type is video/mp4 for .mp4 files',
+          );
+        });
+
+        test('creates file metadata for binary upload', async function (assert) {
+          let bytes = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+          await request
+            .post('/meta-test.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes));
+
+          let rows = await query(dbAdapter, [
+            'SELECT content_hash FROM realm_file_meta WHERE realm_url =',
+            param(testRealmHref),
+            'AND file_path =',
+            param('meta-test.bin'),
+          ]);
+          assert.strictEqual(rows.length, 1, 'file meta row exists');
+          assert.ok(rows[0].content_hash, 'content hash is set');
+        });
+
+        test('overwrites existing binary file', async function (assert) {
+          let bytes1 = new Uint8Array([0x01, 0x02, 0x03]);
+          let bytes2 = new Uint8Array([0x04, 0x05, 0x06]);
+
+          let response1 = await request
+            .post('/overwrite-test.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes1));
+          assert.strictEqual(response1.status, 204, 'first upload returns 204');
+
+          let response2 = await request
+            .post('/overwrite-test.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(bytes2));
+          assert.strictEqual(
+            response2.status,
+            204,
+            'second upload returns 204',
+          );
+
+          let filePath = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'overwrite-test.bin',
+          );
+          let fileBytes = readFileSync(filePath);
+          assert.deepEqual(
+            new Uint8Array(fileBytes),
+            bytes2,
+            'file contains second upload bytes',
+          );
+        });
+
+        test('broadcasts realm events for binary upload', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          await request
+            .post('/event-test.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0xca, 0xfe])));
+
+          await expectIncrementalIndexEvent(
+            `${testRealmURL}event-test.bin`,
+            realmEventTimestampStart,
+            {
+              assert,
+              getMessagesSince,
+              realm: testRealmHref,
+            },
+          );
+        });
+      });
+
+      module(
+        'public writable realm with size limit for binary',
+        function (hooks) {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
+            permissions: {
+              '*': ['read', 'write'],
+              '@node-test_realm:localhost': ['read', 'realm-owner'],
+            },
+            fileSizeLimitBytes: 512,
+            onRealmSetup,
+          });
+
+          test('returns 413 when binary payload exceeds size limit', async function (assert) {
+            let oversized = new Uint8Array(2048).fill(0xff);
+            let response = await request
+              .post('/too-large.bin')
+              .set('Content-Type', 'application/octet-stream')
+              .send(Buffer.from(oversized));
+
+            assert.strictEqual(response.status, 413, 'HTTP 413 status');
+            assert.strictEqual(
+              response.body.errors[0].title,
+              'Payload Too Large',
+              'error title is correct',
+            );
+          });
+        },
+      );
+
+      module('permissioned realm for binary', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
+          permissions: {
+            john: ['read', 'write'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
+          },
+          onRealmSetup,
+        });
+
+        test('401 without a JWT for binary upload', async function (assert) {
+          let response = await request
+            .post('/secret.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0x01])));
+
+          assert.strictEqual(response.status, 401, 'HTTP 401 status');
+        });
+
+        test('403 without permission for binary upload', async function (assert) {
+          let response = await request
+            .post('/secret.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0x01])))
+            .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`);
+
+          assert.strictEqual(response.status, 403, 'HTTP 403 status');
+        });
+
+        test('204 with permission for binary upload', async function (assert) {
+          let response = await request
+            .post('/secret.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(new Uint8Array([0x01])))
             .set(
               'Authorization',
               `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,

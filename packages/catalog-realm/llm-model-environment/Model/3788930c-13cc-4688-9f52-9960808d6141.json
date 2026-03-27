@@ -5,8 +5,8 @@
       "modelId": "google/gemini-2.0-flash-001",
       "modelName": "Gemini 2.0 Flash",
       "displayName": "Gemini 2.0 Flash",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

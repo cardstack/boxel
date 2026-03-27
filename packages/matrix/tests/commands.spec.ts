@@ -15,6 +15,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
 } from '../helpers/matrix-constants';
 import { appURL } from '../helpers/isolated-realm-server';
@@ -153,8 +154,8 @@ test.describe('Commands', () => {
       data: {
         attributes: {
           cardInfo: {
-            title: 'Test card title',
-            description: 'Test card description',
+            name: 'Test card title',
+            summary: 'Test card description',
           },
         },
         meta: {
@@ -200,16 +201,18 @@ test.describe('Commands', () => {
         },
       ],
     };
+    let commandRequestId = '1';
 
     await putEvent(
       credentials.accessToken,
       room1,
       'm.room.message',
-      '1',
+      commandRequestId,
       content,
     );
-    await page.locator('[data-test-command-apply]').click();
-    await page.locator('[data-test-command-idle]');
+    let command = page.locator(`[data-test-command-id="${commandRequestId}"]`);
+    await command.waitFor();
+    await command.locator('[data-test-command-apply]').click();
 
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
@@ -227,6 +230,7 @@ test.describe('Commands', () => {
       await createSubscribedUserAndLogin(page, 'commands-search');
     let room1 = await getRoomId(page);
     let cardId = `${appURL}/hassan`;
+    let commandRequestId = '1';
     let content = {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
@@ -234,7 +238,7 @@ test.describe('Commands', () => {
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          id: '1',
+          id: commandRequestId,
           name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             description: 'Searching for card',
@@ -253,24 +257,35 @@ test.describe('Commands', () => {
     let hassanCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
     await hassanCard.waitFor();
     await hassanCard.click();
-    await putEvent(
+    let messageEvent = await putEvent(
       credentials.accessToken,
       room1,
       'm.room.message',
-      '1',
+      commandRequestId,
       content,
     );
-    await page.locator('[data-test-command-apply]').click();
-    await page.locator('[data-test-command-idle]');
+    let command = page.locator(`[data-test-command-id="${commandRequestId}"]`);
+    await command.waitFor();
+    await command.locator('[data-test-command-apply]').click();
+
     await expect(async () => {
       let events = await getRoomEvents(username, password, room1);
       let commandResultEvent = (events as any).find(
-        (e: any) => e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        (e: any) =>
+          e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          e.content?.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
+          e.content?.commandRequestId === commandRequestId &&
+          e.content?.['m.relates_to']?.rel_type ===
+            APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          e.content?.['m.relates_to']?.key === 'applied' &&
+          e.content?.['m.relates_to']?.event_id === messageEvent?.event_id,
       );
       await expect(commandResultEvent).toBeDefined();
-      await expect(
-        JSON.parse(commandResultEvent.content.data).card,
-      ).toBeDefined();
+      let commandResultData =
+        typeof commandResultEvent.content.data === 'string'
+          ? JSON.parse(commandResultEvent.content.data)
+          : commandResultEvent.content.data;
+      await expect(commandResultData.card).toBeDefined();
     }).toPass();
   });
 
@@ -294,11 +309,13 @@ test.describe('Commands', () => {
     await page.locator('[data-test-create-new-card-button]').click();
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
-      .locator('[data-test-select="https://cardstack.com/base/cards/skill"]')
+      .locator(
+        '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+      )
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await page
-      .locator('[data-test-field="title"] input')
+      .locator('[data-test-field="cardTitle"] input')
       .fill('Automatic Switch Command');
     await page
       .locator('[data-test-field="instructions"] textarea')
@@ -330,6 +347,7 @@ test.describe('Commands', () => {
       .locator('[data-test-card-catalog-item]', {
         hasText: 'Automatic Switch Command',
       })
+      .first()
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();
 

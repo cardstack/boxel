@@ -52,7 +52,7 @@ export class MusicAlbumCard extends BaseMusicAlbumCard {
   @field totalPlays = contains(NumberField);
   @field rating = contains(NumberField); // Average user rating 1-5
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: MusicAlbumCard) {
       try {
         const album = this.albumTitle ?? 'Unknown Album';
@@ -118,8 +118,8 @@ export class MusicAlbumCard extends BaseMusicAlbumCard {
                 {{/if}}
               </div>
 
-              {{#if @model.description}}
-                <p class='album-description'>{{@model.description}}</p>
+              {{#if @model.cardDescription}}
+                <p class='album-description'>{{@model.cardDescription}}</p>
               {{/if}}
 
               {{#if @model.recordLabel}}

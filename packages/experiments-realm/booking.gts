@@ -14,7 +14,7 @@ import CalendarCheck from '@cardstack/boxel-icons/calendar-check';
 export class Booking extends CardDef {
   static displayName = 'Booking';
   static icon = CalendarCheck;
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field venue = contains(StringField);
   @field startTime = contains(DateTimeField);
   @field endTime = contains(DateTimeField);
@@ -23,7 +23,7 @@ export class Booking extends CardDef {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <h2><@fields.title /></h2>
+      <h2><@fields.cardTitle /></h2>
       <div><@fields.startTime /> to <@fields.endTime /></div>
       <div>Hosted by: <@fields.hosts /></div>
     </template>

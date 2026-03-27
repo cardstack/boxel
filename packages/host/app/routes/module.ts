@@ -123,7 +123,9 @@ export default class ModuleRoute extends Route<Model> {
   #releaseTimerBlock: (() => void) | undefined;
 
   deactivate() {
-    (globalThis as any).__boxelRenderContext = undefined;
+    if (isTesting()) {
+      (globalThis as any).__boxelRenderContext = undefined;
+    }
     this.lastStoreResetKey = undefined;
     this.#authGuard.unregister();
     this.#restoreRenderTimers?.();
@@ -208,11 +210,124 @@ export async function buildModuleModel(
     }
   }
 
-  let module: Record<string, any> | undefined;
   try {
-    module = await context.authGuard.race(() =>
-      context.loaderService.loader.import(id),
-    );
+    return await context.authGuard.race(async () => {
+      let module: Record<string, any> | undefined;
+      try {
+        module = await context.loaderService.loader.import(id);
+      } catch (err: any) {
+        console.warn(
+          `encountered error loading module "${id}": ${err.message}`,
+        );
+        let depsSet = new Set(
+          await (
+            await context.loaderService.loader.getConsumedModules(id)
+          ).filter((u) => u !== id),
+        );
+        if (isCardError(err) && err.deps) {
+          for (let dep of err.deps) {
+            depsSet.add(dep);
+          }
+        }
+        return modelWithError({
+          id,
+          nonce,
+          deps: [...depsSet],
+          message: `encountered error loading module "${id}": ${err.message}`,
+          err,
+        });
+      }
+
+      let response: Response;
+      try {
+        response = await context.network.authedFetch(id, {
+          method: 'HEAD',
+          headers: {
+            Accept: SupportedMimeType.CardSource,
+          },
+        });
+      } catch (err: any) {
+        console.warn(
+          `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
+        );
+        return modelWithError({
+          id,
+          nonce,
+          message: `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
+          err,
+        });
+      }
+      let maybeShimmed = response.status === 404;
+      if (!maybeShimmed && !response.ok) {
+        return modelWithError({
+          id,
+          nonce,
+          status: response.status,
+          message: `Could not HTTP HEAD (accept: card-source) ${id}: ${response.status} - ${response.statusText}`,
+        });
+      }
+
+      let lastModified: number;
+      let createdAt: number;
+      let deps: string[];
+
+      let isShimmed = maybeShimmed;
+      if (maybeShimmed) {
+        // for testing purposes we'll still generate meta for shimmed cards,
+        // however the deps will only be the shimmed file
+        lastModified = 0;
+        createdAt = 0;
+        deps = [moduleURL.href];
+      } else {
+        let consumes = (
+          await context.loaderService.loader.getConsumedModules(id)
+        ).filter((u) => u !== id);
+        deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+        let lastModifiedRFC7321 = response.headers.get('last-modified');
+        let createdAtRFC7321 = response.headers.get('x-created');
+        if (!lastModifiedRFC7321) {
+          return modelWithError({
+            id,
+            nonce,
+            deps,
+            message: `HTTP HEAD (accept: card-source) ${id} has no last-modified time header`,
+          });
+        }
+        lastModified = parseRfc7321Time(lastModifiedRFC7321);
+        createdAt = createdAtRFC7321
+          ? parseRfc7321Time(createdAtRFC7321)
+          : lastModified;
+      }
+
+      let definitions: {
+        [name: string]: ModuleDefinitionResult | ErrorEntry;
+      } = {};
+      for (let [name, maybeBaseDef] of Object.entries(module)) {
+        if (isBaseDef(maybeBaseDef)) {
+          let definition = await makeDefinition(
+            {
+              name,
+              url: moduleURL,
+              cardOrFieldDef: maybeBaseDef,
+            },
+            context,
+          );
+          let codeRef = internalKeyFor({ module: id, name }, undefined);
+          definitions[codeRef] = definition;
+        }
+      }
+
+      return {
+        id,
+        nonce,
+        status: 'ready' as const,
+        deps,
+        lastModified,
+        createdAt,
+        isShimmed,
+        definitions,
+      };
+    });
   } catch (err: any) {
     if (context.authGuard.isAuthError(err)) {
       return modelWithError({
@@ -223,115 +338,8 @@ export async function buildModuleModel(
         status: err.status ?? (isCardError(err) ? err.status : 401),
       });
     }
-    console.warn(`encountered error loading module "${id}": ${err.message}`);
-    let depsSet = new Set(
-      await (
-        await context.loaderService.loader.getConsumedModules(id)
-      ).filter((u) => u !== id),
-    );
-    if (isCardError(err) && err.deps) {
-      for (let dep of err.deps) {
-        depsSet.add(dep);
-      }
-    }
-    return modelWithError({
-      id,
-      nonce,
-      deps: [...depsSet],
-      message: `encountered error loading module "${id}": ${err.message}`,
-      err,
-    });
+    throw err;
   }
-
-  let response: Response;
-  try {
-    response = await context.network.authedFetch(id, {
-      method: 'HEAD',
-      headers: {
-        Accept: SupportedMimeType.CardSource,
-      },
-    });
-  } catch (err: any) {
-    console.warn(
-      `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
-    );
-    return modelWithError({
-      id,
-      nonce,
-      message: `Encountered error HTTP HEAD (accept: card-source) ${id}: ${err.message}`,
-      err,
-    });
-  }
-  let maybeShimmed = response.status === 404;
-  if (!maybeShimmed && !response.ok) {
-    return modelWithError({
-      id,
-      nonce,
-      status: response.status,
-      message: `Could not HTTP HEAD (accept: card-source) ${id}: ${response.status} - ${response.statusText}`,
-    });
-  }
-
-  let lastModified: number;
-  let createdAt: number;
-  let deps: string[];
-
-  let isShimmed = maybeShimmed;
-  if (maybeShimmed) {
-    // for testing purposes we'll still generate meta for shimmed cards,
-    // however the deps will only be the shimmed file
-    lastModified = 0;
-    createdAt = 0;
-    deps = [moduleURL.href];
-  } else {
-    let consumes = (
-      await context.loaderService.loader.getConsumedModules(id)
-    ).filter((u) => u !== id);
-    deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
-    let lastModifiedRFC7321 = response.headers.get('last-modified');
-    let createdAtRFC7321 = response.headers.get('x-created');
-    if (!lastModifiedRFC7321) {
-      return modelWithError({
-        id,
-        nonce,
-        deps,
-        message: `HTTP HEAD (accept: card-source) ${id} has no last-modified time header`,
-      });
-    }
-    lastModified = parseRfc7321Time(lastModifiedRFC7321);
-    createdAt = createdAtRFC7321
-      ? parseRfc7321Time(createdAtRFC7321)
-      : lastModified;
-  }
-
-  let definitions: {
-    [name: string]: ModuleDefinitionResult | ErrorEntry;
-  } = {};
-  for (let [name, maybeBaseDef] of Object.entries(module)) {
-    if (isBaseDef(maybeBaseDef)) {
-      let definition = await makeDefinition(
-        {
-          name,
-          url: moduleURL,
-          cardOrFieldDef: maybeBaseDef,
-        },
-        context,
-      );
-      let codeRef = internalKeyFor({ module: id, name }, undefined);
-      definitions[codeRef] = definition;
-    }
-  }
-
-  return {
-    id,
-    nonce,
-    status: 'ready' as const,
-    deps,
-    lastModified,
-    createdAt,
-    isShimmed,
-    definitions,
-  };
 }
 
 async function makeDefinition(

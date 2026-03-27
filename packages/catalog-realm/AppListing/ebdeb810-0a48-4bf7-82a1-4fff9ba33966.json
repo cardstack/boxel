@@ -18,9 +18,9 @@
       "summary": "CRM App\n- A comprehensive, customizable customer relationship management solution built on the Boxel platform. Streamline your sales workflow, manage client relationships, and close more deals.\n\nKey Features\n- Contact Management: Organize all your contacts, leads, and customers in one place with detailed profiles and communication history.\n- Deal Tracking: Monitor your sales pipeline with visual kanban boards. Track deal status, priority, and projected values.\n- Task Management: Create and assign tasks with due dates, priorities, and statuses to ensure nothing falls through the cracks.\n- Account Management: Track customer accounts with custom urgency tags and comprehensive relationship history.\n- Reporting & Analytics: Gain insights with detailed reports on deal sizes, revenue forecasts, and profit margins.\n\nBenefits\n- Centralize customer data and communication history\n- Visualize your sales pipeline and forecast revenue\n- Increase team collaboration through task assignments\n- Make data-driven decisions with built-in analytics",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/crm-app-listing/thumbnail.png"
       }
     },
     "relationships": {

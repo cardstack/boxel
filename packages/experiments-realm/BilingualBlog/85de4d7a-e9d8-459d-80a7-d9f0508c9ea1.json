@@ -16,8 +16,8 @@
         "height": null,
         "width": null
       },
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "authorBio": {

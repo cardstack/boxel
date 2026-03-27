@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "LeafletMap",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "LeafletMap",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

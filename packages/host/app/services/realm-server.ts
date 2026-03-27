@@ -18,6 +18,7 @@ import {
   SupportedMimeType,
   Deferred,
   testRealmURL,
+  type RealmInfo,
   type JWTPayload,
 } from '@cardstack/runtime-common';
 import {
@@ -102,7 +103,17 @@ export default class RealmServerService extends Service {
   }
 
   resetState() {
+    let catalogRealms = this.availableRealms.filter(
+      (realm) => realm.type === 'catalog',
+    );
     this.logout();
+    this.availableRealms = new TrackedArray([
+      { type: 'base', url: baseRealm.url },
+      ...catalogRealms,
+    ]);
+    this.eventSubscribers = new Map();
+    this._ready = new Deferred<void>();
+    this._ready.fulfill();
   }
 
   setClient(client: ExtendedClient) {
@@ -131,34 +142,6 @@ export default class RealmServerService extends Service {
     }
 
     return response;
-  }
-
-  async createUser(matrixUserId: string, registrationToken?: string) {
-    await this.login();
-    let response = await this.network.fetch(`${this.url.href}_user`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'user',
-          attributes: {
-            matrixUserId,
-            registrationToken: registrationToken ?? null,
-          },
-        },
-      }),
-    });
-    if (!response.ok) {
-      let err = `Could not create user with parameters '${matrixUserId}' and '${registrationToken}': ${
-        response.status
-      } - ${await response.text()}`;
-      console.error(err);
-      throw new Error(err);
-    }
   }
 
   async createRealm(args: {
@@ -191,6 +174,33 @@ export default class RealmServerService extends Service {
       data: { id: realmURL },
     } = (await response.json()) as { data: { id: string } };
     return new URL(realmURL);
+  }
+
+  async deleteRealm(realmURL: string) {
+    await this.login();
+
+    let response = await this.network.fetch(`${this.url.href}_delete-realm`, {
+      method: 'DELETE',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'realm',
+          id: realmURL,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let err = `Could not delete realm '${realmURL}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
   }
 
   logout(): void {
@@ -244,15 +254,23 @@ export default class RealmServerService extends Service {
   }
 
   assertOwnRealmServer(realmServerURLs: string[]): void {
+    let normalizedOwnRealmServerURL = this.normalizeRealmServerURL(
+      this.realmServer.url.href,
+    );
+    let normalizedRealmServerURLs = [
+      ...new Set(
+        realmServerURLs.map((url) => this.normalizeRealmServerURL(url)),
+      ),
+    ];
     if (realmServerURLs.length === 0) {
       throw new Error(`Unable to determine realm server to use`);
     }
     if (
-      realmServerURLs.length > 1 ||
-      realmServerURLs[0] !== this.realmServer.url.href
+      normalizedRealmServerURLs.length > 1 ||
+      normalizedRealmServerURLs[0] !== normalizedOwnRealmServerURL
     ) {
       throw new Error(
-        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm servers: ${realmServerURLs.join()} (own realm server: ${this.url.href})`,
+        `Multi-realm server support is not yet implemented: don't know how to provide auth token for different realm servers: ${normalizedRealmServerURLs.join()} (own realm server: ${normalizedOwnRealmServerURL})`,
       );
     }
   }
@@ -288,15 +306,31 @@ export default class RealmServerService extends Service {
 
       let claims = realmClaimsFromRawToken(token);
       if (claims?.realmServerURL) {
-        realmServerURLs.add(ensureTrailingSlash(claims.realmServerURL));
+        realmServerURLs.add(
+          this.normalizeRealmServerURL(claims.realmServerURL),
+        );
       }
     }
 
     if (realmServerURLs.size === 0) {
-      realmServerURLs.add(ensureTrailingSlash(this.url.href));
+      realmServerURLs.add(this.normalizeRealmServerURL(this.url.href));
     }
 
     return [...realmServerURLs];
+  }
+
+  private normalizeRealmServerURL(url: string): string {
+    let normalizedURL = ensureTrailingSlash(url);
+    if (isTesting()) {
+      let testRealmOrigin = new URL(testRealmURL).origin;
+      // In tests, realm URLs are often rooted at the test realm origin but
+      // are served by the base realm server; remap to the base origin so
+      // federated requests hit the active test server.
+      if (new URL(normalizedURL).origin === testRealmOrigin) {
+        return ensureTrailingSlash(new URL(resolvedBaseRealmURL).origin);
+      }
+    }
+    return normalizedURL;
   }
 
   @cached
@@ -384,7 +418,18 @@ export default class RealmServerService extends Service {
     }
 
     let { data } = await response.json();
+    let externalCatalogURL = ENV.resolvedExternalCatalogRealmURL;
+    let showExternalCatalog =
+      window.localStorage.getItem('boxel:externalCatalog') === 'true';
+
     data.forEach((publicRealm: { id: string }) => {
+      if (
+        externalCatalogURL &&
+        publicRealm.id === externalCatalogURL &&
+        !showExternalCatalog
+      ) {
+        return;
+      }
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
           type: 'catalog',
@@ -392,7 +437,70 @@ export default class RealmServerService extends Service {
         });
       }
     });
+
+    if (showExternalCatalog && externalCatalogURL) {
+      if (!this.availableRealms.find((r) => r.url === externalCatalogURL)) {
+        this.availableRealms.push({
+          type: 'catalog',
+          url: externalCatalogURL,
+        });
+      }
+    }
+
     this._ready.fulfill();
+  }
+
+  async fetchRealmInfos(realmUrls: string[]): Promise<{
+    data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    publicReadableRealms: Set<string>;
+  }> {
+    if (realmUrls.length === 0) {
+      return { data: [], publicReadableRealms: new Set() };
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let infoURL = new URL('_federated-info', realmServerURL);
+
+    let response = await this.authedFetch(infoURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.RealmInfo,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ realms: uniqueRealmUrls }),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch federated realm info: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let publicReadableRealms = new Set<string>();
+    let publicReadableHeader = response.headers.get(
+      'x-boxel-realms-public-readable',
+    );
+    if (publicReadableHeader) {
+      for (let value of publicReadableHeader.split(',')) {
+        let trimmed = value.trim();
+        if (trimmed) {
+          publicReadableRealms.add(ensureTrailingSlash(trimmed));
+        }
+      }
+    }
+
+    let json = (await response.json()) as {
+      data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
+    };
+    return { data: json.data ?? [], publicReadableRealms };
   }
 
   async handleEvent(event: Partial<IEvent>) {
@@ -417,6 +525,10 @@ export default class RealmServerService extends Service {
   }
 
   get url() {
+    if (isTesting()) {
+      return new URL(ENV.realmServerURL);
+    }
+
     let url;
     if (hostsOwnAssets) {
       url = new URL(resolvedBaseRealmURL).origin;
@@ -488,8 +600,12 @@ export default class RealmServerService extends Service {
   });
 
   private loggingIn: Promise<void> | undefined;
+  private pendingRegistrationToken: string | undefined;
 
-  async login(): Promise<void> {
+  async login(registrationToken?: string): Promise<void> {
+    if (registrationToken) {
+      this.pendingRegistrationToken = registrationToken;
+    }
     if (this.auth.type === 'logged-in') {
       return;
     }
@@ -510,8 +626,10 @@ export default class RealmServerService extends Service {
         this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
+          registrationToken: this.pendingRegistrationToken,
         },
       );
+      this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
       this.token = token;
     } catch (e: any) {
@@ -541,6 +659,28 @@ export default class RealmServerService extends Service {
     const headers = new Headers(options.headers);
     if (this.token) {
       headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    return this.network.fetch(url, {
+      ...options,
+      headers,
+    });
+  }
+
+  maybeAuthedFetchForRealms(
+    url: string,
+    realms: string[],
+    options: RequestInit = {},
+  ) {
+    const headers = new Headers(options.headers);
+    if (!headers.has('Authorization')) {
+      if (this.token) {
+        headers.set('Authorization', `Bearer ${this.token}`);
+      } else {
+        let realmToken = this.getRealmTokenForRealms(realms);
+        if (realmToken) {
+          headers.set('Authorization', `Bearer ${realmToken}`);
+        }
+      }
     }
     return this.network.fetch(url, {
       ...options,
@@ -579,6 +719,123 @@ export default class RealmServerService extends Service {
     }
 
     return response;
+  }
+
+  async registerBot(username: string) {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registration`,
+      {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'bot-registration',
+            attributes: {
+              username,
+            },
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not register bot: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let body = (await response.json()) as {
+      data: {
+        id: string;
+        attributes: {
+          username: string;
+          createdAt: string;
+        };
+      };
+    };
+
+    return {
+      botRegistrationId: body.data.id,
+    };
+  }
+
+  async unregisterBot(botRegistrationId: string) {
+    await this.login();
+
+    if (!botRegistrationId) {
+      throw new Error('botRegistrationId is required');
+    }
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registration`,
+      {
+        method: 'DELETE',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/vnd.api+json',
+          Authorization: `Bearer ${this.token}`,
+        },
+        body: JSON.stringify({
+          data: {
+            type: 'bot-registration',
+            id: botRegistrationId,
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not unregister bot: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    return;
+  }
+
+  async getBotRegistrations() {
+    await this.login();
+
+    let response = await this.network.fetch(
+      `${this.url.href}_bot-registrations`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          Authorization: `Bearer ${this.token}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      let err = `Could not fetch bot registrations: ${response.status} - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+
+    let body = (await response.json()) as {
+      data: Array<{
+        id: string;
+        attributes: {
+          username: string;
+          createdAt: string;
+        };
+      }>;
+    };
+
+    let registrations = body.data.map((entry) => ({
+      botRegistrationId: entry.id,
+      username: entry.attributes.username,
+      createdAt: entry.attributes.createdAt,
+    }));
+
+    return registrations;
   }
 
   async publishRealm(sourceRealmURL: string, publishedRealmURL: string) {
@@ -710,7 +967,7 @@ export default class RealmServerService extends Service {
         type: 'claimed-domain',
         attributes: {
           source_realm_url: sourceRealmURL,
-          hostname: hostname,
+          hostname,
         },
       },
     };
@@ -762,6 +1019,67 @@ export default class RealmServerService extends Service {
     return response.json();
   }
 
+  async createGitHubPR(params: {
+    listingName: string;
+    listingId?: string;
+    snapshotId: string;
+    branch: string;
+    baseBranch?: string;
+    files: Array<{ path: string; content: string }>;
+  }): Promise<{
+    prUrl: string;
+    prNumber: number;
+    branch: string;
+    sha: string;
+    status: 'open' | 'merged' | 'closed' | 'failed';
+  }> {
+    await this.login();
+
+    const response = await this.authedFetch(`${this.url.href}_github-pr`, {
+      method: 'POST',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'github-pr',
+          attributes: params,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage: string;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.errors?.[0]?.detail || errorText;
+      } catch {
+        errorMessage = errorText;
+      }
+      throw new Error(
+        `GitHub PR creation failed: ${response.status} - ${errorMessage}`,
+      );
+    }
+
+    const { data } = (await response.json()) as {
+      data: {
+        type: string;
+        id: string;
+        attributes: {
+          prUrl: string;
+          prNumber: number;
+          branch: string;
+          sha: string;
+          status: 'open' | 'merged' | 'closed' | 'failed';
+        };
+      };
+    };
+
+    return data.attributes;
+  }
+
   private async getToken() {
     if (!this.token) {
       await this.login();
@@ -772,6 +1090,27 @@ export default class RealmServerService extends Service {
     }
 
     return this.token;
+  }
+
+  private getRealmTokenForRealms(realms: string[]): string | undefined {
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
+    if (!sessionStr) {
+      return undefined;
+    }
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      return undefined;
+    }
+    for (let realmURL of realms) {
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      if (token) {
+        return token;
+      }
+    }
+    return undefined;
   }
 }
 

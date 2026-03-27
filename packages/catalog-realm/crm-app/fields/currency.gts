@@ -81,7 +81,7 @@ class CurrencyFieldEdit extends Component<typeof CurrencyField> {
   </template>
 }
 
-export class CurrencyField extends FieldDef {
+export default class CurrencyField extends FieldDef {
   static displayName = 'Currency';
   @field code = contains(StringField);
   static edit = CurrencyFieldEdit;

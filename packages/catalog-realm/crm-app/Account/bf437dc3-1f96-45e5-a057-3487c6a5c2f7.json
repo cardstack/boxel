@@ -32,8 +32,8 @@
         "foregroundColor": "#1976D2",
         "backgroundColor": "#E3F2FD"
       },
-      "description": "Potential startup client interested in digital marketing services",
-      "thumbnailURL": null
+      "cardDescription": "Potential startup client interested in digital marketing services",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "crmApp": {

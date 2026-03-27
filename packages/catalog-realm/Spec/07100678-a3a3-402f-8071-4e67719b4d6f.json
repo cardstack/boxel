@@ -9,9 +9,9 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "AstralGardens",
-      "description": "Spec of AstralGardens",
-      "thumbnailURL": null
+      "cardTitle": "AstralGardens",
+      "cardDescription": "Spec of AstralGardens",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

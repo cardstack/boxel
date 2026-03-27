@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Website Field",
-      "description": "A field that validates website addresses and provides a suitable editor.",
+      "cardTitle": "Website Field",
+      "cardDescription": "A field that validates website addresses and provides a suitable editor.",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/website",

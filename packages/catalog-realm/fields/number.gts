@@ -1,4 +1,4 @@
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 import { Component } from 'https://cardstack.com/base/card-api';
 import BaseNumberField, {
   deserializeForUI,
@@ -148,6 +148,7 @@ export default class NumberField extends BaseNumberField {
         @value={{@model}}
         @config={{this.inputOptions}}
         @onChange={{@set}}
+        @disabled={{not @canEdit}}
       />
     </template>
 

@@ -16,9 +16,9 @@
       "summary": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
       "cardInfo": {
         "notes": null,
-        "title": "Product Rotator",
-        "description": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/thumbnail.png"
+        "name": "Product Rotator",
+        "summary": "This software enables users to upload reference images and describe a product to generate, rotate, and export high-quality 360-degree digital representations for use in product catalogs.",
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/product-rotater-listing/thumbnail.png"
       }
     },
     "relationships": {
@@ -54,7 +54,7 @@
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/16320d37-fac6-417c-ae20-c583ea0c8a2e"
+          "self": "../field-spec/ImageFieldSpec/7c9e416c-e6c8-45b2-81c3-4eb6ddd219dc"
         }
       },
       "specs.3": {

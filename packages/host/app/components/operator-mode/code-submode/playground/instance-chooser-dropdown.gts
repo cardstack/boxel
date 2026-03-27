@@ -10,11 +10,14 @@ import type { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import {
   cardTypeDisplayName,
+  isFileDefInstance,
   type Format,
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type { FieldOption, SelectedInstance } from './playground-panel';
 
@@ -23,62 +26,72 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
     return;
   }
   let { card, fieldIndex } = selection;
-  let title = card.title ?? `Untitled ${cardTypeDisplayName(card)}`;
+  let title: string;
+  if (isFileDefInstance(card)) {
+    title = card.name ?? `Untitled ${cardTypeDisplayName(card)}`;
+  } else {
+    title = card.cardTitle ?? `Untitled ${cardTypeDisplayName(card)}`;
+  }
   if (fieldIndex === undefined) {
     return title;
   }
   return `${title} - Example ${fieldIndex + 1}`;
 };
 
-const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
-  <template>
-    <div class='selected-item' data-test-selected-item>
-      <span class='label'>Instance:</span>
-      <span class='item'>{{@title}}</span>
-    </div>
-    <style scoped>
-      .selected-item {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .label {
-        font-weight: 600;
-        margin-right: var(--boxel-sp-xxs);
-      }
-    </style>
-  </template>;
-
-const BeforeOptions: TemplateOnlyComponent = <template>
-  <div class='before-options'>
-    Recent
+const SelectedItem: TemplateOnlyComponent<{
+  Args: { title?: string; label?: string };
+}> = <template>
+  <div class='selected-item' data-test-selected-item>
+    <span class='label'>{{if @label @label 'Instance:'}}</span>
+    <span class='item'>{{@title}}</span>
   </div>
   <style scoped>
-    .before-options {
-      width: 100%;
-      background-color: var(--boxel-light);
-      padding: var(--boxel-sp-xs) var(--boxel-sp);
-      font: 500 var(--boxel-font-sm);
-      letter-spacing: var(--boxel-lsp-xs);
-      text-align: left;
+    .selected-item {
+      font: 500 var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-sm);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .label {
+      font-weight: 600;
+      margin-right: var(--boxel-sp-xxs);
     }
   </style>
 </template>;
+
+const BeforeOptions: TemplateOnlyComponent<{ Args: { label?: string } }> =
+  <template>
+    <div class='before-options'>
+      {{if @label @label 'Recent'}}
+    </div>
+    <style scoped>
+      .before-options {
+        width: 100%;
+        background-color: var(--boxel-light);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-align: left;
+      }
+    </style>
+  </template>;
 
 interface AfterOptionsSignature {
   Args: {
     menuItems: MenuItem[];
     closeMenu?: () => void;
+    hideTitle?: boolean;
   };
 }
 const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
   <div class='after-options'>
-    <span class='title'>
-      Action
-    </span>
+    {{#unless @hideTitle}}
+      <span class='title'>
+        Action
+      </span>
+    {{/unless}}
     <Menu
       class='after-options-menu'
       @items={{@menuItems}}
@@ -121,13 +134,15 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
 interface Signature {
   Args: {
     isFieldDef: boolean;
+    isFileDef?: boolean;
     cardOptions: PrerenderedCardLike[] | undefined;
     fieldOptions?: FieldOption[];
+    fileMetaOptions?: FileDef[];
     findSelectedCard: (
       cards?: PrerenderedCardLike[],
     ) => PrerenderedCardLike | SelectedInstance | undefined;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCardLike | FieldOption) => void;
+    onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
     recentCardIds: string[];
@@ -138,11 +153,15 @@ interface Signature {
 interface OptionsDropdownSignature {
   Args: {
     isField?: boolean;
-    options: PrerenderedCardLike[] | FieldOption[] | undefined;
-    selected?: PrerenderedCardLike | FieldOption | SelectedInstance;
+    isFileMeta?: boolean;
+    options: PrerenderedCardLike[] | FieldOption[] | FileDef[] | undefined;
+    selected?: PrerenderedCardLike | FieldOption | SelectedInstance | FileDef;
     selection: SelectedInstance | undefined;
-    onSelect: (item: PrerenderedCardLike | FieldOption) => void;
+    onSelect: (item: PrerenderedCardLike | FieldOption | FileDef) => void;
     afterMenuOptions: MenuItem[];
+    beforeOptionsLabel?: string;
+    selectedItemLabel?: string;
+    hideAfterOptionsTitle?: boolean;
   };
 }
 
@@ -164,22 +183,38 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
       @selectedItemComponent={{component
         SelectedItem
         title=(getItemTitle @selection)
+        label=@selectedItemLabel
       }}
       @renderInPlace={{true}}
       @onChange={{@onSelect}}
-      @placeholder='Select {{if @isField "field" "card"}} instance'
-      @beforeOptionsComponent={{component BeforeOptions}}
-      @afterOptionsComponent={{component
-        AfterOptions
-        menuItems=@afterMenuOptions
-        closeMenu=closeInstanceChooser
+      @placeholder='Select {{if
+        @isFileMeta
+        "file"
+        (if @isField "field" "card")
+      }} instance'
+      @beforeOptionsComponent={{component
+        BeforeOptions
+        label=@beforeOptionsLabel
+      }}
+      @afterOptionsComponent={{if
+        @afterMenuOptions.length
+        (component
+          AfterOptions
+          menuItems=@afterMenuOptions
+          closeMenu=closeInstanceChooser
+          hideTitle=@hideAfterOptionsTitle
+        )
       }}
       @verticalPosition='above'
       data-playground-instance-chooser
       data-test-instance-chooser
       as |item|
     >
-      {{#if @isField}}
+      {{#if @isFileMeta}}
+        <div class='file-item'>
+          <CardRenderer @card={{item}} @format='atom' />
+        </div>
+      {{else if @isField}}
         <CardContainer class='field' @displayBoundaries={{true}}>
           <CardRenderer @card={{item.field}} @format='atom' />
         </CardContainer>
@@ -232,7 +267,8 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         width: 100%;
       }
 
-      :deep(.ember-power-select-option:hover .card) {
+      :deep(.ember-power-select-option:hover .card),
+      :deep(.ember-power-select-option:hover .file-item) {
         background-color: var(--boxel-100);
       }
       .card,
@@ -249,12 +285,31 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .file-item {
+        display: flex;
+        align-items: center;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        min-width: 0;
+        background-color: var(--boxel-light);
+      }
     </style>
   </template>;
 
 export default class InstanceSelectDropdown extends Component<Signature> {
   <template>
-    {{#if @isFieldDef}}
+    {{#if @isFileDef}}
+      <OptionsDropdown
+        @isFileMeta={{true}}
+        @options={{@fileMetaOptions}}
+        @selected={{this.findSelectedFileMeta @fileMetaOptions}}
+        @selection={{@selection}}
+        @onSelect={{@onSelect}}
+        @afterMenuOptions={{@afterMenuOptions}}
+        @beforeOptionsLabel='Files'
+        @selectedItemLabel='File:'
+        @hideAfterOptionsTitle={{true}}
+      />
+    {{else if @isFieldDef}}
       <OptionsDropdown
         @isField={{true}}
         @options={{@fieldOptions}}
@@ -280,5 +335,12 @@ export default class InstanceSelectDropdown extends Component<Signature> {
     }
     let selection = this.args.selection;
     return fields.find((f) => f.index === selection.fieldIndex);
+  };
+
+  private findSelectedFileMeta = (files?: FileDef[]) => {
+    if (!files?.length || !this.args.selection) {
+      return;
+    }
+    return files.find((f) => f.id === this.args.selection?.card?.id);
   };
 }

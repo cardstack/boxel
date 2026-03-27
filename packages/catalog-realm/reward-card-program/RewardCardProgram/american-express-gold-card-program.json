@@ -13,9 +13,9 @@
       "network": "American Express",
       "cardInfo": {
         "notes": null,
-        "title": "American Express Gold Card",
-        "description": "Reward card with elevated earnings on restaurants and supermarkets",
-        "thumbnailURL": "https://icm.aexp-static.com/Internet/internationalcardshop/en_sg/images/cards/gold-card.png"
+        "name": "American Express Gold Card",
+        "summary": "Reward card with elevated earnings on restaurants and supermarkets",
+        "cardThumbnailURL": "https://icm.aexp-static.com/Internet/internationalcardshop/en_sg/images/cards/gold-card.png"
       },
       "cardName": "American Express Gold Card",
       "annualFee": {

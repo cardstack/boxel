@@ -5,16 +5,16 @@
       "readMe": null,
       "ref": {
         "name": "default",
-        "module": "http://localhost:4201/catalog/fields/image"
+        "module": "@cardstack/catalog/fields/image"
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "Image",
-      "description": null,
+      "cardTitle": "Image",
+      "cardDescription": null,
       "cardInfo": {
-        "title": null,
-        "description": null,
-        "thumbnailURL": null,
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
         "notes": null
       }
     },

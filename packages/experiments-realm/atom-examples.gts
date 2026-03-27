@@ -182,7 +182,7 @@ class Isolated extends Component<typeof AtomExamples> {
 
 class Trip extends FieldDef {
   static displayName = 'Trip';
-  @field title = contains(StringField);
+  @field cardTitle = contains(StringField);
   @field country = linksTo(Country);
   @field countries = linksToMany(Country);
 }

@@ -12,11 +12,15 @@ Router.map(function () {
     this.route('html', { path: '/html/:format/:ancestor_level' });
     this.route('icon');
     this.route('meta');
+    this.route('file-extract');
     this.route('error');
   });
   this.route('module', { path: '/module/:id/:nonce/:options' });
   this.route('connect', { path: '/connect/:origin' });
-  this.route('standby');
+  this.route('standby', { path: '/_standby' });
+  this.route('command-runner', {
+    path: '/command-runner/:request_id/:nonce',
+  });
 
   this.route('index', { path: '/*path' });
   this.route('index-root', { path: '/' });

@@ -1,4 +1,4 @@
-import { insertUser } from '@cardstack/runtime-common';
+import { getOrCreateUser } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import {
   fetchRequestFromContext,
@@ -9,6 +9,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt';
 import type { CreateRoutesArgs } from '../routes';
 import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
+import { parseLowCreditThreshold } from '../lib/daily-credit-grant-config';
 
 export default function handleCreateUserRequest({
   dbAdapter,
@@ -40,37 +41,28 @@ export default function handleCreateUserRequest({
 
     let registrationToken = json.data.attributes.registrationToken;
 
-    let user;
-
+    let lowCreditThreshold: number;
     try {
-      user = await insertUser(dbAdapter, matrixUserId, registrationToken);
-    } catch (e) {
-      let errorMessage: string;
-      if (
-        (e as Error).message.includes(
-          'duplicate key value violates unique constraint',
-        )
-      ) {
-        errorMessage = 'User already exists';
-      } else {
-        errorMessage = 'Unknown error creating user';
-      }
-
-      await setContextResponse(
-        ctxt,
-        new Response(errorMessage, { status: 422 }),
-      );
+      lowCreditThreshold = parseLowCreditThreshold();
+    } catch (error) {
+      await sendResponseForSystemError(ctxt, (error as Error).message);
       return;
     }
 
-    // When user signs up, they get 1000 credits and no stripe subscription is needed
-    // In this case we don't need to create a subscription cycle, just add the credits to the user
-    await addToCreditsLedger(dbAdapter, {
-      userId: user!.id,
-      creditAmount: 1000,
-      creditType: 'extra_credit',
-      subscriptionCycleId: null,
-    });
+    let { user, created } = await getOrCreateUser(
+      dbAdapter,
+      matrixUserId,
+      registrationToken,
+    );
+
+    if (created) {
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: lowCreditThreshold,
+        creditType: 'daily_credit',
+        subscriptionCycleId: null,
+      });
+    }
 
     await setContextResponse(ctxt, new Response('ok'));
   };

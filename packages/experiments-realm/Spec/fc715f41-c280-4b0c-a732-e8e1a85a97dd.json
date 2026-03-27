@@ -10,18 +10,18 @@
       "specType": "field",
       "containedExamples": [
         {
-          "title": "Orange ball"
+          "cardTitle": "Orange ball"
         },
         {
-          "title": "Large yellow ball"
+          "cardTitle": "Large yellow ball"
         },
         {
-          "title": "Small red ball"
+          "cardTitle": "Small red ball"
         }
       ],
-      "title": "Toy Spec II",
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": "Toy Spec II",
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

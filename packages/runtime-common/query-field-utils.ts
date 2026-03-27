@@ -1,13 +1,20 @@
-import { codeRefWithAbsoluteURL } from './code-ref';
+import { codeRefWithAbsoluteURL, type CodeRef } from './code-ref';
+import { cardIdToURL } from './card-reference-resolver';
 import type { FieldDefinition } from './definitions';
 import type {
+  FileMetaResource,
   LooseCardResource,
   Relationship,
   ResourceID,
 } from './resource-types';
 import {
   buildQueryParamValue,
+  isAnyFilter,
+  isCardTypeFilter,
+  isEveryFilter,
+  isNotFilter,
   normalizeQueryForSignature,
+  type Filter,
   type Query,
   type QueryWithInterpolations,
 } from './query';
@@ -30,7 +37,7 @@ export interface NormalizeQueryDefinitionParams {
   fieldName: string;
   fieldPath?: string;
   resolvePathValue: (path: string) => any;
-  resource?: LooseCardResource;
+  resource?: LooseCardResource | FileMetaResource;
   relativeTo?: URL;
 }
 
@@ -224,7 +231,7 @@ export function normalizeQueryDefinition({
   let resolvedRealm = resolveRealm(specifiedRealm);
 
   let relativeToURL =
-    relativeTo ?? (resource?.id ? new URL(resource.id) : realmURL);
+    relativeTo ?? (resource?.id ? cardIdToURL(resource.id) : realmURL);
   let targetRef = codeRefWithAbsoluteURL(
     fieldDefinition.fieldOrCard,
     relativeToURL,
@@ -233,8 +240,8 @@ export function normalizeQueryDefinition({
   let filter = queryAny.filter as Record<string, any> | undefined;
   if (!filter || Object.keys(filter).length === 0) {
     queryAny.filter = { type: targetRef };
-  } else if (!filter.on) {
-    filter.on = targetRef;
+  } else {
+    injectOnIntoLeafFilters(filter, targetRef);
   }
 
   if (Array.isArray(queryAny.sort)) {
@@ -265,7 +272,7 @@ export function normalizeQueryDefinition({
 }
 
 export function getValueForResourcePath(
-  resource: LooseCardResource,
+  resource: LooseCardResource | FileMetaResource,
   path: string,
 ): any {
   let root: any = {
@@ -312,6 +319,78 @@ export function buildQuerySearchURL(realmHref: string, query: Query): string {
   let normalizedQuery = normalizeQueryForSignature(query);
   searchURL.searchParams.set('query', buildQueryParamValue(normalizedQuery));
   return searchURL.href;
+}
+
+function injectOnIntoLeafFilters(
+  filter: Record<string, any>,
+  targetRef: any,
+): void {
+  if ('type' in filter) {
+    return;
+  }
+  if ('not' in filter && filter.not && typeof filter.not === 'object') {
+    injectOnIntoLeafFilters(filter.not, targetRef);
+    return;
+  }
+  if ('any' in filter && Array.isArray(filter.any)) {
+    for (let child of filter.any) {
+      if (child && typeof child === 'object') {
+        injectOnIntoLeafFilters(child, targetRef);
+      }
+    }
+    return;
+  }
+  if ('every' in filter && Array.isArray(filter.every)) {
+    for (let child of filter.every) {
+      if (child && typeof child === 'object') {
+        injectOnIntoLeafFilters(child, targetRef);
+      }
+    }
+    return;
+  }
+  if (!filter.on) {
+    filter.on = targetRef;
+  }
+}
+
+export interface TypeRefResult {
+  ref: CodeRef;
+  negated: boolean;
+}
+
+export function getTypeRefsFromFilter(
+  filter: Filter,
+): TypeRefResult[] | undefined {
+  // Any filter with an explicit 'on' scoping (e.g. specRef in chooseCard)
+  if ('on' in filter && filter.on) {
+    return [{ ref: filter.on, negated: false }];
+  }
+  // Top-level CardTypeFilter { type: CodeRef } (e.g. linksTo)
+  if (isCardTypeFilter(filter)) {
+    return [{ ref: filter.type, negated: false }];
+  }
+  // NotFilter: recurse and flip negated flag on all results
+  if (isNotFilter(filter)) {
+    const inner = getTypeRefsFromFilter(filter.not);
+    return inner
+      ? inner.map((r) => ({ ref: r.ref, negated: !r.negated }))
+      : undefined;
+  }
+  // EveryFilter: recurse into all children and collect
+  if (isEveryFilter(filter)) {
+    const results = filter.every.flatMap(
+      (sub: Filter) => getTypeRefsFromFilter(sub) ?? [],
+    );
+    return results.length > 0 ? results : undefined;
+  }
+  // AnyFilter: recurse into all children and collect
+  if (isAnyFilter(filter)) {
+    const results = filter.any.flatMap(
+      (sub: Filter) => getTypeRefsFromFilter(sub) ?? [],
+    );
+    return results.length > 0 ? results : undefined;
+  }
+  return undefined;
 }
 
 export function cloneRelationship(

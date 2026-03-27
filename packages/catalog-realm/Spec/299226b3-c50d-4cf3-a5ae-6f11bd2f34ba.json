@@ -9,10 +9,10 @@
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "GamingPlatform",
-      "description": null,
+      "cardTitle": "GamingPlatform",
+      "cardDescription": null,
       "cardInfo": {},
-      "thumbnailURL": null
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

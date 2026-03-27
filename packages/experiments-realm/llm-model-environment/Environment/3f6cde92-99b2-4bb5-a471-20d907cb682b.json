@@ -103,8 +103,8 @@
           "name": "default"
         }
       ],
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "parent": {

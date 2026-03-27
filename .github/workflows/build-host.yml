@@ -15,45 +15,21 @@ jobs:
       group: build-host-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Init
         uses: ./.github/actions/init
 
       - name: Set up env
+        run: cat packages/host/config/${{ inputs.environment }}.env >> $GITHUB_ENV
+
+      - name: Restore boxel-icons build cache
+        id: icons-cache
+        uses: ./.github/actions/restore-icons-cache
+      - name: Build boxel-icons and boxel-ui
+        run: mise run build:ui
         env:
-          INPUT_ENVIRONMENT: ${{ inputs.environment }}
-        run: |
-          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
-            echo "RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/" >> $GITHUB_ENV
-            echo "RESOLVED_CATALOG_REALM_URL=https://app.boxel.ai/catalog/" >> $GITHUB_ENV
-            echo "RESOLVED_SKILLS_REALM_URL=https://app.boxel.ai/skills/" >> $GITHUB_ENV
-            echo "MATRIX_URL=https://matrix.boxel.ai" >> $GITHUB_ENV
-            echo "MATRIX_SERVER_NAME=boxel.ai" >> $GITHUB_ENV
-            echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
-            echo "PUBLISHED_REALM_BOXEL_SPACE_DOMAIN=boxel.space" >> $GITHUB_ENV
-            echo "PUBLISHED_REALM_BOXEL_SITE_DOMAIN=boxel.site" >> $GITHUB_ENV
-          elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
-            echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
-            echo "RESOLVED_CATALOG_REALM_URL=https://realms-staging.stack.cards/catalog/" >> $GITHUB_ENV
-            echo "RESOLVED_SKILLS_REALM_URL=https://realms-staging.stack.cards/skills/" >> $GITHUB_ENV
-            echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
-            echo "MATRIX_SERVER_NAME=stack.cards" >> $GITHUB_ENV
-            echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
-            echo "PUBLISHED_REALM_BOXEL_SPACE_DOMAIN=staging.boxel.dev" >> $GITHUB_ENV
-            echo "PUBLISHED_REALM_BOXEL_SITE_DOMAIN=staging.boxel.build" >> $GITHUB_ENV
-          else
-            echo "unrecognized environment"
-            exit 1;
-          fi
-
-      - name: Build boxel-icons
-        run: pnpm build
-        working-directory: packages/boxel-icons
-
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
+          SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
 
       - name: Build host
         run: pnpm deploy:boxel-host build-only --verbose

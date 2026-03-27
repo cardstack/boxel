@@ -30,6 +30,8 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../../helpers';
 import { setupBaseRealm } from '../../../helpers/base-realm';
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
@@ -68,17 +70,21 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
 
   let { simulateRemoteMessage } = mockMatrixUtils;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function () {
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
-    });
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      }),
+    );
   });
 
   function setCardInOperatorModeState(
@@ -108,9 +114,7 @@ module('Integration | ai-assistant-panel | debug-message', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         noop = () => {};
-        <template>
-          <OperatorMode @onClose={{this.noop}} />
-        </template>
+        <template><OperatorMode @onClose={{this.noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();

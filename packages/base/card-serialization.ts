@@ -1,15 +1,20 @@
 // --- Type Imports ---
 
 import type {
-  LooseCardResource,
-  Loader,
   CardDocument,
   CardResource,
   CardResourceMeta,
+  FileMetaResource,
+  Loader,
+  LooseCardResource,
+  LooseFileMetaResource,
   LooseSingleCardDocument,
+  LooseSingleFileMetaDocument,
   Meta,
+  RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
+import type { FileDef } from './file-api';
 import type { ResourceID } from '@cardstack/runtime-common';
 
 // --- Runtime Imports ---
@@ -17,11 +22,16 @@ import type { ResourceID } from '@cardstack/runtime-common';
 import { isEqual, merge } from 'lodash';
 import {
   assertIsSerializerName,
+  CardResourceType,
   fieldSerializer,
+  FileMetaResourceType,
   getSerializer,
   humanReadable,
   identifyCard,
+  isRegisteredPrefix,
+  cardIdToURL,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   loadCardDef,
   localId,
   maybeRelativeURL,
@@ -65,6 +75,7 @@ export interface SerializeOpts {
 
 export interface DeserializeOpts {
   ignoreBrokenLinks?: true;
+  dependencyTrackingContext?: RuntimeDependencyTrackingContext;
 }
 
 // --- Serialization Symbols ---
@@ -86,7 +97,7 @@ function myLoader(): Loader {
 }
 
 export async function cardClassFromResource<CardT extends BaseDefConstructor>(
-  resource: LooseCardResource | undefined,
+  resource: LooseCardResource | CardResource | FileMetaResource | undefined,
   fallback: CardT,
   relativeTo: URL | undefined,
 ): Promise<CardT> {
@@ -102,7 +113,7 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       {
         loader: myLoader(),
         relativeTo:
-          relativeTo ?? (resource.id ? new URL(resource.id) : undefined),
+          relativeTo ?? (resource.id ? cardIdToURL(resource.id) : undefined),
       },
     );
     if (!card) {
@@ -136,7 +147,7 @@ export function callSerializeHook(
 }
 
 export function getCardMeta<K extends keyof CardResourceMeta>(
-  card: CardDef,
+  card: BaseDef,
   metaKey: K,
 ): CardResourceMeta[K] | undefined {
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
@@ -172,7 +183,7 @@ export function makeRelativeURL(
 export function resourceFrom(
   doc: CardDocument | undefined,
   resourceId: string | undefined,
-): LooseCardResource | undefined {
+): CardResource | FileMetaResource | undefined {
   if (doc == null) {
     return;
   }
@@ -206,12 +217,17 @@ export function serializeCard(
   };
   let modelRelativeTo =
     model.id != null
-      ? new URL(model.id)
+      ? cardIdToURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{
       maybeRelativeURL(possibleURL: string) {
+        // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
+        // in their canonical portable form — return as-is
+        if (isRegisteredPrefix(possibleURL)) {
+          return possibleURL;
+        }
         let url = maybeURL(possibleURL, modelRelativeTo);
         if (!url) {
           throw new Error(
@@ -241,11 +257,12 @@ export function serializeCard(
 }
 
 export function serializeCardResource(
-  model: CardDef,
+  model: CardDef | FileDef,
   doc: JSONAPISingleResourceDocument,
   opts?: SerializeOpts,
   visited: Set<string> = new Set(),
-): LooseCardResource {
+  resourceType: string = CardResourceType,
+): LooseCardResource | LooseFileMetaResource {
   let adoptsFrom = identifyCard(
     model.constructor,
     opts?.useAbsoluteURL ? undefined : opts?.maybeRelativeURL,
@@ -276,9 +293,70 @@ export function serializeCardResource(
     },
     ...fieldResources,
     {
-      type: 'card',
+      type: resourceType,
       meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
     },
-    model.id ? { id: model.id } : { lid: model[localId] },
+    // Only CardDef instances can be unsaved (without an id), so when model.id
+    // is falsy we know the model is a CardDef which has [localId].
+    model.id ? { id: model.id } : { lid: (model as CardDef)[localId] },
   );
+}
+
+export function serializeFileDef(
+  model: FileDef,
+  opts?: SerializeOpts,
+): LooseSingleFileMetaDocument {
+  let doc = {
+    data: {
+      type: FileMetaResourceType,
+      ...(model.id != null ? { id: model.id } : {}),
+    },
+  };
+  let modelRelativeTo =
+    model.id != null
+      ? cardIdToURL(model.id)
+      : (model[relativeTo] as URL | undefined);
+  let data = serializeCardResource(
+    model,
+    doc,
+    {
+      ...opts,
+      ...{
+        maybeRelativeURL(possibleURL: string) {
+          // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
+          // in their canonical portable form — return as-is
+          if (isRegisteredPrefix(possibleURL)) {
+            return possibleURL;
+          }
+          let url = maybeURL(possibleURL, modelRelativeTo);
+          if (!url) {
+            throw new Error(
+              `could not determine url from '${possibleURL}' relative to ${modelRelativeTo}`,
+            );
+          }
+          if (!modelRelativeTo) {
+            return url.href;
+          }
+          const realmURLString = getCardMeta(model, 'realmURL');
+          const realmURL = realmURLString
+            ? new URL(realmURLString)
+            : undefined;
+          return maybeRelativeURL(url, modelRelativeTo, realmURL);
+        },
+      },
+    },
+    undefined,
+    FileMetaResourceType,
+  );
+  merge(doc, { data });
+  if (!isSingleFileMetaDocument(doc)) {
+    throw new Error(
+      `Expected serialized file def to be a SingleFileMetaDocument, but it was: ${JSON.stringify(
+        doc,
+        null,
+        2,
+      )}`,
+    );
+  }
+  return doc as LooseSingleFileMetaDocument;
 }

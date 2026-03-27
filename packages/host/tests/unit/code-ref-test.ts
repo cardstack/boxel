@@ -19,6 +19,8 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupIntegrationTestRealm,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
@@ -30,13 +32,16 @@ module('code-ref', function (hooks) {
 
   let loader: Loader;
 
+  setupRealmCacheTeardown(hooks);
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': `
+    await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': `
           import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
           import StringField from 'https://cardstack.com/base/string';
           export class Person extends CardDef {
@@ -44,7 +49,7 @@ module('code-ref', function (hooks) {
             @field firstName = contains(StringField);
           }
         `,
-        'code-ref-test.ts': `
+          'code-ref-test.ts': `
           import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
           import CodeRefField from 'https://cardstack.com/base/code-ref';
 
@@ -57,8 +62,9 @@ module('code-ref', function (hooks) {
             };
           }
         `,
-      },
-    });
+        },
+      }),
+    );
   });
 
   setupCardLogs(

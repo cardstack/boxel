@@ -4,7 +4,11 @@ import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealm, testRealmHref, createJWT } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  testRealmHref,
+  createJWT,
+} from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
@@ -29,7 +33,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     }
 
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           '*': ['read'],
         },
@@ -97,9 +101,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           john: ['read'],
+          '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
         onRealmSetup,
       });

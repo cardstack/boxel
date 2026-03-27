@@ -8,8 +8,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { fetchSessionRoom } from '@cardstack/runtime-common/db-queries/session-room-queries';
 
 import {
-  setupPermissionedRealm,
-  insertUser,
+  setupPermissionedRealmCached,
   realmSecretSeed,
   testRealmHref,
 } from './helpers';
@@ -21,19 +20,16 @@ module(basename(__filename), function () {
     let request: SuperTest<SupertestTest>;
     const matrixUserId = '@firsttimer:localhost';
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read'],
         [matrixUserId]: ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
       onRealmSetup: ({ dbAdapter: adapter, request: req }) => {
         dbAdapter = adapter;
         request = req;
       },
-    });
-
-    hooks.beforeEach(async function () {
-      await insertUser(dbAdapter, matrixUserId, 'cus_test', null);
     });
 
     hooks.afterEach(function () {
@@ -51,11 +47,7 @@ module(basename(__filename), function () {
       });
       sinon.stub(MatrixClient.prototype, 'joinRoom').resolves();
 
-      let existingRoom = await fetchSessionRoom(
-        dbAdapter,
-        testRealmHref,
-        matrixUserId,
-      );
+      let existingRoom = await fetchSessionRoom(dbAdapter, matrixUserId);
       assert.strictEqual(
         existingRoom,
         null,
@@ -86,11 +78,7 @@ module(basename(__filename), function () {
         'realm created the DM room for the requesting user',
       );
 
-      let sessionRoom = await fetchSessionRoom(
-        dbAdapter,
-        testRealmHref,
-        matrixUserId,
-      );
+      let sessionRoom = await fetchSessionRoom(dbAdapter, matrixUserId);
       assert.strictEqual(
         sessionRoom,
         expectedRoomId,

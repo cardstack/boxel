@@ -23,7 +23,7 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -40,11 +40,12 @@ import {
   testRealmInfo,
   waitUntil,
   testRealmHref,
-  testRealmURL,
   createJWT,
   cardInfo,
   getTestPrerenderer,
   testCreatePrerenderAuth,
+  type RealmRequest,
+  withRealmPath,
 } from './helpers';
 import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -64,9 +65,13 @@ const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let testRealmHref = realmURL.href;
+    let testRealmURL = realmURL;
     let testRealm: Realm;
     let testRealmHttpServer: Server;
-    let request: SuperTest<Test>;
+    let request: RealmRequest;
+    let serverRequest: SuperTest<Test>;
     let dir: DirResult;
     let dbAdapter: PgAdapter;
     let testRealmHttpServer2: Server;
@@ -85,7 +90,8 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       testRealmHttpServer = args.testRealmHttpServer;
-      request = args.request;
+      serverRequest = args.request;
+      request = withRealmPath(args.request, realmURL);
       dir = args.dir;
       dbAdapter = args.dbAdapter;
     }
@@ -95,17 +101,20 @@ module(basename(__filename), function () {
         testRealm,
         testRealmHttpServer,
         request,
+        serverRequest,
         dir,
         dbAdapter,
       };
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
         carol: ['read', 'write'],
+        '@node-test_realm:localhost': ['read', 'realm-owner'],
       },
+      realmURL,
       onRealmSetup,
     });
 
@@ -213,12 +222,42 @@ module(basename(__filename), function () {
         ),
         'content-type uses file meta mime type',
       );
-
       let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.type, 'file-meta');
       assert.strictEqual(json.data.attributes?.name, 'person.gts');
       assert.deepEqual(json.data.meta?.adoptsFrom, {
-        module: `${baseRealm.url}file-api`,
-        name: 'FileDef',
+        module: `${baseRealm.url}gts-file-def`,
+        name: 'GtsFileDef',
+      });
+    });
+
+    test('serves markdown file meta subclass for noCache requests', async function (assert) {
+      await testRealm.write(
+        'guide.md',
+        '# Guide\n\nThis markdown file should resolve to MarkdownDef.',
+      );
+
+      let response = await request
+        .get(`/guide.md?noCache=true`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        response.headers['content-type']?.startsWith(
+          SupportedMimeType.FileMeta,
+        ),
+        'content-type uses file meta mime type',
+      );
+      let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.strictEqual(json.data.attributes?.name, 'guide.md');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}markdown-file-def`,
+        name: 'MarkdownDef',
       });
     });
 
@@ -245,7 +284,8 @@ module(basename(__filename), function () {
 
     test('can set response Cache-Control header for json api request', async function (assert) {
       let response = await request
-        .get(`/_info`)
+        .post(`/_info`)
+        .set('X-HTTP-Method-Override', 'QUERY')
         .set('Accept', SupportedMimeType.JSONAPI)
         .set(
           'Authorization',
@@ -327,7 +367,6 @@ module(basename(__filename), function () {
               type: 'realm-config',
               attributes: {
                 ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
                 backgroundURL: 'new-bg',
               },
             },
@@ -934,21 +973,19 @@ module(basename(__filename), function () {
           'Authorization',
           `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
         )
-        .send(
-          JSON.stringify({
-            data: {
-              attributes: {
-                firstName: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '/person',
-                  name: 'Person',
-                },
+        .send({
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person.gts',
+                name: 'Person',
               },
             },
-          }),
-        );
+          },
+        });
 
       let newCardId = postResponse.body.data.id;
       let newCardPath = new URL(newCardId).pathname;
@@ -980,6 +1017,7 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${newCardId}.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
@@ -987,6 +1025,7 @@ module(basename(__filename), function () {
         indexType: 'incremental',
         invalidations: [newCardId],
         clientRequestId: null,
+        realmURL: testRealmHref,
       });
 
       {
@@ -1013,10 +1052,10 @@ module(basename(__filename), function () {
             id: newCardId,
             type: 'card',
             attributes: {
-              title: 'Mango',
+              cardTitle: 'Mango',
               firstName: 'Mango',
-              description: null,
-              thumbnailURL: null,
+              cardDescription: null,
+              cardThumbnailURL: null,
               cardInfo,
             },
             meta: {
@@ -1024,10 +1063,7 @@ module(basename(__filename), function () {
                 module: '../person',
                 name: 'Person',
               },
-              realmInfo: {
-                ...testRealmInfo,
-                realmUserId: '@node-test_realm:localhost',
-              },
+              realmInfo: testRealmInfo,
               realmURL: testRealmHref,
             },
             links: {
@@ -1144,12 +1180,14 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
         updatedFile: `${testRealmHref}person-1.json`,
+        realmURL: testRealmHref,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${testRealmHref}person-1`],
+        realmURL: testRealmHref,
       });
 
       {
@@ -1175,37 +1213,12 @@ module(basename(__filename), function () {
   });
 
   module('Realm server with realm mounted at the origin', function (hooks) {
-    let testRealmServer: Server;
-
     let request: SuperTest<Test>;
 
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        let testRealmDir = join(dir.name, 'realm_server_3', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_3'),
-            realmURL: testRealmURL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      permissions: { '*': ['read'] },
+      onRealmSetup(args) {
+        request = args.request;
       },
     });
 
@@ -1523,6 +1536,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'sample.md': {
+                links: {
+                  related: `${testRealmHref}sample.md`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'timers-card.gts': {
                 links: {
                   related: `${testRealmHref}timers-card.gts`,
@@ -1564,11 +1585,17 @@ module(basename(__filename), function () {
 
     let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
+    const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
+      '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
+      'person.gts': readFileSync(
+        join(__dirname, 'cards', 'person.gts'),
+        'utf8',
+      ),
+      'person-1.json': readJSONSync(join(__dirname, 'cards', 'person-1.json')),
+    };
 
     hooks.beforeEach(async function () {
       dir = dirSync();
-      ensureDirSync(join(dir.name, 'demo'));
-      copySync(join(__dirname, 'cards'), join(dir.name, 'demo'));
     });
 
     setupDB(hooks, {
@@ -1586,6 +1613,7 @@ module(basename(__filename), function () {
         ({ realm: base } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: basePath,
           realmURL: baseRealm.url,
           virtualNetwork,
@@ -1599,7 +1627,9 @@ module(basename(__filename), function () {
         ({ realm: testRealm } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: join(dir.name, 'demo'),
+          fileSystem: demoFileSystem,
           virtualNetwork,
           realmURL: 'http://127.0.0.1:4446/demo/',
           publisher,
@@ -1672,38 +1702,13 @@ module(basename(__filename), function () {
   });
 
   module('Realm Server serving from a subdirectory', function (hooks) {
-    let testRealmServer: Server;
-
     let request: SuperTest<Test>;
 
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        dir = dirSync();
-        let testRealmDir = join(dir.name, 'realm_server_4', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_4'),
-            realmURL: new URL('http://127.0.0.1:4446/demo/'),
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      permissions: { '*': ['read'] },
+      realmURL: new URL('http://127.0.0.1:4446/demo/'),
+      onRealmSetup(args) {
+        request = args.request;
       },
     });
 

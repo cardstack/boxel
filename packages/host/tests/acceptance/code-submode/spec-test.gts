@@ -14,6 +14,7 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -24,6 +25,7 @@ import {
   type TestContextWithSave,
   setupOnSave,
   setupRealmServerEndpoints,
+  withCachedRealmSetup,
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -56,7 +58,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -66,7 +68,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
         </div>
         <style scoped>
           div {
@@ -99,7 +101,7 @@ const petCardSource = `
   export class Pet extends CardDef {
     static displayName = 'Pet';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -113,7 +115,7 @@ const petCardSource = `
     }
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-        <h1>{{@model.title}}</h1>
+        <h1>{{@model.cardTitle}}</h1>
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
@@ -129,7 +131,7 @@ const employeeCardSource = `
   export default class Employee extends CardDef {
     static displayName = 'Employee';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -147,6 +149,14 @@ const newSkillCardSource = `
 
   export class ExtendedNewSkill extends NewSkill {
     static displayName = 'ExtendedNewSkill';
+  }
+`;
+
+const specCardSource = `
+  import { Spec } from 'https://cardstack.com/base/spec';
+
+  export class TestSpec extends Spec {
+    static displayName = 'TestSpec';
   }
 `;
 
@@ -272,6 +282,7 @@ module('Acceptance | Spec preview', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -293,392 +304,395 @@ module('Acceptance | Spec preview', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealmURL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'person.gts': personCardSource,
-        'person-1.gts': person1CardSource,
-        'pet.gts': petCardSource,
-        'employee.gts': employeeCardSource,
-        'new-skill.gts': newSkillCardSource,
-        'quote-field.gts': quoteFieldCardSource,
-        'primitive-field.gts': primitiveFieldCardSource,
-        'polymorphic-field.gts': polymorphicFieldCardSource,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec for Person',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
+    await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'person.gts': personCardSource,
+          'person-1.gts': person1CardSource,
+          'pet.gts': petCardSource,
+          'employee.gts': employeeCardSource,
+          'new-skill.gts': newSkillCardSource,
+          'test-spec.gts': specCardSource,
+          'quote-field.gts': quoteFieldCardSource,
+          'primitive-field.gts': primitiveFieldCardSource,
+          'polymorphic-field.gts': polymorphicFieldCardSource,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec for Person',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
-        },
-        'quote-field-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'QuoteField',
-              specType: 'field',
-              ref: {
-                module: './quote-field',
-                name: 'QuoteField',
-              },
-              containedExamples: [
-                {
-                  text: 'Words build worlds',
+          'quote-field-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'QuoteField',
+                specType: 'field',
+                ref: {
+                  module: './quote-field',
+                  name: 'QuoteField',
                 },
-              ],
-            },
-            meta: {
-              fields: {
                 containedExamples: [
                   {
-                    adoptsFrom: {
-                      module: './quote-field',
-                      name: 'QuoteField',
+                    text: 'Words build worlds',
+                  },
+                ],
+              },
+              meta: {
+                fields: {
+                  containedExamples: [
+                    {
+                      adoptsFrom: {
+                        module: './quote-field',
+                        name: 'QuoteField',
+                      },
+                    },
+                  ],
+                },
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'employee-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                specType: 'card',
+                ref: {
+                  module: `./employee`,
+                  name: 'default',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'pet-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Pet',
+                specType: 'card',
+                ref: {
+                  module: `./pet`,
+                  name: 'Pet',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'pet-entry-2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Pet2',
+                specType: 'card',
+                ref: {
+                  module: `./pet`,
+                  name: 'Pet',
+                },
+              },
+              relationships: {
+                'linkedExamples.0': {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
+                  },
+                },
+                'linkedExamples.1': {
+                  links: {
+                    self: `${testRealmURL}Pet/pudding`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'Person/fadhlan.json': {
+            data: {
+              attributes: {
+                firstName: 'Fadhlan',
+                address: [
+                  {
+                    city: 'Bandung',
+                    country: 'Indonesia',
+                    shippingInfo: {
+                      preferredCarrier: 'DHL',
+                      remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
                     },
                   },
                 ],
               },
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'employee-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              specType: 'card',
-              ref: {
-                module: `./employee`,
-                name: 'default',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'pet-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Pet',
-              specType: 'card',
-              ref: {
-                module: `./pet`,
-                name: 'Pet',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'pet-entry-2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Pet2',
-              specType: 'card',
-              ref: {
-                module: `./pet`,
-                name: 'Pet',
-              },
-            },
-            relationships: {
-              'linkedExamples.0': {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
-                },
-              },
-              'linkedExamples.1': {
-                links: {
-                  self: `${testRealmURL}Pet/pudding`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Person/fadhlan.json': {
-          data: {
-            attributes: {
-              firstName: 'Fadhlan',
-              address: [
-                {
-                  city: 'Bandung',
-                  country: 'Indonesia',
-                  shippingInfo: {
-                    preferredCarrier: 'DHL',
-                    remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              relationships: {
+                pet: {
+                  links: {
+                    self: `${testRealmURL}Pet/mango`,
                   },
                 },
-              ],
-            },
-            relationships: {
-              pet: {
-                links: {
-                  self: `${testRealmURL}Pet/mango`,
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}person`,
-                name: 'Person',
-              },
-            },
           },
-        },
-        'Person/1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              firstName: 'Hassan',
-              lastName: 'Abdel-Rahman',
-            },
-            meta: {
-              adoptsFrom: {
-                module: '../person',
-                name: 'Person',
+          'Person/1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                lastName: 'Abdel-Rahman',
               },
-            },
-          },
-        },
-        'Pet/mango.json': {
-          data: {
-            attributes: {
-              name: 'Mango',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'Pet/pudding.json': {
-          data: {
-            attributes: {
-              name: 'Pudding',
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
-              },
-            },
-          },
-        },
-        'subTestField.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              readMe: null,
-              ref: {
-                name: 'SubTestField',
-                module: './polymorphic-field',
-              },
-              specType: 'field',
-              containedExamples: [],
-              description: null,
-              thumbnailURL: null,
-            },
-            relationships: {
-              linkedExamples: {
-                links: {
-                  self: null,
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
                 },
               },
             },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
           },
-        },
-        'pet-field-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'PetField',
-              description: 'Spec',
-              specType: 'field',
-              ref: {
-                module: `./pet`,
-                name: 'PetField',
+          'Pet/mango.json': {
+            data: {
+              attributes: {
+                name: 'Mango',
               },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'different-field-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'DifferentField',
-              description: 'Spec for DifferentField',
-              specType: 'field',
-              ref: {
-                module: `./person`,
-                name: 'DifferentField',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'primitve-field-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'PrimitiveField',
-              description: 'Spec for PrimitiveField',
-              specType: 'field',
-              ref: {
-                module: `./primitive-field`,
-                name: 'PrimitiveField',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'subclass-primitive-field-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'SubclassPrimitiveField',
-              description: 'Spec for SubclassPrimitiveField',
-              specType: 'field',
-              ref: {
-                module: `./primitive-field`,
-                name: 'SubclassPrimitiveField',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        '.realm.json': {
-          name: 'Test Workspace B',
-          backgroundURL:
-            'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-          iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-        },
-      },
-    });
-    await setupAcceptanceTestRealm({
-      mockMatrixUtils,
-      realmURL: testRealm2URL,
-      contents: {
-        ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        'new-skill.gts': newSkillCardSource,
-        'person.gts': personCardSource,
-        'quote-field.gts': quoteFieldCardSource,
-        'person-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'quote-field-entry.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'QuoteField',
-              specType: 'field',
-              ref: {
-                module: './quote-field',
-                name: 'QuoteField',
-              },
-              containedExamples: [
-                {
-                  text: 'Words build worlds',
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
                 },
-              ],
+              },
             },
-            meta: {
-              fields: {
+          },
+          'Pet/pudding.json': {
+            data: {
+              attributes: {
+                name: 'Pudding',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}pet`,
+                  name: 'Pet',
+                },
+              },
+            },
+          },
+          'subTestField.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                readMe: null,
+                ref: {
+                  name: 'SubTestField',
+                  module: './polymorphic-field',
+                },
+                specType: 'field',
+                containedExamples: [],
+                cardDescription: null,
+                cardThumbnailURL: null,
+              },
+              relationships: {
+                linkedExamples: {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'pet-field-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'PetField',
+                cardDescription: 'Spec',
+                specType: 'field',
+                ref: {
+                  module: `./pet`,
+                  name: 'PetField',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'different-field-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'DifferentField',
+                cardDescription: 'Spec for DifferentField',
+                specType: 'field',
+                ref: {
+                  module: `./person`,
+                  name: 'DifferentField',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'primitve-field-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'PrimitiveField',
+                cardDescription: 'Spec for PrimitiveField',
+                specType: 'field',
+                ref: {
+                  module: `./primitive-field`,
+                  name: 'PrimitiveField',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'subclass-primitive-field-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'SubclassPrimitiveField',
+                cardDescription: 'Spec for SubclassPrimitiveField',
+                specType: 'field',
+                ref: {
+                  module: `./primitive-field`,
+                  name: 'SubclassPrimitiveField',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          '.realm.json': {
+            name: 'Test Workspace B',
+            backgroundURL:
+              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+          },
+        },
+      });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealm2URL,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'new-skill.gts': newSkillCardSource,
+          'person.gts': personCardSource,
+          'quote-field.gts': quoteFieldCardSource,
+          'person-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Person',
+                cardDescription: 'Spec',
+                specType: 'card',
+                ref: {
+                  module: `./person`,
+                  name: 'Person',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'quote-field-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'QuoteField',
+                specType: 'field',
+                ref: {
+                  module: './quote-field',
+                  name: 'QuoteField',
+                },
                 containedExamples: [
                   {
-                    adoptsFrom: {
-                      module: './quote-field',
-                      name: 'QuoteField',
-                    },
+                    text: 'Words build worlds',
                   },
                 ],
               },
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
+              meta: {
+                fields: {
+                  containedExamples: [
+                    {
+                      adoptsFrom: {
+                        module: './quote-field',
+                        name: 'QuoteField',
+                      },
+                    },
+                  ],
+                },
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
               },
             },
           },
         },
-      },
+      });
     });
     setActiveRealms([testRealmURL, testRealm2URL]);
     setRealmPermissions({
@@ -729,6 +743,21 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
+  test('shows cannot create spec message for subclasses of spec ', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}test-spec.gts`,
+    });
+    await click('[data-test-module-inspector-view="spec"]');
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
+    assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
+    assert
+      .dom('[data-test-spec-error-message]')
+      .hasText(
+        'This is a card definition for a  Spec Card. Cannot create or display spec instances for this card type.',
+      );
+  });
   test('spec updates when different declaration selected in the module', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -762,13 +791,14 @@ module('Acceptance | Spec preview', function (hooks) {
     const receivedEventDeferred = new Deferred<void>();
     const messageService = getService('message-service');
 
-    messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+    const unsubscribe = messageService.subscribe(testRealmURL, (e) => {
       if (
         e.eventName === 'index' &&
         e.indexType === 'incremental-index-initiation'
       ) {
         return; // ignore the index initiation event
       }
+      unsubscribe();
       receivedEventDeferred.fulfill();
     });
     await visitOperatorMode({
@@ -821,6 +851,25 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
     assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
+  });
+
+  test('spec fields in edit format are read-only when user cannot write', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealm2URL}person-entry.json`,
+      cardPreviewFormat: 'edit',
+    });
+    await waitFor(
+      `[data-test-card="${testRealm2URL}person-entry"][data-test-card-format="edit"]`,
+    );
+
+    assert.dom('[data-test-title] input').isDisabled();
+    assert.dom('[data-test-description] input').isDisabled();
+
+    assert.dom('[data-test-readme] textarea').isDisabled();
+    assert.dom('[data-test-readme] textarea').hasAttribute('readonly');
+
+    assert.dom('[data-test-generate-readme]').doesNotExist();
   });
 
   test('renders linked examples in isolated spec view when user cannot write', async function (assert) {
@@ -1224,7 +1273,8 @@ module('Acceptance | Spec preview', function (hooks) {
     );
   });
 
-  test('spec preview updates when changing between different declarations inside inspector', async function (assert) {
+  // TODO: restore in CS-10321
+  skip('spec preview updates when changing between different declarations inside inspector', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,

@@ -46,7 +46,7 @@ const contactValues: ContactLink[] = [
   },
 ];
 
-export class ContactLinkField extends FieldDef {
+export default class ContactLinkField extends FieldDef {
   static displayName = 'Contact Link';
   static values: ContactLink[] = contactValues;
   @field label = contains(StringField);

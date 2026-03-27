@@ -10,7 +10,8 @@ import {
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
-  fetchAllSessionRooms,
+  clearSessionRoom,
+  fetchRealmSessionRooms,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
@@ -35,19 +36,57 @@ import type {
   AdapterWriteResult,
 } from '@cardstack/runtime-common/realm';
 import type {
+  FileWatcherEventContent,
   RealmEventContent,
-  UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { createJWT, verifyJWT } from './jwt';
 
 const realmEventsLog = logger('realm:events');
 
+function parseMatrixSendEventError(error: unknown): {
+  status?: number;
+  errcode?: string;
+  error?: string;
+} | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  let match = error.message.match(/status (\d+) - (\{.*\})$/);
+  if (!match) {
+    return null;
+  }
+
+  let [, status, body] = match;
+  try {
+    return {
+      status: Number(status),
+      ...(JSON.parse(body) as { errcode?: string; error?: string }),
+    };
+  } catch (_err) {
+    return { status: Number(status) };
+  }
+}
+
+function isRealmServerNotInRoomError(error: unknown, roomId: string): boolean {
+  let details = parseMatrixSendEventError(error);
+  return Boolean(
+    details?.status === 403 &&
+    details?.errcode === 'M_FORBIDDEN' &&
+    details?.error?.includes(`not in room ${roomId}`),
+  );
+}
+
 export class NodeAdapter implements RealmAdapter {
   constructor(
     private realmDir: string,
     private enableFileWatcher?: boolean,
   ) {}
+
+  get dir(): string {
+    return this.realmDir;
+  }
 
   get fileWatcherEnabled(): boolean {
     return this.enableFileWatcher ?? false;
@@ -80,7 +119,7 @@ export class NodeAdapter implements RealmAdapter {
   private watcher: Watcher | undefined = undefined;
 
   async subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
+    cb: (message: FileWatcherEventContent) => void,
   ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
@@ -179,7 +218,10 @@ export class NodeAdapter implements RealmAdapter {
     };
   }
 
-  async write(path: string, contents: string): Promise<AdapterWriteResult> {
+  async write(
+    path: string,
+    contents: string | Uint8Array,
+  ): Promise<AdapterWriteResult> {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
     writeFileSync(absolutePath, contents);
@@ -212,7 +254,11 @@ export class NodeAdapter implements RealmAdapter {
     return { response, writable: s as unknown as WritableStream };
   }
 
-  createJWT(claims: TokenClaims, expiration: string, secret: string): string {
+  createJWT(
+    claims: TokenClaims,
+    expiration: Parameters<typeof createJWT>[1],
+    secret: string,
+  ): string {
     return createJWT(claims, expiration, secret);
   }
 
@@ -234,7 +280,10 @@ export class NodeAdapter implements RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
-
+    const eventWithRealmURL: RealmEventContent = {
+      ...event,
+      realmURL: realmUrl,
+    };
     if (dbAdapter.isClosed) {
       realmEventsLog.warn(
         `Database adapter is closed, skipping sending realm event`,
@@ -243,6 +292,13 @@ export class NodeAdapter implements RealmAdapter {
     }
     try {
       await matrixClient.login();
+      if (!matrixClient.getUserId()) {
+        realmEventsLog.error(
+          'Matrix client has no user ID after login, unable to broadcast realm event',
+          event,
+        );
+        return;
+      }
     } catch (e) {
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
       return;
@@ -255,8 +311,32 @@ export class NodeAdapter implements RealmAdapter {
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];
       try {
-        await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_TYPE,
+          eventWithRealmURL,
+        );
       } catch (e) {
+        if (isRealmServerNotInRoomError(e, roomId)) {
+          try {
+            let cleared = await clearSessionRoom(dbAdapter, userId, roomId);
+            realmEventsLog.warn(
+              `Skipping stale session room ${roomId} for user ${userId}; realm server is no longer in the room`,
+              { cleared, realmUrl },
+            );
+          } catch (cleanupError) {
+            realmEventsLog.error(
+              `Failed to clear stale session room ${roomId} for user ${userId}`,
+              cleanupError,
+            );
+            realmEventsLog.error(
+              `Unable to send event in room ${roomId} for user ${userId}`,
+              event,
+              e,
+            );
+          }
+          continue;
+        }
         realmEventsLog.error(
           `Unable to send event in room ${roomId} for user ${userId}`,
           event,
@@ -278,7 +358,7 @@ export class NodeAdapter implements RealmAdapter {
 
     let dmRooms: Record<string, string> = {};
     try {
-      dmRooms = await fetchAllSessionRooms(dbAdapter, realmUrl);
+      dmRooms = await fetchRealmSessionRooms(dbAdapter, realmUrl);
     } catch (e) {
       realmEventsLog.error('Error getting account data', e);
       return {}; // bail immediately on errors instead of retrying

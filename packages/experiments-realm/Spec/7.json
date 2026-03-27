@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Booking Card",
-      "description": "Spec for Booking Card",
+      "cardTitle": "Booking Card",
+      "cardDescription": "Spec for Booking Card",
       "specType": "card",
       "ref": {
         "module": "../booking",

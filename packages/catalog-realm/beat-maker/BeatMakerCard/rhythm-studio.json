@@ -13,9 +13,9 @@
       "pattern": "House-Standard",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "masterVolume": 75,
       "instrumentKit": "Rock Kit"

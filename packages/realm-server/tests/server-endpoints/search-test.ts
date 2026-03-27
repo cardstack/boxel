@@ -18,7 +18,6 @@ import {
   closeServer,
   createVirtualNetwork,
   setupDB,
-  insertUser,
   matrixURL,
   realmSecretSeed,
   runTestRealmServerWithRealms,
@@ -27,7 +26,7 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import type { Server } from 'http';
 
 module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
-  module('Realm Server Endpoints | /_search', function (hooks) {
+  module('Realm Server Endpoints | /_federated-search', function (hooks) {
     let testRealm: Realm;
     let secondaryRealm: Realm;
     let request: SuperTest<Test>;
@@ -42,7 +41,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           type: 'card',
           attributes: {
             cardInfo: {
-              title: 'Shared Card',
+              name: 'Shared Card',
             },
           },
           meta: {
@@ -58,7 +57,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
           type: 'card',
           attributes: {
             cardInfo: {
-              title: 'Other Card',
+              name: 'Other Card',
             },
           },
           meta: {
@@ -140,9 +139,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       },
     });
 
-    test('QUERY /_search federates results across realms', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
-
+    test('QUERY /_federated-search federates results across realms', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
@@ -152,14 +149,12 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };
 
-      let searchURL = new URL('/_search', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
-      searchURL.searchParams.append('realms', secondaryRealm.url);
+      let searchURL = new URL('/_federated-search', testRealm.url);
 
       let searchResponse = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
@@ -167,7 +162,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', `Bearer ${realmServerToken}`)
-        .send(query);
+        .send({ ...query, realms: [testRealm.url, secondaryRealm.url] });
 
       assert.strictEqual(searchResponse.status, 200, 'HTTP 200 status');
       let results = searchResponse.body;
@@ -185,9 +180,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('GET /_search supports query param', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
-
+    test('QUERY /_federated-search supports query body', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
@@ -197,12 +190,40 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Shared Card',
+            cardTitle: 'Shared Card',
           },
         },
       };
 
-      let searchURL = new URL('/_search', testRealm.url);
+      let searchURL = new URL('/_federated-search', testRealm.url);
+
+      let response = await request
+        .post(`${searchURL.pathname}${searchURL.search}`)
+        .set('Accept', 'application/vnd.card+json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${realmServerToken}`)
+        .send({ ...query, realms: [testRealm.url] });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.body.data.length, 1, 'found one card');
+    });
+
+    test('GET /_federated-search returns 400 for unsupported method', async function (assert) {
+      let realmServerToken = createRealmServerJWT(
+        { user: ownerUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      );
+
+      let query: Query = {
+        filter: {
+          on: baseCardRef,
+          eq: {
+            cardTitle: 'Shared Card',
+          },
+        },
+      };
+
+      let searchURL = new URL('/_federated-search', testRealm.url);
       searchURL.searchParams.append('realms', testRealm.url);
       searchURL.searchParams.set('query', stringify(query, { encode: false }));
 
@@ -211,11 +232,14 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Accept', 'application/vnd.card+json')
         .set('Authorization', `Bearer ${realmServerToken}`);
 
-      assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.strictEqual(response.body.data.length, 1, 'found one card');
+      assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      assert.ok(
+        response.body.errors?.[0]?.includes('method must be QUERY'),
+        'response explains unsupported method',
+      );
     });
 
-    test('QUERY /_search returns 403 when user lacks read access', async function (assert) {
+    test('QUERY /_federated-search returns 403 when user lacks read access', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: '@rando:localhost', sessionRoom: 'session-room-test' },
         realmSecretSeed,
@@ -225,13 +249,12 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Test Card',
+            cardTitle: 'Test Card',
           },
         },
       };
 
-      let searchURL = new URL('/_search', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
+      let searchURL = new URL('/_federated-search', testRealm.url);
 
       let response = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
@@ -239,7 +262,7 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', `Bearer ${realmServerToken}`)
-        .send(query);
+        .send({ ...query, realms: [testRealm.url] });
 
       assert.strictEqual(response.status, 403, 'HTTP 403 status');
       assert.ok(
@@ -248,25 +271,24 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('QUERY /_search returns 401 when unauthenticated user requests non-public realm', async function (assert) {
+    test('QUERY /_federated-search returns 401 when unauthenticated user requests non-public realm', async function (assert) {
       let query: Query = {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Test Card',
+            cardTitle: 'Test Card',
           },
         },
       };
 
-      let searchURL = new URL('/_search', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
+      let searchURL = new URL('/_federated-search', testRealm.url);
 
       let response = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
         .set('Accept', 'application/vnd.card+json')
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
-        .send(query);
+        .send({ ...query, realms: [testRealm.url] });
 
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
       assert.ok(
@@ -275,15 +297,13 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       );
     });
 
-    test('QUERY /_search returns 400 for invalid query', async function (assert) {
-      await insertUser(dbAdapter, ownerUserId, 'stripe-test-user', null);
+    test('QUERY /_federated-search returns 400 for invalid query', async function (assert) {
       let realmServerToken = createRealmServerJWT(
         { user: ownerUserId, sessionRoom: 'session-room-test' },
         realmSecretSeed,
       );
 
-      let searchURL = new URL('/_search', testRealm.url);
-      searchURL.searchParams.append('realms', testRealm.url);
+      let searchURL = new URL('/_federated-search', testRealm.url);
 
       let response = await request
         .post(`${searchURL.pathname}${searchURL.search}`)
@@ -291,23 +311,23 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
         .set('Authorization', `Bearer ${realmServerToken}`)
-        .send({ invalid: 'query structure' });
+        .send({ realms: [testRealm.url], invalid: 'query structure' });
 
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
     });
 
-    test('QUERY /_search returns 400 when realms param is missing', async function (assert) {
+    test('QUERY /_federated-search returns 400 when realms param is missing', async function (assert) {
       let query: Query = {
         filter: {
           on: baseCardRef,
           eq: {
-            title: 'Test Card',
+            cardTitle: 'Test Card',
           },
         },
       };
 
       let response = await request
-        .post('/_search')
+        .post('/_federated-search')
         .set('Accept', 'application/vnd.card+json')
         .set('Content-Type', 'application/json')
         .set('X-HTTP-Method-Override', 'QUERY')
@@ -316,9 +336,9 @@ module(`server-endpoints/${basename(__filename)}`, function (_hooks) {
       assert.strictEqual(response.status, 400, 'HTTP 400 status');
       assert.ok(
         response.body.errors?.[0]?.includes(
-          'realms query param must be supplied',
+          'realms must be supplied in request body',
         ),
-        'response explains missing realms query param',
+        'response explains missing realms in request body',
       );
     });
   });

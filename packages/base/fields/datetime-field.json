@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Date-time Field",
-      "description": "A field that captures date-time values",
+      "cardTitle": "Date-time Field",
+      "cardDescription": "A field that captures date-time values",
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/datetime",

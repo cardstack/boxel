@@ -26,6 +26,8 @@ import {
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  setMonacoContent,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
@@ -34,6 +36,7 @@ import {
   withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
@@ -66,6 +69,17 @@ const codeRefDriverCard = `import { CardDef, field, contains } from 'https://car
     @field ref = contains(CodeRefField);
 }`;
 
+const testSpecCard = `import { Component } from 'https://cardstack.com/base/card-api';
+  import { Spec } from 'https://cardstack.com/base/spec';
+  export class TestSpec extends Spec {
+    static displayName = 'TestSpec';
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-subclass-spec>Spec Subclass</div>
+      </template>
+    }
+  }`;
+
 const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import StringField from "https://cardstack.com/base/string";
@@ -74,7 +88,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
     @field bio = contains(MarkdownField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Author) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -83,7 +97,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
     <template>
       <article>
         <header>
-          <h1 data-test-author-title><@fields.title /></h1>
+          <h1 data-test-author-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-author-bio><@fields.bio /></div>
       </article>
@@ -97,7 +111,7 @@ const authorCard = `import { contains, field, CardDef, Component } from "https:/
 }`;
 
 const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
-  import DatetimeField from 'https://cardstack.com/base/datetime';
+  import DateTimeField from 'https://cardstack.com/base/datetime';
   import MarkdownField from 'https://cardstack.com/base/markdown';
   import { Author } from './author';
 
@@ -105,7 +119,7 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     static displayName = 'Category';
     static fitted = class Fitted extends Component<typeof this> {
     <template>
-      <div data-test-category-fitted><@fields.title /></div>
+      <div data-test-category-fitted><@fields.cardTitle /></div>
     </template>
     }
   }
@@ -118,18 +132,18 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
 
   export class BlogPost extends CardDef {
     static displayName = 'Blog Post';
-    @field publishDate = contains(DatetimeField);
+    @field publishDate = contains(DateTimeField);
     @field author = linksTo(Author);
     @field categories = linksToMany(Category);
     @field localCategories = linksToMany(LocalCategoryCard);
     @field body = contains(MarkdownField);
-    @field title = contains(StringField);
+    @field cardTitle = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
     <template>
       <article>
         <header>
-          <h1 data-test-post-title><@fields.title /></h1>
+          <h1 data-test-post-title><@fields.cardTitle /></h1>
         </header>
         <div data-test-byline><@fields.author /></div>
         <div data-test-post-body><@fields.body /></div>
@@ -158,14 +172,14 @@ const headPreviewCard = `import { contains, field, CardDef, Component } from "ht
 
   export class HeadPreview extends CardDef {
     static displayName = 'Head Preview';
-    @field title = contains(StringField);
-    @field description = contains(StringField);
+    @field cardTitle = contains(StringField);
+    @field cardDescription = contains(StringField);
     @field url = contains(StringField);
 
     static head = class Head extends Component<typeof this> {
       <template>
-        <title>{{@model.title}}</title>
-        <meta name='description' content={{@model.description}} />
+        <title>{{@model.cardTitle}}</title>
+        <meta name='description' content={{@model.cardDescription}} />
         <meta property='og:url' content={{@model.url}} />
       </template>
     };
@@ -178,8 +192,8 @@ const localStyleReferenceCard = {
     attributes: {
       cardInfo: {
         title: 'Local Style Reference',
-        description: 'Local card instance for style reference tests',
-        thumbnailURL: null,
+        cardDescription: 'Local card instance for style reference tests',
+        cardThumbnailURL: null,
         notes: null,
       },
       styleName: 'Local Style Reference',
@@ -212,6 +226,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       mockMatrixUtils;
 
     setupOnSave(hooks);
+    setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
       let loader = getService('loader-service').loader;
@@ -226,176 +241,179 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       setupUserSubscription();
       setupAuthEndpoints();
 
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.json': new CardsGrid(),
-          'author.gts': authorCard,
-          'blog-post.gts': blogPostCard,
-          'code-ref-driver.gts': codeRefDriverCard,
-          'person.gts': personCard,
-          'head-preview.gts': headPreviewCard,
-          'Author/jane-doe.json': {
-            data: {
-              attributes: {
-                firstName: 'Jane',
-                lastName: 'Doe',
-                bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}author`,
-                  name: 'Author',
+      ({ realm } = await withCachedRealmSetup(async () =>
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.json': new CardsGrid(),
+            'author.gts': authorCard,
+            'blog-post.gts': blogPostCard,
+            'code-ref-driver.gts': codeRefDriverCard,
+            'test-spec.gts': testSpecCard,
+            'person.gts': personCard,
+            'head-preview.gts': headPreviewCard,
+            'Author/jane-doe.json': {
+              data: {
+                attributes: {
+                  firstName: 'Jane',
+                  lastName: 'Doe',
+                  bio: "Jane Doe is the Senior Managing Editor at <em>Ramped.com</em>, where she leads content strategy, editorial direction, and ensures the highest standards of quality across all publications. With over a decade of experience in digital media and editorial management, Jane has a proven track record of shaping impactful narratives, growing engaged audiences, and collaborating with cross-functional teams to deliver compelling content. When she's not editing, you can find her exploring new books, hiking, or indulging in her love of photography.",
                 },
-              },
-            },
-          },
-          'HeadPreview/example.json': {
-            data: {
-              attributes: {
-                title: 'Definition Title',
-                description: 'Definition description',
-                url: 'https://example.com/definition',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}head-preview`,
-                  name: 'HeadPreview',
-                },
-              },
-            },
-          },
-          'BlogPost/remote-work.json': {
-            data: {
-              attributes: {
-                title: 'The Ultimate Guide to Remote Work',
-                description:
-                  'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}author`,
+                    name: 'Author',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
-                },
-              },
             },
-          },
-          'BlogPost/mad-hatter.json': {
-            data: {
-              attributes: { title: 'Mad As a Hatter' },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+            'HeadPreview/example.json': {
+              data: {
+                attributes: {
+                  cardTitle: 'Definition Title',
+                  cardDescription: 'Definition description',
+                  url: 'https://example.com/definition',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}head-preview`,
+                    name: 'HeadPreview',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
-                },
-              },
             },
-          },
-          'BlogPost/urban-living.json': {
-            data: {
-              attributes: {
-                title:
-                  'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
-              },
-              relationships: {
-                author: {
-                  links: {
-                    self: `${testRealmURL}Author/jane-doe`,
+            'BlogPost/remote-work.json': {
+              data: {
+                attributes: {
+                  title: 'The Ultimate Guide to Remote Work',
+                  cardDescription:
+                    'In today’s digital age, remote work has transformed from a luxury to a necessity. This comprehensive guide will help you navigate the world of remote work, offering tips, tools, and best practices for success.',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'BlogPost',
+            },
+            'BlogPost/mad-hatter.json': {
+              data: {
+                attributes: { cardTitle: 'Mad As a Hatter' },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
+                },
+              },
+            },
+            'BlogPost/urban-living.json': {
+              data: {
+                attributes: {
+                  cardTitle:
+                    'The Future of Urban Living: Skyscrapers or Sustainable Communities?',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: `${testRealmURL}Author/jane-doe`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'BlogPost',
+                  },
+                },
+              },
+            },
+            'Category/city-design.json': {
+              data: {
+                attributes: { cardInfo: { name: 'City Design' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/future-tech.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Future Tech' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/interior-design.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Interior Design' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/landscaping.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Landscaping' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Category/home-gym.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Home Gym' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}blog-post`,
+                    name: 'Category',
+                  },
+                },
+              },
+            },
+            'Person/pet-mango.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Mango' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Pet',
+                  },
                 },
               },
             },
           },
-          'Category/city-design.json': {
-            data: {
-              attributes: { cardInfo: { title: 'City Design' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/future-tech.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Future Tech' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/interior-design.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Interior Design' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/landscaping.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Landscaping' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Category/home-gym.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Home Gym' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}blog-post`,
-                  name: 'Category',
-                },
-              },
-            },
-          },
-          'Person/pet-mango.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Mango' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-        },
-      }));
+        }),
+      ));
 
       setRecentFiles([
         [testRealmURL, 'blog-post.gts'],
@@ -459,6 +477,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel]')
         .exists('exists for BlogPost (exported card def)');
+    });
+
+    test('playground does not auto-create spec for subclasses of specs', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}test-spec.gts`,
+      });
+      await selectDeclaration('TestSpec');
+      await togglePlaygroundPanel();
+      await waitFor('[data-test-playground-panel]');
+      assert.dom('[data-test-subclass-spec]').doesNotExist();
     });
 
     test('can populate instance chooser dropdown from recent files and pre-select the first card', async function (assert) {
@@ -549,6 +578,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('.google-title').hasText('Definition Title');
       assert.dom('.google-description').hasText('Definition description');
       assert.dom('.google-site-name').hasText('example.com');
+
+      setMonacoContent(headPreviewCard.replace('</title>', '!!</title>'));
+      await settled();
+
+      assert.dom('.google-title').hasText('Definition Title!!');
     });
 
     test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {
@@ -615,7 +649,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .exists();
 
       await click('[data-test-open-search-field]');
-      await click('[data-test-search-result-index="5"]');
+      await waitFor(
+        `[data-test-search-result="${testRealmURL}Category/landscaping"]`,
+        { timeout: 8000 },
+      );
+      await click(
+        `[data-test-search-result="${testRealmURL}Category/landscaping"]`,
+      );
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
         .exists();
@@ -969,7 +1009,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           @field firstName = contains(StringField);
           @field lastName = contains(StringField);
           @field bio = contains(MarkdownField);
-          @field title = contains(StringField, {
+          @field cardTitle = contains(StringField, {
             computeVia: function (this: Author) {
               return [this.firstName, this.lastName].filter(Boolean).join(' ');
             },
@@ -978,7 +1018,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         <template>
           <article>
             <header>
-              <h1 data-test-author-title>Hello <@fields.title /></h1>
+              <h1 data-test-author-title>Hello <@fields.cardTitle /></h1>
             </header>
             <div data-test-author-bio><@fields.bio /></div>
           </article>
@@ -1007,7 +1047,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('playground preview for card with linked fields can live update when module changes', async function (assert) {
       // change: added "Hello" before rendering title on the template
       const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import DatetimeField from 'https://cardstack.com/base/datetime';
+        import DateTimeField from 'https://cardstack.com/base/datetime';
         import MarkdownField from 'https://cardstack.com/base/markdown';
         import StringField from "https://cardstack.com/base/string";
         import { Author } from './author';
@@ -1016,7 +1056,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           static displayName = 'Category';
           static fitted = class Fitted extends Component<typeof this> {
           <template>
-            <div data-test-category-fitted><@fields.title /></div>
+            <div data-test-category-fitted><@fields.cardTitle /></div>
           </template>
           }
         }
@@ -1027,7 +1067,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
         export class BlogPost extends CardDef {
           static displayName = 'Blog Post';
-          @field publishDate = contains(DatetimeField);
+          @field publishDate = contains(DateTimeField);
           @field author = linksTo(Author);
           @field categories = linksToMany(Category);
           @field body = contains(MarkdownField);
@@ -1042,13 +1082,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               return 'Scheduled';
             },
           });
-          @field title = contains(StringField);
+          @field cardTitle = contains(StringField);
 
           static isolated = class Isolated extends Component<typeof this> {
           <template>
             <article>
               <header>
-                <h1 data-test-post-title>Hello <@fields.title /></h1>
+                <h1 data-test-post-title>Hello <@fields.cardTitle /></h1>
               </header>
               <div data-test-byline><@fields.author /></div>
               <div data-test-post-body><@fields.body /></div>
@@ -1324,7 +1364,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             },
           ],
           cards: [
-            { id: `${testRealmURL}Category/city-design`, title: 'City Design' },
+            {
+              id: `${testRealmURL}Category/city-design`,
+              cardTitle: 'City Design',
+            },
           ],
         },
       ]);
@@ -1349,7 +1392,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'recent file count is correct',
       );
 
-      let { data: results } = await realm.realmIndexQueryEngine.search({
+      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
       });
       assert.strictEqual(results.length, 0);
@@ -1375,7 +1418,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-option-index]')
         .exists({ count: 1 }, 'new card shows up in instance chooser dropdown');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.search({
+      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
       }));
       assert.strictEqual(results.length, 1);
@@ -1385,7 +1428,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('does not autogenerate card instance if one exists in the realm but is not in recent cards', async function (assert) {
       removeRecentFiles();
       const cardId = `${testRealmURL}Person/pet-mango`;
-      let { data: results } = await realm.realmIndexQueryEngine.search({
+      let { data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
       });
       assert.strictEqual(results.length, 1);
@@ -1404,7 +1447,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').exists({ count: 1 });
       assert.dom('[data-option-index="0"]').containsText('Mango');
 
-      ({ data: results } = await realm.realmIndexQueryEngine.search({
+      ({ data: results } = await realm.realmIndexQueryEngine.searchCards({
         filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
       }));
       assert.strictEqual(results.length, 1);
@@ -1413,7 +1456,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can request AI assistant to fill in sample data', async function (assert) {
       const prompt = `Fill in sample data for the attached card instance.`;
-      const menuItem = 'Fill in sample data with AI';
+      const menuItem = 'Fill in Sample Data with AI';
       const commandMessage = {
         from: 'testuser',
         message: prompt,
@@ -1475,6 +1518,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     let { setActiveRealms, setRealmPermissions, createAndJoinRoom } =
       mockMatrixUtils;
+    setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
       createAndJoinRoom({
@@ -1489,33 +1533,36 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       additionalRealmURL = `${realmServerService.url}testuser/aaa/`; // writeable realm that is lexically before the personal realm
       setActiveRealms([additionalRealmURL, personalRealmURL]);
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: personalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author-card.gts': authorCard,
-          'StyleReference/local-style.json': localStyleReferenceCard,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: personalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author-card.gts': authorCard,
+            'StyleReference/local-style.json': localStyleReferenceCard,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
           },
-        },
-      });
+        });
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: additionalRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'author-card.gts': authorCard,
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: additionalRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'author-card.gts': authorCard,
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
           },
-        },
+        });
       });
 
       setRealmPermissions({
@@ -1617,6 +1664,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupOnSave(hooks);
+    setupRealmCacheTeardown(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -1628,13 +1676,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from 'https://cardstack.com/base/card-api';
       // this field explodes when serialized (saved)
       export class BoomField extends FieldDef {
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         static [serialize](_boom: any) {
           throw new Error('Boom!');
         }
         static embedded = class Embedded extends Component<typeof this> {
           <template>
-            <@fields.title />
+            <@fields.cardTitle />
           </template>
         };
       }
@@ -1657,7 +1705,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       export class FailingField extends FieldDef {
         static displayName = 'Failing Field';
-        @field title = contains(StringField);
+        @field cardTitle = contains(StringField);
         static embedded = class Embedded extends Component<typeof this> {
           <template>
             <p>This will fail.</p> {{this.boom}}
@@ -1696,28 +1744,30 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],
       });
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'boom-pet.gts': boomPet,
-          'person.gts': personCard,
-          'boom-person.gts': boomPerson,
-          'syntax-error.gts': syntaxError,
-          'Person/delilah.json': {
-            data: {
-              attributes: { cardInfo: { title: 'Delilah' } },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
+      ({ realm } = await withCachedRealmSetup(async () =>
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'boom-pet.gts': boomPet,
+            'person.gts': personCard,
+            'boom-person.gts': boomPerson,
+            'syntax-error.gts': syntaxError,
+            'Person/delilah.json': {
+              data: {
+                attributes: { cardInfo: { name: 'Delilah' } },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
                 },
               },
             },
           },
-        },
-      }));
+        }),
+      ));
     });
 
     test('it renders a module error', async function (assert) {
@@ -1764,7 +1814,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Internal Server Error');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
         .doesNotExist();
       assert
         .dom('[data-test-card-error]')
@@ -1926,7 +1976,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
            export class FailingField extends FieldDef {
              static displayName = 'Failing Field';
-             @field title = contains(StringField);
+             @field cardTitle = contains(StringField);
              static embedded = class Embedded extends Component<typeof this> {
                <template>
                  <p>This will not fail.</p>
@@ -1971,7 +2021,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { cardInfo: { title: 'Lila' } },
+            attributes: { cardInfo: { name: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -2006,7 +2056,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { cardInfo: { title: 'Lila' } },
+            attributes: { cardInfo: { name: 'Lila' } },
             relationships: {
               pet: {
                 links: {
@@ -2041,7 +2091,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
       assert
-        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Delilah', 'last known good state is rendered');
       assert
         .dom('[data-test-error-message]')
@@ -2059,7 +2109,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         'Person/delilah.json',
         JSON.stringify({
           data: {
-            attributes: { cardInfo: { title: 'Lila' } },
+            attributes: { cardInfo: { name: 'Lila' } },
             meta: {
               adoptsFrom: {
                 module: `${testRealmURL}person`,
@@ -2072,7 +2122,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await settled();
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert
-        .dom('[data-test-playground-panel] [data-test-field="cardTitle"]')
+        .dom('[data-test-playground-panel] [data-test-field="cardInfo-name"]')
         .containsText('Lila');
       assert
         .dom('[data-test-error-container]')

@@ -114,12 +114,12 @@ export class DrumKitCard extends CardDef {
   static icon = MusicIcon;
 
   @field kitName = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field category = contains(StringField); // e.g., "Analog", "Trap", "House"
   @field creator = contains(StringField);
   @field kit = contains(DrumKitField); // The actual sound parameters
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: DrumKitCard) {
       try {
         return this.kitName ?? 'Untitled Kit';
@@ -144,8 +144,8 @@ export class DrumKitCard extends CardDef {
           {{/if}}
         </div>
 
-        {{#if @model.description}}
-          <p class='kit-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='kit-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         {{#if @fields.kit}}
@@ -241,8 +241,8 @@ export class DrumKitCard extends CardDef {
           </div>
         </div>
 
-        {{#if @model.description}}
-          <p class='pattern-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='pattern-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         {{#if @fields.kit}}
@@ -459,13 +459,13 @@ export class BeatPatternCard extends CardDef {
   static icon = MusicIcon;
 
   @field patternName = contains(StringField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field bpm = contains(NumberField);
   @field genre = contains(StringField);
   @field creator = contains(StringField);
   @field pattern = contains(BeatPatternField); // The actual pattern data
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BeatPatternCard) {
       try {
         return this.patternName ?? 'Untitled Beat';
@@ -495,8 +495,8 @@ export class BeatPatternCard extends CardDef {
           </div>
         </div>
 
-        {{#if @model.description}}
-          <p class='pattern-description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='pattern-description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         {{#if @fields.pattern}}
@@ -2401,7 +2401,7 @@ export class BeatMakerCard extends CardDef {
   @field availableKits = linksToMany(() => DrumKitCard); // ⁹³ Available drum kits library
   @field availablePatterns = linksToMany(() => BeatPatternCard); // ⁹⁴ Available patterns library
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: BeatMakerCard) {
       return 'Beat Maker';
     },

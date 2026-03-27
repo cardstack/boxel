@@ -35,7 +35,7 @@ export default class AuthorDisplay extends GlimmerComponent<AuthorDisplayArgs> {
   }
 
   get thumbnailURL() {
-    return this.args.author?.thumbnailURL;
+    return this.args.author?.cardThumbnailURL;
   }
 
   <template>

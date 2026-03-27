@@ -4,7 +4,7 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { Server } from 'http';
-import { closeServer, setupPermissionedRealm } from '../helpers';
+import { closeServer, setupPermissionedRealmCached } from '../helpers';
 
 module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let testRealm: Realm;
@@ -28,14 +28,14 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await closeServer(testRealmHttpServer);
   });
 
-  setupPermissionedRealm(hooks, {
+  setupPermissionedRealmCached(hooks, {
     permissions: {
       '*': ['read'],
     },
     onRealmSetup,
   });
 
-  test('returns resource index entries for an existing module', async function (assert) {
+  test('returns resource index entries for an existing file', async function (assert) {
     await testRealm.write(
       'dependencies-card.gts',
       `
@@ -50,20 +50,30 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
 
     let targetUrl = `${testRealm.url}dependencies-card.gts`;
     let response = await request
-      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}`)
+      .get(`/_dependencies?url=${encodeURIComponent(targetUrl)}&type=file`)
       .set('Accept', SupportedMimeType.JSONAPI);
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     assert.true(response.body.data.length > 0, 'returns at least one entry');
 
-    let entry = response.body.data[0];
+    let entry = response.body.data.find(
+      (candidate: any) => candidate.attributes?.entryType === 'file',
+    );
+    assert.ok(entry, 'returns file entry');
     assert.strictEqual(entry.id, targetUrl);
     assert.strictEqual(entry.attributes.canonicalUrl, targetUrl);
     assert.strictEqual(entry.attributes.realmUrl, testRealm.url);
+    assert.strictEqual(entry.attributes.entryType, 'file');
+    assert.false(entry.attributes.hasError);
     assert.true(
       entry.attributes.dependencies.includes(
-        'https://cardstack.com/base/string',
+        'https://cardstack.com/base/card-api',
       ),
+      'includes consumed card-api module dependency',
+    );
+    assert.false(
+      entry.attributes.dependencies.includes(targetUrl),
+      'self url is excluded from dependencies',
     );
   });
 

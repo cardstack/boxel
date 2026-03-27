@@ -23,7 +23,7 @@ export class PolicyManual extends CardDef {
   @field version = contains(StringField);
   @field activityLogCardType = contains(AbsoluteCodeRefField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: PolicyManual) {
       try {
         return this.manualTitle ?? 'Policy Manual';

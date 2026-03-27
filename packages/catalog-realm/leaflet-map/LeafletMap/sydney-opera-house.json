@@ -8,13 +8,13 @@
       },
       "tileserverUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
       "cardInfo": {
-        "title": "Sydney Opera House Harbor",
-        "description": "Stunning harbor view featuring the iconic Sydney Opera House and Harbour Bridge with surrounding botanical gardens",
-        "thumbnailURL": null,
+        "name": "Sydney Opera House Harbor",
+        "summary": "Stunning harbor view featuring the iconic Sydney Opera House and Harbour Bridge with surrounding botanical gardens",
+        "cardThumbnailURL": null,
         "notes": "Perfect example of architectural masterpiece integrated with natural harbor setting"
       },
-      "title": "Sydney Opera House Harbor",
-      "description": "Stunning harbor view featuring the iconic Sydney Opera House and Harbour Bridge with surrounding botanical gardens"
+      "cardTitle": "Sydney Opera House Harbor",
+      "cardDescription": "Stunning harbor view featuring the iconic Sydney Opera House and Harbour Bridge with surrounding botanical gardens"
     },
     "relationships": {
       "cardInfo.theme": {

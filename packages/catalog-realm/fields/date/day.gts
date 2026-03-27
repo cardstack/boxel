@@ -7,6 +7,7 @@ import {
 import NumberField from 'https://cardstack.com/base/number';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import { not } from '@cardstack/boxel-ui/helpers';
 import CalendarDaysIcon from '@cardstack/boxel-icons/calendar-days';
 
 // Helper function to get ordinal suffix for a number (1st, 2nd, 3rd, etc.)
@@ -45,6 +46,7 @@ class DayFieldEdit extends Component<typeof DayField> {
       @onChange={{this.updateValue}}
       @placeholder='Select day (1-31)'
       @dropdownClass='day-dropdown'
+      @disabled={{not @canEdit}}
       class='day-select'
       data-test-day-select
       as |option|
@@ -61,7 +63,7 @@ class DayFieldEdit extends Component<typeof DayField> {
   </template>
 }
 
-export class DayField extends FieldDef {
+export default class DayField extends FieldDef {
   static displayName = 'Day';
   static icon = CalendarDaysIcon;
 
@@ -146,5 +148,3 @@ export class DayField extends FieldDef {
 
   static edit = DayFieldEdit;
 }
-
-export default DayField;

@@ -1471,7 +1471,7 @@ export class OnlineProduct extends CardDef {
   @field inStock = contains(BooleanField);
   @field imageUrl = contains(UrlField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineProduct) {
       try {
         const name = this.productName ?? 'Unnamed Product';

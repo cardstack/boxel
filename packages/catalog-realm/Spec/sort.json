@@ -9,9 +9,9 @@
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Sort",
-      "description": "Spec for Sort component",
-      "thumbnailURL": null
+      "cardTitle": "Sort",
+      "cardDescription": "Spec for Sort component",
+      "cardThumbnailURL": null
     },
     "relationships": {},
     "meta": {

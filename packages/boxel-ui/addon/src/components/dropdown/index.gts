@@ -1,6 +1,8 @@
+import { registerDestructor } from '@ember/destroyable';
 import { concat, fn, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import BasicDropdown, {
   type Dropdown,
@@ -62,6 +64,11 @@ interface Signature {
 class BoxelDropdown extends Component<Signature> {
   private themeObserver?: MutationObserver | null = null;
   private dropdownId = guidFor(this);
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => this.stopObservingTheme());
+  }
 
   get dropdownEl(): HTMLElement | null {
     return document.getElementById(this.dropdownId);
@@ -154,7 +161,7 @@ class BoxelDropdown extends Component<Signature> {
     this.syncCustomProps();
     this.detectAndSetThemeColors();
 
-    this.themeObserver?.disconnect();
+    this.stopObservingTheme();
     this.themeObserver = new MutationObserver(() => {
       this.syncCustomProps();
       this.detectAndSetThemeColors();
@@ -164,6 +171,11 @@ class BoxelDropdown extends Component<Signature> {
       attributeFilter: ['style', 'class'],
       subtree: false,
     });
+  }
+
+  private stopObservingTheme() {
+    this.themeObserver?.disconnect();
+    this.themeObserver = null;
   }
 
   @action registerAPI(publicAPI: DropdownAPI) {
@@ -180,6 +192,11 @@ class BoxelDropdown extends Component<Signature> {
     this.startObservingTheme();
   }
 
+  @action onClose() {
+    this.stopObservingTheme();
+    this.args.onClose?.();
+  }
+
   <template>
     {{!--
       Note:
@@ -188,7 +205,7 @@ class BoxelDropdown extends Component<Signature> {
     --}}
     <BasicDropdown
       @registerAPI={{this.registerAPI}}
-      @onClose={{@onClose}}
+      @onClose={{this.onClose}}
       @matchTriggerWidth={{@matchTriggerWidth}}
       @initiallyOpened={{@initiallyOpened}}
       @onOpen={{this.onOpen}}

@@ -1,7 +1,7 @@
 import NumberField from 'https://cardstack.com/base/number';
 import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { CurrencyField } from './currency';
+import CurrencyField from './currency';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
 import { guidFor } from '@ember/object/internals';
@@ -103,7 +103,7 @@ class Edit extends Component<typeof AmountWithCurrency> {
   </template>
 }
 
-export class AmountWithCurrency extends FieldDef {
+export default class AmountWithCurrency extends FieldDef {
   static displayName = 'Amount With Currency';
 
   @field amount = contains(NumberField);

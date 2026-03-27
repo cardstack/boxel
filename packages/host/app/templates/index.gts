@@ -20,6 +20,7 @@ import {
   isCardErrorJSONAPI,
   CardContextName,
   CommandContextName,
+  type getCard as GetCardType,
 } from '@cardstack/runtime-common';
 
 import HostModeContent from '@cardstack/host/components/host-mode/content';
@@ -56,17 +57,17 @@ export interface IndexComponentComponentSignature {
 }
 
 export class IndexComponent extends Component<IndexComponentComponentSignature> {
-  @service private declare commandService: CommandService;
-  @service private declare hostModeService: HostModeService;
-  @service private declare hostModeStateService: HostModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare router: RouterService;
-  @service private declare store: StoreService;
+  @service declare private commandService: CommandService;
+  @service declare private hostModeService: HostModeService;
+  @service declare private hostModeStateService: HostModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private router: RouterService;
+  @service declare private store: StoreService;
 
   @provide(GetCardContextName)
-  private get getCard() {
-    return getCard;
+  private get getCard(): GetCardType {
+    return getCard as unknown as GetCardType;
   }
 
   @provide(GetCardsContextName)
@@ -109,10 +110,14 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
 
   get title() {
     if (this.isError) {
-      return `Card not found: ${this.args.model?.id}`;
+      let error = this.args.model as CardErrorJSONAPI;
+      if (error.status === 404) {
+        return `Card not found: ${error.id}`;
+      }
+      return `Error rendering ${error.id}`;
     }
 
-    return this.card?.title ?? '';
+    return this.card?.cardTitle ?? '';
   }
 
   private viewCard: ViewCardFn = (cardOrURL) => {
@@ -198,37 +203,44 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
     };
   });
 
+  // TODO: remove in CS-9977, with rehydration
+  removeIsolatedMarkup = modifier(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    let start = document.getElementById('boxel-isolated-start');
+    let end = document.getElementById('boxel-isolated-end');
+    if (!start || !end) {
+      return;
+    }
+    let node = start.nextSibling;
+    while (node && node !== end) {
+      let next = node.nextSibling;
+      node.parentNode?.removeChild(node);
+      node = next;
+    }
+  });
+
   <template>
     {{#if this.hostModeService.isActive}}
-      {{pageTitle this.title}}
+      {{#unless this.hostModeService.headTemplateContainsTitle}}
+        {{pageTitle this.title}}
+      {{/unless}}
 
-      {{#if this.isError}}
-        <div data-test-error='not-found'>
-          Card not found:
-          {{@model.id}}
-        </div>
-      {{else}}
-        <HostModeContent
-          @primaryCardId={{this.hostModeStateService.primaryCard}}
-          @stackItemCardIds={{this.hostModeStateService.stackItems}}
-          @removeCardFromStack={{this.removeCardFromStack}}
-          @viewCard={{this.viewCard}}
-          class='host-mode-content'
-        />
-      {{/if}}
+      <HostModeContent
+        @primaryCardId={{this.hostModeStateService.primaryCard}}
+        @stackItemCardIds={{this.hostModeStateService.stackItems}}
+        @removeCardFromStack={{this.removeCardFromStack}}
+        @viewCard={{this.viewCard}}
+        {{this.removeIsolatedMarkup}}
+      />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}
-      <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
+      <OperatorModeContainer
+        @onClose={{this.closeOperatorMode}}
+        {{this.removeIsolatedMarkup}}
+      />
     {{/if}}
-
-    <style scoped>
-      .host-mode-content {
-        height: 100%;
-        position: fixed;
-        top: 0;
-        left: 0;
-      }
-    </style>
   </template>
 }
 

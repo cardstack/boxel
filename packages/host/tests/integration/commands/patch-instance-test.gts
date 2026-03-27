@@ -20,6 +20,8 @@ import {
   setupOnSave,
   withSlowSave,
   type TestContextWithSave,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import {
   CardDef,
@@ -40,10 +42,13 @@ module('Integration | commands | patch-instance', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  const saveWaitTimeoutMs = 5000;
   let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
   let commandService: CommandService;
   let PersonDef: typeof CardDefType;
   let indexQuery: RealmIndexQueryEngine;
+
+  setupRealmCacheTeardown(hooks);
 
   hooks.beforeEach(async function () {
     commandService = getService('command-service');
@@ -55,16 +60,18 @@ module('Integration | commands | patch-instance', function (hooks) {
     }
     PersonDef = Person;
 
-    let { realm } = await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/hassan.json': new Person({ name: 'Hassan' }),
-        'Person/jade.json': new Person({ name: 'Jade' }),
-        'Person/queenzy.json': new Person({ name: 'Queenzy' }),
-        'Person/germaine.json': new Person({ name: 'Germaine' }),
-      },
-    });
+    let { realm } = await withCachedRealmSetup(async () =>
+      setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/hassan.json': new Person({ name: 'Hassan' }),
+          'Person/jade.json': new Person({ name: 'Jade' }),
+          'Person/queenzy.json': new Person({ name: 'Queenzy' }),
+          'Person/germaine.json': new Person({ name: 'Germaine' }),
+        },
+      }),
+    );
     indexQuery = realm.realmIndexQueryEngine;
   });
 
@@ -92,7 +99,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -108,10 +118,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Paper',
-        description: null,
+        cardDescription: null,
         nickNames: [],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -159,7 +169,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -175,10 +188,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Hassan',
-        description: null,
+        cardDescription: null,
         nickNames: ['Paper'],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -226,7 +239,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -242,10 +258,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Hassan',
-        description: null,
+        cardDescription: null,
         nickNames: [],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -294,7 +310,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       },
     });
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
 
     let result = await indexQuery.instance(url);
     assert.ok(result, 'instance query returned a result');
@@ -310,10 +329,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Hassan',
-        description: null,
+        cardDescription: null,
         nickNames: [],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -404,7 +423,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       'store.patch invoked with doNotWaitForPersist',
     );
 
-    await waitUntil(() => saves > 0);
+    await waitUntil(() => saves > 0, {
+      timeout: saveWaitTimeoutMs,
+      timeoutMessage: 'timed out waiting for save to complete',
+    });
     assert.strictEqual(
       savedName,
       'Hassan Optimistic',
@@ -459,10 +481,10 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.attributes,
       {
         name: 'Andrea',
-        description: null,
+        cardDescription: null,
         nickNames: ['Air'],
-        thumbnailURL: null,
-        title: 'Untitled Card',
+        cardThumbnailURL: null,
+        cardTitle: 'Untitled Card',
         cardInfo,
       },
       'the attributes are correct',
@@ -471,6 +493,7 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.relationships,
       {
         bestFriend: { links: { self: `./queenzy` } },
+        'cardInfo.theme': { links: { self: null } },
         friends: {
           links: {
             self: null,

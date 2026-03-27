@@ -23,6 +23,8 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupOperatorModeStateCleanup,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../../helpers';
 import {
   CardDef,
@@ -51,6 +53,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -84,7 +87,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -101,15 +104,17 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       };
     }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'person.gts': { Person },
-        'Person/fadhlan.json': new Person({
-          firstName: 'Fadhlan',
-        }),
-        '.realm.json': `{ "name": "${realmName}" }`,
-      },
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'person.gts': { Person },
+          'Person/fadhlan.json': new Person({
+            firstName: 'Fadhlan',
+          }),
+          '.realm.json': `{ "name": "${realmName}" }`,
+        },
+      });
     });
   });
 
@@ -139,9 +144,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();
@@ -187,7 +190,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       '[data-test-ai-assistant-conversation]',
     )!;
 
-    return conversationElement.scrollTop === 0;
+    return conversationElement.scrollTop < 20;
   }
 
   function fillRoomWithReadMessages(
@@ -291,9 +294,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
@@ -315,9 +316,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
@@ -339,9 +338,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');

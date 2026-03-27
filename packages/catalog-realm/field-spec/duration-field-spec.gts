@@ -1,0 +1,198 @@
+import {
+  Spec,
+  SpecHeader,
+  SpecReadmeSection,
+  ExamplesWithInteractive,
+  SpecModuleSection,
+} from 'https://cardstack.com/base/spec';
+import {
+  field,
+  contains,
+  Component,
+} from 'https://cardstack.com/base/card-api';
+import DurationField from '../fields/time/duration';
+import CodeSnippet from '../components/code-snippet';
+
+const standardFieldCode = `@field standard = contains(DurationField);`;
+const fullFieldCode = `@field full = contains(DurationField, {
+    configuration: {
+      includeYears: true,
+      includeMonths: true,
+      includeDays: true,
+      includeHours: true,
+      includeMinutes: true,
+      includeSeconds: true,
+    },
+  });`;
+const dayTimeFieldCode = `@field dayTime = contains(DurationField, {
+    configuration: {
+      includeDays: true,
+      includeHours: true,
+      includeMinutes: true,
+      includeSeconds: true,
+    },
+  });`;
+const yearMonthFieldCode = `@field yearMonth = contains(DurationField, {
+    configuration: {
+      includeYears: true,
+      includeMonths: true,
+    },
+  });`;
+
+class DurationFieldSpecIsolated extends Component<typeof DurationFieldSpec> {
+  <template>
+    <article class='container'>
+      <SpecHeader @model={{@model}}>
+        <:title><@fields.cardTitle /></:title>
+        <:description><@fields.cardDescription /></:description>
+      </SpecHeader>
+
+      <SpecReadmeSection @model={{@model}} @context={{@context}}>
+        <@fields.readMe />
+      </SpecReadmeSection>
+
+      <ExamplesWithInteractive>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{standardFieldCode}} />
+          <@fields.standard />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{fullFieldCode}} />
+          <@fields.full />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{dayTimeFieldCode}} />
+          <@fields.dayTime />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{yearMonthFieldCode}} />
+          <@fields.yearMonth />
+        </article>
+      </ExamplesWithInteractive>
+
+      <SpecModuleSection @model={{@model}} />
+    </article>
+    <style scoped>
+      .container {
+        --boxel-spec-background-color: #ebeaed;
+        --boxel-spec-code-ref-background-color: #e2e2e2;
+        --boxel-spec-code-ref-text-color: #646464;
+
+        height: 100%;
+        min-height: max-content;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-spec-background-color);
+      }
+      .fields-configuration-card {
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-100);
+        padding: var(--boxel-sp-xs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
+
+class DurationFieldSpecEdit extends Component<typeof DurationFieldSpec> {
+  <template>
+    <article class='container'>
+      <SpecHeader @model={{@model}} @isEditMode={{true}}>
+        <:title><@fields.cardTitle /></:title>
+        <:description><@fields.cardDescription /></:description>
+      </SpecHeader>
+
+      <SpecReadmeSection
+        @model={{@model}}
+        @context={{@context}}
+        @isEditMode={{@canEdit}}
+      >
+        <@fields.readMe />
+      </SpecReadmeSection>
+
+      <ExamplesWithInteractive>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{standardFieldCode}} />
+          <@fields.standard @format='edit' />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{fullFieldCode}} />
+          <@fields.full @format='edit' />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{dayTimeFieldCode}} />
+          <@fields.dayTime @format='edit' />
+        </article>
+        <article class='fields-configuration-card'>
+          <CodeSnippet @code={{yearMonthFieldCode}} />
+          <@fields.yearMonth @format='edit' />
+        </article>
+      </ExamplesWithInteractive>
+
+      <SpecModuleSection @model={{@model}} />
+    </article>
+    <style scoped>
+      .container {
+        --boxel-spec-background-color: #ebeaed;
+        --boxel-spec-code-ref-background-color: #e2e2e2;
+        --boxel-spec-code-ref-text-color: #646464;
+
+        height: 100%;
+        min-height: max-content;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-spec-background-color);
+      }
+      .fields-configuration-card {
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-100);
+        padding: var(--boxel-sp-xs);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
+
+export class DurationFieldSpec extends Spec {
+  static displayName = 'Duration Field Spec';
+
+  // Standard DurationField
+  @field standard = contains(DurationField);
+
+  // Full duration breakdown
+  @field full = contains(DurationField, {
+    configuration: {
+      includeYears: true,
+      includeMonths: true,
+      includeDays: true,
+      includeHours: true,
+      includeMinutes: true,
+      includeSeconds: true,
+    },
+  });
+
+  // Day + time units
+  @field dayTime = contains(DurationField, {
+    configuration: {
+      includeDays: true,
+      includeHours: true,
+      includeMinutes: true,
+      includeSeconds: true,
+    },
+  });
+
+  // Year + month breakdown
+  @field yearMonth = contains(DurationField, {
+    configuration: {
+      includeYears: true,
+      includeMonths: true,
+    },
+  });
+
+  static isolated = DurationFieldSpecIsolated as unknown as typeof Spec.isolated;
+  static edit = DurationFieldSpecEdit as unknown as typeof Spec.edit;
+}

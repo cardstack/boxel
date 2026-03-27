@@ -564,7 +564,7 @@ export class CRMTask extends Task {
   @field subtasks = linksToMany(() => CRMTask);
   @field status = contains(CRMTaskStatusField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: CRMTask) {
       return this.name;
     },

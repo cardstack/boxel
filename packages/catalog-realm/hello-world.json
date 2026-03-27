@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Hello World",
-      "description": "This is a test card instance."
+      "cardTitle": "Hello World",
+      "cardDescription": "This is a test card instance."
     },
     "meta": {
       "adoptsFrom": {

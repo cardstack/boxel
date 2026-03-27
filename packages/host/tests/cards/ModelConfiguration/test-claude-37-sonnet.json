@@ -3,9 +3,9 @@
     "type": "card",
     "attributes": {
       "cardInfo": {
-        "title": "Anthropic: Claude 3.7 Sonnet",
-        "description": "Test fixture model configuration referencing Claude 3.7 Sonnet.",
-        "thumbnailURL": null,
+        "name": "Anthropic: Claude 3.7 Sonnet",
+        "summary": "Test fixture model configuration referencing Claude 3.7 Sonnet.",
+        "cardThumbnailURL": null,
         "notes": null
       },
       "modelId": "anthropic/claude-3.7-sonnet",

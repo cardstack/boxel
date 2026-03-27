@@ -11,6 +11,7 @@ import {
   isCardDef,
   isBaseDef,
   isFieldDef,
+  isFileDef,
 } from '@cardstack/runtime-common/code-ref';
 
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
@@ -66,9 +67,7 @@ class SelectorItemRenderer extends Component<{
   get asSelectorItem(): SelectorItem {
     return this.args.selectorItem as SelectorItem;
   }
-  <template>
-    {{yield this.asSelectorItem to='item'}}
-  </template>
+  <template>{{yield this.asSelectorItem to='item'}}</template>
 }
 
 interface Signature {
@@ -82,14 +81,16 @@ interface Signature {
 
 function typeOfCardOrField(cardOrField: typeof BaseDef) {
   if (isCardDef(cardOrField)) {
-    return 'card';
+    return 'card def';
   } else if (isFieldDef(cardOrField)) {
-    return 'field';
+    return 'field def';
+  } else if (isFileDef(cardOrField)) {
+    return 'file def';
   } else if (isBaseDef(cardOrField)) {
-    return 'base';
+    return 'base def';
   }
   throw new Error(
-    `in-this-file panel: declaration should either be card, field, or base.`,
+    `in-this-file panel: declaration should either be card def, field def, file def, or base def.`,
   );
 }
 

@@ -7,7 +7,7 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import { action } from '@ember/object';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
-import { formatDateTime } from '@cardstack/boxel-ui/helpers';
+import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 class WeekFieldEdit extends Component<typeof WeekField> {
@@ -22,12 +22,13 @@ class WeekFieldEdit extends Component<typeof WeekField> {
       @value={{@model.value}}
       @onInput={{this.updateValue}}
       @id='week-input'
+      @disabled={{not @canEdit}}
       data-test-week-input
     />
   </template>
 }
 
-export class WeekField extends FieldDef {
+export default class WeekField extends FieldDef {
   static displayName = 'Week';
   static icon = CalendarEventIcon;
 
@@ -143,4 +144,3 @@ export class WeekField extends FieldDef {
   static edit = WeekFieldEdit;
 }
 
-export default WeekField;

@@ -1235,7 +1235,7 @@ export class SongCard extends Song {
   @field coverArtUrl = contains(UrlField);
   @field isExplicit = contains(BooleanField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: SongCard) {
       try {
         const song = this.songTitle ?? 'Untitled';

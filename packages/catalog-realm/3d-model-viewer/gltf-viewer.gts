@@ -309,8 +309,8 @@ class GltfViewerIsolated extends Component<typeof GltfViewer> {
     <div class='gltf-viewer'>
       <header class='viewer-header'>
         <h1>{{if @model.modelName @model.modelName '3D Model Viewer'}}</h1>
-        {{#if @model.description}}
-          <p class='description'>{{@model.description}}</p>
+        {{#if @model.cardDescription}}
+          <p class='description'>{{@model.cardDescription}}</p>
         {{/if}}
 
         <div class='viewer-controls'>
@@ -659,10 +659,10 @@ export class GltfViewer extends CardDef {
 
   @field modelName = contains(StringField);
   @field modelUrl = contains(UrlField);
-  @field description = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field settings = contains(GltfSettingsField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: GltfViewer) {
       try {
         return this.modelName ?? '3D Model';
@@ -682,8 +682,8 @@ export class GltfViewer extends CardDef {
           <CubeIcon class='card-icon' />
           <div class='card-info'>
             <h3>{{if @model.modelName @model.modelName '3D Model'}}</h3>
-            {{#if @model.description}}
-              <p>{{@model.description}}</p>
+            {{#if @model.cardDescription}}
+              <p>{{@model.cardDescription}}</p>
             {{else}}
               <p class='placeholder'>No description provided</p>
             {{/if}}
@@ -832,8 +832,8 @@ export class GltfViewer extends CardDef {
           </div>
 
           <div class='tile-content'>
-            {{#if @model.description}}
-              <p class='tile-description'>{{@model.description}}</p>
+            {{#if @model.cardDescription}}
+              <p class='tile-description'>{{@model.cardDescription}}</p>
             {{else}}
               <p class='tile-placeholder'>GLTF 3D model viewer</p>
             {{/if}}
@@ -854,8 +854,8 @@ export class GltfViewer extends CardDef {
               <CubeIcon class='card-icon' />
               <div class='card-title-area'>
                 <h4>{{if @model.modelName @model.modelName '3D Model'}}</h4>
-                {{#if @model.description}}
-                  <p>{{@model.description}}</p>
+                {{#if @model.cardDescription}}
+                  <p>{{@model.cardDescription}}</p>
                 {{else}}
                   <p class='card-placeholder'>Interactive 3D model viewer
                     powered by Three.js</p>

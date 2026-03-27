@@ -7,8 +7,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import { ContactLinkField } from '../fields/contact-link';
+import DateTimeField from 'https://cardstack.com/base/datetime';
+import ContactLinkField from '../fields/contact-link';
 
 import {
   formatCurrency,
@@ -1389,10 +1389,10 @@ export class OnlineCustomer extends CardDef {
   @field phone = contains(ContactLinkField);
   @field totalOrders = contains(NumberField);
   @field totalSpent = contains(NumberField);
-  @field customerSince = contains(DatetimeField);
+  @field customerSince = contains(DateTimeField);
   @field loyaltyTier = contains(LoyaltyTierField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: OnlineCustomer) {
       try {
         const name = this.customerName ?? 'Customer';

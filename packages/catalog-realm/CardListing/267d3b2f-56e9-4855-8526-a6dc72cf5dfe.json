@@ -15,9 +15,9 @@
       "summary": "A comprehensive solution for businesses needing to display, track, and manage online orders within the Boxel card system.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/online-order-listing/thumbnail.png"
       }
     },
     "relationships": {

@@ -8,6 +8,7 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
+import { resolveCardReference, cardIdToURL } from '../card-reference-resolver';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -34,7 +35,7 @@ export function serialize(
     opts?.relativeTo instanceof URL
       ? opts.relativeTo
       : doc?.data?.id && typeof doc.data.id === 'string'
-        ? new URL(doc.data.id)
+        ? cardIdToURL(doc.data.id)
         : undefined;
   return {
     ...codeRef,
@@ -81,10 +82,26 @@ function codeRefAdjustments(
     return {};
   }
   if (!isUrlLike(codeRef.module)) {
+    // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
+    try {
+      let resolved = resolveCardReference(codeRef.module, relativeTo);
+      if (resolved !== codeRef.module) {
+        let module = resolved;
+        if (opts?.trimExecutableExtension) {
+          module = trimExecutableExtension(module);
+        }
+        if (opts?.allowRelative && opts?.maybeRelativeURL) {
+          module = opts.maybeRelativeURL(module);
+        }
+        return { module };
+      }
+    } catch {
+      // not resolvable, skip
+    }
     return {};
   }
   if (relativeTo) {
-    let module = new URL(codeRef.module, relativeTo).href;
+    let module = resolveCardReference(codeRef.module, relativeTo);
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(module);
     }
@@ -101,16 +118,15 @@ function maybeSerializeCodeRef(
   stack: any[] = [],
 ): string | undefined {
   if (codeRef && isResolvedCodeRef(codeRef)) {
-    if (isUrlLike(codeRef.module)) {
-      // if a stack is passed in, use the containing card to resolve relative references
-      let base =
-        stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
-      let moduleHref =
-        base && typeof base === 'string'
-          ? new URL(codeRef.module, base).href
-          : codeRef.module;
+    let base =
+      stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
+    try {
+      let moduleHref = resolveCardReference(
+        codeRef.module,
+        base && typeof base === 'string' ? base : undefined,
+      );
       return `${moduleHref}/${codeRef.name}`;
-    } else {
+    } catch {
       return `${codeRef.module}/${codeRef.name}`;
     }
   }

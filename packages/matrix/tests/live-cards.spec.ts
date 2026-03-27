@@ -30,8 +30,8 @@ test.describe('Live Cards', () => {
       data: {
         attributes: {
           cardInfo: {
-            title: 'test card title',
-            description: 'test card description',
+            name: 'test card title',
+            summary: 'test card description',
           },
         },
         meta: {

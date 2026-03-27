@@ -20,7 +20,7 @@ import { getFieldIcon } from '@cardstack/runtime-common';
 
 class CardInfoImageContainer extends GlimmerComponent<{
   Args: {
-    thumbnailURL?: string;
+    cardThumbnailURL?: string;
     icon?: CardOrFieldTypeIcon;
   };
   Element: HTMLElement;
@@ -28,11 +28,11 @@ class CardInfoImageContainer extends GlimmerComponent<{
   <template>
     <div
       class='cardInfo-image-container thumbnail'
-      style={{setBackgroundImage @thumbnailURL}}
+      style={{setBackgroundImage @cardThumbnailURL}}
       role='presentation'
       ...attributes
     >
-      {{#unless @thumbnailURL}}
+      {{#unless @cardThumbnailURL}}
         <@icon class='icon' width='50' height='40' data-test-thumbnail-icon />
       {{/unless}}
     </div>
@@ -60,9 +60,9 @@ class CardInfoImageContainer extends GlimmerComponent<{
 
 interface ViewSignature {
   Args: {
-    title?: string;
-    description?: string;
-    thumbnailURL?: string;
+    cardTitle?: string;
+    cardDescription?: string;
+    cardThumbnailURL?: string;
     icon?: CardOrFieldTypeIcon;
   };
 }
@@ -71,14 +71,16 @@ class CardInfoView extends GlimmerComponent<ViewSignature> {
   <template>
     <CardInfoImageContainer
       class='image-container'
-      @thumbnailURL={{@thumbnailURL}}
+      @cardThumbnailURL={{@cardThumbnailURL}}
       @icon={{@icon}}
-      data-test-field='cardThumbnailURL'
+      data-test-field='cardInfo-thumbnailURL'
     />
     <div class='info'>
-      <h2 class='card-info-title' data-test-field='cardTitle'>{{@title}}</h2>
-      <p class='card-info-description' data-test-field='cardDescription'>
-        {{@description}}
+      <h2 class='card-info-title' data-test-field='cardInfo-name'>
+        {{@cardTitle}}
+      </h2>
+      <p class='card-info-description' data-test-field='cardInfo-summary'>
+        {{@cardDescription}}
       </p>
     </div>
     <style scoped>
@@ -144,24 +146,24 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           </FieldContainer>
           <FieldContainer
             @label='Title'
-            @icon={{getFieldIcon @model 'title'}}
+            @icon={{getFieldIcon @model 'cardTitle'}}
             data-test-edit-preview='cardTitle'
           >
-            <@fields.title @format='embedded' />
+            <@fields.cardTitle @format='embedded' />
           </FieldContainer>
           <FieldContainer
             @label='Description'
-            @icon={{getFieldIcon @model 'description'}}
+            @icon={{getFieldIcon @model 'cardDescription'}}
             data-test-edit-preview='cardDescription'
           >
-            <@fields.description @format='embedded' />
+            <@fields.cardDescription @format='embedded' />
           </FieldContainer>
           <FieldContainer
             @label='Thumbnail URL'
             @icon={{LinkIcon}}
             data-test-edit-preview='cardThumbnailURL'
           >
-            <@fields.thumbnailURL @format='embedded' />
+            <@fields.cardThumbnailURL @format='embedded' />
           </FieldContainer>
         </div>
       {{/if}}
@@ -170,7 +172,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
           <div class='cardInfo-thumbnail-container'>
             <CardInfoImageContainer
               class='cardInfo-thumbnail-preview'
-              @thumbnailURL={{@model.cardInfo.thumbnailURL}}
+              @cardThumbnailURL={{@model.cardInfo.cardThumbnailURL}}
               @icon={{@model.constructor.icon}}
               data-test-thumbnail-image
             />
@@ -197,7 +199,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               @vertical={{true}}
               data-test-field='cardInfo-name'
             >
-              <@fields.cardInfo.title />
+              <@fields.cardInfo.name />
             </FieldContainer>
             <FieldContainer
               class='card-info-field'
@@ -208,7 +210,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
               @vertical={{true}}
               data-test-field='cardInfo-summary'
             >
-              <@fields.cardInfo.description />
+              <@fields.cardInfo.summary />
             </FieldContainer>
           </div>
         </:default>
@@ -228,11 +230,11 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
                   class='thumbnail-placeholder'
                   data-test-thumbnail-placeholder
                 >
-                  <@fields.thumbnailURL />
+                  <@fields.cardThumbnailURL />
                 </span>
               {{/if}}
               <span class='boxel-contents-only' data-test-thumbnail-input>
-                <@fields.cardInfo.thumbnailURL />
+                <@fields.cardInfo.cardThumbnailURL />
               </span>
             </div>
           </FieldContainer>
@@ -330,7 +332,8 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
 
   private get showThumbnailPlaceholder() {
     return (
-      !this.args.model?.cardInfo?.thumbnailURL && this.args.model?.thumbnailURL
+      !this.args.model?.cardInfo?.cardThumbnailURL &&
+      this.args.model?.cardThumbnailURL
     );
   }
 }

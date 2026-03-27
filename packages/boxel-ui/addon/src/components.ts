@@ -26,6 +26,7 @@ import EntityDisplayWithIcon from './components/entity-icon-display/index.gts';
 import EntityDisplayWithThumbnail from './components/entity-thumbnail-display/index.gts';
 import FieldContainer from './components/field-container/index.gts';
 import FilterList, { type Filter } from './components/filter-list/index.gts';
+import FittedCardContainer from './components/fitted-card-container/index.gts';
 import GridContainer from './components/grid-container/index.gts';
 import BoxelHeader from './components/header/index.gts';
 import Header from './components/header/index.gts';
@@ -47,6 +48,7 @@ import BoxelMultiSelect, {
   BoxelMultiSelectBasic,
 } from './components/multi-select/index.gts';
 import PhoneInput from './components/phone-input/index.gts';
+import Picker, { type PickerOption } from './components/picker/index.gts';
 import Pill from './components/pill/index.gts';
 import ProgressBar from './components/progress-bar/index.gts';
 import ProgressRadial from './components/progress-radial/index.gts';
@@ -114,6 +116,7 @@ export {
   EntityDisplayWithThumbnail,
   FieldContainer,
   FilterList,
+  FittedCardContainer,
   GridContainer,
   Header,
   IconButton,
@@ -123,6 +126,8 @@ export {
   Message,
   Modal,
   PhoneInput,
+  Picker,
+  PickerOption,
   Pill,
   ProgressBar,
   ProgressRadial,

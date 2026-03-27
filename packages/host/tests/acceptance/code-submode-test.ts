@@ -35,6 +35,7 @@ import {
 import {
   getMonacoContent,
   percySnapshot,
+  setupRealmCacheTeardown,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setMonacoContent,
@@ -44,6 +45,7 @@ import {
   setupAuthEndpoints,
   setupUserSubscription,
   assertMessages,
+  withCachedRealmSetup,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
@@ -136,7 +138,7 @@ const countryCardSource = `
   export class Country extends CardDef {
     static displayName = 'Country';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia(this: Country) {
         return this.name;
       },
@@ -187,7 +189,7 @@ const personCardSource = `
     static displayName = 'Person';
     @field firstName = contains(StringField);
     @field lastName = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -202,7 +204,7 @@ const personCardSource = `
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
-          <p>Title: <@fields.title /></p>
+          <p>Title: <@fields.cardTitle /></p>
           <p>Address List: <@fields.address /></p>
           <p>Friends: <@fields.friends /></p>
         </div>
@@ -224,7 +226,7 @@ const petCardSource = `
   export class Pet extends CardDef {
     static displayName = 'Pet';
     @field name = contains(StringField);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -238,7 +240,7 @@ const petCardSource = `
     }
     static isolated = class Isolated extends Component<typeof this> {
       <template>
-        <h1>{{@model.title}}</h1>
+        <h1>{{@model.cardTitle}}</h1>
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
@@ -350,7 +352,7 @@ const friendCardSource = `
     static displayName = 'Friend';
     @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringField, {
+    @field cardTitle = contains(StringField, {
       computeVia: function (this: Friend) {
         return this.name;
       },
@@ -428,6 +430,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
+    setupRealmCacheTeardown(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -460,69 +463,73 @@ module('Acceptance | code submode tests', function (_hooks) {
       catalogRealmURL = `${realmServerService.url}catalog/`;
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: personalRealmURL,
-        permissions: {
-          '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'hello.txt': txtSource,
-          '.realm.json': {
-            name: `Test User's Workspace`,
-            backgroundURL: 'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-            iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+      await withCachedRealmSetup(async () => {
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: personalRealmURL,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
           },
-        },
-      });
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: additionalRealmURL,
-        permissions: {
-          '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'hello.txt': txtSource,
-          '.realm.json': {
-            name: `Additional Workspace`,
-            backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-            iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'hello.txt': txtSource,
+            '.realm.json': {
+              name: `Test User's Workspace`,
+              backgroundURL:
+                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
+              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+            },
           },
-        },
-      });
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: catalogRealmURL,
-        permissions: {
-          '*': ['read'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'hello.txt': txtSource,
-          '.realm.json': {
-            name: `Catalog Realm`,
-            backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
-            iconURL: 'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
+        });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: additionalRealmURL,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
           },
-        },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'hello.txt': txtSource,
+            '.realm.json': {
+              name: `Additional Workspace`,
+              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
+              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+            },
+          },
+        });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: catalogRealmURL,
+          permissions: {
+            '*': ['read'],
+          },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'hello.txt': txtSource,
+            '.realm.json': {
+              name: `Catalog Realm`,
+              backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
+              iconURL:
+                'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
+            },
+          },
+        });
+        await setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          realmURL: testRealmURL,
+          permissions: {
+            '@testuser:localhost': ['read', 'write', 'realm-owner'],
+          },
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          },
+        });
       });
 
       setupAuthEndpoints({
         [catalogRealmURL]: ['read'],
         [additionalRealmURL]: ['read', 'write', 'realm-owner'],
         [personalRealmURL]: ['read', 'write', 'realm-owner'],
-      });
-      await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        realmURL: testRealmURL,
-        permissions: {
-          '@testuser:localhost': ['read', 'write', 'realm-owner'],
-        },
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-        },
       });
     });
 
@@ -569,6 +576,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
+    setupRealmCacheTeardown(hooks);
 
     let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -589,273 +597,275 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       // this seeds the loader used during index which obtains url mappings
       // from the global loader
-      ({ realm } = await setupAcceptanceTestRealm({
-        mockMatrixUtils,
-        contents: {
-          ...SYSTEM_CARD_FIXTURE_CONTENTS,
-          'index.gts': indexCardSource,
-          'pet-person.gts': personCardSource,
-          'person.gts': personCardSource,
-          'pet.gts': petCardSource,
-          'friend.gts': friendCardSource,
-          'employee.gts': employeeCardSource,
-          'in-this-file.gts': inThisFileSource,
-          'postal-code.gts': postalCodeFieldSource,
-          'address.gts': addressFieldSource,
-          'country.gts': countryCardSource,
-          'trips.gts': tripsFieldSource,
-          'broken.gts': brokenSource,
-          'broken-country.gts': brokenCountryCardSource,
-          'broken-adoption-instance.json': brokenAdoptionInstance,
-          'not-found-adoption-instance.json': notFoundAdoptionInstance,
-          'person-entry.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                title: 'Person',
-                description: 'Spec',
-                specType: 'card',
-                ref: {
-                  module: `./person`,
-                  name: 'Person',
+      ({ realm } = await withCachedRealmSetup(async () =>
+        setupAcceptanceTestRealm({
+          mockMatrixUtils,
+          contents: {
+            ...SYSTEM_CARD_FIXTURE_CONTENTS,
+            'index.gts': indexCardSource,
+            'pet-person.gts': personCardSource,
+            'person.gts': personCardSource,
+            'pet.gts': petCardSource,
+            'friend.gts': friendCardSource,
+            'employee.gts': employeeCardSource,
+            'in-this-file.gts': inThisFileSource,
+            'postal-code.gts': postalCodeFieldSource,
+            'address.gts': addressFieldSource,
+            'country.gts': countryCardSource,
+            'trips.gts': tripsFieldSource,
+            'broken.gts': brokenSource,
+            'broken-country.gts': brokenCountryCardSource,
+            'broken-adoption-instance.json': brokenAdoptionInstance,
+            'not-found-adoption-instance.json': notFoundAdoptionInstance,
+            'person-entry.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  cardTitle: 'Person',
+                  cardDescription: 'Spec',
+                  specType: 'card',
+                  ref: {
+                    module: `./person`,
+                    name: 'Person',
+                  },
                 },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'pet-entry.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                specType: 'card',
-                ref: {
-                  module: `./pet`,
-                  name: 'Pet',
-                },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
-                  name: 'Spec',
+                meta: {
+                  adoptsFrom: {
+                    module: `${baseRealm.url}spec`,
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'pet-entry-2.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                specType: 'card',
-                ref: {
-                  module: `./pet`,
-                  name: 'Pet',
+            'pet-entry.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  specType: 'card',
+                  ref: {
+                    module: `./pet`,
+                    name: 'Pet',
+                  },
                 },
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${baseRealm.url}spec`,
-                  name: 'Spec',
-                },
-              },
-            },
-          },
-          'index.json': {
-            data: {
-              type: 'card',
-              attributes: {},
-              meta: {
-                adoptsFrom: {
-                  module: './index',
-                  name: 'Index',
+                meta: {
+                  adoptsFrom: {
+                    module: `${baseRealm.url}spec`,
+                    name: 'Spec',
+                  },
                 },
               },
             },
-          },
-          'not-json.json': 'I am not JSON.',
-          'Person/fadhlan.json': {
-            data: {
-              attributes: {
-                firstName: 'Fadhlan',
-                address: [
-                  {
-                    city: 'Bandung',
-                    country: 'Indonesia',
-                    shippingInfo: {
-                      preferredCarrier: 'DHL',
-                      remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+            'pet-entry-2.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  specType: 'card',
+                  ref: {
+                    module: `./pet`,
+                    name: 'Pet',
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${baseRealm.url}spec`,
+                    name: 'Spec',
+                  },
+                },
+              },
+            },
+            'index.json': {
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: './index',
+                    name: 'Index',
+                  },
+                },
+              },
+            },
+            'not-json.json': 'I am not JSON.',
+            'Person/fadhlan.json': {
+              data: {
+                attributes: {
+                  firstName: 'Fadhlan',
+                  address: [
+                    {
+                      city: 'Bandung',
+                      country: 'Indonesia',
+                      shippingInfo: {
+                        preferredCarrier: 'DHL',
+                        remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+                      },
+                    },
+                  ],
+                },
+                relationships: {
+                  pet: {
+                    links: {
+                      self: `${testRealmURL}Pet/mango`,
                     },
                   },
-                ],
-              },
-              relationships: {
-                pet: {
-                  links: {
-                    self: `${testRealmURL}Pet/mango`,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
-                },
-              },
             },
-          },
-          'Person/1.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Hassan',
-                lastName: 'Abdel-Rahman',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../person',
-                  name: 'Person',
+            'Person/1.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                  lastName: 'Abdel-Rahman',
                 },
-              },
-            },
-          },
-          'Pet/mango.json': {
-            data: {
-              attributes: {
-                name: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}pet`,
-                  name: 'Pet',
-                },
-              },
-            },
-          },
-          'Friend/amy.json': {
-            data: {
-              attributes: {
-                name: 'Amy',
-              },
-              relationships: {
-                friend: {
-                  links: {
-                    self: `${testRealmURL}Friend/bob`,
+                meta: {
+                  adoptsFrom: {
+                    module: '../person',
+                    name: 'Person',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}friend`,
-                  name: 'Friend',
-                },
-              },
             },
-          },
-          'Friend/bob.json': {
-            data: {
-              attributes: {
-                name: 'Bob',
-              },
-              relationships: {},
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}friend`,
-                  name: 'Friend',
+            'Pet/mango.json': {
+              data: {
+                attributes: {
+                  name: 'Mango',
                 },
-              },
-            },
-          },
-          'Person/with-friends.json': {
-            data: {
-              attributes: {
-                firstName: 'With',
-                lastName: 'Friends',
-              },
-              relationships: {
-                'friends.0': {
-                  links: {
-                    self: `${testRealmURL}Friend/amy`,
-                  },
-                },
-                'friends.1': {
-                  links: {
-                    self: `${testRealmURL}Friend/bob`,
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}pet`,
+                    name: 'Pet',
                   },
                 },
               },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}person`,
-                  name: 'Person',
+            },
+            'Friend/amy.json': {
+              data: {
+                attributes: {
+                  name: 'Amy',
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: `${testRealmURL}Friend/bob`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}friend`,
+                    name: 'Friend',
+                  },
                 },
               },
             },
-          },
-          'Country/united-states.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                name: 'United States',
-                description: null,
-                thumbnailURL: null,
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../country',
-                  name: 'Country',
+            'Friend/bob.json': {
+              data: {
+                attributes: {
+                  name: 'Bob',
+                },
+                relationships: {},
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}friend`,
+                    name: 'Friend',
+                  },
                 },
               },
             },
-          },
-          'BrokenCountry/broken-country.json': {
-            data: {
-              type: 'card',
-              attributes: {
-                name: 'Broken Country',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: '../broken-country',
-                  name: 'Country',
+            'Person/with-friends.json': {
+              data: {
+                attributes: {
+                  firstName: 'With',
+                  lastName: 'Friends',
+                },
+                relationships: {
+                  'friends.0': {
+                    links: {
+                      self: `${testRealmURL}Friend/amy`,
+                    },
+                  },
+                  'friends.1': {
+                    links: {
+                      self: `${testRealmURL}Friend/bob`,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `${testRealmURL}person`,
+                    name: 'Person',
+                  },
                 },
               },
             },
+            'Country/united-states.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'United States',
+                  cardDescription: null,
+                  cardThumbnailURL: null,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../country',
+                    name: 'Country',
+                  },
+                },
+              },
+            },
+            'BrokenCountry/broken-country.json': {
+              data: {
+                type: 'card',
+                attributes: {
+                  name: 'Broken Country',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: '../broken-country',
+                    name: 'Country',
+                  },
+                },
+              },
+            },
+            'hello.txt': txtSource,
+            'z00.json': '{}',
+            'z01.json': '{}',
+            'z02.json': '{}',
+            'z03.json': '{}',
+            'z04.json': '{}',
+            'z05.json': '{}',
+            'z06.json': '{}',
+            'z07.json': '{}',
+            'z08.json': '{}',
+            'z09.json': '{}',
+            'z10.json': '{}',
+            'z11.json': '{}',
+            'z12.json': '{}',
+            'z13.json': '{}',
+            'z14.json': '{}',
+            'z15.json': '{}',
+            'z16.json': '{}',
+            'z17.json': '{}',
+            'z18.json': '{}',
+            'z19.json': '{}',
+            'zzz/zzz/file.json': '{}',
+            '.realm.json': {
+              name: 'Test Workspace B',
+              backgroundURL:
+                'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+            },
+            'noop.gts': `export function noop() {};\nclass NoopClass {}`,
           },
-          'hello.txt': txtSource,
-          'z00.json': '{}',
-          'z01.json': '{}',
-          'z02.json': '{}',
-          'z03.json': '{}',
-          'z04.json': '{}',
-          'z05.json': '{}',
-          'z06.json': '{}',
-          'z07.json': '{}',
-          'z08.json': '{}',
-          'z09.json': '{}',
-          'z10.json': '{}',
-          'z11.json': '{}',
-          'z12.json': '{}',
-          'z13.json': '{}',
-          'z14.json': '{}',
-          'z15.json': '{}',
-          'z16.json': '{}',
-          'z17.json': '{}',
-          'z18.json': '{}',
-          'z19.json': '{}',
-          'zzz/zzz/file.json': '{}',
-          '.realm.json': {
-            name: 'Test Workspace B',
-            backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
-          },
-          'noop.gts': `export function noop() {};\nclass NoopClass {}`,
-        },
-      }));
+        }),
+      ));
     });
 
     test('defaults to inheritance view and can toggle to file view', async function (assert) {
@@ -899,7 +909,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-file]').exists();
     });
 
-    test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
+    test('non-card JSON is shown as a file instance with file inheritance', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -913,7 +923,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}z01.json`,
       });
 
-      await waitFor('[data-test-file-definition]');
+      await waitFor('[data-test-card-instance-definition]');
 
       assert.dom('[data-test-definition-file-extension]').hasText('.json');
       await waitFor('[data-test-definition-realm-name]');
@@ -921,13 +931,30 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-definition-realm-name]')
         .hasText('in Test Workspace B');
 
-      assert
-        .dom('[data-test-file-incompatibility-message]')
-        .hasText(
-          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-        );
+      assert.dom('[data-test-code-mode-card-renderer-body]').exists();
 
-      assert.dom('[data-test-definition-header]').includesText('File');
+      // File preview header shows "JSON" type (JsonFileDef)
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
+        )
+        .includesText('JSON');
+
+      // No edit format option for file previews
+      assert.dom('[data-test-format-chooser="edit"]').doesNotExist();
+
+      // No edit button in header for files
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-edit-button]',
+        )
+        .doesNotExist();
+
+      assert.dom('[data-test-definition-header]').includesText('File Instance');
+
+      assert
+        .dom('[data-test-inheritance-panel-header]')
+        .includesText('File Inheritance');
 
       assert
         .dom('[data-test-definition-realm-name]')
@@ -935,7 +962,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-action-button="Delete"]').exists();
     });
 
-    test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
+    test('invalid JSON is shown as a file instance with file inheritance', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -949,18 +976,14 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}not-json.json`,
       });
 
-      await waitFor('[data-test-file-definition]');
+      await waitFor('[data-test-card-instance-definition]');
 
       assert.dom('[data-test-definition-file-extension]').hasText('.json');
       await waitFor('[data-test-definition-realm-name]');
       assert
         .dom('[data-test-definition-realm-name]')
         .hasText('in Test Workspace B');
-      assert
-        .dom('[data-test-file-incompatibility-message]')
-        .hasText(
-          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-        );
+      assert.dom('[data-test-code-mode-card-renderer-body]').exists();
     });
 
     test('showing module with a syntax error will display the error', async function (assert) {
@@ -1240,11 +1263,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         assert
           .dom('[data-test-binary-info] [data-test-last-modified]')
           .containsText('Last modified');
-        assert
-          .dom('[data-test-file-incompatibility-message]')
-          .hasText(
-            'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-          );
+        assert.dom('[data-test-code-mode-card-renderer-body]').exists();
         await percySnapshot(assert);
       });
     });
@@ -1303,6 +1322,19 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');
 
+      // Cards HAVE the edit format option (contrast with files)
+      assert.dom('[data-test-format-chooser="edit"]').exists();
+
+      // Cards do NOT have the metadata format option (only files do)
+      assert.dom('[data-test-format-chooser="metadata"]').doesNotExist();
+
+      // Cards HAVE the edit button in header
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-edit-button]',
+        )
+        .exists();
+
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
       await click('[data-test-format-chooser="fitted"]');
@@ -1341,6 +1373,109 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       // Only preview is shown in the right column when viewing an instance, no schema editor
       assert.dom('[data-test-card-schema]').doesNotExist();
+    });
+
+    test('non-card file preview shows "metadata" format option and not "edit"', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}z01.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      // Non-card files should have the metadata format option
+      assert.dom('[data-test-format-chooser="metadata"]').exists();
+
+      // Non-card files should NOT have the edit format option
+      assert.dom('[data-test-format-chooser="edit"]').doesNotExist();
+
+      // The standard view formats are all present
+      assert.dom('[data-test-format-chooser="isolated"]').exists();
+      assert.dom('[data-test-format-chooser="embedded"]').exists();
+      assert.dom('[data-test-format-chooser="fitted"]').exists();
+      assert.dom('[data-test-format-chooser="atom"]').exists();
+    });
+
+    test('clicking "metadata" format for a non-card file shows metadata panel with JSON-API content', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}z01.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      await click('[data-test-format-chooser="metadata"]');
+
+      assert
+        .dom('[data-test-format-chooser="metadata"]')
+        .hasClass('active', 'metadata button is active after clicking');
+
+      await waitFor('[data-test-metadata-panel]');
+      assert.dom('[data-test-metadata-panel]').exists();
+
+      await waitFor('[data-test-metadata-content]');
+      assert.dom('[data-test-metadata-content]').exists();
+
+      // The content should be a JSON-API document with type "file-meta"
+      let content =
+        document.querySelector('[data-test-metadata-content]')?.textContent ??
+        '';
+      assert.true(
+        content.includes('"file-meta"'),
+        'metadata content includes "file-meta" type',
+      );
+      assert.true(
+        content.includes('adoptsFrom'),
+        'metadata content includes adoptsFrom',
+      );
+    });
+
+    test('switching away from "metadata" format hides the metadata panel', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `${testRealmURL}z01.json`,
+      });
+
+      await waitFor('[data-test-code-mode-card-renderer-body]');
+
+      await click('[data-test-format-chooser="metadata"]');
+      await waitFor('[data-test-metadata-panel]');
+      assert.dom('[data-test-metadata-panel]').exists();
+
+      // Switch back to isolated — metadata panel should disappear
+      await click('[data-test-format-chooser="isolated"]');
+
+      assert
+        .dom('[data-test-metadata-panel]')
+        .doesNotExist('metadata panel is hidden after switching formats');
+
+      assert
+        .dom('[data-test-format-chooser="isolated"]')
+        .hasClass('active', 'isolated button is active after switching');
     });
 
     test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {
@@ -1396,12 +1531,29 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}hello.txt`,
       });
 
-      await waitFor('[data-test-file-incompatibility-message]');
+      assert.dom('[data-test-code-mode-card-renderer-body]').exists();
+
+      // File preview header shows "File" type and file name
       assert
-        .dom('[data-test-file-incompatibility-message]')
-        .hasText(
-          'No tools are available to be used with this file type. Choose a file representing a card instance or module.',
-        );
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
+        )
+        .includesText('File');
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-boxel-card-header-title]',
+        )
+        .includesText('hello.txt');
+
+      // No edit format for file previews
+      assert.dom('[data-test-format-chooser="edit"]').doesNotExist();
+
+      // No edit button for files
+      assert
+        .dom(
+          '[data-test-code-mode-card-renderer-header] [data-test-edit-button]',
+        )
+        .doesNotExist();
 
       await waitFor('[data-test-definition-file-extension]');
       assert.dom('[data-test-definition-file-extension]').hasText('.txt');
@@ -1734,7 +1886,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       assert
         .dom('[data-test-boxel-selector-item-selected]')
-        .hasText(`${elementName} field`);
+        .hasText(`${elementName} field def`);
 
       elementName = 'LocalField';
       position = new MonacoSDK.Position(38, 0);
@@ -1744,7 +1896,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       assert
         .dom('[data-test-boxel-selector-item-selected]')
-        .hasText(`${elementName} field`);
+        .hasText(`${elementName} field def`);
 
       elementName = 'ExportedCard';
       position = new MonacoSDK.Position(31, 0);
@@ -1754,7 +1906,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
       assert
         .dom('[data-test-boxel-selector-item-selected]')
-        .hasText(`${elementName} card`);
+        .hasText(`${elementName} card def`);
     });
 
     test('the monaco cursor position is maintained during an auto-save', async function (assert) {
@@ -1897,9 +2049,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
       );
       await waitFor(
-        `[data-test-select="${testRealmURL}Country/united-states"]`,
+        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
       );
-      await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+      await click(
+        `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+      );
       await click(`[data-test-card-catalog-go-button]`);
 
       await waitFor('[data-test-saved]');
@@ -1965,6 +2119,40 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
+    test('code editor shows size limit error when json save exceeds limit', async function (assert) {
+      let environmentService = getService('environment-service') as any;
+      let originalMaxSize = environmentService.cardSizeLimitBytes;
+
+      try {
+        await visitOperatorMode({
+          submode: 'code',
+          codePath: `${testRealmURL}person-entry.json`,
+        });
+
+        await waitFor('[data-test-editor]');
+
+        let content = getMonacoContent();
+        let encoder = new TextEncoder();
+        let currentSize = encoder.encode(content).length;
+        environmentService.cardSizeLimitBytes = currentSize + 50;
+
+        let doc = JSON.parse(content);
+        doc.data.attributes = {
+          ...(doc.data.attributes ?? {}),
+          title: 'x'.repeat(currentSize + 200),
+        };
+        setMonacoContent(JSON.stringify(doc, null, 2));
+        await waitFor('[data-test-save-error]');
+        assert
+          .dom('[data-test-save-error]')
+          .includesText(
+            `exceeds maximum allowed size (${environmentService.cardSizeLimitBytes} bytes)`,
+          );
+      } finally {
+        environmentService.cardSizeLimitBytes = originalMaxSize;
+      }
+    });
+
     test('card preview live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
@@ -2021,7 +2209,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           static displayName = 'Person';
           @field firstName = contains(StringField);
           @field lastName = contains(StringField);
-          @field title = contains(StringField, {
+          @field cardTitle = contains(StringField, {
             computeVia: function (this: Person) {
               return [this.firstName, this.lastName].filter(Boolean).join(' ');
             },

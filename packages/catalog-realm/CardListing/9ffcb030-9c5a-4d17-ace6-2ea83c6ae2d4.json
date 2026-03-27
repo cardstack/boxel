@@ -16,9 +16,9 @@
       "summary": "Track your cycling progress with this elegant, feature-rich mileage logger. Set targets, log your rides with origin and destination details, and visualize your progress with beautiful charts. Perfect for casual cyclists and serious riders looking to achieve their distance goals.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cycling-mileage-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cycling-mileage-listing/thumbnail.png"
       }
     },
     "relationships": {

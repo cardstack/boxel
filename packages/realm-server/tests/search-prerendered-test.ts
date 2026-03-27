@@ -2,15 +2,20 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { stringify } from 'qs';
+import { setupPermissionedRealmCached, createJWT } from './helpers';
+import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { setupPermissionedRealm, testRealmHref, createJWT } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+
+const missingPrerenderedHtmlFormatMessage = `Must include a 'prerenderedHtmlFormat' parameter with a value of ${PRERENDERED_HTML_FORMATS.join()} to use this endpoint`;
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | _search-prerendered', function () {
     let testRealm: Realm;
     let request: SuperTest<Test>;
+    let searchPath: string;
+    let realmHref: string;
+    let realmURL = new URL('http://127.0.0.1:4444/test/');
 
     function onRealmSetup(args: {
       testRealm: Realm;
@@ -18,13 +23,17 @@ module(basename(__filename), function () {
     }) {
       testRealm = args.testRealm;
       request = args.request;
+      let realmURLFromTest = new URL(testRealm.url);
+      realmHref = realmURLFromTest.href;
+      searchPath = `${realmURLFromTest.pathname.replace(/\/$/, '')}/_search-prerendered`;
     }
 
-    module('GET request', function (_hooks) {
+    module('QUERY request (formerly GET)', function (_hooks) {
       module(
         'instances with no embedded template css of its own',
         function (hooks) {
-          setupPermissionedRealm(hooks, {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
             permissions: {
               '*': ['read'],
             },
@@ -65,20 +74,23 @@ module(basename(__filename), function () {
                   },
                 },
               },
+              'hello.md': '# Hello from FileDef content',
             },
             onRealmSetup,
           });
 
           test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
             let response = await request
-              .get(`/_search-prerendered`)
-              .set('Accept', 'application/vnd.card+json');
+              .post(searchPath)
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .send({});
 
             assert.strictEqual(response.status, 400, 'HTTP 200 status');
 
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+                missingPrerenderedHtmlFormatMessage,
               ),
             );
           });
@@ -87,7 +99,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${testRealmHref}person`,
+                  module: `${realmHref}person`,
                   name: 'Person',
                 },
                 eq: {
@@ -97,13 +109,15 @@ module(basename(__filename), function () {
               prerenderedHtmlFormat: 'embedded',
             };
             let response = await request
-              .get(`/_search-prerendered?${stringify(query)}`)
-              .set('Accept', 'application/vnd.card+json');
+              .post(searchPath)
+              .set('Accept', 'application/vnd.card+json')
+              .set('X-HTTP-Method-Override', 'QUERY')
+              .send(query);
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
-              testRealmHref,
+              realmHref,
               'realm url header is correct',
             );
             assert.strictEqual(
@@ -140,11 +154,92 @@ module(basename(__filename), function () {
               'total count is correct',
             );
           });
+
+          test('returns prerendered file-meta results for FileDef queries', async function (assert) {
+            let queryBase: Query = {
+              filter: {
+                on: {
+                  module: `${baseRealm.url}file-api`,
+                  name: 'FileDef',
+                },
+                eq: {
+                  url: `${realmHref}hello.md`,
+                },
+              },
+            };
+            let formatsAndExpected: Array<{
+              format: 'embedded' | 'fitted' | 'atom' | 'head';
+              expectedSnippet: string;
+            }> = [
+              {
+                format: 'embedded',
+                expectedSnippet: 'data-test-markdown-embedded',
+              },
+              {
+                format: 'fitted',
+                expectedSnippet: 'data-test-markdown-fitted',
+              },
+              {
+                format: 'atom',
+                expectedSnippet: 'data-test-markdown-atom',
+              },
+              {
+                format: 'head',
+                expectedSnippet: 'data-test-card-head-title',
+              },
+            ];
+
+            for (let { format, expectedSnippet } of formatsAndExpected) {
+              let response = await request
+                .post(searchPath)
+                .set('Accept', 'application/vnd.card+json')
+                .set('X-HTTP-Method-Override', 'QUERY')
+                .send({
+                  ...queryBase,
+                  prerenderedHtmlFormat: format,
+                } as Query & { prerenderedHtmlFormat: string });
+
+              assert.strictEqual(
+                response.status,
+                200,
+                `HTTP 200 status for ${format}`,
+              );
+              let json = response.body;
+
+              assert.strictEqual(
+                json.data.length,
+                1,
+                `one file-meta entry is returned in ${format} results`,
+              );
+              assert.strictEqual(json.data[0].type, 'prerendered-card');
+              assert.strictEqual(json.data[0].id, `${realmHref}hello.md`);
+              assert.true(
+                json.data[0].attributes.html.includes(expectedSnippet),
+                `${format} html includes expected snippet: ${json.data[0].attributes.html}`,
+              );
+              assert.true(
+                json.data[0].attributes.html.includes(
+                  'Hello from FileDef content',
+                ),
+                `${format} html includes file content/title`,
+              );
+              assert.strictEqual(
+                json.meta.page.total,
+                1,
+                `total count is correct for ${format}`,
+              );
+              assert.true(
+                json.meta.isFileMeta,
+                `isFileMeta flag is set for ${format} file-meta query`,
+              );
+            }
+          });
         },
       );
 
       module('instances whose embedded template has css', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
           },
@@ -198,7 +293,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Aaron',
-                  title: 'Person Aaron',
+                  cardTitle: 'Person Aaron',
                 },
                 meta: {
                   adoptsFrom: {
@@ -212,7 +307,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Craig',
-                  title: 'Person Craig',
+                  cardTitle: 'Person Craig',
                 },
                 meta: {
                   adoptsFrom: {
@@ -227,7 +322,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jane',
                   favoriteColor: 'blue',
-                  title: 'FancyPerson Jane',
+                  cardTitle: 'FancyPerson Jane',
                 },
                 meta: {
                   adoptsFrom: {
@@ -242,7 +337,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jimmy',
                   favoriteColor: 'black',
-                  title: 'FancyPerson Jimmy',
+                  cardTitle: 'FancyPerson Jimmy',
                 },
                 meta: {
                   adoptsFrom: {
@@ -258,13 +353,17 @@ module(basename(__filename), function () {
 
         test('returns instances with CardDef prerendered embedded html + css when there is no "on" filter', async function (assert) {
           let response = await request
-            .get(`/_search-prerendered?prerenderedHtmlFormat=embedded`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              prerenderedHtmlFormat: 'embedded',
+            });
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
-            testRealmHref,
+            realmHref,
             'realm url header is correct',
           );
           assert.strictEqual(
@@ -329,7 +428,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${testRealmHref}fancy-person`,
+                module: `${realmHref}fancy-person`,
                 name: 'FancyPerson',
               },
               not: {
@@ -342,8 +441,10 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -371,10 +472,7 @@ module(basename(__filename), function () {
 
           assertScopedCssUrlsContain(assert, json.meta.scopedCssUrls, [
             ...cardDefModuleDependencies,
-            ...[
-              `${testRealmHref}fancy-person.gts`,
-              `${testRealmHref}person.gts`,
-            ],
+            ...[`${realmHref}fancy-person.gts`, `${realmHref}person.gts`],
           ]);
         });
 
@@ -382,7 +480,7 @@ module(basename(__filename), function () {
           let query: Query & { prerenderedHtmlFormat: string } = {
             filter: {
               on: {
-                module: `${testRealmHref}person`,
+                module: `${realmHref}person`,
                 name: 'Person',
               },
               eq: {
@@ -392,8 +490,10 @@ module(basename(__filename), function () {
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -402,10 +502,7 @@ module(basename(__filename), function () {
             1,
             'one prerendered card instance is returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
         });
 
         test('can use cardUrls to filter prerendered instances', async function (assert) {
@@ -414,11 +511,13 @@ module(basename(__filename), function () {
             cardUrls: string[];
           } = {
             prerenderedHtmlFormat: 'embedded',
-            cardUrls: [`${testRealmHref}jimmy.json`],
+            cardUrls: [`${realmHref}jimmy.json`],
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
@@ -427,21 +526,17 @@ module(basename(__filename), function () {
             1,
             'one prerendered card instance is returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
 
           query = {
             prerenderedHtmlFormat: 'embedded',
-            cardUrls: [
-              `${testRealmHref}jimmy.json`,
-              `${testRealmHref}jane.json`,
-            ],
+            cardUrls: [`${realmHref}jimmy.json`, `${realmHref}jane.json`],
           };
           response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           json = response.body;
 
@@ -450,14 +545,8 @@ module(basename(__filename), function () {
             2,
             '2 prerendered card instances are returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jimmy.json`);
         });
 
         test('can sort prerendered instances', async function (assert) {
@@ -465,37 +554,27 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${testRealmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person`, name: 'Person' },
                 direction: 'desc',
               },
             ],
             prerenderedHtmlFormat: 'embedded',
           };
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
           assert.strictEqual(json.data.length, 4, 'results count is correct');
 
           // firstName descending
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[2].id,
-            'http://127.0.0.1:4444/craig.json',
-          );
-          assert.strictEqual(
-            json.data[3].id,
-            'http://127.0.0.1:4444/aaron.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[2].id, `${realmHref}craig.json`);
+          assert.strictEqual(json.data[3].id, `${realmHref}aaron.json`);
         });
 
         test('can paginate prerendered instances', async function (assert) {
@@ -508,7 +587,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${testRealmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person`, name: 'Person' },
                 direction: 'asc',
               },
             ],
@@ -516,40 +595,32 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           let json = response.body;
 
           assert.strictEqual(json.data.length, 2, 'first page has 2 results');
           assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/aaron.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/craig.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}aaron.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}craig.json`);
 
           // Second page
           query.page = { number: 1, size: 2 };
           response = await request
-            .get(`/_search-prerendered?${stringify(query)}`)
-            .set('Accept', 'application/vnd.card+json');
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send(query);
 
           json = response.body;
 
           assert.strictEqual(json.data.length, 2, 'second page has 2 results');
           assert.strictEqual(json.meta.page.total, 4, 'total count is correct');
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jimmy.json`);
         });
       });
     });
@@ -558,7 +629,8 @@ module(basename(__filename), function () {
       module(
         'instances with no embedded template css of its own',
         function (hooks) {
-          setupPermissionedRealm(hooks, {
+          setupPermissionedRealmCached(hooks, {
+            realmURL,
             permissions: {
               '*': ['read'],
             },
@@ -605,7 +677,7 @@ module(basename(__filename), function () {
 
           test('endpoint will respond with a bad request if html format is not provided', async function (assert) {
             let response = await request
-              .post('/_search-prerendered')
+              .post(searchPath)
               .set('Accept', 'application/vnd.card+json')
               .set('X-HTTP-Method-Override', 'QUERY')
               .send({});
@@ -613,7 +685,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 400, 'HTTP 400 status');
             assert.ok(
               response.body.errors[0].message.includes(
-                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+                missingPrerenderedHtmlFormatMessage,
               ),
             );
           });
@@ -622,7 +694,7 @@ module(basename(__filename), function () {
             let query: Query & { prerenderedHtmlFormat: string } = {
               filter: {
                 on: {
-                  module: `${testRealmHref}person`,
+                  module: `${realmHref}person`,
                   name: 'Person',
                 },
                 eq: {
@@ -633,7 +705,7 @@ module(basename(__filename), function () {
             };
 
             let response = await request
-              .post('/_search-prerendered')
+              .post(searchPath)
               .set('Accept', 'application/vnd.card+json')
               .set('X-HTTP-Method-Override', 'QUERY')
               .send(query);
@@ -641,7 +713,7 @@ module(basename(__filename), function () {
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
               response.get('X-boxel-realm-url'),
-              testRealmHref,
+              realmHref,
               'realm url header is correct',
             );
             assert.strictEqual(
@@ -682,7 +754,8 @@ module(basename(__filename), function () {
       );
 
       module('instances whose embedded template has css', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
           },
@@ -736,7 +809,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Aaron',
-                  title: 'Person Aaron',
+                  cardTitle: 'Person Aaron',
                 },
                 meta: {
                   adoptsFrom: {
@@ -750,7 +823,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Craig',
-                  title: 'Person Craig',
+                  cardTitle: 'Person Craig',
                 },
                 meta: {
                   adoptsFrom: {
@@ -765,7 +838,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jane',
                   favoriteColor: 'blue',
-                  title: 'FancyPerson Jane',
+                  cardTitle: 'FancyPerson Jane',
                 },
                 meta: {
                   adoptsFrom: {
@@ -780,7 +853,7 @@ module(basename(__filename), function () {
                 attributes: {
                   firstName: 'Jimmy',
                   favoriteColor: 'black',
-                  title: 'FancyPerson Jimmy',
+                  cardTitle: 'FancyPerson Jimmy',
                 },
                 meta: {
                   adoptsFrom: {
@@ -796,7 +869,7 @@ module(basename(__filename), function () {
 
         test('returns instances with CardDef prerendered embedded html + css using QUERY method', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({
@@ -806,7 +879,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
             response.get('X-boxel-realm-url'),
-            testRealmHref,
+            realmHref,
             'realm url header is correct',
           );
           assert.strictEqual(
@@ -855,14 +928,11 @@ module(basename(__filename), function () {
             cardUrls: string[];
           } = {
             prerenderedHtmlFormat: 'embedded',
-            cardUrls: [
-              `${testRealmHref}jimmy.json`,
-              `${testRealmHref}jane.json`,
-            ],
+            cardUrls: [`${realmHref}jimmy.json`, `${realmHref}jane.json`],
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(query);
@@ -874,21 +944,15 @@ module(basename(__filename), function () {
             2,
             '2 prerendered card instances are returned in the filtered search results',
           );
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jimmy.json`);
         });
 
         test('can filter prerendered instances with complex query in request body', async function (assert) {
           let complexQuery = {
             filter: {
               on: {
-                module: `${testRealmHref}fancy-person`,
+                module: `${realmHref}fancy-person`,
                 name: 'FancyPerson',
               },
               not: {
@@ -901,7 +965,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(complexQuery);
@@ -924,10 +988,7 @@ module(basename(__filename), function () {
 
           assertScopedCssUrlsContain(assert, json.meta.scopedCssUrls, [
             ...cardDefModuleDependencies,
-            ...[
-              `${testRealmHref}fancy-person.gts`,
-              `${testRealmHref}person.gts`,
-            ],
+            ...[`${realmHref}fancy-person.gts`, `${realmHref}person.gts`],
           ]);
         });
 
@@ -948,7 +1009,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(complexQuery);
@@ -968,7 +1029,7 @@ module(basename(__filename), function () {
             sort: [
               {
                 by: 'firstName',
-                on: { module: `${testRealmHref}person`, name: 'Person' },
+                on: { module: `${realmHref}person`, name: 'Person' },
                 direction: 'desc',
               },
             ],
@@ -976,7 +1037,7 @@ module(basename(__filename), function () {
           };
 
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send(query);
@@ -986,29 +1047,19 @@ module(basename(__filename), function () {
           assert.strictEqual(json.data.length, 4, 'results count is correct');
 
           // firstName descending
-          assert.strictEqual(
-            json.data[0].id,
-            'http://127.0.0.1:4444/jimmy.json',
-          );
-          assert.strictEqual(
-            json.data[1].id,
-            'http://127.0.0.1:4444/jane.json',
-          );
-          assert.strictEqual(
-            json.data[2].id,
-            'http://127.0.0.1:4444/craig.json',
-          );
-          assert.strictEqual(
-            json.data[3].id,
-            'http://127.0.0.1:4444/aaron.json',
-          );
+          assert.strictEqual(json.data[0].id, `${realmHref}jimmy.json`);
+          assert.strictEqual(json.data[1].id, `${realmHref}jane.json`);
+          assert.strictEqual(json.data[2].id, `${realmHref}craig.json`);
+          assert.strictEqual(json.data[3].id, `${realmHref}aaron.json`);
         });
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             john: ['read'],
+            '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
           fileSystem: {
             'person.gts': `
@@ -1043,7 +1094,7 @@ module(basename(__filename), function () {
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set('Authorization', `Bearer invalid-token`)
@@ -1054,7 +1105,7 @@ module(basename(__filename), function () {
 
         test('401 without a JWT', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({ prerenderedHtmlFormat: 'embedded' }); // no Authorization header
@@ -1064,7 +1115,7 @@ module(basename(__filename), function () {
 
         test('403 without permission', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set('Authorization', `Bearer ${createJWT(testRealm, 'not-john')}`)
@@ -1075,7 +1126,7 @@ module(basename(__filename), function () {
 
         test('200 with permission', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .set(
@@ -1089,7 +1140,8 @@ module(basename(__filename), function () {
       });
 
       module('search query validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
+          realmURL,
           permissions: {
             '*': ['read'],
           },
@@ -1098,7 +1150,7 @@ module(basename(__filename), function () {
 
         test('400 with invalid query schema', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({
@@ -1115,7 +1167,7 @@ module(basename(__filename), function () {
 
         test('400 with invalid filter logic', async function (assert) {
           let response = await request
-            .post('/_search-prerendered')
+            .post(searchPath)
             .set('Accept', 'application/vnd.card+json')
             .set('X-HTTP-Method-Override', 'QUERY')
             .send({

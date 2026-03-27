@@ -6,9 +6,11 @@ import type {
   FieldDef,
   FieldConstructor,
 } from 'https://cardstack.com/base/card-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import { Loader } from './loader';
 import {
   isField,
+  isSpec,
   primitive,
   fields,
   fieldsUntracked,
@@ -16,8 +18,11 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
-import type { LooseCardResource } from './index';
-import { isUrlLike, trimExecutableExtension } from './index';
+import { cardIdToURL } from './card-reference-resolver';
+import type { LooseCardResource, FileMetaResource } from './index';
+import { trimExecutableExtension } from './index';
+import { resolveCardReference } from './card-reference-resolver';
+import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -51,6 +56,15 @@ export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
   }
 }
 
+export function assertIsResolvedCodeRef(
+  ref: unknown,
+  message = 'Expected ResolvedCodeRef',
+): asserts ref is ResolvedCodeRef {
+  if (!isResolvedCodeRef(ref as CodeRef | {})) {
+    throw new Error(message);
+  }
+}
+
 export function isCodeRef(ref: any): ref is CodeRef {
   if (!ref || typeof ref !== 'object') {
     return false;
@@ -81,6 +95,10 @@ export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
   return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
 }
 
+export function isBaseDefInstance(value: unknown): value is BaseDef {
+  return typeof value === 'object' && value !== null && isBaseInstance in value;
+}
+
 export function isCardDef(card: any): card is typeof CardDef;
 export function isCardDef(codeRef: CodeRef, loader: Loader): Promise<boolean>;
 export function isCardDef(
@@ -108,14 +126,36 @@ export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
 }
 
+export function isFileDef(def: any): def is typeof FileDef {
+  return isBaseDef(def) && 'isFileDef' in def;
+}
+
+export function isListingDef(def: any): boolean {
+  return isCardDef(def) && 'isListingDef' in def;
+}
+
+export function isListingInstance(card: any): boolean {
+  return isListingDef(card?.constructor);
+}
+
 export function isFieldInstance<T extends FieldDef>(
   fieldInstance: any,
 ): fieldInstance is T {
   return isFieldDef(fieldInstance?.constructor);
 }
 
+export function isFileDefInstance<T extends FileDef>(
+  fileInstance: any,
+): fileInstance is T {
+  return isFileDef(fileInstance?.constructor);
+}
+
 export function isPrimitive(def: any) {
   return isBaseDef(def) && primitive in def;
+}
+
+export function isSpecCard(def: any) {
+  return isBaseDef(def) && isSpec in def;
 }
 
 export function codeRefWithAbsoluteURL(
@@ -124,13 +164,14 @@ export function codeRefWithAbsoluteURL(
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
-    if (isUrlLike(ref.module)) {
-      let moduleURL = new URL(ref.module, relativeTo);
+    try {
+      let moduleHref = resolveCardReference(ref.module, relativeTo);
+      let moduleURL = new URL(moduleHref);
       if (opts?.trimExecutableExtension) {
         moduleURL = trimExecutableExtension(moduleURL);
       }
       return { ...ref, module: moduleURL.href };
-    } else {
+    } catch {
       return { ...ref };
     }
   }
@@ -144,13 +185,20 @@ export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
 
 export async function loadCardDef(
   ref: CodeRef,
-  opts: { loader: Loader; relativeTo?: URL },
+  opts: {
+    loader: Loader;
+    relativeTo?: URL;
+    dependencyTrackingContext?: RuntimeDependencyTrackingContext;
+  },
 ): Promise<typeof BaseDef> {
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
-    let resolvedModuleURL = new URL(ref.module, opts?.relativeTo).href;
-    let module = await loader.import<Record<string, any>>(resolvedModuleURL);
+    let resolvedModuleURL = resolveCardReference(ref.module, opts?.relativeTo);
+    let module = await loader.import<Record<string, any>>(
+      resolvedModuleURL,
+      opts.dependencyTrackingContext,
+    );
     maybeCard = module[ref.name];
   } else if (ref.type === 'ancestorOf') {
     let child = await loadCardDef(ref.card, opts);
@@ -168,7 +216,7 @@ export async function loadCardDef(
   }
 
   let err = new CardError(
-    `Cannot find card ${humanReadable(ref)}. Make sure ${new URL(moduleFrom(ref), opts?.relativeTo).href} exports ${exportFrom(ref)}`,
+    `Cannot find card ${humanReadable(ref)}. Make sure ${resolveCardReference(moduleFrom(ref), opts?.relativeTo)} exports ${exportFrom(ref)}`,
     {
       status: 404,
     },
@@ -289,6 +337,16 @@ export function getField<T extends BaseDef>(
   return undefined;
 }
 
+export function normalizeCodeRef(ref: CodeRef): {
+  module: string;
+  name: string;
+} {
+  if (!('type' in ref)) {
+    return { module: ref.module, name: ref.name };
+  }
+  return normalizeCodeRef(ref.card);
+}
+
 export function getAncestor(
   card: BaseDefConstructor,
 ): BaseDefConstructor | undefined {
@@ -357,7 +415,7 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   }
   let resolved = codeRefWithAbsoluteURL(
     adoptsFrom,
-    instance[relativeTo] || new URL(instance.id),
+    instance[relativeTo] || cardIdToURL(instance.id),
   );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
@@ -373,11 +431,8 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (typeof id !== 'string') {
       return undefined;
     }
-    if (typeof URL.canParse === 'function' && !URL.canParse(id)) {
-      return undefined;
-    }
     try {
-      return new URL(id);
+      return cardIdToURL(id);
     } catch {
       return undefined;
     }
@@ -441,7 +496,7 @@ function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {
 }
 
 export function visitModuleDeps(
-  resourceJson: LooseCardResource,
+  resourceJson: LooseCardResource | FileMetaResource,
   visit: VisitModuleDep,
 ): void {
   let resourceMeta = resourceJson.meta;

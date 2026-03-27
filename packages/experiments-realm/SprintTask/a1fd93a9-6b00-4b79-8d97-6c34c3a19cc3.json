@@ -18,8 +18,8 @@
       },
       "name": "Calendar displays wrong date after closing",
       "details": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

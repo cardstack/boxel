@@ -1,3 +1,5 @@
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
 import type { JobInfo } from './worker';
 
 export async function retry<T>(
@@ -46,4 +48,10 @@ export function jobIdentity(jobInfo?: JobInfo): string {
 
 export function isValidDate(value: unknown): value is Date {
   return value instanceof Date && !Number.isNaN(value.getTime());
+}
+
+export function isOwnField(card: typeof BaseDef, fieldName: string): boolean {
+  return Object.keys(Object.getOwnPropertyDescriptors(card.prototype)).includes(
+    fieldName,
+  );
 }

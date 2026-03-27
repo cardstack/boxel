@@ -24,6 +24,7 @@ import EntityIconDisplayUsage from './components/entity-icon-display/usage.gts';
 import EntityThumbnailDisplayUsage from './components/entity-thumbnail-display/usage.gts';
 import FieldContainerUsage from './components/field-container/usage.gts';
 import FilterListUsage from './components/filter-list/usage.gts';
+import FittedCardContainerUsage from './components/fitted-card-container/usage.gts';
 import GridContainerUsage from './components/grid-container/usage.gts';
 import HeaderUsage from './components/header/usage.gts';
 import IconButtonUsage from './components/icon-button/usage.gts';
@@ -35,6 +36,7 @@ import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
 import MultiSelectUsage from './components/multi-select/usage.gts';
 import PhoneInputUsage from './components/phone-input/usage.gts';
+import PickerUsage from './components/picker/usage.gts';
 import PillUsage from './components/pill/usage.gts';
 import ProgressBarUsage from './components/progress-bar/usage.gts';
 import ProgressRadialUsage from './components/progress-radial/usage.gts';
@@ -76,6 +78,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['EntityThumbnailDisplay', EntityThumbnailDisplayUsage],
   ['FieldContainer', FieldContainerUsage],
   ['FilterList', FilterListUsage],
+  ['FittedCardContainer', FittedCardContainerUsage],
   ['GridContainer', GridContainerUsage],
   ['Header', HeaderUsage],
   ['IconButton', IconButtonUsage],
@@ -87,6 +90,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Modal', ModalUsage],
   ['MultiSelect', MultiSelectUsage],
   ['PhoneInput', PhoneInputUsage],
+  ['Picker', PickerUsage],
   ['Pill', PillUsage],
   ['ProgressBar', ProgressBarUsage],
   ['ProgressRadial', ProgressRadialUsage],

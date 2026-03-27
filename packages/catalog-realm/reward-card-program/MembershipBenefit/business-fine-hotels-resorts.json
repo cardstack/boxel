@@ -11,9 +11,9 @@
       "partner": "Fine Hotels + Resorts",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "conditions": "Book through Amex Travel to receive benefits. Minimum 2-night stay may be required at some properties. Benefits vary by property and availability. Must book with American Express Fine Hotels + Resorts rate to be eligible.",
       "statusLevel": "Silver",

@@ -53,9 +53,9 @@
       "estimatedResaleValueFinancePercent": null,
       "userMemo": "Excellent lease deal on the new Q5 with updated quattro system and premium interior package. Includes technology package with virtual cockpit plus.",
       "resultMode": null,
-      "title": "2025 Audi Q5 Premium Plus",
-      "description": "Premium compact luxury SUV lease calculation with competitive terms and incentives",
-      "thumbnailURL": null
+      "cardTitle": "2025 Audi Q5 Premium Plus",
+      "cardDescription": "Premium compact luxury SUV lease calculation with competitive terms and incentives",
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

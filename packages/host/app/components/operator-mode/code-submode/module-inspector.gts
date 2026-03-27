@@ -14,8 +14,12 @@ import Schema from '@cardstack/boxel-icons/schema';
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
 import window from 'ember-window-mock';
 
+import { TrackedObject } from 'tracked-built-ins';
+
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type {
@@ -29,25 +33,28 @@ import {
   type Query,
   type CardResourceMeta,
   isFieldDef,
+  isSpecCard,
+  isCardErrorJSONAPI,
   internalKeyFor,
   GetCardsContextName,
   GetCardContextName,
+  loadCardDef,
   specRef,
   localId,
   meta,
+  hasExtension,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
-import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
-
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
 
 import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
+import PreviewPanel from '@cardstack/host/components/operator-mode/preview-panel/index';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -56,6 +63,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 import { isReady } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
+  type CardOrFieldReexport,
   type ModuleAnalysis,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -74,6 +82,7 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
 import type {
   CardDef,
@@ -108,7 +117,10 @@ interface ModuleInspectorSignature {
     moduleAnalysis: ModuleAnalysis;
     previewFormat: Format;
     readyFile: Ready;
-    selectedCardOrField: CardOrFieldDeclaration | undefined;
+    selectedCardOrField:
+      | CardOrFieldDeclaration
+      | CardOrFieldReexport
+      | undefined;
     selectedCodeRef: ResolvedCodeRef | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     setPreviewFormat: (format: Format) => void;
@@ -116,24 +128,183 @@ interface ModuleInspectorSignature {
 }
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
-  @service private declare commandService: CommandService;
-  @service private declare loaderService: LoaderService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare store: StoreService;
+  @service declare private commandService: CommandService;
+  @service declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private realm: RealmService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
-  @consume(GetCardsContextName) private declare getCards: getCards;
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) declare private getCards: getCards;
+  @consume(GetCardContextName) declare private getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
+  @use private isSpecResource = resource(({ on }) => {
+    let state = new TrackedObject<{ value: boolean }>({ value: false });
+    let codeRef = this.selectedDeclarationAsCodeRef;
+    if (!codeRef.module || !codeRef.name) {
+      return state;
+    }
+    let loader = this.loaderService.loader;
+    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    runWhileActive(on, async (isActive) => {
+      try {
+        let cardDef = await loadCardDef(codeRef, {
+          loader,
+          relativeTo,
+        });
+        if (!isActive()) {
+          return;
+        }
+        state.value = isSpecCard(cardDef);
+      } catch {
+        if (isActive()) {
+          state.value = false;
+        }
+      }
+    });
+    return state;
+  });
+
+  @use private fileDefResource = resource(({ on }) => {
+    let state = new TrackedObject<{
+      value: FileDef | undefined;
+      isLoading: boolean;
+      error: unknown;
+    }>({
+      value: undefined,
+      isLoading: false,
+      error: undefined,
+    });
+    if (!this.args.isIncompatibleFile || !this.args.readyFile?.url) {
+      return state;
+    }
+    let fileUrl = this.args.readyFile.url;
+    let store = this.store;
+    void this.args.readyFile?.lastModified; // track lastModified to re-run on save
+    state.isLoading = true;
+    runWhileActive(on, async (isActive) => {
+      try {
+        let result = await store.getWithoutCache(fileUrl, {
+          type: 'file-meta',
+        });
+        if (!isActive()) {
+          return;
+        }
+        if (isCardErrorJSONAPI(result)) {
+          state.error = result;
+          state.value = undefined;
+        } else {
+          state.value = result as unknown as FileDef;
+          state.error = undefined;
+        }
+      } catch (e) {
+        if (!isActive()) {
+          return;
+        }
+        state.error = e;
+        state.value = undefined;
+      } finally {
+        if (isActive()) {
+          state.isLoading = false;
+        }
+      }
+    });
+    return state;
+  });
+
+  private get fileDefInstance(): FileDef | undefined {
+    return this.fileDefResource?.value;
+  }
+
+  private get fileDefError(): boolean {
+    return this.fileDefResource?.error != null;
+  }
+
+  private get isFileDefLoading(): boolean {
+    return this.fileDefResource?.isLoading ?? false;
+  }
+
+  private get selectedDeclarationIsSpec() {
+    return this.isSpecResource?.value ?? false;
+  }
+
   private get isEmptyFile() {
     return this.args.readyFile?.content.match(/^\s*$/);
+  }
+
+  private get isGeneratingEmptyFileContent() {
+    if (!this.isEmptyFile) {
+      return false;
+    }
+
+    let roomId = this.matrixService.currentRoomId;
+    if (!roomId) {
+      return false;
+    }
+
+    let roomResource = this.matrixService.roomResources.get(roomId);
+    if (!roomResource) {
+      return false;
+    }
+
+    let lastMessageIndex = roomResource.indexOfLastNonDebugMessage;
+    if (lastMessageIndex < 0) {
+      return false;
+    }
+
+    let lastMessage = roomResource.messages[lastMessageIndex];
+    if (!lastMessage) {
+      return false;
+    }
+
+    let canceledActionMessageId =
+      this.matrixService.getLastCanceledActionEventId(roomId);
+    if (
+      lastMessage.isCanceled ||
+      canceledActionMessageId === lastMessage.eventId
+    ) {
+      return false;
+    }
+
+    if (lastMessage.author.userId !== this.matrixService.aiBotUserId) {
+      return false;
+    }
+
+    if (lastMessage.isStreamingFinished !== false) {
+      return lastMessage.htmlParts?.some((htmlPart) => {
+        let codeData = htmlPart.codeData;
+        if (!codeData) {
+          return false;
+        }
+
+        if (
+          codeData.fileUrl !== this.args.readyFile.url ||
+          !codeData.searchReplaceBlock
+        ) {
+          return false;
+        }
+
+        return this.commandService.getCodePatchStatus(codeData) === 'ready';
+      });
+    }
+
+    return lastMessage.htmlParts?.some((htmlPart) => {
+      let codeData = htmlPart.codeData;
+      if (!codeData) {
+        return false;
+      }
+
+      return (
+        codeData.fileUrl === this.args.readyFile.url &&
+        !codeData.searchReplaceBlock
+      );
+    });
   }
 
   private get sourceFileForCard(): FileDef | undefined {
@@ -148,11 +319,11 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return undefined;
     }
 
+    let moduleRef = adoptsFrom.module.endsWith('.gts')
+      ? adoptsFrom.module
+      : `${adoptsFrom.module}.gts`;
     let moduleURLWithExtension = new URL(
-      adoptsFrom.module.endsWith('.gts')
-        ? adoptsFrom.module
-        : `${adoptsFrom.module}.gts`,
-      this.args.currentOpenFile.url,
+      resolveCardReference(moduleRef, this.args.currentOpenFile.url),
     );
     return this.matrixService.fileAPI.createFileDef({
       sourceUrl: moduleURLWithExtension.href,
@@ -162,6 +333,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private get fileIncompatibilityMessage() {
     if (this.args.isIncompatibleFile) {
+      if (this.fileDefError) {
+        return `Unable to load file preview. Choose a file representing a card instance or module.`;
+      }
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
     return null;
@@ -180,7 +354,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return;
     }
 
-    const fileUrl = cardId.endsWith('.json') ? cardId : `${cardId}.json`;
+    const fileUrl = hasExtension(cardId) ? cardId : `${cardId}.json`;
     await this.operatorModeStateService.updateCodePath(new URL(fileUrl));
   };
 
@@ -378,6 +552,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       !this.specSearch?.isLoading &&
       this.specsForSelectedDefinition.length === 0 &&
       !this.activeSpec &&
+      !this.selectedDeclarationIsSpec &&
       this.canWrite
     );
   }
@@ -388,7 +563,23 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   <template>
     {{#if this.isEmptyFile}}
-      <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+      <div class='empty-file-message' data-test-empty-file-message>
+        {{if
+          this.isGeneratingEmptyFileContent
+          'File is empty - its content is currently being generated by the AI Assistant.'
+          'File is empty - tools like schema inspector, and file preview, are unavailable.'
+        }}
+      </div>
+    {{else if this.fileDefInstance}}
+      <PreviewPanel
+        @card={{this.fileDefInstance}}
+        @format={{@previewFormat}}
+        @setFormat={{@setPreviewFormat}}
+      />
+    {{else if this.isFileDefLoading}}
+      <div class='file-loading' data-test-file-preview-loading>
+        <LoadingIndicator />
+      </div>
     {{else if this.fileIncompatibilityMessage}}
       <div
         class='file-incompatible-message'
@@ -496,7 +687,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         />
       </section>
     {{else if @card}}
-      <CardRendererPanel
+      <PreviewPanel
         @card={{@card}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
@@ -555,6 +746,27 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
       .file-incompatible-message > span {
         max-width: 400px;
+      }
+
+      .empty-file-message {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        text-align: center;
+        padding: var(--boxel-sp-xl);
+      }
+
+      .file-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        background-color: var(--boxel-200);
       }
 
       .non-preview-panel-content {

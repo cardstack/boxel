@@ -17,7 +17,7 @@ const IconComponent: TemplateOnlyComponent<Signature> = <template>
     viewBox='0 0 24 24'
     ...attributes
   ><path stroke='none' d='M0 0h24v24H0z' /><path
-      d='M5 8a2 2 0 0 1 2 2v4a2 2 0 1 1-4 0v-4a2 2 0 0 1 2-2zM6 15l1 1M21 8h-4v8h4M17 12h2.5M10 8v6a2 2 0 1 0 4 0V8'
+      d='M5 8a2 2 0 0 1 2 2v4a2 2 0 1 1-4 0v-4a2 2 0 0 1 2-2M6 15l1 1M21 8h-4v8h4M17 12h2.5M10 8v6a2 2 0 1 0 4 0V8'
     /></svg>
 </template>;
 

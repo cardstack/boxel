@@ -8,22 +8,19 @@ import { isEqual } from 'lodash';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
+  cardIdToURL,
   identifyCard,
   internalKeyFor,
   maybeRelativeURL,
   relationshipEntries,
   realmURL,
+  snapshotRuntimeDependencies,
   type SingleCardDocument,
   type PrerenderMeta,
   type RenderError,
 } from '@cardstack/runtime-common';
 
-import {
-  directModuleDeps,
-  recursiveModuleDeps,
-} from '@cardstack/host/lib/prerender-util';
 import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -35,7 +32,6 @@ export type Model = PrerenderMeta | RenderError | undefined;
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
-  @service declare loaderService: LoaderService;
 
   async model(_: unknown, transition: Transition) {
     let api = await this.cardService.getAPI();
@@ -54,12 +50,16 @@ export default class RenderMetaRoute extends Route<Model> {
       return;
     }
 
+    let deps =
+      renderModel?.capturedDeps ??
+      snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps;
+
     let serialized = api.serializeCard(instance, {
       includeComputeds: true,
       maybeRelativeURL: (url: string) =>
         maybeRelativeURL(
-          new URL(url),
-          new URL(instance.id),
+          cardIdToURL(url),
+          cardIdToURL(instance.id),
           instance[realmURL],
         ),
     }) as SingleCardDocument;
@@ -69,12 +69,6 @@ export default class RenderMetaRoute extends Route<Model> {
       // we want to emulate the file serialization here
       delete relationship.data;
     }
-
-    let moduleDeps = directModuleDeps(serialized.data, new URL(instance.id));
-    // TODO eventually we need to include instance deps in here
-    let deps = [
-      ...(await recursiveModuleDeps(moduleDeps, this.loaderService.loader)),
-    ];
 
     let Klass = getClass(instance);
 

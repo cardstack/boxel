@@ -10,12 +10,12 @@
     "attributes": {
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "bonusType": "points",
-      "description": "Earn 250,000 Membership Rewards® Points after you spend $20,000 in eligible purchases on your Card within the first 3 months of Card Membership.†",
+      "cardDescription": "Earn 250,000 Membership Rewards\u00ae Points after you spend $20,000 in eligible purchases on your Card within the first 3 months of Card Membership.\u2020",
       "pointsAmount": 250000,
       "bonusCurrency": "Membership Rewards",
       "spendWindowDays": 90,

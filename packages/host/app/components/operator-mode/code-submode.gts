@@ -16,25 +16,29 @@ import perform from 'ember-concurrency/helpers/perform';
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { consume, provide } from 'ember-provide-consume-context';
+import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 
 import startCase from 'lodash/startCase';
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   LoadingIndicator,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { not, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { File } from '@cardstack/boxel-ui/icons';
+import { not, MenuItem, MenuDivider } from '@cardstack/boxel-ui/helpers';
+import { File, Upload } from '@cardstack/boxel-ui/icons';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   isCardDocumentString,
+  isCardErrorJSONAPI,
   RealmPaths,
   PermissionsContextName,
   GetCardContextName,
   type ResolvedCodeRef,
   type getCard,
+  type LocalPath,
   CardContextName,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
@@ -51,14 +55,17 @@ import type {
 } from '@cardstack/host/resources/module-contents';
 import type CardService from '@cardstack/host/services/card-service';
 import type CodeSemanticsService from '@cardstack/host/services/code-semantics-service';
+import type FileUploadService from '@cardstack/host/services/file-upload';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type {
+  BaseDef,
   CardDef,
   Format,
   CardContext,
@@ -69,6 +76,7 @@ import {
   CodeModePanelWidths,
   CodeModePanelHeights,
 } from '../../utils/local-storage-keys';
+import { runWhileActive } from '../../utils/run-while-active';
 import FileTree from '../editor/file-tree';
 
 import CardURLBar from './card-url-bar';
@@ -133,20 +141,23 @@ function urlToFilename(url: URL) {
 }
 
 export default class CodeSubmode extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext: CardContext;
 
-  @service private declare cardService: CardService;
-  @service private declare codeSemanticsService: CodeSemanticsService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare realm: RealmService;
-  @service private declare specPanelService: SpecPanelService;
+  @service declare private cardService: CardService;
+  @service declare private codeSemanticsService: CodeSemanticsService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private realm: RealmService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private store: StoreService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
   @tracked private sourceFileIsSaving = false;
+  @tracked private writeError: string | undefined;
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -203,6 +214,7 @@ export default class CodeSubmode extends Component<Signature> {
 
     registerDestructor(this, () => {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
+      this.codeSemanticsService.clearOnModuleEditCallback(this.onModuleEdit);
     });
   }
 
@@ -236,6 +248,10 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get realmURL() {
     return this.operatorModeStateService.realmURL;
+  }
+
+  private get canWriteToRealm() {
+    return this.realm.canWrite(this.realmURL);
   }
 
   private get isCard() {
@@ -374,6 +390,11 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
+  private onWriteError(message: string | undefined) {
+    this.writeError = message;
+  }
+
+  @action
   private onHorizontalLayoutChange(layout: number[]) {
     if (layout.length > 2) {
       this.defaultPanelWidths.leftPanel = layout[0];
@@ -401,22 +422,37 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get menuItems(): MenuItem[] {
-    return newFileTypes.flatMap(({ id, icon, description, extension }) => {
-      if (id === 'duplicate-instance' || id === 'spec-instance') {
-        return [];
-      }
-      let displayName = capitalize(startCase(id));
-      return [
-        new MenuItem({
-          label: displayName,
-          action: () => this.createFile.perform({ id, displayName }),
-          subtext: description,
-          icon,
-          postscript: extension,
-        }),
-      ];
-    });
+  private get menuItems(): (MenuItem | MenuDivider)[] {
+    let items: (MenuItem | MenuDivider)[] = newFileTypes.flatMap(
+      ({ id, icon, description, extension }) => {
+        if (
+          id === 'duplicate-instance' ||
+          id === 'spec-instance' ||
+          id === 'file-definition'
+        ) {
+          return [];
+        }
+        let displayName = capitalize(startCase(id));
+        return [
+          new MenuItem({
+            label: displayName,
+            action: () => this.createFile.perform({ id, displayName }),
+            subtext: description,
+            icon,
+            postscript: extension,
+          }),
+        ];
+      },
+    );
+    items.push(new MenuDivider());
+    items.push(
+      new MenuItem({
+        label: 'Upload File…',
+        action: () => this.triggerUploadFile(),
+        icon: Upload,
+      }),
+    );
+    return items;
   }
 
   private get newFileOptions(): NewFileOptions {
@@ -439,6 +475,11 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private setItemToDelete(item: CardDef | URL | null | undefined) {
     this.itemToDelete = item;
+  }
+
+  @action private deleteFileInTree(entryPath: LocalPath) {
+    let url = new URL(entryPath, this.realmURL);
+    this.setItemToDelete(url);
   }
 
   @action private onCancelDelete() {
@@ -544,6 +585,24 @@ export default class CodeSubmode extends Component<Signature> {
     },
   );
 
+  @action
+  private triggerUploadFile() {
+    let realmURL = this.operatorModeStateService.realmURL;
+    if (!realmURL) {
+      throw new Error('No realm available for upload');
+    }
+    let task = this.fileUpload.uploadFile({ realmURL: new URL(realmURL) });
+    task.result
+      .then((fileDef) => {
+        if (fileDef?.url) {
+          this.operatorModeStateService.updateCodePath(new URL(fileDef.url));
+        }
+      })
+      .catch((error) => {
+        console.error('Unexpected error during file upload', error);
+      });
+  }
+
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
@@ -584,8 +643,59 @@ export default class CodeSubmode extends Component<Signature> {
     this.operatorModeStateService.updateCardPreviewFormat(format);
   }
 
+  private get isNonModuleFile() {
+    return !this.isModule && !isCardDocumentString(this.readyFile.content);
+  }
+
+  @use private fileDefResource = resource(({ on }) => {
+    let state = new TrackedObject<{
+      value: BaseDef | undefined;
+      isLoading: boolean;
+      error: unknown;
+    }>({
+      value: undefined,
+      isLoading: false,
+      error: undefined,
+    });
+    if (!this.isNonModuleFile) {
+      return state;
+    }
+    let store = this.store;
+    let fileUrl = this.readyFile.url;
+    state.isLoading = true;
+    runWhileActive(on, async (isActive) => {
+      try {
+        let result = await store.get(fileUrl, { type: 'file-meta' });
+        if (!isActive()) {
+          return;
+        }
+        if (isCardErrorJSONAPI(result)) {
+          state.error = result;
+          state.value = undefined;
+        } else {
+          state.value = result as unknown as BaseDef;
+          state.error = undefined;
+        }
+      } catch (e) {
+        if (!isActive()) {
+          return;
+        }
+        state.error = e;
+        state.value = undefined;
+      } finally {
+        if (isActive()) {
+          state.isLoading = false;
+        }
+      }
+    });
+    return state;
+  });
+
   get isReadOnly() {
-    return !this.realm.canWrite(this.readyFile.url);
+    return (
+      !this.realm.canWrite(this.readyFile.url) ||
+      this.fileDefResource?.isLoading
+    );
   }
 
   @provide(PermissionsContextName)
@@ -691,6 +801,10 @@ export default class CodeSubmode extends Component<Signature> {
                           @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
                           @onFileSelected={{this.operatorModeStateService.onFileSelected}}
                           @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                          @onDeleteFile={{if
+                            this.canWriteToRealm
+                            this.deleteFileInTree
+                          }}
                           @scrollPositionKey={{this.operatorModeStateService.codePathString}}
                         />
                       </:browser>
@@ -731,6 +845,7 @@ export default class CodeSubmode extends Component<Signature> {
                       @saveSourceOnClose={{@saveSourceOnClose}}
                       @selectDeclaration={{this.selectDeclaration}}
                       @onFileSave={{this.onSourceFileSave}}
+                      @onWriteError={{this.onWriteError}}
                       @onSetup={{this.setupCodeEditor}}
                       @isReadOnly={{this.isReadOnly}}
                     />
@@ -738,6 +853,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <CodeSubmodeEditorIndicator
                       @isSaving={{this.isSaving}}
                       @isReadOnly={{this.isReadOnly}}
+                      @errorMessage={{this.writeError}}
                     />
                   {{else if this.isLoading}}
                     <LoadingIndicator
@@ -804,7 +920,7 @@ export default class CodeSubmode extends Component<Signature> {
             <:content>
               {{#if this.isCard}}
                 Delete the card
-                <strong>{{this.itemToDeleteAsCard.title}}</strong>?
+                <strong>{{this.itemToDeleteAsCard.cardTitle}}</strong>?
               {{else}}
                 Delete the file
                 <strong>{{urlToFilename this.itemToDeleteAsFile}}</strong>?

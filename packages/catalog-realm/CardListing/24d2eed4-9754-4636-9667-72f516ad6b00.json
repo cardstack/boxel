@@ -16,9 +16,9 @@
       "summary": "Dynamic photo collage with masonry grid layout - upload multiple images with captions while viewing an adaptive grid display. Features varied sizing patterns, hover-reveal captions, smooth scaling animations, and elegant dark mode aesthetics for professional photo presentations.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/photo-collage---minimalist-photography-collection-listing/thumbnail.png"
       }
     },
     "relationships": {

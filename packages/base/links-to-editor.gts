@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import {
   restartableTask,
@@ -10,15 +11,17 @@ import {
   getBoxComponent,
 } from './field-component';
 import {
-  type CardDef,
   type BaseDef,
   type Box,
   type Field,
   type CardContext,
+  type LinkableDefConstructor,
   CreateCardFn,
+  isFileDef,
 } from './card-api';
 import {
   chooseCard,
+  chooseFile,
   baseCardRef,
   identifyCard,
   CardContextName,
@@ -31,13 +34,12 @@ import {
 import { Button, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 import { consume } from 'ember-provide-consume-context';
-import { hash } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    model: Box<CardDef | null>;
-    field: Field<typeof CardDef>;
+    model: Box<BaseDef | null>;
+    field: Field<LinkableDefConstructor>;
     typeConstraint?: ResolvedCodeRef;
     createCard?: CreateCardFn;
   };
@@ -85,7 +87,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             />
           {{/if}}
           <DefaultFormatsProvider
-            @value={{hash cardDef='fitted' fieldDef='embedded'}}
+            @value={{hash
+              cardDef='fitted'
+              fieldDef='embedded'
+            }}
           >
             <this.linkedCard />
           </DefaultFormatsProvider>
@@ -165,6 +170,17 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
   }
 
   private chooseCard = restartableTask(async () => {
+    if (isFileDef(this.args.field.card)) {
+      let fileType = identifyCard(this.args.field.card);
+      let fileTypeName = this.args.field.card.displayName;
+      let file = await chooseFile(
+        fileType ? { fileType, fileTypeName } : undefined,
+      );
+      if (file) {
+        this.args.model.value = file;
+      }
+      return;
+    }
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());

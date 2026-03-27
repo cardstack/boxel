@@ -21,6 +21,7 @@ interface ImageDropzonePreviewArgs {
     isReading?: boolean;
     readProgress?: number;
     previewImageFit?: 'contain' | 'cover';
+    disabled?: boolean;
   };
 }
 
@@ -60,24 +61,26 @@ export default class ImageDropzonePreview extends GlimmerComponent<ImageDropzone
           {{/if}}
 
           {{! Top-right: Change and Remove buttons }}
-          <div class='top-right-buttons'>
-            <label class='change-button'>
-              <ImageIcon class='icon' />
-              <input
-                type='file'
-                class='file-input'
-                accept='image/*'
-                {{on 'change' @onFileSelect}}
-              />
-            </label>
-            <button
-              type='button'
-              {{on 'click' @onRemove}}
-              class='remove-button'
-            >
-              <XIcon class='icon' />
-            </button>
-          </div>
+          {{#unless @disabled}}
+            <div class='top-right-buttons'>
+              <label class='change-button'>
+                <ImageIcon class='icon' />
+                <input
+                  type='file'
+                  class='file-input'
+                  accept='image/*'
+                  {{on 'change' @onFileSelect}}
+                />
+              </label>
+              <button
+                type='button'
+                {{on 'click' @onRemove}}
+                class='remove-button'
+              >
+                <XIcon class='icon' />
+              </button>
+            </div>
+          {{/unless}}
         {{/if}}
       </div>
     </div>

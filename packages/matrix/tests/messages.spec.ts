@@ -18,6 +18,7 @@ import {
   getRoomEvents,
   setupTwoStackItems,
   showAllCards,
+  waitUntil,
 } from '../helpers';
 import { appURL } from '../helpers/isolated-realm-server';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
@@ -197,7 +198,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-attach-button]').click();
     await page.locator('[data-test-attach-card-btn]').click();
     await page.locator(`[data-test-search-field]`).fill(testCard);
-    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
@@ -235,7 +236,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-attach-card-btn]').click();
 
     await page.locator(`[data-test-search-field]`).fill('Mango the Puppy');
-    await page.locator(`[data-test-select="${testCard}"]`).click();
+    await page.locator(`[data-test-card-catalog-item="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
       page.locator(`[data-test-attached-card="${testCard}"]`),
@@ -295,7 +296,10 @@ test.describe('Room messages', () => {
       .click();
     await page.locator(`[data-test-boxel-menu-item-text="Code"]`).click();
 
-    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(2);
+    await expect(
+      page.locator(`[data-test-attached-file="${appURL}/person.gts"]`),
+    ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
     ).toHaveCount(1);
@@ -329,7 +333,7 @@ test.describe('Room messages', () => {
     expect(attachedFiles.length).toStrictEqual(1);
     expect(attachedFiles[0].name).toStrictEqual('person.gts');
     expect(attachedFiles[0].contentType).toStrictEqual(
-      'text/plain; charset=utf-8',
+      'text/typescript+glimmer',
     );
     expect(attachedFiles[0].sourceUrl).toStrictEqual(`${appURL}/person.gts`);
     expect(attachedFiles[0].url).toMatch(
@@ -356,7 +360,10 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
     ).toHaveCount(1);
-    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
+    await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(2);
+    await expect(
+      page.locator(`[data-test-attached-file="${appURL}/person.gts"]`),
+    ).toHaveCount(1);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
     ).toHaveCount(1);
@@ -396,19 +403,49 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    let messages = await getRoomEvents(username, password);
-    let lastMessage = messages[messages.length - 1];
+    let messageData = await waitUntil(async () => {
+      let messages = await getRoomEvents(username, password);
+      for (let message of [...messages].reverse()) {
+        if (
+          message.type !== 'm.room.message' ||
+          message.content?.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE ||
+          typeof message.content?.data !== 'string'
+        ) {
+          continue;
+        }
+        try {
+          let parsed = JSON.parse(message.content.data);
+          let attachedFiles = parsed?.attachedFiles;
+          if (
+            Array.isArray(attachedFiles) &&
+            attachedFiles.some(
+              (file: { sourceUrl?: string }) =>
+                file.sourceUrl === `${appURL}/pet.gts`,
+            )
+          ) {
+            return parsed;
+          }
+        } catch {
+          continue;
+        }
+      }
+      return undefined;
+    }, 20_000);
 
-    let attachedCards = JSON.parse(lastMessage.content.data).attachedCards;
+    let attachedCards = messageData.attachedCards;
     expect(attachedCards).toBeUndefined;
-    let attachedFiles = JSON.parse(lastMessage.content.data).attachedFiles;
+    let attachedFiles = messageData.attachedFiles;
     expect(attachedFiles.length).toStrictEqual(2);
-    expect(attachedFiles[1].name).toStrictEqual('pet.gts');
-    expect(attachedFiles[1].contentType).toStrictEqual(
-      'text/plain; charset=utf-8',
+    let petFile = attachedFiles.find(
+      (file: { sourceUrl: string }) => file.sourceUrl === `${appURL}/pet.gts`,
     );
-    expect(attachedFiles[1].sourceUrl).toStrictEqual(`${appURL}/pet.gts`);
-    expect(attachedFiles[1].url).toMatch(
+    expect(petFile).toBeDefined();
+    expect(petFile?.name).toStrictEqual('pet.gts');
+    expect(petFile?.contentType).toStrictEqual(
+      'text/typescript+glimmer',
+    );
+    expect(petFile?.sourceUrl).toStrictEqual(`${appURL}/pet.gts`);
+    expect(petFile?.url).toMatch(
       /^http:\/\/localhost:8008\/_matrix\/client\/v1\/media\/download\/localhost\/[A-Za-z0-9]+\?allow_redirect=true$/,
     ); // Example http://localhost:8008/_matrix/client/v1/media/download/localhost/phPajGXxttKlRxWYYjYLTkFP (generated by matrix storage)
   });

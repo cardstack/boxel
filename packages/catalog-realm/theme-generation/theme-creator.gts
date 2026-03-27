@@ -159,7 +159,7 @@ class Isolated extends Component<typeof ThemeCreator> {
 
   get styleReferenceGuidance(): string {
     return [
-      // 'Style Reference guidance: keep `styleName`, `visualDNA`, and `cardInfo.description` concise, and align inspirations/wallpaper images to the intended vibe.',
+      // 'Style Reference guidance: keep `styleName`, `visualDNA`, and `cardInfo.summary` concise, and align inspirations/wallpaper images to the intended vibe.',
       // 'Maintain cohesive light/dark palettes, typography, spacing, radius, and shadows with OKLCH or Hex values that satisfy AA contrast.',
       // 'Emit `cssVariables` with :root, .dark, and `@theme inline` mappings that match the variable maps; prefer `var(--token, fallback)` and include remote fonts in `cssImports`.',
       'Sample serialized JSON:',
@@ -172,7 +172,7 @@ class Isolated extends Component<typeof ThemeCreator> {
 
   get brandGuideGuidance(): string {
     return [
-      // 'Brand Guide guidance: convey brand essence through `styleName`, `visualDNA`, and `cardInfo.description`, with inspirations and wall imagery that reinforce the system.',
+      // 'Brand Guide guidance: convey brand essence through `styleName`, `visualDNA`, and `cardInfo.summary`, with inspirations and wall imagery that reinforce the system.',
       // 'Populate marks, typography, palette, and semantic colors per the template using cohesive OKLCH or Hex values that preserve AA contrast across light/dark.',
       // 'Emit `cssVariables` covering :root, .dark, and `@theme inline` mappings that mirror the variable maps; use `var(--token, fallback)` and capture fonts inside `cssImports`.',
       'Sample serialized JSON:',

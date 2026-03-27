@@ -23,6 +23,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_RELOAD_BILLING_DATA_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -186,7 +187,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     class Pet extends CardDef {
       static displayName = 'Pet';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -228,7 +229,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -302,9 +303,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     let roomId = await openAiAssistant();
@@ -316,9 +315,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-          </template>
+          <template><OperatorMode @onClose={{noop}} /></template>
         },
       );
 
@@ -400,9 +397,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
 
@@ -705,14 +700,16 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
+    let unreachableCardId = 'http://this-is-not-a-real-card.com';
+    let canonicalUnreachableCardId = new URL(unreachableCardId).href;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       data: JSON.stringify({
         attachedCards: [
           {
-            sourceUrl: 'http://this-is-not-a-real-card.com',
-            url: 'http://this-is-not-a-real-card.com',
+            sourceUrl: unreachableCardId,
+            url: unreachableCardId,
             contentType: 'text/plain',
           },
         ],
@@ -723,7 +720,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await waitFor('[data-test-card-error]');
     assert
       .dom('[data-test-card-error]')
-      .containsText('Error rendering attached cards');
+      .containsText(
+        `This card could not be displayed because it hit a runtime error.`,
+      );
+    assert
+      .dom(`[data-test-attached-card-error="${canonicalUnreachableCardId}"]`)
+      .exists('errored attached cards still render as pills');
     await percySnapshot(assert);
   });
 
@@ -863,6 +865,58 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.dom('[data-test-credits-added]').exists();
   });
 
+  test('it reloads billing data for the latest flagged out-of-credits message', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let billingService = getService('billing-service');
+    let requestCount = 0;
+
+    billingService.fetchSubscriptionData = async () => {
+      requestCount++;
+
+      let attributes =
+        requestCount === 1
+          ? {
+              creditsAvailableInPlanAllowance: 1,
+              extraCreditsAvailableInBalance: 2,
+            }
+          : {
+              creditsAvailableInPlanAllowance: 1,
+              extraCreditsAvailableInBalance: 1000,
+            };
+
+      return new Response(JSON.stringify({ data: { attributes } }));
+    };
+
+    await billingService.loadSubscriptionData();
+    assert.strictEqual(billingService.availableCredits, 3);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'You need a minimum of 10 credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      errorMessage:
+        'You need a minimum of 10 credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.',
+      [APP_BOXEL_RELOAD_BILLING_DATA_KEY]: true,
+    });
+
+    await waitUntil(() => requestCount === 2);
+    await waitUntil(() => billingService.availableCredits >= 10, {
+      timeout: 2000,
+    });
+
+    assert.strictEqual(requestCount, 2, 'billing data reloads exactly once');
+    assert
+      .dom('[data-test-alert-action-button="Retry"]')
+      .exists('retry is shown after the reload confirms credits are available');
+    assert
+      .dom('[data-test-credits-added]')
+      .exists('credits added notice is shown after the reload');
+    assert
+      .dom('[data-test-alert-action-button="Buy More Credits"]')
+      .doesNotExist();
+  });
+
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -991,9 +1045,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-        </template>
+        <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
     await openAiAssistant();

@@ -16,14 +16,14 @@
         }
       },
       "details": [
-        "Statement credits up to $150 on U.S. purchases directly with Dell Technologies, and an additional $1,000 statement credit after you spend $5,000 or more on those purchases, per calendar year. Enrollment required.‡"
+        "Statement credits up to $150 on U.S. purchases directly with Dell Technologies, and an additional $1,000 statement credit after you spend $5,000 or more on those purchases, per calendar year. Enrollment required.\u2021"
       ],
       "partner": "",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": null
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null
       },
       "minSpend": {
         "amount": 5000,

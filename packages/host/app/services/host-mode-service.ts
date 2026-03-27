@@ -1,11 +1,29 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 
+import { sanitizeHeadHTML } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
+
+const DEFAULT_HEAD_HTML = '<title>Boxel</title>';
+
+function headContainsTitle(html: string): boolean {
+  return /<title[\s>]/.test(html);
+}
+
+function ensureSingleTitle(headHTML: string): string {
+  return headContainsTitle(headHTML)
+    ? headHTML
+    : `${DEFAULT_HEAD_HTML}\n${headHTML}`;
+}
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import type ResetService from '@cardstack/host/services/reset';
 
 interface PublishedRealmMetadata {
   urlString: string;
@@ -17,9 +35,24 @@ export default class HostModeService extends Service {
   @service declare hostModeStateService: HostModeStateService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
+  @service declare realmServer: RealmServerService;
+  @service declare reset: ResetService;
 
   // increasing token to ignore stale async head fetches
   private headUpdateRequestId = 0;
+
+  // tracks whether the current head template contains a title tag
+  @tracked headTemplateContainsTitle = false;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.headUpdateRequestId = 0;
+    this.headTemplateContainsTitle = false;
+  }
 
   get isActive() {
     if (this.simulatingHostMode) {
@@ -165,6 +198,7 @@ export default class HostModeService extends Service {
 
     if (normalizedCardURL === null) {
       // If there is no card, clear the head content
+      this.headTemplateContainsTitle = false;
       this.replaceHeadTemplate(null);
       return;
     }
@@ -190,7 +224,13 @@ export default class HostModeService extends Service {
       return;
     }
 
-    this.replaceHeadTemplate(headHTML);
+    // Track whether the fetched head HTML contains a title
+    this.headTemplateContainsTitle =
+      headHTML !== null && headContainsTitle(headHTML);
+
+    this.replaceHeadTemplate(
+      headHTML !== null ? ensureSingleTitle(headHTML) : null,
+    );
   }
 
   private async fetchPrerenderedHead(
@@ -203,15 +243,32 @@ export default class HostModeService extends Service {
         card.pathname.replace(/[^/]+$/, ''),
         `${card.protocol}//${card.host}`,
       ).href;
-    let searchURL = new URL('_search-prerendered', realmRoot);
+    let realmServerURLs = this.realmServer.getRealmServersForRealms([
+      realmRoot,
+    ]);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.realmServer.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+    let hostModeOrigin = this.hostModeOrigin;
+    if (
+      hostModeOrigin &&
+      new URL(realmServerURL).origin !== new URL(hostModeOrigin).origin
+    ) {
+      realmServerURL = hostModeOrigin;
+    }
+    let searchURL = new URL('_federated-search-prerendered', realmServerURL);
     let cardJsonURL = cardURL.endsWith('.json') ? cardURL : `${cardURL}.json`;
-
-    searchURL.searchParams.set('prerenderedHtmlFormat', 'head');
-    searchURL.searchParams.append('cardUrls[]', cardJsonURL);
-
     let response = await fetch(searchURL.toString(), {
-      headers: { Accept: 'application/vnd.card+json' },
+      method: 'QUERY',
+      headers: {
+        Accept: 'application/vnd.card+json',
+      },
       credentials: 'include',
+      body: JSON.stringify({
+        realms: [realmRoot],
+        prerenderedHtmlFormat: 'head',
+        cardUrls: [cardJsonURL],
+      }),
     });
 
     if (!response.ok) {
@@ -252,11 +309,22 @@ export default class HostModeService extends Service {
     }
 
     if (!headHTML || headHTML.trim().length === 0) {
+      let fallback = document
+        .createRange()
+        .createContextualFragment(DEFAULT_HEAD_HTML);
+      parent.insertBefore(fallback, end);
       return;
     }
 
-    let fragment = document.createRange().createContextualFragment(headHTML);
-    parent.insertBefore(fragment, end);
+    let sanitized = sanitizeHeadHTML(headHTML, document);
+    if (sanitized) {
+      parent.insertBefore(sanitized, end);
+    } else {
+      let fallback = document
+        .createRange()
+        .createContextualFragment(DEFAULT_HEAD_HTML);
+      parent.insertBefore(fallback, end);
+    }
   }
 
   private findHeadMarkers(): [Element, Element] | null {

@@ -17,7 +17,7 @@ export class ExchangeRate extends CardDef {
   @field asset1 = linksTo(Currency);
   @field asset2 = linksTo(Currency);
   @field conversionRate = contains(NumberField);
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia(this: ExchangeRate) {
       return `${this.asset1?.symbol} → ${this.asset2?.symbol} (${this.conversionRate})`;
     },

@@ -16,9 +16,9 @@
       "summary": "The Featured Image Field is a versatile component that allows you to easily add and customize images in your application. Whether you need to display a simple image or a more detailed presentation with captions and credits, this component has you covered.\n\nKey Features\n- Image Display: Add an image by providing its URL. The component will handle the rest.\n- Accessibility: Include alternative text for images to ensure accessibility for all users.\n- Captions and Credits: Add descriptive captions and credits to your images for better context and attribution.\n- Flexible Sizing: Choose how your image is displayed with options like actual, contain, or cover.\n- Custom Dimensions: Specify exact dimensions for your image to fit your design needs.\n\nDisplay Options\n- Simple View: Display your image with basic styling.\n- Detailed View: Use the embedded option to include captions and credits, making your images more informative.",
       "cardInfo": {
         "notes": null,
-        "title": null,
-        "description": null,
-        "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/featured-image-listing/thumbnail.png"
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/featured-image-listing/thumbnail.png"
       }
     },
     "relationships": {

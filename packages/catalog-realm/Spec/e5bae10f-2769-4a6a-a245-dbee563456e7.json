@@ -9,9 +9,9 @@
       },
       "specType": "field",
       "containedExamples": [],
-      "title": "IngredientField",
-      "description": "Spec of Ingredient Field",
-      "thumbnailURL": null
+      "cardTitle": "IngredientField",
+      "cardDescription": "Spec of Ingredient Field",
+      "cardThumbnailURL": null
     },
     "relationships": {
       "linkedExamples": {

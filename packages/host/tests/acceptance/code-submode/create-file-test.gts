@@ -1,19 +1,29 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
+import type FileUploadService from '@cardstack/host/services/file-upload';
+
 import {
   percySnapshot,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
+  withCachedRealmSetup,
   type TestContextWithSave,
   setupAuthEndpoints,
   setupUserSubscription,
@@ -89,8 +99,8 @@ const files: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Error',
-        description: 'Spec for Error',
+        cardTitle: 'Error',
+        cardDescription: 'Spec for Error',
         specType: 'card',
         ref: {
           module: '../error',
@@ -109,8 +119,8 @@ const files: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Pet',
-        description: 'Spec for Pet',
+        cardTitle: 'Pet',
+        cardDescription: 'Spec for Pet',
         specType: 'card',
         ref: { module: `../pet`, name: 'default' },
       },
@@ -126,8 +136,8 @@ const files: Record<string, any> = {
     data: {
       type: 'card',
       attributes: {
-        title: 'Person',
-        description: 'Spec for Person',
+        cardTitle: 'Person',
+        cardDescription: 'Spec for Person',
         specType: 'card',
         ref: { module: `../person`, name: 'Person' },
       },
@@ -200,6 +210,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
@@ -209,14 +220,16 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    await setupAcceptanceTestRealm({
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
-      realmURL: testRealmURL2,
-      mockMatrixUtils,
-    });
-    ({ adapter } = await setupAcceptanceTestRealm({
-      contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
-      mockMatrixUtils,
+    ({ adapter } = await withCachedRealmSetup(async () => {
+      await setupAcceptanceTestRealm({
+        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...filesB },
+        realmURL: testRealmURL2,
+        mockMatrixUtils,
+      });
+      return await setupAcceptanceTestRealm({
+        contents: { ...SYSTEM_CARD_FIXTURE_CONTENTS, ...files },
+        mockMatrixUtils,
+      });
     }));
 
     createAndJoinRoom({
@@ -247,7 +260,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       });
     });
 
-    test('new file button has options to create card def, field def, card instance, and text files', async function (assert) {
+    test('new file button has options to create card def, field def, card instance, text files, and upload file', async function (assert) {
       await visitOperatorMode();
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor('[data-test-new-file-button]');
@@ -257,7 +270,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text]',
         )
-        .exists({ count: 4 });
+        .exists({ count: 5 });
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Card Definition"]',
@@ -276,6 +289,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert
         .dom(
           '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Text File"]',
+        )
+        .exists();
+      assert
+        .dom(
+          '[data-test-new-file-dropdown-menu] [data-test-boxel-menu-item-text="Upload File\u2026"]',
         )
         .exists();
     });
@@ -309,6 +327,81 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await deferred.promise;
       assert.ok(savedUrls.some((url) => url.endsWith('notes.txt')));
       assert.ok(savedUrls.some((url) => url.endsWith('readme.md')));
+    });
+
+    test('can upload a file via the New menu', async function (assert) {
+      await visitOperatorMode();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
+
+      let fileUpload = getService('file-upload') as FileUploadService;
+      await waitUntil(() => fileUpload.activeUploads.length > 0, {
+        timeout: 2000,
+        timeoutMessage: 'upload task was not created',
+      });
+
+      let task = fileUpload.activeUploads[0];
+      assert.strictEqual(
+        task.state,
+        'picking',
+        'task is in picking state waiting for file',
+      );
+
+      task.__provideFileForTesting(
+        new File(['hello upload'], 'uploaded-via-menu.txt', {
+          type: 'text/plain',
+        }),
+      );
+
+      await waitUntil(
+        () =>
+          (
+            document.querySelector(
+              '[data-test-card-url-bar-input]',
+            ) as HTMLInputElement | null
+          )?.value?.includes('uploaded-via-menu.txt'),
+        {
+          timeout: 10000,
+          timeoutMessage: 'code editor did not navigate to the uploaded file',
+        },
+      );
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}uploaded-via-menu.txt`,
+          'code editor navigated to the uploaded file',
+        );
+    });
+
+    test('cancelling upload file picker does not cause errors', async function (assert) {
+      await visitOperatorMode();
+      await waitFor('[data-test-code-mode][data-test-save-idle]');
+      await waitFor('[data-test-new-file-button]');
+      await click('[data-test-new-file-button]');
+      await click('[data-test-boxel-menu-item-text="Upload File\u2026"]');
+
+      let fileUpload = getService('file-upload') as FileUploadService;
+      await waitUntil(() => fileUpload.activeUploads.length > 0, {
+        timeout: 2000,
+        timeoutMessage: 'upload task was not created',
+      });
+
+      let task = fileUpload.activeUploads[0];
+
+      // Simulate cancelling the native file picker
+      task.__provideFileForTesting(null);
+
+      await settled();
+
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          `${testRealmURL}index.json`,
+          'URL bar still shows the original file',
+        );
     });
 
     test('filename is auto-populated from display name', async function (assert) {
@@ -345,8 +438,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       // card type selection
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/person"]`);
-      await click(`[data-test-select="${testRealmURL}spec/person"]`);
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
+      );
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
       assert.dom(`[data-test-selected-type]`).hasText('Person');
@@ -411,8 +506,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/error"]`);
-      await click(`[data-test-select="${testRealmURL}spec/error"]`);
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}spec/error"]`,
+      );
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/error"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Error"]`);
 
@@ -453,7 +550,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('expected JSON save data');
         }
         assert.strictEqual(
-          json.data.attributes?.title,
+          json.data.attributes?.cardTitle,
           'Untitled Card',
           'title field defaults to fallback',
         );
@@ -515,7 +612,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
           throw new Error('expected JSON save data');
         }
         assert.strictEqual(
-          json.data.attributes?.title,
+          json.data.attributes?.cardTitle,
           'Untitled Card',
           'title field defaults to fallback',
         );
@@ -567,8 +664,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       // card type selection
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/person"]`);
-      await click(`[data-test-select="${testRealmURL}spec/person"]`);
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
+      );
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -682,8 +781,10 @@ export class TrèsTestCard extends CardDef {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/person"]`);
-      await click(`[data-test-select="${testRealmURL}spec/person"]`);
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
+      );
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -720,8 +821,10 @@ export class TestCard extends Person {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/person"]`);
-      await click(`[data-test-select="${testRealmURL}spec/person"]`);
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
+      );
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -746,8 +849,10 @@ export class TestCard extends Person {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/person"]`);
-      await click(`[data-test-select="${testRealmURL}spec/person"]`);
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}spec/person"]`,
+      );
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/person"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Person"]`);
 
@@ -782,10 +887,10 @@ export class TestCard extends Person {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
 
@@ -824,10 +929,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
       await fillIn(
@@ -856,8 +961,8 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       // select card type
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/pet"]`);
-      await click(`[data-test-select="${testRealmURL}spec/pet"]`);
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
@@ -895,8 +1000,8 @@ export class TestCard extends Pet {
       // select card type
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/pet"]`);
-      await click(`[data-test-select="${testRealmURL}spec/pet"]`);
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 
@@ -933,8 +1038,8 @@ export class Pet extends PetParent {
       // select card type
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
-      await waitFor(`[data-test-select="${testRealmURL}spec/pet"]`);
-      await click(`[data-test-select="${testRealmURL}spec/pet"]`);
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
+      await click(`[data-test-card-catalog-item="${testRealmURL}spec/pet"]`);
       await click('[data-test-card-catalog-go-button]');
       await waitFor(`[data-test-selected-type="Pet"]`);
 

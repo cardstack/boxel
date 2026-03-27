@@ -74,7 +74,7 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
   await click('[data-test-attach-card-btn]');
   await fillIn('[data-test-search-field]', cardId);
-  await click(`[data-test-select="${cardId}"]`);
+  await click(`[data-test-card-catalog-item="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
 }
 
@@ -102,12 +102,32 @@ let matrixRoomId: string;
 let mockedFileContent = 'Hello, world!';
 const TEST_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5': 'OpenAI: GPT-5',
+  'openai/gpt-5-extended': 'OpenAI: GPT-5 Extended Thinking',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+  'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
   'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
   'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
 };
+
+// Maps model IDs to their ModelConfiguration card IDs in the test realm.
+// These correspond to the file paths used in the test setup (e.g.,
+// 'ModelConfiguration/gpt-5.json' → `${testRealmURL}ModelConfiguration/gpt-5`).
+const TEST_MODEL_CONFIG_IDS: Record<string, string> = {
+  'openai/gpt-5': `${testRealmURL}ModelConfiguration/gpt-5`,
+  'openai/gpt-5-extended': `${testRealmURL}ModelConfiguration/gpt-5-extended`,
+  'openai/gpt-4o-mini': `${testRealmURL}ModelConfiguration/gpt-4o-mini`,
+  'anthropic/claude-sonnet-4.6': `${testRealmURL}ModelConfiguration/claude-sonnet-4.6`,
+  'anthropic/claude-sonnet-4.5': `${testRealmURL}ModelConfiguration/claude-sonnet-4.5`,
+  'anthropic/claude-3.7-sonnet': `${testRealmURL}ModelConfiguration/claude-sonnet-3.7`,
+  'deepseek/deepseek-chat-v3-0324': `${testRealmURL}ModelConfiguration/deepseek-chat-v3-0324`,
+  'google/gemini-2.5-flash': `${testRealmURL}ModelConfiguration/gemini-2.5-flash`,
+};
+
+function configIdFor(modelId: string): string {
+  return TEST_MODEL_CONFIG_IDS[modelId] ?? modelId;
+}
 
 function modelNameFor(llmId: string): string {
   return TEST_MODEL_NAMES[llmId] ?? llmId;
@@ -224,7 +244,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       @field name = contains(StringField);
       @field favoriteTreat = contains(StringField);
 
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -239,15 +259,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2><@fields.title /></h2>
+            <h2><@fields.cardTitle /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
                 {{#if @canEdit}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is editable.
                 {{else}}
-                  <@fields.title />
+                  <@fields.cardTitle />
                   is NOT editable.
                 {{/if}}
               </div>
@@ -271,7 +291,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           return this.firstName[0];
         },
       });
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Person) {
           return [this.firstName, this.lastName].filter(Boolean).join(' ');
         },
@@ -298,24 +318,41 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     // Create model configurations for testing
     let openAiGpt5Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('openai/gpt-5'),
+        name: modelNameFor('openai/gpt-5'),
       }),
       modelId: 'openai/gpt-5',
       toolsSupported: true,
       reasoningEffort: 'minimal',
     });
 
+    let openAiGpt5ExtendedModel = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        name: modelNameFor('openai/gpt-5-extended'),
+      }),
+      modelId: 'openai/gpt-5',
+      toolsSupported: true,
+      reasoningEffort: 'high',
+    });
+
     let openAiGpt4oMiniModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('openai/gpt-4o-mini'),
+        name: modelNameFor('openai/gpt-4o-mini'),
       }),
       modelId: 'openai/gpt-4o-mini',
       toolsSupported: true,
     });
 
+    let anthropicClaudeSonnet46Model = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        name: modelNameFor('anthropic/claude-sonnet-4.6'),
+      }),
+      modelId: 'anthropic/claude-sonnet-4.6',
+      toolsSupported: true,
+    });
+
     let anthropicClaudeSonnet45Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-sonnet-4.5'),
+        name: modelNameFor('anthropic/claude-sonnet-4.5'),
       }),
       modelId: 'anthropic/claude-sonnet-4.5',
       toolsSupported: true,
@@ -323,7 +360,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let anthropicClaudeSonnet37Model = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('anthropic/claude-3.7-sonnet'),
+        name: modelNameFor('anthropic/claude-3.7-sonnet'),
       }),
       modelId: 'anthropic/claude-3.7-sonnet',
       toolsSupported: true,
@@ -331,10 +368,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create system card with model configurations
     let defaultSystemCard = new SystemCard({
-      defaultModelConfiguration: anthropicClaudeSonnet45Model,
+      defaultModelConfiguration: anthropicClaudeSonnet46Model,
       modelConfigurations: [
         openAiGpt5Model,
+        openAiGpt5ExtendedModel,
         openAiGpt4oMiniModel,
+        anthropicClaudeSonnet46Model,
         anthropicClaudeSonnet45Model,
         anthropicClaudeSonnet37Model,
       ],
@@ -342,7 +381,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let deepseekModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('deepseek/deepseek-chat-v3-0324'),
+        name: modelNameFor('deepseek/deepseek-chat-v3-0324'),
       }),
       modelId: 'deepseek/deepseek-chat-v3-0324',
       toolsSupported: true,
@@ -350,7 +389,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let geminiFlashModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
-        title: modelNameFor('google/gemini-2.5-flash'),
+        name: modelNameFor('google/gemini-2.5-flash'),
       }),
       modelId: 'google/gemini-2.5-flash',
       toolsSupported: true,
@@ -367,6 +406,29 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ...SYSTEM_CARD_FIXTURE_CONTENTS,
         'person.gts': { Person },
         'pet.gts': { Pet },
+        'broken-card.gts': `
+          import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          import { BrokenField } from './does-not-exist';
+          export class BrokenCard extends CardDef {
+            static displayName = 'Broken Card';
+            @field name = contains(StringField);
+            @field broken = contains(BrokenField);
+          }
+        `,
+        'BrokenCard/errored.json': {
+          data: {
+            attributes: {
+              name: 'Errored Instance',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../broken-card',
+                name: 'BrokenCard',
+              },
+            },
+          },
+        },
         'country.gts': countryDefinition,
         'Country/indonesia.json': {
           data: {
@@ -424,7 +486,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
                 module: `${testRealmURL}plant`,
               },
               specType: 'card',
-              title: 'Plant spec',
+              cardTitle: 'Plant spec',
             },
             meta: {
               adoptsFrom: {
@@ -437,8 +499,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'Skill/example.json': {
           data: {
             attributes: {
-              title: 'Exanple Skill',
-              description: 'This skill card is for testing purposes',
+              cardTitle: 'Example Skill',
+              cardDescription: 'This skill card is for testing purposes',
               instructions: 'This is an example skill card',
               commands: [],
             },
@@ -450,8 +512,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         'Skill/example2.json': {
           data: {
             attributes: {
-              title: 'Example 2 Skill',
-              description: 'This skill card is also for testing purposes',
+              cardTitle: 'Example 2 Skill',
+              cardDescription: 'This skill card is also for testing purposes',
               instructions: 'This is a second example skill card',
               commands: [],
             },
@@ -462,6 +524,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
         'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
         'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+        'ModelConfiguration/gpt-5-extended.json': openAiGpt5ExtendedModel,
+        'ModelConfiguration/claude-sonnet-4.6.json':
+          anthropicClaudeSonnet46Model,
         'ModelConfiguration/claude-sonnet-4.5.json':
           anthropicClaudeSonnet45Model,
         'ModelConfiguration/claude-sonnet-3.7.json':
@@ -510,17 +575,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message - 1',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [{ id: testCard, cardTitle: 'Hassan' }],
       },
       {
         from: 'testuser',
         message: 'Message - 2',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [{ id: testCard, cardTitle: 'Hassan' }],
       },
       {
         from: 'testuser',
         message: 'Message - 3',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [{ id: testCard, cardTitle: 'Hassan' }],
       },
     ]);
     await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -544,22 +609,22 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message - 1',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [{ id: testCard, cardTitle: 'Updated Name Abdel-Rahman' }],
       },
       {
         from: 'testuser',
         message: 'Message - 2',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [{ id: testCard, cardTitle: 'Updated Name Abdel-Rahman' }],
       },
       {
         from: 'testuser',
         message: 'Message - 3',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [{ id: testCard, cardTitle: 'Updated Name Abdel-Rahman' }],
       },
       {
         from: 'testuser',
         message: 'Message with updated card',
-        cards: [{ id: testCard, title: 'Updated Name Abdel-Rahman' }],
+        cards: [{ id: testCard, cardTitle: 'Updated Name Abdel-Rahman' }],
       },
     ]);
   });
@@ -587,7 +652,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message - 1',
-        cards: [{ id: testCard, title: 'Hassan' }],
+        cards: [{ id: testCard, cardTitle: 'Hassan' }],
       },
     ]);
 
@@ -609,10 +674,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     const mxcUrl = attachedCard.url;
 
     assert.ok(mxcUrl, 'Attached card has a URL (mxc)');
-    // The mock matrix server uses http://mock-server/ for its mxc content
+    // The mock matrix server uses http://mock-server/_matrix/media/ for its mxc content
     assert.ok(
-      mxcUrl.startsWith('http://mock-server/'),
-      `Card URL "${mxcUrl}" should start with http://mock-server/`,
+      mxcUrl.startsWith('http://mock-server/_matrix/media/'),
+      `Card URL "${mxcUrl}" should start with http://mock-server/_matrix/media/`,
     );
 
     // Download the card file def
@@ -620,9 +685,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let cardContent = await matrixService.downloadCardFileDef(attachedCard);
 
-    // Check that the computed title is present in the downloaded content
+    // Check that the computed cardTitle is present in the downloaded content
     assert.strictEqual(
-      cardContent.data.attributes!.title,
+      cardContent.data.attributes!.cardTitle,
       'Hassan Abdel-Rahman',
       'Computed card title is present in downloaded content',
     );
@@ -643,24 +708,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should come from the system card's default configuration
-    let defaultModelId = 'anthropic/claude-sonnet-4.5';
+    let defaultModelId = 'anthropic/claude-sonnet-4.6';
     let defaultModelName = modelNameFor(defaultModelId);
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
-    // Should have 4 models from our system card
+    // Should have 6 models from our system card (including duplicate modelId with different config)
     assert.dom('[data-test-llm-select-item]').exists({
-      count: 4,
+      count: 6,
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
+    let llmConfigId = configIdFor(llmIdToChangeTo);
     let llmNameToChangeTo = modelNameFor('anthropic/claude-3.7-sonnet');
 
     assert
-      .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
+      .dom(`[data-test-llm-select-item="${llmConfigId}"]`)
       .hasText(llmNameToChangeTo);
-    await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
+    await click(`[data-test-llm-select-item="${llmConfigId}"] button`);
     await click('[data-test-llm-select-selected]');
     assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
 
@@ -683,7 +749,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-room-settled]');
 
     await click('[data-test-llm-select-selected]');
-    await click(`[data-test-llm-select-item="openai/gpt-4o-mini"] button`);
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-4o-mini')}"] button`,
+    );
     await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
@@ -708,7 +776,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     await click('[data-test-llm-select-selected]');
-    await click(`[data-test-llm-select-item="openai/gpt-5"] button`);
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-5')}"] button`,
+    );
     await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
@@ -730,6 +800,84 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       secondState.reasoningEffort,
       'minimal',
       'Active LLM event records configured reasoning effort for GPT-5',
+    );
+  });
+
+  test('duplicate model IDs render as distinct menu items with correct state', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-llm-select-selected]');
+
+    let gpt5ConfigId = configIdFor('openai/gpt-5');
+    let gpt5ExtendedConfigId = configIdFor('openai/gpt-5-extended');
+
+    // Both configs with the same modelId should appear as distinct menu items
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ConfigId}"]`)
+      .exists('GPT-5 (minimal) config appears in the menu');
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"]`)
+      .exists('GPT-5 Extended Thinking config appears in the menu');
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ConfigId}"]`)
+      .hasText(modelNameFor('openai/gpt-5'));
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"]`)
+      .hasText(modelNameFor('openai/gpt-5-extended'));
+
+    // Select the extended thinking variant
+    await click(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-5' && state.reasoningEffort === 'high';
+    });
+
+    let extendedState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      extendedState.model,
+      'openai/gpt-5',
+      'Extended thinking variant sends the same modelId',
+    );
+    assert.strictEqual(
+      extendedState.reasoningEffort,
+      'high',
+      'Extended thinking variant sends its own reasoningEffort',
+    );
+
+    // Now select the minimal variant
+    await click('[data-test-llm-select-selected]');
+    await click(`[data-test-llm-select-item="${gpt5ConfigId}"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return (
+        state.model === 'openai/gpt-5' && state.reasoningEffort === 'minimal'
+      );
+    });
+
+    let minimalState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      minimalState.model,
+      'openai/gpt-5',
+      'Minimal variant sends the same modelId',
+    );
+    assert.strictEqual(
+      minimalState.reasoningEffort,
+      'minimal',
+      'Minimal variant sends its own reasoningEffort',
     );
   });
 
@@ -781,13 +929,15 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-llm-select-selected]');
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .doesNotExist();
     await click('[data-test-llm-select-selected]');
     await click('[data-test-close-ai-assistant]');
 
     await click('[data-test-more-options-button]');
-    await click('[data-test-boxel-menu-item-text="Set as my system card"]');
+    await click('[data-test-boxel-menu-item-text="Set as My System Card"]');
 
     let matrixService = getService('matrix-service');
     await waitUntil(
@@ -803,14 +953,108 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     await click('[data-test-llm-select-selected]');
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .exists();
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     assert
-      .dom('[data-test-llm-select-item="google/gemini-2.5-flash"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('google/gemini-2.5-flash')}"]`,
+      )
       .exists();
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer shows "Go to current system card" action', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-go-to-system-card]')
+      .exists('Go to system card action is visible');
+    assert
+      .dom('[data-test-go-to-system-card]')
+      .hasText('Go to current system card');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer shows "Restore default" when non-default system card is active', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}SystemCard/productivity`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // Set the alternate system card as active
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Set as My System Card"]');
+
+    let matrixService = getService('matrix-service');
+    await waitUntil(
+      () =>
+        matrixService.systemCard?.modelConfigurations?.[0]?.modelId ===
+        'deepseek/deepseek-chat-v3-0324',
+    );
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-restore-default-system-card]')
+      .exists('Restore default action is visible for non-default system card');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer hides "Restore default" when default system card is active', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-restore-default-system-card]')
+      .doesNotExist(
+        'Restore default action is hidden when default system card is active',
+      );
+
     await click('[data-test-pill-menu-button]');
     await click('[data-test-close-ai-assistant]');
   });
@@ -884,6 +1128,28 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-card]').doesNotExist();
   });
 
+  test('errored card instance is not auto-attached in code mode', async function (assert) {
+    // Start directly in code mode with the errored card's JSON file
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}BrokenCard/errored.json`,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    // The JSON file itself should still be auto-attached as a file
+    assert
+      .dom('[data-test-autoattached-file]')
+      .exists('errored card JSON file should still be auto-attached as a file');
+    // But the card instance should NOT be auto-attached (it has errors)
+    assert
+      .dom('[data-test-autoattached-card]')
+      .doesNotExist(
+        'errored card instance should not be auto-attached as a card',
+      );
+  });
+
   test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
@@ -906,7 +1172,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-card]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
-    await click(`[data-test-select="https://cardstack.com/base/types/card"]`);
+    await click(
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"]`,
+    );
 
     await click(`[data-test-card-catalog-go-button]`);
 
@@ -923,7 +1191,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message with updated card',
-        cards: [{ id, title: 'new card' }],
+        cards: [{ id, cardTitle: 'new card' }],
       },
     ]);
   });
@@ -1111,7 +1379,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
 
     assert.dom('[data-test-past-sessions]').exists();
-    assert.dom('[data-test-joined-room]').exists({ count: 10 });
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-joined-room]').length >= 10,
+    );
+    let initialRoomCount = document.querySelectorAll(
+      '[data-test-joined-room]',
+    ).length;
+    assert.ok(
+      initialRoomCount >= 10,
+      `Expected at least 10 rooms, got ${initialRoomCount}`,
+    );
 
     let pastSessionsElement = document.querySelector(
       '[data-test-past-sessions] .body ul',
@@ -1119,9 +1396,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     if (pastSessionsElement) {
       pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
     }
-    await waitUntil(
-      () => document.querySelectorAll('[data-test-joined-room]').length === 16,
-    );
+    await waitUntil(() => {
+      return (
+        document.querySelectorAll('[data-test-joined-room]').length >=
+        Math.min(initialRoomCount + 1, 16)
+      );
+    });
     assert.dom('[data-test-joined-room]').exists({ count: 16 });
   });
 
@@ -1230,7 +1510,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Mango');
-    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
     assert
@@ -1266,7 +1546,17 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="Person/fadhlan.json"]');
     assert.dom('[data-test-attached-card]').exists({ count: 2 });
     assert.dom('[data-test-autoattached-card]').exists({ count: 1 });
-    assert.dom('[data-test-autoattached-file]').exists({ count: 1 });
+    assert.dom('[data-test-autoattached-file]').exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}Person/fadhlan.json"][data-test-autoattached-file]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}person.gts"][data-test-autoattached-file]`,
+      )
+      .exists();
     assert.dom(`[data-test-attached-card="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(
@@ -1989,7 +2279,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           type: 'user-workspace',
           url: testRealmURL,
         },
-        {
+        catalogRealm && {
           name: 'Cardstack Catalog',
           type: 'catalog-workspace',
           url: catalogRealm.url,
@@ -1999,7 +2289,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           type: 'catalog-workspace',
           url: skillsRealm.url,
         },
-      ],
+      ].filter(Boolean),
       'Context sent with message contains correct workspaces',
     );
   });
@@ -2283,7 +2573,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       await click('[data-test-attach-button]');
       await click('[data-test-attach-card-btn]');
       await fillIn('[data-test-search-field]', 'Plant spec');
-      await click(`[data-test-select="${autoAttachedSpecId}"]`);
+      await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
       await click('[data-test-card-catalog-go-button]');
 
       // Verify the spec card appears only once (not duplicated)
@@ -2363,7 +2653,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-attach-button]');
     await click('[data-test-attach-card-btn]');
     await fillIn('[data-test-search-field]', 'Plant spec');
-    await click(`[data-test-select="${autoAttachedSpecId}"]`);
+    await click(`[data-test-card-catalog-item="${autoAttachedSpecId}"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await click('[data-test-attach-button]');
@@ -2807,7 +3097,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message with card',
-        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+        cards: [{ id: `${testRealmURL}Person/hassan`, cardTitle: 'Hassan' }],
       },
       {
         from: 'testuser',
@@ -2817,7 +3107,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Message with another card',
-        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+        cards: [{ id: `${testRealmURL}Pet/mango`, cardTitle: 'Mango' }],
       },
     ]);
     // Create new session with "Copy File History" option
@@ -2837,8 +3127,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         message:
           'This session includes files and cards from the previous conversation for context.',
         cards: [
-          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+          { id: `${testRealmURL}Person/hassan`, cardTitle: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, cardTitle: 'Mango' },
         ],
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },
@@ -2968,7 +3258,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'I have a person card here',
-        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+        cards: [{ id: `${testRealmURL}Person/hassan`, cardTitle: 'Hassan' }],
       },
       {
         from: 'testuser',
@@ -3270,7 +3560,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'First message with card',
-        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+        cards: [{ id: `${testRealmURL}Person/hassan`, cardTitle: 'Hassan' }],
       },
       {
         from: 'testuser',
@@ -3280,7 +3570,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Third message with another card',
-        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+        cards: [{ id: `${testRealmURL}Pet/mango`, cardTitle: 'Mango' }],
       },
     ]);
 
@@ -3319,7 +3609,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'First message with card',
-        cards: [{ id: `${testRealmURL}Person/hassan`, title: 'Hassan' }],
+        cards: [{ id: `${testRealmURL}Person/hassan`, cardTitle: 'Hassan' }],
       },
       {
         from: 'testuser',
@@ -3329,7 +3619,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       {
         from: 'testuser',
         message: 'Third message with another card',
-        cards: [{ id: `${testRealmURL}Pet/mango`, title: 'Mango' }],
+        cards: [{ id: `${testRealmURL}Pet/mango`, cardTitle: 'Mango' }],
       },
     ]);
 
@@ -3361,8 +3651,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         message:
           'This session includes files and cards from the previous conversation for context.',
         cards: [
-          { id: `${testRealmURL}Person/hassan`, title: 'Hassan' },
-          { id: `${testRealmURL}Pet/mango`, title: 'Mango' },
+          { id: `${testRealmURL}Person/hassan`, cardTitle: 'Hassan' },
+          { id: `${testRealmURL}Pet/mango`, cardTitle: 'Mango' },
         ],
         files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
       },

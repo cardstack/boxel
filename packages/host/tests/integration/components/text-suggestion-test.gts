@@ -15,6 +15,8 @@ import {
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
+  setupRealmCacheTeardown,
+  withCachedRealmSetup,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -26,6 +28,7 @@ let loader: Loader;
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupRealmCacheTeardown(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
@@ -48,7 +51,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     class Post extends CardDef {
       static displayName = 'Post';
       @field article = linksTo(Article);
-      @field title = contains(StringField);
+      @field cardTitle = contains(StringField);
     }
 
     class BlogPost extends Post {
@@ -66,15 +69,17 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
       @field booker = contains(StringField);
     }
 
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'article.gts': { Article },
-        'blog-post.gts': { BlogPost },
-        'book.gts': { Book },
-        'booking.gts': { Booking },
-        'post.gts': { Post },
-      },
+    await withCachedRealmSetup(async () => {
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        contents: {
+          'article.gts': { Article },
+          'blog-post.gts': { BlogPost },
+          'book.gts': { Book },
+          'booking.gts': { Booking },
+          'post.gts': { Post },
+        },
+      });
     });
   });
 
@@ -229,7 +234,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
             name: 'Post',
           },
         },
-        { eq: { title: 'Card 1' } },
+        { eq: { cardTitle: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
       type: { module: `${baseRealm.url}card-api`, name: 'CardDef' },

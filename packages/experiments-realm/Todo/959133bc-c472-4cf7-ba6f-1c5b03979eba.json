@@ -4,9 +4,9 @@
     "attributes": {
       "name": "Buy pancake flour for dinner",
       "details": "Make sure to get Krusteaz Buttermilk mix. Do not buy the cinnamon one!",
-      "title": null,
-      "description": null,
-      "thumbnailURL": null
+      "cardTitle": null,
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {

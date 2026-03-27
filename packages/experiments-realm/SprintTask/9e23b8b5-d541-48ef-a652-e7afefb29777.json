@@ -18,8 +18,8 @@
       },
       "name": "Incoporate Boxel Multi Select in Dropdown",
       "details": "Integrate Boxel's multi-select dropdown component to be more unified with the single-select dropdown.\n\nThe trigger component should share the same designs.",
-      "description": null,
-      "thumbnailURL": null
+      "cardDescription": null,
+      "cardThumbnailURL": null
     },
     "relationships": {
       "project": {

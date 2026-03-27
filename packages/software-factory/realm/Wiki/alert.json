@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["other", "alert"],
+      "content": "## Overview\n\nThe Alert card gives the workspace a structured home for urgent alert: condition, threshold, current value, severity, and acknowledgment.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nAlert acts as the canonical record for this concept in the workspace. Its fields capture the facts that need to stay structured, while computed state and relationships make it easy to search, group, and reuse across the system.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Trigger]]** -- Changes to Alert can fire automation, and automation can also create or update Alert.\n- **[[Task]]** -- Alert often creates follow-up work or is itself tracked through task execution.\n- **[[Workflow Playbook]]** -- Alert can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Report]]** -- Alert can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Document]]** -- Alert can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Image Search]]** -- Image Search can provide adjacent context, downstream output, or grouped navigation around Alert.\n\n## Example Use Cases\n\n- **System of record:** Teams create Alert as the structured home for urgent alert: condition, threshold, current value, severity, and acknowledgment and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Alert when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Alert stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Alert",
+        "notes": null,
+        "summary": "Urgent alert: condition, threshold, current value, severity, and acknowledgment.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

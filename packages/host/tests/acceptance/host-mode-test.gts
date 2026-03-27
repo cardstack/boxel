@@ -12,8 +12,10 @@ import { getPageTitle } from 'ember-page-title/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import { Deferred } from '@cardstack/runtime-common';
 
 import HostModeService from '@cardstack/host/services/host-mode-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   percySnapshot,
@@ -95,7 +97,7 @@ module('Acceptance | host mode tests', function (hooks) {
       static displayName = 'Pet';
       static headerColor = '#355e3b';
       @field name = contains(StringField);
-      @field title = contains(StringField, {
+      @field cardTitle = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },
@@ -128,7 +130,6 @@ module('Acceptance | host mode tests', function (hooks) {
         </template>
       };
     }
-
     await setupAcceptanceTestRealm({
       realmURL: testHostModeRealmURL,
       mockMatrixUtils,
@@ -156,7 +157,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Primary View Demo',
+              cardTitle: 'Primary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/secondary.json`,
             },
             meta: {
@@ -171,7 +172,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Secondary View Demo',
+              cardTitle: 'Secondary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/tertiary.json`,
             },
             meta: {
@@ -186,7 +187,7 @@ module('Acceptance | host mode tests', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              title: 'Tertiary View Demo',
+              cardTitle: 'Tertiary View Demo',
               targetCardURL: `${testHostModeRealmURL}ViewCardDemo/index.json`,
             },
             meta: {
@@ -204,6 +205,33 @@ module('Acceptance | host mode tests', function (hooks) {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/cards-grid',
                 name: 'CardsGrid',
+              },
+            },
+          },
+        },
+        'broken-card.gts': `
+          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
+          import StringField from 'https://cardstack.com/base/string';
+          export class BrokenCard extends CardDef {
+            static displayName = 'BrokenCard';
+            @field name = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template><div>{{this.triggerError}}</div></template>
+              get triggerError() {
+                throw new Error('Intentional rendering error');
+              }
+            };
+          }
+        `,
+        'BrokenCard/broken.json': {
+          data: {
+            attributes: {
+              name: 'Broken',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}broken-card`,
+                name: 'BrokenCard',
               },
             },
           },
@@ -251,14 +279,47 @@ module('Acceptance | host mode tests', function (hooks) {
   });
 
   test('visiting a non-existent card shows an error', async function (assert) {
-    await visit('/test/Pet/non-existent.json');
+    let store = getService('store') as StoreService;
+    let originalGet = store.get.bind(store);
+    let gate = new Deferred<void>();
+    let targetId = `${testHostModeRealmURL}Pet/non-existent.json`;
+    store.get = (async (...args: Parameters<StoreService['get']>) => {
+      let [id] = args;
+      if (id === targetId) {
+        await gate.promise;
+      }
+      return (originalGet as StoreService['get'])(...args);
+    }) as StoreService['get'];
 
-    assert
-      .dom('[data-test-error="not-found"]')
-      .hasText(`Card not found: ${testHostModeRealmURL}Pet/non-existent`);
+    let visitPromise = visit('/test/Pet/non-existent.json');
+    await waitFor('[data-test-host-loading]');
+    assert.dom('[data-test-host-loading]').exists();
+    gate.fulfill();
+
+    await visitPromise;
+    await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-card-error]').exists();
+    assert.dom('[data-test-card-error]').containsText('Card not found');
     assert.strictEqual(
       getPageTitle(),
       `Card not found: ${testHostModeRealmURL}Pet/non-existent`,
+    );
+    assert.dom('[data-test-host-loading]').doesNotExist();
+
+    store.get = originalGet;
+  });
+
+  test('visiting a card with a rendering error shows an error', async function (assert) {
+    await visit('/test/BrokenCard/broken.json');
+
+    await waitFor('[data-test-card-error]');
+    assert.dom('[data-test-card-error]').exists();
+    assert
+      .dom('[data-test-card-error]')
+      .containsText('This card contains an error');
+    assert.strictEqual(
+      getPageTitle(),
+      `Error rendering ${testHostModeRealmURL}BrokenCard/broken`,
     );
   });
 
@@ -396,7 +457,7 @@ module('Acceptance | host mode tests', function (hooks) {
       .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
       .exists();
     await click(
-      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] .close-button`,
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"] [data-test-host-stack-item-close-button]`,
     );
 
     assert.strictEqual(currentURL(), '/test/Pet/mango.json');
@@ -404,6 +465,60 @@ module('Acceptance | host mode tests', function (hooks) {
       new URL(window.location.href).searchParams.get('hostModeStack'),
       null,
     );
+  });
+
+  test('clicking the stack backdrop closes the top card', async function (assert) {
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([`${testHostModeRealmURL}index`]),
+    );
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    // Wait for stack item to appear
+    await waitFor(
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
+    );
+
+    // Verify stack item exists
+    assert
+      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
+      .exists();
+
+    // Click outside the stack items (on the stack backdrop area)
+    await click('[data-test-host-mode-stack]');
+
+    // Stack item should be removed
+    await waitUntil(() => {
+      return !document.querySelector(
+        `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`,
+      );
+    });
+    assert
+      .dom(`[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`)
+      .doesNotExist();
+  });
+
+  test('clicking on a stack card does not close it', async function (assert) {
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([`${testHostModeRealmURL}index`]),
+    );
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    let stackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}index"]`;
+    assert.dom(stackSelector).exists();
+
+    // Click on the card content itself
+    await click(stackSelector);
+
+    // Card should still exist
+    assert.dom(stackSelector).exists();
+  });
+
+  test('stack does not exist when there are no stacked cards', async function (assert) {
+    // Visit card with no stack
+    await visit('/test/Pet/mango.json');
+
+    // Stack shouldn't exist when there are no stacked cards
+    assert.dom('[data-test-host-mode-stack]').doesNotExist();
   });
 
   module('with a custom subdomain', function (hooks) {

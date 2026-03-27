@@ -7,8 +7,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import TextAreaField from 'https://cardstack.com/base/text-area';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import { GeoSearchPointField } from '../fields/geo-search-point';
+import DateTimeField from 'https://cardstack.com/base/datetime';
+import GeoSearchPointField from '../fields/geo-search-point';
 
 import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';
 import { FieldContainer, BoxelInput } from '@cardstack/boxel-ui/components';
@@ -119,9 +119,9 @@ export class Post extends CardDef {
 
   @field author = linksTo(() => Author);
   @field content = contains(TextAreaPlaceholderField);
-  @field createdAt = contains(DatetimeField);
+  @field createdAt = contains(DateTimeField);
 
-  @field title = contains(StringField, {
+  @field cardTitle = contains(StringField, {
     computeVia: function (this: Post) {
       const preview = this.content?.substring(0, 50) || 'New Post';
       return preview.length > 50 ? preview + '...' : preview;
@@ -387,7 +387,7 @@ export class ReminderPost extends Post {
   static icon = ClockIcon;
 
   @field reminderTitle = contains(StringField);
-  @field reminderDate = contains(DatetimeField);
+  @field reminderDate = contains(DateTimeField);
 
   static edit = ReminderPostEdit;
   static embedded = ReminderPostEmbedded;
@@ -441,7 +441,7 @@ export class EventPost extends Post {
   static icon = CalendarIcon;
 
   @field eventTitle = contains(StringField);
-  @field eventDate = contains(DatetimeField);
+  @field eventDate = contains(DateTimeField);
   @field location = contains(GeoSearchPointField);
 
   static edit = EventPostEdit;

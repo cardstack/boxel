@@ -24,19 +24,28 @@ import max from 'lodash/max';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedArray } from 'tracked-built-ins';
+import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { Alert, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  Alert,
+  BoxelButton,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
+  baseFileRef,
+  formattedError,
   type getCard,
   GetCardContextName,
+  inferContentType,
   internalKeyFor,
   isCardInstance,
+  resolveFileDefCodeRef,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -44,30 +53,38 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
+import ENV from '@cardstack/host/config/environment';
+import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
+import { isReady } from '@cardstack/host/resources/file';
 import type { RoomResource } from '@cardstack/host/resources/room';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import type FileUploadService from '@cardstack/host/services/file-upload';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
+import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import FocusPill from '../ai-assistant/focus-pill';
 import LLMModeToggle from '../ai-assistant/llm-mode-toggle';
-import LLMSelect from '../ai-assistant/llm-select';
+import LLMSelect, { type LLMOption } from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
@@ -80,6 +97,8 @@ import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
 import type { MatrixEvent } from 'matrix-js-sdk';
 
+const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -88,6 +107,15 @@ interface Signature {
     monacoSDK: MonacoSDK;
     selectedCardRef?: ResolvedCodeRef;
   };
+}
+
+interface RoomScrollState {
+  messageElements: Map<HTMLElement, number>;
+  messageScrollers: Map<number, Element['scrollIntoView']>;
+  messageVisibilityObserver: IntersectionObserver;
+  isScrolledToBottom: boolean;
+  userHasScrolled: boolean;
+  isConversationScrollable: boolean;
 }
 
 export default class Room extends Component<Signature> {
@@ -165,7 +193,9 @@ export default class Room extends Component<Signature> {
                 @roomId={{@roomId}}
                 @roomResource={{@roomResource}}
                 @index={{i}}
+                @isMostRecentMessage={{this.isLastMessage i}}
                 @registerScroller={{this.registerMessageScroller}}
+                @unregisterScroller={{this.unregisterMessageScroller}}
                 @isPending={{this.isPendingMessage message}}
                 @monacoSDK={{@monacoSDK}}
                 @isStreaming={{this.isMessageStreaming message}}
@@ -192,10 +222,14 @@ export default class Room extends Component<Signature> {
             @cardIdsToAttach={{this.cardIdsToAttach}}
             @chooseCard={{this.chooseCard}}
             @removeCard={{this.removeCard}}
-            @chooseFile={{this.chooseFile}}
+            @chooseFile={{perform this.chooseFileTask}}
+            @chooseLocalFile={{perform this.chooseLocalFileTask}}
             @removeFile={{this.removeFile}}
-            @autoAttachedFile={{this.autoAttachedFile}}
+            @autoAttachedFiles={{this.autoAttachedFiles}}
             @filesToAttach={{this.filesToAttach}}
+            @fileUploadStates={{this.fileUploadStates}}
+            @retryFileUpload={{this.retryFileUpload}}
+            @inputModalities={{@roomResource.activeInputModalities}}
             @autoAttachedCardTooltipMessage={{if
               (eq this.operatorModeStateService.state.submode Submodes.Code)
               'Current card is shared automatically'
@@ -217,12 +251,29 @@ export default class Room extends Component<Signature> {
                 @scrollToFirstUnread={{this.scrollToFirstUnread}}
               />
             {{/if}}
-            <div class='chat-input-area' data-test-chat-input-area>
+            <div
+              class='chat-input-area'
+              data-test-chat-input-area
+              data-drop-zone-active={{this.isDropZoneActive}}
+              {{on 'dragover' this.handleChatInputDragOver}}
+              {{on 'dragenter' this.handleChatInputDragEnter}}
+              {{on 'dragleave' this.handleChatInputDragLeave}}
+              {{on 'drop' this.handleChatInputDrop}}
+            >
+              {{#if this.isDropZoneActive}}
+                <div
+                  class='chat-input-drop-hint'
+                  data-test-chat-input-drop-hint
+                >
+                  Drop file to attach
+                </div>
+              {{/if}}
               <AiAssistantChatInput
                 @attachButton={{AttachButton}}
                 @value={{this.messageToSend}}
                 @onInput={{this.setMessage}}
                 @onSend={{this.sendMessage}}
+                @onPaste={{this.handleChatInputPaste}}
                 @canSend={{this.canSend}}
                 data-test-message-field={{@roomId}}
               />
@@ -260,7 +311,37 @@ export default class Room extends Component<Signature> {
                     @disabled={{@roomResource.isActivatingLLM}}
                     @onExpand={{fn this.setSelectedBottomAction 'llm-select'}}
                     @onCollapse={{fn this.setSelectedBottomAction undefined}}
-                  />
+                  >
+                    <:footer>
+                      <li class='llm-select-footer'>
+                        {{#if this.systemCardId}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            class='llm-select-footer-action'
+                            {{on 'click' this.goToSystemCard}}
+                            data-test-go-to-system-card
+                          >
+                            Go to current system card
+                          </BoxelButton>
+                        {{/if}}
+                        {{#unless this.isDefaultSystemCard}}
+                          <BoxelButton
+                            @kind='text-only'
+                            @size='extra-small'
+                            class='llm-select-footer-action'
+                            {{on
+                              'click'
+                              (perform this.restoreDefaultSystemCardTask)
+                            }}
+                            data-test-restore-default-system-card
+                          >
+                            Restore default system card
+                          </BoxelButton>
+                        {{/unless}}
+                      </li>
+                    </:footer>
+                  </LLMSelect>
                 {{/if}}
                 {{#if this.displayLLMModeSelect}}
                   <LLMModeToggle
@@ -332,6 +413,26 @@ export default class Room extends Component<Signature> {
         z-index: 2;
 
         timeline-scope: --chat-input-scroll-timeline;
+      }
+      .chat-input-area[data-drop-zone-active='true'] {
+        box-shadow: inset 0 0 0 2px var(--boxel-dark);
+        background-color: #e8f0ff;
+      }
+      .chat-input-drop-hint {
+        position: absolute;
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        bottom: var(--boxel-sp-xs);
+        left: var(--boxel-sp-xs);
+        z-index: 3;
+        pointer-events: none;
+        color: var(--boxel-light-100);
+        font: 500 var(--boxel-font);
+        background-color: var(--boxel-darker-hover);
+        border-radius: var(--boxel-border-radius-lg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
       .chat-input-area__bottom-actions {
         display: flex;
@@ -423,58 +524,79 @@ export default class Room extends Component<Signature> {
         width: 100%;
       }
 
+      .llm-select-footer {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxs);
+        border-top: 1px solid var(--boxel-200);
+        padding-top: var(--boxel-sp-xxxs);
+      }
+
+      .llm-select-footer-action {
+        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        --boxel-button-min-height: unset;
+        justify-content: flex-start;
+        font: 500 var(--boxel-font-xs);
+        color: var(--boxel-500);
+      }
+
+      .llm-select-footer-action:hover {
+        color: var(--boxel-dark);
+      }
+
       .chat-input-area :deep(.minimized-arrow) {
         margin-left: 0;
       }
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardContextName) declare private getCard: getCard;
   @tracked private selectedBottomAction:
     | 'skill-menu'
     | 'llm-select'
     | undefined;
   @tracked lastCanceledActionMessageId: string | undefined;
   @tracked acceptingAllLabel: string | undefined;
+  @tracked private isDropZoneActive = false;
+  private dropZoneDragDepth = 0;
 
-  @service private declare store: StoreService;
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare matrixService: MatrixService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare specPanelService: SpecPanelService;
-  @service private declare aiAssistantPanelService: AiAssistantPanelService;
+  @service declare private store: StoreService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service('file-upload') declare private fileUpload: FileUploadService;
+  @service('loader-service') declare private loaderService: LoaderService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private specPanelService: SpecPanelService;
+  @service declare private aiAssistantPanelService: AiAssistantPanelService;
 
   private autoAttachmentResource = getAutoAttachment(this, {
     submode: () => this.operatorModeStateService.state.submode,
     moduleInspectorPanel: () =>
       this.operatorModeStateService.moduleInspectorPanel,
-    autoAttachedFileUrl: () => this.autoAttachedFileUrl,
+    autoAttachedFileUrls: () => this.autoAttachedFileUrls,
     playgroundPanelCardId: () => this.playgroundPanelCardId,
     activeSpecId: () => this.specPanelService.specSelection,
     topMostStackItems: () => this.topMostStackItems,
     attachedCardIds: () => this.cardIdsToAttach,
     removedCardIds: () => this.removedAttachedCardIds,
   });
-  private removedAttachedCardIds = new TrackedArray<string>();
+  private removedAttachedCardIds = new TrackedSet<string>();
   private removedAttachedFileUrls: string[] = [];
-  private lastAutoAttachedFileUrl: string | undefined;
+  private lastAutoAttachedFileUrlsKey: string | undefined;
+  private lastKnownRoom: RoomData | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
-  private roomScrollState: WeakMap<
-    RoomData,
-    {
-      messageElements: WeakMap<HTMLElement, number>;
-      messageScrollers: Map<number, Element['scrollIntoView']>;
-      messageVisibilityObserver: IntersectionObserver;
-      isScrolledToBottom: boolean;
-      userHasScrolled: boolean;
-      isConversationScrollable: boolean;
-    }
-  > = new WeakMap();
+  private roomScrollState: WeakMap<RoomData, RoomScrollState> = new WeakMap();
 
   @tracked private unknownMessageSendError: string | undefined = undefined;
+  private _fileUploadStates = new TrackedMap<string, FileUploadState>();
+
+  get fileUploadStates(): ReadonlyMap<string, FileUploadState> {
+    return this._fileUploadStates;
+  }
   private get shouldShowUnknownMessageSendError() {
     // Since unknownMessageSendError error is coming from the catch-all block in doSendMessage,
     // we need to check if there already exists an error message in the last message, which is
@@ -490,28 +612,43 @@ export default class Room extends Component<Signature> {
     super(owner, args);
     this.doMatrixEventFlush.perform();
     registerDestructor(this, () => {
-      this.scrollState().messageVisibilityObserver.disconnect();
+      this.cleanupScrollState();
+      this.getConversationScrollability = undefined;
+      this.scrollConversationToBottom = undefined;
     });
   }
 
-  private scrollState() {
-    if (!this.room) {
-      throw new Error(`Cannot get room scroll state before room is loaded`);
+  private get existingScrollState() {
+    let room = this.roomForCleanup;
+    return room ? this.roomScrollState.get(room) : undefined;
+  }
+
+  private ensureScrollState() {
+    let room = this.room;
+    if (!room) {
+      return;
     }
-    let state = this.roomScrollState.get(this.room);
+    if (this.lastKnownRoom && this.lastKnownRoom !== room) {
+      this.cleanupScrollState(this.lastKnownRoom);
+    }
+    this.lastKnownRoom = room;
+    let state = this.roomScrollState.get(room);
     if (!state) {
-      state = new TrackedObject({
+      let nextState!: RoomScrollState;
+      nextState = new TrackedObject({
         isScrolledToBottom: false,
         userHasScrolled: false,
         isConversationScrollable: false,
-        messageElements: new WeakMap(),
+        messageElements: new Map(),
         messageScrollers: new Map(),
         messageVisibilityObserver: new IntersectionObserver((entries) => {
           entries.forEach((entry) => {
-            let index = this.messageElements.get(entry.target as HTMLElement);
+            let index = nextState.messageElements.get(
+              entry.target as HTMLElement,
+            );
             if (index != null) {
               if (
-                (!this.isConversationScrollable || entry.isIntersecting) &&
+                (!nextState.isConversationScrollable || entry.isIntersecting) &&
                 index > this.lastReadMessageIndex
               ) {
                 this.sendReadReceipt(this.messages[index]);
@@ -520,9 +657,30 @@ export default class Room extends Component<Signature> {
           });
         }),
       });
-      this.roomScrollState.set(this.room, state);
+      state = nextState;
+      this.roomScrollState.set(room, state);
     }
     return state;
+  }
+
+  private cleanupScrollState(room = this.roomForCleanup) {
+    if (!room) {
+      return;
+    }
+    let scrollState = this.roomScrollState.get(room);
+    if (!scrollState) {
+      return;
+    }
+    for (let element of scrollState.messageElements.keys()) {
+      scrollState.messageVisibilityObserver.unobserve(element);
+    }
+    scrollState.messageVisibilityObserver.disconnect();
+    scrollState.messageElements.clear();
+    scrollState.messageScrollers.clear();
+    scrollState.isScrolledToBottom = false;
+    scrollState.userHasScrolled = false;
+    scrollState.isConversationScrollable = false;
+    this.roomScrollState.delete(room);
   }
 
   // Using a resource for automatically attached files,
@@ -530,59 +688,104 @@ export default class Room extends Component<Signature> {
   // when the user opens a different file and then returns to this one.
   @use private autoAttachedFileResource = resource(() => {
     let state = new TrackedObject<{
-      value: FileDef | undefined;
-      remove: () => void;
+      value: FileDef[];
+      remove: (sourceUrl?: string) => void;
     }>({
-      value: undefined,
-      remove: () => {
-        state.value = undefined;
+      value: [],
+      remove: (sourceUrl?: string) => {
+        if (!sourceUrl) {
+          state.value = [];
+          return;
+        }
+        state.value = state.value.filter(
+          (file) => file.sourceUrl !== sourceUrl,
+        );
       },
     });
 
-    let autoAttachedFileUrl = this.autoAttachedFileUrl;
+    let autoAttachedFileUrls = this.autoAttachedFileUrls;
     let manuallyAttachedFiles = this.filesToAttach;
+    let autoAttachedFileUrlsKey = autoAttachedFileUrls.join('\n');
 
     let removedFileUrls: string[];
-    if (autoAttachedFileUrl !== this.lastAutoAttachedFileUrl) {
+    if (autoAttachedFileUrlsKey !== this.lastAutoAttachedFileUrlsKey) {
       this.removedAttachedFileUrls.splice(0);
       removedFileUrls = this.removedAttachedFileUrls;
-      this.lastAutoAttachedFileUrl = autoAttachedFileUrl;
+      this.lastAutoAttachedFileUrlsKey = autoAttachedFileUrlsKey;
     } else {
       removedFileUrls = this.removedAttachedFileUrls;
     }
 
-    let isManuallyAttached = manuallyAttachedFiles.some(
-      (file) => file.sourceUrl === autoAttachedFileUrl,
-    );
-    let isRemoved = autoAttachedFileUrl
-      ? removedFileUrls.includes(autoAttachedFileUrl)
-      : false;
+    let candidateUrls = autoAttachedFileUrls.filter((url) => {
+      if (!url) {
+        return false;
+      }
+      let isManuallyAttached = manuallyAttachedFiles.some(
+        (file) => file.sourceUrl === url,
+      );
+      let isRemoved = removedFileUrls.includes(url);
+      return !isManuallyAttached && !isRemoved;
+    });
 
-    if (!autoAttachedFileUrl || isManuallyAttached || isRemoved) {
-      state.value = undefined;
-    } else {
-      state.value = this.matrixService.fileAPI.createFileDef({
-        sourceUrl: autoAttachedFileUrl,
-        name: autoAttachedFileUrl.split('/').pop(),
+    state.value = candidateUrls.map((url) => {
+      let name = url.split('/').pop();
+      return this.matrixService.fileAPI.createFileDef({
+        sourceUrl: url,
+        name,
+        contentType: url.endsWith('.json')
+          ? SupportedMimeType.CardJson
+          : name
+            ? inferContentType(name)
+            : undefined,
       });
-    }
+    });
 
     return state;
   });
 
-  private get autoAttachedFileUrl() {
-    return this.operatorModeStateService.state.codePath?.href;
+  private get autoAttachedFileUrls() {
+    let codePathUrl = this.operatorModeStateService.state.codePath?.href;
+    if (!codePathUrl) {
+      return [];
+    }
+
+    let urls = [codePathUrl];
+
+    if (codePathUrl.endsWith('.json')) {
+      let openFile = this.operatorModeStateService.openFile?.current;
+      if (openFile && isReady(openFile)) {
+        try {
+          let fileContent = JSON.parse(openFile.content);
+          let adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
+          if (adoptsFrom?.module) {
+            let moduleURLWithExtension = new URL(
+              adoptsFrom.module.endsWith('.gts')
+                ? adoptsFrom.module
+                : `${adoptsFrom.module}.gts`,
+              openFile.url,
+            );
+            if (!urls.includes(moduleURLWithExtension.href)) {
+              urls.push(moduleURLWithExtension.href);
+            }
+          }
+        } catch (_error) {
+          // If JSON parse fails, fall back to just the current file URL.
+        }
+      }
+    }
+
+    return urls;
   }
 
-  private get autoAttachedFile() {
+  private get autoAttachedFiles() {
     return this.operatorModeStateService.state.submode === Submodes.Code
       ? this.autoAttachedFileResource.value
-      : undefined;
+      : [];
   }
 
   private get removeAutoAttachedFile() {
-    return () => {
-      this.autoAttachedFileResource.remove();
+    return (sourceUrl?: string) => {
+      this.autoAttachedFileResource.remove(sourceUrl);
     };
   }
 
@@ -630,27 +833,15 @@ export default class Room extends Component<Signature> {
   }
 
   private get isScrolledToBottom() {
-    return this.scrollState().isScrolledToBottom;
+    return this.existingScrollState?.isScrolledToBottom ?? false;
   }
 
   private get userHasScrolled() {
-    return this.scrollState().userHasScrolled;
+    return this.existingScrollState?.userHasScrolled ?? false;
   }
 
   private get isConversationScrollable() {
-    return this.scrollState().isConversationScrollable;
-  }
-
-  private get messageElements() {
-    return this.scrollState().messageElements;
-  }
-
-  private get messageScrollers() {
-    return this.scrollState().messageScrollers;
-  }
-
-  private get messageVisibilityObserver() {
-    return this.scrollState().messageVisibilityObserver;
+    return this.existingScrollState?.isConversationScrollable ?? false;
   }
 
   private registerMessageScroller = ({
@@ -662,10 +853,24 @@ export default class Room extends Component<Signature> {
     element: HTMLElement;
     scrollTo: (arg?: any) => void;
   }) => {
-    this.messageElements.set(element, index);
-    this.messageScrollers.set(index, scrollTo);
-    this.messageVisibilityObserver.observe(element);
-    this.scrollState().isConversationScrollable = Boolean(
+    let scrollState = this.ensureScrollState();
+    if (!scrollState) {
+      return;
+    }
+    for (let [
+      registeredElement,
+      registeredIndex,
+    ] of scrollState.messageElements) {
+      if (registeredIndex === index && registeredElement !== element) {
+        scrollState.messageElements.delete(registeredElement);
+        scrollState.messageVisibilityObserver.unobserve(registeredElement);
+        break;
+      }
+    }
+    scrollState.messageElements.set(element, index);
+    scrollState.messageScrollers.set(index, scrollTo);
+    scrollState.messageVisibilityObserver.observe(element);
+    scrollState.isConversationScrollable = Boolean(
       this.getConversationScrollability?.(),
     );
     if (!this.isConversationScrollable || !this.isAllowedToAutoScroll) {
@@ -694,6 +899,25 @@ export default class Room extends Component<Signature> {
     }
   };
 
+  private unregisterMessageScroller = ({
+    index,
+    element,
+  }: {
+    index: number;
+    element: HTMLElement;
+  }) => {
+    let scrollState = this.existingScrollState;
+    if (!scrollState) {
+      return;
+    }
+    let elementOwnsIndex = scrollState.messageElements.get(element) === index;
+    scrollState.messageElements.delete(element);
+    if (elementOwnsIndex) {
+      scrollState.messageScrollers.delete(index);
+    }
+    scrollState.messageVisibilityObserver.unobserve(element);
+  };
+
   private registerConversationScroller = (
     isConversationScrollable: () => boolean,
     scrollToBottom: () => void,
@@ -703,9 +927,13 @@ export default class Room extends Component<Signature> {
   };
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
-    this.scrollState().isScrolledToBottom = isBottom;
+    let scrollState = this.ensureScrollState();
+    if (!scrollState) {
+      return;
+    }
+    scrollState.isScrolledToBottom = isBottom;
     if (!isBottom) {
-      this.scrollState().userHasScrolled = true;
+      scrollState.userHasScrolled = true;
     }
   };
 
@@ -715,7 +943,8 @@ export default class Room extends Component<Signature> {
     }
 
     let firstUnreadIndex = this.lastReadMessageIndex + 1;
-    let scrollTo = this.messageScrollers.get(firstUnreadIndex);
+    let scrollTo =
+      this.existingScrollState?.messageScrollers.get(firstUnreadIndex);
     if (!scrollTo) {
       console.warn(`No scroller for message index ${firstUnreadIndex}`);
     } else {
@@ -835,21 +1064,30 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.skills;
   }
 
-  private get llmsForSelectMenu() {
-    // Read from the LLM environment card if available
+  private get llmsForSelectMenu(): LLMOption[] {
+    // Read from the system card if available
     let systemCard = this.matrixService.systemCard;
     if (systemCard?.modelConfigurations) {
-      let options: Record<string, string> = {};
+      let options: LLMOption[] = [];
+      let configModelIds = new Set<string>();
       for (let modelConfig of systemCard.modelConfigurations) {
-        if (modelConfig.modelId) {
-          options[modelConfig.modelId] =
-            modelConfig.title || modelConfig.modelId;
+        if (modelConfig.modelId && modelConfig.id) {
+          options.push({
+            id: modelConfig.id,
+            modelId: modelConfig.modelId,
+            name: modelConfig.cardTitle || modelConfig.modelId,
+          });
+          configModelIds.add(modelConfig.modelId);
         }
       }
-      // Add any used LLMs that aren't already in the options
+      // Add any used LLMs that aren't already covered by a config
       for (let usedLLM of this.args.roomResource.usedLLMs) {
-        if (usedLLM && !options[usedLLM]) {
-          options[usedLLM] = usedLLM; // Use model ID as display name
+        if (usedLLM && !configModelIds.has(usedLLM)) {
+          options.push({
+            id: usedLLM,
+            modelId: usedLLM,
+            name: usedLLM,
+          });
         }
       }
       return options;
@@ -862,11 +1100,46 @@ export default class Room extends Component<Signature> {
       .filter(Boolean)
       .sort();
 
-    return ids.reduce((acc: Record<string, string>, id) => {
-      acc[id] = DEFAULT_LLM_ID_TO_NAME[id] ?? id;
-      return acc;
-    }, {});
+    return ids.map((id) => ({
+      id,
+      modelId: id,
+      name: DEFAULT_LLM_ID_TO_NAME[id] ?? id,
+    }));
   }
+
+  private get systemCardId(): string | undefined {
+    return this.matrixService.systemCard?.id;
+  }
+
+  private get isDefaultSystemCard(): boolean {
+    let systemCardId = this.systemCardId;
+    let defaultSystemCardId = ENV.defaultSystemCardId;
+    if (!defaultSystemCardId) {
+      return true;
+    }
+    return !systemCardId || systemCardId === defaultSystemCardId;
+  }
+
+  @action
+  private goToSystemCard() {
+    let systemCardId = this.systemCardId;
+    if (systemCardId) {
+      let stackIndex = Math.min(
+        this.operatorModeStateService.numberOfStacks(),
+        1,
+      );
+      let stackItem = this.operatorModeStateService.createStackItem(
+        systemCardId,
+        stackIndex,
+        'isolated',
+      );
+      this.operatorModeStateService.addItemToStack(stackItem);
+    }
+  }
+
+  private restoreDefaultSystemCardTask = task(async () => {
+    await this.matrixService.setUserSystemCard(undefined);
+  });
 
   private get sortedSkills(): RoomSkill[] {
     return [...this.skills].sort((a, b) => {
@@ -879,8 +1152,11 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.args.roomResource.matrixRoom;
-    return room;
+    return this.args.roomResource?.matrixRoom;
+  }
+
+  private get roomForCleanup() {
+    return this.room ?? this.lastKnownRoom;
   }
 
   private doWhenRoomChanges = restartableTask(async () => {
@@ -939,8 +1215,8 @@ export default class Room extends Component<Signature> {
     }
 
     let files = [];
-    if (this.autoAttachedFile) {
-      files.push(this.autoAttachedFile);
+    if (this.autoAttachedFiles.length > 0) {
+      files.push(...this.autoAttachedFiles);
     }
     files.push(...this.filesToAttach);
 
@@ -955,7 +1231,7 @@ export default class Room extends Component<Signature> {
   private chooseCard(cardId: string) {
     // handle the case where auto-attached card pill is clicked
     if (this.autoAttachedCardIds.has(cardId)) {
-      this.removedAttachedCardIds.push(cardId);
+      this.removedAttachedCardIds.add(cardId);
     }
 
     let cardIds = this.cardIdsToAttach ?? [];
@@ -972,7 +1248,7 @@ export default class Room extends Component<Signature> {
     }
 
     if (this.autoAttachedCardIds.has(id)) {
-      this.removedAttachedCardIds.push(id);
+      this.removedAttachedCardIds.add(id);
       return;
     }
 
@@ -992,28 +1268,148 @@ export default class Room extends Component<Signature> {
     );
   }
 
-  @action
-  private chooseFile(file: FileDef) {
+  private chooseFileTask = enqueueTask(async (file: FileDef) => {
     // handle the case where auto-attached file pill is clicked
     if (this.isAutoAttachedFile(file)) {
-      this.removeAutoAttachedFile();
+      this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
     }
 
     let files = this.filesToAttach;
     if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      await this.matrixService.prefetchFileContent(file);
       this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
+      this.startFileUploadTask.perform(file);
+    }
+  });
+
+  private chooseLocalFileTask = task(async () => {
+    let localFile = await this.fileUpload.pickLocalFile();
+    if (!localFile) {
+      return;
+    }
+    await this.attachLocalFile(localFile);
+  });
+
+  @action
+  private handleChatInputDragOver(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDropZoneActive = true;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
     }
   }
 
   @action
+  private handleChatInputDragEnter(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth++;
+    this.isDropZoneActive = true;
+  }
+
+  @action
+  private handleChatInputDragLeave(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
+    if (this.dropZoneDragDepth === 0) {
+      this.isDropZoneActive = false;
+    }
+  }
+
+  @action
+  private handleChatInputDrop(event: DragEvent) {
+    let files = Array.from(event.dataTransfer?.files ?? []);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = 0;
+    this.isDropZoneActive = false;
+    this.attachLocalFilesTask.perform(files);
+  }
+
+  @action
+  private handleChatInputPaste(event: ClipboardEvent) {
+    let files = this.getClipboardFiles(event.clipboardData);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.attachLocalFilesTask.perform(files);
+  }
+
+  private attachLocalFilesTask = enqueueTask(async (files: File[]) => {
+    for (let file of files) {
+      await this.attachLocalFile(file);
+    }
+  });
+
+  private getClipboardFiles(clipboardData: DataTransfer | null): File[] {
+    if (!clipboardData) {
+      return [];
+    }
+
+    let files = Array.from(clipboardData.files ?? []);
+    if (files.length) {
+      return files;
+    }
+
+    let itemFiles: File[] = [];
+    for (let item of Array.from(clipboardData.items ?? [])) {
+      if (item.kind !== 'file') {
+        continue;
+      }
+      let file = item.getAsFile();
+      if (file) {
+        itemFiles.push(file);
+      }
+    }
+
+    return itemFiles;
+  }
+
+  private isFileDrag(dataTransfer: DataTransfer | null | undefined): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+    return Array.from(dataTransfer.types ?? []).includes('Files');
+  }
+
+  private async attachLocalFile(localFile: File) {
+    let bytes = new Uint8Array(await localFile.arrayBuffer());
+    let file = await this.createLocalFileDef(localFile, bytes);
+    let files = this.filesToAttach;
+    let contentType =
+      file.contentType || localFile.type || 'application/octet-stream';
+    await this.matrixService.prefetchLocalFileContent(file, bytes, contentType);
+    this.matrixService.setFilesToSend(this.args.roomId, [...files, file]);
+    this.startFileUploadTask.perform(file);
+  }
+
+  @action
   private isAutoAttachedFile(file: FileDef) {
-    return this.autoAttachedFile?.sourceUrl === file.sourceUrl;
+    return this.autoAttachedFiles.some(
+      (autoFile) => autoFile.sourceUrl === file.sourceUrl,
+    );
   }
 
   @action
   private removeFile(file: FileDef) {
     if (this.isAutoAttachedFile(file)) {
-      this.removeAutoAttachedFile();
+      this.removeAutoAttachedFile(file.sourceUrl ?? undefined);
       return;
     }
 
@@ -1033,6 +1429,126 @@ export default class Room extends Component<Signature> {
     );
 
     this.markAttachedFileRemoved(file.sourceUrl);
+    if (file.sourceUrl) {
+      this._fileUploadStates.delete(file.sourceUrl);
+    }
+  }
+
+  private startFileUploadTask = task(async (file: FileDef) => {
+    let sourceUrl = file.sourceUrl;
+    if (!sourceUrl) return;
+    this._fileUploadStates.set(sourceUrl, { status: 'uploading' });
+    try {
+      let [uploadedFile] = await this.matrixService.uploadFiles([file]);
+      let uploadedOrOriginal = uploadedFile ?? file;
+      // Only update state if the file is still attached (guards against
+      // race where file is removed while upload was in-flight).
+      let files = this.filesToAttach;
+      if (files?.find((f) => f.sourceUrl === sourceUrl)) {
+        let nextFiles = files.map((f) =>
+          f.sourceUrl === sourceUrl ? uploadedOrOriginal : f,
+        );
+        this.matrixService.setFilesToSend(this.args.roomId, nextFiles);
+        this._fileUploadStates.set(sourceUrl, { status: 'complete' });
+      }
+    } catch (e: any) {
+      // Only set error state if the file is still attached, to avoid
+      // blocking canSend for a file the user already removed.
+      if (this.filesToAttach?.find((f) => f.sourceUrl === sourceUrl)) {
+        this._fileUploadStates.set(sourceUrl, {
+          status: 'error',
+          error: e?.message,
+        });
+      }
+    }
+  });
+
+  private get hasFileUploadIssues() {
+    for (let [, state] of this._fileUploadStates) {
+      if (state.status === 'uploading' || state.status === 'error') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @action
+  private retryFileUpload(file: FileDef) {
+    this.startFileUploadTask.perform(file);
+  }
+
+  private buildLocalSourceUrl(fileName: string): string {
+    return `${LOCAL_SOURCE_URL_PREFIX}${uuidv4()}/${encodeURIComponent(fileName)}`;
+  }
+
+  private async createLocalFileDef(
+    localFile: File,
+    bytes: Uint8Array,
+  ): Promise<FileDef> {
+    let sourceUrl = this.buildLocalSourceUrl(localFile.name);
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
+    let extractor = new FileDefAttributesExtractor({
+      loaderService: this.loaderService,
+      network: this.network,
+      fileURL: sourceUrl,
+      fileDefCodeRef,
+      baseFileDefCodeRef: baseFileRef,
+      contentHash: undefined,
+      contentSize: bytes.byteLength,
+      fileBytes: bytes,
+      buildError: (errorUrl, error) => {
+        let errorJSONAPI = formattedError(errorUrl, error).errors[0];
+        return errorJsonApiToErrorEntry(errorJSONAPI);
+      },
+    });
+    let extracted = await extractor.extract();
+    if (extracted.status === 'error' || !extracted.resource) {
+      throw new Error(
+        extracted.error?.error?.message ??
+          `Failed to extract file metadata for ${localFile.name}`,
+      );
+    }
+
+    let classCodeRef =
+      extracted.resource.meta.adoptsFrom &&
+      'module' in extracted.resource.meta.adoptsFrom &&
+      'name' in extracted.resource.meta.adoptsFrom
+        ? extracted.resource.meta.adoptsFrom
+        : fileDefCodeRef;
+    let fileDefModule = await this.loaderService.loader.import<
+      Record<string, unknown>
+    >(classCodeRef.module);
+    let FileDefKlass = fileDefModule[classCodeRef.name] as
+      | (new (attributes: Record<string, unknown>) => FileDef)
+      | undefined;
+    let baseAttributes = extracted.resource.attributes as Record<
+      string,
+      unknown
+    >;
+    let attributes: Record<string, unknown> = {
+      ...baseAttributes,
+      sourceUrl,
+      url: sourceUrl,
+      name: (baseAttributes.name as string | undefined) ?? localFile.name,
+      contentSize:
+        (baseAttributes.contentSize as number | undefined) ?? bytes.byteLength,
+    };
+
+    if (!FileDefKlass) {
+      return this.matrixService.fileAPI.createFileDef({
+        sourceUrl,
+        url: sourceUrl,
+        name: localFile.name,
+        contentType:
+          (attributes.contentType as string | undefined) ??
+          localFile.type ??
+          'application/octet-stream',
+        contentHash: attributes.contentHash as string | undefined,
+        contentSize: attributes.contentSize as number | undefined,
+      });
+    }
+
+    return new FileDefKlass(attributes);
   }
 
   private doSendMessage = enqueueTask(
@@ -1061,6 +1577,7 @@ export default class Room extends Component<Signature> {
         this.matrixService.setMessageToSend(this.args.roomId, undefined);
         this.matrixService.setCardsToSend(this.args.roomId, undefined);
         this.matrixService.setFilesToSend(this.args.roomId, undefined);
+        this._fileUploadStates.clear();
       }
 
       let openCardIds = new Set([
@@ -1142,7 +1659,7 @@ export default class Room extends Component<Signature> {
 
   private resetAutoAttachedRemovedStateTask = task(async () => {
     await Promise.resolve();
-    this.removedAttachedCardIds.splice(0);
+    this.removedAttachedCardIds.clear();
   });
 
   private get autoAttachedCardIds() {
@@ -1166,9 +1683,12 @@ export default class Room extends Component<Signature> {
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend?.trim() ||
-          this.cardIdsToAttach?.length ||
-          this.autoAttachedCardIds.size !== 0,
+        this.cardIdsToAttach?.length ||
+        this.autoAttachedCardIds.size !== 0 ||
+        this.filesToAttach?.length ||
+        this.autoAttachedFiles.length > 0,
       ) &&
+      !this.hasFileUploadIssues &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
       !this.matrixService.isLoadingTimeline &&
@@ -1228,7 +1748,7 @@ export default class Room extends Component<Signature> {
     return (
       this.filesToAttach?.length ||
       this.cardIdsToAttach?.length ||
-      this.autoAttachedFile ||
+      this.autoAttachedFiles.length > 0 ||
       this.autoAttachedCardIds?.size
     );
   }
@@ -1311,6 +1831,10 @@ export default class Room extends Component<Signature> {
     let lastMessage = this.messages[this.messages.length - 1];
     if (lastMessage) {
       this.lastCanceledActionMessageId = lastMessage.eventId;
+      this.matrixService.markActionAsCanceled(
+        this.args.roomId,
+        lastMessage.eventId,
+      );
     }
   }
 

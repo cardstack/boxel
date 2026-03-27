@@ -17,8 +17,8 @@ import { AskAiInput } from './command';
 import { tracked } from '@glimmer/tracking';
 
 export class SuggestionField extends FieldDef {
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
 
   static displayName = 'Suggestion';
 }
@@ -26,8 +26,8 @@ export class SuggestionField extends FieldDef {
 export class AiAppGenerator extends CardDef {
   static displayName = 'AI App Generator';
 
-  @field title = contains(StringField);
-  @field description = contains(StringField);
+  @field cardTitle = contains(StringField);
+  @field cardDescription = contains(StringField);
   @field suggestions = containsMany(SuggestionField);
   @tracked promptValue =
     'Create a sprint-planning tool that lets users define backlogs, estimate stories, assign owners, and track burndown.';
@@ -110,10 +110,13 @@ export class AiAppGenerator extends CardDef {
                 <BoxelButton
                   @kind='secondary'
                   @size='small'
-                  title={{suggestion.title}}
-                  {{on 'click' (fn this.setPromptValue suggestion.description)}}
+                  title={{suggestion.cardTitle}}
+                  {{on
+                    'click'
+                    (fn this.setPromptValue suggestion.cardDescription)
+                  }}
                 >
-                  {{suggestion.title}}
+                  {{suggestion.cardTitle}}
                 </BoxelButton>
               {{/each}}
             </div>

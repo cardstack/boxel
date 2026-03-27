@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "progressionName": "vi-IV-I-V (Pop Progression)",
-      "description": "One of the most popular chord progressions in modern music. Found in countless pop, rock, and folk songs. Creates a sense of movement from minor to major with a strong resolution.",
+      "cardDescription": "One of the most popular chord progressions in modern music. Found in countless pop, rock, and folk songs. Creates a sense of movement from minor to major with a strong resolution.",
       "key": "C major",
       "scale": "major",
       "timeSignature": "4/4",
@@ -63,7 +63,7 @@
           }
         ]
       },
-      "title": "vi-IV-I-V (Pop Progression)"
+      "cardTitle": "vi-IV-I-V (Pop Progression)"
     },
     "relationships": {},
     "meta": {
