@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+/* eslint-env node */
 'use strict';
 
-const { spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process'); // eslint-disable-line @typescript-eslint/no-var-requires
 
 function buildModuleFilter(modulesToMatch) {
   const escaped = modulesToMatch
