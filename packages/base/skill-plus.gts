@@ -89,43 +89,6 @@ export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
   return headers;
 }
 
-// Modifier to add IDs to rendered markdown headers for TOC markdown anchor links
-export const addHeaderIds = modifier((element: HTMLElement) => {
-  const headers = element.querySelectorAll('h2, h3, h4, h5, h6');
-  const usedIds = new Set<string>();
-
-  headers.forEach((header) => {
-    if (header.getAttribute('id')) return; // Skip if already has ID
-
-    const text = header.textContent || '';
-
-    // Check for explicit ID in text
-    const idMatch = text.match(/\{#([a-z0-9-]+)\}/);
-    let baseId: string;
-
-    if (idMatch) {
-      baseId = idMatch[1];
-      // Remove {#id} from display
-      header.textContent = text.replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
-    } else {
-      baseId = slugifyHeading(text);
-    }
-
-    // Deduplicate IDs
-    let finalId = baseId;
-    let suffix = 2;
-    while (usedIds.has(finalId)) {
-      finalId = `${baseId}-${suffix}`;
-      suffix++;
-    }
-
-    if (finalId) {
-      header.setAttribute('id', finalId);
-      usedIds.add(finalId);
-    }
-  });
-});
-
 // Pre-process markdown to inject anchor elements before each heading.
 // Uses parseMarkdownHeaders for ID generation so IDs are identical to the toc field.
 export function injectHeadingAnchors(markdown?: string): string {
@@ -216,7 +179,7 @@ export class TocSection extends GlimmerComponent<{
     event.preventDefault();
     (event.currentTarget as HTMLElement)
       .closest('.doc-layout')
-      ?.querySelector(`#${id}`)
+      ?.querySelector(`[id="${id}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 }
@@ -617,7 +580,7 @@ export class DocLayout extends GlimmerComponent<{
     event.preventDefault();
     (event.currentTarget as HTMLElement)
       .closest('.doc-layout')
-      ?.querySelector('#top')
+      ?.querySelector('[id="top"]')
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 }
@@ -629,7 +592,7 @@ export class SkillPlus extends Skill {
   // override skill card's title field to be computed of cardInfo.name
   @field cardTitle = contains(StringField, {
     computeVia: function (this: SkillPlus) {
-      return this.cardInfo?.name ?? `Untitled ${SkillPlus.displayName}`;
+      return this.cardInfo?.name ?? `Untitled Skill`;
     },
   });
 

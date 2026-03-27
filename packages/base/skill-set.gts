@@ -9,8 +9,8 @@ import { gt } from '@cardstack/boxel-ui/helpers';
 
 import {
   SkillPlus,
+  TocItemField,
   slugifyHeading,
-  addHeaderIds,
   DocLayout,
   TocSection,
   EmptyStateContainer,
@@ -22,6 +22,63 @@ import { Component, field, contains, containsMany } from './card-api';
 import StringField from './string';
 import MarkdownField from './markdown';
 
+function isFence(line: string): boolean {
+  if (!line) return false;
+  const c = line[0];
+  return (c === '`' || c === '~') && line.startsWith(c.repeat(3));
+}
+
+function getModeLabel(mode: string): string {
+  return mode === 'full' ? 'Full' : mode === 'essential' ? 'Essential' : 'Link Only';
+}
+
+// Normalize markdown header levels so the top-level header in any skill becomes H2.
+// Skips fenced code blocks. Used both for building instructions and for counting
+// how many headings a skill contributes to the combined document.
+function normalizeHeaders(markdown: string): string {
+  if (!markdown) return markdown;
+
+  const lines = markdown.split('\n');
+  let insideFence = false;
+
+  // Pass 1: find minimum header level outside fenced code
+  let minLevel: number | undefined;
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (isFence(trimmed)) { insideFence = !insideFence; continue; }
+    if (insideFence) continue;
+    const m = trimmed.match(/^(#{1,6})\s+/);
+    if (m) {
+      const lvl = m[1].length;
+      minLevel = minLevel === undefined ? lvl : Math.min(minLevel, lvl);
+    }
+  }
+
+  if (minLevel === undefined) return markdown;
+
+  const levelShift = 2 - minLevel; // make top level ## (H2)
+  if (levelShift === 0) return markdown;
+
+  // Pass 2: shift headers outside fences
+  insideFence = false;
+  const out: string[] = [];
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    if (isFence(trimmed)) { insideFence = !insideFence; out.push(raw); continue; }
+    if (insideFence) { out.push(raw); continue; }
+    const m = raw.match(/^(\s*)(#{1,6})\s+(.*)$/);
+    if (m) {
+      const leading = m[1] ?? '';
+      const rest = m[3] ?? '';
+      const newLevel = Math.max(2, Math.min(6, m[2].length + levelShift));
+      out.push(`${leading}${'#'.repeat(newLevel)} ${rest}`);
+    } else {
+      out.push(raw);
+    }
+  }
+  return out.join('\n');
+}
+
 // Compute table of contents markdown for a Skill Set's related skills
 // Updated to handle frontMatter, backMatter, and different indentation styles
 function computeTableOfContents(
@@ -31,12 +88,6 @@ function computeTableOfContents(
 ): string | undefined {
   const tocLines: string[] = [];
   let sectionNumber = 0;
-
-  const isFence = (line: string) => {
-    if (!line) return false;
-    const c = line[0];
-    return (c === '`' || c === '~') && line.startsWith(c.repeat(3));
-  };
 
   // ²⁵⁵ Parse markdown heading (## or ###) into structured data
   // Handles headers with or without leading whitespace
@@ -75,16 +126,13 @@ function computeTableOfContents(
     let inFence = false;
 
     for (const rawLine of content.split('\n')) {
-      const line = rawLine;
-
-      // Check for fence markers (trimmed for detection)
-      if (isFence(line.trim())) {
+      if (isFence(rawLine.trim())) {
         inFence = !inFence;
         continue;
       }
       if (inFence) continue;
 
-      const heading = parseHeading(line);
+      const heading = parseHeading(rawLine);
       if (!heading) continue;
 
       // Calculate indent based on header level relative to base
@@ -126,15 +174,13 @@ function computeTableOfContents(
     let inFence = false;
 
     for (const rawLine of skillContent.split('\n')) {
-      const line = rawLine;
-
-      if (isFence(line.trim())) {
+      if (isFence(rawLine.trim())) {
         inFence = !inFence;
         continue;
       }
       if (inFence) continue;
 
-      const heading = parseHeading(line);
+      const heading = parseHeading(rawLine);
       if (!heading) continue;
 
       // ²⁶⁴ Indent nested headers: 2 spaces for H2, 4 spaces for H3
@@ -223,6 +269,66 @@ export class SkillSet extends SkillPlus {
     },
   });
 
+  @field frontMatterToc = containsMany(TocItemField, {
+    // Slice from this.toc so IDs match the anchors in instructionsWithIds exactly.
+    computeVia: function (this: SkillSet) {
+      const count = parseMarkdownHeaders(this.frontMatter).length;
+      return (this.toc as unknown as Array<{ level: number; text: string; id: string }>).slice(0, count);
+    },
+  });
+
+  @field backMatterToc = containsMany(TocItemField, {
+    // Slice from this.toc so IDs match the anchors in instructionsWithIds exactly.
+    computeVia: function (this: SkillSet) {
+      const count = parseMarkdownHeaders(this.backMatter).length;
+      return count > 0
+        ? (this.toc as unknown as Array<{ level: number; text: string; id: string }>).slice(-count)
+        : [];
+    },
+  });
+
+  @field contentToc = containsMany(TocItemField, {
+    // Heading IDs come from this.toc (same dedup context as instructionsWithIds).
+    // normalizeHeaders gives accurate per-skill heading counts in the combined doc.
+    computeVia: function (this: SkillSet) {
+      const allToc = this.toc as unknown as Array<{ level: number; text: string; id: string }>;
+      const frontCount = parseMarkdownHeaders(this.frontMatter).length;
+      const backCount = parseMarkdownHeaders(this.backMatter).length;
+      const contentHeadings = allToc.slice(
+        frontCount,
+        backCount > 0 ? allToc.length - backCount : undefined,
+      );
+
+      const items: Array<{ level: number; text: string; id: string }> = [];
+      let headingIdx = 0;
+
+      for (let i = 0; i < (this.relatedSkills?.length ?? 0); i++) {
+        const skillRef = this.relatedSkills[i];
+        if (!skillRef) continue;
+        const topicName =
+          skillRef.topicName || skillRef.skill?.cardTitle || 'Untitled';
+        items.push({ level: 2, text: topicName, id: `skill-divider-${i}` });
+        const mode = skillRef.inclusionMode || 'link-only';
+        const rawContent =
+          mode === 'full' && skillRef.skill?.instructions
+            ? skillRef.skill.instructions
+            : mode === 'essential' && skillRef.essentials
+              ? skillRef.essentials
+              : '';
+        // Normalize before counting so the count matches the combined instructions
+        const skillHeadingCount = parseMarkdownHeaders(
+          normalizeHeaders(rawContent),
+        ).length;
+        for (let j = 0; j < skillHeadingCount; j++) {
+          const heading = contentHeadings[headingIdx++];
+          if (heading) items.push({ level: 3, text: heading.text, id: heading.id });
+        }
+      }
+
+      return items;
+    },
+  });
+
   @field instructions = contains(MarkdownField, {
     // Computed instructions with table-based skill dividers (NO TOC embedded)
     computeVia: function (this: SkillSet) {
@@ -233,82 +339,8 @@ export class SkillSet extends SkillPlus {
         result += this.frontMatter + '\n\n';
       }
 
-      const isFence = (line: string) => {
-        if (!line) return false;
-        const c = line[0];
-        return c === '`' && line.startsWith(c.repeat(3));
-      };
-
       // REMOVED: Do NOT add tableOfContents here - breaks circular dependency
       // TOC is extracted FROM instructions and displayed separately in template
-
-      // Helper function to normalize markdown header levels
-      // - Top-level becomes ## for each external skill
-      // - Preserves relative depth
-      // - Skips fenced code blocks (``` ... ```)
-      const normalizeHeaders = (markdown: string): string => {
-        if (!markdown) return markdown;
-
-        const lines = markdown.split('\n');
-        let insideFence = false;
-
-        // Pass 1: find minimum header level outside fenced code
-        let minLevel: number | undefined;
-        for (let raw of lines) {
-          const line = raw;
-          const trimmed = line.trim();
-          if (isFence(trimmed)) {
-            insideFence = !insideFence;
-            continue;
-          }
-          if (insideFence) continue;
-
-          const m = trimmed.match(/^(#{1,6})\s+/);
-          if (m) {
-            const lvl = m[1].length;
-            minLevel = minLevel === undefined ? lvl : Math.min(minLevel, lvl);
-          }
-        }
-
-        if (minLevel === undefined) return markdown; // no headers to normalize
-
-        const levelShift = 2 - minLevel; // make top level ## (H2) for external skills
-
-        if (levelShift === 0) return markdown;
-
-        // Pass 2: shift headers outside fences
-        insideFence = false;
-        const out: string[] = [];
-        for (let raw of lines) {
-          const trimmed = raw.trim();
-          if (isFence(trimmed)) {
-            insideFence = !insideFence;
-            out.push(raw);
-            continue;
-          }
-          if (insideFence) {
-            out.push(raw);
-            continue;
-          }
-
-          const m = raw.match(/^(\s*)(#{1,6})\s+(.*)$/);
-          if (m) {
-            const leading = m[1] ?? '';
-            const hashes = m[2];
-            const rest = m[3] ?? '';
-            const currentLevel = hashes.length;
-            const newLevel = Math.max(
-              2,
-              Math.min(6, currentLevel + levelShift),
-            );
-            out.push(`${leading}${'#'.repeat(newLevel)} ${rest}`);
-          } else {
-            out.push(raw);
-          }
-        }
-
-        return out.join('\n');
-      };
 
       // Add related skills with numbered dividers
       if (this.relatedSkills && this.relatedSkills.length > 0) {
@@ -352,13 +384,7 @@ export class SkillSet extends SkillPlus {
           // Add inclusion mode badge to divider (pill-style)
           const indent = '    ';
           dividerLines.push(
-            `${indent}<div class="divider-mode divider-mode-${mode}">${
-              mode === 'full'
-                ? 'Full'
-                : mode === 'essential'
-                  ? 'Essential'
-                  : 'Link Only'
-            }</div>`,
+            `${indent}<div class="divider-mode divider-mode-${mode}">${getModeLabel(mode)}</div>`,
           );
 
           // Close divider tags (no closing </a>)
@@ -397,9 +423,9 @@ export class SkillSet extends SkillPlus {
 
     private get isTocEmpty() {
       return (
-        !this.args.model?.tableOfContents &&
-        !this.args.model?.frontMatter &&
-        !this.args.model?.backMatter &&
+        !this.args.model?.contentToc?.length &&
+        !this.args.model?.frontMatterToc?.length &&
+        !this.args.model?.backMatterToc?.length &&
         !this.hasAppendix
       );
     }
@@ -420,21 +446,22 @@ export class SkillSet extends SkillPlus {
         @hideToc={{this.isTocEmpty}}
       >
         <:navbar>
-          {{#if @model.frontMatter}}
+          {{#if @model.frontMatterToc.length}}
             <TocSection
               @sectionTitle='Intro'
-              @navItems={{parseMarkdownHeaders @model.frontMatter}}
+              @navItems={{@model.frontMatterToc}}
             />
           {{/if}}
-          {{#if @model.tableOfContents}}
-            <TocSection @sectionTitle='Content'>
-              <@fields.tableOfContents />
-            </TocSection>
+          {{#if @model.contentToc.length}}
+            <TocSection
+              @sectionTitle='Content'
+              @navItems={{@model.contentToc}}
+            />
           {{/if}}
-          {{#if @model.backMatter}}
+          {{#if @model.backMatterToc.length}}
             <TocSection
               @sectionTitle='Summary'
-              @navItems={{parseMarkdownHeaders @model.backMatter}}
+              @navItems={{@model.backMatterToc}}
             />
           {{/if}}
           {{#if this.hasAppendix}}
@@ -476,10 +503,9 @@ export class SkillSet extends SkillPlus {
             <article
               class='instructions-article'
               id='instructions'
-              {{addHeaderIds}}
               {{dividerActivation this.activateDivider}}
             >
-              <@fields.instructions />
+              <@fields.instructionsWithIds />
             </article>
           {{else}}
             <EmptyStateContainer>
@@ -709,29 +735,14 @@ export class SkillSet extends SkillPlus {
   };
 
   static embedded = class Embedded extends Component<typeof this> {
-    addHeaderIds = addHeaderIds;
-
     <template>
       <div class='skill-set-embedded'>
         <div class='embedded-header'>
           <div class='skill-type-badge'>
-            <svg
-              class='badge-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-              <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-            </svg>
+            <SkillIcon class='badge-icon' />
             SKILL SET
           </div>
-          <h3 class='embedded-title'>{{if
-              @model.cardTitle
-              @model.cardTitle
-              'Untitled Skill Set'
-            }}</h3>
+          <h3 class='embedded-title'>{{@model.cardTitle}}</h3>
         </div>
 
         {{#if @model.cardDescription}}
@@ -897,31 +908,14 @@ export class SkillSet extends SkillPlus {
       <div class='fitted-container'>
         {{! Badge format (≤150px width, <170px height) - Compact title display }}
         <div class='badge-format'>
-          <div class='badge-title'>{{if
-              @model.cardTitle
-              @model.cardTitle
-              'Skill Set'
-            }}</div>
+          <div class='badge-title'>{{@model.cardTitle}}</div>
         </div>
 
         {{! Strip format (>150px width, <170px height) - Horizontal info bar }}
         <div class='strip-format'>
           <div class='strip-left'>
-            <svg
-              class='strip-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-              <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-            </svg>
-            <div class='strip-title'>{{if
-                @model.cardTitle
-                @model.cardTitle
-                'Skill Set'
-              }}</div>
+            <SkillIcon class='strip-icon' />
+            <div class='strip-title'>{{@model.cardTitle}}</div>
           </div>
           <div class='strip-count'>{{@model.relatedSkills.length}} skills</div>
         </div>
@@ -929,23 +923,10 @@ export class SkillSet extends SkillPlus {
         {{! Tile format (<400px width, ≥170px height) - Vertical card }}
         <div class='tile-format'>
           <div class='tile-header'>
-            <svg
-              class='tile-icon'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-              <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-            </svg>
+            <SkillIcon class='tile-icon' />
             <div class='tile-badge'>SKILL SET</div>
           </div>
-          <h4 class='tile-title'>{{if
-              @model.cardTitle
-              @model.cardTitle
-              'Untitled'
-            }}</h4>
+          <h4 class='tile-title'>{{@model.cardTitle}}</h4>
           <div class='tile-stats'>
             <span class='stat'>{{@model.relatedSkills.length}} skills</span>
           </div>
@@ -958,39 +939,17 @@ export class SkillSet extends SkillPlus {
         <div class='card-format'>
           <div class='card-header'>
             <div class='card-meta'>
-              <svg
-                class='card-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-                <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-              </svg>
+              <SkillIcon class='card-icon' />
               <span class='card-type'>SKILL SET</span>
             </div>
-            <h4 class='card-title'>{{if
-                @model.cardTitle
-                @model.cardTitle
-                'Untitled Skill Set'
-              }}</h4>
+            <h4 class='card-title'>{{@model.cardTitle}}</h4>
           </div>
           {{#if @model.cardDescription}}
             <p class='card-description'>{{@model.cardDescription}}</p>
           {{/if}}
           <div class='card-footer'>
             <span class='footer-stat'>
-              <svg
-                class='footer-icon'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <path d='M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' />
-                <path d='M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' />
-              </svg>
+              <SkillIcon class='footer-icon' />
               {{@model.relatedSkills.length}}
               skills
             </span>
