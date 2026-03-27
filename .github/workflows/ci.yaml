@@ -527,6 +527,14 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
+          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shard }}.xml
+      - name: Upload junit report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-report-${{ matrix.shard }}
+          path: junit/realm-server-${{ matrix.shard }}.xml
+          retention-days: 30
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
@@ -602,6 +610,39 @@ jobs:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
           retention-days: 30
+
+  realm-server-merge-reports:
+    name: Merge Realm Server reports and publish
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: realm-server-merge-reports-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: realm-server-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download JUnit reports
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          path: all-realm-server-reports
+          pattern: realm-server-test-report-*
+          merge-multiple: true
+      - name: Merge reports
+        run: npx junit-report-merger realm-server.xml "./all-realm-server-reports/*.xml"
+      - name: Upload merged report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-report-merged
+          path: realm-server.xml
+          retention-days: 30
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
+        if: ${{ !cancelled() }}
+        with:
+          junit_files: realm-server.xml
+          check_name: Realm Server Test Results
 
   software-factory-test:
     name: Software Factory Tests
