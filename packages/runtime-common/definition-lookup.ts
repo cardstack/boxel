@@ -124,7 +124,7 @@ export class FilterRefersToNonexistentTypeError extends Error {
 
   constructor(codeRef: ResolvedCodeRef, opts?: { cause?: unknown }) {
     super(
-      `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}". This is almost always caused by a stale modules cache (e.g. after switching branches). Clearing the "modules" table in the database will fix this.`,
+      `Your filter refers to a nonexistent type: import { ${codeRef.name} } from "${codeRef.module}". This is almost always caused by a stale modules cache. Clearing the "modules" table in the database will fix this.`,
     );
     this.name = 'FilterRefersToNonexistentTypeError';
     this.codeRef = codeRef;
