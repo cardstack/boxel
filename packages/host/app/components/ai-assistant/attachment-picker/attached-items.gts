@@ -5,8 +5,9 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { Tooltip, Pill } from '@cardstack/boxel-ui/components';
+import { Tooltip, Pill, RealmIcon } from '@cardstack/boxel-ui/components';
 import { and, gt, not } from '@cardstack/boxel-ui/helpers';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import type { CardErrorJSONAPI } from '@cardstack/runtime-common';
 import {
@@ -23,6 +24,7 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import type { PrerenderedCard } from '@cardstack/host/components/prerendered-card-search';
 import type {
   FileUploadState,
   FileUploadStatus,
@@ -30,6 +32,7 @@ import type {
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -43,6 +46,7 @@ interface Signature {
   Args: {
     items: (CardDef | FileDef | CardErrorJSONAPI)[];
     autoAttachedCardIds?: TrackedSet<string>;
+    autoAttachedPrerenderedCards?: PrerenderedCard[];
     autoAttachedFiles?: FileDef[];
     removeCard: (cardId: string) => void;
     removeFile: (file: FileDef) => void;
@@ -60,19 +64,32 @@ export default class AttachedItems extends Component<Signature> {
   @tracked areAllItemsDisplayed = false;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private realm: RealmService;
 
-  get itemsToDisplay() {
-    return this.areAllItemsDisplayed
-      ? this.args.items
-      : this.args.items.slice(0, MAX_ITEMS_TO_DISPLAY);
+  private get allItemsCount() {
+    let autoCount = this.args.autoAttachedPrerenderedCards?.length ?? 0;
+    return this.args.items.length + autoCount;
+  }
+
+  private get allItemsToDisplay() {
+    let autoCards = this.args.autoAttachedPrerenderedCards ?? [];
+    let items = this.args.items;
+    let total = autoCards.length + items.length;
+
+    if (this.areAllItemsDisplayed || total <= MAX_ITEMS_TO_DISPLAY) {
+      return { autoCards, items };
+    }
+
+    // Show auto-attached cards first, then fill remaining with items
+    let remaining = MAX_ITEMS_TO_DISPLAY;
+    let displayedAutoCards = autoCards.slice(0, remaining);
+    remaining -= displayedAutoCards.length;
+    let displayedItems = remaining > 0 ? items.slice(0, remaining) : [];
+    return { autoCards: displayedAutoCards, items: displayedItems };
   }
 
   private isCard = (item: CardDef | FileDef): item is CardDef => {
     return isCardInstance(item);
-  };
-
-  private isAutoAttachedCard = (cardId: string): boolean => {
-    return this.args.autoAttachedCardIds?.has(cardId) ?? false;
   };
 
   private isAutoAttachedFile = (file: FileDef): boolean => {
@@ -81,6 +98,16 @@ export default class AttachedItems extends Component<Signature> {
         (autoFile) => autoFile.sourceUrl === file.sourceUrl,
       ) ?? false
     );
+  };
+
+  private getPrerenderedCardTitle = (card: PrerenderedCard): string => {
+    // Extract text content from atom HTML. The atom template renders the card title.
+    if (!card.data.html) {
+      return card.url.split('/').pop() ?? 'Card';
+    }
+    let parser = new DOMParser();
+    let doc = parser.parseFromString(card.data.html, 'text/html');
+    return doc.body.textContent?.trim() || card.url.split('/').pop() || 'Card';
   };
 
   @action
@@ -144,69 +171,70 @@ export default class AttachedItems extends Component<Signature> {
   <template>
     <div class='attached-items' ...attributes>
       {{#if @isLoaded}}
-        {{#each this.itemsToDisplay as |item|}}
+        {{! Auto-attached cards rendered from prerendered HTML (no full card module loading) }}
+        {{#each this.allItemsToDisplay.autoCards as |card|}}
+          <Tooltip @placement='top'>
+            <:trigger>
+              <Pill
+                @kind='button'
+                class='card-pill border-dashed'
+                data-test-attached-card={{card.url}}
+                data-test-autoattached-card={{card.url}}
+                {{on 'click' (fn this.handleChooseCard card.url)}}
+              >
+                <:iconLeft>
+                  <RealmIcon
+                    @realmInfo={{this.realm.info card.data.realmUrl}}
+                  />
+                </:iconLeft>
+                <:default>
+                  <div
+                    class='card-content'
+                    title={{this.getPrerenderedCardTitle card}}
+                  >
+                    {{this.getPrerenderedCardTitle card}}
+                  </div>
+                </:default>
+                <:iconRight>
+                  <button
+                    class='remove-button'
+                    type='button'
+                    {{on 'click' (fn this.handleRemoveCard card.url)}}
+                    data-test-remove-card-btn
+                  >
+                    <IconX width='10' height='10' />
+                  </button>
+                </:iconRight>
+              </Pill>
+            </:trigger>
+
+            <:content>
+              {{#if @autoAttachedCardTooltipMessage}}
+                {{@autoAttachedCardTooltipMessage}}
+              {{else}}
+                Topmost card is shared automatically
+              {{/if}}
+            </:content>
+          </Tooltip>
+        {{/each}}
+        {{! Manually attached cards and files (loaded via getCardCollection) }}
+        {{#each this.allItemsToDisplay.items as |item|}}
           {{#if (isCardErrorJSONAPI item)}}
             {{#if item.id}}
-              {{#if (this.isAutoAttachedCard item.id)}}
-                <Tooltip @placement='top'>
-                  <:trigger>
-                    <CardPill
-                      @cardId={{item.id}}
-                      @borderType='dashed'
-                      @onClick={{fn this.handleChooseCard item.id}}
-                      @onRemove={{fn this.handleRemoveCard item.id}}
-                      @urlForRealmLookup={{this.getCardErrorRealm item}}
-                      data-test-autoattached-card={{item.id}}
-                    />
-                  </:trigger>
-
-                  <:content>
-                    {{#if @autoAttachedCardTooltipMessage}}
-                      {{@autoAttachedCardTooltipMessage}}
-                    {{else if (this.isAutoAttachedCard item.id)}}
-                      Topmost card is shared automatically
-                    {{/if}}
-                  </:content>
-                </Tooltip>
-              {{else}}
-                <CardPill
-                  @cardId={{item.id}}
-                  @borderType='solid'
-                  @onRemove={{fn this.handleRemoveCard item.id}}
-                  @urlForRealmLookup={{this.getCardErrorRealm item}}
-                />
-              {{/if}}
-            {{/if}}
-          {{else if (this.isCard item)}}
-            {{#if (this.isAutoAttachedCard item.id)}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <CardPill
-                    @cardId={{idFor item}}
-                    @borderType='dashed'
-                    @onClick={{fn this.handleChooseCard (idFor item)}}
-                    @onRemove={{fn this.handleRemoveCard (idFor item)}}
-                    @urlForRealmLookup={{urlForRealmLookup item}}
-                    data-test-autoattached-card={{idFor item}}
-                  />
-                </:trigger>
-
-                <:content>
-                  {{#if @autoAttachedCardTooltipMessage}}
-                    {{@autoAttachedCardTooltipMessage}}
-                  {{else if (this.isAutoAttachedCard item.id)}}
-                    Topmost card is shared automatically
-                  {{/if}}
-                </:content>
-              </Tooltip>
-            {{else}}
               <CardPill
-                @cardId={{idFor item}}
+                @cardId={{item.id}}
                 @borderType='solid'
-                @onRemove={{fn this.handleRemoveCard (idFor item)}}
-                @urlForRealmLookup={{urlForRealmLookup item}}
+                @onRemove={{fn this.handleRemoveCard item.id}}
+                @urlForRealmLookup={{this.getCardErrorRealm item}}
               />
             {{/if}}
+          {{else if (this.isCard item)}}
+            <CardPill
+              @cardId={{idFor item}}
+              @borderType='solid'
+              @onRemove={{fn this.handleRemoveCard (idFor item)}}
+              @urlForRealmLookup={{urlForRealmLookup item}}
+            />
           {{else}}
             {{#if (this.isAutoAttachedFile item)}}
               <Tooltip @placement='top'>
@@ -240,7 +268,7 @@ export default class AttachedItems extends Component<Signature> {
         {{/each}}
         {{#if
           (and
-            (gt @items.length MAX_ITEMS_TO_DISPLAY)
+            (gt this.allItemsCount MAX_ITEMS_TO_DISPLAY)
             (not this.areAllItemsDisplayed)
           )
         }}
@@ -249,7 +277,7 @@ export default class AttachedItems extends Component<Signature> {
             {{on 'click' this.toggleViewAllAttachedCards}}
             data-test-view-all
           >
-            View All ({{@items.length}})
+            View All ({{this.allItemsCount}})
           </Pill>
         {{/if}}
       {{/if}}
@@ -261,6 +289,36 @@ export default class AttachedItems extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxxs);
+      }
+      .card-pill {
+        --pill-gap: var(--boxel-sp-xxxs);
+        --pill-icon-size: 18px;
+        --boxel-realm-icon-size: var(--pill-icon-size);
+        border: 1px solid var(--boxel-400);
+        height: var(--pill-height, 1.875rem);
+        overflow: hidden;
+      }
+      .border-dashed {
+        border-style: dashed;
+      }
+      .card-content {
+        max-width: 100px;
+        max-height: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .remove-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        width: var(--boxel-icon-sm);
+        height: var(--boxel-icon-sm);
+        border-radius: var(--boxel-border-radius-xs);
       }
     </style>
   </template>

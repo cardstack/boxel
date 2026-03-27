@@ -1059,6 +1059,94 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-close-ai-assistant]');
   });
 
+  test('auto-attachment does not trigger full card module loading for cards in the stack', async function (assert) {
+    // Regression test: Previously, the auto-attachment system called store.get()
+    // for every card in the stack, which triggers loading the card's entire module
+    // graph via Babel compilation on the main thread. For deep module graphs like
+    // the catalog realm index card, this caused 83+ modules to be compiled (~5s
+    // freeze and crash). Auto-attachment should not load full card instances.
+    let store = getService('store');
+
+    // Open with the index card and a Person card in the stack.
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // Spy on store.get() BEFORE opening AI panel to capture ALL calls
+    // triggered by auto-attachment, getOpenCards, and stack backgrounds.
+    let storeGetCalls: string[] = [];
+    let originalGet = store.get.bind(store);
+    store.get = async function (id: string, ...args: any[]) {
+      storeGetCalls.push(id);
+      return originalGet(id, ...args);
+    } as typeof store.get;
+
+    try {
+      // Positive control: verify the spy works by calling store.get() directly.
+      await store.get(`${testRealmURL}Pet/mango`);
+      assert.true(
+        storeGetCalls.includes(`${testRealmURL}Pet/mango`),
+        'positive control: store.get() spy is working',
+      );
+
+      // Reset spy before the real test
+      storeGetCalls = [];
+
+      await click('[data-test-open-ai-assistant]');
+      await waitFor(`[data-room-settled]`);
+
+      // Realm index cards should NOT be auto-attached.
+      assert
+        .dom(`[data-test-autoattached-card="${testRealmURL}index"]`)
+        .doesNotExist('realm index card should not be auto-attached');
+
+      // The critical assertion for index cards: store.get() should NOT have
+      // been called for the realm index card by any code path during AI panel
+      // open. On the old code, auto-attachment, getOpenCards, and
+      // StackBackgroundsResource all called store.get() for stack items
+      // including index cards, triggering createFromSerialized → loader.import()
+      // for the card's adoptsFrom module and all transitive dependencies (Babel
+      // compilation on main thread). On staging with the catalog realm, this
+      // caused 83 modules to be compiled (~5s freeze and crash).
+      let indexCardGetCalls = storeGetCalls.filter(
+        (id) => id === `${testRealmURL}index`,
+      );
+      assert.strictEqual(
+        indexCardGetCalls.length,
+        0,
+        `store.get() should not be called for the realm index card, but was called ${indexCardGetCalls.length} time(s)`,
+      );
+
+      // The critical assertion for arbitrary cards: store.get() should NOT
+      // have been called for the Person card during AI panel open. The Person
+      // card is already in the store from stack rendering, so systems should
+      // use store.peek() instead.
+      let personCardGetCalls = storeGetCalls.filter(
+        (id) => id === `${testRealmURL}Person/fadhlan`,
+      );
+      assert.strictEqual(
+        personCardGetCalls.length,
+        0,
+        `store.get() should not be called for Person/fadhlan during AI panel open - store.peek() or prerendered HTML should be used instead`,
+      );
+    } finally {
+      store.get = originalGet;
+    }
+  });
+
   test('auto-attached file is not displayed in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',

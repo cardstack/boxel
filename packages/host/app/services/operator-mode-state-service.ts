@@ -596,7 +596,26 @@ export default class OperatorModeStateService extends Service {
     if (!cardIds) {
       return;
     }
-    let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
+    // Filter out realm index cards - loading them triggers Babel compilation
+    // of their entire module graph on the main thread (e.g. catalog realm's
+    // 83+ modules causing a ~5s freeze).
+    let realmIndexCardIds = this.realmServer.availableRealmIndexCardIds;
+    cardIds = cardIds.filter((id) => !realmIndexCardIds.includes(id));
+
+    // Use store.peek() first (synchronous, no compilation) since cards
+    // should already be loaded by stack rendering. Only fall back to
+    // store.get() if the card isn't in the store yet.
+    let cards = (
+      await Promise.all(
+        cardIds.map((id) => {
+          let existing = this.store.peek(id);
+          if (existing && isCardInstance(existing)) {
+            return existing;
+          }
+          return this.store.get(id);
+        }),
+      )
+    )
       .filter(Boolean)
       .filter(isCardInstance);
     return cards;

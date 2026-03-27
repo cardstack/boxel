@@ -1,3 +1,5 @@
+import { getOwner } from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -6,9 +8,13 @@ import { consume } from 'ember-provide-consume-context';
 import {
   GetCardCollectionContextName,
   type getCardCollection,
+  type Format,
 } from '@cardstack/runtime-common';
 
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
+import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -41,6 +47,7 @@ interface Signature {
         typeof AttachedItems,
         | 'items'
         | 'autoAttachedCardIds'
+        | 'autoAttachedPrerenderedCards'
         | 'autoAttachedFiles'
         | 'removeCard'
         | 'removeFile'
@@ -68,6 +75,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         isLoaded=this.isLoaded
         items=this.items
         autoAttachedCardIds=@autoAttachedCardIds
+        autoAttachedPrerenderedCards=this.autoAttachedPrerenderedCards
         autoAttachedFiles=@autoAttachedFiles
         removeCard=@removeCard
         removeFile=@removeFile
@@ -90,9 +98,38 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
 
+  @service declare private realmServer: RealmServerService;
+
+  // Only load manually attached cards through the store (getCardCollection)
   @cached
   private get cardCollection(): ReturnType<getCardCollection> {
-    return this.getCardCollection(this, () => this.cardIds);
+    return this.getCardCollection(this, () => this.manuallyAttachedCardIds);
+  }
+
+  // Use prerendered search for auto-attached cards to avoid loading full card modules
+  private autoAttachedSearchResource = getPrerenderedSearch(
+    this,
+    getOwner(this)!,
+    () => {
+      let cardUrls = this.autoAttachedCardIdsArray;
+      return {
+        query: cardUrls.length > 0 ? {} : undefined,
+        format: cardUrls.length > 0 ? ('atom' as Format) : undefined,
+        realms: this.realmServer.availableRealmURLs,
+        cardUrls,
+        isLive: false,
+      };
+    },
+  );
+
+  private get autoAttachedCardIdsArray() {
+    return this.args.autoAttachedCardIds
+      ? [...this.args.autoAttachedCardIds]
+      : [];
+  }
+
+  private get autoAttachedPrerenderedCards() {
+    return this.autoAttachedSearchResource.instances;
   }
 
   private get items() {
@@ -100,7 +137,13 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   }
 
   private get isLoaded() {
-    return this.cardCollection?.isLoaded;
+    let manualLoaded =
+      this.manuallyAttachedCardIds.length === 0 ||
+      this.cardCollection?.isLoaded;
+    let autoLoaded =
+      this.autoAttachedCardIdsArray.length === 0 ||
+      this.autoAttachedSearchResource.hasSearchRun;
+    return manualLoaded && autoLoaded;
   }
 
   private get cards() {
@@ -111,14 +154,10 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     return this.cardCollection?.cardErrors ?? [];
   }
 
-  private get cardIds() {
+  // Only manually attached cards go through getCardCollection (which loads full card instances)
+  private get manuallyAttachedCardIds() {
     let cardIds = this.args.cardIdsToAttach ?? [];
-
-    if (this.args.autoAttachedCardIds) {
-      cardIds = [...new Set([...this.args.autoAttachedCardIds, ...cardIds])];
-    }
-
-    cardIds = cardIds.filter(Boolean); // Dont show new unsaved cards
+    cardIds = cardIds.filter(Boolean);
     return cardIds;
   }
 

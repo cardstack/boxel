@@ -3,12 +3,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { isCardInstance } from '@cardstack/runtime-common';
-
 import type { Stack } from '../components/operator-mode/interact-submode';
-import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
-import type StoreService from '../services/store';
 
 interface Args {
   positional: [stacks: Stack[]];
@@ -16,9 +12,7 @@ interface Args {
 
 export class StackBackgroundsResource extends Resource<Args> {
   @tracked value: (string | undefined | null)[] = [];
-  @service declare cardService: CardService;
   @service declare realm: RealmService;
-  @service declare store: StoreService;
 
   get backgroundImageURLs() {
     return this.value?.map((u) => (u ? u : undefined)) ?? [];
@@ -54,17 +48,15 @@ export class StackBackgroundsResource extends Resource<Args> {
         if (!bottomMostStackItem.id) {
           return;
         }
-        let bottomMostCard = await this.store.get(bottomMostStackItem.id);
-        if (!isCardInstance(bottomMostCard)) {
-          let realm = bottomMostCard.realm;
-          if (!realm) {
-            return undefined;
-          }
-          await this.realm.ensureRealmMeta(realm);
-          return this.realm.info(realm)?.backgroundURL;
+        // Derive the realm URL from the card URL directly.
+        // This avoids calling store.get() which would trigger loading the
+        // card's full module graph via Babel compilation on the main thread.
+        let realmURL = this.realm.realmOfURL(new URL(bottomMostStackItem.id));
+        if (realmURL) {
+          await this.realm.ensureRealmMeta(realmURL.href);
+          return this.realm.info(realmURL.href)?.backgroundURL;
         }
-        return (await this.cardService.getRealmInfo(bottomMostCard))
-          ?.backgroundURL;
+        return undefined;
       }),
     );
     this.value = result;
