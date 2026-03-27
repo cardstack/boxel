@@ -10,6 +10,11 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
+import {
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+} from './card-reference-resolver';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -230,10 +235,6 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
-import {
-  resolveCardReference,
-  unresolveCardReference,
-} from './card-reference-resolver';
 export * from './paths';
 export * from './cached-fetch';
 export * from './definition-lookup';
@@ -782,7 +783,7 @@ export function unixTime(epochTimeMs: number) {
 }
 
 export function isLocalId(id: string) {
-  return !id.startsWith('http');
+  return !id.startsWith('http') && !isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {
