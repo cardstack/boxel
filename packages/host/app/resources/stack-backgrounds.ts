@@ -3,6 +3,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
+
 import type { Stack } from '../components/operator-mode/interact-submode';
 import type RealmService from '../services/realm';
 
@@ -53,7 +55,7 @@ export class StackBackgroundsResource extends Resource<Args> {
         // card's full module graph via Babel compilation on the main thread.
         let realmURL;
         try {
-          realmURL = this.realm.realmOfURL(new URL(bottomMostStackItem.id));
+          realmURL = this.realm.realmOfURL(cardIdToURL(bottomMostStackItem.id));
         } catch {
           // Non-URL ids (e.g. local-...) cannot be parsed; no background URL.
           return undefined;
