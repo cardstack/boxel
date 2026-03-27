@@ -1469,6 +1469,11 @@ module(basename(__filename), function () {
             { clientRequestId: 'burst-2' },
           );
 
+          let expectedUrls = [
+            `${testRealm}mango`,
+            `${testRealm}post-1`,
+            `${testRealm}vangogh`,
+          ];
           let row = (await waitUntil(
             async () => {
               let rows = (await testDbAdapter.execute(
@@ -1485,13 +1490,19 @@ module(basename(__filename), function () {
                   changes: { url: string; operation: 'update' | 'delete' }[];
                 };
               }[];
-              return rows.length === 1 ? rows[0] : undefined;
+              if (rows.length !== 1) {
+                return undefined;
+              }
+              let urls = rows[0].args.changes
+                .map((change) => change.url)
+                .sort();
+              return urls.length === expectedUrls.length ? rows[0] : undefined;
             },
             {
               timeout: 3000,
               interval: 50,
               timeoutMessage:
-                'expected exactly one pending incremental canonical job',
+                'expected exactly one pending incremental canonical job with all coalesced URLs',
             },
           )) as {
             id: number;
@@ -1504,7 +1515,7 @@ module(basename(__filename), function () {
           let urls = row.args.changes.map((change) => change.url).sort();
           assert.deepEqual(
             urls,
-            [`${testRealm}mango`, `${testRealm}post-1`, `${testRealm}vangogh`],
+            expectedUrls,
             'pending canonical incremental args include union of burst invalidations',
           );
           assert.strictEqual(
