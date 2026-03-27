@@ -812,7 +812,7 @@ module(basename(__filename), function () {
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
           assert.ok(
             response.body.errors[0].detail.includes(
-              'Your filter refers to a nonexistent type: import { Place }',
+              `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}missing-place/does-not-exist"`,
             ),
             'error message is correct',
           );
