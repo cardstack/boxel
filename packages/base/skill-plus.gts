@@ -14,9 +14,11 @@ import {
   contains,
   containsMany,
   linksTo,
+  FieldDef,
   StringField,
   type BaseDefComponent,
 } from './card-api';
+import NumberField from './number';
 import MarkdownField from './markdown';
 import { Skill, CommandField } from './skill';
 import { MarkdownDef } from './markdown-file-def';
@@ -39,6 +41,13 @@ export function slugifyHeading(text: string): string {
 }
 
 type TocItem = { level: number; text: string; id: string };
+
+export class TocItemField extends FieldDef {
+  static displayName = 'TOC Item';
+  @field level = contains(NumberField);
+  @field text = contains(StringField);
+  @field id = contains(StringField);
+}
 
 // Parse headers from markdown text with deterministic ID generation
 export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
@@ -116,6 +125,21 @@ export const addHeaderIds = modifier((element: HTMLElement) => {
     }
   });
 });
+
+// Pre-process markdown to inject anchor elements before each heading.
+// Uses parseMarkdownHeaders for ID generation so IDs are identical to the toc field.
+export function injectHeadingAnchors(markdown?: string): string {
+  if (!markdown) return '';
+
+  const headers = parseMarkdownHeaders(markdown);
+  let idx = 0;
+
+  return markdown.replace(/^(#{2,3})\s+(.+)$/gm, (match, hashes, text) => {
+    const item = headers[idx++];
+    if (!item) return match;
+    return `<a id="${item.id}" aria-hidden="true"></a>\n${hashes} ${text}`;
+  });
+}
 
 export class TocSection extends GlimmerComponent<{
   Args: {
@@ -615,6 +639,16 @@ export class SkillPlus extends Skill {
   });
 
   @field instructions = contains(MarkdownField);
+  @field instructionsWithIds = contains(MarkdownField, {
+    computeVia: function (this: SkillPlus) {
+      return injectHeadingAnchors(this.instructions);
+    },
+  });
+  @field toc = containsMany(TocItemField, {
+    computeVia: function (this: SkillPlus) {
+      return parseMarkdownHeaders(this.instructions);
+    },
+  });
   @field commands = containsMany(CommandField);
 
   static isolated: BaseDefComponent = class Isolated extends Component<
@@ -635,10 +669,7 @@ export class SkillPlus extends Skill {
       >
         <:navbar>
           {{#if @model.instructions}}
-            <TocSection
-              @sectionTitle='Content'
-              @navItems={{parseMarkdownHeaders @model.instructions}}
-            />
+            <TocSection @sectionTitle='Content' @navItems={{@model.toc}} />
           {{/if}}
           {{#if @model.commands.length}}
             <TocSection @sectionTitle='Appendix'>
@@ -650,12 +681,8 @@ export class SkillPlus extends Skill {
         </:navbar>
         <:default>
           {{#if @model.instructions}}
-            <article
-              class='instructions-article'
-              id='instructions'
-              {{addHeaderIds}}
-            >
-              <@fields.instructions />
+            <article class='instructions-article' id='instructions'>
+              <@fields.instructionsWithIds />
             </article>
           {{else}}
             <EmptyStateContainer>
