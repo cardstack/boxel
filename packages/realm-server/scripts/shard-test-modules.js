@@ -29,7 +29,9 @@ function collectTestModules(dir, prefix) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
-      modules = modules.concat(collectTestModules(path.join(dir, entry.name), relative));
+      modules = modules.concat(
+        collectTestModules(path.join(dir, entry.name), relative),
+      );
     } else if (entry.isFile() && entry.name.endsWith('-test.ts')) {
       modules.push(relative);
     }
