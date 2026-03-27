@@ -134,6 +134,7 @@
     "lint:test-shards": "ts-node --transpileOnly scripts/lint-test-shards.ts",
     "full-reset": "./scripts/full-reset.sh",
     "full-reindex": "./scripts/full-reindex.sh",
+    "clear-modules-cache": "NODE_NO_WARNINGS=1 PGDATABASE=${PGDATABASE:-boxel} PGPORT=${PGPORT:-5435} ts-node --transpileOnly scripts/clear-modules-cache.ts",
     "check-user-pg-connections": "./scripts/check-user-pg-connections.sh",
     "sync-stripe-products": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-stripe-products.ts",
     "sync-openrouter-models": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly scripts/sync-openrouter-models.ts",
