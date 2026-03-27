@@ -277,6 +277,24 @@ module('Integration | Store', function (hooks) {
       byUrl,
       'prefix id and resolved URL return the same instance',
     );
+    assert.strictEqual(
+      storeService.getReferenceCount('@test-prefix/Person/hassan'),
+      1,
+      'prefix id and resolved URL share a single reference count',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+      1,
+      'resolved URL sees the same reference count',
+    );
+
+    storeService.dropReference('@test-prefix/Person/hassan');
+
+    assert.strictEqual(
+      storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+      0,
+      'dropping a prefix reference clears the resolved URL reference count',
+    );
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {

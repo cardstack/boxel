@@ -231,6 +231,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!id) {
       return;
     }
+    id = asURL(id);
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
     currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
@@ -254,6 +255,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!id) {
       return;
     }
+    id = asURL(id);
     let readType: StoreReadType = opts?.type ?? 'card';
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
@@ -428,6 +430,7 @@ export default class StoreService extends Service implements StoreInterface {
     id: string,
     opts?: { type?: StoreReadType },
   ): T | CardErrorJSONAPI | undefined {
+    id = asURL(id);
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
@@ -445,6 +448,7 @@ export default class StoreService extends Service implements StoreInterface {
     id: string,
     opts?: { type?: StoreReadType },
   ): CardErrorJSONAPI | undefined {
+    id = asURL(id);
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return this.store.getFileMetaError(id);
@@ -864,6 +868,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
+    id = asURL(id);
     return this.autoSaveStates.get(id);
   }
 
@@ -877,6 +882,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getReferenceCount(id: string) {
+    id = asURL(id);
     return this.referenceCount.get(id) ?? 0;
   }
 
@@ -2072,10 +2078,17 @@ function needsServerStateMerge(
   );
 }
 
+export function asURL(urlOrDoc: string): string;
+export function asURL(urlOrDoc: LooseSingleCardDocument): string | undefined;
+export function asURL(
+  urlOrDoc: string | LooseSingleCardDocument,
+): string | undefined;
 export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
-  return typeof urlOrDoc === 'string'
-    ? urlOrDoc.replace(/\.json$/, '')
-    : urlOrDoc.data.id;
+  if (typeof urlOrDoc !== 'string') {
+    return urlOrDoc.data.id;
+  }
+  let id = urlOrDoc.replace(/\.json$/, '');
+  return isLocalId(id) ? id : resolveCardReference(id, undefined);
 }
 
 function isSystemCardDefaultId(
