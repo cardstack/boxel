@@ -904,7 +904,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('full reindex does not clear modules cache for bot-owned realms', async function (assert) {
+      test('full reindex clears all modules cache entries', async function (assert) {
         let endpoint = `test-realm-${uuidv4()}`;
         let owner = 'realm/bot';
         let ownerUserId = `@${owner}:localhost`;
@@ -965,8 +965,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
         assert.strictEqual(
           staleRowsForBotRealm.length,
-          1,
-          'full reindex preserves module rows for bot realms that are skipped',
+          0,
+          'full reindex clears stale module rows for bot realms too',
         );
       });
 

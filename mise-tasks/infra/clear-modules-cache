@@ -4,6 +4,6 @@
 #MISE dir="packages/realm-server"
 
 echo "Clearing modules cache..."
-PGPORT="${PGPORT}" PGDATABASE="${PGDATABASE}" \
+PGPORT="${PGPORT:-5435}" PGDATABASE="${PGDATABASE:-boxel}" \
   NODE_NO_WARNINGS=1 \
   ts-node --transpileOnly scripts/clear-modules-cache.ts
