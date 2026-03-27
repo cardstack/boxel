@@ -24,6 +24,8 @@ import {
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -170,6 +172,10 @@ module('Integration | Store', function (hooks) {
     await realmService.login(testRealmURL);
   });
 
+  hooks.afterEach(function () {
+    unregisterCardReferencePrefix('@test-prefix/');
+  });
+
   test('can peek a card instance', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
@@ -254,6 +260,23 @@ module('Integration | Store', function (hooks) {
   test('peek for an uncached returns undefined', async function (assert) {
     let instance = storeService.peek(`${testRealmURL}Person/does-not-exist`);
     assert.strictEqual(instance, undefined, 'instance is undefined');
+  });
+
+  test('can add and peek a card by registered prefix id', async function (assert) {
+    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+
+    storeService.addReference('@test-prefix/Person/hassan');
+    await storeService.flush();
+
+    let byPrefix = storeService.peek('@test-prefix/Person/hassan');
+    let byUrl = storeService.peek(`${testRealmURL}Person/hassan`);
+
+    assert.true(isCardInstance(byPrefix), 'prefix id resolves to a card');
+    assert.strictEqual(
+      byPrefix,
+      byUrl,
+      'prefix id and resolved URL return the same instance',
+    );
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {
