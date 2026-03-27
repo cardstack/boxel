@@ -262,6 +262,12 @@ function copyRealmFixture(
   rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
 }
 
+export interface AdditionalRealm {
+  realmDir: string;
+  realmURL: URL;
+  username?: string;
+}
+
 export async function startIsolatedRealmStack({
   realmDir,
   realmURL,
@@ -270,6 +276,7 @@ export async function startIsolatedRealmStack({
   context,
   migrateDB,
   fullIndexOnStartup,
+  additionalRealms,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -278,6 +285,7 @@ export async function startIsolatedRealmStack({
   context: FactorySupportContext;
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
+  additionalRealms?: AdditionalRealm[];
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
@@ -308,6 +316,37 @@ export async function startIsolatedRealmStack({
   realmLog.debug(
     `startIsolatedRealmStack: copied fixture ${realmDir} -> ${testRealmDir}`,
   );
+
+  // Copy and resolve additional realm fixtures.
+  let resolvedAdditionalRealms: {
+    realmDir: string;
+    localDir: string;
+    realmURL: URL;
+    actualRealmURL: URL;
+    username: string;
+  }[] = [];
+  for (let i = 0; i < (additionalRealms ?? []).length; i++) {
+    let additional = additionalRealms![i];
+    let additionalLocalDir = join(rootDir, `additional-${i}`);
+    let additionalPath = realmRelativePath(additional.realmURL, realmServerURL);
+    let additionalActualURL = realmURLWithinServer(
+      actualRealmServerURL,
+      additionalPath,
+    );
+    let username = additional.username ?? `additional_realm_${i}`;
+    ensureDirSync(additionalLocalDir);
+    copyRealmFixture(additional.realmDir, additionalLocalDir, sourceRealmURL);
+    realmLog.debug(
+      `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}`,
+    );
+    resolvedAdditionalRealms.push({
+      realmDir: additional.realmDir,
+      localDir: additionalLocalDir,
+      realmURL: additional.realmURL,
+      actualRealmURL: additionalActualURL,
+      username,
+    });
+  }
   let compatProxy = await startCompatRealmProxy({
     listenPort: Number(realmServerURL.port),
   });
@@ -386,6 +425,12 @@ export async function startIsolatedRealmStack({
       `--toUrl=${actualSkillsRealmURL.href}`,
     );
   }
+  for (let additional of resolvedAdditionalRealms) {
+    workerArgs.push(
+      `--fromUrl=${additional.realmURL.href}`,
+      `--toUrl=${additional.actualRealmURL.href}`,
+    );
+  }
   if (migrateDB) {
     workerArgs.splice(5, 0, '--migrateDB');
   }
@@ -435,6 +480,14 @@ export async function startIsolatedRealmStack({
     `--fromUrl=${realmURL.href}`,
     `--toUrl=${actualRealmURL.href}`,
   ];
+  for (let additional of resolvedAdditionalRealms) {
+    serverArgs.push(
+      `--username=${additional.username}`,
+      `--path=${additional.localDir}`,
+      `--fromUrl=${additional.realmURL.href}`,
+      `--toUrl=${additional.actualRealmURL.href}`,
+    );
+  }
   if (INCLUDE_SKILLS) {
     serverArgs.splice(
       16,

@@ -13,8 +13,8 @@ import {
 
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
-    project: { id: 'Project/test-project' },
-    ticket: { id: 'Ticket/test-ticket' },
+    project: { id: 'Projects/test-project' },
+    ticket: { id: 'Tickets/test-ticket' },
     knowledge: [],
     skills: [],
     tools: [],
@@ -185,7 +185,7 @@ module(
         assert.strictEqual(messages[0].role, 'system');
         assert.strictEqual(messages[1].role, 'user');
         assert.ok(
-          messages[1].content.includes('Ticket/test-ticket'),
+          messages[1].content.includes('Tickets/test-ticket'),
           'user message includes ticket ID',
         );
       } finally {

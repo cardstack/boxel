@@ -251,12 +251,12 @@ module('factory-entrypoint integration', function () {
       assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
       assert.strictEqual(
         summary.bootstrap.projectId,
-        'Project/sticky-note-mvp',
+        'Projects/sticky-note-mvp',
       );
       assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
       assert.strictEqual(
         summary.bootstrap.activeTicket.id,
-        'Ticket/sticky-note-define-core',
+        'Tickets/sticky-note-define-core',
       );
       assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
       assert.deepEqual(summary.result, {

@@ -3,6 +3,20 @@ import { formatErrorResponse, formatUnknownError } from './error-format';
 
 const cardSourceMimeType = 'application/vnd.card+source';
 
+interface CardDocument {
+  data: {
+    type: 'card';
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, { links: { self: string | null } }>;
+    meta: {
+      adoptsFrom: {
+        module: string;
+        name: string;
+      };
+    };
+  };
+}
+
 export interface FactoryBootstrapResult {
   project: FactoryBootstrapArtifact;
   knowledgeArticles: FactoryBootstrapArtifact[];
@@ -20,19 +34,7 @@ export interface FactoryBootstrapOptions {
   darkfactoryModuleUrl?: string;
 }
 
-interface CardDocument {
-  data: {
-    type: 'card';
-    attributes: Record<string, unknown>;
-    relationships?: Record<string, { links: { self: string | null } }>;
-    meta: {
-      adoptsFrom: {
-        module: string;
-        name: string;
-      };
-    };
-  };
-}
+
 
 export async function bootstrapProjectArtifacts(
   brief: FactoryBrief,
@@ -52,15 +54,15 @@ export async function bootstrapProjectArtifacts(
   let now = new Date().toISOString();
   let sections = extractSections(brief.content);
 
-  let projectPath = `Project/${slug}-mvp`;
+  let projectPath = `Projects/${slug}-mvp`;
   let knowledgePaths = [
-    `KnowledgeArticle/${slug}-brief-context`,
-    `KnowledgeArticle/${slug}-agent-onboarding`,
+    `Knowledge Articles/${slug}-brief-context`,
+    `Knowledge Articles/${slug}-agent-onboarding`,
   ];
   let ticketPaths = [
-    `Ticket/${slug}-define-core`,
-    `Ticket/${slug}-design-views`,
-    `Ticket/${slug}-add-integration`,
+    `Tickets/${slug}-define-core`,
+    `Tickets/${slug}-design-views`,
+    `Tickets/${slug}-add-integration`,
   ];
 
   let projectDoc = buildProjectDocument(brief, {
@@ -220,12 +222,12 @@ function buildProjectDocument(
       relationships: {
         'knowledgeBase.0': {
           links: {
-            self: `../KnowledgeArticle/${context.slug}-brief-context`,
+            self: `../Knowledge Articles/${context.slug}-brief-context`,
           },
         },
         'knowledgeBase.1': {
           links: {
-            self: `../KnowledgeArticle/${context.slug}-agent-onboarding`,
+            self: `../Knowledge Articles/${context.slug}-agent-onboarding`,
           },
         },
       },
@@ -316,7 +318,7 @@ function buildTicketDocuments(
       },
       relationships: {
         project: {
-          links: { self: `../Project/${context.slug}-mvp` },
+          links: { self: `../Projects/${context.slug}-mvp` },
         },
       },
       meta: {

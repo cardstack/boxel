@@ -391,6 +391,7 @@ export class Project extends CardDef {
   @field teamAgents = linksToMany(() => AgentProfile);
   @field successCriteria = contains(MarkdownField);
   @field risks = contains(MarkdownField);
+  @field testArtifactsRealmUrl = contains(StringField);
   @field createdAt = contains(DateTimeField);
 
   @field title = contains(StringField, {

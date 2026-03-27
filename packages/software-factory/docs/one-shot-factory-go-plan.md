@@ -204,17 +204,25 @@ Test execution policy:
 - on failure, the full test output is fed back to the agent as context for the next implementation attempt
 - on success, the test artifact serves as durable proof that the ticket was verified
 
-Test realm artifact structure:
+Target realm artifact structure (test specs and results co-located with implementation):
 
-- `TestSpec/<ticket-slug>.spec.ts` — the generated test source
-- `TestResult/<ticket-slug>.json` — structured test execution output (status, duration, failures, stack traces)
-- `TestResult/<ticket-slug>-screenshot.png` — optional visual evidence when Playwright captures are available
+- `Tests/<ticket-slug>.spec.ts` — the generated test source (in target realm)
+- `Test Runs/<ticket-slug>-<seq>.json` — TestRun card instance with status, results, timing (in target realm)
+
+Test artifacts realm (auto-created from project name, e.g., `Sticky Notes Test Artifacts`):
+
+- `Run 1/` — card instances created during test run 1
+- `Run 2/` — card instances created during test run 2
+
+All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Tests/`.
 
 Implementation note:
 
 - the Playwright harness in `packages/software-factory` is reused to execute AI-generated tests
 - this gives the factory a real browser-level verification path for generated cards
 - the test harness output format should match what the agent needs to diagnose failures and iterate
+- the test artifacts realm is auto-created from the project name and its URL is persisted on the Project card (`testArtifactsRealmUrl` field)
+- before test execution, all indexing jobs (running + pending) are cancelled on the test artifacts realm via `_cancel-indexing-job` with `cancelPending: true`
 
 ### Phase 6: Stop Conditions
 
@@ -261,6 +269,31 @@ The current behavior is described in prose, but not encoded as a decision engine
 - when to create new tickets
 - when to capture knowledge
 - when to ask the user a question
+
+### 7. Sequential Async Tool Calls and Long-Running Operations
+
+The execution loop involves operations with causal dependencies that must execute in sequence. For example, the verify step requires:
+
+1. Write test spec to the test realm (via `realm-write`)
+2. Execute tests against the target realm (via `run-realm-tests`)
+3. Parse and save test results to the test realm
+4. Feed results back to the agent for the next iteration
+
+The current `AgentAction[]` model is a flat array — it does not express causal ordering between actions. The orchestrator must either:
+
+- **Implicit sequencing**: The orchestrator always runs writes before test execution, treating the action array as an unordered set that it sequences according to hardcoded rules (write → execute → parse → iterate).
+- **Explicit sequencing**: Extend the action model to support ordered groups or dependency edges, so the agent can express "write this, then run that."
+- **Orchestrator-owned verification step**: The orchestrator owns the test execution step entirely — the agent only produces `create_test`/`update_test` actions, and the orchestrator triggers test execution as a separate phase after all file writes complete. This is the approach implied by the current Phase 4/5 design.
+
+The third approach (orchestrator-owned verification) is the simplest and most aligned with the current plan. The agent never invokes `run-realm-tests` directly — the orchestrator does, after executing all agent-requested writes.
+
+**Long-running test execution**: Test execution can take ~10 minutes per run. The orchestrator process may be interrupted by SIGTERM or SIGKILL during this time. The system must be able to resume from where it left off:
+
+- **State persistence via realm cards**: All orchestration state that must survive process restarts should be persisted as card instances in the realm — specifically, darkfactory cards like `Ticket` (status, agentNotes) and `AgentExecutionLog` (iteration history, last action set, pending test run). This means the realm is the source of truth, not in-memory state or local files.
+- **Idempotent phases**: Each phase of the loop (write specs → run tests → save results → iterate) should be idempotent or at minimum safe to re-execute. If the process dies during test execution, the next run should detect that tests were not completed (no `TestResult` artifact for the current iteration) and re-run them.
+- **Checkpoint pattern**: Before starting a long-running operation (test execution), the orchestrator writes a "pending" state to the execution log card. On completion, it updates to "completed" with results. On resume, the orchestrator checks for pending states and re-executes the interrupted operation.
+
+**Reference**: The `ai-bot` workspace in the Boxel monorepo implements async tool call sequencing for user-agent interaction. While that system is oriented around conversational turns rather than one-shot execution, its patterns for managing tool call ordering, result threading, and state persistence may inform the `factory-loop.ts` implementation. The key difference is that `ai-bot` operates in a request-response loop with the user, while the factory loop is autonomous — but the underlying sequencing and state management challenges are similar.
 
 ## Minimal Implementation Plan For `experiment_1`
 
@@ -410,15 +443,44 @@ For the first version, this does not need to be a general autonomous system. It 
 
 ### F. `scripts/lib/factory-test-realm.ts`
 
-New helper module for managing AI-generated tests in the test realm.
+Helper module for managing test execution and results in the test realm.
 
-Responsibilities:
+#### Key Design Decisions
 
-- create or update test spec files in the test realm (`TestSpec/<ticket-slug>.spec.ts`)
-- invoke the Playwright test harness against the target realm using tests from the test realm
-- capture structured test results (pass/fail, errors, durations, screenshots)
-- save test result artifacts in the test realm (`TestResult/<ticket-slug>.json`)
-- provide a structured summary of test results that can be fed back to the agent as context
+- **Test spec writing uses normal `realm-write`** — no special mechanism. The agent's `create_test`/`update_test` actions route through the same ToolExecutor.
+- **Test results are `TestRun` card instances**, not plain JSON files. A new card definition (`realm/test-results.gts`) defines `TestRun` (CardDef) and `TestResultEntry` (FieldDef).
+- **TestRun is created at start** with `status: running` and pre-populated `pending` result entries. The card ID is the primary handle returned to callers.
+- **Incremental updates**: Each test result is written to the card as it completes (pending → passed/failed), enabling precise resume after interruption.
+- **Resume behavior**: On start, queries for the most recent TestRun (by `sequenceNumber` desc). If it has `status: running`, resumes it by only running pending tests. `forceNew: true` option skips resume.
+
+#### Responsibilities
+
+- Parse raw Playwright output into `TestRunAttributes` (the serialized card shape)
+- Create `TestRun` cards with `status: running` and pre-populated `pending` results
+- Update `TestRun` cards with completion results (uses `LooseSingleCardDocument` from `@cardstack/runtime-common`)
+- Determine resume vs new run via realm-search query (type filter on TestRun, sorted by sequenceNumber desc)
+- Pull remote realm files to local temp directory (via `_mtimes` endpoint)
+- Orchestrate the full test execution flow: create card → pull realms → run harness → stream results → complete card
+- Format results for agent iteration prompts
+
+#### Card Definitions (`realm/test-results.gts`)
+
+- `TestRunStatusField` — enum: running, passed, failed, error
+- `TestResultStatusField` — enum: pending, passed, failed, error
+- `TestResultEntry` (FieldDef) — testName, status, message, stackTrace, durationMs
+- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), specRef (CodeRefField), status, passedCount, failedCount, durationMs, results (containsMany), errorMessage, title (computed)
+
+#### Return Type
+
+```
+TestRunHandle { testRunId: string; status: 'running'|'passed'|'failed'|'error'; errorMessage?: string }
+```
+
+The orchestrator only needs the ID and pass/fail signal. On `error`, the `errorMessage` tells you why. On `failed`, read the TestRun card for individual failure details.
+
+#### Auth
+
+The caller provides an authenticated `fetch` via `createBoxelRealmFetch` from `src/realm-auth.ts` — the same pattern used in `factory-entrypoint.ts`. The test realm module itself does not handle Matrix credentials.
 
 The test realm acts as durable verification evidence. Each ticket gets at least one test spec and one test result artifact. Failed test output is the primary feedback signal driving the implement-verify loop.
 
@@ -427,6 +489,19 @@ The test realm acts as durable verification evidence. Each ticket gets at least 
 This is the main architectural decision.
 
 There are two options:
+
+### G. `scripts/lib/realm-operations.ts`
+
+Shared realm HTTP operations extracted from `boxel.ts`, `factory-test-realm.ts`, and `factory-tool-executor.ts`. Centralizes:
+
+- `searchRealm()` — QUERY to `_search` endpoint
+- `readCardSource()` / `writeCardSource()` — card read/write with card source MIME type
+- `pullRealmFiles()` — HTTP-based realm download via `_mtimes` (TODO: replace with `boxel pull --jwt` per CS-10529)
+- `ensureTrailingSlash()`, `buildAuthHeaders()`, `buildCardSourceHeaders()`, `cardSourceMimeType`
+
+Design rule: **prefer using existing tools (boxel-cli, realm-api tools in ToolExecutor) over inventing new realm operation functions.** When a tool doesn't yet support the needed auth path (e.g., `boxel pull` lacks `--jwt`), use the shared lib as a stopgap and file a follow-up ticket.
+
+## Implementation Backend Choice
 
 ### Option 1: Agent-Assisted Orchestration
 

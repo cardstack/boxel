@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "greeting": "Hello from the test fixture!"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../hello",
+        "name": "HelloCard"
+      }
+    }
+  }
+}

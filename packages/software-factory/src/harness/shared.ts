@@ -175,7 +175,7 @@ export const CONFIGURED_PRERENDER_URL = process.env
   .SOFTWARE_FACTORY_PRERENDER_URL
   ? new URL(process.env.SOFTWARE_FACTORY_PRERENDER_URL)
   : undefined;
-// The seeded test Postgres used by the harness runs with max_connections=20, so
+// The seeded test Postgres used by the harness runs with max_connections=40, so
 // isolated workers need a smaller per-process pool cap to keep workers=2 stable.
 export const DEFAULT_PG_POOL_MAX = Number(
   process.env.SOFTWARE_FACTORY_PG_POOL_MAX ?? 2,
@@ -431,6 +431,25 @@ export function hashRealmFixture(realmDir: string): string {
   visit(realmDir);
   entries.sort();
   return hashString(entries.join('|'));
+}
+
+export interface CombinedRealmFixture {
+  realmDir: string;
+  realmPath: string;
+}
+
+/**
+ * Compute a combined hash for multiple realm fixtures, suitable for a
+ * combined template database cache key.
+ */
+export function hashCombinedRealmFixtures(
+  fixtures: CombinedRealmFixture[],
+): string {
+  let entries = fixtures
+    .slice()
+    .sort((a, b) => a.realmPath.localeCompare(b.realmPath))
+    .map((f) => `${f.realmPath}:${hashRealmFixture(f.realmDir)}`);
+  return hashString(entries.join('||'));
 }
 
 export function templateDatabaseNameForCacheKey(cacheKey: string): string {

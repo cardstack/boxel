@@ -16,7 +16,7 @@ const darkfactoryTicketFixture = JSON.parse(
   readFileSync(
     resolve(
       __dirname,
-      '../test-fixtures/darkfactory-adopter/Ticket/ticket-001.json',
+      '../test-fixtures/darkfactory-adopter/Tickets/ticket-001.json',
     ),
     'utf8',
   ),
@@ -61,7 +61,7 @@ module('factory-brief', function () {
 
   test('normalizeFactoryBrief falls back to summary and description text when content is absent', function (assert) {
     let sourceUrl =
-      'https://briefs.example.test/darkfactory-adopter/Ticket/ticket-001';
+      'https://briefs.example.test/darkfactory-adopter/Tickets/ticket-001';
     let brief = normalizeFactoryBrief(darkfactoryTicketFixture, sourceUrl);
 
     assert.strictEqual(brief.title, 'Ticket 001');

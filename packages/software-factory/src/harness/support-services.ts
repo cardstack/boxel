@@ -100,15 +100,16 @@ function assertUsableHostDist(hostPackageDir: string): void {
 
   try {
     let config = JSON.parse(decodeURIComponent(match[1]));
+    // Only reject Ember test builds where autoboot is explicitly disabled and
+    // the rootElement is #ember-testing. Development and production builds are
+    // both usable by the harness. This keeps worktree setups working without
+    // requiring a full production build pipeline.
     if (
-      config?.environment === 'test' ||
-      config?.APP?.autoboot === false ||
+      config?.APP?.autoboot === false &&
       config?.APP?.rootElement === '#ember-testing'
     ) {
       throw new Error(
-        `Host dist at ${hostPackageDir}/dist is a test build and cannot power the software-factory harness (environment=${String(
-          config?.environment,
-        )}, autoboot=${String(config?.APP?.autoboot)}, rootElement=${String(
+        `Host dist at ${hostPackageDir}/dist is an Ember test build and cannot power the software-factory harness (autoboot=${String(config?.APP?.autoboot)}, rootElement=${String(
           config?.APP?.rootElement,
         )}). The harness needs a normal host app build so /_standby can boot. Run \`cd ${hostPackageDir} && mise exec -- pnpm build\` and retry.`,
       );

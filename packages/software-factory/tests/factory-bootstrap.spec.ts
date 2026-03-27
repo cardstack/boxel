@@ -73,14 +73,14 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
     bootstrapOptions,
   );
 
-  expect(result1.project.id).toBe('Project/sticky-note-mvp');
+  expect(result1.project.id).toBe('Projects/sticky-note-mvp');
   expect(result1.project.status).toBe('created');
   expect(result1.knowledgeArticles).toHaveLength(2);
   expect(result1.tickets).toHaveLength(3);
-  expect(result1.activeTicket.id).toBe('Ticket/sticky-note-define-core');
+  expect(result1.activeTicket.id).toBe('Tickets/sticky-note-define-core');
 
   let projectResponse = await authenticatedFetch(
-    realm.cardURL('Project/sticky-note-mvp'),
+    realm.cardURL('Projects/sticky-note-mvp'),
     { headers: { Accept: cardSourceMimeType } },
   );
   expect(projectResponse.ok).toBe(true);
@@ -96,7 +96,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(projectJson.data.meta.adoptsFrom.name).toBe('Project');
 
   let ticketResponse = await authenticatedFetch(
-    realm.cardURL('Ticket/sticky-note-define-core'),
+    realm.cardURL('Tickets/sticky-note-define-core'),
     { headers: { Accept: cardSourceMimeType } },
   );
   expect(ticketResponse.ok).toBe(true);
@@ -112,7 +112,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(ticketJson.data.meta.adoptsFrom.name).toBe('Ticket');
 
   let ticket2Response = await authenticatedFetch(
-    realm.cardURL('Ticket/sticky-note-design-views'),
+    realm.cardURL('Tickets/sticky-note-design-views'),
     { headers: { Accept: cardSourceMimeType } },
   );
   expect(ticket2Response.ok).toBe(true);
@@ -122,7 +122,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(ticket2Json.data.attributes.status).toBe('backlog');
 
   let contextResponse = await authenticatedFetch(
-    realm.cardURL('KnowledgeArticle/sticky-note-brief-context'),
+    realm.cardURL('Knowledge Articles/sticky-note-brief-context'),
     { headers: { Accept: cardSourceMimeType } },
   );
   expect(contextResponse.ok).toBe(true);
@@ -159,7 +159,7 @@ test('bootstrapped project card renders correctly in the browser', async ({
     bootstrapOptions,
   );
 
-  await authedPage.goto(realm.cardURL('Project/sticky-note-mvp'), {
+  await authedPage.goto(realm.cardURL('Projects/sticky-note-mvp'), {
     waitUntil: 'commit',
   });
 

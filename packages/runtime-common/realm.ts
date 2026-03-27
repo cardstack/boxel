@@ -169,7 +169,10 @@ import {
   type PublishabilityWarningType,
   type ResourceIndexEntry,
 } from './publishability';
-import { cancelRunningJobsInConcurrencyGroup } from './job-utils';
+import {
+  cancelAllJobsInConcurrencyGroup,
+  cancelRunningJobsInConcurrencyGroup,
+} from './job-utils';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -825,13 +828,31 @@ export class Realm {
   }
 
   private async cancelIndexingJob(
-    _request: Request,
+    request: Request,
     requestContext: RequestContext,
   ) {
-    await cancelRunningJobsInConcurrencyGroup(
-      this.#dbAdapter,
-      `indexing:${this.url}`,
-    );
+    let cancelPending = false;
+    try {
+      let body = await request.text();
+      if (body) {
+        let parsed = JSON.parse(body) as { cancelPending?: boolean };
+        cancelPending = parsed.cancelPending === true;
+      }
+    } catch {
+      // No body or invalid JSON — use default (running only).
+    }
+
+    if (cancelPending) {
+      await cancelAllJobsInConcurrencyGroup(
+        this.#dbAdapter,
+        `indexing:${this.url}`,
+      );
+    } else {
+      await cancelRunningJobsInConcurrencyGroup(
+        this.#dbAdapter,
+        `indexing:${this.url}`,
+      );
+    }
 
     return createResponse({
       body: null,

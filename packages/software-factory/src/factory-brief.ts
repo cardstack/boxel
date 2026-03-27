@@ -5,7 +5,7 @@ const wikiLinkPattern = /\[\[([^[\]]+)\]\]/g;
 const markdownHeadingReplacePattern = /^\s*#{1,6}\s+/gm;
 const markdownListReplacePattern = /^\s*[-*+]\s+/gm;
 const whitespacePattern = /\s+/g;
-const cardSourceMimeType = 'application/vnd.card+source';
+import { cardSourceMimeType } from '../scripts/lib/realm-operations';
 
 export interface FactoryBrief {
   title: string;

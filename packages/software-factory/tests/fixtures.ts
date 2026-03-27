@@ -246,12 +246,17 @@ async function startRealmProcess(
           }
         | undefined)
     : undefined;
+  let resolvedRealmDir = resolve(realmDir);
   let preparedTemplate =
     supportMetadata?.preparedTemplates?.find(
-      (entry) => resolve(entry.realmDir) === resolve(realmDir),
+      (entry) =>
+        resolve(entry.realmDir) === resolvedRealmDir ||
+        entry.coveredRealmDirs?.some(
+          (dir) => resolve(dir) === resolvedRealmDir,
+        ),
     ) ??
     (supportMetadata?.realmDir != null &&
-    resolve(supportMetadata.realmDir) === resolve(realmDir) &&
+    resolve(supportMetadata.realmDir) === resolvedRealmDir &&
     supportMetadata.templateDatabaseName &&
     supportMetadata.templateRealmServerURL
       ? {

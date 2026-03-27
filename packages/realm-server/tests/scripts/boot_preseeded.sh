@@ -10,7 +10,7 @@ exec docker-entrypoint.sh postgres \
   -c full_page_writes=off \
   -c synchronous_commit=off \
   -c shared_buffers=16MB \
-  -c max_connections=20 \
+  -c max_connections=40 \
   -c wal_level=minimal \
   -c max_wal_senders=0 \
   -c max_replication_slots=0 \
