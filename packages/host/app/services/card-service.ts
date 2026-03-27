@@ -11,6 +11,7 @@ import {
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
@@ -148,6 +149,9 @@ export default class CardService extends Service {
     if (requestInit.method === 'QUERY') {
       requestInit.method = 'POST';
       requestHeaders.set('X-HTTP-Method-Override', 'QUERY');
+    }
+    if (typeof url === 'string' && !url.startsWith('http')) {
+      url = cardIdToURL(url).href;
     }
     let urlString = url instanceof URL ? url.href : url;
     let method = requestInit.method?.toUpperCase?.();

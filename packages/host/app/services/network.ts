@@ -7,6 +7,8 @@ import {
   baseRealm,
   registerCardReferencePrefix,
   fetcher,
+  isRegisteredPrefix,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -31,7 +33,13 @@ export default class NetworkService extends Service {
   }
 
   get fetch() {
-    return this.virtualNetwork.fetch;
+    let vnFetch = this.virtualNetwork.fetch;
+    return (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      if (typeof input === 'string' && isRegisteredPrefix(input)) {
+        input = resolveCardReference(input, undefined);
+      }
+      return vnFetch(input, init);
+    };
   }
 
   get resolveImport() {

@@ -10,6 +10,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
+import { isRegisteredPrefix } from './card-reference-resolver';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -782,7 +783,7 @@ export function unixTime(epochTimeMs: number) {
 }
 
 export function isLocalId(id: string) {
-  return !id.startsWith('http') && !id.startsWith('@');
+  return !id.startsWith('http') && !isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {

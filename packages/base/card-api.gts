@@ -2790,7 +2790,8 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = resolveCardReference(link, instance.id ?? instance[relativeTo]);
+  let reference = resolveCardReference(link, instance[relativeTo] ?? instance.id);
+  console.log('lazilyLoadLink', { link, instanceId: instance.id, relativeTo: instance[relativeTo]?.href, reference });
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   let store = getStore(instance);
@@ -3173,7 +3174,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = new URL(doc.data.id);
+    instance[relativeTo] = cardIdToURL(doc.data.id);
   }
 
   if (isCardInstance(instance)) {

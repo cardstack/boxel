@@ -1433,7 +1433,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         id = remoteId;
       }
-      let url = id; // after this point we know we are dealing with a remote id, e.g. url
+      let url = cardIdToURL(id).href; // resolve prefix-form IDs (e.g. @cardstack/catalog/...) to HTTP URLs
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
