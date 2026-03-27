@@ -616,7 +616,11 @@ module(`Integration | search resource`, function (hooks) {
       named: args,
     }));
     await search.loaded;
-    assert.strictEqual(search.instances.length, 2, 'initial search returns 2 books');
+    assert.strictEqual(
+      search.instances.length,
+      2,
+      'initial search returns 2 books',
+    );
 
     // Simulate modal close: set query to undefined
     args = { ...args, query: undefined as any };
@@ -660,7 +664,11 @@ module(`Integration | search resource`, function (hooks) {
       named: args,
     }));
     await search.loaded;
-    assert.strictEqual(search.instances.length, 2, 'initial live search returns 2 books');
+    assert.strictEqual(
+      search.instances.length,
+      2,
+      'initial live search returns 2 books',
+    );
 
     // Simulate modal close: set query to undefined
     args = { ...args, query: undefined as any };
