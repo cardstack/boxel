@@ -112,10 +112,18 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     getOwner(this)!,
     () => {
       let cardUrls = this.autoAttachedCardIdsArray;
+      // Only search realms that contain the requested cards to avoid
+      // unnecessary cross-realm federation queries.
+      let realms =
+        cardUrls.length > 0
+          ? this.realmServer.availableRealmURLs.filter((realmUrl) =>
+              cardUrls.some((cardUrl) => cardUrl.startsWith(realmUrl)),
+            )
+          : undefined;
       return {
         query: cardUrls.length > 0 ? {} : undefined,
         format: cardUrls.length > 0 ? ('atom' as Format) : undefined,
-        realms: this.realmServer.availableRealmURLs,
+        realms,
         cardUrls,
         isLive: false,
       };

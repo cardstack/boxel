@@ -38,6 +38,7 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { TrackedSet } from 'tracked-built-ins';
 
 const MAX_ITEMS_TO_DISPLAY = 4;
+const domParser = new DOMParser();
 
 interface Signature {
   Element: HTMLDivElement;
@@ -101,8 +102,7 @@ export default class AttachedItems extends Component<Signature> {
     if (!card.data.html) {
       return card.url.split('/').pop() ?? 'Card';
     }
-    let parser = new DOMParser();
-    let doc = parser.parseFromString(card.data.html, 'text/html');
+    let doc = domParser.parseFromString(card.data.html, 'text/html');
     return doc.body.textContent?.trim() || card.url.split('/').pop() || 'Card';
   };
 
