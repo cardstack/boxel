@@ -41,6 +41,7 @@ interface Signature {
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
     registerScroller: (args: {
@@ -185,6 +186,7 @@ export default class RoomMessage extends Component<Signature> {
         @eventId={{this.message.eventId}}
         @index={{@index}}
         @isLastAssistantMessage={{this.isLastAssistantMessage}}
+        @isMostRecentMessage={{@isMostRecentMessage}}
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @unregisterScroller={{@unregisterScroller}}
@@ -200,6 +202,7 @@ export default class RoomMessage extends Component<Signature> {
         @files={{this.message.attachedFiles}}
         @attachedCardsAsFiles={{this.message.attachedCardsAsFiles}}
         @errorMessage={{this.errorMessage}}
+        @reloadBillingData={{this.message.reloadBillingData}}
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
