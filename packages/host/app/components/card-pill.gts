@@ -32,6 +32,7 @@ interface CardPillSignature {
     borderType?: 'dashed' | 'solid';
     displayTitle?: string;
     showErrorIcon?: boolean;
+    suppressCardLoad?: true;
     onClick?: () => void;
     onRemove?: () => void;
     isEnabled?: boolean;
@@ -45,7 +46,10 @@ export default class CardPill extends Component<CardPillSignature> {
   @service declare private realm: RealmService;
 
   @cached
-  private get cardResource(): ReturnType<getCard> {
+  private get cardResource(): ReturnType<getCard> | undefined {
+    if (this.args.suppressCardLoad) {
+      return undefined;
+    }
     return this.getCard(this, () => this.args.cardId);
   }
 
