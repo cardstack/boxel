@@ -37,12 +37,7 @@ jobs:
           fi
       - name: Restore boxel-icons build cache
         id: icons-cache
-        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
-        with:
-          path: |
-            packages/boxel-icons/dist
-            packages/boxel-icons/declarations
-          key: boxel-icons-${{ hashFiles('packages/boxel-icons/src/**', 'packages/boxel-icons/package.json', 'packages/boxel-icons/rollup.config.mjs', 'packages/boxel-icons/tsconfig.json', 'packages/boxel-icons/babel.config.json') }}
+        uses: ./.github/actions/restore-icons-cache
       - name: Build boxel-icons and boxel-ui
         run: mise run build:ui
         env:
