@@ -194,10 +194,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         llmModel: 'openai/gpt-4.1-nano',
       });
       const maybeType = parseResponseToSingleWord(result.output, true);
-      if (
-        maybeType === 'skill' ||
-        maybeType === 'theme'
-      ) {
+      if (maybeType === 'skill' || maybeType === 'theme') {
         return maybeType;
       }
       return 'card';
