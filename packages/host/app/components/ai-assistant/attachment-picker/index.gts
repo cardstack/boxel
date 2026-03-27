@@ -127,7 +127,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         query: cardUrls.length > 0 ? {} : undefined,
         format: cardUrls.length > 0 ? ('atom' as Format) : undefined,
         realms,
-        cardUrls,
+        cardUrls: resolvedUrls,
         isLive: false,
       };
     },
