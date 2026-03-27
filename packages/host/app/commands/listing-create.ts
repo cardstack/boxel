@@ -111,8 +111,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingCreateInput,
   ): Promise<BaseCommandModule.ListingCreateResult> {
-    const cardAPI = await this.loadCardAPI();
-    let { openCardId, codeRef, targetRealm } = input;
+    let { openCardIds, codeRef, targetRealm } = input;
 
     if (!codeRef) {
       throw new Error('codeRef is required');
@@ -126,14 +125,17 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     let listingType = await this.guessListingType(codeRef);
 
+    let relationships: Record<string, { links: { self: string } }> = {};
+    if (openCardIds && openCardIds.length > 0) {
+      openCardIds.forEach((id, index) => {
+        relationships[`examples.${index}`] = { links: { self: id } };
+      });
+    }
+
     const listingDoc: LooseSingleCardDocument = {
       data: {
         type: 'card',
-        relationships: openCardId
-          ? {
-              'examples.0': { links: { self: openCardId } },
-            }
-          : {},
+        relationships,
         meta: {
           adoptsFrom: {
             module: `${this.catalogRealm}catalog-app/listing/listing`,
@@ -143,34 +145,31 @@ export default class ListingCreateCommand extends HostBaseCommand<
       },
     };
     const listing = await this.store.add(listingDoc, { realm: targetRealm });
-    // Always use the transient symbol-based localId; ignore any persisted id at this stage
-    const listingId = (listing as any)[(cardAPI as any).localId];
-    if (!listingId) {
-      throw new Error('Failed to create listing card (no localId)');
-    }
-    await this.operatorModeStateService.openCardInInteractMode(listingId);
 
     const commandModule = await this.loadCommandModule();
-    const listingCard = listing as CardAPI.CardDef; // ensure correct type
-    const specsPromise = this.linkSpecs(
-      listingCard,
-      targetRealm,
-      openCardId ?? codeRef?.module,
-    );
+    const listingCard = listing as CardAPI.CardDef;
+    const firstOpenCardId = openCardIds?.[0];
 
-    const promises = [
+    const backgroundWork = Promise.all([
       this.autoPatchName(listingCard, codeRef),
       this.autoPatchSummary(listingCard, codeRef),
       this.autoLinkTag(listingCard),
       this.autoLinkCategory(listingCard),
       this.autoLinkLicense(listingCard),
-      this.autoLinkExample(listingCard, codeRef, openCardId),
-      specsPromise,
-    ];
+      this.autoLinkExample(listingCard, codeRef, openCardIds),
+      this.linkSpecs(
+        listingCard,
+        targetRealm,
+        firstOpenCardId ?? codeRef?.module,
+      ),
+    ]).catch((error) => {
+      console.warn('Background autopatch failed:', error);
+    });
 
-    await Promise.all(promises);
     const { ListingCreateResult } = commandModule;
-    return new ListingCreateResult({ listing });
+    const result = new ListingCreateResult({ listing });
+    (result as any).backgroundWork = backgroundWork;
+    return result;
   }
 
   private async guessListingType(
@@ -249,7 +248,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
     targetRealm: string,
     resourceUrl: string, // can be module or card instance id
   ): Promise<Spec[]> {
-    const url = `${targetRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
+    const resourceRealm =
+      this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
+    const url = `${resourceRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
     const response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.JSONAPI },
     });
@@ -371,7 +372,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async autoLinkExample(
     listing: CardAPI.CardDef,
     codeRef: ResolvedCodeRef,
-    openCardId?: string,
+    openCardIds?: string[],
   ) {
     const existingExamples = Array.isArray((listing as any).examples)
       ? ((listing as any).examples as CardAPI.CardDef[])
@@ -391,25 +392,29 @@ export default class ListingCreateCommand extends HostBaseCommand<
       addCard(existing);
     }
 
-    let exampleCard: CardAPI.CardDef | undefined;
-    if (openCardId) {
-      try {
-        const instance = await this.store.get<CardAPI.CardDef>(openCardId);
-        if (isCardInstance(instance)) {
-          exampleCard = instance as CardAPI.CardDef;
-        } else {
-          console.warn('autoLinkExample: openCardId is not a card instance', {
-            openCardId,
-          });
-        }
-      } catch (error) {
-        console.warn('autoLinkExample: failed to load openCardId', {
-          openCardId,
-          error,
-        });
-      }
+    if (openCardIds && openCardIds.length > 0) {
+      await Promise.all(
+        openCardIds.map(async (openCardId) => {
+          try {
+            const instance = await this.store.get<CardAPI.CardDef>(openCardId);
+            if (isCardInstance(instance)) {
+              addCard(instance as CardAPI.CardDef);
+            } else {
+              console.warn(
+                'autoLinkExample: openCardId is not a card instance',
+                { openCardId },
+              );
+            }
+          } catch (error) {
+            console.warn('autoLinkExample: failed to load openCardId', {
+              openCardId,
+              error,
+            });
+          }
+        }),
+      );
     } else {
-      // If no openCardId was provided, attempt to find any existing instance of this type.
+      // If no openCardIds were provided, attempt to find any existing instance of this type.
       try {
         const search = new SearchCardsByTypeAndTitleCommand(
           this.commandContext,
@@ -421,7 +426,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
             (c: any) => c && typeof c.id === 'string' && isCardInstance(c),
           );
           if (first) {
-            exampleCard = first as CardAPI.CardDef;
+            addCard(first as CardAPI.CardDef);
           }
         }
       } catch (error) {
@@ -432,10 +437,15 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
     }
 
-    addCard(exampleCard);
-
+    // Only auto-fill additional examples when the user didn't explicitly choose
+    const userExplicitlyChose = openCardIds && openCardIds.length > 0;
     const MAX_EXAMPLES = 4;
-    if (codeRef && exampleCard && uniqueById.size < MAX_EXAMPLES) {
+    if (
+      !userExplicitlyChose &&
+      codeRef &&
+      uniqueById.size > 0 &&
+      uniqueById.size < MAX_EXAMPLES
+    ) {
       try {
         const searchAndChoose = new SearchAndChooseCommand(this.commandContext);
         const existingIds = Array.from(uniqueById.keys());
@@ -457,7 +467,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         }
       } catch (error) {
         console.warn('Failed to auto-link additional examples', {
-          sourceCardId: exampleCard.id,
+          codeRef,
           error,
         });
       }

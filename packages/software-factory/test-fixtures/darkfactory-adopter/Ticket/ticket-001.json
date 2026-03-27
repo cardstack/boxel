@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ticketId": "DF-1",
+      "summary": "Verify public DarkFactory adoption",
+      "description": "Render tracker cards from an adopter realm using the public software-factory module URL.",
+      "ticketType": "task",
+      "status": "in_progress",
+      "priority": "high",
+      "acceptanceCriteria": "- [x] Project resolves from public module\n- [x] Ticket resolves from public module\n- [x] Knowledge article link renders",
+      "agentNotes": "Testing the shared DarkFactory module from a fixture realm.",
+      "estimatedHours": 2,
+      "actualHours": 1,
+      "createdAt": "2026-03-16T11:00:00.000Z",
+      "updatedAt": "2026-03-16T12:00:00.000Z"
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/demo-project"
+        }
+      },
+      "assignedAgent": {
+        "links": {
+          "self": "../AgentProfile/demo-agent"
+        }
+      },
+      "relatedKnowledge.0": {
+        "links": {
+          "self": "../KnowledgeArticle/agent-onboarding"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "http://localhost:4205/software-factory/darkfactory",
+        "name": "Ticket"
+      }
+    }
+  }
+}

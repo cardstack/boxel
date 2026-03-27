@@ -28,6 +28,8 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  isRegisteredPrefix,
+  cardIdToURL,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
@@ -111,7 +113,7 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       {
         loader: myLoader(),
         relativeTo:
-          relativeTo ?? (resource.id ? new URL(resource.id) : undefined),
+          relativeTo ?? (resource.id ? cardIdToURL(resource.id) : undefined),
       },
     );
     if (!card) {
@@ -215,12 +217,17 @@ export function serializeCard(
   };
   let modelRelativeTo =
     model.id != null
-      ? new URL(model.id)
+      ? cardIdToURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(model, doc, {
     ...opts,
     ...{
       maybeRelativeURL(possibleURL: string) {
+        // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
+        // in their canonical portable form — return as-is
+        if (isRegisteredPrefix(possibleURL)) {
+          return possibleURL;
+        }
         let url = maybeURL(possibleURL, modelRelativeTo);
         if (!url) {
           throw new Error(
@@ -307,7 +314,7 @@ export function serializeFileDef(
   };
   let modelRelativeTo =
     model.id != null
-      ? new URL(model.id)
+      ? cardIdToURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(
     model,
@@ -316,6 +323,11 @@ export function serializeFileDef(
       ...opts,
       ...{
         maybeRelativeURL(possibleURL: string) {
+          // Registered prefix refs (e.g. @cardstack/catalog/foo) are already
+          // in their canonical portable form — return as-is
+          if (isRegisteredPrefix(possibleURL)) {
+            return possibleURL;
+          }
           let url = maybeURL(possibleURL, modelRelativeTo);
           if (!url) {
             throw new Error(

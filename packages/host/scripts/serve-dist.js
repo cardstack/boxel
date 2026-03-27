@@ -31,66 +31,18 @@ function runServe(port) {
   return child;
 }
 
-function sanitizeSlug(raw) {
-  return raw
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
-
-function getTraefikDynamicDir() {
-  try {
-    const { execSync } = require('child_process');
-    const mounted = execSync(
-      `docker inspect boxel-traefik --format '{{range .Mounts}}{{if eq .Destination "/etc/traefik/dynamic"}}{{.Source}}{{end}}{{end}}'`,
-      { encoding: 'utf-8' },
-    ).trim();
-    if (mounted) return mounted;
-  } catch {
-    // fall through
-  }
-  return path.resolve(__dirname, '..', '..', '..', 'traefik', 'dynamic');
-}
-
-function registerWithTraefik(slug, hostname, port) {
-  const fs = require('fs');
-  const dynamicDir = getTraefikDynamicDir();
-  const configPath = path.join(dynamicDir, `${slug}-host.yml`);
-  const routerKey = `host-${slug}`;
-
-  const entry = [
-    'http:',
-    '  routers:',
-    `    ${routerKey}:`,
-    '      rule: "Host(`' + hostname + '`)"',
-    `      service: ${routerKey}`,
-    '      entryPoints:',
-    '        - web',
-    '  services:',
-    `    ${routerKey}:`,
-    '      loadBalancer:',
-    '        servers:',
-    `          - url: "http://host.docker.internal:${port}"`,
-    '',
-  ].join('\n');
-  const tmpPath = configPath + '.tmp';
-  fs.writeFileSync(tmpPath, entry, 'utf-8');
-  fs.renameSync(tmpPath, configPath);
-}
-
 if (!BOXEL_ENVIRONMENT) {
-  // Legacy mode: hardcoded port 4200
+  // Standard mode: hardcoded port 4200
   runServe(4200);
 } else {
-  // Environment mode: dynamic port + Traefik registration
   const { ensureTraefik } = require('./ensure-traefik');
+  const { getEnvSlug, registerWithTraefik } = require('./traefik-helpers');
+
   ensureTraefik();
 
   const net = require('net');
 
-  const slug = sanitizeSlug(BOXEL_ENVIRONMENT);
+  const slug = getEnvSlug();
   const hostname = `host.${slug}.localhost`;
 
   // Find a free port

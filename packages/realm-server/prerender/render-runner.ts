@@ -37,6 +37,7 @@ import {
 import { randomUUID } from 'crypto';
 
 const log = logger('prerenderer');
+const reproduceLog = logger('prerenderer-reproduce');
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 
 const CLEAR_CACHE_RETRY_SIGNATURES: readonly (readonly string[])[] = [
@@ -196,8 +197,9 @@ export class RenderRunner {
         return;
       };
 
-      log.debug(
-        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0`,
+      // please leave the auth token in the debug log so that we can debug timed out prerenders
+      reproduceLog.debug(
+        `manually visit prerendered url ${url} at: ${this.#boxelHostURL}/render/${encodeURIComponent(url)}/${this.#nonce}/${optionsSegment}/html/isolated/0 with boxel-session = ${auth}`,
       );
 
       // We need to render the isolated HTML view first, as the template will pull linked fields.

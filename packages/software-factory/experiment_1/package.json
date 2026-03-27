@@ -1,0 +1,15 @@
+{
+  "name": "software-factory",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "boxel:session": "node scripts/boxel-session.mjs",
+    "boxel:search": "node scripts/boxel-search.mjs",
+    "boxel:pick-ticket": "node scripts/pick-ticket.mjs",
+    "test:ticket-flow": "playwright test tests/ticket-flow.spec.mjs",
+    "test:realm": "node scripts/run-realm-tests.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0"
+  }
+}

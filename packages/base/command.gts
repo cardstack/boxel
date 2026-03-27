@@ -386,10 +386,11 @@ export class ListingInstallResult extends CardDef {
 export class CreateListingPRRequestInput extends CardDef {
   @field realm = contains(RealmField);
   @field listingId = contains(StringField);
+  @field listingName = contains(StringField);
 }
 
 export class ListingCreateInput extends CardDef {
-  @field openCardId = contains(StringField);
+  @field openCardIds = containsMany(StringField);
   @field codeRef = contains(CodeRefField);
   @field targetRealm = contains(RealmField);
 }

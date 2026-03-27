@@ -84,6 +84,7 @@ import {
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
   resolveCardReference,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -3007,6 +3008,10 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
+  // getKnownConsumedModules is fast now: the Loader caches the dependency
+  // graph traversal result in collectKnownModuleDependencies, and
+  // trimModuleIdentifier uses string ops + a cache instead of URL
+  // construction. No need for a caller-side skip cache here.
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
     trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }
@@ -3366,7 +3371,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       relativeTo:
         instanceRelativeTo ??
         (resource.id && typeof resource.id === 'string'
-          ? new URL(resource.id)
+          ? cardIdToURL(resource.id)
           : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
     });

@@ -3,8 +3,8 @@
 # Migrates realm references by replacing one string with another.
 #
 # When <find> is a URL, also handles path-only references:
-#   1. Full URL:  https://realms-staging.stack.cards/catalog/Theme/cardstack
-#   2. Path-only: /catalog/Theme/cardstack (preceded by " or ' in source)
+#   1. Full URL:  https://realms-staging.stack.cards/catalog/blog-app/BlogApp/ramped
+#   2. Path-only: /catalog/blog-app/BlogApp/ramped (preceded by " or ' in source)
 #   Does NOT touch relative paths like ../catalog/... (within-realm references).
 #
 # When <find> is not a URL (e.g. @cardstack/base/), only does literal replacement.

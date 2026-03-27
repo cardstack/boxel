@@ -41,9 +41,11 @@ import {
   formattedError,
   type getCard,
   GetCardContextName,
+  inferContentType,
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -724,12 +726,18 @@ export default class Room extends Component<Signature> {
       return !isManuallyAttached && !isRemoved;
     });
 
-    state.value = candidateUrls.map((url) =>
-      this.matrixService.fileAPI.createFileDef({
+    state.value = candidateUrls.map((url) => {
+      let name = url.split('/').pop();
+      return this.matrixService.fileAPI.createFileDef({
         sourceUrl: url,
-        name: url.split('/').pop(),
-      }),
-    );
+        name,
+        contentType: url.endsWith('.json')
+          ? SupportedMimeType.CardJson
+          : name
+            ? inferContentType(name)
+            : undefined,
+      });
+    });
 
     return state;
   });

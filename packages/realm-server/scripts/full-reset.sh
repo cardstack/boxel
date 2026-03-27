@@ -13,6 +13,9 @@ pnpm migrate up
 # well.
 rm -rf "${SCRIPTS_DIR}/../realms"
 
+# reset the skills realm contents so they are in sync with the skills repository
+pnpm --dir="${SCRIPTS_DIR}/../../skills-realm" skills:reset
+
 # also now you will have users that have realm associations to realms that don't
 # exist anymore, so we should clear the matrix state so it can be in sync with
 # the DB state

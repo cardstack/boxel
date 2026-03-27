@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="Start dev stack without optional realms (experiments, catalog, homepage, submission)"
+#MISE dir="packages/realm-server"
+
+READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
+NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+
+WAIT_ON_TIMEOUT=900000 \
+  SKIP_EXPERIMENTS=true \
+  SKIP_CATALOG=true \
+  SKIP_BOXEL_HOMEPAGE=true \
+  SKIP_SUBMISSION=true \
+  NODE_NO_WARNINGS=1 \
+  start-server-and-test \
+    'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
+    "${BASE_REALM_READY}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
+    'run-p -ln start:worker-test start:test-realms' \
+    "${NODE_TEST_REALM_READY}" \
+    'wait'

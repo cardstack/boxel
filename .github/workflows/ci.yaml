@@ -29,12 +29,13 @@ jobs:
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
       matrix: ${{ steps.filter.outputs.matrix }}
       realm-server: ${{ steps.filter.outputs.realm-server }}
+      software-factory: ${{ steps.filter.outputs.software-factory }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
         id: filter
         with:
@@ -96,6 +97,15 @@ jobs:
               - 'packages/eslint-plugin-boxel/**'
               - 'packages/postgres/**'
               - 'packages/realm-server/**'
+            software-factory:
+              - *shared
+              - 'packages/base/**'
+              - 'packages/boxel-icons/**'
+              - 'packages/host/**'
+              - 'packages/matrix/**'
+              - 'packages/postgres/**'
+              - 'packages/realm-server/**'
+              - 'packages/software-factory/**'
             vscode-boxel-tools:
               - *shared
               - 'packages/vscode-boxel-tools/**'
@@ -111,8 +121,11 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.software-factory == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
+    concurrency:
+      group: ci-test-web-assets-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
 
   ai-bot-test:
     name: AI bot Tests
@@ -141,7 +154,7 @@ jobs:
       group: ai-bot-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: AI Bot test suite
         run: pnpm test
@@ -156,7 +169,7 @@ jobs:
       group: bot-runner-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Bot Runner test suite
         run: pnpm test
@@ -171,7 +184,7 @@ jobs:
       group: eslint-plugin-boxel-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: ESLint Plugin Boxel test suite
         run: pnpm test
@@ -186,7 +199,7 @@ jobs:
       group: postgres-migration-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
       - uses: ./.github/actions/init
@@ -230,7 +243,7 @@ jobs:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Build boxel-icons
         run: pnpm build
@@ -251,7 +264,7 @@ jobs:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Rebuild boxel-ui icons
         run: pnpm rebuild:icons
@@ -268,7 +281,7 @@ jobs:
       group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Rebuild boxel-icons icons
         run: pnpm rebuild:all
@@ -290,7 +303,7 @@ jobs:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
@@ -319,38 +332,38 @@ jobs:
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
       - name: Print realm server logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: cat /tmp/server.log
       - name: Extract worker and prerender logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           grep -E '^\[start:worker-base|^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
@@ -378,9 +391,12 @@ jobs:
     needs:
       - change-check
       - matrix-client-test
-    # always() makes it run even if a matrix-client-test shard fails
-    if: always() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true')
+    # !cancelled() makes it run even if a matrix-client-test shard fails, but still respects cancellation
+    if: ${{ !cancelled() && (needs.change-check.outputs.matrix == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
     runs-on: ubuntu-latest
+    concurrency:
+      group: matrix-client-merge-reports-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
 
     permissions:
       id-token: write
@@ -395,7 +411,7 @@ jobs:
       - name: Create a timestamp as a directory to store reports in
         id: timestampid
         run: echo "timestamp=$(date --utc +%Y%m%d_%H%M%SZ)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Download blob reports from GitHub Actions Artifacts
@@ -474,6 +490,7 @@ jobs:
             "billing-test.ts",
             "card-dependencies-endpoint-test.ts",
             "card-endpoints-test.ts",
+            "card-reference-resolver-test.ts",
             "card-source-endpoints-test.ts",
             "definition-lookup-test.ts",
             "file-watcher-events-test.ts",
@@ -509,6 +526,7 @@ jobs:
             "server-endpoints/authentication-test.ts",
             "server-endpoints/bot-commands-test.ts",
             "server-endpoints/bot-registration-test.ts",
+            "server-endpoints/delete-realm-test.ts",
             "server-endpoints/download-realm-test.ts",
             "server-endpoints/index-responses-test.ts",
             "server-endpoints/maintenance-endpoints-test.ts",
@@ -540,7 +558,7 @@ jobs:
             "full-reindex-test.ts",
           ]
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
@@ -574,16 +592,16 @@ jobs:
         env:
           TEST_MODULE: ${{matrix.testModule}}
       - name: Print realm server logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: cat /tmp/server.log
       - name: Prepare artifact name
         id: artifact_name
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
       - name: Extract worker and prerender logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           grep -E '^\[start:worker-development|^\[start:worker-test' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
@@ -592,46 +610,99 @@ jobs:
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload start:development log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/start-development.log
           retention-days: 30
       - name: Upload test-realms log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
           retention-days: 30
+
+  software-factory-test:
+    name: Software Factory Tests
+    needs: [change-check, test-web-assets]
+    if: needs.change-check.outputs.software-factory == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: software-factory-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install
+        working-directory: packages/software-factory
+      - name: Run Node tests
+        run: pnpm test:node
+        working-directory: packages/software-factory
+      - name: Serve host dist (test assets)
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve:dist &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
+      - name: Serve boxel-icons
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm serve &
+          working-directory: packages/boxel-icons
+          wait-for: 3m
+          wait-on: http-get://localhost:4206/@cardstack/boxel-icons/v1/icons/code.js
+      - name: Run Playwright tests
+        run: pnpm test:playwright
+        working-directory: packages/software-factory
+      - name: Upload Playwright traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: software-factory-playwright-traces
+          path: packages/software-factory/test-results/**/trace.zip
+          retention-days: 30
+          if-no-files-found: ignore
 
   vscode-boxel-tools-package:
     name: Boxel Tools VS Code Extension package
@@ -642,7 +713,7 @@ jobs:
       group: vscode-boxel-tools-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
@@ -675,7 +746,7 @@ jobs:
       group: workspace-sync-cli-build-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Build workspace-sync-cli
         run: pnpm build
@@ -690,7 +761,7 @@ jobs:
       group: workspace-sync-cli-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
         uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
@@ -726,7 +797,7 @@ jobs:
         working-directory: packages/workspace-sync-cli
       - name: Upload test services log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: workspace-sync-cli-test-services-log
           path: /tmp/test-services.log

@@ -166,6 +166,7 @@ let autoMigrate = migrateDB || undefined;
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+  process.on('disconnect', shutdown);
   process.on('message', (message) => {
     if (message === 'stop') {
       shutdown(); // warning this is async

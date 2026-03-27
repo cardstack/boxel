@@ -699,14 +699,15 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
+    let unreachableCardId = 'http://this-is-not-a-real-card.com';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       data: JSON.stringify({
         attachedCards: [
           {
-            sourceUrl: 'http://this-is-not-a-real-card.com',
-            url: 'http://this-is-not-a-real-card.com',
+            sourceUrl: unreachableCardId,
+            url: unreachableCardId,
             contentType: 'text/plain',
           },
         ],
@@ -717,7 +718,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     await waitFor('[data-test-card-error]');
     assert
       .dom('[data-test-card-error]')
-      .containsText('Error rendering attached cards');
+      .containsText(
+        `This card could not be displayed because it hit a runtime error.`,
+      );
+    assert
+      .dom(`[data-test-attached-card-error="${unreachableCardId}"]`)
+      .exists('errored attached cards still render as pills');
     await percySnapshot(assert);
   });
 

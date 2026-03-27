@@ -1,8 +1,11 @@
 #! /bin/sh
 
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/../../../scripts/env-slug.sh"
+
 # Determine the Synapse health check URL (environment-aware)
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  SLUG=$(resolve_env_slug)
   CONTAINER_NAME="boxel-synapse-${SLUG}"
   # Read the dynamic host port from the running container
   SYNAPSE_HOST_PORT=$(docker port "$CONTAINER_NAME" 8008/tcp 2>/dev/null | head -1 | awk -F: '{print $NF}')

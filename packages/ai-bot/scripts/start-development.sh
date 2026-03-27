@@ -4,11 +4,14 @@
 
 set -e
 
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/../../../scripts/env-slug.sh"
+
 export NODE_NO_WARNINGS=1
 export PGPORT="${PGPORT:-5435}"
 
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
-  SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  SLUG=$(resolve_env_slug)
   CONTAINER_NAME="boxel-synapse-${SLUG}"
 
   PORT_OUTPUT=$(docker port "$CONTAINER_NAME" 8008/tcp 2>/dev/null | head -1) || true
