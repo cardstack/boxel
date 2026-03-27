@@ -176,12 +176,13 @@ export default class MatrixResponsePublisher {
     return sendOperation;
   }
 
-  async sendError(error: any) {
+  async sendError(error: any, opts?: { reloadBillingData?: boolean }) {
     sendErrorEvent(
       this.client,
       this.roomId,
       error,
       this.originalResponseEventId,
+      opts,
     );
   }
 

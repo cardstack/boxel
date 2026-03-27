@@ -27,7 +27,10 @@ module('command runner', () => {
       destroy: async () => {},
     };
     let githubClient: GitHubClient = {
-      openPullRequest: async () => ({ number: 1, html_url: 'https://example/pr/1' }),
+      openPullRequest: async () => ({
+        number: 1,
+        html_url: 'https://example/pr/1',
+      }),
       createBranch: async () => ({ ref: 'refs/heads/test', sha: 'abc123' }),
       writeFileToBranch: async () => ({ commitSha: 'def456' }),
       writeFilesToBranch: async () => ({ commitSha: 'def456' }),
@@ -84,7 +87,11 @@ module('command runner', () => {
       'bot-registration-1',
     );
 
-    assert.strictEqual(publishedJobs.length, 1, 'published one run-command job');
+    assert.strictEqual(
+      publishedJobs.length,
+      1,
+      'published one run-command job',
+    );
     assert.deepEqual(
       publishedJobs[0],
       {
@@ -220,8 +227,8 @@ module('command runner', () => {
         input: {
           roomId: '!abc123:localhost',
           listingName: 'My Listing Name',
-          listingSummary: 'My listing Summary'
-        },  
+          listingSummary: 'My listing Summary',
+        },
       },
       'bot-registration-2',
     );
@@ -234,6 +241,27 @@ module('command runner', () => {
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
+
+    // Job 1 (create-submission) targets the user's realm — default concurrency group
+    assert.strictEqual(
+      (publishedJobs[0] as { concurrencyGroup: string }).concurrencyGroup,
+      'command:http://localhost:4201/test/',
+      'Job 1 (create-submission) uses default realm concurrency group',
+    );
+    // Job 2 (create-pr-card) targets the shared submission realm — listing-scoped
+    // concurrency group so different listings can run in parallel
+    assert.strictEqual(
+      (publishedJobs[1] as { concurrencyGroup: string }).concurrencyGroup,
+      `command:${SUBMISSION_REALM_URL}:listing:room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing-name`,
+      'Job 2 (create-pr-card) uses listing-scoped concurrency group',
+    );
+    // Job 3 (patch-card-instance) targets the user's realm — default concurrency group
+    assert.strictEqual(
+      (publishedJobs[2] as { concurrencyGroup: string }).concurrencyGroup,
+      'command:http://localhost:4201/test/',
+      'Job 3 (patch-card-instance) uses default realm concurrency group',
+    );
+
     assert.deepEqual(
       (publishedJobs[1] as { args: Record<string, unknown> }).args,
       {
@@ -275,7 +303,10 @@ module('command runner', () => {
       },
       'enqueues submission card patch in the user realm',
     );
-    let prBody = (openedPRs[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
+    let prBody =
+      (
+        openedPRs[0] as { params: Record<string, unknown> }
+      ).params.body?.toString() ?? '';
     assert.true(
       prBody.includes(`[${submissionCardUrl}](${submissionCardUrl})`),
       'PR body includes submission card URL as markdown link',
@@ -477,7 +508,11 @@ module('command runner', () => {
 
     assert.strictEqual(publishedJobs.length, 1, 'enqueues run-command job');
     assert.strictEqual(createdBranches.length, 0, 'does not create branch');
-    assert.strictEqual(branchWrites.length, 0, 'does not write files to branch');
+    assert.strictEqual(
+      branchWrites.length,
+      0,
+      'does not write files to branch',
+    );
     assert.strictEqual(openedPRs.length, 0, 'does not open pull request');
   });
 });
