@@ -168,7 +168,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return computeLatestReviewState(this.latestReviewByReviewer);
   }
 
-  get latestPrReviewCommentEventInstance() {
+  get latestPrReviewEventInstance() {
     let state = this.latestReviewState;
     if (state === 'changes_requested') {
       return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
@@ -181,21 +181,21 @@ class IsolatedTemplate extends Component<typeof PrCard> {
 
   get latestReviewComment() {
     let comment =
-      this.latestPrReviewCommentEventInstance?.payload?.review?.body?.trim();
+      this.latestPrReviewEventInstance?.payload?.review?.body?.trim();
     return comment || '-';
   }
 
   get latestReviewCommentUrl() {
-    return this.latestPrReviewCommentEventInstance?.payload?.review?.html_url;
+    return this.latestPrReviewEventInstance?.payload?.review?.html_url;
   }
 
   get hasReview() {
-    return !!this.latestPrReviewCommentEventInstance;
+    return !!this.latestPrReviewEventInstance;
   }
 
   get latestReviewerName() {
     return (
-      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
+      this.latestPrReviewEventInstance?.payload?.review?.user?.login ??
       null
     );
   }

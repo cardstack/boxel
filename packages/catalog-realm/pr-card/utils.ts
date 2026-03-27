@@ -296,24 +296,24 @@ export function computeLatestReviewState(
 export function findLatestChangesRequestedEvent(
   latestReviewByReviewer: Map<string, any>,
 ): any | null {
-  let activeChangesRequestedEvents = [
-    ...latestReviewByReviewer.values(),
-  ].filter(
-    (event: any) =>
-      normalizeReviewState(event?.payload?.review?.state) ===
-        'changes_requested',
+  return (
+    [...latestReviewByReviewer.values()].find(
+      (event: any) =>
+        normalizeReviewState(event?.payload?.review?.state) ===
+          'changes_requested',
+    ) ?? null
   );
-  return activeChangesRequestedEvents[0] ?? null;
 }
 
 export function findLatestApprovedEvent(
   latestReviewByReviewer: Map<string, any>,
 ): any | null {
-  let approvedEvents = [...latestReviewByReviewer.values()].filter(
-    (event: any) =>
-      normalizeReviewState(event?.payload?.review?.state) === 'approved',
+  return (
+    [...latestReviewByReviewer.values()].find(
+      (event: any) =>
+        normalizeReviewState(event?.payload?.review?.state) === 'approved',
+    ) ?? null
   );
-  return approvedEvents[0] ?? null;
 }
 
 // ── Query Builders ───────────────────────────────────────────────────────
