@@ -591,6 +591,127 @@ module(`Integration | search resource`, function (hooks) {
     );
   });
 
+  test(`setting query to undefined clears cached state and re-runs search on next query`, async function (assert) {
+    let query: Query | undefined = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.lastName': 'Abdel-Rahman',
+        },
+      },
+    };
+    let args = {
+      query,
+      realms: [testRealmURL],
+      isLive: false,
+      isAutoSaved: false,
+      storeService,
+      owner: this.owner,
+    } satisfies SearchResourceArgs['named'];
+
+    let search = getSearchResourceForTest(loaderService, () => ({
+      named: args,
+    }));
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 2, 'initial search returns 2 books');
+
+    // Simulate modal close: set query to undefined
+    args = { ...args, query: undefined as any };
+    search.modify([], args);
+    await settled();
+
+    // Simulate modal reopen with same query
+    args = { ...args, query };
+    search.modify([], args);
+    await search.loaded;
+
+    assert.strictEqual(
+      search.instances.length,
+      2,
+      'search re-runs after query was set to undefined and back',
+    );
+  });
+
+  test(`setting query to undefined tears down live subscriptions`, async function (assert) {
+    let query: Query | undefined = {
+      filter: {
+        on: {
+          module: `${testRealmURL}book`,
+          name: 'Book',
+        },
+        eq: {
+          'author.lastName': 'Abdel-Rahman',
+        },
+      },
+    };
+    let args = {
+      query,
+      realms: [testRealmURL],
+      isLive: true,
+      isAutoSaved: false,
+      storeService,
+      owner: this.owner,
+    } satisfies SearchResourceArgs['named'];
+
+    let search = getSearchResourceForTest(loaderService, () => ({
+      named: args,
+    }));
+    await search.loaded;
+    assert.strictEqual(search.instances.length, 2, 'initial live search returns 2 books');
+
+    // Simulate modal close: set query to undefined
+    args = { ...args, query: undefined as any };
+    search.modify([], args);
+    await settled();
+
+    // Write a new matching card while "modal is closed"
+    await realm.write(
+      'books/4.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            author: {
+              firstName: 'New',
+              lastName: 'Abdel-Rahman',
+            },
+            editions: 0,
+            pubDate: '2024-01-01',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}book`,
+              name: 'Book',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await settled();
+
+    // Instances should NOT have updated since subscriptions were torn down
+    assert.strictEqual(
+      search.instances.length,
+      2,
+      'live subscription was torn down — no update while query is undefined',
+    );
+
+    // Simulate modal reopen: restore query
+    args = { ...args, query };
+    search.modify([], args);
+    await search.loaded;
+
+    assert.strictEqual(
+      search.instances.length,
+      3,
+      'fresh search on reopen picks up the new card',
+    );
+  });
+
   test(`can search for file-meta instances using SearchResource`, async function (assert) {
     let query: Query = {
       filter: {

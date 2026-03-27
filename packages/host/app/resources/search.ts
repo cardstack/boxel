@@ -163,6 +163,12 @@ export class SearchResource<
     }
 
     if (query === undefined) {
+      this.#previousQueryString = undefined;
+      this.#previousQuery = undefined;
+      for (let subscription of this.subscriptions) {
+        subscription.unsubscribe();
+      }
+      this.subscriptions = [];
       return;
     }
 

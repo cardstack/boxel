@@ -47,8 +47,12 @@ export default class CreateListingModal extends Component<Signature> {
 
   @tracked private selectedExamples: PickerOption[] = [];
 
-  private instancesSearch = getSearch<CardDef>(this, getOwner(this)!, () =>
-    this.codeRef ? { filter: { type: this.codeRef } } : undefined,
+  private instancesSearch = getSearch<CardDef>(
+    this,
+    getOwner(this)!,
+    () => (this.codeRef ? { filter: { type: this.codeRef } } : undefined),
+    () => (this.payload?.targetRealm ? [this.payload.targetRealm] : undefined),
+    { isLive: true },
   );
 
   private get instances(): CardDef[] {
@@ -117,6 +121,10 @@ export default class CreateListingModal extends Component<Signature> {
     return this.selectedExamples.length > 0
       ? this.selectedExamples
       : this.initialSelected;
+  }
+
+  private get isCreateDisabled(): boolean {
+    return this.createListing.isRunning || this.instancesSearch.isLoading;
   }
 
   @action private onExampleChange(selected: PickerOption[]) {
@@ -208,20 +216,22 @@ export default class CreateListingModal extends Component<Signature> {
             </div>
           </FieldContainer>
 
-          {{#if this.instanceOptions.length}}
-            <FieldContainer @label='Examples' class='field'>
-              <div class='field-contents' data-test-examples-container>
-                <CardInstancePicker
-                  @placeholder='Select examples to include in the listing'
-                  @options={{this.instanceOptions}}
-                  @selected={{this.effectiveSelected}}
-                  @onChange={{this.onExampleChange}}
-                  @maxSelectedDisplay={{3}}
-                  data-test-create-listing-examples
-                />
-              </div>
-            </FieldContainer>
-          {{/if}}
+          {{#unless this.instancesSearch.isLoading}}
+            {{#if this.instanceOptions.length}}
+              <FieldContainer @label='Examples' class='field'>
+                <div class='field-contents' data-test-examples-container>
+                  <CardInstancePicker
+                    @placeholder='Select examples to include in the listing'
+                    @options={{this.instanceOptions}}
+                    @selected={{this.effectiveSelected}}
+                    @onChange={{this.onExampleChange}}
+                    @maxSelectedDisplay={{3}}
+                    data-test-create-listing-examples
+                  />
+                </div>
+              </FieldContainer>
+            {{/if}}
+          {{/unless}}
 
         </:content>
         <:footer>
@@ -249,7 +259,7 @@ export default class CreateListingModal extends Component<Signature> {
               @kind='primary'
               @size='tall'
               @loading={{this.createListing.isRunning}}
-              @disabled={{this.createListing.isRunning}}
+              @disabled={{this.isCreateDisabled}}
               {{on 'click' (perform this.createListing)}}
               {{onKeyMod 'Enter'}}
               data-test-create-listing-confirm-button
