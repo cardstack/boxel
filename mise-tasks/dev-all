@@ -38,7 +38,7 @@ while true; do
 done
 echo "Host app is ready."
 
-WAIT_ON_TIMEOUT=2400000 NODE_NO_WARNINGS=1 start-server-and-test \
+WAIT_ON_TIMEOUT=7200000 NODE_NO_WARNINGS=1 start-server-and-test \
   'run-p -ln start:pg start:matrix start:smtp start:prerender-dev start:prerender-manager-dev start:worker-development start:development' \
   "$PHASE1_URLS" \
   'run-p -ln start:worker-test start:test-realms' \
