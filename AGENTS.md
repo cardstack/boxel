@@ -101,7 +101,7 @@
     `pnpm stop:synapse`
   - Ensure that host and realm server are running:
     `cd ../host && pnpm start`
-    `cd ../realm-server && MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests`
+    `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
   - Run tests:
     `pnpm test`
 - Focusing on single test or module:

@@ -707,7 +707,9 @@ export class RealmServer {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
           matrixURL: this.matrixClient.matrixURL.href.replace(/\/$/, ''),
-          matrixServerName: this.matrixClient.matrixURL.hostname,
+          matrixServerName:
+            process.env.MATRIX_SERVER_NAME ||
+            this.matrixClient.matrixURL.hostname,
           realmServerURL: this.serverURL.href,
           resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
           resolvedCatalogRealmURL: rewriteRealmURL(

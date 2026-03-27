@@ -93,22 +93,10 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
-      - name: Serve boxel-icons
-        run: pnpm serve &> /tmp/icon-server.log &
-        working-directory: packages/boxel-icons
-
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:host | tee -a /tmp/server.log &
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
@@ -164,25 +152,13 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
-      - name: Serve boxel-icons
-        run: pnpm serve &> /tmp/icon-server.log &
-        working-directory: packages/boxel-icons
-
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:host | tee -a /tmp/server.log &
         env:
           SKIP_CATALOG: true
       - name: create realm users
@@ -245,6 +221,8 @@ jobs:
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:development' /tmp/server.log > /tmp/start-development.log || true
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
+          grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
+          grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
@@ -287,19 +265,26 @@ jobs:
           name: test-realms-log-${{ matrix.shardIndex }}
           path: /tmp/test-realms.log
           retention-days: 30
-      - name: Upload testem log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: ${{ !cancelled() }}
-        with:
-          name: testem-log-${{ matrix.shardIndex }}
-          path: junit/host-testem.log
-          retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
         with:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
+          retention-days: 30
+      - name: Upload host-dist log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: host-dist-log-${{ matrix.shardIndex }}
+          path: /tmp/host-dist.log
+          retention-days: 30
+      - name: Upload testem log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: testem-log-${{ matrix.shardIndex }}
+          path: junit/host-testem.log
           retention-days: 30
 
   host-percy-finalize:

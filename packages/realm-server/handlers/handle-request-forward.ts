@@ -13,6 +13,10 @@ import * as Sentry from '@sentry/node';
 
 const log = logger('request-forward');
 
+// Track pending cost-saving promises per user so we can ensure the previous
+// request's cost has been recorded before allowing a new one
+const pendingCostPromises = new Map<string, Promise<void>>();
+
 async function handleStreamingRequest(
   ctxt: Koa.Context,
   url: string,
@@ -61,13 +65,24 @@ async function handleStreamingRequest(
         // Handle end of stream
         if (data === '[DONE]') {
           if (generationId) {
-            // Create a mock response object with the generation ID for the credit strategy
-            const mockResponse = { id: generationId };
-            await endpointConfig.creditStrategy.saveUsageCost(
-              dbAdapter,
-              matrixUserId,
-              mockResponse,
-            );
+            // Save cost in the background so we don't block the stream on OpenRouter's generation cost API.
+            // Chain per-user promises so costs are recorded sequentially.
+            const previousPromise =
+              pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
+            const costPromise = previousPromise
+              .then(() =>
+                endpointConfig.creditStrategy.saveUsageCost(
+                  dbAdapter,
+                  matrixUserId,
+                  { id: generationId },
+                ),
+              )
+              .finally(() => {
+                if (pendingCostPromises.get(matrixUserId) === costPromise) {
+                  pendingCostPromises.delete(matrixUserId);
+                }
+              });
+            pendingCostPromises.set(matrixUserId, costPromise);
           }
           ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';
@@ -328,7 +343,22 @@ export default function handleRequestForward({
         return;
       }
 
-      // 4. Check user has sufficient credits using credit strategy
+      // 4. Wait for any pending cost from a previous request to be recorded
+      const pendingCost = pendingCostPromises.get(matrixUserId);
+      if (pendingCost) {
+        try {
+          await pendingCost;
+        } catch (e) {
+          log.error('Error waiting for pending cost:', e);
+          await sendResponseForSystemError(
+            ctxt,
+            'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+          );
+          return;
+        }
+      }
+
+      // 5. Check user has sufficient credits using credit strategy
       const creditValidation =
         await destinationConfig.creditStrategy.validateCredits(
           dbAdapter,
@@ -469,12 +499,47 @@ export default function handleRequestForward({
 
       const responseData = await externalResponse.json();
 
-      // 6. Calculate and deduct credits using credit strategy
-      await destinationConfig.creditStrategy.saveUsageCost(
-        dbAdapter,
-        matrixUserId,
-        responseData,
-      );
+      // 6. Deduct credits in the background using the cost from the response,
+      //    or fall back to saveUsageCost when the cost is not provided.
+      const costInUsd = responseData?.usage?.cost;
+      const previousPromise =
+        pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
+      let costPromise: Promise<void>;
+
+      if (
+        typeof costInUsd === 'number' &&
+        Number.isFinite(costInUsd) &&
+        costInUsd > 0
+      ) {
+        costPromise = previousPromise
+          .then(() =>
+            destinationConfig.creditStrategy.spendUsageCost(
+              dbAdapter,
+              matrixUserId,
+              costInUsd,
+            ),
+          )
+          .finally(() => {
+            if (pendingCostPromises.get(matrixUserId) === costPromise) {
+              pendingCostPromises.delete(matrixUserId);
+            }
+          });
+      } else {
+        costPromise = previousPromise
+          .then(() =>
+            destinationConfig.creditStrategy.saveUsageCost(
+              dbAdapter,
+              matrixUserId,
+              responseData,
+            ),
+          )
+          .finally(() => {
+            if (pendingCostPromises.get(matrixUserId) === costPromise) {
+              pendingCostPromises.delete(matrixUserId);
+            }
+          });
+      }
+      pendingCostPromises.set(matrixUserId, costPromise);
 
       // 7. Return response
       const response = new Response(JSON.stringify(responseData), {

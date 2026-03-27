@@ -76,8 +76,11 @@ mise-tasks/
   dev-all                      # Host app + full dev stack (single command)
   dev-minimal                  # Dev stack without optional realms
   dev-without-matrix           # Dev stack (expects Matrix already running)
-  test-services-host           # Services for host test suite
-  test-services-matrix         # Services for matrix test suite
+  build:ui                     # Build boxel-icons + boxel-ui (in dependency order)
+  test-services:host           # Services for host test suite
+  test-services:matrix         # Services for matrix test suite
+  test-services:realm-server   # Services for realm-server test suite
+  ci:serve-test-assets         # Serve icons + host dist (CI only)
   stop-environment                  # Stop all services for an environment
 ```
 
@@ -483,7 +486,7 @@ pnpm start
 Then start the realm server for matrix tests (does not start the matrix server). From the repo root:
 
 ```
-MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services-matrix
+MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix
 ```
 
 Then to run the tests from the CLI execute the following from `packages/matrix`:

@@ -193,6 +193,7 @@ export default class Room extends Component<Signature> {
                 @roomId={{@roomId}}
                 @roomResource={{@roomResource}}
                 @index={{i}}
+                @isMostRecentMessage={{this.isLastMessage i}}
                 @registerScroller={{this.registerMessageScroller}}
                 @unregisterScroller={{this.unregisterMessageScroller}}
                 @isPending={{this.isPendingMessage message}}
