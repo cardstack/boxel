@@ -1,6 +1,5 @@
 import type Koa from 'koa';
 import {
-  fetchAllRealmsWithOwners,
   SupportedMimeType,
   systemInitiatedPriority,
 } from '@cardstack/runtime-common';
@@ -9,27 +8,13 @@ import type { CreateRoutesArgs } from '../routes';
 
 export default function handleFullReindex({
   queue,
-  dbAdapter,
   definitionLookup,
   realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     let realmUrls = realms.map((r) => r.url);
-    let realmOwners = await fetchAllRealmsWithOwners(dbAdapter);
-    let ownerMap = new Map(
-      realmOwners.map((realmOwner) => [
-        realmOwner.realm_url,
-        realmOwner.owner_username,
-      ]),
-    );
 
-    for (let realmUrl of realmUrls) {
-      let ownerUsername = ownerMap.get(realmUrl);
-      if (!ownerUsername || ownerUsername.startsWith('realm/')) {
-        continue;
-      }
-      await definitionLookup.clearRealmCache(realmUrl);
-    }
+    await definitionLookup.clearAllModules();
 
     await queue.publish<void>({
       jobType: `full-reindex`,
