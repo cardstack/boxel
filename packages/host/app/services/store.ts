@@ -524,6 +524,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async delete(id: string): Promise<void> {
+    id = asURL(id);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -1651,10 +1652,11 @@ export default class StoreService extends Service implements StoreInterface {
   ) {
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
-      instance = this.store.getCard(idOrInstance);
-      if (!instance) {
+      let maybeInstance = this.peek(idOrInstance);
+      if (!isCardInstance(maybeInstance)) {
         return;
       }
+      instance = maybeInstance;
     } else {
       instance = idOrInstance;
     }

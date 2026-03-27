@@ -262,7 +262,7 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(instance, undefined, 'instance is undefined');
   });
 
-  test('can add and peek a card by registered prefix id', async function (assert) {
+  test<TestContextWithSave>('can use registered prefix ids across store APIs', async function (assert) {
     registerCardReferencePrefix('@test-prefix/', testRealmURL);
 
     storeService.addReference('@test-prefix/Person/hassan');
@@ -295,6 +295,46 @@ module('Integration | Store', function (hooks) {
       0,
       'dropping a prefix reference clears the resolved URL reference count',
     );
+
+    let saveFinished = new Deferred<void>();
+    this.onSave((url) => {
+      if (url.href === `${testRealmURL}Person/hassan`) {
+        assert.strictEqual(url.href, `${testRealmURL}Person/hassan`);
+        assert.strictEqual(
+          storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+          0,
+          'save() does not create a separate resolved-url reference count',
+        );
+        assert.strictEqual(
+          storeService.getReferenceCount('@test-prefix/Person/hassan'),
+          0,
+          'save() does not create a separate prefix reference count',
+        );
+        saveFinished.fulfill();
+      }
+    });
+
+    storeService.save('@test-prefix/Person/hassan');
+    await saveFinished;
+
+    storeService.addReference('@test-prefix/Person/boris');
+    await storeService.flush();
+
+    await storeService.delete('@test-prefix/Person/boris');
+
+    assert.strictEqual(
+      storeService.peek('@test-prefix/Person/boris'),
+      undefined,
+      'delete() clears the prefix-form card identity from the store',
+    );
+    assert.strictEqual(
+      storeService.peek(`${testRealmURL}Person/boris`),
+      undefined,
+      'delete() clears the resolved card identity from the store',
+    );
+
+    let file = await testRealmAdapter.openFile(`Person/boris.json`);
+    assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {
