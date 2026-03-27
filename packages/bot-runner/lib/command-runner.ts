@@ -134,11 +134,13 @@ export class CommandRunner {
     realmURL,
     command,
     commandInput,
+    concurrencyGroup,
   }: {
     runAs: string;
     realmURL: string;
     command: string;
     commandInput: Record<string, any> | null;
+    concurrencyGroup?: string;
   }): Promise<RunCommandResponse> {
     let job = await enqueueRunCommandJob(
       {
@@ -151,6 +153,7 @@ export class CommandRunner {
       this.queuePublisher,
       this.dbAdapter,
       userInitiatedPriority,
+      concurrencyGroup ? { concurrencyGroup } : undefined,
     );
     return await job.done;
   }
@@ -191,10 +194,12 @@ export class CommandRunner {
     prResult: CreatedListingPRResult;
   }): Promise<void> {
     let submissionRealm = new URL('/submissions/', realmURL).href;
+    let listingConcurrencyGroup = `command:${submissionRealm}:listing:${prResult.branchName}`;
     let prCardResult = await this.enqueueRunCommand({
       runAs: this.submissionBotUserId,
       realmURL: submissionRealm,
       command: CREATE_PR_CARD_COMMAND,
+      concurrencyGroup: listingConcurrencyGroup,
       commandInput: {
         realm: submissionRealm,
         prNumber: prResult.prNumber,

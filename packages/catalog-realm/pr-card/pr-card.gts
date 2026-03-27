@@ -280,7 +280,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         display: flex;
         flex-direction: column;
         height: 100%;
-        overflow: hidden;
+        overflow-y: auto;
       }
 
       /* ── Body ── */
@@ -290,7 +290,6 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         flex-direction: column;
         background: var(--card, #ffffff);
         color: var(--card-foreground, #1f2328);
-        overflow-y: auto;
       }
 
       /* ── Status columns ── */
@@ -849,6 +848,7 @@ class FittedTemplate extends Component<typeof PrCard> {
         font-size: 10px;
         font-weight: 600;
         color: #fff;
+        text-align: center;
       }
       /* ── Summary ── */
       .pr-card :deep(.markdown-content) {

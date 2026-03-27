@@ -73,6 +73,42 @@ export async function validateAICredits(
   };
 }
 
+export async function spendUsageCost(
+  dbAdapter: DBAdapter,
+  matrixUserId: string,
+  costInUsd: number,
+) {
+  try {
+    if (
+      typeof costInUsd !== 'number' ||
+      !Number.isFinite(costInUsd) ||
+      costInUsd < 0
+    ) {
+      log.warn(
+        `Invalid costInUsd value: ${costInUsd} for user ${matrixUserId}, skipping`,
+      );
+      return;
+    }
+
+    let creditsConsumed = Math.round(costInUsd * CREDITS_PER_USD);
+    let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
+
+    if (!user) {
+      throw new Error(
+        `should not happen: user with matrix id ${matrixUserId} not found in the users table`,
+      );
+    }
+
+    await spendCredits(dbAdapter, user.id, creditsConsumed);
+  } catch (err) {
+    log.error(
+      `Failed to spend usage cost (matrixUserId: ${matrixUserId}, costInUsd: ${costInUsd}):`,
+      err,
+    );
+    Sentry.captureException(err);
+  }
+}
+
 export async function saveUsageCost(
   dbAdapter: DBAdapter,
   matrixUserId: string,
