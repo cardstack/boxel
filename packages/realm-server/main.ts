@@ -300,10 +300,8 @@ const getIndexHTML = async () => {
     createPrerenderAuth,
   );
 
-  if (FULL_INDEX_ON_STARTUP) {
-    log.info('Clearing modules cache before full index...');
-    await definitionLookup.clearAllModules();
-  }
+  log.info('Clearing modules cache...');
+  await definitionLookup.clearAllModules();
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
