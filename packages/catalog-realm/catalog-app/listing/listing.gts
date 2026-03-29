@@ -666,6 +666,9 @@ export class Listing extends CardDef {
     if (params.menuContext !== 'interact') {
       return;
     }
+    if (!params.canEdit) {
+      return;
+    }
     if (!this[realmURL]?.href) {
       return;
     }
