@@ -623,7 +623,7 @@ module(`Integration | search resource`, function (hooks) {
     );
 
     // Simulate modal close: set query to undefined
-    args = { ...args, query: undefined as any };
+    args = { ...args, query: undefined };
     search.modify([], args);
     await settled();
 
@@ -671,7 +671,7 @@ module(`Integration | search resource`, function (hooks) {
     );
 
     // Simulate modal close: set query to undefined
-    args = { ...args, query: undefined as any };
+    args = { ...args, query: undefined };
     search.modify([], args);
     await settled();
 
