@@ -586,8 +586,8 @@ export class Listing extends CardDef {
   protected getGenerateExampleMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
-    if (!params.commandContext) {
-      return undefined;
+    if (!params.commandContext || !params.canEdit) {
+      return;
     }
     const firstExample =
       Array.isArray(this.examples) && this.examples.length
@@ -619,12 +619,11 @@ export class Listing extends CardDef {
   private getUpdateSpecsMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
-    if (params.menuContext !== 'interact') {
+    if (!params.commandContext || !params.canEdit) {
       return;
     }
-    const commandContext = params.commandContext;
     const targetRealm = this[realmURL]?.href;
-    if (!commandContext || !targetRealm) {
+    if (!targetRealm) {
       return;
     }
 
@@ -633,7 +632,7 @@ export class Listing extends CardDef {
       id: 'update-listing-specs',
       icon: Refresh,
       action: () =>
-        new ListingUpdateSpecsCommand(commandContext).execute({
+        new ListingUpdateSpecsCommand(params.commandContext).execute({
           listing: this,
         }),
     };
@@ -643,19 +642,17 @@ export class Listing extends CardDef {
     let menuItems = super
       [getMenuItems](params)
       .filter((item) => item.label?.toLowerCase() !== 'create listing');
-    if (params.menuContext === 'interact') {
-      const extra = this.getGenerateExampleMenuItem(params);
-      if (extra) {
-        menuItems = [...menuItems, extra];
-      }
-      const updateSpecs = this.getUpdateSpecsMenuItem(params);
-      if (updateSpecs) {
-        menuItems = [...menuItems, updateSpecs];
-      }
-      const createPRMenuItem = this.getCreatePRMenuItem(params);
-      if (createPRMenuItem) {
-        menuItems = [...menuItems, createPRMenuItem];
-      }
+    const extra = this.getGenerateExampleMenuItem(params);
+    if (extra) {
+      menuItems = [...menuItems, extra];
+    }
+    const updateSpecs = this.getUpdateSpecsMenuItem(params);
+    if (updateSpecs) {
+      menuItems = [...menuItems, updateSpecs];
+    }
+    const createPRMenuItem = this.getCreatePRMenuItem(params);
+    if (createPRMenuItem) {
+      menuItems = [...menuItems, createPRMenuItem];
     }
     return menuItems;
   }
@@ -663,21 +660,17 @@ export class Listing extends CardDef {
   private getCreatePRMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
-    if (params.menuContext !== 'interact') {
+    if (!params.commandContext || !params.canEdit) {
       return;
     }
     if (!this[realmURL]?.href) {
-      return;
-    }
-    const commandContext = params.commandContext;
-    if (!commandContext) {
       return;
     }
 
     return {
       label: 'Make a PR',
       action: async () => {
-        await new OpenCreatePRModalCommand(commandContext).execute({
+        await new OpenCreatePRModalCommand(params.commandContext).execute({
           listingId: this.id,
           realm: this[realmURL]!.href,
           listingName: this.name,
