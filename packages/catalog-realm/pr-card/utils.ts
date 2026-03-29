@@ -21,10 +21,7 @@ export type CiGroup = {
   items: CiItem[];
 };
 
-export type ReviewState =
-  | 'changes_requested'
-  | 'approved'
-  | 'unknown';
+export type ReviewState = 'changes_requested' | 'approved' | 'unknown';
 
 // ── PR State Helpers ─────────────────────────────────────────────────────
 
@@ -299,13 +296,24 @@ export function computeLatestReviewState(
 export function findLatestChangesRequestedEvent(
   latestReviewByReviewer: Map<string, any>,
 ): any | null {
-  let activeChangesRequestedEvents = [...latestReviewByReviewer.values()].filter(
-    (event: any) =>
-      normalizeReviewState(event?.payload?.review?.state) ===
-        'changes_requested' &&
-      (event?.payload?.review?.body ?? '').trim().length > 0,
+  return (
+    [...latestReviewByReviewer.values()].find(
+      (event: any) =>
+        normalizeReviewState(event?.payload?.review?.state) ===
+          'changes_requested',
+    ) ?? null
   );
-  return activeChangesRequestedEvents[0] ?? null;
+}
+
+export function findLatestApprovedEvent(
+  latestReviewByReviewer: Map<string, any>,
+): any | null {
+  return (
+    [...latestReviewByReviewer.values()].find(
+      (event: any) =>
+        normalizeReviewState(event?.payload?.review?.state) === 'approved',
+    ) ?? null
+  );
 }
 
 // ── Query Builders ───────────────────────────────────────────────────────
