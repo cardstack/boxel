@@ -40,6 +40,7 @@ import {
   createRealm,
   getRealmScopedAuth,
   writeCardSource,
+  writeModuleSource,
 } from '../../scripts/lib/realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -94,6 +95,13 @@ test('realm index page loads with HelloCard definition', async ({ page }) => {
   let realmUrl = process.env.BOXEL_SOURCE_REALM_URL;
   await page.goto(realmUrl, { waitUntil: 'commit' });
   await expect(page.locator('body')).toBeVisible({ timeout: 30000 });
+});
+`;
+
+const PLAYWRIGHT_FAILING_SPEC = `import { expect, test } from '@playwright/test';
+
+test('deliberately fails for smoke testing', async ({ page }) => {
+  expect(1).toBe(2);
 });
 `;
 
@@ -169,6 +177,11 @@ async function main() {
     name: 'Smoke Test Realm',
     endpoint: realmEndpoint,
     authorization: authorization ?? '',
+    matrixAuth: {
+      userId: matrixAuth.userId,
+      accessToken: matrixAuth.accessToken,
+      matrixUrl: matrixAuth.credentials.matrixUrl,
+    },
   });
 
   if (createResult.created) {
@@ -215,16 +228,10 @@ async function main() {
 
   // 1. Card definition
   console.log('  Writing hello.gts (HelloCard definition)...');
-  let defResult = await writeCardSource(
+  let defResult = await writeModuleSource(
     targetRealmUrl,
     'hello.gts',
-    {
-      data: {
-        type: 'module' as any,
-        attributes: { content: HELLO_CARD_GTS },
-        meta: { adoptsFrom: { module: '', name: '' } },
-      },
-    } as any,
+    HELLO_CARD_GTS,
     fetchOptions,
   );
   console.log(
@@ -247,16 +254,10 @@ async function main() {
 
   // 3. Playwright test spec
   console.log('  Writing Tests/hello-smoke.spec.ts (Playwright spec)...');
-  let specResult = await writeCardSource(
+  let specResult = await writeModuleSource(
     targetRealmUrl,
     'Tests/hello-smoke.spec.ts',
-    {
-      data: {
-        type: 'module' as any,
-        attributes: { content: PLAYWRIGHT_SPEC },
-        meta: { adoptsFrom: { module: '', name: '' } },
-      },
-    } as any,
+    PLAYWRIGHT_SPEC,
     fetchOptions,
   );
   console.log(
@@ -265,21 +266,29 @@ async function main() {
       : `  ✗ Tests/hello-smoke.spec.ts: ${specResult.error}`,
   );
 
-  // -------------------------------------------------------------------------
-  // Phase 2: Run the testing phase via factory-test-realm
-  // -------------------------------------------------------------------------
-
+  // 4. Deliberately failing Playwright test spec
   console.log(
-    '--- Phase 2: Running executeTestRunFromRealm (testing phase) ---\n',
+    '  Writing Tests/hello-failing.spec.ts (deliberately failing spec)...',
   );
-  console.log('  This will:');
-  console.log('    1. Create a TestRun card (status: running) in Test Runs/');
-  console.log('    2. Pull spec files from the target realm locally');
-  console.log('    3. Run the Playwright spec against the live target realm');
-  console.log('    4. Complete the TestRun card with results');
-  console.log('');
+  let failSpecResult = await writeModuleSource(
+    targetRealmUrl,
+    'Tests/hello-failing.spec.ts',
+    PLAYWRIGHT_FAILING_SPEC,
+    fetchOptions,
+  );
+  console.log(
+    failSpecResult.ok
+      ? '  ✓ Tests/hello-failing.spec.ts'
+      : `  ✗ Tests/hello-failing.spec.ts: ${failSpecResult.error}`,
+  );
 
-  let handle = await executeTestRunFromRealm({
+  // -------------------------------------------------------------------------
+  // Phase 2a: Run a passing test
+  // -------------------------------------------------------------------------
+
+  console.log('\n--- Phase 2a: Running passing spec ---\n');
+
+  let passHandle = await executeTestRunFromRealm({
     targetRealmUrl,
     testResultsModuleUrl,
     slug: 'hello-smoke',
@@ -289,26 +298,69 @@ async function main() {
     fetch: fetchImpl,
   });
 
+  console.log(`  TestRun ID:  ${passHandle.testRunId}`);
+  console.log(`  Status:      ${passHandle.status}`);
+  if (passHandle.errorMessage) {
+    console.log(`  Error:       ${passHandle.errorMessage}`);
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 2b: Run a deliberately failing test
+  // -------------------------------------------------------------------------
+
+  console.log('\n--- Phase 2b: Running failing spec (expected to fail) ---\n');
+
+  let failHandle = await executeTestRunFromRealm({
+    targetRealmUrl,
+    testResultsModuleUrl,
+    slug: 'hello-fail',
+    specPaths: ['Tests/hello-failing.spec.ts'],
+    testNames: ['deliberately fails for smoke testing'],
+    authorization,
+    fetch: fetchImpl,
+  });
+
+  console.log(`  TestRun ID:  ${failHandle.testRunId}`);
+  console.log(`  Status:      ${failHandle.status}`);
+  if (failHandle.errorMessage) {
+    console.log(`  Error:       ${failHandle.errorMessage}`);
+  }
+
   // -------------------------------------------------------------------------
   // Results
   // -------------------------------------------------------------------------
 
   console.log('\n--- Results ---\n');
-  console.log(`  TestRun ID:  ${handle.testRunId}`);
-  console.log(`  Status:      ${handle.status}`);
-  if (handle.errorMessage) {
-    console.log(`  Error:       ${handle.errorMessage}`);
-  }
-  console.log(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
 
-  if (handle.status === 'passed') {
-    console.log('\n✓ All tests passed!');
-  } else if (handle.status === 'failed') {
+  let passOk = passHandle.status === 'passed';
+  let failOk = failHandle.status === 'failed';
+
+  console.log(
+    `  Passing spec: ${passOk ? '✓ passed' : `✗ ${passHandle.status}`}`,
+  );
+  console.log(
+    `  Failing spec: ${failOk ? '✓ correctly reported as failed' : `✗ expected failed, got ${failHandle.status}`}`,
+  );
+  console.log(`\n  View in Boxel: ${targetRealmUrl}${passHandle.testRunId}`);
+  console.log(`  View in Boxel: ${targetRealmUrl}${failHandle.testRunId}`);
+
+  if (passOk && failOk) {
     console.log(
-      '\n✗ Some tests failed. Open the TestRun card in Boxel to see failure details.',
+      '\n✓ Smoke test passed! Both pass and fail paths work correctly.',
     );
-  } else if (handle.status === 'error') {
-    console.log('\n✗ Test execution encountered an error.');
+  } else {
+    console.log('\n✗ Smoke test had unexpected results.');
+    if (!passOk) {
+      console.log(
+        `  Passing spec should be "passed" but was "${passHandle.status}"`,
+      );
+    }
+    if (!failOk) {
+      console.log(
+        `  Failing spec should be "failed" but was "${failHandle.status}"`,
+      );
+    }
+    process.exit(1);
   }
 }
 

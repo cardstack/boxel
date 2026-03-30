@@ -43,6 +43,11 @@ export async function ensureTestArtifactsRealm(
     authorization?: string;
     fetch?: typeof globalThis.fetch;
     realmServerUrl: string;
+    matrixAuth: {
+      userId: string;
+      accessToken: string;
+      matrixUrl: string;
+    };
   },
 ): Promise<{
   testArtifactsRealmUrl: string;
@@ -92,6 +97,7 @@ export async function ensureTestArtifactsRealm(
       endpoint: tryEndpoint,
       authorization: options.authorization ?? '',
       fetch: options.fetch,
+      matrixAuth: options.matrixAuth,
     });
 
     if (result.created) {
@@ -396,6 +402,7 @@ export async function executeTestRunFromRealm(
     let playwrightConfig = resolve(packageRoot, 'playwright.realm.config.ts');
 
     let playwrightEnv: NodeJS.ProcessEnv = {
+      PLAYWRIGHT_TEST_DIR: specsLocalDir,
       BOXEL_SOURCE_REALM_URL: options.targetRealmUrl,
       BOXEL_SOURCE_REALM_PATH: specsLocalDir,
       BOXEL_TEST_REALM_PATH: specsLocalDir,
@@ -408,9 +415,6 @@ export async function executeTestRunFromRealm(
         ? { BOXEL_TEST_ARTIFACTS_RUN_FOLDER: testArtifactsRunFolder }
         : {}),
     };
-
-    // Use absolute paths so Playwright can find specs regardless of testDir config.
-    let absoluteSpecFiles = specFiles;
 
     let grepArgs: string[] = [];
     if (resolved.resumed && effectiveTestNames.length > 0) {
@@ -428,13 +432,14 @@ export async function executeTestRunFromRealm(
         'test',
         '--config',
         playwrightConfig,
-        `--testDir=${specsLocalDir}`,
         '--reporter=line,json',
         ...grepArgs,
-        ...absoluteSpecFiles,
+        ...specFiles,
       ],
       {
-        cwd: specsLocalDir,
+        // Run from the package root so spec files can resolve
+        // @playwright/test and other dependencies from node_modules.
+        cwd: packageRoot,
         encoding: 'utf8',
         env: { ...process.env, ...playwrightEnv },
       },

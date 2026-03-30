@@ -9,6 +9,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   iconURLFor,
   getRandomBackgroundURL,
@@ -189,6 +190,43 @@ export async function writeCardSource(
   }
 }
 
+/**
+ * Write a module (.gts, .ts) to a realm as raw source content.
+ * Unlike writeCardSource, this sends the raw text — no JSON wrapping.
+ */
+export async function writeModuleSource(
+  realmUrl: string,
+  modulePath: string,
+  content: string,
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
+
+  try {
+    let response = await fetchImpl(url, {
+      method: 'POST',
+      headers: buildCardSourceHeaders(options?.authorization),
+      body: content,
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Indexing Job Management
 // ---------------------------------------------------------------------------
@@ -244,15 +282,10 @@ export async function cancelAllIndexingJobs(
 /**
  * Create a new realm on the realm server via `_create-realm`.
  * Returns the canonical realm URL on success.
- */
-/**
- * Create a new realm on the realm server via `_create-realm`.
- * Returns the canonical realm URL on success.
  *
- * Note: callers should obtain realm-scoped auth separately via
- * `getRealmScopedAuth` AFTER any post-creation setup (e.g., Matrix
- * account data updates) — the realm server may not return the new
- * realm's JWT until it's fully registered.
+ * When `matrixAuth` is provided, the new realm URL is automatically
+ * added to the user's Matrix account data so it appears in their
+ * workspace list in Boxel.
  */
 export async function createRealm(
   realmServerUrl: string,
@@ -263,6 +296,11 @@ export async function createRealm(
     backgroundURL?: string;
     authorization: string;
     fetch?: typeof globalThis.fetch;
+    matrixAuth: {
+      userId: string;
+      accessToken: string;
+      matrixUrl: string;
+    };
   },
 ): Promise<{ realmUrl: string; created: boolean; error?: string }> {
   let fetchImpl = options.fetch ?? globalThis.fetch;
@@ -292,7 +330,17 @@ export async function createRealm(
 
     if (response.ok) {
       let result = (await response.json()) as { data?: { id?: string } };
-      return { realmUrl: result.data?.id ?? '', created: true };
+      let realmUrl = result.data?.id ?? '';
+
+      if (realmUrl) {
+        await addRealmToMatrixAccountData(
+          options.matrixAuth,
+          ensureTrailingSlash(realmUrl),
+          fetchImpl,
+        );
+      }
+
+      return { realmUrl, created: true };
     }
 
     let body: string;
@@ -401,6 +449,50 @@ export async function waitForRealmReady(
 }
 
 // ---------------------------------------------------------------------------
+// Matrix Account Data
+// ---------------------------------------------------------------------------
+
+/**
+ * Add a realm URL to the user's Matrix account data so it shows up
+ * in their Boxel workspace list.
+ */
+async function addRealmToMatrixAccountData(
+  matrixAuth: { userId: string; accessToken: string; matrixUrl: string },
+  realmUrl: string,
+  fetchImpl: typeof globalThis.fetch,
+): Promise<void> {
+  let accountDataUrl = new URL(
+    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+    matrixAuth.matrixUrl,
+  ).href;
+
+  let existingRealms: string[] = [];
+  try {
+    let getResponse = await fetchImpl(accountDataUrl, {
+      headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
+    });
+    if (getResponse.ok) {
+      let data = (await getResponse.json()) as { realms?: string[] };
+      existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
+    }
+  } catch {
+    // Best-effort — if we can't read existing realms, start fresh
+  }
+
+  if (!existingRealms.includes(realmUrl)) {
+    existingRealms.push(realmUrl);
+    await fetchImpl(accountDataUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${matrixAuth.accessToken}`,
+      },
+      body: JSON.stringify({ realms: existingRealms }),
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Pull Realm Files
 // ---------------------------------------------------------------------------
 
@@ -481,27 +573,7 @@ export async function pullRealmFiles(
         continue;
       }
 
-      let contentType = fileResponse.headers.get('content-type') ?? '';
       let rawText = await fileResponse.text();
-
-      // Card source responses wrap module content in JSON:API format.
-      // Extract the raw content for .gts/.ts files so they can be
-      // used directly by Playwright or other local tools.
-      if (contentType.includes('card+source') || contentType.includes('json')) {
-        try {
-          let parsed = JSON.parse(rawText) as {
-            data?: { attributes?: { content?: string } };
-          };
-          if (parsed.data?.attributes?.content) {
-            writeFileSync(localPath, parsed.data.attributes.content);
-            downloadedFiles.push(relativePath);
-            continue;
-          }
-        } catch {
-          // Not JSON or no content wrapper — write as-is
-        }
-      }
-
       writeFileSync(localPath, rawText);
       downloadedFiles.push(relativePath);
     } catch {

@@ -13,9 +13,17 @@ export function parseRunRealmTestsOutput(
   output: RunRealmTestsOutput,
   durationMs: number,
 ): TestRunAttributes {
-  let expected = output.expected ?? 0;
-  let unexpected = output.unexpected ?? 0;
+  // Support both the legacy run-realm-tests format (top-level expected/unexpected)
+  // and Playwright JSON reporter format (stats.expected/unexpected + suites).
+  let playwrightReport = output as unknown as PlaywrightJsonReport;
+  let expected = output.expected ?? playwrightReport.stats?.expected ?? 0;
+  let unexpected = output.unexpected ?? playwrightReport.stats?.unexpected ?? 0;
   let rawFailures = output.failures ?? [];
+
+  // Extract failures from Playwright suites if no legacy failures present.
+  if (rawFailures.length === 0 && playwrightReport.suites) {
+    rawFailures = extractPlaywrightFailures(playwrightReport.suites);
+  }
 
   let results: TestResultEntryData[] = rawFailures.map((f) => {
     let { message, stackTrace } = splitErrorAndStack(f.error);
@@ -30,7 +38,24 @@ export function parseRunRealmTestsOutput(
   let status: TestRunAttributes['status'] =
     unexpected > 0 || results.length > 0 ? 'failed' : 'passed';
 
+  // If no tests ran at all, check for Playwright-level errors (e.g. module not found).
   if (expected === 0 && unexpected === 0 && rawFailures.length === 0) {
+    let reportErrors = playwrightReport.errors ?? [];
+    if (reportErrors.length > 0) {
+      let errorMessage = reportErrors
+        .map((e) => e.message ?? '')
+        .filter(Boolean)
+        .join('\n')
+        .slice(0, 1000);
+      return {
+        status: 'error',
+        passedCount: 0,
+        failedCount: 0,
+        durationMs,
+        errorMessage: errorMessage || 'No tests found',
+        results: [],
+      };
+    }
     status = 'error';
   }
 
@@ -41,6 +66,50 @@ export function parseRunRealmTestsOutput(
     durationMs,
     results,
   };
+}
+
+// Playwright JSON reporter types (subset)
+interface PlaywrightJsonReport {
+  stats?: { expected?: number; unexpected?: number };
+  suites?: PlaywrightSuite[];
+  errors?: { message?: string }[];
+}
+
+interface PlaywrightSuite {
+  specs?: PlaywrightSpec[];
+  suites?: PlaywrightSuite[];
+}
+
+interface PlaywrightSpec {
+  title?: string;
+  ok?: boolean;
+  tests?: {
+    results?: { status?: string; errors?: { message?: string }[] }[];
+  }[];
+}
+
+function extractPlaywrightFailures(
+  suites: PlaywrightSuite[],
+): { title: string; outcome: string; error: string }[] {
+  let failures: { title: string; outcome: string; error: string }[] = [];
+  for (let suite of suites) {
+    if (suite.suites) {
+      failures.push(...extractPlaywrightFailures(suite.suites));
+    }
+    for (let spec of suite.specs ?? []) {
+      if (spec.ok === false) {
+        let errorMsg =
+          spec.tests?.[0]?.results?.[0]?.errors?.[0]?.message ??
+          'Unknown failure';
+        failures.push({
+          title: spec.title ?? 'unknown',
+          outcome: 'unexpected',
+          error: errorMsg,
+        });
+      }
+    }
+  }
+  return failures;
 }
 
 /**
