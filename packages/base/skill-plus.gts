@@ -56,7 +56,7 @@ export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
   const headers: Array<TocItem> = [];
   const usedIds = new Set<string>();
 
-  const headerRegex = /^(#{2,3})\s+(.+)$/gm;
+  const headerRegex = /^ {0,3}(#{2,3})\s+(.+)$/gm;
   let match;
 
   while ((match = headerRegex.exec(markdown)) !== null) {
@@ -96,11 +96,15 @@ export function injectHeadingAnchors(markdown?: string): string {
   const headers = parseMarkdownHeaders(markdown);
   let idx = 0;
 
-  return markdown.replace(/^(#{2,3})\s+(.+)$/gm, (match, hashes, text) => {
-    const item = headers[idx++];
-    if (!item) return match;
-    return `<a id="${item.id}" aria-hidden="true"></a>\n${hashes} ${text}`;
-  });
+  return markdown.replace(
+    /^ {0,3}(#{2,3})\s+(.+)$/gm,
+    (match, hashes, text) => {
+      const item = headers[idx++];
+      if (!item) return match;
+      const cleanText = text.replace(/\s*\{#[a-z0-9-]+\}\s*$/, '').trim();
+      return `<a id="${item.id}" aria-hidden="true"></a>\n${hashes} ${cleanText}`;
+    },
+  );
 }
 
 export class TocSection extends GlimmerComponent<{
@@ -118,12 +122,12 @@ export class TocSection extends GlimmerComponent<{
         <ul>
           {{#each @navItems as |item|}}
             <li
-              class={{if (gt item.level 2) 'toc-subsection' 'toc-section-item'}}
+              class={{if (gt item.level 3) 'toc-sub-subsection' (if (gt item.level 2) 'toc-subsection' 'toc-section-item')}}
             >
               <a
                 href='#{{item.id}}'
                 {{on 'click' (fn this.scrollToItem item.id)}}
-              >{{item.text}}</a>
+              >{{{item.text}}}</a>
             </li>
           {{/each}}
         </ul>
@@ -169,6 +173,10 @@ export class TocSection extends GlimmerComponent<{
       }
       .toc-subsection {
         padding-left: var(--boxel-sp);
+        font-size: var(--boxel-font-size-xs);
+      }
+      .toc-sub-subsection {
+        padding-left: calc(var(--boxel-sp) * 2);
         font-size: var(--boxel-font-size-xs);
       }
     </style>

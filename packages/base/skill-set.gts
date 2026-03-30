@@ -305,7 +305,8 @@ export class SkillSet extends SkillPlus {
         if (!skillRef) continue;
         const topicName =
           skillRef.topicName || skillRef.skill?.cardTitle || 'Untitled';
-        items.push(Object.assign(new TocItemField(), { level: 2, text: topicName, id: `skill-divider-${i}` }));
+        const sectionNumber = i + 1;
+        items.push(Object.assign(new TocItemField(), { level: 2, text: `<b>${sectionNumber}</b> ${topicName}`, id: `skill-divider-${i}` }));
         const mode = skillRef.inclusionMode || 'link-only';
         const rawContent =
           mode === 'full' && skillRef.skill?.instructions
@@ -319,7 +320,14 @@ export class SkillSet extends SkillPlus {
         ).length;
         for (let j = 0; j < skillHeadingCount; j++) {
           const heading = contentHeadings[headingIdx++];
-          if (heading) items.push(heading);
+          if (heading)
+            items.push(
+              Object.assign(new TocItemField(), {
+                level: heading.level + 1,
+                text: heading.text,
+                id: heading.id,
+              }),
+            );
         }
       }
 
