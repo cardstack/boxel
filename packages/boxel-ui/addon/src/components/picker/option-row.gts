@@ -6,6 +6,7 @@ import { cn, sanitizeHtmlSafe } from '../../helpers.ts';
 import CheckMark from '../../icons/check-mark.gts';
 import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
+import Tooltip from '../tooltip/index.gts';
 import type { PickerOption } from './index.gts';
 
 export interface OptionRowSignature {
@@ -61,6 +62,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       class={{cn 'picker-option-row' picker-option-row--selected=@isSelected}}
       data-test-boxel-picker-option-selected={{if @isSelected 'true' 'false'}}
       data-test-boxel-picker-option-row={{@option.id}}
+      data-test-boxel-picker-option-label={{@option.label}}
       {{on 'mouseenter' this.handleMouseEnter}}
       {{on 'mouseleave' this.handleMouseLeave}}
     >
@@ -107,7 +109,21 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
           {{/if}}
         </div>
       {{/if}}
-      <div class='picker-option-row__label'>{{@option.label}}</div>
+      {{#if @option.tooltip}}
+        <Tooltip
+          @placement='right'
+          class='picker-option-row__tooltip-trigger'
+        >
+          <:trigger>
+            <div class='picker-option-row__label'>{{@option.label}}</div>
+          </:trigger>
+          <:content>
+            {{@option.tooltip}}
+          </:content>
+        </Tooltip>
+      {{else}}
+        <div class='picker-option-row__label'>{{@option.label}}</div>
+      {{/if}}
     </div>
 
     <style scoped>
@@ -181,6 +197,15 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         width: 18px;
         height: 18px;
         flex-shrink: 0;
+      }
+
+      .picker-option-row__tooltip-trigger {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .picker-option-row__tooltip-trigger :deep(.trigger) {
+        width: 100%;
       }
 
       .picker-option-row__label {

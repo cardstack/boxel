@@ -42,7 +42,6 @@ import {
 import type { WithBoundArgs } from '@glint/template';
 
 const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
-const TYPE_PAGE_SIZE = 25;
 
 type TypeSummaryItem = {
   id: string;
@@ -78,7 +77,6 @@ interface Signature {
         | 'searchKey'
         | 'selectedRealmURLs'
         | 'selectedCardTypes'
-        | 'typeCodeRefs'
         | 'baseFilter'
         | 'searchResource'
         | 'activeSort'
@@ -104,7 +102,6 @@ export default class SearchPanel extends Component<Signature> {
 
   // Type summaries state
   @tracked private _typeSearchKey = '';
-  @tracked private _typePageNumber = 0;
   @tracked private _typeSummariesData: TypeSummaryItem[] = [];
   @tracked private _isLoadingTypes = false;
   @tracked private _isLoadingMoreTypes = false;
@@ -171,115 +168,34 @@ export default class SearchPanel extends Component<Signature> {
     }
   }
 
-  // Stores code_ref mappings for each display name (multiple code_refs
-  // can map to the same display name, e.g. different modules with the same card type name).
-  private _typeCodeRefs = new Map<string, string[]>();
-
-  private async fetchTypeSummariesPage(
-    realmURLs: string[],
-    searchKey: string,
-    pageNumber: number,
-    append: boolean,
-  ): Promise<{ hasMore: boolean }> {
-    let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
-      searchKey: searchKey || undefined,
-      page: { number: pageNumber, size: TYPE_PAGE_SIZE },
-    });
-
-    if (isDestroyed(this) || isDestroying(this)) {
-      return { hasMore: false };
-    }
-
-    if (append) {
-      this._typeSummariesData = [...this._typeSummariesData, ...result.data];
-    } else {
-      this._typeSummariesData = result.data;
-    }
-
-    let hasMore = this._typeSummariesData.length < result.meta.page.total;
-    this._hasMoreTypes = hasMore;
-    return { hasMore };
-  }
-
-  private countUniqueDisplayNames(data: TypeSummaryItem[]): number {
-    let names = new Set<string>();
-    let allowedCodeRefs = this.baseFilterCodeRefs;
-    for (let item of data) {
-      let name = item.attributes.displayName;
-      if (!name) continue;
-      if (allowedCodeRefs && !allowedCodeRefs.has(item.id)) continue;
-      names.add(name);
-    }
-    return names.size;
-  }
+  @tracked private _currentPage = 0;
+  private static PAGE_SIZE = 25;
 
   private fetchTypeSummariesTask = restartableTask(
-    async (
-      realmURLs: string[],
-      searchKey: string,
-      pageNumber: number,
-      append: boolean,
-    ) => {
-      // Debounce search requests (not load-more or initial load)
-      if (pageNumber === 0 && searchKey) {
-        await timeout(300);
+    async (realmURLs: string[], searchKey: string) => {
+      if (searchKey) {
+        await timeout(300); // debounce search
       }
-
-      if (isDestroyed(this) || isDestroying(this)) {
-        return;
-      }
-
-      if (!append) {
-        this._isLoadingTypes = true;
-      }
-
-      let currentPage = pageNumber;
-      let keepFetching = true;
+      if (isDestroyed(this) || isDestroying(this)) return;
+      this._isLoadingTypes = true;
+      this._currentPage = 0;
 
       try {
-        while (keepFetching) {
-          let previousVisibleCount = append
-            ? this.countUniqueDisplayNames(this._typeSummariesData)
-            : 0;
+        let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
+          searchKey: searchKey || undefined,
+          page: { number: 0, size: SearchPanel.PAGE_SIZE },
+        });
+        if (isDestroyed(this) || isDestroying(this)) return;
 
-          let { hasMore } = await this.fetchTypeSummariesPage(
-            realmURLs,
-            searchKey,
-            currentPage,
-            append,
-          );
-
-          if (isDestroyed(this) || isDestroying(this)) {
-            return;
-          }
-
-          let currentVisibleCount = this.countUniqueDisplayNames(
-            this._typeSummariesData,
-          );
-          let gotNewVisibleItems =
-            !append || currentVisibleCount > previousVisibleCount;
-
-          if (gotNewVisibleItems || !hasMore) {
-            keepFetching = false;
-          } else {
-            // No new visible items but more pages exist — fetch next page
-            currentPage++;
-            this._typePageNumber = currentPage;
-            append = true;
-          }
-        }
-
+        this._typeSummariesData = result.data;
+        this._hasMoreTypes = result.data.length < result.meta.page.total;
         this._isLoadingTypes = false;
-        this._isLoadingMoreTypes = false;
       } catch (e) {
         console.error('Failed to fetch card type summaries', e);
         if (!isDestroyed(this) && !isDestroying(this)) {
-          if (!append) {
-            this._typeSummariesData = [];
-          }
+          this._typeSummariesData = [];
           this._hasMoreTypes = false;
           this._isLoadingTypes = false;
-          this._isLoadingMoreTypes = false;
         }
       }
     },
@@ -290,9 +206,7 @@ export default class SearchPanel extends Component<Signature> {
     let realmURLs = this.selectedRealmURLs;
     let searchKey = this._typeSearchKey;
 
-    // Reset page and fetch
-    this._typePageNumber = 0;
-    this.fetchTypeSummariesTask.perform(realmURLs, searchKey, 0, false);
+    this.fetchTypeSummariesTask.perform(realmURLs, searchKey);
 
     return { realmURLs, searchKey };
   });
@@ -321,9 +235,8 @@ export default class SearchPanel extends Component<Signature> {
         options: [],
       });
 
-    const seen = new Map<string, PickerOption>();
-    const codeRefsByDisplayName = new Map<string, string[]>();
     const allowedCodeRefs = this.baseFilterCodeRefs;
+    const optionsById = new Map<string, PickerOption>();
 
     for (const item of this._typeSummariesData) {
       const name = item.attributes.displayName;
@@ -337,25 +250,19 @@ export default class SearchPanel extends Component<Signature> {
         continue;
       }
 
-      if (!codeRefsByDisplayName.has(name)) {
-        codeRefsByDisplayName.set(name, []);
-      }
-      codeRefsByDisplayName.get(name)!.push(codeRef);
-
-      if (!seen.has(name)) {
-        seen.set(name, {
-          id: name,
-          label: name,
-          icon: item.attributes.iconHTML ?? undefined,
-          type: 'option',
-        });
-      }
+      optionsById.set(codeRef, {
+        id: codeRef,
+        label: name,
+        tooltip: codeRef,
+        icon: item.attributes.iconHTML ?? undefined,
+        type: 'option',
+      });
     }
 
-    this._typeCodeRefs = codeRefsByDisplayName;
-
     value.options = [
-      ...[...seen.values()].sort((a, b) => a.label.localeCompare(b.label)),
+      ...[...optionsById.values()].sort((a, b) =>
+        a.label.localeCompare(b.label),
+      ),
     ];
 
     // Recalculate selected based on previous user selection.
@@ -375,10 +282,9 @@ export default class SearchPanel extends Component<Signature> {
       // Keep previous selections that still exist in the new options,
       // mapping to new object references so Picker's isSelected (which
       // uses reference equality via lodash includes) works correctly.
-      const validIds = new Set(seen.keys());
       const kept = prev
-        .filter((opt) => opt.type !== 'select-all' && validIds.has(opt.id))
-        .map((opt) => seen.get(opt.id)!);
+        .filter((opt) => opt.type !== 'select-all' && optionsById.has(opt.id))
+        .map((opt) => optionsById.get(opt.id)!);
       value.selected = kept.length > 0 ? kept : [];
     }
 
@@ -419,8 +325,35 @@ export default class SearchPanel extends Component<Signature> {
   @action
   private onTypeSearchChange(term: string) {
     this._typeSearchKey = term;
-    this._typePageNumber = 0;
   }
+
+  private loadMoreTypesTask = restartableTask(async () => {
+    if (isDestroyed(this) || isDestroying(this)) return;
+    this._isLoadingMoreTypes = true;
+    const nextPage = this._currentPage + 1;
+
+    try {
+      let result = await this.realmServer.fetchCardTypeSummaries(
+        this.selectedRealmURLs,
+        {
+          searchKey: this._typeSearchKey || undefined,
+          page: { number: nextPage, size: SearchPanel.PAGE_SIZE },
+        },
+      );
+      if (isDestroyed(this) || isDestroying(this)) return;
+
+      this._currentPage = nextPage;
+      this._typeSummariesData = [...this._typeSummariesData, ...result.data];
+      const totalFetched = this._typeSummariesData.length;
+      this._hasMoreTypes = totalFetched < result.meta.page.total;
+      this._isLoadingMoreTypes = false;
+    } catch (e) {
+      console.error('Failed to load more card type summaries', e);
+      if (!isDestroyed(this) && !isDestroying(this)) {
+        this._isLoadingMoreTypes = false;
+      }
+    }
+  });
 
   @action
   private onLoadMoreTypes() {
@@ -431,14 +364,7 @@ export default class SearchPanel extends Component<Signature> {
     ) {
       return;
     }
-    this._isLoadingMoreTypes = true;
-    this._typePageNumber = this._typePageNumber + 1;
-    this.fetchTypeSummariesTask.perform(
-      this.selectedRealmURLs,
-      this._typeSearchKey,
-      this._typePageNumber,
-      true,
-    );
+    this.loadMoreTypesTask.perform();
   }
 
   <template>
@@ -462,7 +388,6 @@ export default class SearchPanel extends Component<Signature> {
         searchKey=@searchKey
         selectedRealmURLs=this.selectedRealmURLs
         selectedCardTypes=this.typeFilter.selected
-        typeCodeRefs=this._typeCodeRefs
         baseFilter=@baseFilter
         searchResource=this.searchResource
         activeSort=this.activeSort

@@ -19,6 +19,7 @@ export type PickerOption = {
   id: string;
   label: string;
   shortLabel?: string;
+  tooltip?: string;
   type?: 'select-all' | 'option';
 };
 

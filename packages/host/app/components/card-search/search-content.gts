@@ -153,7 +153,6 @@ interface Signature {
     onSubmit?: (selection: string | NewCardArgs) => void;
     showHeader?: boolean;
     selectedCardTypes?: PickerOption[];
-    typeCodeRefs?: Map<string, string[]>;
     filteredRecentCards?: CardDef[];
     searchResource: PrerenderedSearchResource;
     activeSort: SortOption;
@@ -278,7 +277,7 @@ export default class SearchContent extends Component<Signature> {
     const pickerSelectedTypeNames = new Set(
       (this.args.selectedCardTypes ?? [])
         .filter((opt) => opt.type !== 'select-all')
-        .map((opt) => opt.id),
+        .map((opt) => opt.label),
     );
     if (pickerSelectedTypeNames.size > 0) {
       cards = cards.filter((card) =>
@@ -422,9 +421,7 @@ export default class SearchContent extends Component<Signature> {
       if (opt.type === 'select-all') {
         continue;
       }
-      for (const ref of this.args.typeCodeRefs?.get(opt.id) ?? []) {
-        selectedCodeRefs.add(ref);
-      }
+      selectedCodeRefs.add(opt.id);
     }
 
     const allCards = this.args.searchResource.instances;

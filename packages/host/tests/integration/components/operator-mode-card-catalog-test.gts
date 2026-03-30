@@ -424,7 +424,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       // Options should be constrained by baseFilter (Pet types only)
       // Person should NOT appear as a type option since baseFilter constrains to Pet
       assert
-        .dom('[data-test-boxel-picker-option-row="Person"]')
+        .dom('[data-test-boxel-picker-option-label="Person"]')
         .doesNotExist(
           'Person type is not available when baseFilter constrains to Pet',
         );

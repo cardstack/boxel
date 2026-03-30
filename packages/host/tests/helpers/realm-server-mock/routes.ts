@@ -270,6 +270,13 @@ function registerTypesRoutes() {
         );
       }
 
+      // Sort alphabetically by displayName so pagination returns a stable order
+      allEntries.sort((a, b) =>
+        (a.attributes.displayName ?? '').localeCompare(
+          b.attributes.displayName ?? '',
+        ),
+      );
+
       let total = allEntries.length;
 
       // Apply pagination
