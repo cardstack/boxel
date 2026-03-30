@@ -14,6 +14,7 @@ import {
   inferContentType,
   SupportedMimeType,
   relativeTo,
+  unresolveCardReference,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -337,7 +338,7 @@ export default class FileDefManagerImpl
         const content = JSON.stringify(entry.serialization);
         const contentHash = await this.getContentHash(content);
         let fileDef = this.fileAPI.createFileDef({
-          sourceUrl: entry.card.id,
+          sourceUrl: unresolveCardReference(entry.card.id),
           name: entry.card.cardTitle,
           contentType: SupportedMimeType.CardJson,
           contentHash,
