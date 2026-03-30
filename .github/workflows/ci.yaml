@@ -614,11 +614,11 @@ jobs:
 
   realm-server-merge-reports:
     name: Merge Realm Server reports and publish
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && (needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
     concurrency:
       group: realm-server-merge-reports-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    needs: realm-server-test
+    needs: [change-check, realm-server-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
