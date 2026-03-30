@@ -413,6 +413,14 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-option-row]');
 
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .hasAttribute(
+          'placeholder',
+          'Search for a type',
+          'type picker has correct search placeholder',
+        );
+
       // "Any Type" should be present with count
       assert
         .dom('[data-test-boxel-picker-option-row="select-all"]')
