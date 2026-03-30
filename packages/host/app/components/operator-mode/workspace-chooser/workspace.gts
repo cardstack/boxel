@@ -1,10 +1,11 @@
-import { array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import Home from '@cardstack/boxel-icons/home';
 import { dropTask, task } from 'ember-concurrency';
 import pluralize from 'pluralize';
 
@@ -14,8 +15,15 @@ import {
   Menu,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar } from '@cardstack/boxel-ui/helpers';
-import { Group, IconGlobe, IconTrash, Lock, Star, StarFilled } from '@cardstack/boxel-ui/icons';
+import { MenuItem, cssVar, gt } from '@cardstack/boxel-ui/helpers';
+import {
+  Group,
+  IconGlobe,
+  IconTrash,
+  Lock,
+  Star,
+  StarFilled,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   hasExecutableExtension,
@@ -46,13 +54,17 @@ export default class Workspace extends Component<Signature> {
     {{#if this.loadRealmTask.isRunning}}
       <WorkspaceLoadingIndicator />
     {{else}}
-      <div class='workspace-card' ...attributes>
+      <div
+        class='workspace-card {{if this.isHostDropdownOpen "is-open"}}'
+        {{on 'mouseleave' this.closeHostDropdown}}
+        ...attributes
+      >
         <ItemContainer
           data-test-workspace={{this.name}}
           {{on 'click' this.openWorkspace}}
         >
           <div
-            class='icon'
+            class='tile-icon'
             style={{cssVar
               workspace-background-image-url=this.backgroundImageURL
             }}
@@ -70,6 +82,7 @@ export default class Workspace extends Component<Signature> {
           type='button'
           {{on 'click' this.toggleFavorite}}
           aria-label={{if this.isFavorited 'Unfavorite' 'Favorite'}}
+          data-test-workspace-favorite-btn={{@realmURL}}
         >
           {{#if this.isFavorited}}
             <StarFilled width='16' height='16' />
@@ -80,19 +93,63 @@ export default class Workspace extends Component<Signature> {
         <div class='tile-menu-btn'>
           <BoxelDropdown @autoClose={{true}}>
             <:trigger as |bindings|>
-              <ContextButton @label='Options' @variant='ghost' @width='16' @height='16' {{bindings}} />
+              <ContextButton
+                @label='Options'
+                @variant='ghost'
+                @width='16'
+                @height='16'
+                data-test-workspace-menu-trigger={{@realmURL}}
+                {{bindings}}
+              />
             </:trigger>
             <:content as |dd|>
               <Menu @items={{this.tileMenuItems}} @closeMenu={{dd.close}} />
             </:content>
           </BoxelDropdown>
         </div>
-        <div class='info'>
-          <span class='name' data-test-workspace-name>{{this.name}}</span>
-          <span
-            class='visibility'
-            data-test-workspace-visibility
+        {{#if this.hasPublishedRealms}}
+          <button
+            class='host-trigger'
+            type='button'
+            data-test-host-trigger={{@realmURL}}
+            {{on 'click' this.toggleHostDropdown}}
           >
+            <span class='trigger-house'><Home width='13' height='13' /></span>
+            <span class='trigger-url'>{{this.displayPublishedURL}}</span>
+            {{#if (gt this.publishedRealmURLs.length 1)}}
+              <span class='trigger-chevron'>&#x25BE;</span>
+            {{/if}}
+          </button>
+
+          {{#if this.isHostDropdownOpen}}
+            <div class='host-dropdown' data-test-host-dropdown={{@realmURL}}>
+              <span class='dropdown-header'>Launch in new window</span>
+              <ul class='dropdown-list'>
+                {{#each this.publishedRealmURLs as |url|}}
+                  <li>
+                    <button
+                      type='button'
+                      class='dropdown-option'
+                      data-test-host-dropdown-option={{url}}
+                      {{on 'click' (fn this.openPublishedRealm url)}}
+                    >
+                      <span class='option-url'>{{url}}</span>
+                    </button>
+                  </li>
+                {{/each}}
+              </ul>
+            </div>
+          {{/if}}
+        {{/if}}
+
+        <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
+          <span class='name' data-test-workspace-name>{{this.name}}</span>
+          <span class='visibility' data-test-workspace-visibility>
+            {{#if this.hasPublishedRealms}}
+              <span class='hosted-icon'>
+                <Home width='13' height='13' />
+              </span>
+            {{/if}}
             <this.visibilityIcon width='12' height='12' />
             {{this.visibility}}
           </span>
@@ -228,8 +285,8 @@ export default class Workspace extends Component<Signature> {
         border-radius: 6px;
       }
       .tile-favorite-btn.is-favorited {
-        color: #00FFBA;
-        --icon-color: #00FFBA;
+        color: #00ffba;
+        --icon-color: #00ffba;
         opacity: 1;
       }
       .tile-menu-btn {
@@ -258,7 +315,7 @@ export default class Workspace extends Component<Signature> {
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
       }
-      .icon {
+      .tile-icon {
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);
         background-position: center;
@@ -292,7 +349,9 @@ export default class Workspace extends Component<Signature> {
       }
       .workspace-realm-icon {
         --boxel-realm-icon-size: 42px;
-        --boxel-realm-icon-border-radius: calc(var(--boxel-border-radius-xs) + 6px);
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
         --boxel-realm-icon-background-color: var(--boxel-light);
       }
       .info {
@@ -323,6 +382,113 @@ export default class Workspace extends Component<Signature> {
         justify-content: center;
         gap: var(--boxel-sp-5xs);
         --icon-color: var(--boxel-400);
+      }
+      .hosted-icon {
+        color: #00ffba;
+        display: flex;
+        align-items: center;
+        margin-right: 2px;
+      }
+      .info--hidden {
+        visibility: hidden;
+      }
+      .host-trigger {
+        position: absolute;
+        top: calc(166px - 36px);
+        left: 0;
+        width: 250px;
+        height: 36px;
+        background: rgba(0 0 0 / 40%);
+        backdrop-filter: blur(6px);
+        border: none;
+        border-radius: 0 0 15px 15px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 10px 0 15px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+        z-index: 7;
+        overflow: hidden;
+      }
+      .workspace-card:hover .host-trigger,
+      .workspace-card.is-open .host-trigger {
+        opacity: 1;
+        transition: none;
+      }
+      .trigger-house {
+        color: #00ffba;
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .trigger-url {
+        font-size: 11px;
+        color: white;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+        text-align: left;
+      }
+      .trigger-chevron {
+        font-size: 12px;
+        color: white;
+        flex-shrink: 0;
+      }
+      .host-dropdown {
+        position: absolute;
+        top: 166px;
+        left: 0;
+        width: 250px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 16px rgba(0 0 0 / 25%);
+        z-index: 10;
+        padding: 10px 0 6px;
+        display: flex;
+        flex-direction: column;
+      }
+      .dropdown-header {
+        font-size: 11px;
+        font-weight: 600;
+        color: #444;
+        padding: 0 12px 8px;
+        border-bottom: 1px solid rgba(0 0 0 / 8%);
+        display: block;
+      }
+      .dropdown-list {
+        list-style: none;
+        margin: 0;
+        padding: 4px 6px;
+      }
+      .dropdown-list li {
+        margin: 0;
+        padding: 0;
+      }
+      .dropdown-option {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        background: none;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        text-align: left;
+      }
+      .dropdown-option:hover {
+        background: rgba(0 0 0 / 6%);
+      }
+      .option-url {
+        font-size: 12px;
+        color: #1a1628;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .workspace-menu {
         position: absolute;
@@ -478,7 +644,9 @@ export default class Workspace extends Component<Signature> {
     </style>
   </template>
 
-  @tracked isFavorited = false;
+  get isFavorited() {
+    return this.matrixService.workspaceFavorites.includes(this.args.realmURL);
+  }
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
@@ -490,6 +658,7 @@ export default class Workspace extends Component<Signature> {
   @tracked private showDeleteModal = false;
   @tracked private deleteError: string | undefined;
   @tracked private deleteSummary: WorkspaceDeleteSummary | undefined;
+  @tracked private isHostDropdownOpen = false;
 
   constructor(...args: [any, any]) {
     super(...args);
@@ -524,12 +693,51 @@ export default class Workspace extends Component<Signature> {
         icon: this.isFavorited ? StarFilled : Star,
         action: this.toggleFavorite,
       }),
-      new MenuItem({ label: 'Delete Workspace', icon: IconTrash, action: () => {}, dangerous: true }),
+      new MenuItem({
+        label: 'Delete Workspace',
+        icon: IconTrash,
+        action: this.openDeleteModal,
+        dangerous: true,
+        disabled: !this.canDeleteWorkspace,
+      }),
     ];
   }
 
-  @action toggleFavorite() {
-    this.isFavorited = !this.isFavorited;
+  @action async toggleFavorite() {
+    if (this.isFavorited) {
+      await this.matrixService.removeWorkspaceFavorite(this.args.realmURL);
+    } else {
+      await this.matrixService.addWorkspaceFavorite(this.args.realmURL);
+    }
+  }
+
+  private get primaryPublishedURL() {
+    return this.publishedRealmURLs[0] ?? '';
+  }
+
+  private get displayPublishedURL() {
+    try {
+      let url = new URL(this.primaryPublishedURL);
+      return url.host + url.pathname.replace(/\/$/, '');
+    } catch {
+      return this.primaryPublishedURL;
+    }
+  }
+
+  @action toggleHostDropdown(event: MouseEvent) {
+    event.stopPropagation();
+    if (!this.hasPublishedRealms) return;
+    this.isHostDropdownOpen = !this.isHostDropdownOpen;
+  }
+
+  @action openPublishedRealm(url: string, event: MouseEvent) {
+    event.stopPropagation();
+    window.open(url, '_blank', 'noopener,noreferrer');
+    this.isHostDropdownOpen = false;
+  }
+
+  @action closeHostDropdown() {
+    this.isHostDropdownOpen = false;
   }
 
   private get backgroundURL() {
@@ -566,10 +774,6 @@ export default class Workspace extends Component<Signature> {
 
   private get canDeleteWorkspace() {
     return this.realm.isRealmOwner(this.args.realmURL);
-  }
-
-  private get deleteWorkspaceDisabled() {
-    return !this.canDeleteWorkspace;
   }
 
   private get deleteSummaryText() {

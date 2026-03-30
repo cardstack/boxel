@@ -7,6 +7,8 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Home from '@cardstack/boxel-icons/home';
+import Shapes from '@cardstack/boxel-icons/shapes';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -17,12 +19,17 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Avatar,
+  BoxelDropdown,
   IconButton,
+  Menu,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, MenuItem, not } from '@cardstack/boxel-ui/helpers';
 
-import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
+import {
+  BoxelIconWithText,
+  DropdownArrowDown,
+} from '@cardstack/boxel-ui/icons';
 
 import { cardIdToURL } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -105,10 +112,31 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private profileSummaryOpened = false;
   @tracked private sortOrder: 'default' | 'hosted-only' = 'default';
 
-  @action private setSortOrder(event: Event) {
-    this.sortOrder = (event.target as HTMLSelectElement).value as
-      | 'default'
-      | 'hosted-only';
+  @action private setSortOrder(value: 'default' | 'hosted-only') {
+    this.sortOrder = value;
+  }
+
+  private get sortLabel() {
+    return this.sortOrder === 'hosted-only' ? 'Hosted Only' : 'View All';
+  }
+
+  private get sortIcon() {
+    return this.sortOrder === 'hosted-only' ? Home : Shapes;
+  }
+
+  private get sortMenuItems() {
+    return [
+      new MenuItem({
+        label: 'View All',
+        icon: Shapes,
+        action: () => this.setSortOrder('default'),
+      }),
+      new MenuItem({
+        label: 'Hosted Only',
+        icon: Home,
+        action: () => this.setSortOrder('hosted-only'),
+      }),
+    ];
   }
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
@@ -411,15 +439,29 @@ export default class SubmodeLayout extends Component<Signature> {
             />
             {{#if this.workspaceChooserOpened}}
               <div class='sort-controls'>
-                <select
-                  id='workspace-sort-dropdown'
-                  class='sort-dropdown'
-                  {{on 'change' this.setSortOrder}}
-                  aria-label='Filter workspaces'
-                >
-                  <option value='default'>View All</option>
-                  <option value='hosted-only'>Hosted Only</option>
-                </select>
+                <BoxelDropdown @autoClose={{true}}>
+                  <:trigger as |bindings|>
+                    <button
+                      class='sort-dropdown-trigger'
+                      aria-label='Filter workspaces'
+                      {{bindings}}
+                    >
+                      <this.sortIcon width='16' height='16' />
+                      {{this.sortLabel}}
+                      <DropdownArrowDown
+                        width='12'
+                        height='12'
+                        class='sort-dropdown-arrow'
+                      />
+                    </button>
+                  </:trigger>
+                  <:content as |dd|>
+                    <Menu
+                      @items={{this.sortMenuItems}}
+                      @closeMenu={{dd.close}}
+                    />
+                  </:content>
+                </BoxelDropdown>
               </div>
             {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
@@ -453,10 +495,7 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser
-              @sortOrder={{this.sortOrder}}
-              @onSortChange={{this.setSortOrder}}
-            />
+            <WorkspaceChooser @sortOrder={{this.sortOrder}} />
           {{/if}}
 
           {{yield
@@ -609,33 +648,37 @@ export default class SubmodeLayout extends Component<Signature> {
         pointer-events: auto;
         z-index: 9999;
       }
-      .sort-dropdown {
+      .sort-dropdown-trigger {
         appearance: none;
         background-color: rgb(42 32 64 / 90%);
         border: 1px solid rgba(255 255 255 / 25%);
         border-radius: 7px;
         color: var(--boxel-light);
+        --icon-color: var(--boxel-light);
         cursor: pointer;
         font: 400 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
-        padding: 6px 52px 6px 14px;
+        padding: 6px 14px;
         text-align: left;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: right 12px center;
-        transition: border-color 0.15s ease, background-color 0.15s ease;
+        transition:
+          border-color 0.15s ease,
+          background-color 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       }
-      .sort-dropdown:hover {
+      .sort-dropdown-trigger:hover {
         background-color: rgba(255 255 255 / 12%);
         border-color: rgba(255 255 255 / 50%);
       }
-      .sort-dropdown:focus {
+      .sort-dropdown-trigger:focus {
         outline: none;
         border-color: rgba(255 255 255 / 50%);
       }
-      .sort-dropdown option {
-        background-color: #1a1628;
-        color: var(--boxel-light);
+      .sort-dropdown-arrow {
+        --icon-color: var(--boxel-light);
+        margin-left: 2px;
+        flex-shrink: 0;
       }
 
       .submode-switcher {
