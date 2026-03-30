@@ -323,7 +323,8 @@ export class SkillSet extends SkillPlus {
         items.push(
           Object.assign(new TocItemField(), {
             level: 2,
-            text: `<b>${sectionNumber}</b> ${topicName}`,
+            text: topicName,
+            badge: String(sectionNumber),
             id: `skill-divider-${i}`,
           }),
         );

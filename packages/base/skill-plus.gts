@@ -46,6 +46,7 @@ export class TocItemField extends FieldDef {
   @field level = contains(NumberField);
   @field text = contains(StringField);
   @field id = contains(StringField);
+  @field badge = contains(StringField);
 }
 
 // Parse headers from markdown text with deterministic ID generation
@@ -152,7 +153,7 @@ export class TocSection extends GlimmerComponent<{
               <a
                 href='#{{item.id}}'
                 {{on 'click' (fn this.scrollToItem item.id)}}
-              >{{{item.text}}}</a>
+              >{{#if item.badge}}<b>{{item.badge}}</b> {{/if}}{{item.text}}</a>
             </li>
           {{/each}}
         </ul>
