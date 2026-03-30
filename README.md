@@ -457,9 +457,9 @@ The tests are available at `http://localhost:4200/tests`
 
 ### Realm Server Node tests
 
-To run the `packages/realm-server/` workspace tests start:
-
 First make sure to generate the host app's `dist/` output in order to support card pre-rendering by first starting the host app (instructions above). If you want to make the host app's `dist/` output without starting the host app, you can run `pnpm build` in the host app's workspace.
+
+To run the `packages/realm-server/` workspace tests start:
 
 1. `mise run dev` from the repo root to serve _both_ the base realm and the realm that serves the test cards for node.
 2. Run the realm server tests:
