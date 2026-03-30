@@ -13,8 +13,8 @@
  * Phase 2 — Run the testing phase:
  *   Calls executeTestRunFromRealm which:
  *   - Creates a TestRun card (status: running) in the target realm's Test Runs/ folder
- *   - Pulls the target realm locally and starts a test harness
- *   - Runs the Playwright spec against the harness
+ *   - Pulls spec files from the target realm locally (Playwright needs local .spec.ts files)
+ *   - Runs the Playwright spec against the live target realm (no local harness)
  *   - Any card instances created during spec execution land in the test artifacts realm
  *   - Completes the TestRun card with pass/fail results
  *
@@ -274,10 +274,9 @@ async function main() {
   );
   console.log('  This will:');
   console.log('    1. Create a TestRun card (status: running) in Test Runs/');
-  console.log('    2. Pull the target realm locally');
-  console.log('    3. Start a test harness realm server');
-  console.log('    4. Run the Playwright spec against the harness');
-  console.log('    5. Complete the TestRun card with results');
+  console.log('    2. Pull spec files from the target realm locally');
+  console.log('    3. Run the Playwright spec against the live target realm');
+  console.log('    4. Complete the TestRun card with results');
   console.log('');
 
   let handle = await executeTestRunFromRealm({
