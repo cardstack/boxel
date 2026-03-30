@@ -86,12 +86,24 @@ export default class CreatePRModal extends Component<Signature> {
       >
         <:content>
           {{#if this.isSubmitted}}
-            <p class='submitted-message' data-test-create-pr-success>
-              Your listing
-              <strong>{{this.listingName}}</strong>
-              has been submitted for review. A PR will be created on GitHub and
-              you will be notified once it is approved.
-            </p>
+            <div class='submitted-container' data-test-create-pr-success>
+              <p class='submitted-message'>
+                Your listing
+                <strong>{{this.listingName}}</strong>
+                has been submitted for review. A PR will be created on GitHub
+                and you will be notified once it is approved.
+              </p>
+              <Button
+                @as='anchor'
+                @kind='secondary'
+                @size='small'
+                @href='https://github.com/cardstack/boxel-catalog/pulls'
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                Check for updates on GitHub
+              </Button>
+            </div>
           {{else}}
             <p class='description'>
               You're about to submit your listing for review. A PR will be
@@ -193,6 +205,12 @@ export default class CreatePRModal extends Component<Signature> {
         to {
           opacity: 1;
         }
+      }
+      .submitted-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--boxel-sp);
       }
       .submitted-message {
         font: var(--boxel-font-sm);
