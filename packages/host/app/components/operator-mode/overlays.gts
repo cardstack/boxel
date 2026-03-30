@@ -107,19 +107,24 @@ export default class Overlays extends Component<OverlaySignature> {
   @tracked
   protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
 
+  // Expand the overlay slightly beyond the card boundary so the selection ring
+  // and hover border sit outside the card, avoiding border-radius style clashes.
+  protected overlayExpansionPx = 2;
+
   protected offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
       let { elements, rects } = state;
       let { floating, reference } = elements;
       let { width, height } = reference.getBoundingClientRect();
+      let expansion = this.overlayExpansionPx;
 
-      floating.style.width = width + 'px';
-      floating.style.height = height + 'px';
+      floating.style.width = width + expansion * 2 + 'px';
+      floating.style.height = height + expansion * 2 + 'px';
       floating.style.position = 'absolute';
       return {
-        x: rects.reference.x,
-        y: rects.reference.y,
+        x: rects.reference.x - expansion,
+        y: rects.reference.y - expansion,
       };
     },
   };

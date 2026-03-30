@@ -186,7 +186,7 @@ export default class OperatorModeOverlays extends Overlays {
         --overlay-fitted-card-header-height: 2.5rem;
       }
       .actions-overlay {
-        border-radius: var(--boxel-border-radius);
+        border-radius: var(--boxel-border-radius-lg);
         pointer-events: none;
 
         container-name: actions-overlay;
