@@ -31,9 +31,7 @@ function escapeXml(str) {
 }
 
 QUnit.on('testEnd', (data) => {
-  const moduleName = data.fullName
-    ? data.fullName.slice(0, data.fullName.lastIndexOf(' > '))
-    : data.module || 'default';
+  const moduleName = data.module || 'default';
   const testName = data.name || 'unknown';
   const runtime = (data.runtime || 0) / 1000; // ms → seconds
   const status = data.status; // passed, failed, skipped, todo
