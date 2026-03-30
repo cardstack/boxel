@@ -5153,7 +5153,6 @@ new
     );
   });
 
-
   test('excludes assistant messages with empty body and no tool calls', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -5188,6 +5187,7 @@ new
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
+          data: {},
         },
         sender: '@aibot:localhost',
         room_id: 'room1',
@@ -5292,6 +5292,7 @@ new
               }),
             },
           ],
+          data: {},
         },
         sender: '@aibot:localhost',
         room_id: 'room1',
@@ -5307,13 +5308,13 @@ new
         origin_server_ts: 3,
         content: {
           msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-          body: 'Command result',
           commandRequestId: 'call_1',
           'm.relates_to': {
             rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
             event_id: '2',
             key: 'applied',
           },
+          data: {},
         },
         sender: '@user:localhost',
         room_id: 'room1',
