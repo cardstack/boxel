@@ -259,8 +259,11 @@ class RealmResource {
 
   private loginTask = task(async () => {
     try {
+      let resolvedURL = isRegisteredPrefix(this.realmURL)
+        ? cardIdToURL(this.realmURL)
+        : new URL(this.realmURL);
       let token = await this.matrixService.createRealmSession(
-        new URL(this.realmURL),
+        resolvedURL,
       );
       this.token = token;
     } catch (e: any) {
