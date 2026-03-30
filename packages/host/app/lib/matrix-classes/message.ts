@@ -78,7 +78,7 @@ export class Message implements RoomMessageInterface {
   isCodePatchCorrectness?: boolean;
 
   author: RoomMember;
-  status: EventStatus | null;
+  @tracked status: EventStatus | null;
   @tracked _updated: Date;
   eventId: string;
   roomId: string;
