@@ -448,7 +448,11 @@ export async function pullRealmFiles(
 
   let mtimes: Record<string, number>;
   try {
-    mtimes = (await mtimesResponse.json()) as Record<string, number>;
+    let json = await mtimesResponse.json();
+    // _mtimes returns JSON:API format: { data: { attributes: { mtimes: {...} } } }
+    mtimes =
+      (json as { data?: { attributes?: { mtimes?: Record<string, number> } } })
+        ?.data?.attributes?.mtimes ?? json;
   } catch {
     return { files: [], error: 'Failed to parse _mtimes response as JSON' };
   }
@@ -470,15 +474,38 @@ export async function pullRealmFiles(
     try {
       let fileResponse = await fetchImpl(fullUrl, {
         method: 'GET',
-        headers: buildAuthHeaders(options?.authorization, '*/*'),
+        headers: buildAuthHeaders(
+          options?.authorization,
+          cardSourceMimeType,
+        ),
       });
 
       if (!fileResponse.ok) {
         continue;
       }
 
-      let content = await fileResponse.arrayBuffer();
-      writeFileSync(localPath, Buffer.from(content));
+      let contentType = fileResponse.headers.get('content-type') ?? '';
+      let rawText = await fileResponse.text();
+
+      // Card source responses wrap module content in JSON:API format.
+      // Extract the raw content for .gts/.ts files so they can be
+      // used directly by Playwright or other local tools.
+      if (contentType.includes('card+source') || contentType.includes('json')) {
+        try {
+          let parsed = JSON.parse(rawText) as {
+            data?: { attributes?: { content?: string } };
+          };
+          if (parsed.data?.attributes?.content) {
+            writeFileSync(localPath, parsed.data.attributes.content);
+            downloadedFiles.push(relativePath);
+            continue;
+          }
+        } catch {
+          // Not JSON or no content wrapper — write as-is
+        }
+      }
+
+      writeFileSync(localPath, rawText);
       downloadedFiles.push(relativePath);
     } catch {
       continue;

@@ -409,7 +409,8 @@ export async function executeTestRunFromRealm(
         : {}),
     };
 
-    let relativeSpecFiles = specFiles.map((f) => relative(specsLocalDir, f));
+    // Use absolute paths so Playwright can find specs regardless of testDir config.
+    let absoluteSpecFiles = specFiles;
 
     let grepArgs: string[] = [];
     if (resolved.resumed && effectiveTestNames.length > 0) {
@@ -427,9 +428,10 @@ export async function executeTestRunFromRealm(
         'test',
         '--config',
         playwrightConfig,
+        `--testDir=${specsLocalDir}`,
         '--reporter=line,json',
         ...grepArgs,
-        ...relativeSpecFiles,
+        ...absoluteSpecFiles,
       ],
       {
         cwd: specsLocalDir,
