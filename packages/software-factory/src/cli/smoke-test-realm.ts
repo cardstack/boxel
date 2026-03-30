@@ -105,7 +105,7 @@ async function main() {
   if (!targetRealmUrl) {
     console.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
     console.error(
-      '\nRequires MATRIX_USERNAME and MATRIX_PASSWORD environment variables.',
+      '\nRequires MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD environment variables.',
     );
     process.exit(1);
   }
@@ -124,6 +124,11 @@ async function main() {
   // The endpoint for _create-realm is just the realm name (not username/realm).
   // The username is determined from the JWT. Extract just the last segment.
   let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
+
+  // Ensure REALM_SERVER_URL is set for the auth chain (derived from target realm URL)
+  if (!process.env.REALM_SERVER_URL) {
+    process.env.REALM_SERVER_URL = realmServerUrl;
+  }
 
   console.log('=== Factory Test Realm Smoke Test ===\n');
   console.log(`Target realm: ${targetRealmUrl}`);
