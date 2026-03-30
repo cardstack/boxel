@@ -175,8 +175,8 @@ export const CONFIGURED_PRERENDER_URL = process.env
   .SOFTWARE_FACTORY_PRERENDER_URL
   ? new URL(process.env.SOFTWARE_FACTORY_PRERENDER_URL)
   : undefined;
-// The seeded test Postgres used by the harness runs with max_connections=40, so
-// isolated workers need a smaller per-process pool cap to keep workers=2 stable.
+// The seeded test Postgres used by the harness runs with max_connections=50, so
+// isolated workers need a smaller per-process pool cap to keep workers=3 stable.
 export const DEFAULT_PG_POOL_MAX = Number(
   process.env.SOFTWARE_FACTORY_PG_POOL_MAX ?? 2,
 );
