@@ -311,6 +311,10 @@ export async function executeTestRunFromRealm(
     authorization: options.authorization,
     fetch: options.fetch,
   };
+  let completeOptions = {
+    ...realmOptions,
+    projectCardUrl: options.projectCardUrl,
+  };
 
   // Step 1-2: Resolve or create the TestRun card.
   let resolved = await resolveTestRun(options);
@@ -402,7 +406,7 @@ export async function executeTestRunFromRealm(
           errorMessage,
           results: [],
         },
-        realmOptions,
+        completeOptions,
       );
       return { testRunId, status: 'error', errorMessage };
     }
@@ -420,7 +424,7 @@ export async function executeTestRunFromRealm(
           errorMessage,
           results: [],
         },
-        realmOptions,
+        completeOptions,
       );
       return { testRunId, status: 'error', errorMessage };
     }
@@ -507,7 +511,7 @@ export async function executeTestRunFromRealm(
       };
     }
 
-    await completeTestRun(testRunId, attrs, realmOptions);
+    await completeTestRun(testRunId, attrs, completeOptions);
 
     return {
       testRunId,
@@ -526,7 +530,7 @@ export async function executeTestRunFromRealm(
           errorMessage,
           results: [],
         },
-        realmOptions,
+        completeOptions,
       );
     } catch {
       // Best-effort

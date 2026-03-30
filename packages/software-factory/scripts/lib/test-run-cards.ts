@@ -50,7 +50,7 @@ export async function createTestRun(
 export async function completeTestRun(
   testRunId: string,
   attrs: TestRunAttributes,
-  options: TestRunRealmOptions,
+  options: TestRunRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
   let fetchOptions = {
     authorization: options.authorization,
@@ -84,6 +84,17 @@ export async function completeTestRun(
     ...readResult.document.data.attributes,
     ...completionAttrs,
   };
+
+  // Ensure the project relationship is preserved — the read-back from
+  // the realm may not include relationships if indexing hasn't completed.
+  if (options.projectCardUrl) {
+    let existingRelationships =
+      (readResult.document.data as Record<string, unknown>).relationships ?? {};
+    (readResult.document.data as Record<string, unknown>).relationships = {
+      ...(existingRelationships as Record<string, unknown>),
+      project: { links: { self: options.projectCardUrl } },
+    };
+  }
 
   let writeResult = await writeCardSource(
     options.testRealmUrl,
