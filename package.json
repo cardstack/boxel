@@ -47,8 +47,7 @@
       "openai": "patches/openai.patch",
       "matrix-js-sdk@38.3.0": "patches/matrix-js-sdk@38.3.0.patch",
       "@embroider/webpack": "patches/@embroider__webpack.patch",
-      "ember-source": "patches/ember-source.patch",
-      "tracked-built-ins": "patches/tracked-built-ins.patch"
+      "ember-source": "patches/ember-source.patch"
     },
     "onlyBuiltDependencies": [
       "@percy/core",
