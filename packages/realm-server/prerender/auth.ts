@@ -1,5 +1,7 @@
 import {
   ensureTrailingSlash,
+  cardIdToURL,
+  isRegisteredPrefix,
   type RealmPermissions,
 } from '@cardstack/runtime-common';
 import { createJWT } from '../jwt';
@@ -16,8 +18,11 @@ export function buildCreatePrerenderAuth(
     for (let [realmURL, realmPermissions] of Object.entries(
       permissions ?? {},
     )) {
+      let resolvedURL = isRegisteredPrefix(realmURL)
+        ? cardIdToURL(realmURL)
+        : new URL(realmURL);
       let resolvedRealmServerURL =
-        normalizedServerURL ?? ensureTrailingSlash(new URL(realmURL).origin);
+        normalizedServerURL ?? ensureTrailingSlash(resolvedURL.origin);
       sessions[realmURL] = createJWT(
         {
           user: userId,
