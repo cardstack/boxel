@@ -13,6 +13,7 @@ import {
   cancelAllIndexingJobs,
   createRealm,
   ensureTrailingSlash,
+  getRealmScopedAuth,
   pullRealmFiles,
   readCardSource,
   searchRealm,
@@ -41,8 +42,10 @@ export async function ensureTestArtifactsRealm(
   projectCardUrl: string,
   options: {
     authorization?: string;
+    serverToken?: string;
     fetch?: typeof globalThis.fetch;
     realmServerUrl: string;
+    targetRealmUrl: string;
     matrixAuth: {
       userId: string;
       accessToken: string;
@@ -78,14 +81,14 @@ export async function ensureTestArtifactsRealm(
     return { testArtifactsRealmUrl: existingUrl, created: false };
   }
 
-  let projectName =
-    (readResult.document.data.attributes?.projectName as string) ?? 'Project';
-  let slug = projectName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  let realmName = `${projectName} Test Artifacts`;
-  let endpoint = `${slug}-test-artifacts`;
+  // Derive the test artifacts realm name from the target realm endpoint.
+  // e.g. target realm "smoke-test-10" → artifacts realm "smoke-test-10-test-artifacts"
+  let targetSegments = new URL(options.targetRealmUrl).pathname
+    .split('/')
+    .filter(Boolean);
+  let targetEndpoint = targetSegments.at(-1) ?? 'project';
+  let realmName = `${targetEndpoint} Test Artifacts`;
+  let endpoint = `${targetEndpoint}-test-artifacts`;
 
   let testArtifactsRealmUrl = '';
   let created = false;
@@ -95,7 +98,7 @@ export async function ensureTestArtifactsRealm(
     let result = await createRealm(options.realmServerUrl, {
       name: realmName,
       endpoint: tryEndpoint,
-      authorization: options.authorization ?? '',
+      authorization: options.serverToken ?? options.authorization ?? '',
       fetch: options.fetch,
       matrixAuth: options.matrixAuth,
     });
@@ -106,8 +109,16 @@ export async function ensureTestArtifactsRealm(
       break;
     }
 
-    // 400 "already exists" → try next endpoint
+    // 400 "already exists" → extract the existing realm URL from the error
+    // message and use it. The error format is:
+    // "realm 'http://.../{username}/{endpoint}/' already exists on this server"
     if (result.error?.includes('already exists')) {
+      let urlMatch = result.error.match(/'(https?:\/\/[^']+)'/);
+      if (urlMatch) {
+        testArtifactsRealmUrl = urlMatch[1];
+        created = false;
+        break;
+      }
       continue;
     }
 
@@ -313,14 +324,17 @@ export async function executeTestRunFromRealm(
 
   // Step 2a: Ensure test artifacts realm exists (if projectCardUrl provided).
   let testArtifactsRealmUrl = options.testRealmUrl;
+  let testArtifactsAuthorization = options.authorization;
   if (options.projectCardUrl && options.matrixAuth) {
     let realmServerUrl = ensureTrailingSlash(
       new URL(options.targetRealmUrl).origin + '/',
     );
     let ensureResult = await ensureTestArtifactsRealm(options.projectCardUrl, {
       authorization: options.authorization,
+      serverToken: options.serverToken,
       fetch: options.fetch,
       realmServerUrl,
+      targetRealmUrl: options.targetRealmUrl,
       matrixAuth: options.matrixAuth,
     });
     if (ensureResult.error) {
@@ -331,6 +345,21 @@ export async function executeTestRunFromRealm(
       };
     }
     testArtifactsRealmUrl = ensureResult.testArtifactsRealmUrl;
+
+    // Get a realm-scoped token for the test artifacts realm so specs can
+    // write card instances to it.
+    if (testArtifactsRealmUrl && options.serverToken) {
+      let authResult = await getRealmScopedAuth(
+        realmServerUrl,
+        options.serverToken,
+        { fetch: options.fetch },
+      );
+      let artifactsToken =
+        authResult.tokens[ensureTrailingSlash(testArtifactsRealmUrl)];
+      if (artifactsToken) {
+        testArtifactsAuthorization = artifactsToken;
+      }
+    }
   }
 
   // Step 2b: Cancel all indexing jobs on the test artifacts realm.
@@ -402,6 +431,16 @@ export async function executeTestRunFromRealm(
     let packageRoot = resolve(__dirname, '../..');
     let playwrightConfig = resolve(packageRoot, 'playwright.realm.config.ts');
 
+    // Build the full test artifacts folder URL: realm URL + Run folder.
+    // Specs write instances to this URL — each test run gets its own folder.
+    let testArtifactsFolderUrl =
+      testArtifactsRealmUrl && testArtifactsRunFolder
+        ? new URL(
+            testArtifactsRunFolder,
+            ensureTrailingSlash(testArtifactsRealmUrl),
+          ).href
+        : undefined;
+
     let playwrightEnv: NodeJS.ProcessEnv = {
       PLAYWRIGHT_TEST_DIR: specsLocalDir,
       BOXEL_SOURCE_REALM_URL: options.targetRealmUrl,
@@ -409,11 +448,11 @@ export async function executeTestRunFromRealm(
       BOXEL_TEST_REALM_PATH: specsLocalDir,
       BOXEL_TEST_REALM_URL: options.targetRealmUrl,
       PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
-      ...(testArtifactsRealmUrl
-        ? { BOXEL_TEST_ARTIFACTS_REALM_URL: testArtifactsRealmUrl }
+      ...(testArtifactsFolderUrl
+        ? { BOXEL_TEST_ARTIFACTS_FOLDER_URL: testArtifactsFolderUrl }
         : {}),
-      ...(testArtifactsRunFolder
-        ? { BOXEL_TEST_ARTIFACTS_RUN_FOLDER: testArtifactsRunFolder }
+      ...(testArtifactsAuthorization
+        ? { BOXEL_TEST_ARTIFACTS_AUTHORIZATION: testArtifactsAuthorization }
         : {}),
     };
 

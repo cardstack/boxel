@@ -107,4 +107,6 @@ export interface ExecuteTestRunOptions {
     accessToken: string;
     matrixUrl: string;
   };
+  /** Server-level JWT for obtaining realm-scoped auth for test artifacts realm. */
+  serverToken?: string;
 }

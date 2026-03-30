@@ -89,19 +89,107 @@ const HELLO_SPEC_CARD = {
   },
 };
 
+function buildProjectCard(realmServerUrl: string) {
+  return {
+    data: {
+      type: 'card',
+      attributes: {
+        projectCode: 'HELLO-SMOKE',
+        projectName: 'Hello World Smoke Test',
+        projectStatus: 'active',
+        objective:
+          'Verify the factory test realm pipeline by creating a HelloCard and running Playwright specs against it.',
+        scope:
+          '## Scope\n\n- Create a HelloCard definition with a greeting field\n- Create a Spec card pointing to the definition\n- Write Playwright specs that create and verify HelloCard instances\n- Verify pass and fail paths produce correct TestRun cards',
+        technicalContext:
+          '## Technical Context\n\nThis is a smoke test project. The HelloCard has a single `greeting` field and renders it in an `<h1>` with `data-test-greeting`.',
+      },
+      meta: {
+        adoptsFrom: {
+          module: `${realmServerUrl}software-factory/darkfactory`,
+          name: 'Project',
+        },
+      },
+    },
+  };
+}
+
 const PLAYWRIGHT_SPEC = `import { expect, test } from '@playwright/test';
 
-test('realm index page loads with HelloCard definition', async ({ page }) => {
-  let realmUrl = process.env.BOXEL_SOURCE_REALM_URL;
-  await page.goto(realmUrl, { waitUntil: 'commit' });
-  await expect(page.locator('body')).toBeVisible({ timeout: 30000 });
+test('hello card renders greeting', async ({ request }) => {
+  let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
+  let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
+  let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
+
+  // Create a HelloCard instance in the test artifacts folder (Run N/).
+  let response = await request.post(artifactsFolderUrl + 'HelloCard/smoke-pass.json', {
+    headers: {
+      Accept: 'application/vnd.card+source',
+      'Content-Type': 'application/vnd.card+source',
+      Authorization: authorization,
+    },
+    data: JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { greeting: 'Hello from smoke test' },
+        meta: {
+          adoptsFrom: { module: sourceRealmUrl + 'hello', name: 'HelloCard' },
+        },
+      },
+    }),
+  });
+  expect(response.ok()).toBe(true);
+
+  // Verify the card was created by reading it back.
+  let readResponse = await request.get(artifactsFolderUrl + 'HelloCard/smoke-pass', {
+    headers: {
+      Accept: 'application/vnd.card+source',
+      Authorization: authorization,
+    },
+  });
+  expect(readResponse.ok()).toBe(true);
+  let card = await readResponse.json();
+  expect(card.data.attributes.greeting).toBe('Hello from smoke test');
 });
 `;
 
 const PLAYWRIGHT_FAILING_SPEC = `import { expect, test } from '@playwright/test';
 
-test('deliberately fails for smoke testing', async ({ page }) => {
-  expect(1).toBe(2);
+test('hello card has wrong greeting (deliberately fails)', async ({ request }) => {
+  let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
+  let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
+  let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
+
+  // Create a HelloCard instance in the test artifacts folder.
+  let response = await request.post(artifactsFolderUrl + 'HelloCard/smoke-fail.json', {
+    headers: {
+      Accept: 'application/vnd.card+source',
+      'Content-Type': 'application/vnd.card+source',
+      Authorization: authorization,
+    },
+    data: JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { greeting: 'Hello from smoke test' },
+        meta: {
+          adoptsFrom: { module: sourceRealmUrl + 'hello', name: 'HelloCard' },
+        },
+      },
+    }),
+  });
+  expect(response.ok()).toBe(true);
+
+  // Read the card back and check for text that doesn't exist (deliberately fails).
+  let readResponse = await request.get(artifactsFolderUrl + 'HelloCard/smoke-fail', {
+    headers: {
+      Accept: 'application/vnd.card+source',
+      Authorization: authorization,
+    },
+  });
+  expect(readResponse.ok()).toBe(true);
+  let card = await readResponse.json();
+  // This assertion is deliberately wrong:
+  expect(card.data.attributes.greeting).toBe('THIS TEXT DOES NOT EXIST');
 });
 `;
 
@@ -226,7 +314,22 @@ async function main() {
     '--- Phase 1: Writing LLM implementation output to target realm ---\n',
   );
 
-  // 1. Card definition
+  // 1. Project card — represents this project in the testing phase.
+  console.log('  Writing Projects/hello-world.json (Project card)...');
+  let projectResult = await writeCardSource(
+    targetRealmUrl,
+    'Projects/hello-world.json',
+    buildProjectCard(realmServerUrl) as any,
+    fetchOptions,
+  );
+  console.log(
+    projectResult.ok
+      ? '  ✓ Projects/hello-world.json'
+      : `  ✗ Projects/hello-world.json: ${projectResult.error}`,
+  );
+  let projectCardUrl = `${targetRealmUrl}Projects/hello-world`;
+
+  // 2. Card definition
   console.log('  Writing hello.gts (HelloCard definition)...');
   let defResult = await writeModuleSource(
     targetRealmUrl,
@@ -238,7 +341,7 @@ async function main() {
     defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
   );
 
-  // 2. Spec card instance pointing to the card definition
+  // 3. Spec card instance pointing to the card definition
   console.log('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
   let specCardResult = await writeCardSource(
     targetRealmUrl,
@@ -252,7 +355,7 @@ async function main() {
       : `  ✗ Spec/hello-card.json: ${specCardResult.error}`,
   );
 
-  // 3. Playwright test spec
+  // 5. Playwright test spec
   console.log('  Writing Tests/hello-smoke.spec.ts (Playwright spec)...');
   let specResult = await writeModuleSource(
     targetRealmUrl,
@@ -288,14 +391,23 @@ async function main() {
 
   console.log('\n--- Phase 2a: Running passing spec ---\n');
 
+  let matrixAuthForRealm = {
+    userId: matrixAuth.userId,
+    accessToken: matrixAuth.accessToken,
+    matrixUrl: matrixAuth.credentials.matrixUrl,
+  };
+
   let passHandle = await executeTestRunFromRealm({
     targetRealmUrl,
     testResultsModuleUrl,
     slug: 'hello-smoke',
     specPaths: ['Tests/hello-smoke.spec.ts'],
-    testNames: ['realm index page loads with HelloCard definition'],
+    testNames: ['hello card renders greeting'],
     authorization,
     fetch: fetchImpl,
+    projectCardUrl,
+    matrixAuth: matrixAuthForRealm,
+    serverToken,
   });
 
   console.log(`  TestRun ID:  ${passHandle.testRunId}`);
@@ -315,9 +427,12 @@ async function main() {
     testResultsModuleUrl,
     slug: 'hello-fail',
     specPaths: ['Tests/hello-failing.spec.ts'],
-    testNames: ['deliberately fails for smoke testing'],
+    testNames: ['hello card shows wrong greeting (deliberately fails)'],
     authorization,
     fetch: fetchImpl,
+    projectCardUrl,
+    matrixAuth: matrixAuthForRealm,
+    serverToken,
   });
 
   console.log(`  TestRun ID:  ${failHandle.testRunId}`);
