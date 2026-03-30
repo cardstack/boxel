@@ -84,8 +84,6 @@ export type ParsedArgs = Record<string, ParsedArgValue | undefined> & {
   _: string[];
 };
 
-
-
 function parseProfilesConfig(): BoxelProfilesConfig {
   if (!existsSync(PROFILES_FILE)) {
     return { profiles: {}, activeProfile: null };

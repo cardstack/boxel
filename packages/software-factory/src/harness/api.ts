@@ -402,10 +402,7 @@ export async function startFactoryRealmServer(
                 .templateRealmServerURL,
             )
           : undefined);
-      if (
-        templateServerURL &&
-        templateServerURL.href !== realmServerURL.href
-      ) {
+      if (templateServerURL && templateServerURL.href !== realmServerURL.href) {
         await rewriteClonedRealmServerUrls(
           databaseName,
           templateServerURL,

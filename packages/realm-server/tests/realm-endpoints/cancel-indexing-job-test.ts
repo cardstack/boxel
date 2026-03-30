@@ -309,7 +309,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         let [runningJob] = await dbAdapter.execute(
           `SELECT status FROM jobs WHERE id = ${runningJobId}`,
         );
-        assert.strictEqual(runningJob.status, 'rejected', 'running job canceled');
+        assert.strictEqual(
+          runningJob.status,
+          'rejected',
+          'running job canceled',
+        );
 
         let [pendingJob] = await dbAdapter.execute(
           `SELECT status FROM jobs WHERE id = ${pendingJobId}`,
