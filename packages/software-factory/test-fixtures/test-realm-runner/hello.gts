@@ -20,7 +20,11 @@ export class HelloCard extends CardDef {
   static fitted = class Fitted extends Component<typeof HelloCard> {
     <template>
       <div class='hello-card' data-test-hello-card>
-        <p data-test-greeting>{{if @model.greeting @model.greeting 'Hello World'}}</p>
+        <p data-test-greeting>{{if
+            @model.greeting
+            @model.greeting
+            'Hello World'
+          }}</p>
       </div>
       <style scoped>
         .hello-card {
@@ -38,7 +42,11 @@ export class HelloCard extends CardDef {
   static isolated = class Isolated extends Component<typeof HelloCard> {
     <template>
       <article class='surface' data-test-hello-card>
-        <h1 data-test-greeting>{{if @model.greeting @model.greeting 'Hello World'}}</h1>
+        <h1 data-test-greeting>{{if
+            @model.greeting
+            @model.greeting
+            'Hello World'
+          }}</h1>
       </article>
       <style scoped>
         .surface {

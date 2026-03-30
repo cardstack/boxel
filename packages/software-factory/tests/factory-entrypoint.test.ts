@@ -35,7 +35,10 @@ const mockBootstrapResult: FactoryBootstrapResult = {
   project: { id: 'Projects/sticky-note-mvp', status: 'created' },
   knowledgeArticles: [
     { id: 'Knowledge Articles/sticky-note-brief-context', status: 'created' },
-    { id: 'Knowledge Articles/sticky-note-agent-onboarding', status: 'created' },
+    {
+      id: 'Knowledge Articles/sticky-note-agent-onboarding',
+      status: 'created',
+    },
   ],
   tickets: [
     { id: 'Tickets/sticky-note-define-core', status: 'created' },

@@ -562,12 +562,7 @@ export function cleanupStaleSynapseContainers() {
   // environment (mise run dev-all) and killing them breaks the dev server.
   let result = spawnSync(
     'docker',
-    [
-      'ps',
-      '-aq',
-      '--filter',
-      'name=synapsedocker-',
-    ],
+    ['ps', '-aq', '--filter', 'name=synapsedocker-'],
     {
       cwd: workspaceRoot,
       encoding: 'utf8',

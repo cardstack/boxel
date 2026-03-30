@@ -129,8 +129,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       summary.targetRealm.url,
     );
 
-    let projectUrl = new URL('Projects/sticky-note-mvp', summary.targetRealm.url)
-      .href;
+    let projectUrl = new URL(
+      'Projects/sticky-note-mvp',
+      summary.targetRealm.url,
+    ).href;
     let projectResponse = await fetch(projectUrl, {
       headers: {
         Accept: 'application/vnd.card+source',

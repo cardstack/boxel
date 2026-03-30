@@ -474,10 +474,7 @@ export async function pullRealmFiles(
     try {
       let fileResponse = await fetchImpl(fullUrl, {
         method: 'GET',
-        headers: buildAuthHeaders(
-          options?.authorization,
-          cardSourceMimeType,
-        ),
+        headers: buildAuthHeaders(options?.authorization, cardSourceMimeType),
       });
 
       if (!fileResponse.ok) {
