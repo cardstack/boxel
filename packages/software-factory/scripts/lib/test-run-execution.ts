@@ -365,75 +365,53 @@ export async function executeTestRunFromRealm(
     ? `Run ${runSeq}/`
     : undefined;
 
-  // Steps 3-8: Pull realm, start harness, run Playwright.
+  // Step 3: Pull only spec files from the target realm to a local temp dir.
+  // Playwright needs local .spec.ts files to run, but tests execute against
+  // the LIVE target realm URL — no local harness startup needed.
   let tmpBase = mkdtempSync(join(tmpdir(), 'sf-test-run-'));
-  let targetLocalDir = join(tmpBase, 'target');
-  mkdirSync(targetLocalDir, { recursive: true });
-
-  let runtime: { stop(): Promise<void> } | undefined;
+  let specsLocalDir = join(tmpBase, 'specs');
+  mkdirSync(specsLocalDir, { recursive: true });
 
   try {
-    // Step 3: Pull target realm to local temp dir (single pull for both
-    // card content and test specs — specs live in target realm's Tests/).
-    // TODO: Refactor to use `boxel pull` CLI once it supports --jwt.
     let pullResult = await pullRealmFiles(
       options.targetRealmUrl,
-      targetLocalDir,
-      {
-        authorization: options.authorization,
-        fetch: options.fetch,
-      },
+      specsLocalDir,
+      { authorization: options.authorization, fetch: options.fetch },
     );
     if (pullResult.error) {
-      let errorMessage = `Failed to pull target realm: ${pullResult.error}`;
+      let errorMessage = `Failed to pull spec files: ${pullResult.error}`;
       await completeTestRun(
         testRunId,
-        {
-          status: 'error',
-          passedCount: 0,
-          failedCount: 0,
-          errorMessage,
-          results: [],
-        },
+        { status: 'error', passedCount: 0, failedCount: 0, errorMessage, results: [] },
         realmOptions,
       );
       return { testRunId, status: 'error', errorMessage };
     }
 
-    // Step 4-5: Start realm server from pulled target realm.
-    let { startFactoryRealmServer } = await import('../../src/harness');
-    runtime = await startFactoryRealmServer({ realmDir: targetLocalDir });
-    let startedRealm =
-      runtime as import('../../src/harness').StartedFactoryRealm;
-
-    // Step 6: Find spec files in the pulled target realm (no second pull needed).
-    let specFiles = findSpecFiles(targetLocalDir, options.specPaths);
+    // Step 4: Find spec files in the pulled directory.
+    let specFiles = findSpecFiles(specsLocalDir, options.specPaths);
     if (specFiles.length === 0) {
       let errorMessage = 'No spec files found in the target realm';
       await completeTestRun(
         testRunId,
-        {
-          status: 'error',
-          passedCount: 0,
-          failedCount: 0,
-          errorMessage,
-          results: [],
-        },
+        { status: 'error', passedCount: 0, failedCount: 0, errorMessage, results: [] },
         realmOptions,
       );
       return { testRunId, status: 'error', errorMessage };
     }
 
-    // Step 7: Spawn Playwright against the running realm server.
+    // Step 5: Run Playwright against the LIVE target realm.
+    // No local harness — specs execute against the running realm server.
+    // Test artifacts (instances created during tests) go to the test artifacts realm.
     let reportFile = join(tmpBase, 'playwright-report.json');
     let packageRoot = resolve(__dirname, '../..');
     let playwrightConfig = resolve(packageRoot, 'playwright.realm.config.ts');
 
     let playwrightEnv: NodeJS.ProcessEnv = {
-      BOXEL_SOURCE_REALM_PATH: targetLocalDir,
-      BOXEL_SOURCE_REALM_URL: startedRealm.realmURL.href,
-      BOXEL_TEST_REALM_PATH: targetLocalDir,
-      BOXEL_TEST_REALM_URL: startedRealm.realmURL.href,
+      BOXEL_SOURCE_REALM_URL: options.targetRealmUrl,
+      BOXEL_SOURCE_REALM_PATH: specsLocalDir,
+      BOXEL_TEST_REALM_PATH: specsLocalDir,
+      BOXEL_TEST_REALM_URL: options.targetRealmUrl,
       PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
       ...(testArtifactsRealmUrl
         ? { BOXEL_TEST_ARTIFACTS_REALM_URL: testArtifactsRealmUrl }
@@ -443,7 +421,7 @@ export async function executeTestRunFromRealm(
         : {}),
     };
 
-    let relativeSpecFiles = specFiles.map((f) => relative(targetLocalDir, f));
+    let relativeSpecFiles = specFiles.map((f) => relative(specsLocalDir, f));
 
     let grepArgs: string[] = [];
     if (resolved.resumed && effectiveTestNames.length > 0) {
@@ -466,14 +444,14 @@ export async function executeTestRunFromRealm(
         ...relativeSpecFiles,
       ],
       {
-        cwd: targetLocalDir,
+        cwd: specsLocalDir,
         encoding: 'utf8',
         env: { ...process.env, ...playwrightEnv },
       },
     );
     let durationMs = Date.now() - start;
 
-    // Step 8: Parse results and complete the TestRun card.
+    // Step 6: Parse results and complete the TestRun card.
     let attrs: TestRunAttributes;
     if (existsSync(reportFile)) {
       let report = JSON.parse(
@@ -505,13 +483,7 @@ export async function executeTestRunFromRealm(
     try {
       await completeTestRun(
         testRunId,
-        {
-          status: 'error',
-          passedCount: 0,
-          failedCount: 0,
-          errorMessage,
-          results: [],
-        },
+        { status: 'error', passedCount: 0, failedCount: 0, errorMessage, results: [] },
         realmOptions,
       );
     } catch {
@@ -519,11 +491,6 @@ export async function executeTestRunFromRealm(
     }
     return { testRunId, status: 'error', errorMessage };
   } finally {
-    try {
-      await runtime?.stop();
-    } catch {
-      // Best-effort
-    }
     try {
       rmSync(tmpBase, { recursive: true, force: true });
     } catch {

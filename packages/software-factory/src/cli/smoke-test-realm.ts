@@ -36,7 +36,11 @@ import {
   parseArgs,
 } from '../../scripts/lib/boxel';
 import { executeTestRunFromRealm } from '../../scripts/lib/factory-test-realm';
-import { writeCardSource } from '../../scripts/lib/realm-operations';
+import {
+  getRealmScopedAuth,
+  waitForRealmReady,
+  writeCardSource,
+} from '../../scripts/lib/realm-operations';
 import { createBoxelRealmFetch } from '../realm-auth';
 
 // ---------------------------------------------------------------------------
@@ -100,14 +104,19 @@ test('realm index page loads with HelloCard definition', async ({ page }) => {
 
 async function main() {
   let args = parseArgs(process.argv.slice(2));
-  let targetRealmUrl = args['target-realm-url'] as string;
+  let targetRealmUrl = (args['target-realm-url'] as string) ?? '';
 
   if (!targetRealmUrl) {
-    console.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
-    console.error(
-      '\nRequires MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD environment variables.',
-    );
-    process.exit(1);
+    let username = process.env.MATRIX_USERNAME;
+    if (!username) {
+      console.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
+      console.error(
+        '\nRequires MATRIX_USERNAME and MATRIX_PASSWORD environment variables.',
+      );
+      process.exit(1);
+    }
+    targetRealmUrl = `http://localhost:4201/${username}/smoke-test-realm/`;
+    console.log(`No --target-realm-url specified, using default: ${targetRealmUrl}\n`);
   }
 
   if (!targetRealmUrl.endsWith('/')) {
@@ -125,7 +134,10 @@ async function main() {
   // The username is determined from the JWT. Extract just the last segment.
   let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
 
-  // Ensure REALM_SERVER_URL is set for the auth chain (derived from target realm URL)
+  // Set defaults for the auth chain
+  if (!process.env.MATRIX_URL) {
+    process.env.MATRIX_URL = 'http://localhost:8008';
+  }
   if (!process.env.REALM_SERVER_URL) {
     process.env.REALM_SERVER_URL = realmServerUrl;
   }
@@ -194,20 +206,21 @@ async function main() {
     }
   }
 
-  // Get realm-scoped auth now that the realm exists
-  let realmFetch = createBoxelRealmFetch(targetRealmUrl);
-  try {
-    let authResponse = await realmFetch(targetRealmUrl, {
-      headers: { Accept: 'application/json' },
-    });
-    let realmAuth = authResponse.headers.get('authorization');
-    if (realmAuth) {
-      authorization = realmAuth;
+  // Get realm-scoped JWT now that the realm exists
+  console.log('  Authenticating with new realm...');
+  let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
+  if (realmAuth.error) {
+    console.warn(`  Warning: could not get realm-scoped auth: ${realmAuth.error}`);
+  } else {
+    // Find the token for our target realm
+    let realmToken = realmAuth.tokens[targetRealmUrl];
+    if (realmToken) {
+      authorization = realmToken;
+      console.log('  Realm-scoped JWT obtained.\n');
+    } else {
+      console.warn(`  Warning: no token for ${targetRealmUrl} in realm-auth response\n`);
     }
-  } catch {
-    // keep server token as fallback
   }
-  fetchImpl = realmFetch as unknown as typeof globalThis.fetch;
 
   let fetchOptions = {
     authorization,
@@ -279,7 +292,7 @@ async function main() {
   // -------------------------------------------------------------------------
 
   console.log(
-    '\n--- Phase 2: Running executeTestRunFromRealm (testing phase) ---\n',
+    '--- Phase 2: Running executeTestRunFromRealm (testing phase) ---\n',
   );
   console.log('  This will:');
   console.log('    1. Create a TestRun card (status: running) in Test Runs/');
@@ -296,7 +309,7 @@ async function main() {
     specPaths: ['Tests/hello-smoke.spec.ts'],
     testNames: ['realm index page loads with HelloCard definition'],
     authorization,
-    fetch: realmFetch as unknown as typeof globalThis.fetch,
+    fetch: fetchImpl,
   });
 
   // -------------------------------------------------------------------------

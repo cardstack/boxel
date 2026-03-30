@@ -234,6 +234,88 @@ export async function cancelAllIndexingJobs(
 }
 
 // ---------------------------------------------------------------------------
+// Realm Authentication
+// ---------------------------------------------------------------------------
+
+/**
+ * Get a realm-scoped JWT by calling `_realm-auth` on the realm server.
+ * Requires a server-level JWT (from `_server-session`).
+ */
+export async function getRealmScopedAuth(
+  realmServerUrl: string,
+  serverToken: string,
+  options?: { fetch?: typeof globalThis.fetch },
+): Promise<{ tokens: Record<string, string>; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
+
+  try {
+    let response = await fetchImpl(`${normalizedUrl}_realm-auth`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: serverToken,
+      },
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        tokens: {},
+        error: `_realm-auth returned HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    let data = (await response.json()) as Record<string, string>;
+    return { tokens: data };
+  } catch (err) {
+    return {
+      tokens: {},
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Realm Readiness
+// ---------------------------------------------------------------------------
+
+/**
+ * Wait for a realm to be ready by polling `_readiness-check` until it
+ * returns 200 or the timeout is reached.
+ */
+export async function waitForRealmReady(
+  realmUrl: string,
+  options?: RealmFetchOptions & { timeoutMs?: number },
+): Promise<{ ready: boolean; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmUrl);
+  let readinessUrl = `${normalizedUrl}_readiness-check`;
+  let timeoutMs = options?.timeoutMs ?? 30_000;
+  let startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      let response = await fetchImpl(readinessUrl, {
+        headers: buildAuthHeaders(options?.authorization),
+      });
+      if (response.ok) {
+        return { ready: true };
+      }
+    } catch {
+      // retry
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  return {
+    ready: false,
+    error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Pull Realm Files
 // ---------------------------------------------------------------------------
 
@@ -253,7 +335,8 @@ export async function pullRealmFiles(
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
 
-  let headers = buildAuthHeaders(options?.authorization);
+  // _mtimes requires Accept: application/vnd.api+json (SupportedMimeType.Mtimes)
+  let headers = buildAuthHeaders(options?.authorization, 'application/vnd.api+json');
 
   // Fetch mtimes to discover all file paths.
   let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
