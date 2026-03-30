@@ -175,7 +175,45 @@ export default class SearchPanel extends Component<Signature> {
   // can map to the same display name, e.g. different modules with the same card type name).
   private _typeCodeRefs = new Map<string, string[]>();
 
-  private fetchTypeSummaries = restartableTask(
+  private async fetchTypeSummariesPage(
+    realmURLs: string[],
+    searchKey: string,
+    pageNumber: number,
+    append: boolean,
+  ): Promise<{ hasMore: boolean }> {
+    let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
+      searchKey: searchKey || undefined,
+      page: { number: pageNumber, size: TYPE_PAGE_SIZE },
+    });
+
+    if (isDestroyed(this) || isDestroying(this)) {
+      return { hasMore: false };
+    }
+
+    if (append) {
+      this._typeSummariesData = [...this._typeSummariesData, ...result.data];
+    } else {
+      this._typeSummariesData = result.data;
+    }
+
+    let hasMore = this._typeSummariesData.length < result.meta.page.total;
+    this._hasMoreTypes = hasMore;
+    return { hasMore };
+  }
+
+  private countUniqueDisplayNames(data: TypeSummaryItem[]): number {
+    let names = new Set<string>();
+    let allowedCodeRefs = this.baseFilterCodeRefs;
+    for (let item of data) {
+      let name = item.attributes.displayName;
+      if (!name) continue;
+      if (allowedCodeRefs && !allowedCodeRefs.has(item.id)) continue;
+      names.add(name);
+    }
+    return names.size;
+  }
+
+  private fetchTypeSummariesTask = restartableTask(
     async (
       realmURLs: string[],
       searchKey: string,
@@ -195,27 +233,41 @@ export default class SearchPanel extends Component<Signature> {
         this._isLoadingTypes = true;
       }
 
+      let currentPage = pageNumber;
+
       try {
-        let result = await this.realmServer.fetchCardTypeSummaries(realmURLs, {
-          searchKey: searchKey || undefined,
-          page: { number: pageNumber, size: TYPE_PAGE_SIZE },
-        });
+        while (true) {
+          let previousVisibleCount = append
+            ? this.countUniqueDisplayNames(this._typeSummariesData)
+            : 0;
 
-        if (isDestroyed(this) || isDestroying(this)) {
-          return;
+          let { hasMore } = await this.fetchTypeSummariesPage(
+            realmURLs,
+            searchKey,
+            currentPage,
+            append,
+          );
+
+          if (isDestroyed(this) || isDestroying(this)) {
+            return;
+          }
+
+          let currentVisibleCount = this.countUniqueDisplayNames(
+            this._typeSummariesData,
+          );
+          let gotNewVisibleItems =
+            !append || currentVisibleCount > previousVisibleCount;
+
+          if (gotNewVisibleItems || !hasMore) {
+            break;
+          }
+
+          // No new visible items but more pages exist — fetch next page
+          currentPage++;
+          this._typePageNumber = currentPage;
+          append = true;
         }
 
-        if (append) {
-          this._typeSummariesData = [
-            ...this._typeSummariesData,
-            ...result.data,
-          ];
-        } else {
-          this._typeSummariesData = result.data;
-        }
-
-        this._hasMoreTypes =
-          this._typeSummariesData.length < result.meta.page.total;
         this._isLoadingTypes = false;
         this._isLoadingMoreTypes = false;
       } catch (e) {
@@ -239,7 +291,7 @@ export default class SearchPanel extends Component<Signature> {
 
     // Reset page and fetch
     this._typePageNumber = 0;
-    this.fetchTypeSummaries.perform(realmURLs, searchKey, 0, false);
+    this.fetchTypeSummariesTask.perform(realmURLs, searchKey, 0, false);
 
     return { realmURLs, searchKey };
   });
@@ -380,7 +432,7 @@ export default class SearchPanel extends Component<Signature> {
     }
     this._isLoadingMoreTypes = true;
     this._typePageNumber = this._typePageNumber + 1;
-    this.fetchTypeSummaries.perform(
+    this.fetchTypeSummariesTask.perform(
       this.selectedRealmURLs,
       this._typeSearchKey,
       this._typePageNumber,
