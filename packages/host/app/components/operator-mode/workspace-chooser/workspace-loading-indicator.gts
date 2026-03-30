@@ -18,9 +18,9 @@ const WorkspaceLoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   </ItemContainer>
   <style scoped>
     .workspace {
-      min-width: 251.6px;
-      width: 251.6px;
-      height: 215.3px;
+      min-width: 250px;
+      width: 250px;
+      height: 166px;
       display: flex;
       flex-direction: column;
       justify-content: center;

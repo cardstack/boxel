@@ -30,12 +30,16 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
         position: absolute;
         inset: 0;
         border-radius: 15px;
-        border: 1px solid var(--item-container-border-color, rgba(255 255 255 / 15%));
+        border: 1px solid
+          var(--item-container-border-color, rgba(255 255 255 / 15%));
         pointer-events: none;
         z-index: 2;
       }
       .workspace:hover::after {
-        border-color: var(--item-container-border-hover-color, rgba(255 255 255 / 40%));
+        border-color: var(
+          --item-container-border-hover-color,
+          rgba(255 255 255 / 40%)
+        );
       }
       .workspace:focus-visible {
         outline-offset: -1px;
