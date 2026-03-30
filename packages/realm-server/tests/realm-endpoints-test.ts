@@ -44,14 +44,10 @@ import {
   cardInfo,
   getTestPrerenderer,
   testCreatePrerenderAuth,
-  findRealmEvent,
   type RealmRequest,
   withRealmPath,
 } from './helpers';
-import {
-  expectIncrementalIndexEvent,
-  waitForIncrementalIndexEvent,
-} from './helpers/indexing';
+import { expectIncrementalIndexEvent } from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -1243,10 +1239,13 @@ module(basename(__filename), function () {
       assert.ok(updateEvent, 'update event with added was emitted');
       let content = updateEvent!.content as UpdateRealmEventContent;
       assert.strictEqual(content.eventName, 'update');
-      assert.ok(
-        'added' in content && content.added.endsWith('.json'),
-        'added field contains the new file path',
-      );
+      assert.true('added' in content, 'event has added field');
+      if ('added' in content) {
+        assert.ok(
+          content.added.endsWith('.json'),
+          'added field contains the new file path',
+        );
+      }
       assert.strictEqual(
         content.realmURL,
         testRealmHref,
@@ -1297,10 +1296,14 @@ module(basename(__filename), function () {
       assert.ok(updateEvent, 'update event with updated was emitted');
       let content = updateEvent!.content as UpdateRealmEventContent;
       assert.strictEqual(content.eventName, 'update');
-      assert.ok(
-        'updated' in content && content.updated === 'person-1.json',
-        'updated field contains the changed file path',
-      );
+      assert.true('updated' in content, 'event has updated field');
+      if ('updated' in content) {
+        assert.strictEqual(
+          content.updated,
+          'person-1.json',
+          'updated field contains the changed file path',
+        );
+      }
       assert.strictEqual(
         content.realmURL,
         testRealmHref,
@@ -1335,10 +1338,14 @@ module(basename(__filename), function () {
       assert.ok(updateEvent, 'update event with removed was emitted');
       let content = updateEvent!.content as UpdateRealmEventContent;
       assert.strictEqual(content.eventName, 'update');
-      assert.ok(
-        'removed' in content && content.removed === 'person-1.json',
-        'removed field contains the deleted file path',
-      );
+      assert.true('removed' in content, 'event has removed field');
+      if ('removed' in content) {
+        assert.strictEqual(
+          content.removed,
+          'person-1.json',
+          'removed field contains the deleted file path',
+        );
+      }
       assert.strictEqual(
         content.realmURL,
         testRealmHref,
