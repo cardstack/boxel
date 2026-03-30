@@ -494,12 +494,13 @@ jobs:
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ matrix.shard }}-${{ github.head_ref || github.run_id }}
+      group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -515,7 +516,7 @@ jobs:
           cp -a .test-web-assets-artifact/. ./
       - name: Compute shard test modules
         id: shard_modules
-        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shard }} 6)" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} 6)" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
@@ -527,13 +528,13 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
-          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shard }}.xml
+          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
       - name: Upload junit report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: ${{ !cancelled() }}
         with:
-          name: realm-server-test-report-${{ matrix.shard }}
-          path: junit/realm-server-${{ matrix.shard }}.xml
+          name: realm-server-test-report-${{ matrix.shardIndex }}
+          path: junit/realm-server-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Print realm server logs
         if: ${{ !cancelled() }}
@@ -542,7 +543,7 @@ jobs:
         id: artifact_name
         if: ${{ !cancelled() }}
         run: |
-          export SAFE_ARTIFACT_NAME=shard-${{ matrix.shard }}
+          export SAFE_ARTIFACT_NAME=shard-${{ matrix.shardIndex }}
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
