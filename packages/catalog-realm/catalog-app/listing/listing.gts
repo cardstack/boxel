@@ -642,9 +642,9 @@ export class Listing extends CardDef {
     let menuItems = super
       [getMenuItems](params)
       .filter((item) => item.label?.toLowerCase() !== 'create listing');
-    const extra = this.getGenerateExampleMenuItem(params);
-    if (extra) {
-      menuItems = [...menuItems, extra];
+    const generateExample = this.getGenerateExampleMenuItem(params);
+    if (generateExample) {
+      menuItems = [...menuItems, generateExample];
     }
     const updateSpecs = this.getUpdateSpecsMenuItem(params);
     if (updateSpecs) {
