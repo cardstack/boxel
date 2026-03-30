@@ -37,6 +37,7 @@ function scrollToSection(sectionId: string, event: Event) {
     scrollContainer.getBoundingClientRect().top -
     stickyNavHeight;
   scrollContainer.scrollBy({ top: delta, behavior: 'smooth' });
+  history.pushState(null, '', `#${sectionId}`);
 }
 
 function findScrollableParent(el: HTMLElement): HTMLElement | null {
