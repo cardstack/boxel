@@ -1,11 +1,11 @@
-import { getComponentTemplate } from '@ember/component';
 import { destroy } from '@ember/destroyable';
 
 import type Owner from '@ember/owner';
 // @ts-expect-error
-import { createConstRef } from '@glimmer/reference';
-// @ts-expect-error
-import { renderMain, inTransaction } from '@glimmer/runtime';
+import {
+  renderComponent as glimmerRenderComponent,
+  inTransaction,
+} from '@glimmer/runtime';
 // @ts-expect-error
 import { resetTracking } from '@glimmer/validator';
 
@@ -35,30 +35,26 @@ export function render(
   owner: Owner,
   format?: Format,
 ): void {
-  // this needs to be a template-only component because the way we're invoking it
-  // just grabs the template and would drop any associated class.
-  const root = <template><C @format={{format}} /></template>;
-
   // clear any previous render work
   removeChildren(element);
 
   let {
     state: { owner: _owner, builder: _builder, context: _context },
   } = owner.lookup('renderer:-dom') as any;
-  let self = createConstRef({}, 'this');
-  let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
 
-  let iterator = renderMain(
-    _context,
-    _owner,
-    self,
-    _builder(_context.env, { element }),
-    layout,
-  );
-  let vm = (iterator as any).vm;
+  let result: ActiveRender | undefined;
 
   try {
-    inTransaction(_context.env, () => vm._execute());
+    inTransaction(_context.env, () => {
+      let iterator = glimmerRenderComponent(
+        _context,
+        _builder(_context.env, { element }),
+        _owner,
+        C,
+        { format },
+      );
+      result = iterator.sync();
+    });
   } catch (err: any) {
     resetTracking();
     let error = new CardError(
