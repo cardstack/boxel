@@ -101,4 +101,10 @@ export interface ExecuteTestRunOptions {
   projectCardUrl?: string;
   /** Explicit test realm URL. If not set, derived from Project card. */
   testRealmUrl?: string;
+  /** Matrix auth for realm creation (required when projectCardUrl is set). */
+  matrixAuth?: {
+    userId: string;
+    accessToken: string;
+    matrixUrl: string;
+  };
 }

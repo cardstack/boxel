@@ -10,13 +10,42 @@ import {
   executeTestRunFromRealm,
   type TestRunRealmOptions,
 } from '../scripts/lib/factory-test-realm';
-import { pullRealmFiles } from '../scripts/lib/realm-operations';
+import {
+  pullRealmFiles,
+  writeModuleSource,
+} from '../scripts/lib/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
   'test-fixtures',
   'test-realm-runner',
 );
+
+// Spec content written to the realm via the API — same path as the live system.
+const PASSING_SPEC = `import { expect, test } from '@playwright/test';
+
+test('hello card renders greeting', async ({ page }) => {
+  let realmUrl = process.env.BOXEL_SOURCE_REALM_URL;
+  await page.goto(\`\${realmUrl}HelloCard/sample\`);
+  await expect(page.locator('[data-test-greeting]')).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.locator('[data-test-greeting]')).toContainText('Hello');
+});
+`;
+
+const FAILING_SPEC = `import { expect, test } from '@playwright/test';
+
+test('deliberately fails for testing', async ({ page }) => {
+  let realmUrl = process.env.BOXEL_SOURCE_REALM_URL;
+  await page.goto(\`\${realmUrl}HelloCard/sample\`);
+  // This assertion is deliberately wrong — it checks for text that doesn't exist.
+  await expect(page.locator('[data-test-greeting]')).toContainText(
+    'THIS TEXT DOES NOT EXIST',
+    { timeout: 5_000 },
+  );
+});
+`;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
@@ -30,7 +59,15 @@ test.describe('factory-test-realm e2e', () => {
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
 
-    // Use the same realm as both target (has the card) and test (has the specs).
+    // Write the spec to the realm via API — same path as the live system.
+    let writeResult = await writeModuleSource(
+      realmUrl,
+      'Tests/hello-passing.spec.ts',
+      PASSING_SPEC,
+      { authorization },
+    );
+    expect(writeResult.ok).toBe(true);
+
     let handle = await executeTestRunFromRealm({
       targetRealmUrl: realmUrl,
       testRealmUrl: realmUrl,
@@ -73,6 +110,15 @@ test.describe('factory-test-realm e2e', () => {
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
 
+    // Write the deliberately failing spec via API.
+    let writeResult = await writeModuleSource(
+      realmUrl,
+      'Tests/hello-failing.spec.ts',
+      FAILING_SPEC,
+      { authorization },
+    );
+    expect(writeResult.ok).toBe(true);
+
     let handle = await executeTestRunFromRealm({
       targetRealmUrl: realmUrl,
       testRealmUrl: realmUrl,
@@ -91,12 +137,21 @@ test.describe('factory-test-realm e2e', () => {
     expect(handle.status).not.toBe('passed');
   });
 
-  test('pullRealmFiles downloads and unwraps spec files from the realm', async ({
+  test('pullRealmFiles downloads spec files written via the API', async ({
     realm,
   }) => {
     let realmUrl = realm.realmURL.href;
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
+
+    // Write a spec file to the realm via the API.
+    let writeResult = await writeModuleSource(
+      realmUrl,
+      'Tests/hello-passing.spec.ts',
+      PASSING_SPEC,
+      { authorization },
+    );
+    expect(writeResult.ok).toBe(true);
 
     let tmpDir = mkdtempSync(join(tmpdir(), 'pull-test-'));
     let result = await pullRealmFiles(realmUrl, tmpDir, {
@@ -106,19 +161,18 @@ test.describe('factory-test-realm e2e', () => {
     expect(result.error).toBeUndefined();
     expect(result.files.length).toBeGreaterThan(0);
 
-    // The fixture has Tests/hello-passing.spec.ts — verify it was pulled
-    // and contains raw TypeScript (not a JSON wrapper).
+    // Verify the spec was pulled and contains raw TypeScript.
     let specPath = join(tmpDir, 'Tests', 'hello-passing.spec.ts');
     expect(existsSync(specPath)).toBe(true);
 
     let content = readFileSync(specPath, 'utf8');
-    // Should be raw TypeScript, not JSON
     expect(content).toContain('import');
     expect(content).toContain('test(');
+    // Must NOT be JSON-wrapped — raw source only.
     expect(content).not.toContain('"data"');
     expect(content).not.toContain('"type": "module"');
 
-    // Also verify .gts files are unwrapped
+    // Also verify .gts files loaded from the fixture are raw source.
     let gtsPath = join(tmpDir, 'hello.gts');
     expect(existsSync(gtsPath)).toBe(true);
     let gtsContent = readFileSync(gtsPath, 'utf8');

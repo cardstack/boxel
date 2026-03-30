@@ -313,7 +313,7 @@ export async function executeTestRunFromRealm(
 
   // Step 2a: Ensure test artifacts realm exists (if projectCardUrl provided).
   let testArtifactsRealmUrl = options.testRealmUrl;
-  if (options.projectCardUrl) {
+  if (options.projectCardUrl && options.matrixAuth) {
     let realmServerUrl = ensureTrailingSlash(
       new URL(options.targetRealmUrl).origin + '/',
     );
@@ -321,6 +321,7 @@ export async function executeTestRunFromRealm(
       authorization: options.authorization,
       fetch: options.fetch,
       realmServerUrl,
+      matrixAuth: options.matrixAuth,
     });
     if (ensureResult.error) {
       return {
