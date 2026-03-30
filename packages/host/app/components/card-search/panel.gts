@@ -234,9 +234,10 @@ export default class SearchPanel extends Component<Signature> {
       }
 
       let currentPage = pageNumber;
+      let keepFetching = true;
 
       try {
-        while (true) {
+        while (keepFetching) {
           let previousVisibleCount = append
             ? this.countUniqueDisplayNames(this._typeSummariesData)
             : 0;
@@ -259,13 +260,13 @@ export default class SearchPanel extends Component<Signature> {
             !append || currentVisibleCount > previousVisibleCount;
 
           if (gotNewVisibleItems || !hasMore) {
-            break;
+            keepFetching = false;
+          } else {
+            // No new visible items but more pages exist — fetch next page
+            currentPage++;
+            this._typePageNumber = currentPage;
+            append = true;
           }
-
-          // No new visible items but more pages exist — fetch next page
-          currentPage++;
-          this._typePageNumber = currentPage;
-          append = true;
         }
 
         this._isLoadingTypes = false;
