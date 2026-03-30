@@ -494,85 +494,13 @@ jobs:
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
+      group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        testModule:
-          [
-            "auth-client-test.ts",
-            "billing-test.ts",
-            "card-dependencies-endpoint-test.ts",
-            "card-endpoints-test.ts",
-            "card-reference-resolver-test.ts",
-            "card-source-endpoints-test.ts",
-            "definition-lookup-test.ts",
-            "file-watcher-events-test.ts",
-            "indexing-event-sink-test.ts",
-            "indexing-test.ts",
-            "runtime-dependency-tracker-test.ts",
-            "transpile-test.ts",
-            "module-syntax-test.ts",
-            "node-realm-test.ts",
-            "permissions/permission-checker-test.ts",
-            "prerendering-test.ts",
-            "prerender-server-test.ts",
-            "prerender-manager-test.ts",
-            "prerender-proxy-test.ts",
-            "remote-prerenderer-test.ts",
-            "queue-test.ts",
-            "realm-endpoints/cancel-indexing-job-test.ts",
-            "realm-endpoints/dependencies-test.ts",
-            "realm-endpoints/directory-test.ts",
-            "realm-endpoints/info-test.ts",
-            "realm-endpoints/invalidate-urls-test.ts",
-            "realm-endpoints/lint-test.ts",
-            "realm-endpoints/mtimes-test.ts",
-            "realm-endpoints/permissions-test.ts",
-            "realm-endpoints/publishability-test.ts",
-            "realm-endpoints/reindex-test.ts",
-            "realm-endpoints/search-test.ts",
-            "realm-endpoints/user-test.ts",
-            "realm-endpoints-test.ts",
-            "sanitize-head-html-test.ts",
-            "search-prerendered-test.ts",
-            "types-endpoint-test.ts",
-            "server-config-test.ts",
-            "server-endpoints/authentication-test.ts",
-            "server-endpoints/bot-commands-test.ts",
-            "server-endpoints/bot-registration-test.ts",
-            "server-endpoints/delete-realm-test.ts",
-            "server-endpoints/download-realm-test.ts",
-            "server-endpoints/index-responses-test.ts",
-            "server-endpoints/maintenance-endpoints-test.ts",
-            "server-endpoints/queue-status-test.ts",
-            "server-endpoints/realm-lifecycle-test.ts",
-            "server-endpoints/search-test.ts",
-            "server-endpoints/info-test.ts",
-            "server-endpoints/search-prerendered-test.ts",
-            "server-endpoints/stripe-session-test.ts",
-            "server-endpoints/stripe-webhook-test.ts",
-            "server-endpoints/user-and-catalog-test.ts",
-            "server-endpoints/incoming-webhook-test.ts",
-            "server-endpoints/webhook-commands-test.ts",
-            "server-endpoints/webhook-receiver-test.ts",
-            "server-endpoints/federated-types-test.ts",
-            "virtual-network-test.ts",
-            "atomic-endpoints-test.ts",
-            "request-forward-test.ts",
-            "publish-unpublish-realm-test.ts",
-            "boxel-domain-availability-test.ts",
-            "claim-boxel-domain-test.ts",
-            "command-parsing-utils-test.ts",
-            "delete-boxel-claimed-domain-test.ts",
-            "get-boxel-claimed-domain-test.ts",
-            "realm-auth-test.ts",
-            "run-command-task-test.ts",
-            "queries-test.ts",
-            "session-room-queries-test.ts",
-            "full-reindex-test.ts",
-          ]
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -591,11 +519,36 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
+      - name: Wait for realm servers to be ready
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          wait_for_url() {
+            local name="$1"
+            local url="$2"
+            local max_attempts="${3:-180}"
+
+            for ((attempt=1; attempt<=max_attempts; attempt++)); do
+              if curl --silent --show-error --fail --output /dev/null "$url"; then
+                echo "$name is ready"
+                return 0
+              fi
+
+              echo "Waiting for $name ($attempt/$max_attempts): $url"
+              sleep 5
+            done
+
+            echo "Timed out waiting for $name: $url" >&2
+            return 1
+          }
+
+          wait_for_url "base realm" "http://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+          wait_for_url "synapse" "http://localhost:8008"
+          wait_for_url "smtp4dev" "http://localhost:5001"
       - name: realm server test suite
-        run: pnpm test:wait-for-servers
+        run: pnpm test --shard ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/realm-server
-        env:
-          TEST_MODULE: ${{matrix.testModule}}
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
@@ -603,8 +556,7 @@ jobs:
         id: artifact_name
         if: ${{ !cancelled() }}
         run: |
-          export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
-          echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=shard_${{ matrix.shardIndex }}" >> "$GITHUB_OUTPUT"
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
         run: |
@@ -671,6 +623,48 @@ jobs:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
           retention-days: 30
+      - name: Upload blob report to GitHub Actions Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: blob-report-${{ matrix.shardIndex }}
+          path: packages/realm-server/.vitest-reports/*
+          include-hidden-files: true
+          retention-days: 1
+      - name: Upload attachments to GitHub Actions Artifacts
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: blob-attachments-${{ matrix.shardIndex }}
+          path: packages/realm-server/.vitest-attachments/**
+          include-hidden-files: true
+          retention-days: 1
+  merge-realm-server-test-reports:
+    if: ${{ !cancelled() }}
+    needs: [realm-server-test]
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
+      - name: Download blob reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          path: packages/realm-server/.vitest-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Download attachments from GitHub Actions Artifacts
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          path: packages/realm-server/.vitest-attachments
+          pattern: blob-attachments-*
+          merge-multiple: true
+
+      - name: Merge reports
+        working-directory: packages/realm-server
+        run: pnpm vitest run --merge-reports --reporter='github-actions'
 
   software-factory-test:
     name: Software Factory Tests
@@ -836,3 +830,5 @@ jobs:
     secrets: inherit
     with:
       environment: "staging"
+
+

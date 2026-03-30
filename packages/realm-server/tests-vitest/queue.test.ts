@@ -1,0 +1,874 @@
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
+import { createTestPgAdapter, prepareTestDB } from './helpers';
+import {
+  PgAdapter,
+  PgQueuePublisher,
+  PgQueueRunner,
+} from '@cardstack/postgres';
+import type {
+  QueueCoalesceContext,
+  QueuePublisher,
+  QueueRunner,
+} from '@cardstack/runtime-common';
+import {
+  Deferred,
+  registerQueueJobDefinition,
+  userInitiatedPriority,
+} from '@cardstack/runtime-common';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  makeIncrementalArgsWithCallerMetadata,
+  mapIncrementalDoneResult,
+  type IncrementalIndexEnqueueArgs,
+} from '@cardstack/runtime-common/jobs/indexing';
+import {
+  FROM_SCRATCH_JOB_TIMEOUT_SEC,
+  type FromScratchArgs,
+  type FromScratchResult,
+  type IncrementalDoneResult,
+} from '@cardstack/runtime-common/tasks/indexer';
+describe('queue-test.ts', function () {
+  describe('queue', function () {
+    const hooks = {
+      before: beforeAll,
+      after: afterAll,
+      beforeEach,
+      afterEach,
+    };
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
+    let adapter: PgAdapter;
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      publisher = new PgQueuePublisher(adapter);
+      runner = new PgQueueRunner({ adapter, workerId: 'q1', maxTimeoutSec: 2 });
+      await runner.start();
+    });
+    hooks.afterEach(async function () {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    });
+    async function publishFromScratchIndexJob(args: {
+      args: FromScratchArgs;
+      priority: number;
+    }) {
+      return await publisher.publish<FromScratchResult>({
+        jobType: 'from-scratch-index',
+        concurrencyGroup: `indexing:${args.args.realmURL}`,
+        timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
+        priority: args.priority,
+        args: args.args,
+      });
+    }
+    async function publishIncrementalIndexJob(args: {
+      args: IncrementalIndexEnqueueArgs;
+      clientRequestId: string | null;
+      priority?: number;
+    }) {
+      let priority = args.priority ?? userInitiatedPriority;
+      return await publisher.publish<IncrementalDoneResult>({
+        jobType: 'incremental-index',
+        concurrencyGroup: `indexing:${args.args.realmURL}`,
+        timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+        priority,
+        args: makeIncrementalArgsWithCallerMetadata(
+          args.args,
+          args.clientRequestId,
+        ),
+        mapResult: mapIncrementalDoneResult(args.clientRequestId),
+      });
+    }
+    it('it can run a job', async function () {
+      let job = await publisher.publish<number>({
+        jobType: 'increment',
+        concurrencyGroup: null,
+        timeout: 5,
+        args: 17,
+      });
+      runner.register('increment', async (a: number) => a + 1);
+      let result = await job.done;
+      expect(result).toBe(18);
+    });
+    it(`a job can throw an exception`, async function () {
+      runner.register('increment', async (a: number) => a + 1);
+      runner.register('boom', async () => {
+        throw new Error('boom!');
+      });
+      let [errorJob, nonErrorJob] = await Promise.all([
+        publisher.publish<number>({
+          jobType: 'boom',
+          concurrencyGroup: null,
+          timeout: 5,
+          args: null,
+        }),
+        publisher.publish<number>({
+          jobType: 'increment',
+          concurrencyGroup: null,
+          timeout: 5,
+          args: 17,
+        }),
+      ]);
+      let [errorResults, nonErrorResults] = await Promise.allSettled([
+        errorJob.done,
+        nonErrorJob.done,
+      ]);
+      expect(errorResults.status).toBe('rejected');
+      if (errorResults.status === 'rejected') {
+        expect(errorResults.reason.message).toBe('boom!');
+      }
+      expect(nonErrorResults.status).toBe('fulfilled');
+      if (nonErrorResults.status === 'fulfilled') {
+        expect(nonErrorResults.value).toBe(18);
+      }
+    });
+    it('jobs are processed serially within a particular queue', async function () {
+      let startedCount = 0;
+      let completedCount = 0;
+      let count = async (expectedStartedCount: number) => {
+        expect(startedCount).toBe(expectedStartedCount);
+        expect(completedCount).toBe(expectedStartedCount);
+        startedCount++;
+        await new Promise((r) => setTimeout(r, 500));
+        completedCount++;
+        expect(startedCount).toBe(expectedStartedCount + 1);
+        expect(completedCount).toBe(expectedStartedCount + 1);
+      };
+      runner.register('count', count);
+      let job1 = await publisher.publish({
+        jobType: 'count',
+        concurrencyGroup: 'count-group',
+        timeout: 5,
+        args: 0,
+      });
+      let job2 = await publisher.publish({
+        jobType: 'count',
+        concurrencyGroup: 'count-group',
+        timeout: 5,
+        args: 1,
+      });
+      await Promise.all([job2.done, job1.done]);
+    });
+    it('coalesce can join pending jobs and map waiter-specific results', async function () {
+      runner.register('echo', async (arg: { value: number }) => arg);
+      let coalesce = ({ incoming, candidates }: QueueCoalesceContext) => {
+        let candidate = candidates[0];
+        if (!candidate) {
+          return { type: 'insert', job: incoming } as const;
+        }
+        return { type: 'join', jobId: candidate.id } as const;
+      };
+      registerQueueJobDefinition({ jobType: 'echo', coalesce });
+      let first = await publisher.publish<{ value: number; waiter: string }>({
+        jobType: 'echo',
+        concurrencyGroup: 'echo-group',
+        timeout: 5,
+        args: { value: 41 },
+        mapResult: (result) => ({
+          ...(result as { value: number }),
+          waiter: 'first',
+        }),
+      });
+      let second = await publisher.publish<{ value: number; waiter: string }>({
+        jobType: 'echo',
+        concurrencyGroup: 'echo-group',
+        timeout: 5,
+        args: { value: 99 },
+        mapResult: (result) => ({
+          ...(result as { value: number }),
+          waiter: 'second',
+        }),
+      });
+      expect(first.id).toBe(second.id);
+      let [firstResult, secondResult] = await Promise.all([
+        first.done,
+        second.done,
+      ]);
+      expect(firstResult.value).toBe(41);
+      expect(firstResult.waiter).toBe('first');
+      expect(secondResult.value).toBe(41);
+      expect(secondResult.waiter).toBe('second');
+    });
+    it('coalesce can join pending jobs and map waiter-specific rejected results', async function () {
+      runner.register('boom-echo', async (arg: { value: number }) => {
+        throw { reason: 'boom', value: arg.value };
+      });
+      let coalesce = ({ incoming, candidates }: QueueCoalesceContext) => {
+        let candidate = candidates[0];
+        if (!candidate) {
+          return { type: 'insert', job: incoming } as const;
+        }
+        return { type: 'join', jobId: candidate.id } as const;
+      };
+      registerQueueJobDefinition({ jobType: 'boom-echo', coalesce });
+      let first = await publisher.publish<{
+        reason: string;
+        value: number;
+        waiter: string;
+      }>({
+        jobType: 'boom-echo',
+        concurrencyGroup: 'boom-echo-group',
+        timeout: 5,
+        args: { value: 41 },
+        mapResult: (result) => ({
+          ...(result as { reason: string; value: number }),
+          waiter: 'first',
+        }),
+      });
+      let second = await publisher.publish<{
+        reason: string;
+        value: number;
+        waiter: string;
+      }>({
+        jobType: 'boom-echo',
+        concurrencyGroup: 'boom-echo-group',
+        timeout: 5,
+        args: { value: 99 },
+        mapResult: (result) => ({
+          ...(result as { reason: string; value: number }),
+          waiter: 'second',
+        }),
+      });
+      expect(first.id).toBe(second.id);
+      let [firstResult, secondResult] = await Promise.allSettled([
+        first.done,
+        second.done,
+      ]);
+      expect(firstResult.status).toBe('rejected');
+      expect(secondResult.status).toBe('rejected');
+      if (
+        firstResult.status === 'rejected' &&
+        secondResult.status === 'rejected'
+      ) {
+        expect(firstResult.reason.reason).toBe('boom');
+        expect(firstResult.reason.value).toBe(41);
+        expect(firstResult.reason.waiter).toBe('first');
+        expect(secondResult.reason.reason).toBe('boom');
+        expect(secondResult.reason.value).toBe(41);
+        expect(secondResult.reason.waiter).toBe('second');
+      }
+    });
+    it('coalesce does not join pending jobs that already have an active reservation', async function () {
+      await runner.destroy();
+      let existingJob = await publisher.publish<number>({
+        jobType: 'reserved-candidate',
+        concurrencyGroup: 'reserved-group',
+        timeout: 30,
+        args: 1,
+      });
+      await adapter.execute(
+        `INSERT INTO job_reservations (job_id, locked_until, worker_id)
+         VALUES ($1, NOW() + INTERVAL '30 seconds', 'test-worker')`,
+        { bind: [existingJob.id] },
+      );
+      let seenCandidateIds: number[] | undefined;
+      registerQueueJobDefinition({
+        jobType: 'reserved-candidate',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) => {
+          seenCandidateIds = candidates.map((candidate) => candidate.id);
+          let candidate = candidates[0];
+          if (!candidate) {
+            return { type: 'insert', job: incoming } as const;
+          }
+          return { type: 'join', jobId: candidate.id } as const;
+        },
+      });
+      let joinedJob = await publisher.publish<number>({
+        jobType: 'reserved-candidate',
+        concurrencyGroup: 'reserved-group',
+        timeout: 30,
+        args: 2,
+      });
+      expect(seenCandidateIds).toEqual([]);
+      expect(joinedJob.id).not.toBe(existingJob.id);
+    });
+    it('coalesce does not join a currently running job in same concurrency group', async function () {
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+      runner.register('blocking-job', async (arg: number) => {
+        started.fulfill();
+        await release.promise;
+        return arg;
+      });
+      let runningJob = await publisher.publish<number>({
+        jobType: 'blocking-job',
+        concurrencyGroup: 'running-group',
+        timeout: 30,
+        args: 1,
+      });
+      await started.promise;
+      registerQueueJobDefinition({
+        jobType: 'blocking-job',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) => {
+          let candidate = candidates[0];
+          if (!candidate) {
+            return { type: 'insert', job: incoming } as const;
+          }
+          return { type: 'join', jobId: candidate.id } as const;
+        },
+      });
+      let coalescedJob = await publisher.publish<number>({
+        jobType: 'blocking-job',
+        concurrencyGroup: 'running-group',
+        timeout: 30,
+        args: 2,
+      });
+      expect(coalescedJob.id).not.toBe(runningJob.id);
+      release.fulfill();
+      let [runningResult, coalescedResult] = await Promise.all([
+        runningJob.done,
+        coalescedJob.done,
+      ]);
+      expect(runningResult).toBe(1);
+      expect(coalescedResult).toBe(2);
+    });
+    it('concurrent coalesce attempts converge to one canonical pending job', async function () {
+      await runner.destroy();
+      registerQueueJobDefinition({
+        jobType: 'coalesce-target',
+        coalesce: ({ incoming, candidates }: QueueCoalesceContext) => {
+          let candidate = candidates[0];
+          if (!candidate) {
+            return { type: 'insert', job: incoming } as const;
+          }
+          return { type: 'join', jobId: candidate.id } as const;
+        },
+      });
+      let jobs = await Promise.all(
+        [...new Array(20)].map((_, index) =>
+          publisher.publish<number>({
+            jobType: 'coalesce-target',
+            concurrencyGroup: 'coalesce-convergence-group',
+            timeout: 30,
+            args: index,
+          }),
+        ),
+      );
+      let uniqueJobIds = [...new Set(jobs.map((job) => job.id))];
+      expect(uniqueJobIds.length).toBe(1);
+      let rows = (await adapter.execute(`SELECT id
+         FROM jobs
+         WHERE concurrency_group='coalesce-convergence-group'
+           AND status='unfulfilled'`)) as {
+        id: number;
+      }[];
+      expect(rows.length).toBe(1);
+    });
+    it('incremental coalesce merges mixed operations and persists per-caller metadata', async function () {
+      await runner.destroy();
+      let realmURL = 'http://example.com/coalesced/';
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [
+            { url: `${realmURL}a`, operation: 'update' },
+            { url: `${realmURL}b`, operation: 'update' },
+          ],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [
+            { url: `${realmURL}b`, operation: 'delete' },
+            { url: `${realmURL}c`, operation: 'update' },
+          ],
+        },
+      });
+      expect(first.id).toBe(second.id);
+      let [row] = (await adapter.execute(
+        `SELECT job_type, args
+         FROM jobs
+         WHERE id = $1`,
+        { bind: [first.id] },
+      )) as {
+        job_type: string;
+        args: {
+          changes: {
+            url: string;
+            operation: 'update' | 'delete';
+          }[];
+          coalescedCallers: {
+            waiterId: string;
+            clientRequestId: string | null;
+          }[];
+        };
+      }[];
+      expect(row.job_type).toBe('incremental-index');
+      let operationByUrl = new Map(
+        row.args.changes.map((change) => [change.url, change.operation]),
+      );
+      expect(
+        [...operationByUrl.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+      ).toEqual([
+        [`${realmURL}a`, 'update'],
+        [`${realmURL}b`, 'delete'],
+        [`${realmURL}c`, 'update'],
+      ]);
+      expect(
+        row.args.coalescedCallers
+          .map((caller) => caller.clientRequestId)
+          .sort(),
+      ).toEqual(['request-1', 'request-2']);
+    });
+    it('from-scratch does not coalesce onto pending incremental in same group', async function () {
+      await runner.destroy();
+      let realmURL = 'http://example.com/no-mixed-coalesce/';
+      let incremental = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let fromScratch = await publishFromScratchIndexJob({
+        priority: 123,
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+        },
+      });
+      expect(fromScratch.id).not.toBe(incremental.id);
+      let rows = (await adapter.execute(
+        `SELECT job_type
+         FROM jobs
+         WHERE concurrency_group = $1
+           AND status = 'unfulfilled'
+         ORDER BY created_at, id`,
+        { bind: [`indexing:${realmURL}`] },
+      )) as {
+        job_type: string;
+      }[];
+      expect(rows.map((row) => row.job_type)).toEqual([
+        'incremental-index',
+        'from-scratch-index',
+      ]);
+    });
+    it('coalesced incremental waiters each receive their own clientRequestId in done payload', async function () {
+      await runner.destroy();
+      let realmURL = 'http://example.com/done-shape/';
+      let first = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      let second = await publishIncrementalIndexJob({
+        clientRequestId: 'request-2',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}b`, operation: 'delete' }],
+        },
+      });
+      let worker = new PgQueueRunner({ adapter, workerId: 'coalesce-worker' });
+      try {
+        worker.register(
+          'incremental-index',
+          async (args: {
+            changes: {
+              url: string;
+            }[];
+          }) => ({
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          }),
+        );
+        await worker.start();
+        let [firstResult, secondResult] = await Promise.all([
+          first.done,
+          second.done,
+        ]);
+        expect(firstResult.clientRequestId).toBe('request-1');
+        expect(secondResult.clientRequestId).toBe('request-2');
+        expect(firstResult.invalidations.sort()).toEqual(
+          secondResult.invalidations.sort(),
+        );
+      } finally {
+        await worker.destroy();
+      }
+    });
+    it('incremental does not coalesce onto pending from-scratch in same group', async function () {
+      await runner.destroy();
+      let realmURL = 'http://example.com/no-mixed-coalesce-reverse/';
+      let fromScratch = await publishFromScratchIndexJob({
+        priority: 123,
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+        },
+      });
+      let incremental = await publishIncrementalIndexJob({
+        clientRequestId: 'request-1',
+        args: {
+          realmURL,
+          realmUsername: 'owner',
+          ignoreData: {},
+          changes: [{ url: `${realmURL}a`, operation: 'update' }],
+        },
+      });
+      expect(incremental.id).not.toBe(fromScratch.id);
+      let rows = (await adapter.execute(
+        `SELECT job_type
+         FROM jobs
+         WHERE concurrency_group = $1
+           AND status = 'unfulfilled'
+         ORDER BY created_at, id`,
+        { bind: [`indexing:${realmURL}`] },
+      )) as {
+        job_type: string;
+      }[];
+      expect(rows.map((row) => row.job_type)).toEqual([
+        'from-scratch-index',
+        'incremental-index',
+      ]);
+    });
+    it('worker stops waiting for job after its been running longer than max time-out', async function () {
+      let events: string[] = [];
+      let runs = 0;
+      let logJob = async () => {
+        let me = runs;
+        events.push(`job${me} start`);
+        if (runs++ === 0) {
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+        events.push(`job${me} finish`);
+        return me;
+      };
+      runner.register('logJob', logJob);
+      let job = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'log-group',
+        timeout: 1,
+        args: null,
+      });
+      try {
+        await job.done;
+        throw new Error(`expected timeout to be thrown`);
+      } catch (error: any) {
+        expect(error.message).toBe(
+          'Timed-out after 2s waiting for job 1 to complete',
+        );
+      }
+    });
+    // Concurrency control using different queues is only supported in pg-queue,
+    // so these are not tests that are shared with the browser queue implementation.
+    describe('multiple queue clients', function () {
+      const nestedHooks = {
+        before: beforeAll,
+        after: afterAll,
+        beforeEach,
+        afterEach,
+      };
+      let runner2: QueueRunner;
+      let adapter2: PgAdapter;
+      nestedHooks.beforeEach(async function () {
+        adapter2 = new PgAdapter();
+        runner2 = new PgQueueRunner({ adapter: adapter2, workerId: 'q2' });
+        await runner2.start();
+        // Because we need tight timing control for this test, ensure both
+        // adapters have active DB connections before measuring behavior.
+        await adapter.execute('select 1');
+        await adapter2.execute('select 1');
+      });
+      nestedHooks.afterEach(async function () {
+        await runner2.destroy();
+        await adapter2.close();
+      });
+      it('jobs in different concurrency groups can run in parallel', async function () {
+        let events: string[] = [];
+        let logJob = async (jobNum: number) => {
+          events.push(`job${jobNum} start`);
+          await new Promise((r) => setTimeout(r, 500));
+          events.push(`job${jobNum} finish`);
+        };
+        runner.register('logJob', logJob);
+        runner2.register('logJob', logJob);
+        let promiseForJob1 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 5000,
+          args: 1,
+        });
+        // start the 2nd job before the first job finishes
+        await new Promise((r) => setTimeout(r, 100));
+        let promiseForJob2 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'other-group',
+          timeout: 5000,
+          args: 2,
+        });
+        let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
+        await Promise.all([job1.done, job2.done]);
+        expect(events).toEqual([
+          'job1 start',
+          'job2 start',
+          'job1 finish',
+          'job2 finish',
+        ]);
+      });
+      it('jobs are processed serially within a particular queue across different queue clients', async function () {
+        let events: string[] = [];
+        let logJob = async (jobNum: number) => {
+          events.push(`job${jobNum} start`);
+          await new Promise((r) => setTimeout(r, 500));
+          events.push(`job${jobNum} finish`);
+        };
+        runner.register('logJob', logJob);
+        runner2.register('logJob', logJob);
+        let promiseForJob1 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 5000,
+          args: 1,
+        });
+        // start the 2nd job before the first job finishes
+        await new Promise((r) => setTimeout(r, 100));
+        let promiseForJob2 = publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 5000,
+          args: 2,
+        });
+        let [job1, job2] = await Promise.all([promiseForJob1, promiseForJob2]);
+        await Promise.all([job1.done, job2.done]);
+        expect(events).toEqual([
+          'job1 start',
+          'job1 finish',
+          'job2 start',
+          'job2 finish',
+        ]);
+      });
+      it('job can timeout; timed out job is picked up by another worker', async function () {
+        let events: string[] = [];
+        let runs = 0;
+        let logJob = async () => {
+          let me = runs;
+          events.push(`job${me} start`);
+          if (runs++ === 0) {
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+          events.push(`job${me} finish`);
+          return me;
+        };
+        runner.register('logJob', logJob);
+        runner2.register('logJob', logJob);
+        let job = await publisher.publish({
+          jobType: 'logJob',
+          concurrencyGroup: 'log-group',
+          timeout: 1,
+          args: null,
+        });
+        // just after our job has timed out, kick the queue so that another worker
+        // will notice it. Otherwise we'd be stuck until the polling comes around.
+        await new Promise((r) => setTimeout(r, 1100));
+        await adapter.execute('NOTIFY jobs');
+        let result = await job.done;
+        expect(result).toBe(1);
+        // at this point the long-running first job is still stuck. it will
+        // eventually also log "job0 finish", but that is absorbed by our test
+        // afterEach
+        expect(events).toEqual(['job0 start', 'job1 start', 'job1 finish']);
+      });
+    });
+  });
+  describe('queue - high priority worker', function () {
+    const hooks = {
+      before: beforeAll,
+      after: afterAll,
+      beforeEach,
+      afterEach,
+    };
+    let publisher: QueuePublisher;
+    let runner: QueueRunner;
+    let adapter: PgAdapter;
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      publisher = new PgQueuePublisher(adapter);
+      runner = new PgQueueRunner({
+        adapter,
+        workerId: 'q1',
+        maxTimeoutSec: 1,
+        priority: 10,
+      });
+      await runner.start();
+    });
+    hooks.afterEach(async function () {
+      await runner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+    });
+    it('worker can be set to only process jobs greater or equal to a particular priority', async function () {
+      let events: string[] = [];
+      let logJob = async ({ name }: { name: string }) => {
+        events.push(name);
+      };
+      runner.register('logJob', logJob);
+      let lowPriorityJob = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: null,
+        timeout: 1,
+        args: { name: 'low priority' },
+        priority: 0,
+      });
+      let highPriorityJob1 = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'logGroup',
+        timeout: 1,
+        args: { name: 'high priority 1' },
+        priority: 10,
+      });
+      let highPriorityJob2 = await publisher.publish({
+        jobType: 'logJob',
+        concurrencyGroup: 'logGroup',
+        timeout: 1,
+        args: { name: 'high priority 2' },
+        priority: 11,
+      });
+      await highPriorityJob1.done;
+      await highPriorityJob2.done;
+      await Promise.race([
+        lowPriorityJob.done,
+        // the low priority job will never get picked up, so we race it against a timeout
+        new Promise((r) => setTimeout(r, 2)),
+      ]);
+      expect(events.sort()).toEqual(['high priority 1', 'high priority 2']);
+    });
+  });
+  describe('queue - high priority worker and all priority worker', function () {
+    const hooks = {
+      before: beforeAll,
+      after: afterAll,
+      beforeEach,
+      afterEach,
+    };
+    let publisher: QueuePublisher;
+    let allPriorityRunner: QueueRunner;
+    let highPriorityRunner: QueueRunner;
+    let adapter: PgAdapter;
+    let adapter2: PgAdapter;
+    hooks.beforeEach(async function () {
+      prepareTestDB();
+      adapter = await createTestPgAdapter();
+      adapter2 = new PgAdapter();
+      publisher = new PgQueuePublisher(adapter);
+      allPriorityRunner = new PgQueueRunner({
+        adapter,
+        workerId: 'q1',
+        maxTimeoutSec: 1,
+        priority: 0,
+      });
+      highPriorityRunner = new PgQueueRunner({
+        adapter: adapter2,
+        workerId: 'hp1',
+        priority: 100,
+      });
+      await allPriorityRunner.start();
+      await highPriorityRunner.start();
+      // Because we need tight timing control for this test, ensure both
+      // adapters have active DB connections before measuring behavior.
+      await adapter.execute('select 1');
+      await adapter2.execute('select 1');
+    });
+    hooks.afterEach(async function () {
+      await allPriorityRunner.destroy();
+      await highPriorityRunner.destroy();
+      await publisher.destroy();
+      await adapter.close();
+      await adapter2.close();
+    });
+    it('concurrency group enforces concurrency against running jobs', async function () {
+      // Emulate realm server start up with full indexing competing with
+      // incremental indexing. make slow jobs with low priority so the
+      // concurrency group we are testing is waiting on a low priority worker.
+      // make another job with high priority worker that runs while the low
+      // priority job with same concurrency group is still waiting.
+      let events: string[] = [];
+      let slowLogJob = async (jobNum: number) => {
+        events.push(`job${jobNum} start`);
+        await new Promise((r) => setTimeout(r, 500));
+        events.push(`job${jobNum} finish`);
+      };
+      let fastLogJob = async (jobNum: number) => {
+        events.push(`job${jobNum} start`);
+        await new Promise((r) => setTimeout(r, 10));
+        events.push(`job${jobNum} finish`);
+      };
+      allPriorityRunner.register('slowLogJob', slowLogJob);
+      allPriorityRunner.register('fastLogJob', fastLogJob);
+      highPriorityRunner.register('fastLogJob', fastLogJob);
+      let promiseForSlowJob1 = publisher.publish({
+        jobType: 'slowLogJob',
+        concurrencyGroup: 'other-group',
+        timeout: 5000,
+        priority: 0,
+        args: 1,
+      });
+      // start the 2nd slow job before the first job finishes
+      await new Promise((r) => setTimeout(r, 100));
+      let promiseForSlowJob2 = publisher.publish({
+        jobType: 'slowLogJob',
+        concurrencyGroup: 'log-group', // same concurrency group as the fast job
+        timeout: 5000,
+        priority: 0,
+        args: 2,
+      });
+      // start the fast job after the 2nd slow job is published but before the
+      // first job finishes
+      await new Promise((r) => setTimeout(r, 100));
+      let promiseForFastJob3 = publisher.publish({
+        jobType: 'fastLogJob',
+        concurrencyGroup: 'log-group', // same concurrency group as the waiting slow job
+        timeout: 5000,
+        priority: 100, // this is a high priority job so it should be picked up by the idle high priority runner immediately
+        args: 3,
+      });
+      let [slowJob1, slowJob2, fastJob3] = await Promise.all([
+        promiseForSlowJob1,
+        promiseForSlowJob2,
+        promiseForFastJob3,
+      ]);
+      await Promise.all([slowJob1.done, slowJob2.done, fastJob3.done]);
+      expect(events).toEqual([
+        'job1 start',
+        // job 3 is a high priority job and it should not be blocked because
+        // job 2 is waiting--concurrency group is based on running jobs not
+        // waiting jobs
+        'job3 start',
+        'job3 finish',
+        'job1 finish',
+        'job2 start',
+        'job2 finish',
+      ]);
+    });
+  });
+});
