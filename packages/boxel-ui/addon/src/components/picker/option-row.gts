@@ -110,10 +110,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         </div>
       {{/if}}
       {{#if @option.tooltip}}
-        <Tooltip
-          @placement='right'
-          class='picker-option-row__tooltip-trigger'
-        >
+        <Tooltip @placement='right' class='picker-option-row__tooltip-trigger'>
           <:trigger>
             <div class='picker-option-row__label'>{{@option.label}}</div>
           </:trigger>
