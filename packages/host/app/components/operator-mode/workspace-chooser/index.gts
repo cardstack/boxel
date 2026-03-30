@@ -177,16 +177,13 @@ function realmIcon(letter: string, color: string): string {
   }
   const { defs, bg } =
     GRADIENT_FACTORIES[(seed * 7) % GRADIENT_FACTORIES.length]!(color, color2);
-  const isItalic = (seed * 11) % 3 === 0;
   const fontWeight = FONT_WEIGHTS[(seed * 17) % FONT_WEIGHTS.length]!;
-  const textShadow = '<filter id="ts" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="0.5" stdDeviation="1.5" flood-color="black" flood-opacity="0.55"/></filter>';
-  const allDefs = (defs || '') + textShadow;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">` +
-    `<defs>${allDefs}</defs>` +
+    `<defs>${defs || ''}</defs>` +
     bg +
     `<rect width="40" height="40" fill="black" fill-opacity="0.12"/>` +
-    `<text x="50%" y="50%" text-anchor="middle" dominant-baseline="central" font-size="22" font-weight="${fontWeight}" fill="white" font-family="${font}"${isItalic ? ' font-style="italic"' : ''} filter="url(#ts)">${letter}</text>` +
+    `<text x="50%" y="50%" dy="0.35em" text-anchor="middle" font-size="22" font-weight="${fontWeight}" fill="white" font-family="${font}">${letter}</text>` +
     `</svg>`;
   return `data:image/svg+xml;base64,${btoa(svg)}`;
 }

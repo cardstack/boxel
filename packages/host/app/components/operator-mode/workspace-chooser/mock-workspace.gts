@@ -302,12 +302,12 @@ export default class MockWorkspace extends Component<Signature> {
         position: absolute;
         inset: 0;
         border-radius: inherit;
-        box-shadow: 0 0 0 1px rgba(255 255 255 / 50%);
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
         z-index: 1;
         pointer-events: none;
       }
       .floating-realm-icon {
-        --boxel-realm-icon-size: 40px;
+        --boxel-realm-icon-size: 42px;
         --boxel-realm-icon-border-radius: calc(var(--boxel-border-radius-xs) + 6px);
         --boxel-realm-icon-background-color: var(--boxel-light);
       }
@@ -577,12 +577,12 @@ export default class MockWorkspace extends Component<Signature> {
         position: absolute;
         inset: 0;
         border-radius: inherit;
-        box-shadow: 0 0 0 1px rgba(255 255 255 / 50%);
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
         z-index: 1;
         pointer-events: none;
       }
       .delete-modal__realm-icon {
-        --boxel-realm-icon-size: 40px;
+        --boxel-realm-icon-size: 42px;
         --boxel-realm-icon-border-radius: calc(var(--boxel-border-radius-xs) + 6px);
         --boxel-realm-icon-background-color: var(--boxel-light);
       }
