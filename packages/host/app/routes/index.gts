@@ -65,7 +65,7 @@ export default class Card extends Route {
       this.initialLoading = false;
     });
 
-    return this.initialLoading;
+    return this.initialLoading && !this.hostModeService.isActive;
   }
 
   // WARNING! Make sure we are _very_ careful with our async in this model. This

@@ -1,11 +1,19 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import type NetworkService from './network';
+import type ResetService from './reset';
 
 export default class RealmInfoService extends Service {
   @service declare network: NetworkService;
+  @service declare private reset: ResetService;
 
   cachedPublicReadableRealms: Map<string, boolean> = new Map();
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
 
   async isPublicReadable(realmURL: URL): Promise<boolean> {
     let realmURLString = realmURL.href;
@@ -21,5 +29,9 @@ export default class RealmInfoService extends Service {
     this.cachedPublicReadableRealms.set(realmURLString, isPublicReadable);
 
     return isPublicReadable;
+  }
+
+  resetState() {
+    this.cachedPublicReadableRealms.clear();
   }
 }

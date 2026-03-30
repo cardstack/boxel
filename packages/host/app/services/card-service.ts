@@ -95,6 +95,7 @@ export default class CardService extends Service {
     this.subscriber = undefined;
     this.clientRequestIds = new LimitedSet(250);
     this.loaderToCardAPILoadingCache = new WeakMap();
+    this.sizeLimitError.clear();
   }
 
   // used for tests only!
@@ -238,7 +239,10 @@ export default class CardService extends Service {
       }
       this.subscriber?.(url, content);
 
-      if (options?.resetLoader) {
+      if (
+        options?.resetLoader &&
+        this.loaderService.loader.isModuleLoaded(url.href)
+      ) {
         this.loaderService.resetLoader();
       }
 

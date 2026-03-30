@@ -16,8 +16,10 @@ declare const config: {
 
   realmServerURL: string;
   resolvedBaseRealmURL: string;
-  resolvedCatalogRealmURL: string;
+  resolvedCatalogRealmURL: string | undefined;
+  resolvedExternalCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
+  resolvedOpenRouterRealmURL: string | undefined;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
@@ -39,7 +41,7 @@ declare const config: {
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;
   publishedRealmDomainOverrides: string;
-  defaultSystemCardId: string;
+  defaultSystemCardId?: string;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
 };

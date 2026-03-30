@@ -68,6 +68,15 @@ export class CopySourceResult extends CardDef {
   @field url = contains(StringField);
 }
 
+export class CopyFileToRealmInput extends CardDef {
+  @field sourceFileUrl = contains(StringField);
+  @field targetRealm = contains(StringField);
+}
+
+export class CopyFileToRealmResult extends CardDef {
+  @field newFileUrl = contains(StringField);
+}
+
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
@@ -76,6 +85,11 @@ export class PatchCardInput extends CardDef {
 
 export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
+}
+
+export class GetUserSystemCardResult extends CardDef {
+  @field cardId = contains(StringField);
+  @field isDefault = contains(BooleanField);
 }
 
 export class ShowCardInput extends CardDef {
@@ -98,6 +112,10 @@ export class FileUrlCard extends CardDef {
 
 export class RealmUrlCard extends CardDef {
   @field realmUrl = contains(StringField);
+}
+
+export class InvalidateRealmUrlsInput extends RealmUrlCard {
+  @field urls = containsMany(StringField);
 }
 
 export class ReadTextFileInput extends CardDef {
@@ -368,10 +386,11 @@ export class ListingInstallResult extends CardDef {
 export class CreateListingPRRequestInput extends CardDef {
   @field realm = contains(RealmField);
   @field listingId = contains(StringField);
+  @field listingName = contains(StringField);
 }
 
 export class ListingCreateInput extends CardDef {
-  @field openCardId = contains(StringField);
+  @field openCardIds = containsMany(StringField);
   @field codeRef = contains(CodeRefField);
   @field targetRealm = contains(RealmField);
 }
@@ -599,4 +618,11 @@ export class SearchAndChooseInput extends CardDef {
 export class SearchAndChooseResult extends CardDef {
   @field selectedIds = containsMany(StringField);
   @field selectedCards = linksToMany(CardDef);
+}
+
+export class SyncOpenRouterModelsResult extends CardDef {
+  @field modelsProcessed = contains(NumberField);
+  @field totalModels = contains(NumberField);
+  @field status = contains(StringField);
+  @field errors = contains(StringField);
 }

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["orders", "commerce", "fulfillment"],
+      "content": "## Overview\n\nAn Order card represents a customer purchase that bundles one or more [[Product]] items with shipping details, payment information, and fulfillment status. Orders are the transactional bridge between the sales process and delivery, capturing exactly what was purchased, by whom, at what price, and tracking progress from placement through shipment to completion.\n\nOrders serve both B2C and B2B scenarios. A consumer might place a single-item order through a storefront, while an enterprise [[Contact]] might submit a multi-line purchase order referencing a negotiated [[Deal]] with custom pricing and payment terms. The Order card handles both with the same underlying structure.\n\n## Core Mechanics\n\nEach Order contains a header with the purchasing [[Contact]], billing and shipping addresses, order date, and requested delivery date. The body consists of line items, each referencing a [[Product]] with quantity, unit price (which may differ from list price if a [[Deal]] discount applies), and line total. The system computes subtotals, shipping costs, taxes, and the grand total.\n\nOrder status progresses through defined states: **Pending** (submitted, awaiting confirmation), **Confirmed** (accepted, inventory reserved), **Processing** (being picked and packed), **Shipped** (in transit with tracking number), **Delivered** (received by customer), and **Completed** (no further action needed). Additional terminal states include **Cancelled** (voided before shipment) and **Returned** (goods sent back after delivery).\n\n### Inventory and Fulfillment\n\nWhen an order is confirmed, the system reserves inventory for each [[Product]] line item. If stock is insufficient, the order enters a **Backordered** state for affected items, and the [[Contact]] is notified of the expected availability date. Split shipments are supported: available items can ship immediately while backordered items ship when stock arrives.\n\nFulfillment tracking integrates with shipping carriers via the platform's [[Integration]] layer. Tracking numbers, carrier names, and estimated delivery dates are stored on the order and shared with the customer. Delivery confirmation events update the order status automatically through webhook [[Trigger]] rules.\n\n## Integration Points\n\n[[Product]] records provide the catalog foundation for order line items. Product availability, pricing tiers, weight, and dimensions all feed into order calculations. When a product is discontinued, existing orders retain their original product data while new orders cannot reference it.\n\nEach order generates a corresponding [[Invoice]] for billing. The invoice is created when the order is confirmed (for prepaid orders) or when the order ships (for net-terms billing). Invoice line items mirror order line items, with payment terms inherited from the [[Organization]] account settings.\n\nThe purchasing [[Contact]] is the primary stakeholder on the order. Their communication preferences determine how order confirmations, shipping notifications, and delivery updates are sent. For B2B orders, the contact's [[Organization]] may have centralized billing that routes [[Invoice]] delivery to an accounts payable team rather than the individual purchaser.\n\nOrders that originate from closed [[Deal]] records carry forward the negotiated pricing, payment terms, and any special conditions agreed during the sales process. This linkage ensures that the deal's commercial terms are accurately reflected in the transactional layer.\n\nOrder management tasks appear on operational [[Kanban Board]] views. Processing teams use board columns for each fulfillment stage, with cards auto-advancing as status changes occur. This visual workflow helps warehouse and logistics staff manage their daily workload efficiently.\n\n## Example Use Cases\n\n- **E-commerce purchase**: Customer [[Contact]] places an order through the storefront, payment captured via [[Integration]] with Stripe, [[Invoice]] auto-generated, shipment tracked through carrier webhook [[Trigger]] events\n- **Enterprise procurement**: [[Organization]] buyer submits a purchase order referencing a [[Deal]] with volume pricing, split shipment across two warehouses, net-30 [[Invoice]] terms\n- **Subscription box**: Recurring orders auto-generated monthly from subscription [[Product]] configuration, fulfillment tasks created on the operations [[Kanban Board]]\n- **Return and refund**: Customer initiates return, order status changes to Returned, credit note issued against the original [[Invoice]], [[Product]] inventory restocked upon receipt",
+      "cardInfo": {
+        "name": "Order",
+        "notes": null,
+        "summary": "Customer order with line items, shipping tracking, and fulfillment status management",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

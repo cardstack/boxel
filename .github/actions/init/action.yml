@@ -4,11 +4,9 @@ description: Setup common dependencies
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e # 4.3.0
+    - uses: jdx/mise-action@c1ecc8f748cd28cdeabf76dab3cccde4ce692fe4 # v4.0.0
       with:
-        node-version-file: "package.json"
-
-    - uses: cardstack/gh-actions/setup-pnpm-volta@main
+        install: true
 
     - name: Get pnpm store directory
       id: pnpm-cache
@@ -16,7 +14,7 @@ runs:
       run: |
         echo "STORE_PATH=$(pnpm store path -s)" >> $GITHUB_OUTPUT
 
-    - uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+    - uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
       name: Setup pnpm cache
       id: cache
       with:

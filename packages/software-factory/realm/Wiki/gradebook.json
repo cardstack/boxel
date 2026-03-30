@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["learning-education", "gradebook"],
+      "content": "## Overview\n\nThe Gradebook card gives the workspace a structured home for instructor's grade tracking: students, assignments, scores, weighted averages.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nGradebook organizes instructional or learning-specific structure in a way that remains reusable across planning, delivery, and review. The card should support both direct authoring and automation-assisted generation while keeping its context intact.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Course]]** -- Course can provide adjacent context, downstream output, or grouped navigation around Gradebook.\n- **[[Assignment]]** -- Assignment can provide adjacent context, downstream output, or grouped navigation around Gradebook.\n- **[[Quiz]]** -- Quiz can provide adjacent context, downstream output, or grouped navigation around Gradebook.\n- **[[Lesson Plan]]** -- Lesson Plan can provide adjacent context, downstream output, or grouped navigation around Gradebook.\n- **[[Report]]** -- Gradebook can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Workflow Playbook]]** -- Gradebook can be created, reviewed, or progressed as one step inside a repeatable workflow.\n\n## Example Use Cases\n\n- **System of record:** Teams create Gradebook as the structured home for instructor's grade tracking: students, assignments, scores, weighted averages and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Gradebook when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Gradebook stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Gradebook",
+        "notes": null,
+        "summary": "Instructor's grade tracking: students, assignments, scores, weighted averages.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

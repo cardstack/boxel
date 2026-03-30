@@ -96,6 +96,18 @@ function makeMinimalPng(width: number, height: number): Uint8Array {
   return png;
 }
 
+function makeRenderablePng(): Uint8Array {
+  // 1x1 browser-decodable PNG (transparent pixel).
+  let base64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+yF9kAAAAASUVORK5CYII=';
+  let binary = atob(base64);
+  let bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 function buildChunk(type: string, data: Uint8Array): Uint8Array {
   // chunk = length (4 bytes) + type (4 bytes) + data + CRC (4 bytes)
   let chunk = new Uint8Array(4 + 4 + data.length + 4);
@@ -209,12 +221,14 @@ module('Acceptance | png image def', function (hooks) {
 
   hooks.beforeEach(async function () {
     let pngBytes = makeMinimalPng(2, 3);
+    let renderablePngBytes = makeRenderablePng();
     ({ realm } = await withCachedRealmSetup(async () =>
       setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.png': pngBytes,
+          'renderable.png': renderablePngBytes,
           'not-a-png.png': 'This is plain text, not a PNG file.',
         },
       }),
@@ -360,7 +374,9 @@ module('Acceptance | png image def', function (hooks) {
   });
 
   test('authenticated images display in browser', async function (assert) {
-    let url = makeFileURL('sample.png');
+    // Use renderable.png (full image data) rather than sample.png (minimal
+    // metadata fixture), so browser decode assertions are meaningful.
+    let url = makeFileURL('renderable.png');
 
     // First extract the file to get the resource
     await visit(
@@ -392,7 +408,7 @@ module('Acceptance | png image def', function (hooks) {
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
-      img?.getAttribute('src')?.includes('sample.png'),
+      img?.getAttribute('src')?.includes('renderable.png'),
       'img src references the PNG file',
     );
 

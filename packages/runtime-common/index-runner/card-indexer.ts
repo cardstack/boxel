@@ -16,6 +16,7 @@ import {
   type RenderRouteOptions,
 } from '../index';
 import { CardError, isCardError, serializableError } from '../error';
+import { unresolveResourceInstanceURLs } from '../url';
 import type { IndexRunnerDependencyManager } from './dependency-resolver';
 import { uniqueDeps } from './dependency-collections';
 import { canonicalURL } from './dependency-url';
@@ -68,6 +69,8 @@ export async function performCardIndexing({
       : undefined;
 
     renderResult = await prerenderer.prerenderCard({
+      affinityType: 'realm',
+      affinityValue: realmURL.href,
       url: fileURL,
       realm: realmURL.href,
       auth,
@@ -88,6 +91,10 @@ export async function performCardIndexing({
           },
         },
       });
+      // Convert instance URLs (id, relationship links/data) from resolved HTTP
+      // URLs to registered prefix form (e.g. @cardstack/catalog/...) so that
+      // stored card data is portable across environments.
+      unresolveResourceInstanceURLs(serialized.data);
     }
   } catch (err: unknown) {
     uncaughtError = err as Error;

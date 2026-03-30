@@ -2,6 +2,7 @@ import type { ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import { module, test } from 'qunit';
 import { basename } from 'path';
+import '../setup-logger';
 
 module(basename(__filename), function () {
   module('virtual-network', function () {
@@ -61,6 +62,29 @@ module(basename(__filename), function () {
       );
       assert.strictEqual(response.url, 'http://test-realm/test/person.gts');
       assert.true(response.redirected);
+    });
+
+    test('can resolve mapped URLs in both directions', function (assert) {
+      let virtualNetwork = new VirtualNetwork();
+      virtualNetwork.addURLMapping(
+        new URL('http://localhost:4205/test/'),
+        new URL('http://localhost:45123/test/'),
+      );
+
+      assert.strictEqual(
+        virtualNetwork.mapURL(
+          'http://localhost:4205/test/hassan/personal/_readiness-check',
+          'virtual-to-real',
+        )?.href,
+        'http://localhost:45123/test/hassan/personal/_readiness-check',
+      );
+      assert.strictEqual(
+        virtualNetwork.mapURL(
+          'http://localhost:45123/test/hassan/personal/_readiness-check',
+          'real-to-virtual',
+        )?.href,
+        'http://localhost:4205/test/hassan/personal/_readiness-check',
+      );
     });
   });
 });

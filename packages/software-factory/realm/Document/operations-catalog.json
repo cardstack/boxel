@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Operations Card Catalog\n\nCondensed stubs for Operations card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Inventory Item\n**Priority:** P2\n\n- **Core idea:** Stockable item with SKU, quantity, location, reorder point, and supplier.\n\n---\n\n### Vendor\n**Priority:** P2\n\n- **Core idea:** Supplier/vendor record: company, contacts, terms, rating, and order history.\n",
+      "cardInfo": {
+        "name": "Operations Card Catalog",
+        "notes": null,
+        "title": "Operations Card Catalog",
+        "summary": "Condensed stubs for Operations card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

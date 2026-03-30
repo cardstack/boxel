@@ -4,7 +4,7 @@ import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { Server } from 'http';
-import { closeServer, setupPermissionedRealm } from '../helpers';
+import { closeServer, setupPermissionedRealmCached } from '../helpers';
 
 module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
   let testRealm: Realm;
@@ -28,7 +28,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await closeServer(testRealmHttpServer);
   });
 
-  setupPermissionedRealm(hooks, {
+  setupPermissionedRealmCached(hooks, {
     permissions: {
       '*': ['read'],
     },

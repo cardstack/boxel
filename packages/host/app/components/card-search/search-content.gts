@@ -1,43 +1,34 @@
-import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
-import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
+import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
+
+import type { PickerOption } from '@cardstack/boxel-ui/components';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
   type Filter,
-  CardContextName,
   type getCard,
-  type getCardCollection,
-  GetCardCollectionContextName,
   GetCardContextName,
-  getTypeRefsFromFilter,
-  type TypeRefResult,
-  identifyCard,
-  isBaseDef,
-  isResolvedCodeRef,
-  specRef,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
+import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
+
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import ScrollAnchor from '@cardstack/host/modifiers/scroll-anchor';
-import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import type { PrerenderedSearchResource } from '@cardstack/host/resources/prerendered-search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -54,27 +45,61 @@ import { getCodeRefFromSearchKey } from './utils';
 import type { PrerenderedCard } from '../prerendered-card-search';
 
 import type { NewCardArgs } from './utils';
+import type { NamedArgs } from 'ember-modifier';
 
-const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+interface ScrollToFocusedSectionSignature {
+  Element: HTMLElement;
+  Args: {
+    Positional: [];
+    Named: { focusedSectionSid?: string | null; sectionSelector?: string };
+  };
+}
 
-function cardMatchesTypeRef(card: CardDef, typeRef: CodeRef): boolean {
-  if (!isResolvedCodeRef(typeRef)) {
-    return false;
-  }
-  let cls: unknown = card.constructor;
-  while (cls && isBaseDef(cls)) {
-    const ref = identifyCard(cls);
-    if (
-      ref &&
-      isResolvedCodeRef(ref) &&
-      ref.module === typeRef.module &&
-      ref.name === typeRef.name
-    ) {
-      return true;
+class ScrollToFocusedSection extends Modifier<ScrollToFocusedSectionSignature> {
+  #previousSid: string | null = null;
+  #rafId: number | null = null;
+
+  modify(
+    element: HTMLElement,
+    // eslint-disable-next-line no-empty-pattern
+    []: [],
+    {
+      focusedSectionSid,
+      sectionSelector,
+    }: NamedArgs<ScrollToFocusedSectionSignature>,
+  ): void {
+    const currentSid = focusedSectionSid ?? null;
+    const prevSid = this.#previousSid;
+    this.#previousSid = currentSid;
+
+    // Cancel any pending scroll adjustment from a previous modify() call
+    // so rapid toggles don't cause stale callbacks to fire.
+    if (this.#rafId !== null) {
+      cancelAnimationFrame(this.#rafId);
+      this.#rafId = null;
     }
-    cls = Reflect.getPrototypeOf(cls as object);
+
+    if (currentSid && currentSid !== prevSid) {
+      // Checking "show only" — section moved to top, scroll to top.
+      // Defer to next frame so the DOM has re-rendered with the reordered sections;
+      // otherwise the browser's scroll anchoring can shift position back.
+      this.#rafId = requestAnimationFrame(() => {
+        this.#rafId = null;
+        element.scrollTop = 0;
+      });
+    } else if (!currentSid && prevSid && sectionSelector) {
+      // Unchecking "show only" — scroll to the previously focused section.
+      // Defer so the DOM has re-rendered with all sections restored.
+      const targetSid = prevSid;
+      this.#rafId = requestAnimationFrame(() => {
+        this.#rafId = null;
+        const sectionEl = element.querySelector(
+          `${sectionSelector}[data-section-sid="${targetSid}"]`,
+        ) as HTMLElement | null;
+        sectionEl?.scrollIntoView({ block: 'start', behavior: 'auto' });
+      });
+    }
   }
-  return false;
 }
 
 export interface RealmSectionInfo {
@@ -115,7 +140,10 @@ interface Signature {
     selectedRealmURLs: string[];
     isCompact: boolean;
     handleSelect: (selection: string | NewCardArgs) => void;
-    selectedCard?: string | NewCardArgs;
+    selectedCards?: (string | NewCardArgs)[];
+    multiSelect?: boolean;
+    onSelectAll?: (cards: string[]) => void;
+    onDeselectAll?: () => void;
     baseFilter?: Filter;
     offerToCreate?: {
       ref: CodeRef;
@@ -123,6 +151,11 @@ interface Signature {
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
     showHeader?: boolean;
+    selectedCardTypes?: PickerOption[];
+    filteredRecentCards?: CardDef[];
+    searchResource: PrerenderedSearchResource;
+    activeSort: SortOption;
+    onSortChange: (sort: SortOption) => void;
   };
   Blocks: {};
 }
@@ -131,66 +164,19 @@ export default class SearchContent extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
-  @service declare recentCardsService: RecentCards;
   @service declare store: StoreService;
 
   @tracked activeViewId = 'grid';
-  @tracked activeSort: SortOption = SORT_OPTIONS[0];
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
   @tracked focusedSection: string | null = null;
   @tracked displayedCountBySection: Record<string, number> = {};
-  @tracked scrollAnchorSid: string | null = null;
 
-  private get scrollAnchorSelector(): string | null {
-    if (this.scrollAnchorSid) {
-      return `[data-section-sid="${this.scrollAnchorSid}"]`;
-    }
-    return null;
-  }
-
-  @consume(GetCardCollectionContextName)
-  declare private getCardCollection: getCardCollection;
-  @tracked private recentCardCollection:
-    | ReturnType<getCardCollection>
-    | undefined;
-  private getRecentCardCollection = () => {
-    this.recentCardCollection = this.getCardCollection(
-      this,
-      () => this.recentCardsService.recentCardIds,
-    );
-  };
-
-  @consume(CardContextName) declare private cardContext:
-    | CardContext
-    | undefined;
   @consume(GetCardContextName) declare private getCard: getCard;
-  @tracked private cardResource: ReturnType<getCard> | undefined;
-  private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.searchKeyAsURL);
-  };
 
-  private get filterTypeRef(): TypeRefResult[] | undefined {
-    const filter = this.args.baseFilter;
-    // baseFilter takes precedence; searchKey fallback is only used in search-sheet mode
-    if (filter) {
-      return getTypeRefsFromFilter(filter);
-    }
-    // Search-sheet mode: extract type from carddef: search key (searchForInstances)
-    const ref = getCodeRefFromSearchKey(this.args.searchKey);
-    return ref ? [{ ref, negated: false }] : undefined;
+  @cached
+  private get cardResource(): ReturnType<getCard> {
+    return this.getCard(this, () => this.searchKeyAsURL);
   }
-
-  private searchPrerenderedCards = getPrerenderedSearch(
-    this,
-    getOwner(this)!,
-    () => ({
-      query: this.shouldSkipQuery ? undefined : this.query,
-      format: 'fitted',
-      realms: this.realms,
-      isLive: true,
-      cardComponentModifier: this.cardComponentModifier,
-    }),
-  );
 
   private get shouldSkipQuery() {
     // In baseFilter mode (modal), only skip when search key is a URL
@@ -258,67 +244,12 @@ export default class SearchContent extends Component<Signature> {
     return urls ?? [];
   }
 
-  private get query() {
-    const { searchKey } = this.args;
-
-    // Modal mode: use the externally-provided base filter
-    if (this.args.baseFilter) {
-      const searchTerm = searchKey?.trim() || undefined;
-      return {
-        filter: {
-          every: [
-            this.args.baseFilter,
-            ...(searchTerm
-              ? [
-                  {
-                    contains: {
-                      cardTitle: searchTerm,
-                    },
-                  },
-                ]
-              : []),
-          ],
-        },
-        sort: this.activeSort.sort,
-      };
-    }
-
-    // Search-sheet mode: existing logic (type detection, specRef exclusion)
-    const type = getCodeRefFromSearchKey(searchKey);
-    const searchTerm = !type ? searchKey : undefined;
-    return {
-      filter: {
-        every: [
-          {
-            ...(type
-              ? { type }
-              : {
-                  not: {
-                    type: specRef,
-                  },
-                }),
-          },
-          ...(searchTerm
-            ? [
-                {
-                  contains: {
-                    cardTitle: searchTerm,
-                  },
-                },
-              ]
-            : []),
-        ],
-      },
-      sort: this.activeSort.sort,
-    };
-  }
-
   private get summaryText(): string {
     if (this.args.isCompact) {
       return '';
     }
 
-    if (this.searchPrerenderedCards.isLoading) {
+    if (this.args.searchResource.isLoading) {
       return 'Searching…';
     }
 
@@ -331,7 +262,7 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Query search results
-    const total = this.searchPrerenderedCards.meta.page?.total ?? 0;
+    const total = this.args.searchResource.meta.page?.total ?? 0;
     const realms = this.realms;
 
     // Default: all results across all realms
@@ -339,43 +270,32 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get sortedRecentCards(): CardDef[] {
-    const cards = this.recentCardCollection?.cards.filter(Boolean) as CardDef[];
-    if (!cards) {
-      return [];
-    }
-    const realms = this.realms;
-    const realmFiltered = cards.filter(
-      (c) => c.id && realms.some((realmUrl) => c.id.startsWith(realmUrl)),
-    );
+    let cards = [...(this.args.filteredRecentCards ?? [])];
 
-    // Apply type filter when baseFilter specifies a type (modal/chooseCard mode)
-    const typeRefs = this.filterTypeRef;
-    const positiveRefs = typeRefs?.filter((r) => !r.negated).map((r) => r.ref);
-    const negatedRefs = typeRefs?.filter((r) => r.negated).map((r) => r.ref);
-    let typeFiltered = realmFiltered;
-    if (positiveRefs?.length) {
-      typeFiltered = typeFiltered.filter((c) =>
-        positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
-      );
-    }
-    if (negatedRefs?.length) {
-      typeFiltered = typeFiltered.filter(
-        (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
+    // Apply type picker filter (from TypePicker selection)
+    const pickerSelectedTypeNames = new Set(
+      (this.args.selectedCardTypes ?? [])
+        .filter((opt) => opt.type !== 'select-all')
+        .map((opt) => opt.id),
+    );
+    if (pickerSelectedTypeNames.size > 0) {
+      cards = cards.filter((card) =>
+        pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
       );
     }
 
     if (this.args.isCompact) {
-      return typeFiltered;
+      return cards;
     }
-    let filtered = typeFiltered;
+    let filtered = cards;
     const term = this.searchTerm;
     if (term) {
       const lowerTerm = term.toLowerCase();
-      filtered = typeFiltered.filter((c) =>
+      filtered = cards.filter((c) =>
         (c.cardTitle ?? '').toLowerCase().includes(lowerTerm),
       );
     }
-    const sortOption = this.activeSort;
+    const sortOption = this.args.activeSort;
     const displayName = sortOption.displayName;
     return [...filtered].sort((a, b) => {
       if (displayName === 'A-Z') {
@@ -427,13 +347,11 @@ export default class SearchContent extends Component<Signature> {
 
   @action
   onChangeSort(option: SortOption) {
-    this.activeSort = option;
+    this.args.onSortChange(option);
   }
 
   @action
   onFocusSection(sectionId: string | null) {
-    this.scrollAnchorSid = sectionId ?? this.focusedSection;
-
     this.focusedSection = sectionId;
     if (sectionId) {
       const current = this.displayedCountBySection[sectionId] ?? 0;
@@ -496,6 +414,21 @@ export default class SearchContent extends Component<Signature> {
     } as UrlSection;
   }
 
+  private get filteredSearchResults(): PrerenderedCard[] {
+    const selectedTypeNames = new Set(
+      (this.args.selectedCardTypes ?? [])
+        .filter((opt) => opt.type !== 'select-all')
+        .map((opt) => opt.id),
+    );
+
+    const allCards = this.args.searchResource.instances;
+    return selectedTypeNames.size > 0
+      ? allCards.filter(
+          (card) => card.cardType && selectedTypeNames.has(card.cardType),
+        )
+      : allCards;
+  }
+
   private get cardsByQuerySection(): SearchSheetSection[] | null {
     if (this.searchKeyIsURL) {
       return null;
@@ -506,7 +439,7 @@ export default class SearchContent extends Component<Signature> {
       return null;
     }
 
-    const cards = this.searchPrerenderedCards.instances;
+    const cards = this.filteredSearchResults;
     const byRealm = new Map<string, PrerenderedCard[]>();
 
     for (const card of cards) {
@@ -576,6 +509,15 @@ export default class SearchContent extends Component<Signature> {
       sections.push(...this.cardsByQuerySection);
     }
 
+    // Move focused section to front so it appears at the top
+    if (this.focusedSection) {
+      const idx = sections.findIndex((s) => s.sid === this.focusedSection);
+      if (idx > 0) {
+        const [focused] = sections.splice(idx, 1);
+        sections.unshift(focused);
+      }
+    }
+
     return sections;
   }
 
@@ -593,43 +535,45 @@ export default class SearchContent extends Component<Signature> {
     }
   }
 
-  private get cardComponentModifier() {
-    if (isDestroying(this) || isDestroyed(this)) {
-      return undefined;
-    }
-    try {
-      return this.cardContext?.cardComponentModifier;
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes(OWNER_DESTROYED_ERROR)
-      ) {
-        return undefined;
-      }
-      throw error;
-    }
-  }
-
   @action
   isSectionCollapsed(sectionId: string): boolean {
     return !!this.focusedSection && this.focusedSection !== sectionId;
   }
 
+  private get allCards(): string[] {
+    const urls: string[] = [];
+    // Cards from search results (realm sections) - respects type filter
+    for (const card of this.filteredSearchResults) {
+      if (card.url) {
+        urls.push(card.url.replace(/\.json$/, ''));
+      }
+    }
+    // Cards from recents
+    for (const card of this.sortedRecentCards) {
+      if (card.id) {
+        urls.push(card.id.replace(/\.json$/, ''));
+      }
+    }
+    // Card from URL section
+    if (this.resolvedCard?.id) {
+      urls.push(this.resolvedCard.id.replace(/\.json$/, ''));
+    }
+    return [...new Set(urls)];
+  }
+
   private get hasNoResults(): boolean {
     return (
       this.sections.length === 0 &&
-      !this.searchPrerenderedCards.isLoading &&
+      !this.args.searchResource.isLoading &&
       !this.shouldSkipQuery
     );
   }
 
   <template>
-    {{consumeContext this.getRecentCardCollection}}
-    {{consumeContext this.makeCardResource}}
     <div
-      {{ScrollAnchor
-        trackSelector='[data-section-sid]'
-        anchorSelector=this.scrollAnchorSelector
+      {{ScrollToFocusedSection
+        focusedSectionSid=this.focusedSection
+        sectionSelector='[data-section-sid]'
       }}
       class='search-sheet-content {{if @isCompact "compact"}}'
       ...attributes
@@ -640,10 +584,15 @@ export default class SearchContent extends Component<Signature> {
             @summaryText={{this.summaryText}}
             @viewOptions={{VIEW_OPTIONS}}
             @activeViewId={{this.activeViewId}}
-            @activeSort={{this.activeSort}}
+            @activeSort={{@activeSort}}
             @sortOptions={{SORT_OPTIONS}}
             @onChangeView={{this.onChangeView}}
             @onChangeSort={{this.onChangeSort}}
+            @multiSelect={{@multiSelect}}
+            @selectedCards={{@selectedCards}}
+            @allCards={{this.allCards}}
+            @onSelectAll={{@onSelectAll}}
+            @onDeselectAll={{@onDeselectAll}}
           />
         {{/unless}}
       {{/if}}
@@ -681,7 +630,8 @@ export default class SearchContent extends Component<Signature> {
             @onFocusSection={{this.onFocusSection}}
             @getDisplayedCount={{this.getDisplayedCount}}
             @onShowMore={{this.onShowMore}}
-            @selectedCard={{@selectedCard}}
+            @selectedCards={{@selectedCards}}
+            @multiSelect={{@multiSelect}}
             @offerToCreate={{@offerToCreate}}
             @onSubmit={{@onSubmit}}
             data-section-sid={{section.sid}}

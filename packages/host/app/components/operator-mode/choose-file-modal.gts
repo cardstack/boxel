@@ -8,6 +8,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
 import {
@@ -53,6 +55,9 @@ export default class ChooseFileModal extends Component<Signature> {
   @tracked fileTypeName?: string;
   @tracked acceptTypes?: string;
   @tracked currentUpload?: FileUploadTask;
+  @tracked isDropZoneActive = false;
+  @tracked private fileTreeRenderNonce = 0;
+  private dropZoneDragDepth = 0;
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -95,6 +100,7 @@ export default class ChooseFileModal extends Component<Signature> {
         r.url.toString() === this.operatorModeStateService.realmURL?.toString(),
     );
     this.selectedRealm = defaultRealm ?? this.selectedRealm;
+    this.fileTreeRenderNonce++;
 
     if (opts?.fileType) {
       try {
@@ -115,8 +121,7 @@ export default class ChooseFileModal extends Component<Signature> {
     }
   }
 
-  @action
-  private async pick(path: LocalPath | undefined) {
+  private pickTask = task(async (path: LocalPath | undefined) => {
     try {
       if (this.deferred && this.selectedRealm && path) {
         let fileURL = new RealmPaths(this.selectedRealm.url).fileURL(path);
@@ -136,7 +141,7 @@ export default class ChooseFileModal extends Component<Signature> {
     } finally {
       this.resetState();
     }
-  }
+  });
 
   @action
   private triggerUpload() {
@@ -144,6 +149,70 @@ export default class ChooseFileModal extends Component<Signature> {
       realmURL: this.selectedRealm.url,
       acceptTypes: this.acceptTypes,
     });
+    this.beginUpload(task);
+  }
+
+  @action
+  private handleDragEnter(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth++;
+    this.isDropZoneActive = true;
+  }
+
+  @action
+  private handleDragOver(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDropZoneActive = true;
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  @action
+  private handleDragLeave(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
+    if (this.dropZoneDragDepth === 0) {
+      this.isDropZoneActive = false;
+    }
+  }
+
+  @action
+  private handleDrop(event: DragEvent) {
+    if (!this.isFileDrag(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropZoneDragDepth = 0;
+    this.isDropZoneActive = false;
+    if (this.isUploadBusy) {
+      return;
+    }
+    let file = event.dataTransfer?.files?.[0];
+    if (!file) {
+      return;
+    }
+    let task = this.fileUpload.uploadProvidedFile({
+      realmURL: this.selectedRealm.url,
+      file,
+    });
+    this.beginUpload(task);
+  }
+
+  private beginUpload(task: FileUploadTask) {
     this.currentUpload = task;
     task.result.then((fileDef) => {
       if (fileDef && this.deferred) {
@@ -155,6 +224,21 @@ export default class ChooseFileModal extends Component<Signature> {
     });
   }
 
+  private isFileDrag(dataTransfer: DataTransfer | null | undefined): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+    return Array.from(dataTransfer.types ?? []).includes('Files');
+  }
+
+  private get dropZoneLabel() {
+    return `Drop file to upload to ${this.selectedRealm.info.name}`;
+  }
+
+  private get fileTreeRenderKey(): string {
+    return `${this.fileTreeRenderNonce}:${this.selectedRealm.url.href}`;
+  }
+
   private resetState() {
     this.selectedRealm = this.knownRealms[0];
     this.selectedFile = undefined;
@@ -162,6 +246,8 @@ export default class ChooseFileModal extends Component<Signature> {
     this.fileTypeName = undefined;
     this.acceptTypes = undefined;
     this.currentUpload = undefined;
+    this.isDropZoneActive = false;
+    this.dropZoneDragDepth = 0;
     this.deferred = undefined;
   }
 
@@ -184,7 +270,40 @@ export default class ChooseFileModal extends Component<Signature> {
 
   @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      this.pick(undefined);
+      this.pickTask.perform(undefined);
+      return;
+    }
+    if (event.key === 'Tab') {
+      this.trapFocus(event);
+    }
+  }
+
+  private trapFocus(event: KeyboardEvent) {
+    const container = event.currentTarget as HTMLElement;
+    const focusableSelector = [
+      'button:not([disabled]):not([tabindex="-1"])',
+      '[tabindex="0"]',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'a[href]',
+    ].join(', ');
+    const focusable = Array.from(
+      container.querySelectorAll<HTMLElement>(focusableSelector),
+    );
+    if (focusable.length < 2) return;
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
+
+    if (event.shiftKey) {
+      if (document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   }
 
@@ -196,8 +315,32 @@ export default class ChooseFileModal extends Component<Signature> {
       .choose-file-modal {
         --horizontal-gap: var(--boxel-sp-xs);
       }
+      .choose-file-modal[data-drop-zone-active]::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-color: var(--boxel-darker-hover);
+        pointer-events: none;
+        z-index: 2;
+      }
+      .choose-file-modal[data-drop-zone-active]::after {
+        content: attr(data-drop-zone-label);
+        position: absolute;
+        inset: 0;
+        padding: var(--boxel-sp-xl);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-lg);
+        text-align: center;
+        pointer-events: none;
+        z-index: 3;
+      }
       .choose-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
+        position: relative;
+        z-index: 1;
       }
       :deep(.choose-file-modal__container) {
         height: 32rem;
@@ -257,7 +400,7 @@ export default class ChooseFileModal extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
       }
       .choose-file {
-        overflow: hidden;
+        overflow: visible;
       }
       .choose-file :deep(.content) {
         height: 267px;
@@ -266,6 +409,13 @@ export default class ChooseFileModal extends Component<Signature> {
         border: var(--boxel-border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp-xxs);
+      }
+      .choose-file :deep(.content:focus-within) {
+        outline: 2px solid var(--ring, var(--boxel-highlight-hover));
+        outline-offset: 2px;
+      }
+      .choose-file :deep(.content [data-file-tree-nav]:focus-visible) {
+        outline: none;
       }
       :deep(.dialog-box__footer) {
         height: auto;
@@ -301,16 +451,28 @@ export default class ChooseFileModal extends Component<Signature> {
         font: var(--boxel-font-xs);
         overflow-wrap: anywhere;
       }
+
+      /* Ensure keyboard focus indicators are always visible throughout the modal */
+      :deep(:focus-visible) {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
     </style>
     {{#if this.deferred}}
       <ModalContainer
         @title={{this.modalTitle}}
-        @onClose={{fn this.pick undefined}}
+        @onClose={{fn (perform this.pickTask) undefined}}
         @size='medium'
         @centered={{true}}
         {{on 'keydown' this.handleKeydown}}
+        {{on 'dragenter' this.handleDragEnter}}
+        {{on 'dragover' this.handleDragOver}}
+        {{on 'dragleave' this.handleDragLeave}}
+        {{on 'drop' this.handleDrop}}
         @cardContainerClass='choose-file-modal__container'
         class='choose-file-modal'
+        data-drop-zone-active={{this.isDropZoneActive}}
+        data-drop-zone-label={{this.dropZoneLabel}}
         data-test-choose-file-modal
       >
         <:content>
@@ -337,12 +499,14 @@ export default class ChooseFileModal extends Component<Signature> {
             @label='Choose File'
             @tag='div'
           >
-            {{! Use #each with single-element array to force component recreation when realm changes }}
-            {{#each (array this.selectedRealm.url.href) as |realmURL|}}
+            {{! Force recreation when realm changes or chooser reopens }}
+            {{#each (array this.fileTreeRenderKey)}}
               <IndexedFileTree
-                @realmURL={{realmURL}}
+                @realmURL={{this.selectedRealm.url.href}}
                 @fileTypeFilter={{this.fileTypeFilter}}
                 @onFileSelected={{this.selectFile}}
+                @onFileConfirmed={{perform this.pickTask}}
+                @autoFocus={{true}}
               />
             {{/each}}
           </FieldContainer>
@@ -394,7 +558,7 @@ export default class ChooseFileModal extends Component<Signature> {
               <div class='footer-buttons'>
                 <BoxelButton
                   @size='tall'
-                  {{on 'click' (fn this.pick undefined)}}
+                  {{on 'click' (fn (perform this.pickTask) undefined)}}
                   {{onKeyMod 'Escape'}}
                   data-test-choose-file-modal-cancel-button
                 >
@@ -404,7 +568,7 @@ export default class ChooseFileModal extends Component<Signature> {
                   @kind='primary'
                   @size='tall'
                   @disabled={{this.isUploadBusy}}
-                  {{on 'click' (fn this.pick this.selectedFile)}}
+                  {{on 'click' (fn (perform this.pickTask) this.selectedFile)}}
                   {{onKeyMod 'Enter'}}
                   data-test-choose-file-modal-add-button
                 >

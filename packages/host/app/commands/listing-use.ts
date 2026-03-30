@@ -1,6 +1,7 @@
 import { service } from '@ember/service';
 
 import {
+  cardIdToURL,
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
   loadCardDef,
@@ -62,7 +63,7 @@ export default class ListingUseCommand extends HostBaseCommand<
       if (spec.isComponent) {
         return;
       }
-      let url = new URL(spec.id);
+      let url = cardIdToURL(spec.id);
       let ref = codeRefWithAbsoluteURL(spec.ref, url);
       if (!isResolvedCodeRef(ref)) {
         throw new Error('ref is not a resolved code ref');

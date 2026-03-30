@@ -6,6 +6,7 @@ import {
   validateAICredits,
   extractGenerationIdFromResponse,
   saveUsageCost as saveUsageCostFromBilling,
+  spendUsageCost as spendUsageCostFromBilling,
 } from '@cardstack/billing/ai-billing';
 
 export interface CreditStrategy {
@@ -22,6 +23,11 @@ export interface CreditStrategy {
     dbAdapter: DBAdapter,
     matrixUserId: string,
     response: any,
+  ): Promise<void>;
+  spendUsageCost(
+    dbAdapter: DBAdapter,
+    matrixUserId: string,
+    costInUsd: number,
   ): Promise<void>;
 }
 
@@ -62,6 +68,14 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
       );
     }
   }
+
+  async spendUsageCost(
+    dbAdapter: DBAdapter,
+    matrixUserId: string,
+    costInUsd: number,
+  ): Promise<void> {
+    await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
+  }
 }
 
 // No Credit Strategy (for free endpoints)
@@ -79,6 +93,14 @@ export class NoCreditStrategy implements CreditStrategy {
     _dbAdapter: DBAdapter,
     _matrixUserId: string,
     _response: any,
+  ): Promise<void> {
+    // No-op for no-credit strategy
+  }
+
+  async spendUsageCost(
+    _dbAdapter: DBAdapter,
+    _matrixUserId: string,
+    _costInUsd: number,
   ): Promise<void> {
     // No-op for no-credit strategy
   }

@@ -10,14 +10,23 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import PillMenu from '@cardstack/host/components/pill-menu';
 import scrollIntoViewModifier from '@cardstack/host/modifiers/scroll-into-view';
 
+export interface LLMOption {
+  id: string;
+  modelId: string;
+  name: string;
+}
+
 interface Signature {
   Args: {
     selected: string;
-    options: Record<string, string>;
+    options: LLMOption[];
     onChange: (selectedLLM: string) => void;
     disabled?: boolean;
     onExpand?: () => void;
     onCollapse?: () => void;
+  };
+  Blocks: {
+    footer: [];
   };
   Element: HTMLElement;
 }
@@ -42,28 +51,29 @@ export default class LLMSelect extends Component<Signature> {
       </:headerDetail>
       <:content>
         <ul class='llm-list'>
-          {{#each-in @options as |id name|}}
+          {{#each @options key='id' as |option|}}
             <li
-              class='llm-option {{if (eq @selected id) "selected"}}'
-              data-test-llm-select-item={{id}}
+              class='llm-option {{if (eq @selected option.id) "selected"}}'
+              data-test-llm-select-item={{option.id}}
               {{scrollIntoViewModifier
-                (eq @selected id)
+                (eq @selected option.id)
                 container='llm-select'
-                key=id
+                key=option.id
               }}
             >
               <button
                 type='button'
                 class='llm-button'
-                {{on 'click' (fn this.handleOptionClick id)}}
+                {{on 'click' (fn this.handleOptionClick option.id)}}
               >
-                {{name}}
-                {{#if (eq @selected id)}}
+                {{option.name}}
+                {{#if (eq @selected option.id)}}
                   <Check class='selected-icon' />
                 {{/if}}
               </button>
             </li>
-          {{/each-in}}
+          {{/each}}
+          {{yield to='footer'}}
         </ul>
       </:content>
     </PillMenu>
@@ -138,7 +148,7 @@ export default class LLMSelect extends Component<Signature> {
   </template>
 
   private get displayName() {
-    return this.args.options[this.args.selected];
+    return this.args.options.find((o) => o.id === this.args.selected)?.name;
   }
 
   @action

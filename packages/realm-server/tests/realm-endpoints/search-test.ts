@@ -3,7 +3,11 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { setupPermissionedRealm, createJWT } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  createJWT,
+  testRealmURLFor,
+} from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
@@ -54,11 +58,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -517,11 +521,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('fields-based link loading', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           fileSystem: {
             'friend.gts': `
               import {
@@ -745,11 +749,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -821,12 +825,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -878,12 +882,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('search query validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 

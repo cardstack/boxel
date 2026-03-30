@@ -3,7 +3,7 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -19,7 +19,6 @@ import {
   GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import type MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -42,12 +41,17 @@ interface Signature {
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
       scrollTo: Element['scrollIntoView'];
+    }) => void;
+    unregisterScroller?: (args: {
+      index: number;
+      element: HTMLElement;
     }) => void;
   };
 }
@@ -58,27 +62,24 @@ export const STREAMING_TIMEOUT_MINUTES = STREAMING_TIMEOUT_MS / 60_000;
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
-  @tracked private attachedCardCollection:
-    | ReturnType<getCardCollection>
-    | undefined;
   @tracked private timeoutCheckTimestamp = Date.now();
   @tracked private waitStartTimestamp: number | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-
     this.checkStreamingTimeout.perform();
   }
 
-  private makeCardResources = () => {
-    this.attachedCardCollection = this.getCardCollection(
+  private get message() {
+    return this.args.roomResource.messages[this.args.index];
+  }
+
+  @cached
+  private get attachedCardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(
       this,
       () => this.message.attachedCardIds ?? [],
     );
-  };
-
-  private get message() {
-    return this.args.roomResource.messages[this.args.index];
   }
 
   private checkStreamingTimeout = task(async () => {
@@ -167,7 +168,6 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   <template>
-    {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
       it is problematic to ensure the last message sticks to the bottom of the screen.
@@ -186,8 +186,10 @@ export default class RoomMessage extends Component<Signature> {
         @eventId={{this.message.eventId}}
         @index={{@index}}
         @isLastAssistantMessage={{this.isLastAssistantMessage}}
+        @isMostRecentMessage={{@isMostRecentMessage}}
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
+        @unregisterScroller={{@unregisterScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         {{! @glint-ignore }}
         @profileAvatar={{component
@@ -200,6 +202,7 @@ export default class RoomMessage extends Component<Signature> {
         @files={{this.message.attachedFiles}}
         @attachedCardsAsFiles={{this.message.attachedCardsAsFiles}}
         @errorMessage={{this.errorMessage}}
+        @reloadBillingData={{this.message.reloadBillingData}}
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -253,9 +256,6 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return `This message has been processing for a long time (more than ${STREAMING_TIMEOUT_MINUTES} minutes), possibly due to a delay in response time, or due to a system error.`; // Will show a "Wait longer" and "Retry" button
     }
-    if (this.attachedCardCollection?.cardErrors.length === 0) {
-      return undefined;
-    }
-    return 'Error rendering attached cards.';
+    return undefined;
   }
 }

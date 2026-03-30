@@ -6,7 +6,7 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   closeServer,
   insertUser,
   insertPlan,
@@ -63,7 +63,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       }
     });
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -485,7 +485,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       }
     });
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         john: ['read', 'write'],
         '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -548,7 +548,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         'plan allowance was not added (because there is no plan for new user)',
       );
 
-      // Try running the endpoint again
+      // Try running the endpoint again - should be idempotent
       response = await request
         .post(`/_user`)
         .set('Accept', 'application/vnd.api+json')
@@ -561,16 +561,31 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           data: {
             type: 'user',
             attributes: {
-              registrationToken: 'reg_token_123',
+              registrationToken: 'reg_token_456',
             },
           },
         });
 
-      assert.strictEqual(response.status, 422, 'HTTP 200 status');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(response.text, 'ok', 'Response is ok');
+
+      // Verify credits were NOT doubled
+      dailyCredits = await sumUpCreditsLedger(dbAdapter, {
+        userId: user!.id,
+        creditType: 'daily_credit',
+      });
       assert.strictEqual(
-        response.text,
-        'User already exists',
-        'Response is correct',
+        dailyCredits,
+        2000,
+        'daily credits were not added again for existing user',
+      );
+
+      // Verify registration token was updated
+      user = await getUserByMatrixUserId(dbAdapter, 'newuser@test');
+      assert.strictEqual(
+        user!.matrixRegistrationToken,
+        'reg_token_456',
+        'Registration token was updated',
       );
     });
 

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "factoryName": "DarkFactory Test Fixture",
+      "description": "Read-only fixture realm for validating public tracker-module rendering from an adopter realm."
+    },
+    "relationships": {
+      "activeProjects.0": {
+        "links": {
+          "self": "./project-demo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://sf.boxel.test/darkfactory",
+        "name": "DarkFactory"
+      }
+    }
+  }
+}

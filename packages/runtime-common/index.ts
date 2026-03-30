@@ -10,6 +10,11 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref';
 import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
+import {
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+} from './card-reference-resolver';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
@@ -120,7 +125,16 @@ export interface ModulePrerenderModel {
 
 export interface ModuleRenderResponse extends ModulePrerenderModel {}
 
+export type AffinityType = 'realm' | 'user';
+
+export type AffinityArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
+};
+
 export type ModulePrerenderArgs = {
+  affinityType: AffinityType;
+  affinityValue: string;
   realm: string;
   url: string;
   auth: string;
@@ -130,7 +144,7 @@ export type ModulePrerenderArgs = {
 export type PrerenderCardArgs = ModulePrerenderArgs;
 
 export type RunCommandArgs = {
-  realm: string;
+  userId: string;
   auth: string;
   command: string;
   commandInput?: Record<string, any> | null;
@@ -167,6 +181,14 @@ export {
   isCardErrorJSONAPI,
 } from './error';
 export { validateWriteSize } from './write-size-validation';
+export {
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
+  resolveCardReference,
+  unresolveCardReference,
+  isRegisteredPrefix,
+  cardIdToURL,
+} from './card-reference-resolver';
 
 export interface ResourceObject {
   type: string;
@@ -213,7 +235,6 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
-import { resolveCardReference } from './card-reference-resolver';
 export * from './paths';
 export * from './cached-fetch';
 export * from './definition-lookup';
@@ -227,6 +248,7 @@ export * from './document';
 export * from './matrix-constants';
 export * from './matrix-client';
 export * from './queue';
+export * from './job-utils';
 export * from './expression';
 export * from './infer-content-type';
 export * from './index-query-engine';
@@ -388,20 +410,21 @@ export type CreateNewCard = (
   },
 ) => Promise<string | undefined>;
 
+interface CardChooserOpts {
+  offerToCreate?: {
+    ref: CodeRef;
+    relativeTo: URL | undefined;
+    realmURL: URL | undefined;
+  };
+  createNewCard?: CreateNewCard;
+  consumingRealm?: URL;
+}
+
 export interface CardChooser {
   chooseCard(
     query: CardCatalogQuery,
-    opts?: {
-      offerToCreate?: {
-        ref: CodeRef;
-        relativeTo: URL | undefined;
-        realmURL: URL | undefined;
-      };
-      multiSelect?: boolean;
-      createNewCard?: CreateNewCard;
-      consumingRealm?: URL;
-    },
-  ): Promise<undefined | string>;
+    opts?: CardChooserOpts & { multiSelect?: boolean },
+  ): Promise<undefined | string | string[]>;
 }
 
 export interface FileChooser {
@@ -413,18 +436,25 @@ export interface FileChooser {
 
 export async function chooseCard(
   query: CardCatalogQuery,
-  opts?: {
-    offerToCreate?: {
-      ref: CodeRef;
-      relativeTo: URL | undefined;
-      realmURL: URL | undefined;
-    };
-    multiSelect?: boolean;
-    createNewCard?: CreateNewCard;
+  opts: CardChooserOpts & {
+    multiSelect: true;
     preselectedCardTypeQuery?: Query;
-    consumingRealm?: URL;
   },
-): Promise<undefined | string> {
+): Promise<undefined | string[]>;
+export async function chooseCard(
+  query: CardCatalogQuery,
+  opts?: CardChooserOpts & {
+    multiSelect?: false;
+    preselectedCardTypeQuery?: Query;
+  },
+): Promise<undefined | string>;
+export async function chooseCard(
+  query: CardCatalogQuery,
+  opts?: CardChooserOpts & {
+    multiSelect?: boolean;
+    preselectedCardTypeQuery?: Query;
+  },
+): Promise<undefined | string | string[]> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
@@ -646,9 +676,11 @@ export function internalKeyFor(
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
-    let module = trimExecutableExtension(
-      new URL(resolveCardReference(ref.module, relativeTo)),
-    ).href;
+    let resolved = resolveCardReference(ref.module, relativeTo);
+    let module = trimExecutableExtension(new URL(resolved)).href;
+    // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
+    // internal key when a registered prefix mapping matches
+    module = unresolveCardReference(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {
@@ -751,7 +783,7 @@ export function unixTime(epochTimeMs: number) {
 }
 
 export function isLocalId(id: string) {
-  return !id.startsWith('http');
+  return !id.startsWith('http') && !isRegisteredPrefix(id);
 }
 
 export function isBrowserTestEnv() {

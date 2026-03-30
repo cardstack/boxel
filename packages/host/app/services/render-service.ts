@@ -13,8 +13,10 @@ import { tokenize } from 'simple-html-tokenizer';
 
 import type { RealmPaths } from '@cardstack/runtime-common';
 import {
+  isLocalId,
   loadCardDocument,
   loadFileMetaDocument,
+  resolveCardReference,
   type CardError,
   type CodeRef,
   type RuntimeDependencyTrackingContext,
@@ -32,7 +34,7 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
-import { render } from '../lib/isolated-render';
+import { render, teardown } from '../lib/isolated-render';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -61,27 +63,27 @@ export class CardStoreWithErrors implements CardStore {
   }
 
   getCard(id: string): CardDef | undefined {
-    id = id.replace(/\.json$/, '');
+    id = normalizeCardStoreKey(id);
     return this.#cards.get(id);
   }
   getFileMeta(id: string): FileDef | undefined {
-    id = id.replace(/\.json$/, '');
+    id = normalizeCardStoreKey(id);
     return this.#fileMetaInstances.get(id);
   }
   setCard(id: string, instance: CardDef): void {
-    id = id.replace(/\.json$/, '');
+    id = normalizeCardStoreKey(id);
     this.#cards.set(id, instance);
   }
   setFileMeta(id: string, instance: FileDef): void {
-    id = id.replace(/\.json$/, '');
+    id = normalizeCardStoreKey(id);
     this.#fileMetaInstances.set(id, instance);
   }
   setCardNonTracked(id: string, instance: CardDef) {
-    id = id.replace(/\.json$/, '');
+    id = normalizeCardStoreKey(id);
     return this.#cards.set(id, instance);
   }
   setFileMetaNonTracked(id: string, instance: FileDef) {
-    id = id.replace(/\.json$/, '');
+    id = normalizeCardStoreKey(id);
     return this.#fileMetaInstances.set(id, instance);
   }
   makeTracked(_id: string) {}
@@ -92,6 +94,7 @@ export class CardStoreWithErrors implements CardStore {
     url: string,
     _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
+    url = normalizeCardStoreURL(url);
     let promise = this.#cardDocsInFlight.get(url);
     if (promise) {
       return await promise;
@@ -109,6 +112,7 @@ export class CardStoreWithErrors implements CardStore {
     url: string,
     _opts?: { dependencyTrackingContext?: RuntimeDependencyTrackingContext },
   ) {
+    url = normalizeCardStoreURL(url);
     let promise = this.#fileMetaDocsInFlight.get(url);
     if (promise) {
       return await promise;
@@ -142,6 +146,15 @@ export class CardStoreWithErrors implements CardStore {
       errors: undefined,
     } as any;
   }
+}
+
+function normalizeCardStoreKey(id: string): string {
+  return normalizeCardStoreURL(id).replace(/\.json$/, '');
+}
+
+function normalizeCardStoreURL(id: string): string {
+  let key = id.replace(/\.json$/, '');
+  return isLocalId(key) ? id : resolveCardReference(id, undefined);
 }
 
 export interface RenderCardParams {
@@ -309,10 +322,5 @@ export function getIsolatedRenderElement(
 }
 
 function clearIsolatedRenderElement(element: SimpleElement) {
-  let child = element.firstChild;
-  while (child) {
-    let next = child.nextSibling;
-    element.removeChild(child);
-    child = next;
-  }
+  teardown(element);
 }

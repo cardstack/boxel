@@ -2,9 +2,22 @@ import './instrument';
 import {
   type QueuePublisher,
   type QueueRunner,
+  type QueuePublishArgs,
+  type QueuePublishRequest,
+  type QueueCoalesceJoinUpdate,
+  type QueueResultMapper,
+  type QueueWaiter,
+  type QueueJobSpec,
+  type QueueCoalesceCandidate,
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
   type PgPrimitive,
   type Expression,
   type JobInfo,
+  getQueueJobCoalesceHandler,
+  normalizeQueueJobSpec,
+  identityResultMapper,
+  makeQueueWaiter,
   param,
   separatedByCommas,
   addExplicitParens,
@@ -28,11 +41,11 @@ interface JobsTable {
   concurrency_group: string | null;
   timeout: number;
   priority: number;
-  args: Record<string, any>;
+  args: PgPrimitive;
   status: 'unfulfilled' | 'resolved' | 'rejected';
   created_at: Date;
   finished_at: Date;
-  result: Record<string, any>;
+  result: PgPrimitive;
 }
 
 interface JobReservationsTable {
@@ -42,6 +55,22 @@ interface JobReservationsTable {
   locked_until: Date;
   completed_at: Date;
   worker_id: string;
+}
+
+interface CoalesceCandidateRow extends Pick<
+  JobsTable,
+  'id' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority' | 'args'
+> {}
+
+async function acquireConcurrencyGroupLock(
+  queryFn: (expression: Expression) => Promise<unknown>,
+  concurrencyGroup: string | null,
+) {
+  await queryFn([
+    'SELECT pg_advisory_xact_lock(hashtext(',
+    param(concurrencyGroup ?? '__queue_no_concurrency_group__'),
+    '))',
+  ]);
 }
 
 // Tracks a task that should loop with a timeout and an interruptible sleep.
@@ -112,7 +141,7 @@ export class PgQueuePublisher implements QueuePublisher {
   #isDestroyed = false;
   #pgClient: PgAdapter;
   #pollInterval = 10000;
-  #notifiers: Map<number, Deferred<any>> = new Map();
+  #notifiers: Map<number, Set<QueueWaiter>> = new Map();
   #notificationRunner: WorkLoop | undefined;
 
   constructor(pgClient: PgAdapter) {
@@ -123,7 +152,7 @@ export class PgQueuePublisher implements QueuePublisher {
     return await query(this.#pgClient, expression);
   }
 
-  private addNotifier(id: number, n: Deferred<any>) {
+  private addWaiter(id: number, waiter: QueueWaiter) {
     if (!this.#notificationRunner && !this.#isDestroyed) {
       this.#notificationRunner = new WorkLoop(
         'notificationRunner',
@@ -142,12 +171,20 @@ export class PgQueuePublisher implements QueuePublisher {
         );
       });
     }
-    this.#notifiers.set(id, n);
+    let waiters = this.#notifiers.get(id);
+    if (!waiters) {
+      waiters = new Set();
+      this.#notifiers.set(id, waiters);
+    }
+    waiters.add(waiter);
   }
 
   private async drainNotifications(loop: WorkLoop) {
     while (!loop.shuttingDown) {
       let waitingIds = [...this.#notifiers.keys()];
+      if (waitingIds.length === 0) {
+        return;
+      }
       log.debug('jobs waiting for notification: %s', waitingIds);
       let result = (await this.#query([
         `SELECT id, status, result FROM jobs WHERE status != 'unfulfilled' AND (`,
@@ -164,54 +201,222 @@ export class PgQueuePublisher implements QueuePublisher {
           row.id,
           row.status,
         );
-        // "!" because we only searched for rows matching our notifiers Map, and
-        // we are the only code that deletes from that Map.
-        let notifier = this.#notifiers.get(row.id)!;
+        let waiters = this.#notifiers.get(row.id) ?? new Set();
         this.#notifiers.delete(row.id);
-        if (row.status === 'resolved') {
-          notifier.fulfill(row.result);
-        } else {
-          notifier.reject(row.result);
+        for (let waiter of waiters) {
+          if (row.status === 'resolved') {
+            waiter.fulfillFromResult(row.result);
+          } else {
+            waiter.rejectFromResult(row.result);
+          }
         }
       }
     }
   }
 
-  async publish<T>({
-    jobType,
-    concurrencyGroup,
-    timeout, // in seconds
-    priority = 0,
-    args,
-  }: {
-    jobType: string;
-    concurrencyGroup: string | null;
-    priority?: number;
-    timeout: number; // in seconds
-    args: PgPrimitive;
-  }): Promise<Job<T>> {
+  private async findPendingCandidates(
+    queryFn: (expression: Expression) => Promise<unknown>,
+    concurrencyGroup: string | null,
+  ): Promise<QueueCoalesceCandidate[]> {
+    let rows = (await queryFn([
+      `SELECT j.id, j.job_type, j.concurrency_group, j.timeout, j.priority, j.args
+       FROM jobs j
+       WHERE j.status='unfulfilled'
+         AND j.concurrency_group IS NOT DISTINCT FROM`,
+      param(concurrencyGroup),
+      `AND NOT EXISTS (
+          SELECT 1
+          FROM job_reservations r
+          WHERE r.job_id = j.id
+            AND r.locked_until > NOW()
+            AND r.completed_at IS NULL
+       )
+       ORDER BY j.created_at, j.id
+       FOR UPDATE`,
+    ])) as CoalesceCandidateRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      jobType: row.job_type,
+      concurrencyGroup: row.concurrency_group,
+      timeout: row.timeout,
+      priority: row.priority,
+      args: row.args,
+    }));
+  }
+
+  private async insertJob(
+    queryFn: (expression: Expression) => Promise<unknown>,
+    job: QueueJobSpec,
+  ) {
     let { nameExpressions, valueExpressions } = asExpressions({
-      args,
-      job_type: jobType,
-      concurrency_group: concurrencyGroup,
-      priority,
-      timeout,
+      args: job.args,
+      job_type: job.jobType,
+      concurrency_group: job.concurrencyGroup,
+      priority: job.priority,
+      timeout: job.timeout,
     } as Pick<
       JobsTable,
       'args' | 'job_type' | 'concurrency_group' | 'timeout' | 'priority'
     >);
-    let [{ id: jobId }] = (await this.#query([
+    let [{ id: jobId }] = (await queryFn([
       'INSERT INTO JOBS',
       ...addExplicitParens(separatedByCommas(nameExpressions)),
       'VALUES',
       ...addExplicitParens(separatedByCommas(valueExpressions)),
       'RETURNING id',
     ] as Expression)) as Pick<JobsTable, 'id'>[];
-    log.debug(`%s created, notify jobs`, jobId);
-    await this.#query([`NOTIFY jobs`]);
-    let notifier = new Deferred<T>();
-    let job = new Job(jobId, notifier);
-    this.addNotifier(jobId, notifier);
+    return jobId;
+  }
+
+  private async jobIsPendingAndUnreserved(
+    queryFn: (expression: Expression) => Promise<unknown>,
+    jobId: number,
+  ): Promise<boolean> {
+    let rows = (await queryFn([
+      `SELECT j.id
+       FROM jobs j
+       WHERE j.id =`,
+      param(jobId),
+      `AND j.status='unfulfilled'
+       AND NOT EXISTS (
+         SELECT 1 FROM job_reservations r
+         WHERE r.job_id = j.id
+           AND r.locked_until > NOW()
+           AND r.completed_at IS NULL
+       )
+       FOR UPDATE`,
+    ])) as { id: number }[];
+    return rows.length > 0;
+  }
+
+  private async updateJobForCoalesce(
+    queryFn: (expression: Expression) => Promise<unknown>,
+    jobId: number,
+    update: QueueCoalesceJoinUpdate,
+  ): Promise<boolean> {
+    let setClauses: Expression[] = [];
+    if (update.jobType !== undefined) {
+      setClauses.push(['job_type=', param(update.jobType)]);
+    }
+    if (update.args !== undefined) {
+      setClauses.push(['args=', param(update.args)]);
+    }
+    if (update.priority !== undefined) {
+      setClauses.push(['priority=', param(update.priority)]);
+    }
+    if (update.timeout !== undefined) {
+      setClauses.push(['timeout=', param(update.timeout)]);
+    }
+    if (setClauses.length === 0) {
+      return true;
+    }
+
+    let setExpression: Expression = [];
+    for (let clause of setClauses) {
+      if (setExpression.length > 0) {
+        setExpression.push(',');
+      }
+      setExpression.push(...clause);
+    }
+
+    let updatedRows = (await queryFn([
+      'UPDATE jobs SET ',
+      ...setExpression,
+      ' WHERE id=',
+      param(jobId),
+      `AND status='unfulfilled'
+       AND NOT EXISTS (
+         SELECT 1 FROM job_reservations r
+         WHERE r.job_id = jobs.id
+           AND r.locked_until > NOW()
+           AND r.completed_at IS NULL
+       )
+       RETURNING id`,
+    ])) as { id: number }[];
+    return updatedRows.length > 0;
+  }
+
+  private async coalesceAndGetCanonicalJobId(
+    incoming: QueueJobSpec,
+    coalesce: (context: QueueCoalesceContext) => QueueCoalesceDecision,
+  ): Promise<number> {
+    return await this.#pgClient.withConnection(async (queryFn) => {
+      let shouldRetry = true;
+      while (shouldRetry) {
+        try {
+          await queryFn(['BEGIN']);
+          await queryFn(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
+          await acquireConcurrencyGroupLock(queryFn, incoming.concurrencyGroup);
+
+          let candidates = await this.findPendingCandidates(
+            queryFn,
+            incoming.concurrencyGroup,
+          );
+          let decision = coalesce({ incoming, candidates });
+          let jobId: number;
+
+          if (decision.type === 'insert') {
+            let insertJob = decision.job ?? incoming;
+            jobId = await this.insertJob(queryFn, insertJob);
+          } else {
+            jobId = decision.jobId;
+            let isStillPending = await this.jobIsPendingAndUnreserved(
+              queryFn,
+              jobId,
+            );
+            if (!isStillPending) {
+              await queryFn(['ROLLBACK']);
+              continue;
+            }
+
+            if (decision.update) {
+              let wasUpdated = await this.updateJobForCoalesce(
+                queryFn,
+                jobId,
+                decision.update,
+              );
+              if (!wasUpdated) {
+                await queryFn(['ROLLBACK']);
+                continue;
+              }
+            }
+          }
+
+          await queryFn([`NOTIFY jobs`]);
+          await queryFn(['COMMIT']);
+          return jobId;
+        } catch (e: any) {
+          if (e.code === '40001') {
+            await queryFn(['ROLLBACK']);
+            continue;
+          }
+          throw e;
+        }
+      }
+      throw new Error('unreachable: coalesce retry loop exited');
+    });
+  }
+
+  async publish<TResult = PgPrimitive>({
+    mapResult,
+    ...request
+  }: QueuePublishArgs<TResult>): Promise<Job<TResult>> {
+    let spec = normalizeQueueJobSpec(request as QueuePublishRequest);
+    let coalesce = getQueueJobCoalesceHandler(spec.jobType);
+    let jobId = coalesce
+      ? await this.coalesceAndGetCanonicalJobId(spec, coalesce)
+      : await this.insertJob(this.#query.bind(this), spec);
+    if (!coalesce) {
+      log.debug(`%s created, notify jobs`, jobId);
+      await this.#query([`NOTIFY jobs`]);
+    }
+    let deferred = new Deferred<TResult>();
+    let job = new Job(jobId, deferred);
+    let mapper =
+      mapResult == null
+        ? (identityResultMapper as QueueResultMapper<TResult>)
+        : mapResult;
+    this.addWaiter(jobId, makeQueueWaiter(deferred, mapper));
     return job;
   }
 
@@ -337,6 +542,27 @@ export class PgQueueRunner implements QueueRunner {
             this.#workerId,
             jobToRun.id,
           );
+
+          await acquireConcurrencyGroupLock(query, jobToRun.concurrency_group);
+
+          let jobIsStillEligible = (await query([
+            `SELECT j.id
+             FROM jobs j
+             WHERE j.id =`,
+            param(jobToRun.id),
+            `AND j.status='unfulfilled'
+             AND NOT EXISTS (
+               SELECT 1 FROM job_reservations r
+               WHERE r.job_id = j.id
+                 AND r.locked_until > NOW()
+                 AND r.completed_at IS NULL
+             )
+             FOR UPDATE`,
+          ])) as { id: number }[];
+          if (jobIsStillEligible.length === 0) {
+            await query(['ROLLBACK']);
+            continue;
+          }
 
           let [{ id: jobReservationId }] = (await query([
             'INSERT INTO job_reservations (job_id, locked_until, worker_id) values (',

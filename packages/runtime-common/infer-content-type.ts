@@ -3,6 +3,7 @@ import { lookup as lookupMimeType } from 'mime-types';
 const DEFAULT_FILE_CONTENT_TYPE = 'application/octet-stream';
 const CONTENT_TYPE_OVERRIDES: Record<string, string> = {
   '.gts': 'text/typescript+glimmer',
+  '.ts': 'text/typescript',
 };
 
 export function inferContentType(filename: string): string {

@@ -285,7 +285,6 @@ module(
         await click(
           `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
         );
-        await click(`[data-test-card-catalog-go-button]`);
       });
 
       test<TestContextWithSave>('new card can enter edit mode', async function (assert) {
@@ -384,7 +383,6 @@ module(
         await click(
           `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
         );
-        await click(`[data-test-card-catalog-go-button]`);
         await consumerSaved.promise;
       });
 

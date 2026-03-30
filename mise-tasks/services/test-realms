@@ -1,0 +1,69 @@
+#!/bin/sh
+#MISE description="Start test realm servers"
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+SCRIPTS_DIR="./scripts"
+
+# In environment mode, share the dev icons server; otherwise start our own
+if [ -z "$BOXEL_ENVIRONMENT" ]; then
+  sh "$SCRIPTS_DIR/start-icons.sh" &
+  ICONS_PID=$!
+  cleanup_icons_server() {
+    if [ -n "$ICONS_PID" ]; then
+      kill "$ICONS_PID" >/dev/null 2>&1 || true
+    fi
+  }
+  trap cleanup_icons_server EXIT INT TERM
+fi
+
+if [ -n "$ENV_MODE" ]; then
+  WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_TEST_MGR_URL}"
+  SERVICE_NAME_ARG="--serviceName=realm-test"
+
+  # Ensure per-environment test database exists
+  REPO_ROOT="$(cd "../.." && pwd)"
+  sh "$REPO_ROOT/scripts/ensure-branch-db.sh" "test_${ENV_SLUG}"
+else
+  WORKER_MANAGER_ARG="$1"
+  SERVICE_NAME_ARG=""
+fi
+
+pnpm --dir=../skills-realm skills:setup
+
+if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
+  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly "$SCRIPTS_DIR/matrix-registration-secret.ts")
+  export MATRIX_REGISTRATION_SHARED_SECRET
+fi
+
+NODE_ENV=test \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE_TEST}" \
+  NODE_NO_WARNINGS=1 \
+  REALM_SERVER_SECRET_SEED="mum's the word" \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  GRAFANA_SECRET="shhh! it's a secret" \
+  MATRIX_URL="${MATRIX_URL_VAL}" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  ts-node \
+  --transpileOnly main \
+  --port="${TEST_PORT}" \
+  --matrixURL="${MATRIX_URL_VAL}" \
+  --realmsRootPath="${REALMS_TEST_ROOT}" \
+  --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
+  --migrateDB \
+  --prerendererUrl="${PRERENDER_URL}" \
+  $WORKER_MANAGER_ARG \
+  $SERVICE_NAME_ARG \
+  \
+  --path='./tests/cards' \
+  --username='node-test_realm' \
+  --fromUrl="${REALM_TEST_URL}/node-test/" \
+  --toUrl="${REALM_TEST_URL}/node-test/" \
+  \
+  --path='../host/tests/cards' \
+  --username='test_realm' \
+  --fromUrl="${REALM_TEST_URL}/test/" \
+  --toUrl="${REALM_TEST_URL}/test/" \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl="${REALM_BASE_URL}/base/"

@@ -7,7 +7,7 @@ export interface Utils {
     responseInit: ResponseInit | undefined,
   ): Response;
   createJWT(user: string, sessionRoom?: string): Promise<string>;
-  ensureSessionRoom(user: string): Promise<string>;
+  ensureSessionRoom(user: string, registrationToken?: string): Promise<string>;
 }
 
 export class MatrixBackendAuthentication {
@@ -29,8 +29,9 @@ export class MatrixBackendAuthentication {
         JSON.stringify({ errors: [`Request body is not valid JSON`] }),
       );
     }
-    let { access_token } = json as {
+    let { access_token, registration_token } = json as {
       access_token?: string;
+      registration_token?: string;
     };
     if (!access_token) {
       return this.utils.badRequest(
@@ -39,10 +40,10 @@ export class MatrixBackendAuthentication {
         }),
       );
     }
-    return await this.verifyToken(access_token);
+    return await this.verifyToken(access_token, registration_token);
   }
 
-  private async verifyToken(openIdToken: string) {
+  private async verifyToken(openIdToken: string, registrationToken?: string) {
     // Check openID token using the federation endpoint
     let user = await this.matrixClient.verifyOpenIdToken(openIdToken);
     if (!user) {
@@ -57,7 +58,7 @@ export class MatrixBackendAuthentication {
     // because we can't create DM rooms with ourselves
     // and these are used just for direct messaging.
     if (this.matrixClient.getUserId() !== user) {
-      roomId = await this.utils.ensureSessionRoom(user);
+      roomId = await this.utils.ensureSessionRoom(user, registrationToken);
     }
 
     let jwt = await this.utils.createJWT(user, roomId);

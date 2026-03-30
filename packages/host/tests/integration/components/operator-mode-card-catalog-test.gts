@@ -20,7 +20,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { testRealmURL } from '../../helpers';
+import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
@@ -383,6 +383,59 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       assert
         .dom(`[data-test-recent-card-result]`)
         .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
+    });
+
+    test('type picker works in card catalog modal with baseFilter', async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+      recentCardsService.add(`${testRealmURL}Person/fadhlan`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+
+      // Open linksTo card picker for Pet field
+      await waitFor(`[data-test-add-new="pet"]`);
+      await click(`[data-test-add-new="pet"]`);
+      await waitFor('[data-test-card-catalog-modal]');
+      await settled();
+
+      // Type picker should exist in the modal
+      assert
+        .dom('[data-test-type-picker]')
+        .exists('type picker is present in card catalog modal');
+
+      // Open type picker
+      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+      await waitFor('[data-test-boxel-picker-option-row]');
+
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .hasAttribute(
+          'placeholder',
+          'Search for a type',
+          'type picker has correct search placeholder',
+        );
+
+      // "Any Type" should be present with count
+      assert
+        .dom('[data-test-boxel-picker-option-row="select-all"]')
+        .exists('"Any Type" option is present in modal');
+      assert
+        .dom('[data-test-boxel-picker-option-row="select-all"]')
+        .containsText('Any Type (', 'select-all shows type count in modal');
+
+      // Options should be constrained by baseFilter (Pet types only)
+      // Person should NOT appear as a type option since baseFilter constrains to Pet
+      assert
+        .dom('[data-test-boxel-picker-option-row="Person"]')
+        .doesNotExist(
+          'Person type is not available when baseFilter constrains to Pet',
+        );
     });
   });
 
@@ -965,6 +1018,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
     await waitFor('[data-test-search-sheet-show-only]');
+    await percySnapshot(assert);
     await click('[data-test-search-sheet-show-only]');
     const collapsedBlocks = document.querySelectorAll(
       '.search-result-block--collapsed',
@@ -975,7 +1029,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
   });
 
-  test(`Show only preserves scroll position of the focused section`, async function (assert) {
+  test(`Show only reorders focused section to top and scrolls back on uncheck`, async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -987,9 +1041,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await fillIn(`[data-test-search-field]`, 'ma');
     await waitFor('[data-test-search-sheet-show-only]');
 
-    let sections = document.querySelectorAll(
-      '[data-test-search-result-section]',
-    );
+    let sections = document.querySelectorAll('[data-section-sid]');
     assert.ok(sections.length >= 1, 'at least one section is rendered');
 
     let showOnlyCheckbox = document.querySelector(
@@ -1004,62 +1056,63 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     );
     const focusedSectionSid = focusedSection.getAttribute('data-section-sid');
     assert.ok(focusedSectionSid, 'focused section has a section sid');
-    const getFocusedSection = () =>
-      document.querySelector(
-        `[data-section-sid="${focusedSectionSid}"]`,
-      ) as HTMLElement;
 
     let scrollContainer = document.querySelector(
       '.search-sheet-content',
     ) as HTMLElement;
-    const getFocusedSectionTopInContainer = () =>
-      getFocusedSection().getBoundingClientRect().top -
-      scrollContainer.getBoundingClientRect().top;
 
-    // Force the scroll container to be short enough to require scrolling
-    scrollContainer.style.maxHeight = '200px';
-    scrollContainer.scrollTop = 50;
-
-    // Wait for all pending renders (realm indexing callbacks, card loads, etc.)
-    // to complete before we baseline the scroll-anchor position map.
-    // Without this, background MutationObserver-driven capturePositions() calls
-    // can re-baseline the modifier's internal map between our dispatchEvent and
-    // the read of positionBefore, causing a divergence that leads to a ~3px
-    // undershoot in the subsequent scroll-anchor adjustment.
-    await settled();
-
-    // Sync the modifier's position map and read positionBefore in the same
-    // synchronous tick so they are guaranteed to reflect the same layout state.
-    scrollContainer.dispatchEvent(new Event('scroll'));
-    let positionBefore = getFocusedSectionTopInContainer();
-
-    await click('[data-test-search-sheet-show-only]');
-
-    let positionAfter = getFocusedSectionTopInContainer();
-    // Use a 5px tolerance instead of 2px: the scroll-anchor adjustment is
-    // sub-pixel-accurate in local environments but CI Chromium instances can
-    // render element positions with slight differences depending on DPI/font
-    // rendering, causing the delta to land just above 2px.  5px is still tight
-    // enough to catch any real regression (section drifting by tens of pixels).
+    // Force a non-zero scrollTop so the post-click scrollTop === 0 assertion
+    // validates an actual scroll change rather than passing vacuously.
+    scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 5,
-      `focused section position is preserved after checking Show only (before: ${positionBefore}, after: ${positionAfter})`,
+      scrollContainer.scrollTop > 0,
+      `scrollTop is non-zero before checking Show only (scrollTop: ${scrollContainer.scrollTop})`,
     );
 
-    // Uncheck: sections expand, position should still be preserved.
-    // The modifier's handleMutations recaptured positions after the previous
-    // adjustment, so no manual scroll dispatch is needed — but we do need
-    // another settled() call so the re-expanded layout is stable before we
-    // record positionBefore for this second assertion.
-    await settled();
-    scrollContainer.dispatchEvent(new Event('scroll'));
-    positionBefore = getFocusedSectionTopInContainer();
+    // Check "show only" — focused section should move to top
     await click('[data-test-search-sheet-show-only]');
+    // The modifier defers scrollTop = 0 via requestAnimationFrame, so wait
+    // one frame for the scroll adjustment to complete.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
 
-    positionAfter = getFocusedSectionTopInContainer();
+    let firstSection = scrollContainer.querySelector(
+      '[data-section-sid]',
+    ) as HTMLElement;
+    assert.strictEqual(
+      firstSection?.getAttribute('data-section-sid'),
+      focusedSectionSid,
+      'focused section is the first section in the container after checking Show only',
+    );
+    assert.strictEqual(
+      scrollContainer.scrollTop,
+      0,
+      'scroll container is scrolled to top after checking Show only',
+    );
+
+    // Uncheck "show only" — the previously focused section should be visible
+    await click('[data-test-search-sheet-show-only]');
+    // The modifier defers scrollIntoView via requestAnimationFrame, so wait
+    // one frame for the scroll adjustment to complete before reading rects.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    let restoredSection = scrollContainer.querySelector(
+      `[data-section-sid="${focusedSectionSid}"]`,
+    ) as HTMLElement;
     assert.ok(
-      Math.abs(positionAfter - positionBefore) <= 5,
-      `focused section position is preserved after unchecking Show only (before: ${positionBefore}, after: ${positionAfter})`,
+      restoredSection,
+      'previously focused section is still in the DOM',
+    );
+
+    let containerRect = scrollContainer.getBoundingClientRect();
+    let sectionRect = restoredSection.getBoundingClientRect();
+    assert.ok(
+      sectionRect.top >= containerRect.top - 1,
+      `previously focused section top is at or below container top after unchecking Show only (sectionTop: ${sectionRect.top}, containerTop: ${containerRect.top})`,
+    );
+    assert.ok(
+      sectionRect.top < containerRect.bottom,
+      `previously focused section top is above container bottom after unchecking Show only (sectionTop: ${sectionRect.top}, containerBottom: ${containerRect.bottom})`,
     );
   });
 
@@ -1270,5 +1323,36 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
+  });
+
+  test('selection-dropdown-trigger is visible in multi-select mode and hidden in single-select mode', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+
+    // Open single-select linksTo chooser for 'pet' field
+    await waitFor(`[data-test-add-new="pet"]`);
+    await click(`[data-test-add-new="pet"]`);
+    await waitFor('[data-test-card-catalog-modal]');
+
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .doesNotExist('selection dropdown is hidden in single-select mode');
+
+    // Close and open multi-select linksToMany chooser for 'friends' field
+    await click('[data-test-card-catalog-cancel-button]');
+    await waitFor('[data-test-card-catalog-modal]', { count: 0 });
+
+    await click(`[data-test-add-new="friends"]`);
+    await waitFor('[data-test-card-catalog-modal]');
+
+    assert
+      .dom('[data-test-selection-dropdown-trigger]')
+      .exists('selection dropdown is visible in multi-select mode');
   });
 });

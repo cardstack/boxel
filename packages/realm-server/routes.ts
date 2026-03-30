@@ -9,8 +9,10 @@ import type {
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import Router from '@koa/router';
+import { createRequire } from 'module';
 import handleCreateSessionRequest from './handlers/handle-create-session';
 import handleCreateRealmRequest from './handlers/handle-create-realm';
+import handleDeleteRealm from './handlers/handle-delete-realm';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms';
 import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
@@ -41,8 +43,8 @@ import handlePrerenderProxy from './handlers/handle-prerender-proxy';
 import handleSearch from './handlers/handle-search';
 import handleSearchPrerendered from './handlers/handle-search-prerendered';
 import handleRealmInfo from './handlers/handle-realm-info';
+import handleFederatedTypes from './handlers/handle-federated-types';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization';
-import handleGitHubPRRequest from './handlers/handle-github-pr';
 import handleDownloadRealm from './handlers/handle-download-realm';
 import {
   handleBotRegistrationRequest,
@@ -100,6 +102,7 @@ export type CreateRoutesArgs = {
     backgroundURL?: string;
     iconURL?: string;
   }) => Promise<{ realm: Realm; info: Partial<RealmInfo> }>;
+  serveHostApp: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveIndex: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   serveFromRealm: (ctxt: Koa.Context, next: Koa.Next) => Promise<any>;
   sendEvent: (
@@ -124,11 +127,17 @@ export function createRoutes(args: CreateRoutesArgs) {
 
   router.head('/', livenessCheck);
   router.get('/', healthCheck, args.serveIndex, args.serveFromRealm);
+  router.get('/_standby', healthCheck, args.serveHostApp, args.serveFromRealm);
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
     '/_create-realm',
     jwtMiddleware(args.realmSecretSeed),
     handleCreateRealmRequest(args),
+  );
+  router.delete(
+    '/_delete-realm',
+    jwtMiddleware(args.realmSecretSeed),
+    handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
@@ -164,6 +173,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_federated-info',
     multiRealmAuthorization(args),
     handleRealmInfo({ dbAdapter: args.dbAdapter }),
+  );
+  router.all(
+    '/_federated-types',
+    multiRealmAuthorization(args),
+    handleFederatedTypes({ dbAdapter: args.dbAdapter }),
   );
   router.all(
     '/_federated-search-prerendered',
@@ -258,11 +272,15 @@ export function createRoutes(args: CreateRoutesArgs) {
     jwtMiddleware(args.realmSecretSeed),
     handleDeleteBoxelClaimedDomainRequest(args),
   );
-  router.post(
-    '/_github-pr',
-    jwtMiddleware(args.realmSecretSeed),
-    handleGitHubPRRequest(args),
-  );
+  // Matrix tests don't need the GitHub PR integration, and skipping this route
+  // keeps the realm server from loading Octokit's ESM entrypoint during boot.
+  if (process.env.DISABLE_GITHUB_PR_ROUTE !== 'true') {
+    router.post(
+      '/_github-pr',
+      jwtMiddleware(args.realmSecretSeed),
+      handleGitHubPRRequestLazy(args),
+    );
+  }
   router.get('/_download-realm', handleDownloadRealm(args));
   router.post(
     '/_bot-registration',
@@ -327,4 +345,21 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post('/_webhooks/:webhookPath', handleWebhookReceiverRequest(args));
 
   return router.routes();
+}
+
+function handleGitHubPRRequestLazy(args: CreateRoutesArgs) {
+  let handler:
+    | ((ctxt: Koa.Context, next: Koa.Next) => Promise<void>)
+    | undefined;
+
+  return async function (ctxt: Koa.Context, next: Koa.Next) {
+    if (!handler) {
+      handler = (
+        createRequire(__filename)(
+          './handlers/handle-github-pr',
+        ) as typeof import('./handlers/handle-github-pr')
+      ).default(args);
+    }
+    return await handler(ctxt, next);
+  };
 }

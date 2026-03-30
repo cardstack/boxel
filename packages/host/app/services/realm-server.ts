@@ -103,7 +103,17 @@ export default class RealmServerService extends Service {
   }
 
   resetState() {
+    let catalogRealms = this.availableRealms.filter(
+      (realm) => realm.type === 'catalog',
+    );
     this.logout();
+    this.availableRealms = new TrackedArray([
+      { type: 'base', url: baseRealm.url },
+      ...catalogRealms,
+    ]);
+    this.eventSubscribers = new Map();
+    this._ready = new Deferred<void>();
+    this._ready.fulfill();
   }
 
   setClient(client: ExtendedClient) {
@@ -132,34 +142,6 @@ export default class RealmServerService extends Service {
     }
 
     return response;
-  }
-
-  async createUser(matrixUserId: string, registrationToken?: string) {
-    await this.login();
-    let response = await this.network.fetch(`${this.url.href}_user`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'user',
-          attributes: {
-            matrixUserId,
-            registrationToken: registrationToken ?? null,
-          },
-        },
-      }),
-    });
-    if (!response.ok) {
-      let err = `Could not create user with parameters '${matrixUserId}' and '${registrationToken}': ${
-        response.status
-      } - ${await response.text()}`;
-      console.error(err);
-      throw new Error(err);
-    }
   }
 
   async createRealm(args: {
@@ -192,6 +174,33 @@ export default class RealmServerService extends Service {
       data: { id: realmURL },
     } = (await response.json()) as { data: { id: string } };
     return new URL(realmURL);
+  }
+
+  async deleteRealm(realmURL: string) {
+    await this.login();
+
+    let response = await this.network.fetch(`${this.url.href}_delete-realm`, {
+      method: 'DELETE',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'realm',
+          id: realmURL,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let err = `Could not delete realm '${realmURL}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
   }
 
   logout(): void {
@@ -409,7 +418,18 @@ export default class RealmServerService extends Service {
     }
 
     let { data } = await response.json();
+    let externalCatalogURL = ENV.resolvedExternalCatalogRealmURL;
+    let showExternalCatalog =
+      window.localStorage.getItem('boxel:externalCatalog') === 'true';
+
     data.forEach((publicRealm: { id: string }) => {
+      if (
+        externalCatalogURL &&
+        publicRealm.id === externalCatalogURL &&
+        !showExternalCatalog
+      ) {
+        return;
+      }
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
           type: 'catalog',
@@ -417,6 +437,16 @@ export default class RealmServerService extends Service {
         });
       }
     });
+
+    if (showExternalCatalog && externalCatalogURL) {
+      if (!this.availableRealms.find((r) => r.url === externalCatalogURL)) {
+        this.availableRealms.push({
+          type: 'catalog',
+          url: externalCatalogURL,
+        });
+      }
+    }
+
     this._ready.fulfill();
   }
 
@@ -570,8 +600,12 @@ export default class RealmServerService extends Service {
   });
 
   private loggingIn: Promise<void> | undefined;
+  private pendingRegistrationToken: string | undefined;
 
-  async login(): Promise<void> {
+  async login(registrationToken?: string): Promise<void> {
+    if (registrationToken) {
+      this.pendingRegistrationToken = registrationToken;
+    }
     if (this.auth.type === 'logged-in') {
       return;
     }
@@ -592,8 +626,10 @@ export default class RealmServerService extends Service {
         this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
+          registrationToken: this.pendingRegistrationToken,
         },
       );
+      this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
       this.token = token;
     } catch (e: any) {
@@ -931,7 +967,7 @@ export default class RealmServerService extends Service {
         type: 'claimed-domain',
         attributes: {
           source_realm_url: sourceRealmURL,
-          hostname: hostname,
+          hostname,
         },
       },
     };

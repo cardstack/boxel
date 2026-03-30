@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["other", "category"],
+      "content": "## Overview\n\nThe Category card gives the workspace a structured home for taxonomy node: name, parent, children, description. Used to categorize any card type.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nCategory acts as the canonical record for this concept in the workspace. Its fields capture the facts that need to stay structured, while computed state and relationships make it easy to search, group, and reuse across the system.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Trigger]]** -- Changes to Category can fire automation, and automation can also create or update Category.\n- **[[Task]]** -- Category often creates follow-up work or is itself tracked through task execution.\n- **[[Workflow Playbook]]** -- Category can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Report]]** -- Category can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Document]]** -- Category can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Image Search]]** -- Image Search can provide adjacent context, downstream output, or grouped navigation around Category.\n\n## Example Use Cases\n\n- **System of record:** Teams create Category as the structured home for taxonomy node: name, parent, children, description. Used to categorize any card type and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Category when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Category stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Category",
+        "notes": null,
+        "summary": "Taxonomy node: name, parent, children, description. Used to categorize any card type.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

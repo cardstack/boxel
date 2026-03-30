@@ -236,7 +236,10 @@ export class IndexComponent extends Component<IndexComponentComponentSignature> 
       />
     {{else}}
       {{pageTitle this.operatorModeStateService.title}}
-      <OperatorModeContainer @onClose={{this.closeOperatorMode}} />
+      <OperatorModeContainer
+        @onClose={{this.closeOperatorMode}}
+        {{this.removeIsolatedMarkup}}
+      />
     {{/if}}
   </template>
 }

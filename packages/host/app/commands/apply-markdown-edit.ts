@@ -16,6 +16,8 @@ export default class ApplyMarkdownEditCommand extends HostBaseCommand<
   undefined
 > {
   static actionVerb = 'Apply Markdown Edit';
+  description =
+    'Apply a targeted edit to markdown content only (for example .md/.markdown text). This command is not for source code edits such as .gts/.ts/.js/.json files.';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();

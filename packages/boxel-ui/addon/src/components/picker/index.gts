@@ -14,7 +14,8 @@ import PickerLabeledTrigger from './trigger-labeled.gts';
 export type PickerOption = {
   icon?: Icon | string;
   id: string;
-  name: string;
+  label: string;
+  shortLabel?: string;
   type?: 'select-all' | 'option';
 };
 
@@ -102,7 +103,7 @@ export default class Picker extends Component<PickerSignature> {
       ...selectAll,
       ...selectedOptions,
       ...unselectedOptions.filter((option) => {
-        const text = option.name.toLowerCase();
+        const text = option.label.toLowerCase();
         return text.includes(term);
       }),
     ];
@@ -118,8 +119,7 @@ export default class Picker extends Component<PickerSignature> {
 
     const selected = options.filter((o) => {
       if (o.type === 'select-all') return false;
-      // If this is the pinned option, check which section it should stay in
-      if (o === pinnedOption) {
+      if (pinnedOption && o.id === pinnedOption.id) {
         return pinnedToSection === 'selected';
       }
       return this.args.selected.includes(o);
@@ -127,8 +127,7 @@ export default class Picker extends Component<PickerSignature> {
 
     const unselected = options.filter((o) => {
       if (o.type === 'select-all') return false;
-      // If this is the pinned option, check which section it should stay in
-      if (o === pinnedOption) {
+      if (pinnedOption && o.id === pinnedOption.id) {
         return pinnedToSection === 'unselected';
       }
       return !this.args.selected.includes(o);
@@ -140,7 +139,7 @@ export default class Picker extends Component<PickerSignature> {
 
   private isVisuallyInSelectedSection(option: PickerOption): boolean {
     if (option.type === 'select-all') return false;
-    if (option === this.pinnedOption) {
+    if (this.pinnedOption && option.id === this.pinnedOption.id) {
       return this.pinnedToSection === 'selected';
     }
     return this.args.selected.includes(option);
@@ -178,16 +177,23 @@ export default class Picker extends Component<PickerSignature> {
   };
 
   onOptionHover = (option: PickerOption | null) => {
-    if (option && option.type !== 'select-all') {
+    if (
+      option &&
+      option.type !== 'select-all' &&
+      this.pinnedOption?.id !== option.id
+    ) {
       // Remember where the option was when hover started
       this.pinnedOption = option;
       this.pinnedToSection = this.args.selected.includes(option)
         ? 'selected'
         : 'unselected';
-    } else {
-      this.pinnedOption = null;
-      this.pinnedToSection = null;
     }
+  };
+
+  resetPinnedOption = () => {
+    this.pinnedOption = null;
+    this.pinnedToSection = null;
+    return true;
   };
 
   get extra() {
@@ -257,6 +263,8 @@ export default class Picker extends Component<PickerSignature> {
       @options={{this.sortedOptions}}
       @selected={{@selected}}
       @onChange={{this.onChange}}
+      @onBlur={{this.resetPinnedOption}}
+      @onClose={{this.resetPinnedOption}}
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{this.renderInPlace}}
@@ -276,7 +284,8 @@ export default class Picker extends Component<PickerSignature> {
         @option={{option}}
         @isSelected={{this.isSelected option}}
         @currentSelected={{@selected}}
-        @onHover={{this.onOptionHover}}
+        @onFocus={{this.onOptionHover}}
+        @onLeave={{this.resetPinnedOption}}
       />
       {{#if (this.displayDivider option)}}
         <div class='picker-divider' data-test-boxel-picker-divider></div>

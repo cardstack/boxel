@@ -34,6 +34,15 @@ function makeMinimalSvg(width: number, height: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="red"/></svg>`;
 }
 
+function makeRenderableSvg(width: number, height: number): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    `  <rect x="0" y="0" width="${width}" height="${height}" fill="#ff0000" />`,
+    '</svg>',
+  ].join('\n');
+}
+
 module('Acceptance | svg image def', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -118,6 +127,7 @@ module('Acceptance | svg image def', function (hooks) {
         contents: {
           ...SYSTEM_CARD_FIXTURE_CONTENTS,
           'sample.svg': makeMinimalSvg(120, 80),
+          'renderable.svg': makeRenderableSvg(120, 80),
           'viewbox-only.svg':
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 150"><circle cx="100" cy="75" r="50"/></svg>',
           'not-an-svg.svg': 'This is plain text, not an SVG file.',
@@ -288,7 +298,9 @@ module('Acceptance | svg image def', function (hooks) {
   });
 
   test('authenticated images display in browser', async function (assert) {
-    let url = makeFileURL('sample.svg');
+    // Use renderable.svg for the browser-display assertion so decode behavior
+    // is isolated from the minimal metadata fixture.
+    let url = makeFileURL('renderable.svg');
 
     // First extract the file to get the resource
     await visit(
@@ -320,7 +332,7 @@ module('Acceptance | svg image def', function (hooks) {
     let img = document.querySelector(imgSelector) as HTMLImageElement | null;
     assert.ok(img, 'img element is rendered');
     assert.ok(
-      img?.getAttribute('src')?.includes('sample.svg'),
+      img?.getAttribute('src')?.includes('renderable.svg'),
       'img src references the SVG file',
     );
 

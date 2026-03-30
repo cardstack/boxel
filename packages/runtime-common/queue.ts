@@ -10,15 +10,121 @@ export interface QueueRunner {
   destroy: () => Promise<void>;
 }
 
+export type QueueResultMapper<TResult> = (result: PgPrimitive) => TResult;
+
+export type QueuePublishArgs<TResult = PgPrimitive> = QueuePublishRequest & {
+  mapResult?: QueueResultMapper<TResult>;
+};
+
 export interface QueuePublisher {
-  publish: <T>(args: {
-    jobType: string;
-    priority?: number;
-    concurrencyGroup: string | null;
-    timeout: number;
-    args: PgPrimitive;
-  }) => Promise<Job<T>>;
+  publish: <TResult = PgPrimitive>(
+    args: QueuePublishArgs<TResult>,
+  ) => Promise<Job<TResult>>;
   destroy: () => Promise<void>;
+}
+
+export interface QueuePublishRequest {
+  jobType: string;
+  priority?: number;
+  concurrencyGroup: string | null;
+  timeout: number;
+  args: PgPrimitive;
+}
+
+export interface QueueJobSpec extends Omit<QueuePublishRequest, 'priority'> {
+  priority: number;
+}
+
+export interface QueueCoalesceCandidate extends QueueJobSpec {
+  id: number;
+}
+
+export interface QueueCoalesceContext {
+  incoming: QueueJobSpec;
+  candidates: QueueCoalesceCandidate[];
+}
+
+export type QueueCoalesceJoinUpdate = Partial<
+  Pick<QueueJobSpec, 'jobType' | 'args' | 'priority' | 'timeout'>
+>;
+
+export type QueueCoalesceDecision =
+  | {
+      type: 'insert';
+      job?: QueueJobSpec;
+    }
+  | {
+      type: 'join';
+      jobId: number;
+      update?: QueueCoalesceJoinUpdate;
+    };
+
+export interface QueueWaiter {
+  fulfillFromResult: (result: PgPrimitive) => void;
+  rejectFromResult: (result: PgPrimitive) => void;
+  reject: (error: unknown) => void;
+}
+
+export interface QueueJobDefinition {
+  jobType: string;
+  coalesce?: (context: QueueCoalesceContext) => QueueCoalesceDecision;
+}
+
+let coalesceHandlersByJobType = new Map<
+  string,
+  NonNullable<QueueJobDefinition['coalesce']>
+>();
+
+export function registerQueueJobDefinition(definition: QueueJobDefinition) {
+  if (!definition.coalesce) {
+    return;
+  }
+  coalesceHandlersByJobType.set(definition.jobType, definition.coalesce);
+}
+
+export function getQueueJobCoalesceHandler(jobType: string) {
+  return coalesceHandlersByJobType.get(jobType);
+}
+
+export function normalizeQueueJobSpec(args: QueuePublishRequest): QueueJobSpec {
+  return {
+    ...args,
+    priority: args.priority ?? 0,
+  };
+}
+
+export const identityResultMapper: QueueResultMapper<PgPrimitive> = (result) =>
+  result;
+
+export function makeQueueWaiter<TResult>(
+  deferred: Deferred<TResult>,
+  mapResult: QueueResultMapper<TResult>,
+): QueueWaiter {
+  let mapAndFulfill = (result: PgPrimitive) => {
+    try {
+      deferred.fulfill(mapResult(result));
+    } catch (error: unknown) {
+      deferred.reject(error);
+    }
+  };
+  let mapAndReject = (result: PgPrimitive) => {
+    try {
+      deferred.reject(mapResult(result));
+    } catch (error: unknown) {
+      deferred.reject(error);
+    }
+  };
+  return {
+    fulfillFromResult(result: PgPrimitive) {
+      mapAndFulfill(result);
+    },
+    rejectFromResult(result: PgPrimitive) {
+      mapAndReject(result);
+    },
+    reject(error: unknown) {
+      deferred.reject(error);
+    },
+  };
 }
 
 export class Job<T> {

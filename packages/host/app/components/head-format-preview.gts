@@ -152,6 +152,14 @@ export default class HeadFormatPreview extends Component<Signature> {
   }
 
   @cached
+  private get parsedHeadDocument(): Document | undefined {
+    if (!this.headMarkup) {
+      return undefined;
+    }
+    return this.parseHead(this.headMarkup);
+  }
+
+  @cached
   private get headPreviewData(): HeadPreviewData {
     let defaults: HeadPreviewData = {
       title: 'Untitled page',
@@ -168,7 +176,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       return defaults;
     }
 
-    let doc = this.parseHead(this.headMarkup);
+    let doc = this.parsedHeadDocument;
     if (!doc) {
       return defaults;
     }
@@ -251,10 +259,15 @@ export default class HeadFormatPreview extends Component<Signature> {
 
   @cached
   private get disallowedTags(): string[] {
-    if (!this.headMarkup || typeof DOMParser === 'undefined') {
+    if (!this.headMarkup) {
       return [];
     }
-    let doc = new DOMParser().parseFromString('', 'text/html');
+    let doc =
+      this.parsedHeadDocument ??
+      (typeof document !== 'undefined' ? document : undefined);
+    if (!doc) {
+      return [];
+    }
     return findDisallowedHeadTags(this.headMarkup, doc);
   }
 

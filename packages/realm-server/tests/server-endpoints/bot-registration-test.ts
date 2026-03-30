@@ -12,26 +12,24 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       let context = setupServerEndpointsTest(hooks);
 
       test('requires auth to register bot', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_bot-registration')
           .send({});
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('requires auth to list bot registrations', async function (assert) {
-        let response = await context.request2.get('/_bot-registrations');
+        let response = await context.request.get('/_bot-registrations');
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('requires auth to unregister bot', async function (assert) {
-        let response = await context.request2
-          .delete('/_bot-registration')
-          .send({
-            data: {
-              type: 'bot-registration',
-              id: 'bot-reg-1',
-            },
-          });
+        let response = await context.request.delete('/_bot-registration').send({
+          data: {
+            type: 'bot-registration',
+            id: 'bot-reg-1',
+          },
+        });
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
@@ -44,7 +42,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@example.com',
         );
 
-        let response = await context.request2
+        let response = await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -98,7 +96,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@example.com',
         );
 
-        let firstResponse = await context.request2
+        let firstResponse = await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -118,7 +116,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
-        let secondResponse = await context.request2
+        let secondResponse = await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -157,7 +155,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@example.com',
         );
 
-        let response = await context.request2
+        let response = await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -189,7 +187,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@example.com',
         );
 
-        let registerResponse = await context.request2
+        let registerResponse = await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -210,7 +208,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           });
         let botRegistrationId = registerResponse.body.data.id;
 
-        let deleteResponse = await context.request2
+        let deleteResponse = await context.request
           .delete('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -245,7 +243,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'user@example.com',
         );
 
-        let response = await context.request2
+        let response = await context.request
           .delete('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -282,7 +280,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'other@example.com',
         );
 
-        let registerResponse = await context.request2
+        let registerResponse = await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -303,7 +301,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           });
         let botRegistrationId = registerResponse.body.data.id;
 
-        let response = await context.request2
+        let response = await context.request
           .delete('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -365,7 +363,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           `)`,
         ]);
 
-        let response = await context.request2
+        let response = await context.request
           .get('/_bot-registrations')
           .set(
             'Authorization',
@@ -403,7 +401,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'other@example.com',
         );
 
-        await context.request2
+        await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -423,7 +421,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
-        await context.request2
+        await context.request
           .post('/_bot-registration')
           .set('Accept', 'application/vnd.api+json')
           .set('Content-Type', 'application/vnd.api+json')
@@ -443,7 +441,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           });
 
-        let response = await context.request2
+        let response = await context.request
           .get('/_bot-registrations')
           .set(
             'Authorization',

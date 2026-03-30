@@ -93,6 +93,8 @@ module('buildPromptForModel', (hooks) => {
           status: response.ok ? 200 : 404,
           statusText: response.ok ? 'OK' : 'Not Found',
           text: async () => response.text,
+          arrayBuffer: async () =>
+            new TextEncoder().encode(response.text).buffer,
         };
       }
       throw new Error(`No mock response for ${url}`);
@@ -1029,8 +1031,8 @@ Attached Files (files with newer versions don't show their content):
 Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
-[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
-[example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
+[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt)
+[example.pdf](http://test.com/my-realm/example.pdf): [application/pdf]
       `.trim(),
       ),
     );
@@ -5149,6 +5151,1362 @@ new
       { type: 'ephemeral' },
       'cache_control should be set to ephemeral',
     );
+  });
+
+  test('excludes assistant messages with empty body and no tool calls', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2,
+        content: {
+          body: '',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {},
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Can you help me?',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '3',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    const assistantMessages = result.filter(
+      (message) => message.role === 'assistant',
+    );
+    assert.equal(
+      assistantMessages.length,
+      0,
+      'Empty assistant message should not be included',
+    );
+
+    const userMessages = result.filter((message) => message.role === 'user');
+    assert.equal(
+      userMessages.length,
+      2,
+      'Both user messages should be included',
+    );
+  });
+
+  test('keeps assistant messages with empty body when they have tool calls', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Update my card',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2,
+        content: {
+          body: '',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'call_1',
+              name: 'patchCardInstance',
+              arguments: JSON.stringify({
+                card_id: 'http://localhost/card/1',
+                attributes: { title: 'Updated' },
+              }),
+            },
+          ],
+          data: {},
+        },
+        sender: '@aibot:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          commandRequestId: 'call_1',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            event_id: '2',
+            key: 'applied',
+          },
+          data: {},
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '3',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    const assistantMessages = result.filter(
+      (message) => message.role === 'assistant',
+    );
+    assert.equal(
+      assistantMessages.length,
+      1,
+      'Assistant message with tool calls should be kept even with empty body',
+    );
+    assert.ok(
+      assistantMessages[0].tool_calls?.length,
+      'Assistant message should have tool calls',
+    );
+
+    const toolMessages = result.filter((message) => message.role === 'tool');
+    assert.equal(
+      toolMessages.length,
+      1,
+      'Tool result message should be present alongside the assistant tool call',
+    );
+    assert.equal(
+      toolMessages[0].tool_call_id,
+      'call_1',
+      'Tool result should reference the correct tool call id',
+    );
+  });
+
+  test('excludes user messages with empty body', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: '',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '2',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'interact',
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '2',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    const userMessages = result.filter((message) => message.role === 'user');
+    assert.equal(
+      userMessages.length,
+      1,
+      'Only the non-empty user message should be included',
+    );
+    assert.equal(userMessages[0].content, 'Hello');
+  });
+  test('only the most recent message attachments include file content in the prompt', async () => {
+    // Policy: files attached to older messages should show metadata only,
+    // even if they are NOT re-attached in later messages.
+    // Only the most recent user message's attachments should include content.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Here is a config file',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/config.json',
+                url: 'http://test.com/config-uploaded.json',
+                name: 'config.json',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Got it.',
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: 2,
+        unsigned: { age: 1000, transaction_id: '2' },
+        event_id: '2',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Now here is a different file',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/utils.ts',
+                url: 'http://test.com/utils-uploaded.ts',
+                name: 'utils.ts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '3' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/config-uploaded.json', {
+      ok: true,
+      text: '{ "key": "value" }',
+    });
+    mockResponses.set('http://test.com/utils-uploaded.ts', {
+      ok: true,
+      text: 'export function hello() { return "world"; }',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+
+    // Older message's unique file (config.json) should show metadata only, not content
+    assert.ok(
+      (userMessages[0]?.content as string).includes('[config.json]'),
+      'First message mentions config.json',
+    );
+    assert.notOk(
+      (userMessages[0]?.content as string).includes('"key": "value"'),
+      'First message should NOT include config.json content (not the current message)',
+    );
+
+    // Most recent message's file (utils.ts) should include content
+    assert.ok(
+      (userMessages[1]?.content as string).includes(
+        'export function hello() { return "world"; }',
+      ),
+      'Most recent message should include utils.ts content',
+    );
+  });
+
+  test('unsupported MIME types show metadata without error prefix', async () => {
+    // Policy: binary files with unsupported MIME types should show
+    // useful metadata (name, content type, size) rather than an error.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Here is a PDF and an image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/diagram.png',
+                url: 'http://test.com/diagram-uploaded.png',
+                name: 'diagram.png',
+                contentType: 'image/png',
+                contentSize: 51200,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+    // Content may be ContentPart[] when images are attached
+    let content: string;
+    if (Array.isArray(messageContent)) {
+      content = messageContent
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+    } else {
+      content = messageContent as string;
+    }
+
+    // Should show metadata, not error messages
+    assert.ok(content.includes('report.pdf'), 'Should mention the PDF file');
+    assert.ok(
+      content.includes('application/pdf'),
+      'Should show the content type for unsupported files',
+    );
+    assert.notOk(
+      content.includes('Error loading attached file'),
+      'Should NOT show error prefix for unsupported MIME types',
+    );
+    assert.notOk(
+      content.includes('Unsupported file type'),
+      'Should NOT show "Unsupported file type" error',
+    );
+  });
+
+  test('card JSON and card definition files are included as text content', async () => {
+    // Verifies that application/vnd.card+json and application/vnd.card+source
+    // files have their full content sent to the bot rather than being treated
+    // as unsupported binary files (CS-10468).
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Here are my card files',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/person.json',
+                url: 'http://test.com/person-uploaded.json',
+                name: 'person.json',
+                contentType: 'application/vnd.card+json',
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/person.gts',
+                url: 'http://test.com/person-uploaded.gts',
+                name: 'person.gts',
+                contentType: 'application/vnd.card+source',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/person-uploaded.json', {
+      ok: true,
+      text: '{"data":{"type":"card","attributes":{"name":"Alice"}}}',
+    });
+    mockResponses.set('http://test.com/person-uploaded.gts', {
+      ok: true,
+      text: 'export class Person extends CardDef { @field name = contains(StringField); }',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let content = userMessages[0]?.content as string;
+
+    assert.ok(
+      content.includes('"name":"Alice"'),
+      'Card JSON (application/vnd.card+json) content should be included',
+    );
+    assert.ok(
+      content.includes('export class Person'),
+      'Card definition (application/vnd.card+source) content should be included',
+    );
+    assert.notOk(
+      content.includes('Unsupported file type'),
+      'None of these file types should be treated as unsupported',
+    );
+  });
+
+  test('older image attachments still include metadata in text context', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Earlier message with image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/diagram.png',
+                url: 'http://test.com/diagram-uploaded.png',
+                name: 'diagram.png',
+                contentType: 'image/png',
+                contentSize: 51200,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: 'Acknowledged',
+          msgtype: 'm.text',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: 2,
+        unsigned: { age: 1000, transaction_id: '2' },
+        event_id: '2',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Most recent text-only message',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '3' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let firstMessage = userMessages[0]?.content as string;
+    assert.ok(
+      firstMessage.includes('diagram.png'),
+      'older image attachment should still be mentioned',
+    );
+    assert.ok(
+      firstMessage.includes('image/png'),
+      'older image attachment should include metadata',
+    );
+  });
+
+  test('image attachments produce native image_url content parts', async () => {
+    // Policy: when an image file is attached, the prompt should use
+    // native image_url content parts (for vision-capable models)
+    // instead of text-only representation.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'What does this image show?',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/screenshot.png',
+                url: 'http://test.com/screenshot-uploaded.png',
+                name: 'screenshot.png',
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    // Mock binary image download (base64 of a tiny PNG)
+    mockResponses.set('http://test.com/screenshot-uploaded.png', {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    // Content should be an array of content parts, not a plain string
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with image attachment should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      assert.strictEqual(
+        imageParts.length,
+        1,
+        'Should include exactly one image_url content part',
+      );
+      assert.ok(
+        imageParts[0].image_url.url.startsWith('data:image/png;base64,'),
+        'image_url should be a base64 data URL with correct content type',
+      );
+
+      let textParts = messageContent.filter(
+        (part: any) => part.type === 'text',
+      );
+      assert.ok(
+        textParts.length > 0,
+        'Should still include text content part with the message body',
+      );
+    }
+  });
+
+  test('image attachments fall back to canonical Matrix media URL when original URL fails', async () => {
+    let staleUrl =
+      'http://stale-host/_matrix/media/v3/download/localhost/abc123/file.png';
+    let fallbackUrl = fakeMatrixClient.mxcUrlToHttp(
+      'mxc://localhost/abc123',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    assert.ok(fallbackUrl, 'matrix client should resolve canonical mxc URL');
+
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Describe this workspace image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/screenshot.png',
+                url: staleUrl,
+                name: 'screenshot.png',
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set(staleUrl, {
+      ok: false,
+      text: 'not found',
+    });
+    mockResponses.set(fallbackUrl!, {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message should use content parts when fallback media URL succeeds',
+    );
+    if (Array.isArray(messageContent)) {
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      assert.strictEqual(
+        imageParts.length,
+        1,
+        'Should include one image_url part after fallback download',
+      );
+    }
+  });
+
+  test('PDF attachment produces native file content part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Please review this document',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/report-uploaded.pdf', {
+      ok: true,
+      text: 'JVBERi0xLjQK', // fake PDF base64
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with PDF should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let fileParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'file',
+      );
+      assert.strictEqual(
+        fileParts.length,
+        1,
+        'Should include exactly one file content part',
+      );
+      assert.strictEqual(
+        fileParts[0].file.filename,
+        'report.pdf',
+        'file part should include the filename',
+      );
+      assert.ok(
+        fileParts[0].file.file_data.startsWith('data:application/pdf;base64,'),
+        'file_data should be a base64 data URL with PDF content type',
+      );
+    }
+  });
+
+  test('audio attachment produces native input_audio content part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Transcribe this audio',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/recording.mp3',
+                url: 'http://test.com/recording-uploaded.mp3',
+                name: 'recording.mp3',
+                contentType: 'audio/mpeg',
+                contentSize: 204800,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/recording-uploaded.mp3', {
+      ok: true,
+      text: 'AAAAAAAAAA==', // fake audio base64
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with audio should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let audioParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'input_audio',
+      );
+      assert.strictEqual(
+        audioParts.length,
+        1,
+        'Should include exactly one input_audio content part',
+      );
+      assert.strictEqual(
+        audioParts[0].input_audio.format,
+        'mp3',
+        'input_audio format should be mp3',
+      );
+      assert.ok(
+        audioParts[0].input_audio.data.length > 0,
+        'input_audio data should contain raw base64 (no data: prefix)',
+      );
+      assert.ok(
+        !audioParts[0].input_audio.data.startsWith('data:'),
+        'input_audio data should NOT have a data URL prefix',
+      );
+    }
+  });
+
+  test('video attachment produces native video_url content part', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'What happens in this video?',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/clip.mp4',
+                url: 'http://test.com/clip-uploaded.mp4',
+                name: 'clip.mp4',
+                contentType: 'video/mp4',
+                contentSize: 512000,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/clip-uploaded.mp4', {
+      ok: true,
+      text: 'AAAAIGZ0eXA=', // fake MP4 base64
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(
+      Array.isArray(messageContent),
+      'User message with video should have content as ContentPart[]',
+    );
+
+    if (Array.isArray(messageContent)) {
+      let videoParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'video_url',
+      );
+      assert.strictEqual(
+        videoParts.length,
+        1,
+        'Should include exactly one video_url content part',
+      );
+      assert.ok(
+        videoParts[0].video_url.url.startsWith('data:video/mp4;base64,'),
+        'video_url should be a base64 data URL with video/mp4 content type',
+      );
+    }
+  });
+
+  test('unsupported modality is gated when inputModalities is set', async () => {
+    // Model only supports text and image — a PDF attachment should be
+    // excluded from media parts and a warning should appear in the text.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Review this document and image',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/photo.png',
+                url: 'http://test.com/photo-uploaded.png',
+                name: 'photo.png',
+                contentType: 'image/png',
+                contentSize: 2048,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/photo-uploaded.png', {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+    // PDF mock intentionally omitted — should never be downloaded
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+      ['text', 'image'], // model supports text + image only
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
+
+    if (Array.isArray(messageContent)) {
+      // Image should still be included
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      assert.strictEqual(
+        imageParts.length,
+        1,
+        'Image should still be included when model supports it',
+      );
+
+      // PDF should NOT be included as a file part
+      let fileParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'file',
+      );
+      assert.strictEqual(
+        fileParts.length,
+        0,
+        'PDF should be excluded when model does not support file modality',
+      );
+
+      // Warning text should mention the gated file
+      let textContent = messageContent
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+      assert.ok(
+        textContent.includes('report.pdf'),
+        'Warning should mention the excluded file name',
+      );
+      assert.ok(
+        textContent.includes('does not support'),
+        'Warning should explain the file was not sent',
+      );
+    }
+  });
+
+  test('all modalities sent when inputModalities is undefined', async () => {
+    // When no inputModalities is configured, all multimodal types should pass through.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Review these files',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/photo.png',
+                url: 'http://test.com/photo-uploaded.png',
+                name: 'photo.png',
+                contentType: 'image/png',
+                contentSize: 2048,
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/report.pdf',
+                url: 'http://test.com/report-uploaded.pdf',
+                name: 'report.pdf',
+                contentType: 'application/pdf',
+                contentSize: 102400,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/photo-uploaded.png', {
+      ok: true,
+      text: 'iVBORw0KGgoAAAANSUhEUg==',
+    });
+    mockResponses.set('http://test.com/report-uploaded.pdf', {
+      ok: true,
+      text: 'JVBERi0xLjQK',
+    });
+
+    // No inputModalities arg — defaults to undefined
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let userMessages = prompt.filter((m) => m.role === 'user');
+    let messageContent = userMessages[0]?.content;
+
+    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
+
+    if (Array.isArray(messageContent)) {
+      let imageParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'image_url',
+      );
+      let fileParts = (messageContent as any[]).filter(
+        (part: any) => part.type === 'file',
+      );
+      assert.strictEqual(imageParts.length, 1, 'Image should be included');
+      assert.strictEqual(fileParts.length, 1, 'PDF should be included');
+
+      let textContent = messageContent
+        .filter((p: any) => p.type === 'text')
+        .map((p: any) => p.text)
+        .join('\n');
+      assert.notOk(
+        textContent.includes('does not support'),
+        'No gating warning when inputModalities is undefined',
+      );
+    }
+  });
+
+  test('read-file tool call is rejected for files not previously attached in the room', async () => {
+    // Policy: the AI should only be able to read files that were
+    // previously attached by the user in the same room.
+    // This prevents the AI from accessing arbitrary files.
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Here is a file',
+          data: {
+            context: {
+              tools: [],
+              submode: 'code',
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: 'http://test.com/my-realm/allowed-file.ts',
+                url: 'http://test.com/allowed-uploaded.ts',
+                name: 'allowed-file.ts',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          body: '',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {},
+          [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+            {
+              id: 'call_1',
+              name: 'read-file-for-ai-assistant_a831',
+              arguments: JSON.stringify({
+                attributes: {
+                  fileUrl: 'http://test.com/my-realm/not-attached-file.ts',
+                },
+                description: 'Reading a file the user did not attach',
+              }),
+            },
+          ],
+        },
+        origin_server_ts: 2,
+        unsigned: { age: 1000, transaction_id: '2' },
+        event_id: '2',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        event_id: '3',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'call_1',
+          'm.relates_to': {
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            event_id: '2',
+            key: 'applied',
+          },
+          data: {},
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '3' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    mockResponses.set('http://test.com/allowed-uploaded.ts', {
+      ok: true,
+      text: 'export const allowed = true;',
+    });
+    mockResponses.set('http://test.com/not-attached-uploaded.ts', {
+      ok: true,
+      text: 'export const secret = "should not be readable";',
+    });
+
+    let prompt = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    // The command result for the unauthorized file should contain a rejection
+    let toolMessages = prompt.filter((m) => m.role === 'tool');
+    let rejectionMessage = toolMessages.find((m) =>
+      (m.content as string).includes('not-attached-file.ts'),
+    );
+
+    assert.ok(
+      rejectionMessage,
+      'Should have a tool result mentioning the unauthorized file',
+    );
+
+    if (rejectionMessage) {
+      let rejectionContent = rejectionMessage.content as string;
+      assert.ok(
+        rejectionContent.includes('not previously attached') ||
+          rejectionContent.includes('not authorized') ||
+          rejectionContent.includes('rejected'),
+        'Tool result should indicate the file was rejected because it was not previously attached in the room',
+      );
+      assert.notOk(
+        rejectionContent.includes('should not be readable'),
+        'The rejected file content should NOT appear in the prompt',
+      );
+    }
   });
 });
 

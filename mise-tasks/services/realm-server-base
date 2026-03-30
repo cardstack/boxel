@@ -1,0 +1,32 @@
+#!/bin/sh
+#MISE description="Start base realm server only"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
+  MATRIX_REGISTRATION_SHARED_SECRET=$(ts-node --transpileOnly ./scripts/matrix-registration-secret.ts)
+  export MATRIX_REGISTRATION_SHARED_SECRET
+fi
+
+NODE_ENV=development \
+  NODE_NO_WARNINGS=1 \
+  PGPORT="${PGPORT}" \
+  PGDATABASE=boxel_base \
+  REALM_SERVER_SECRET_SEED="mum's the word" \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  GRAFANA_SECRET="shhh! it's a secret" \
+  MATRIX_URL="${MATRIX_URL_VAL}" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  ts-node \
+  --transpileOnly main \
+  --port=4201 \
+  --matrixURL="${MATRIX_URL_VAL}" \
+  --realmsRootPath='./realms/localhost_4201_base' \
+  --prerendererUrl="${PRERENDER_URL}" \
+  --migrateDB \
+  $1 \
+  \
+  --path='../base' \
+  --username='base_realm' \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl='http://localhost:4201/base/'

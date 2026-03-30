@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { isTesting } from '@embroider/macros';
@@ -13,6 +14,7 @@ import {
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 import type NetworkService from './network';
+import type ResetService from './reset';
 import type StoreService from './store';
 
 export class FileUploadTask {
@@ -48,26 +50,71 @@ export class FileUploadTask {
 
 export default class FileUploadService extends Service {
   @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
   @service declare private store: StoreService;
 
   @tracked activeUploads: FileUploadTask[] = [];
+  private queuedLocalFilesForTesting: (File | null)[] = [];
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.activeUploads = [];
+  }
 
   uploadFile(opts: { realmURL: URL; acceptTypes?: string }): FileUploadTask {
     let task = new FileUploadTask();
-    this.activeUploads = [...this.activeUploads, task];
+    this._startTask(task, opts.realmURL);
 
     if (!isTesting()) {
       this._openFilePicker(task, opts.acceptTypes);
     }
 
-    this._processUpload(task, opts.realmURL).finally(() => {
-      this.activeUploads = this.activeUploads.filter((t) => t !== task);
-    });
+    return task;
+  }
+
+  uploadProvidedFile(opts: { realmURL: URL; file: File }): FileUploadTask {
+    let task = new FileUploadTask();
+    this._startTask(task, opts.realmURL);
+    task._resolveFile(opts.file);
 
     return task;
   }
 
+  private _startTask(task: FileUploadTask, realmURL: URL) {
+    this.activeUploads = [...this.activeUploads, task];
+    this._processUpload(task, realmURL).finally(() => {
+      this.activeUploads = this.activeUploads.filter((t) => t !== task);
+    });
+  }
+
+  async pickLocalFile(opts?: {
+    acceptTypes?: string;
+  }): Promise<File | undefined> {
+    if (isTesting()) {
+      let next = this.queuedLocalFilesForTesting.shift();
+      return next ?? undefined;
+    }
+    let file = await this._openNativeFilePicker(opts?.acceptTypes);
+    return file ?? undefined;
+  }
+
+  // Test seam for local-file attachment flow
+  __queueLocalFileForTesting(file: File | null) {
+    this.queuedLocalFilesForTesting.push(file);
+  }
+
   private _openFilePicker(task: FileUploadTask, acceptTypes?: string) {
+    this._openNativeFilePicker(acceptTypes).then((file) => {
+      task._resolveFile(file);
+    });
+  }
+
+  private _openNativeFilePicker(acceptTypes?: string): Promise<File | null> {
+    let deferred = new Deferred<File | null>();
     let input = document.createElement('input');
     input.type = 'file';
     input.accept = acceptTypes ?? '';
@@ -77,7 +124,7 @@ export default class FileUploadService extends Service {
     input.addEventListener(
       'change',
       () => {
-        task._resolveFile(input.files?.[0] ?? null);
+        deferred.fulfill(input.files?.[0] ?? null);
         input.remove();
       },
       { once: true },
@@ -85,13 +132,14 @@ export default class FileUploadService extends Service {
     input.addEventListener(
       'cancel',
       () => {
-        task._resolveFile(null);
+        deferred.fulfill(null);
         input.remove();
       },
       { once: true },
     );
 
     input.click();
+    return deferred.promise;
   }
 
   private async _processUpload(task: FileUploadTask, realmURL: URL) {

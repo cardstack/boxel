@@ -2,6 +2,14 @@ name: Diff Skills
 
 on:
   pull_request:
+    paths:
+      - "packages/base/cards/skill*.json"
+      - "packages/base/Skill/**/*.json"
+      - "packages/catalog-realm/**/Skill/**/*.json"
+      - "packages/experiments-realm/**/Skill*/**/*.json"
+      - "packages/host/tests/cards/skill-*.json"
+      - "packages/skills-realm/**/*.json"
+      - "packages/software-factory/realm/**/*skill*.json"
 
 permissions:
   contents: read
@@ -11,3 +19,6 @@ jobs:
   diff-skills:
     uses: cardstack/gh-actions/.github/workflows/diff-skills.yml@main
     secrets: inherit
+    concurrency:
+      group: diff-skills-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true

@@ -39,7 +39,8 @@ interface Signature {
     onFocusSection?: (sectionId: string | null) => void;
     getDisplayedCount?: (sectionId: string, totalCount: number) => number;
     onShowMore?: (sectionId: string, totalCount: number) => void;
-    selectedCard?: string | NewCardArgs;
+    selectedCards?: (string | NewCardArgs)[];
+    multiSelect?: boolean;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
@@ -170,17 +171,24 @@ export default class SearchResultSection extends Component<Signature> {
     return !!this.args.offerToCreate && this.realm.canWrite(realmUrl);
   };
 
-  get selectedCardId(): string | undefined {
-    const selected = this.args.selectedCard;
-    return typeof selected === 'string' ? selected : undefined;
-  }
+  isCardSelected = (cardUrl: string): boolean => {
+    const selected = this.args.selectedCards;
+    if (!selected) return false;
+    const normalized = cardUrl.replace(/\.json$/, '');
+    return selected.some(
+      (s) => typeof s === 'string' && s.replace(/\.json$/, '') === normalized,
+    );
+  };
 
   get isCreateNewSelected(): boolean {
-    const selected = this.args.selectedCard;
-    if (!this.realmSection || !selected || typeof selected === 'string') {
+    const selected = this.args.selectedCards;
+    if (!this.realmSection || !selected) {
       return false;
     }
-    return selected.realmURL === this.realmSection.realmUrl;
+    return selected.some(
+      (s) =>
+        typeof s !== 'string' && s.realmURL === this.realmSection!.realmUrl,
+    );
   }
 
   newCardArgs = (realmUrl: string): NewCardArgs => {
@@ -235,6 +243,7 @@ export default class SearchResultSection extends Component<Signature> {
             <ItemButton
               @item={{this.newCardArgs this.realmSection.realmUrl}}
               @isSelected={{this.isCreateNewSelected}}
+              @multiSelect={{@multiSelect}}
               @onSelect={{@handleSelect}}
               @onSubmit={{@onSubmit}}
             />
@@ -244,7 +253,8 @@ export default class SearchResultSection extends Component<Signature> {
               <ItemButton
                 @item={{card.component}}
                 @itemId={{card.url}}
-                @isSelected={{eq this.selectedCardId card.url}}
+                @isSelected={{this.isCardSelected card.url}}
+                @multiSelect={{@multiSelect}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
                 data-test-search-sheet-search-result={{i}}
@@ -283,7 +293,8 @@ export default class SearchResultSection extends Component<Signature> {
           <ItemButton
             @item={{this.urlSection.card}}
             @itemId={{this.urlSection.card.id}}
-            @isSelected={{eq this.selectedCardId this.urlSection.card.id}}
+            @isSelected={{this.isCardSelected this.urlSection.card.id}}
+            @multiSelect={{@multiSelect}}
             @onSelect={{@handleSelect}}
             @onSubmit={{@onSubmit}}
             data-test-search-sheet-search-result='0'
@@ -314,7 +325,8 @@ export default class SearchResultSection extends Component<Signature> {
               <ItemButton
                 @item={{card}}
                 @itemId={{card.id}}
-                @isSelected={{eq this.selectedCardId card.id}}
+                @isSelected={{this.isCardSelected card.id}}
+                @multiSelect={{@multiSelect}}
                 @onSelect={{@handleSelect}}
                 @onSubmit={{@onSubmit}}
                 data-test-recent-card-result={{card.id}}

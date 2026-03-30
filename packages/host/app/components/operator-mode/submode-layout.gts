@@ -24,6 +24,7 @@ import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
@@ -189,7 +190,7 @@ export default class SubmodeLayout extends Component<Signature> {
       case Submodes.Code:
         await this.operatorModeStateService.updateCodePath(
           this.lastCardIdInRightMostStack
-            ? new URL(this.lastCardIdInRightMostStack + '.json')
+            ? cardIdToURL(this.lastCardIdInRightMostStack + '.json')
             : null,
         );
         break;

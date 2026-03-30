@@ -1,133 +1,68 @@
-import { join } from 'path';
-import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import { dirSync, type DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
+import type { DirResult } from 'tmp';
 import type {
   QueuePublisher,
   QueueRunner,
   Realm,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
-import { DEFAULT_PERMISSIONS } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 import type { PgAdapter } from '@cardstack/postgres';
 import type { RealmServer } from '../../server';
-import {
-  closeServer,
-  createVirtualNetwork,
-  matrixURL,
-  runTestRealmServer,
-  setupDB,
-  setupPermissionedRealm,
-} from '../helpers';
+import { setupPermissionedRealmCached, testPort } from '../helpers';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
-export const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
+export const testRealmURL = new URL(`http://127.0.0.1:${testPort(4445)}/test/`);
 
 export type ServerEndpointsTestContext = {
   testRealm: Realm;
   request: SuperTest<Test>;
   dir: DirResult;
   dbAdapter: PgAdapter;
-  testRealmServer2: RealmServer;
-  testRealmHttpServer2: Server;
+  testRealmServer: RealmServer;
+  testRealmHttpServer: Server;
   publisher: QueuePublisher;
   runner: QueueRunner;
-  request2: SuperTest<Test>;
   testRealmDir: string;
   virtualNetwork: VirtualNetwork;
-  startRealmServer: () => Promise<void>;
 };
 
-export type ServerEndpointsTestOptions = {
-  beforeStartRealmServer?: (
-    context: ServerEndpointsTestContext,
-  ) => void | Promise<void>;
-};
-
-export function setupServerEndpointsTest(
-  hooks: NestedHooks,
-  options: ServerEndpointsTestOptions = {},
-) {
+export function setupServerEndpointsTest(hooks: NestedHooks) {
   let context = {} as ServerEndpointsTestContext;
-  let ownerUserId = '@mango:localhost';
 
   function onRealmSetup(args: {
+    testRealmServer: {
+      testRealmServer: RealmServer;
+      testRealmHttpServer: Server;
+    };
     testRealm: Realm;
+    testRealmPath: string;
     request: SuperTest<Test>;
     dir: DirResult;
     dbAdapter: PgAdapter;
+    runner: QueueRunner;
+    publisher: QueuePublisher;
+    virtualNetwork: VirtualNetwork;
   }) {
+    context.testRealmServer = args.testRealmServer.testRealmServer;
+    context.testRealmHttpServer = args.testRealmServer.testRealmHttpServer;
     context.testRealm = args.testRealm;
     context.request = args.request;
     context.dir = args.dir;
     context.dbAdapter = args.dbAdapter;
+    context.runner = args.runner;
+    context.publisher = args.publisher;
+    context.testRealmDir = args.testRealmPath;
+    context.virtualNetwork = args.virtualNetwork;
   }
 
-  hooks.beforeEach(async function () {
-    context.dir = dirSync();
-    copySync(join(__dirname, '..', 'cards'), context.dir.name);
-  });
-
-  setupPermissionedRealm(hooks, {
+  setupPermissionedRealmCached(hooks, {
+    realmURL: testRealmURL,
     permissions: {
       '*': ['read', 'write'],
       '@node-test_realm:localhost': ['read', 'realm-owner'],
     },
     onRealmSetup,
-  });
-
-  async function startRealmServer(
-    dbAdapter: PgAdapter,
-    publisher: QueuePublisher,
-    runner: QueueRunner,
-  ) {
-    context.virtualNetwork = createVirtualNetwork();
-    ({
-      testRealmServer: context.testRealmServer2,
-      testRealmHttpServer: context.testRealmHttpServer2,
-    } = await runTestRealmServer({
-      virtualNetwork: context.virtualNetwork,
-      testRealmDir: context.testRealmDir,
-      realmsRootPath: join(context.dir.name, 'realm_server_2'),
-      realmURL: testRealm2URL,
-      dbAdapter,
-      publisher,
-      runner,
-      matrixURL,
-      permissions: {
-        '*': ['read', 'write'],
-        [ownerUserId]: DEFAULT_PERMISSIONS,
-      },
-    }));
-    context.request2 = supertest(context.testRealmHttpServer2);
-  }
-
-  context.startRealmServer = async () => {
-    await startRealmServer(
-      context.dbAdapter,
-      context.publisher,
-      context.runner,
-    );
-  };
-
-  setupDB(hooks, {
-    beforeEach: async (_dbAdapter, _publisher, _runner) => {
-      context.dbAdapter = _dbAdapter;
-      context.publisher = _publisher;
-      context.runner = _runner;
-      context.testRealmDir = join(context.dir.name, 'realm_server_2', 'test');
-      ensureDirSync(context.testRealmDir);
-      copySync(join(__dirname, '..', 'cards'), context.testRealmDir);
-      if (options.beforeStartRealmServer) {
-        await options.beforeStartRealmServer(context);
-      }
-      await startRealmServer(_dbAdapter, _publisher, _runner);
-    },
-    afterEach: async () => {
-      await closeServer(context.testRealmHttpServer2);
-    },
   });
 
   return context;
@@ -136,14 +71,19 @@ export function setupServerEndpointsTest(
 export async function createRealmServerSession(
   matrixClient: MatrixClient,
   request: SuperTest<Test>,
+  options?: { registrationToken?: string },
 ) {
   let openIdToken = await matrixClient.getOpenIdToken();
   if (!openIdToken) {
     throw new Error('matrixClient did not return an OpenID token');
   }
+  let body: Record<string, unknown> = { ...openIdToken };
+  if (options?.registrationToken) {
+    body.registration_token = options.registrationToken;
+  }
   let response = await request
     .post('/_server-session')
-    .send(JSON.stringify(openIdToken))
+    .send(JSON.stringify(body))
     .set('Accept', 'application/json')
     .set('Content-Type', 'application/json');
 

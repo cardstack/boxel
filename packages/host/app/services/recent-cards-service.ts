@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
@@ -35,11 +36,15 @@ export default class RecentCardsService extends Service {
   @tracked private ascendingRecentCards = new TrackedArray<RecentCard>([]);
   private cachedAPI?: typeof CardAPI;
   private addToRecentFiles = new Set<string>();
+  private pendingCardIdSubscriptions = new Map<string, CardDef>();
 
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
     this.reset.register(this);
+    registerDestructor(this, () => {
+      this.clearPendingCardIdSubscriptions();
+    });
 
     const recentCardsString = window.localStorage.getItem(RecentCards);
     if (recentCardsString) {
@@ -66,7 +71,9 @@ export default class RecentCardsService extends Service {
   }
 
   resetState() {
+    this.clearPendingCardIdSubscriptions();
     this.ascendingRecentCards = new TrackedArray([]);
+    this.addToRecentFiles.clear();
   }
 
   private findRecentCardIndex(id: string) {
@@ -109,9 +116,16 @@ export default class RecentCardsService extends Service {
       }
     } else {
       this.cachedAPI = await this.cardService.getAPI();
+      if (this.pendingCardIdSubscriptions.has(instance[localId])) {
+        if (opts?.addToRecentFiles) {
+          this.addToRecentFiles.add(instance[localId]);
+        }
+        return;
+      }
       if (opts?.addToRecentFiles) {
         this.addToRecentFiles.add(instance[localId]);
       }
+      this.pendingCardIdSubscriptions.set(instance[localId], instance);
       this.cachedAPI.subscribeToChanges(instance, this.listenForCardId);
     }
   }
@@ -123,6 +137,7 @@ export default class RecentCardsService extends Service {
         this.recentFilesService.addRecentFileUrl(`${instance.id}.json`);
         this.addToRecentFiles.delete(instance[localId]);
       }
+      this.pendingCardIdSubscriptions.delete(instance[localId]);
       this.cachedAPI?.unsubscribeFromChanges(instance, this.listenForCardId);
     }
   };
@@ -140,6 +155,15 @@ export default class RecentCardsService extends Service {
       'recent-cards',
       JSON.stringify(this.ascendingRecentCards),
     );
+  }
+
+  private clearPendingCardIdSubscriptions() {
+    if (this.cachedAPI) {
+      for (let instance of this.pendingCardIdSubscriptions.values()) {
+        this.cachedAPI.unsubscribeFromChanges(instance, this.listenForCardId);
+      }
+    }
+    this.pendingCardIdSubscriptions.clear();
   }
 }
 

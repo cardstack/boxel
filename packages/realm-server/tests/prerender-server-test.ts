@@ -3,7 +3,10 @@ import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import { basename } from 'path';
 
-import { setupPermissionedRealm, testCreatePrerenderAuth } from './helpers';
+import {
+  setupPermissionedRealmCached,
+  testCreatePrerenderAuth,
+} from './helpers';
 import { buildPrerenderApp } from '../prerender/prerender-app';
 import type { Prerenderer } from '../prerender';
 import { baseCardRef } from '@cardstack/runtime-common';
@@ -12,6 +15,7 @@ import {
   PRERENDER_SERVER_STATUS_DRAINING,
   PRERENDER_SERVER_STATUS_HEADER,
 } from '../prerender/prerender-constants';
+import { toAffinityKey } from '../prerender/affinity';
 import { Deferred } from '@cardstack/runtime-common';
 
 module(basename(__filename), function () {
@@ -22,7 +26,7 @@ module(basename(__filename), function () {
     let draining = false;
     let realmURL = new URL('http://127.0.0.1:4444/test/');
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       mode: 'before',
       permissions: { [testUserId]: ['read', 'write', 'realm-owner'] },
       realmURL,
@@ -68,6 +72,19 @@ module(basename(__filename), function () {
             }
             protected async run(): Promise<CommandResult> {
               return new CommandResult({ message: 'hello from command' });
+            }
+          }
+
+          export class SayGoodbyeCommand extends Command<
+            undefined,
+            typeof CommandResult
+          > {
+            static displayName = 'SayGoodbyeCommand';
+            async getInputType() {
+              return undefined;
+            }
+            protected async run(): Promise<CommandResult> {
+              return new CommandResult({ message: 'goodbye from command' });
             }
           }
 
@@ -128,6 +145,8 @@ module(basename(__filename), function () {
               url,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -179,9 +198,14 @@ module(basename(__filename), function () {
         'pool.timedOut defaults false',
       );
       assert.strictEqual(
-        res.body.meta?.pool?.realm,
+        res.body.meta?.pool?.affinityType,
+        'realm',
+        'pool affinity type ok',
+      );
+      assert.strictEqual(
+        res.body.meta?.pool?.affinityValue,
         realmURL.href,
-        'pool realm ok',
+        'pool affinity value ok',
       );
     });
 
@@ -206,6 +230,8 @@ module(basename(__filename), function () {
               url,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -256,6 +282,8 @@ module(basename(__filename), function () {
                 realm: realmURL.href,
                 auth,
                 command,
+                affinityType: 'user',
+                affinityValue: testUserId,
               },
             },
           });
@@ -309,6 +337,8 @@ module(basename(__filename), function () {
                 realm: realmURL.href,
                 auth,
                 command,
+                affinityType: 'user',
+                affinityValue: testUserId,
               },
             },
           });
@@ -337,6 +367,102 @@ module(basename(__filename), function () {
         assert.ok(res.body.meta?.timing?.totalMs >= 0, 'has timing');
         assert.ok(res.body.meta?.pool?.pageId, 'has pool.pageId');
       });
+
+      test('concurrent commands each return their own correct result', async function (assert) {
+        let permissions = {
+          [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+            | 'read'
+            | 'write'
+            | 'realm-owner'
+          )[],
+        };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let helloCommand = `${realmURL.href}command-runner-test/SayHelloCommand`;
+        let goodbyeCommand = `${realmURL.href}command-runner-test/SayGoodbyeCommand`;
+
+        let [resultA, resultB, resultC] = await Promise.all([
+          prerenderer.runCommand({
+            userId: '@user-a:localhost',
+            auth,
+            command: helloCommand,
+            opts: { simulateTimeoutMs: 500 },
+          }),
+          prerenderer.runCommand({
+            userId: '@user-b:localhost',
+            auth,
+            command: goodbyeCommand,
+            opts: { simulateTimeoutMs: 500 },
+          }),
+          prerenderer.runCommand({
+            userId: '@user-c:localhost',
+            auth,
+            command: helloCommand,
+            opts: { simulateTimeoutMs: 500 },
+          }),
+        ]);
+
+        assert.strictEqual(
+          resultA.response.status,
+          'ready',
+          'command A (hello) returns ready despite concurrent nonce increments',
+        );
+        assert.strictEqual(
+          resultB.response.status,
+          'ready',
+          'command B (goodbye) returns ready despite concurrent nonce increments',
+        );
+        assert.strictEqual(
+          resultC.response.status,
+          'ready',
+          'command C (hello) returns ready despite concurrent nonce increments',
+        );
+
+        assert.ok(
+          resultA.response.cardResultString?.includes('hello from command'),
+          'command A payload contains "hello from command"',
+        );
+        assert.ok(
+          resultB.response.cardResultString?.includes('goodbye from command'),
+          'command B payload contains "goodbye from command"',
+        );
+        assert.ok(
+          resultC.response.cardResultString?.includes('hello from command'),
+          'command C payload contains "hello from command"',
+        );
+
+        assert.notOk(resultA.response.error, 'command A has no error');
+        assert.notOk(resultB.response.error, 'command B has no error');
+        assert.notOk(resultC.response.error, 'command C has no error');
+      });
+
+      test('it returns unusable status when command times out', async function (assert) {
+        let permissions = {
+          [realmURL.href]: ['read', 'write', 'realm-owner'] as (
+            | 'read'
+            | 'write'
+            | 'realm-owner'
+          )[],
+        };
+        let auth = testCreatePrerenderAuth(testUserId, permissions);
+        let command = `${realmURL.href}command-runner-test/SayHelloCommand`;
+        let result = await prerenderer.runCommand({
+          userId: testUserId,
+          auth,
+          command,
+          opts: { timeoutMs: 1, simulateTimeoutMs: 25 },
+        });
+
+        assert.strictEqual(
+          result.response.status,
+          'unusable',
+          'timed-out command returns unusable status',
+        );
+        assert.ok(
+          result.response.error?.includes('Render timed-out'),
+          `error message mentions timeout (got: ${result.response.error})`,
+        );
+        assert.true(result.pool.timedOut, 'pool.timedOut is set');
+      });
     });
 
     test('reports draining status when shutting down', async function (assert) {
@@ -355,6 +481,8 @@ module(basename(__filename), function () {
               url: `${realmURL.href}drain`,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -388,8 +516,8 @@ module(basename(__filename), function () {
       draining = false;
     });
 
-    test('tracks warmed realms for heartbeat', async function (assert) {
-      let beforeWarm = prerenderer.getWarmRealms();
+    test('tracks warmed affinities for heartbeat', async function (assert) {
+      let beforeWarm = prerenderer.getWarmAffinities();
       let url = `${realmURL.href}2`;
       const permissions: Record<string, ('read' | 'write' | 'realm-owner')[]> =
         { [realmURL.href]: ['read', 'write', 'realm-owner'] };
@@ -405,17 +533,24 @@ module(basename(__filename), function () {
               url,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
 
       assert.true(
-        prerenderer.getWarmRealms().includes(realmURL.href),
-        'warm realms include prerendered realm',
+        prerenderer.getWarmAffinities().includes(
+          toAffinityKey({
+            affinityType: 'realm',
+            affinityValue: realmURL.href,
+          }),
+        ),
+        'warm affinities include prerendered realm affinity',
       );
       assert.true(
-        prerenderer.getWarmRealms().length >= beforeWarm.length,
-        'warm realm list does not shrink',
+        prerenderer.getWarmAffinities().length >= beforeWarm.length,
+        'warm affinity list does not shrink',
       );
     });
 
@@ -435,7 +570,8 @@ module(basename(__filename), function () {
         timings: { launchMs: 0, renderMs: 0 },
         pool: {
           pageId: 'p',
-          realm: realmURL.href,
+          affinityType: 'realm',
+          affinityValue: realmURL.href,
           reused: false,
           evicted: false,
           timedOut: false,
@@ -462,6 +598,8 @@ module(basename(__filename), function () {
               url: `${realmURL.href}drain-midflight`,
               auth,
               realm: realmURL.href,
+              affinityType: 'realm',
+              affinityValue: realmURL.href,
             },
           },
         });
@@ -520,6 +658,8 @@ module(basename(__filename), function () {
                 url: `${realmURL.href}drain-unhandled`,
                 auth,
                 realm: realmURL.href,
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
               },
             },
           });

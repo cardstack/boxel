@@ -22,12 +22,14 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "ensure-boxel-ui": "../boxel-ui/addon/bin/conditional-build.sh",
-    "start": "pnpm ensure-boxel-ui && NODE_OPTIONS='--max-old-space-size=8192' ember serve",
-    "serve:dist": "serve --config ../tests/serve.json --single --cors --no-request-logging --no-etag --listen 4200 dist",
+    "start": "pnpm ensure-boxel-ui && node scripts/ember-serve.js",
+    "serve:dist": "node scripts/serve-dist.js",
+    "serve:dist:legacy": "serve --config ../tests/serve.json --single --cors --no-request-logging --no-etag --listen 4200 dist",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
+    "test:live": "./scripts/live-test-wait-for-servers.sh",
     "ember-test-pre-built": "sleep 15 && ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name",
     "wait": "sleep 10000000"
   },
@@ -47,7 +49,7 @@
     "@cardstack/view-transitions": "catalog:",
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "^3.1.1",
-    "@ember/test-helpers": "^3.3.1",
+    "@ember/test-helpers": "catalog:",
     "@ember/test-waiters": "catalog:",
     "@embroider/compat": "^3.5.5",
     "@embroider/core": "^3.4.15",
@@ -197,9 +199,6 @@
   },
   "engines": {
     "node": ">= 20"
-  },
-  "volta": {
-    "extends": "../../package.json"
   },
   "ember": {
     "edition": "octane"

@@ -13,6 +13,7 @@ import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
+  cardIdToURL,
   RealmPaths,
   type LocalPath,
   isResolvedCodeRef,
@@ -67,6 +68,18 @@ import type StoreService from './store';
 import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
+
+export interface CreateListingModalPayload {
+  codeRef: CodeRef;
+  targetRealm: string;
+  openCardIds?: string[];
+}
+
+export interface CreatePRModalPayload {
+  realm: string;
+  listingId: string;
+  listingName?: string;
+}
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -142,6 +155,8 @@ export default class OperatorModeStateService extends Service {
   private moduleInspectorHistory: Record<string, ModuleInspectorView>;
 
   @tracked profileSettingsOpen = false;
+  @tracked createListingModalPayload?: CreateListingModalPayload;
+  @tracked createPRModalPayload?: CreatePRModalPayload;
 
   @service declare private cardService: CardService;
   @service declare private codeSemanticsService: CodeSemanticsService;
@@ -210,6 +225,22 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   };
 
+  showCreateListingModal = (payload: CreateListingModalPayload) => {
+    this.createListingModalPayload = payload;
+  };
+
+  dismissCreateListingModal = () => {
+    this.createListingModalPayload = undefined;
+  };
+
+  showCreatePRModal = (payload: CreatePRModalPayload) => {
+    this.createPRModalPayload = payload;
+  };
+
+  dismissCreatePRModal = () => {
+    this.createPRModalPayload = undefined;
+  };
+
   setNewFileDropdownOpen = () => {
     this._state.newFileDropdownOpen = true;
     this.schedulePersist();
@@ -220,6 +251,8 @@ export default class OperatorModeStateService extends Service {
   };
 
   resetState() {
+    this.getOpenCards.cancelAll();
+    this.setCardTitleTask.cancelAll();
     this._state = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: Submodes.Interact,
@@ -235,6 +268,12 @@ export default class OperatorModeStateService extends Service {
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
+    this.cardTitles = new TrackedMap();
+    this.moduleInspectorHistory = {};
+    this.profileSettingsOpen = false;
+    this.createListingModalPayload = undefined;
+    this.createPRModalPayload = undefined;
+    window.localStorage.removeItem(ModuleInspectorSelections);
     this.schedulePersist();
   }
 
@@ -305,7 +344,7 @@ export default class OperatorModeStateService extends Service {
       this.trimItemsFromStack(item);
     }
     let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(new URL(`${cardId}.json`));
+    let cardPath = realmPaths.local(cardIdToURL(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
   }
@@ -487,7 +526,7 @@ export default class OperatorModeStateService extends Service {
 
   private getRealmURLFromItemId(itemId: string): string {
     try {
-      const url = new URL(itemId);
+      const url = cardIdToURL(itemId);
       return this.realm.realmOfURL(url)?.href ?? this.realmURL;
     } catch (error) {
       return this.realmURL;

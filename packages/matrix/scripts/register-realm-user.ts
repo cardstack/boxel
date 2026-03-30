@@ -1,6 +1,7 @@
 import * as childProcess from 'child_process';
 
 import { loginUser } from '../docker/synapse';
+import { getSynapseContainerName } from '../helpers/environment-config';
 
 import { realmPassword } from '../helpers/realm-credentials';
 
@@ -21,7 +22,9 @@ if (!realmUser) {
 (async () => {
   let password = await realmPassword(realmUser, realmSecretSeed);
   return new Promise<string>((resolve, reject) => {
-    const command = `docker exec boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${realmUser} -p ${password} --no-admin`;
+    console.log(`Registering realm user ${realmUser}`);
+
+    const command = `docker exec ${getSynapseContainerName()} register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u ${realmUser} -p ${password} --no-admin`;
     childProcess.exec(command, async (err, stdout) => {
       if (err) {
         if (stdout.includes('User ID already taken')) {

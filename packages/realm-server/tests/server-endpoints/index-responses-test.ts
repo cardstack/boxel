@@ -1,21 +1,93 @@
 import { module, test } from 'qunit';
 import { join, basename } from 'path';
+import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
-import { systemInitiatedPriority, type Realm } from '@cardstack/runtime-common';
-import { setupServerEndpointsTest, testRealm2URL } from './helpers';
-import { setupPermissionedRealmAtURL, waitUntil } from '../helpers';
-import { ensureDirSync, writeFileSync, writeJSONSync } from 'fs-extra';
+import type { Server } from 'http';
+import { dirSync, type DirResult } from 'tmp';
+import {
+  DEFAULT_PERMISSIONS,
+  systemInitiatedPriority,
+  type DBAdapter,
+  type Realm,
+} from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres';
+import { testRealmURL } from './helpers';
+import {
+  closeServer,
+  createVirtualNetwork,
+  matrixURL,
+  realmSecretSeed,
+  runTestRealmServer,
+  setupDB,
+  setupPermissionedRealmCached,
+  waitUntil,
+} from '../helpers';
+import { createJWT as createRealmServerJWT } from '../../utils/jwt';
+import { ensureDirSync } from 'fs-extra';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
-      let context = setupServerEndpointsTest(hooks, {
-        beforeStartRealmServer: async (context) => {
-          let subdirectoryPath = join(context.testRealmDir, 'subdirectory');
-          ensureDirSync(subdirectoryPath);
-          writeJSONSync(join(subdirectoryPath, 'index.json'), {
+      let request: SuperTest<Test>;
+      let dbAdapter: DBAdapter;
+
+      function onRealmSetup(args: {
+        request: SuperTest<Test>;
+        testRealm: Realm;
+        dbAdapter: DBAdapter;
+      }) {
+        request = args.request;
+        dbAdapter = args.dbAdapter;
+      }
+
+      setupPermissionedRealmCached(hooks, {
+        realmURL: testRealmURL,
+        fileSystem: {
+          'index.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: './home.gts',
+                  name: 'Home',
+                },
+              },
+            },
+          },
+          'home.gts': `import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+                      export class Home extends CardDef {
+                        static isolated = class Isolated extends Component<typeof this> {
+                          <template>
+                            <p data-test-home-card>Hello, world</p>
+                          </template>
+                        };
+                      }`,
+          'person.gts': `import {
+                            contains,
+                            field,
+                            Component,
+                            CardDef,
+                          } from 'https://cardstack.com/base/card-api';
+                          import StringField from 'https://cardstack.com/base/string';
+
+                          export class Person extends CardDef {
+                            static displayName = 'Person';
+                            @field firstName = contains(StringField);
+                            @field cardTitle = contains(StringField, {
+                              computeVia: function (this: Person) {
+                                return this.firstName;
+                              },
+                            });
+                            static isolated = class Isolated extends Component<typeof this> {
+                              <template>
+                                <h1 data-test-card><@fields.firstName /></h1>
+                              </template>
+                            };
+                          }`,
+          'subdirectory/index.json': {
             data: {
               type: 'card',
               attributes: {
@@ -28,11 +100,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
-
-          writeFileSync(
-            join(context.testRealmDir, 'isolated-card.gts'),
-            `
+          },
+          'isolated-card.gts': `
               import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
               export class IsolatedCard extends CardDef {
@@ -43,9 +112,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 };
               }
               `,
-          );
-
-          writeJSONSync(join(context.testRealmDir, 'isolated-test.json'), {
+          'isolated-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -56,11 +123,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'dollar-sign-card.gts'),
-            `
+          'dollar-sign-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class DollarSignCard extends CardDef {
@@ -71,9 +136,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'dollar-sign-test.json'), {
+          'dollar-sign-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -84,11 +148,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'head-card.gts'),
-            `
+          'head-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class HeadCard extends CardDef {
@@ -105,9 +167,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'private-index-test.json'), {
+          'private-index-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -118,11 +179,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'unsafe-head-card.gts'),
-            `
+          'unsafe-head-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class UnsafeHeadCard extends CardDef {
@@ -143,9 +202,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'unsafe-head-test.json'), {
+          'unsafe-head-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -156,11 +214,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeFileSync(
-            join(context.testRealmDir, 'scoped-css-card.gts'),
-            `
+          'scoped-css-card.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class ScopedCssCard extends CardDef {
@@ -176,9 +232,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
-
-          writeJSONSync(join(context.testRealmDir, 'scoped-css-test.json'), {
+          'scoped-css-test.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -189,16 +243,15 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
           // Cards for testing scoped CSS from linked card instances.
           // The parent declares linksTo with a base type, but the actual linked
           // instance is a subclass with its own scoped CSS. This means the child's
           // CSS is NOT reachable through the parent's static module imports — it
           // can only be found by iterating over serialized.included resources.
-          writeFileSync(
-            join(context.testRealmDir, 'linked-css-base.gts'),
-            `
+
+          'linked-css-base.gts': `
             import { Component, CardDef } from 'https://cardstack.com/base/card-api';
 
             export class LinkedCssBase extends CardDef {
@@ -209,11 +262,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeFileSync(
-            join(context.testRealmDir, 'linked-css-child.gts'),
-            `
+          'linked-css-child.gts': `
             import { Component } from 'https://cardstack.com/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
@@ -240,11 +290,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeFileSync(
-            join(context.testRealmDir, 'linked-css-parent.gts'),
-            `
+          'linked-css-parent.gts': `
             import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
@@ -258,9 +305,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               };
             }
             `,
-          );
 
-          writeJSONSync(join(context.testRealmDir, 'linked-css-child-1.json'), {
+          'linked-css-child-1.json': {
             data: {
               type: 'card',
               attributes: {},
@@ -271,33 +317,30 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeJSONSync(
-            join(context.testRealmDir, 'linked-css-parent-1.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {},
-                relationships: {
-                  child: {
-                    links: {
-                      self: './linked-css-child-1',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './linked-css-parent.gts',
-                    name: 'LinkedCssParent',
+          'linked-css-parent-1.json': {
+            data: {
+              type: 'card',
+              attributes: {},
+              relationships: {
+                child: {
+                  links: {
+                    self: './linked-css-child-1',
                   },
                 },
               },
+              meta: {
+                adoptsFrom: {
+                  module: './linked-css-parent.gts',
+                  name: 'LinkedCssParent',
+                },
+              },
             },
-          );
+          },
 
           // Cards for testing default head template with cardInfo.theme
-          writeJSONSync(join(context.testRealmDir, 'a-test-theme.json'), {
+          'a-test-theme.json': {
             data: {
               type: 'card',
               attributes: {
@@ -312,41 +355,34 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                 },
               },
             },
-          });
+          },
 
-          writeJSONSync(
-            join(context.testRealmDir, 'a-brand-guide-theme.json'),
-            {
-              data: {
-                type: 'card',
-                attributes: {
-                  markUsage: {
-                    socialMediaProfileIcon:
-                      'https://example.com/social-icon.png',
-                  },
+          'a-brand-guide-theme.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                markUsage: {
+                  socialMediaProfileIcon: 'https://example.com/social-icon.png',
                 },
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/brand-guide',
-                    name: 'default',
-                  },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/brand-guide',
+                  name: 'default',
                 },
               },
             },
-          );
-
-          // NOTE: card-with-theme.json is NOT written here because from-scratch
-          // indexing uses a batched write strategy (boxel_index_working → boxel_index).
-          // Cards within the same batch can't resolve linksTo references to each other
-          // because the data isn't in the production table yet. Instead, card-with-theme
-          // is created via API in the test itself, triggering incremental indexing
-          // after the theme card is already committed to boxel_index.
+          },
         },
+        permissions: {
+          '*': ['read', 'write'],
+        },
+        onRealmSetup,
       });
 
       test('startup indexing uses system initiated queue priority', async function (assert) {
-        let [job] = (await context.dbAdapter.execute(
-          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealm2URL.href}' ORDER BY created_at DESC LIMIT 1`,
+        let [job] = (await dbAdapter.execute(
+          `SELECT priority FROM jobs WHERE job_type = 'from-scratch-index' AND args->>'realmURL' = '${testRealmURL.href}' ORDER BY created_at DESC LIMIT 1`,
         )) as { priority: number }[];
 
         assert.ok(job, 'found startup from-scratch index job for realm');
@@ -358,9 +394,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML for realm index request', async function (assert) {
-        let response = await context.request2
-          .get('/test')
-          .set('Accept', 'text/html');
+        let response = await request.get('/test').set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
         assert.ok(
@@ -370,7 +404,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML in index responses for card URLs', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -382,7 +416,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('HTML response does not include boxel-ready class on body', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -394,7 +428,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML for /subdirectory/index.json at /subdirectory/', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/subdirectory/')
           .set('Accept', 'text/html');
 
@@ -407,11 +441,11 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('does not inject head or isolated HTML when realm is not public', async function (assert) {
-        await context.dbAdapter.execute(
-          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
         );
 
-        let response = await context.request2
+        let response = await request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -427,7 +461,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS in index responses for card URLs', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -443,7 +477,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves scoped CSS from linked cards in index responses', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/linked-css-parent-1')
           .set('Accept', 'text/html');
 
@@ -459,7 +493,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('sanitizes disallowed tags from head HTML in index responses', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/unsafe-head-test')
           .set('Accept', 'text/html');
 
@@ -494,7 +528,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('serves isolated HTML containing dollar signs without corruption', async function (assert) {
-        let response = await context.request2
+        let response = await request
           .get('/test/dollar-sign-test')
           .set('Accept', 'text/html');
 
@@ -517,7 +551,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let deleteSlugs = ['private-index-test', 'scoped-css-test'];
 
         for (let slug of deleteSlugs) {
-          let deleteResponse = await context.request2
+          let deleteResponse = await request
             .delete(`/test/${slug}`)
             .set('Accept', 'application/vnd.card+json');
 
@@ -530,14 +564,14 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         await waitUntil(
           async () => {
-            let realmURLNoProtocol = testRealm2URL.href.replace(
+            let realmURLNoProtocol = testRealmURL.href.replace(
               /^https?:\/\//,
               '',
             );
 
             for (let slug of deleteSlugs) {
               for (let table of ['boxel_index', 'boxel_index_working']) {
-                let rows = (await context.dbAdapter.execute(
+                let rows = (await dbAdapter.execute(
                   `SELECT COUNT(*) AS count
                    FROM ${table}
                    WHERE type = 'instance'
@@ -562,7 +596,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let headResponse = await context.request2
+        let headResponse = await request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
@@ -576,7 +610,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'deleted isolated HTML is not injected into the HTML response',
         );
 
-        let scopedCSSResponse = await context.request2
+        let scopedCSSResponse = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -599,26 +633,36 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
-      test('HTML response always includes default static favicon and apple-touch-icon', async function (assert) {
-        // Even a card with no theme should get the static icons from index.html
-        // (which live outside the head injection markers)
-        let response = await context.request2
+      test('HTML response includes exactly one favicon and one apple-touch-icon', async function (assert) {
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
-        assert.ok(
-          response.text.includes('rel="icon"'),
-          'static favicon link is present in the HTML response',
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link is present in the HTML response',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link is present in the HTML response',
         );
         assert.ok(
-          response.text.includes('rel="apple-touch-icon"'),
-          'static apple-touch-icon link is present in the HTML response',
+          /<title[\s>]/.test(response.text),
+          'title element is present in the HTML response',
         );
       });
 
-      test('head HTML does not include icon links when card has no theme', async function (assert) {
-        let response = await context.request2
+      test('default icon links are injected when card has no theme', async function (assert) {
+        let response = await request
           .get('/test/isolated-test')
           .set('Accept', 'text/html');
 
@@ -629,36 +673,158 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
         let headContent = headMatch?.[1] ?? '';
 
-        // The default head template should NOT emit icon links when there's no theme
-        // (the static icons from index.html serve as defaults)
-        assert.notOk(
-          headContent.includes('rel="icon"'),
-          'injected head HTML does not contain favicon link (static ones from index.html are the default)',
+        assert.ok(
+          /<title[\s>]/.test(headContent),
+          'title element is preserved in head when no theme is present',
         );
-        assert.notOk(
+        assert.ok(
+          headContent.includes('rel="icon"'),
+          'default favicon link is injected into head when no theme is present',
+        );
+        assert.ok(
           headContent.includes('rel="apple-touch-icon"'),
-          'injected head HTML does not contain apple-touch-icon link',
+          'default apple-touch-icon link is injected into head when no theme is present',
+        );
+        assert.ok(
+          headContent.includes('boxel-favicon.png'),
+          'default favicon points to boxel-favicon.png',
+        );
+        assert.ok(
+          headContent.includes('boxel-webclip.png'),
+          'default apple-touch-icon points to boxel-webclip.png',
         );
       });
 
-      test('non-public realm preserves static favicon and apple-touch-icon', async function (assert) {
-        await context.dbAdapter.execute(
-          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealm2URL.href}' AND username = '*'`,
+      test('non-public realm includes exactly one favicon and one apple-touch-icon', async function (assert) {
+        await dbAdapter.execute(
+          `DELETE FROM realm_user_permissions WHERE realm_url = '${testRealmURL.href}' AND username = '*'`,
         );
 
-        let response = await context.request2
+        let response = await request
           .get('/test/private-index-test')
           .set('Accept', 'text/html');
 
         assert.strictEqual(response.status, 200, 'serves HTML response');
-        // Even without head injection, static icons from index.html remain
-        assert.ok(
-          response.text.includes('rel="icon"'),
-          'static favicon link is present even without head injection',
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link is present even without head injection',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link is present even without head injection',
         );
         assert.ok(
-          response.text.includes('rel="apple-touch-icon"'),
-          'static apple-touch-icon link is present even without head injection',
+          response.text.includes('<title>Boxel</title>'),
+          'title element is present even for non-public realm',
+        );
+      });
+
+      test('missing apple-touch-icon is filled with default when only favicon is present in head HTML', async function (assert) {
+        // Directly set head_html to contain only a favicon link (no apple-touch-icon)
+        let cardURL = `${testRealmURL.href}isolated-test.json`;
+        await dbAdapter.execute(
+          `UPDATE boxel_index
+           SET head_html = '<title>Test</title><link rel="icon" href="https://example.com/custom-icon.png" type="image/png">'
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/custom-icon.png"',
+          ),
+          'custom favicon from head HTML is preserved',
+        );
+        assert.ok(
+          headContent.includes('rel="apple-touch-icon"'),
+          'default apple-touch-icon is injected when missing from head HTML',
+        );
+        assert.ok(
+          headContent.includes('boxel-webclip.png'),
+          'default apple-touch-icon points to boxel-webclip.png',
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link (no default duplicate)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link',
+        );
+      });
+
+      test('missing favicon is filled with default when only apple-touch-icon is present in head HTML', async function (assert) {
+        let cardURL = `${testRealmURL.href}isolated-test.json`;
+        await dbAdapter.execute(
+          `UPDATE boxel_index
+           SET head_html = '<title>Test</title><link rel="apple-touch-icon" href="https://example.com/custom-touch.png">'
+           WHERE url = '${cardURL}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE`,
+        );
+
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/custom-touch.png"',
+          ),
+          'custom apple-touch-icon from head HTML is preserved',
+        );
+        assert.ok(
+          headContent.includes('rel="icon"'),
+          'default favicon is injected when missing from head HTML',
+        );
+        assert.ok(
+          headContent.includes('boxel-favicon.png'),
+          'default favicon points to boxel-favicon.png',
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(faviconCount, 1, 'exactly one favicon link');
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link (no default duplicate)',
         );
       });
 
@@ -694,7 +860,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request2
+        let writeResponse = await request
           .post('/test/card-with-theme.json')
           .set('Accept', 'application/vnd.card+source')
           .send(cardWithThemeJSON);
@@ -708,7 +874,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         // Wait for the card to be indexed (head_html populated, even if empty string).
         await waitUntil(
           async () => {
-            let rows = (await context.dbAdapter.execute(
+            let rows = (await dbAdapter.execute(
               `SELECT url, head_html FROM boxel_index
                WHERE url LIKE '%card-with-theme%'
                  AND type = 'instance'
@@ -726,7 +892,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let response = await context.request2
+        let response = await request
           .get('/test/card-with-theme')
           .set('Accept', 'text/html');
 
@@ -748,6 +914,21 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             '<link rel="apple-touch-icon" href="https://example.com/brand-icon.png"',
           ),
           `head HTML includes apple-touch-icon link from theme`,
+        );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link in response (no duplicate from defaults)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link in response (no duplicate from defaults)',
         );
       });
 
@@ -780,7 +961,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request2
+        let writeResponse = await request
           .post('/test/card-with-brand-guide-theme.json')
           .set('Accept', 'application/vnd.card+source')
           .send(cardJSON);
@@ -793,7 +974,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
         await waitUntil(
           async () => {
-            let rows = (await context.dbAdapter.execute(
+            let rows = (await dbAdapter.execute(
               `SELECT url, head_html FROM boxel_index
                WHERE url LIKE '%card-with-brand-guide-theme%'
                  AND type = 'instance'
@@ -811,7 +992,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         );
 
-        let response = await context.request2
+        let response = await request
           .get('/test/card-with-brand-guide-theme')
           .set('Accept', 'text/html');
 
@@ -834,16 +1015,31 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           ),
           `head HTML includes apple-touch-icon from BrandGuide markUsage.socialMediaProfileIcon`,
         );
+
+        let faviconCount = (response.text.match(/rel="icon"/g) || []).length;
+        let appleTouchIconCount = (
+          response.text.match(/rel="apple-touch-icon"/g) || []
+        ).length;
+        assert.strictEqual(
+          faviconCount,
+          1,
+          'exactly one favicon link in response (no duplicate from defaults)',
+        );
+        assert.strictEqual(
+          appleTouchIconCount,
+          1,
+          'exactly one apple-touch-icon link in response (no duplicate from defaults)',
+        );
       });
 
       test('returns 404 for request that has malformed URI', async function (assert) {
-        let response = await context.request2.get('/%c0').set('Accept', '*/*');
+        let response = await request.get('/%c0').set('Accept', '*/*');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
 
       test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
         // First verify the card is indexed successfully and scoped CSS is served
-        let initialResponse = await context.request2
+        let initialResponse = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -872,7 +1068,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-        let writeResponse = await context.request2
+        let writeResponse = await request
           .post('/test/scoped-css-test.json')
           .set('Accept', 'application/vnd.card+source')
           .send(brokenInstanceJSON);
@@ -886,9 +1082,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         // Wait for the index to reflect the error state
         await waitUntil(
           async () => {
-            let rows = (await context.dbAdapter.execute(
+            let rows = (await dbAdapter.execute(
               `SELECT has_error FROM boxel_index
-               WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+               WHERE url = '${testRealmURL.href}scoped-css-test.json'
                  AND type = 'instance'`,
             )) as { has_error: boolean }[];
 
@@ -903,9 +1099,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         // Verify the database row has an error
-        let errorRows = (await context.dbAdapter.execute(
+        let errorRows = (await dbAdapter.execute(
           `SELECT has_error, last_known_good_deps FROM boxel_index
-           WHERE url = '${testRealm2URL.href}scoped-css-test.json'
+           WHERE url = '${testRealmURL.href}scoped-css-test.json'
              AND type = 'instance'`,
         )) as { has_error: boolean; last_known_good_deps: string[] | null }[];
 
@@ -926,7 +1122,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
 
         // Now request the HTML again - it should still include scoped CSS from last_known_good_deps
-        let errorStateResponse = await context.request2
+        let errorStateResponse = await request
           .get('/test/scoped-css-test')
           .set('Accept', 'text/html');
 
@@ -963,7 +1159,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       testRealm = args.testRealm;
     }
 
-    setupPermissionedRealmAtURL(hooks, realmURL, {
+    setupPermissionedRealmCached(hooks, {
+      realmURL,
       permissions: {
         '*': ['read'],
       },
@@ -1005,4 +1202,243 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
   });
+
+  // This module exercises publishing a realm where a card's cardInfo.theme
+  // linksTo a BrandGuide that lives in the same realm. The themed-card's
+  // attributes must include a cardInfo key (even if empty) so that the
+  // cardInfo.theme relationship has a container field to attach to;
+  // without it the theme resolves to null and the head template
+  // (packages/base/default-templates/head.gts) renders without icon links.
+  module(
+    'Published realm: theme icon links after _publish-realm',
+    function (hooks) {
+      let testRealmHttpServer: Server;
+      let request: SuperTest<Test>;
+      let dbAdapter: PgAdapter;
+      let dir: DirResult;
+      let sourceRealmUrlString: string;
+      let publishedRealmURLString: string;
+      let publishedRealmHost: string;
+      let publishedRealmPath: string;
+      let ownerUserId = '@mango:localhost';
+
+      hooks.beforeEach(function () {
+        dir = dirSync();
+      });
+      setupDB(hooks, {
+        beforeEach: async (_dbAdapter, _publisher, _runner) => {
+          dbAdapter = _dbAdapter;
+          let virtualNetwork = createVirtualNetwork();
+          let testRealmDir = join(dir.name, 'realm_server_theme', 'test');
+          ensureDirSync(testRealmDir);
+          ({ testRealmHttpServer } = await runTestRealmServer({
+            virtualNetwork,
+            testRealmDir,
+            fileSystem: {},
+            realmsRootPath: join(dir.name, 'realm_server_theme'),
+            realmURL: new URL('http://127.0.0.1:4444/test/'),
+            dbAdapter: _dbAdapter,
+            publisher: _publisher,
+            runner: _runner,
+            matrixURL,
+            permissions: {
+              '*': ['read', 'write'],
+              [ownerUserId]: DEFAULT_PERMISSIONS,
+            },
+            domainsForPublishedRealms: {
+              boxelSpace: 'localhost',
+              boxelSite: 'localhost:4444',
+            },
+          }));
+          request = supertest(testRealmHttpServer);
+
+          // Create a publishable source realm
+          let endpoint = 'theme-source';
+          let createResponse = await request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: { name: 'Theme Source Realm', endpoint },
+                },
+              }),
+            );
+
+          if (createResponse.status !== 201) {
+            throw new Error(
+              `/_create-realm failed with status ${createResponse.status}: ` +
+                (createResponse.text ||
+                  (createResponse.body
+                    ? JSON.stringify(createResponse.body)
+                    : '')),
+            );
+          }
+
+          sourceRealmUrlString = createResponse.body.data.id;
+          let sourceRealmPath = new URL(sourceRealmUrlString).pathname;
+
+          // Make the source realm publicly accessible
+          await _dbAdapter.execute(`
+            INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
+            VALUES ('${sourceRealmUrlString}', '*', true, true, true)
+          `);
+
+          // Write a BrandGuide theme card with a custom icon
+          let themeResponse = await request
+            .post(`${sourceRealmPath}brand-guide-theme.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  id: `${sourceRealmUrlString}brand-guide-theme`,
+                  attributes: {
+                    markUsage: {
+                      socialMediaProfileIcon:
+                        'https://example.com/published-theme-icon.png',
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/brand-guide',
+                      name: 'default',
+                    },
+                  },
+                },
+              }),
+            );
+          if (themeResponse.status !== 204) {
+            throw new Error(
+              `Failed to write brand-guide-theme: ${themeResponse.status} ${themeResponse.text}`,
+            );
+          }
+
+          // Write a card that links to the BrandGuide via cardInfo.theme
+          let cardResponse = await request
+            .post(`${sourceRealmPath}themed-card.json`)
+            .set('Accept', 'application/vnd.card+source')
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'card',
+                  id: `${sourceRealmUrlString}themed-card`,
+                  attributes: { cardInfo: {} },
+                  relationships: {
+                    'cardInfo.theme': {
+                      links: {
+                        self: `${sourceRealmUrlString}brand-guide-theme`,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/card-api',
+                      name: 'CardDef',
+                    },
+                  },
+                },
+              }),
+            );
+          if (cardResponse.status !== 204) {
+            throw new Error(
+              `Failed to write themed-card: ${cardResponse.status} ${cardResponse.text}`,
+            );
+          }
+
+          // Publish the source realm — this triggers a full from-scratch reindex
+          publishedRealmURLString =
+            'http://themetest.localhost:4444/theme-source/';
+          publishedRealmHost = new URL(publishedRealmURLString).host;
+          publishedRealmPath = new URL(publishedRealmURLString).pathname;
+
+          let publishResponse = await request
+            .post('/_publish-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                sourceRealmURL: sourceRealmUrlString,
+                publishedRealmURL: publishedRealmURLString,
+              }),
+            );
+          if (publishResponse.status !== 201) {
+            throw new Error(
+              `Failed to publish realm: ${publishResponse.status} ${publishResponse.text}`,
+            );
+          }
+        },
+        afterEach: async () => {
+          await closeServer(testRealmHttpServer);
+        },
+      });
+
+      // CS-10228: The themed-card's attributes must include a cardInfo key so
+      // that the cardInfo.theme linksTo relationship resolves. Without it the
+      // head template renders without icon links and the server falls back to
+      // default boxel icons instead of the theme's socialMediaProfileIcon.
+      test('themed card in published realm includes theme icon links in head HTML', async function (assert) {
+        let response = await request
+          .get(`${publishedRealmPath}themed-card`)
+          .set('Host', publishedRealmHost)
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+
+        let headMatch = response.text.match(
+          /data-boxel-head-start[^>]*>([\s\S]*?)data-boxel-head-end/,
+        );
+        let headContent = headMatch?.[1] ?? '';
+
+        assert.ok(
+          headContent.includes(
+            '<link rel="icon" href="https://example.com/published-theme-icon.png"',
+          ),
+          `head HTML includes favicon from BrandGuide theme. headContent=${headContent.substring(0, 500)}`,
+        );
+        assert.ok(
+          headContent.includes(
+            '<link rel="apple-touch-icon" href="https://example.com/published-theme-icon.png"',
+          ),
+          `head HTML includes apple-touch-icon from BrandGuide theme`,
+        );
+
+        // Verify the pristine_doc preserves the theme relationship
+        let rows = (await dbAdapter.execute(
+          `SELECT pristine_doc::text FROM boxel_index
+           WHERE url LIKE '%themed-card%'
+             AND realm_url = '${publishedRealmURLString}'
+             AND type = 'instance'
+             AND is_deleted IS NOT TRUE
+           LIMIT 1`,
+        )) as { pristine_doc: string }[];
+
+        assert.ok(rows.length > 0, 'themed-card instance entry exists');
+
+        let pristineDoc = JSON.parse(rows[0].pristine_doc);
+        let themeRel =
+          pristineDoc?.relationships?.['cardInfo.theme']?.links?.self;
+        assert.ok(
+          themeRel,
+          `pristine_doc preserves the cardInfo.theme relationship URL (got ${themeRel})`,
+        );
+      });
+    },
+  );
 });

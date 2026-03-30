@@ -1,4 +1,9 @@
-import type { QueuePublisher, QueueRunner } from '../queue';
+import type {
+  QueuePublisher,
+  QueueRunner,
+  QueueCoalesceContext,
+} from '../queue';
+import { registerQueueJobDefinition } from '../queue';
 import type { SharedTests } from '../helpers';
 
 const tests = Object.freeze({
@@ -103,6 +108,118 @@ const tests = Object.freeze({
 
     await Promise.all([job2.done, job1.done]);
   },
+
+  'coalesce can join pending jobs and map waiter-specific results': async (
+    assert,
+    { publisher, runner },
+  ) => {
+    runner.register('echo', async (arg: { value: number }) => arg);
+    let coalesce = ({ incoming, candidates }: QueueCoalesceContext) => {
+      let candidate = candidates[0];
+      if (!candidate) {
+        return { type: 'insert', job: incoming } as const;
+      }
+      return { type: 'join', jobId: candidate.id } as const;
+    };
+    registerQueueJobDefinition({ jobType: 'echo', coalesce });
+    let first = await publisher.publish<{ value: number; waiter: string }>({
+      jobType: 'echo',
+      concurrencyGroup: 'echo-group',
+      timeout: 5,
+      args: { value: 41 },
+      mapResult: (result) => ({
+        ...(result as { value: number }),
+        waiter: 'first',
+      }),
+    });
+    let second = await publisher.publish<{ value: number; waiter: string }>({
+      jobType: 'echo',
+      concurrencyGroup: 'echo-group',
+      timeout: 5,
+      args: { value: 99 },
+      mapResult: (result) => ({
+        ...(result as { value: number }),
+        waiter: 'second',
+      }),
+    });
+
+    assert.strictEqual(first.id, second.id, 'both waiters share canonical job');
+    let [firstResult, secondResult] = await Promise.all([
+      first.done,
+      second.done,
+    ]);
+    assert.strictEqual(firstResult.value, 41);
+    assert.strictEqual(firstResult.waiter, 'first');
+    assert.strictEqual(secondResult.value, 41);
+    assert.strictEqual(secondResult.waiter, 'second');
+  },
+
+  'coalesce can join pending jobs and map waiter-specific rejected results':
+    async (assert, { publisher, runner }) => {
+      runner.register('boom-echo', async (arg: { value: number }) => {
+        throw { reason: 'boom', value: arg.value };
+      });
+      let coalesce = ({ incoming, candidates }: QueueCoalesceContext) => {
+        let candidate = candidates[0];
+        if (!candidate) {
+          return { type: 'insert', job: incoming } as const;
+        }
+        return { type: 'join', jobId: candidate.id } as const;
+      };
+      registerQueueJobDefinition({ jobType: 'boom-echo', coalesce });
+      let first = await publisher.publish<{
+        reason: string;
+        value: number;
+        waiter: string;
+      }>({
+        jobType: 'boom-echo',
+        concurrencyGroup: 'boom-echo-group',
+        timeout: 5,
+        args: { value: 41 },
+        mapResult: (result) => ({
+          ...(result as { reason: string; value: number }),
+          waiter: 'first',
+        }),
+      });
+      let second = await publisher.publish<{
+        reason: string;
+        value: number;
+        waiter: string;
+      }>({
+        jobType: 'boom-echo',
+        concurrencyGroup: 'boom-echo-group',
+        timeout: 5,
+        args: { value: 99 },
+        mapResult: (result) => ({
+          ...(result as { reason: string; value: number }),
+          waiter: 'second',
+        }),
+      });
+
+      assert.strictEqual(
+        first.id,
+        second.id,
+        'both waiters share canonical job',
+      );
+      let [firstResult, secondResult] = await Promise.allSettled([
+        first.done,
+        second.done,
+      ]);
+      if (firstResult.status !== 'rejected') {
+        assert.ok(false, 'expected first coalesced waiter to reject');
+        return;
+      }
+      if (secondResult.status !== 'rejected') {
+        assert.ok(false, 'expected second coalesced waiter to reject');
+        return;
+      }
+      assert.strictEqual(firstResult.reason.reason, 'boom');
+      assert.strictEqual(firstResult.reason.value, 41);
+      assert.strictEqual(firstResult.reason.waiter, 'first');
+      assert.strictEqual(secondResult.reason.reason, 'boom');
+      assert.strictEqual(secondResult.reason.value, 41);
+      assert.strictEqual(secondResult.reason.waiter, 'second');
+    },
 } as SharedTests<{ publisher: QueuePublisher; runner: QueueRunner }>);
 
 export default tests;

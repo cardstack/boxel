@@ -7,7 +7,7 @@ import { sumUpCreditsLedger } from '@cardstack/billing/billing-queries';
 import * as boxelUIChangeChecker from '../../lib/boxel-ui-change-checker';
 import { grafanaSecret, insertUser, realmSecretSeed } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -21,13 +21,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         (args, job_type, concurrency_group, timeout, priority)
         VALUES
         (
-          '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
           'from-scratch-index',
-          'indexing:${testRealm2URL.href}',
+          'indexing:${testRealmURL.href}',
           180,
           0
         ) RETURNING id`)) as { id: string }[];
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${id}`,
           )
@@ -48,14 +48,97 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.ok(job.finished_at, 'job was marked with finish time');
       });
 
+      test('grafana endpoint can target both pending and running jobs by job_id', async function (assert) {
+        let [{ id: pendingJobId }] = (await context.dbAdapter
+          .execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          'indexing:${testRealmURL.href}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        let [{ id: runningJobId }] = (await context.dbAdapter
+          .execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
+          'incremental-index',
+          'indexing:${testRealmURL.href}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        await context.dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${runningJobId}, NOW() + INTERVAL '3 minutes')`);
+
+        let pendingResponse = await context.request
+          .get(
+            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${pendingJobId}`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          pendingResponse.status,
+          204,
+          'pending job cancel returns 204',
+        );
+
+        let runningResponse = await context.request
+          .get(
+            `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${runningJobId}`,
+          )
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(
+          runningResponse.status,
+          204,
+          'running job cancel returns 204',
+        );
+
+        let [pendingJob] = await context.dbAdapter.execute(
+          `SELECT status, result FROM jobs WHERE id = ${pendingJobId}`,
+        );
+        assert.strictEqual(
+          pendingJob.status,
+          'rejected',
+          'pending job canceled',
+        );
+        assert.deepEqual(
+          pendingJob.result,
+          {
+            status: 418,
+            message: 'User initiated job cancellation',
+          },
+          'pending job has cancellation payload',
+        );
+
+        let [runningJob] = await context.dbAdapter.execute(
+          `SELECT status, result FROM jobs WHERE id = ${runningJobId}`,
+        );
+        assert.strictEqual(
+          runningJob.status,
+          'rejected',
+          'running job canceled',
+        );
+        assert.deepEqual(
+          runningJob.result,
+          {
+            status: 418,
+            message: 'User initiated job cancellation',
+          },
+          'running job has cancellation payload',
+        );
+      });
+
       test('can force job completion by reservation_id via grafana endpoint', async function (assert) {
         let [{ id: jobId }] = (await context.dbAdapter.execute(`INSERT INTO jobs
         (args, job_type, concurrency_group, timeout, priority)
         VALUES
         (
-          '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
           'from-scratch-index',
-          'indexing:${testRealm2URL.href}',
+          'indexing:${testRealmURL.href}',
           180,
           0
         ) RETURNING id`)) as { id: string }[];
@@ -66,7 +149,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }[];
         await context.dbAdapter.execute(`INSERT INTO job_reservations
         (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '2 minutes')`);
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
           )
@@ -100,9 +183,9 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         (args, job_type, concurrency_group, timeout, priority)
         VALUES
         (
-          '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
           'from-scratch-index',
-          'indexing:${testRealm2URL.href}',
+          'indexing:${testRealmURL.href}',
           180,
           0
         ) RETURNING id`)) as { id: string }[];
@@ -110,7 +193,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '3 minutes')`);
         await context.dbAdapter.execute(`INSERT INTO job_reservations
         (job_id, locked_until ) VALUES (${jobId}, NOW() + INTERVAL '2 minutes')`);
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-complete-job?authHeader=${grafanaSecret}&job_id=${jobId}`,
           )
@@ -188,7 +271,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let reservationId = reservation?.id;
         assert.ok(reservationId, 'reservation exists for running job');
 
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-complete-job?authHeader=${grafanaSecret}&reservation_id=${reservationId}`,
           )
@@ -262,13 +345,13 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         (args, job_type, concurrency_group, timeout, priority)
         VALUES
         (
-          '{"realmURL": "${testRealm2URL.href}", "realmUsername":"node-test_realm"}',
+          '{"realmURL": "${testRealmURL.href}", "realmUsername":"node-test_realm"}',
           'from-scratch-index',
-          'indexing:${testRealm2URL.href}',
+          'indexing:${testRealmURL.href}',
           180,
           0
         ) RETURNING id`)) as { id: string }[];
-        let response = await context.request2
+        let response = await context.request
           .get(`/_grafana-complete-job?job_id=${id}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -296,7 +379,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         });
         assert.strictEqual(sum, 0, `user has 0 extra credit`);
 
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=1000`,
           )
@@ -317,7 +400,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('returns 400 when calling grafana add credit endpoint without a user', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get(`/_grafana-add-credit?authHeader=${grafanaSecret}&credit=1000`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
@@ -330,7 +413,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'cus_123',
           'user@test.com',
         );
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-add-credit?authHeader=${grafanaSecret}&user=${user.matrixUserId}&credit=a+million+dollars`,
           )
@@ -344,7 +427,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test("returns 400 when calling grafana add credit endpoint when user doesn't exist", async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get(
             `/_grafana-add-credit?authHeader=${grafanaSecret}&user=nobody&credit=1000`,
           )
@@ -359,7 +442,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           'cus_123',
           'user@test.com',
         );
-        let response = await context.request2
+        let response = await context.request
           .get(`/_grafana-add-credit?user=${user.matrixUserId}&credit=1000`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -376,7 +459,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let ownerUserId = `@${owner}:localhost`;
         let realmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -407,11 +490,37 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           2,
           'number of jobs initially is correct',
         );
+        let staleModuleForTargetRealmURL = `${realmURL}stale-module-${uuidv4()}.gts`;
+        let staleModuleForOtherRealmURL = `${testRealmURL.href}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForTargetRealmURL}', '${staleModuleForTargetRealmURL}', '{}', '[]', ${Date.now()}, '${realmURL}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForOtherRealmURL}', '${staleModuleForOtherRealmURL}', '{}', '[]', ${Date.now()}, '${testRealmURL.href}', 'public', '')`,
+        );
+        let seededTargetRowsBefore = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForTargetRealmURL}'`,
+        );
+        let seededOtherRowsBefore = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForOtherRealmURL}'`,
+        );
+        assert.strictEqual(
+          seededTargetRowsBefore.length,
+          1,
+          'stale target realm module row was seeded',
+        );
+        assert.strictEqual(
+          seededOtherRowsBefore.length,
+          1,
+          'stale other realm module row was seeded',
+        );
         {
           let realmPath = realmURL.substring(
-            new URL(testRealm2URL.origin).href.length,
+            new URL(testRealmURL.origin).href.length,
           );
-          let response = await context.request2
+          let response = await context.request
             .get(
               `/_grafana-reindex?authHeader=${grafanaSecret}&realm=${realmPath}`,
             )
@@ -424,6 +533,22 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             totalIndexEntries: 2,
           });
         }
+        let seededTargetRowsAfter = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForTargetRealmURL}'`,
+        );
+        let seededOtherRowsAfter = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForOtherRealmURL}'`,
+        );
+        assert.strictEqual(
+          seededTargetRowsAfter.length,
+          0,
+          'realm reindex clears stale modules for the reindexed realm',
+        );
+        assert.strictEqual(
+          seededOtherRowsAfter.length,
+          1,
+          'realm reindex keeps modules for other realms',
+        );
         let finalJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(finalJobs.length, 3, 'an index job was created');
         let job = finalJobs.pop()!;
@@ -459,7 +584,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let ownerUserId = `@${owner}:localhost`;
         let realmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -486,7 +611,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         }
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         {
-          let response = await context.request2
+          let response = await context.request
             .get(`/_grafana-reindex?realm=${encodeURIComponent(realmURL)}`)
             .set('Content-Type', 'application/json');
           assert.strictEqual(response.status, 401, 'HTTP 401 status');
@@ -500,7 +625,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('post-deployment endpoint requires authorization header', async function (assert: Assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_post-deployment')
           .set('Content-Type', 'application/json');
 
@@ -512,7 +637,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('post-deployment endpoint rejects incorrect authorization', async function (assert: Assert) {
-        let response = await context.request2
+        let response = await context.request
           .post('/_post-deployment')
           .set('Content-Type', 'application/json')
           .set('Authorization', 'wrong-secret');
@@ -554,7 +679,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             await context.dbAdapter.execute('select * from jobs');
           let initialJobCount = initialJobs.length;
 
-          let response = await context.request2
+          let response = await context.request
             .post('/_post-deployment')
             .set('Content-Type', 'application/json')
             .set('Authorization', "mum's the word");
@@ -646,7 +771,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             await context.dbAdapter.execute('select * from jobs');
           let initialJobCount = initialJobs.length;
 
-          let response = await context.request2
+          let response = await context.request
             .post('/_post-deployment')
             .set('Content-Type', 'application/json')
             .set('Authorization', "mum's the word");
@@ -693,7 +818,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         let ownerUserId = `@${owner}:localhost`;
         let realmURL: string;
         {
-          let response = await context.request2
+          let response = await context.request
             .post('/_create-realm')
             .set('Accept', 'application/vnd.api+json')
             .set('Content-Type', 'application/json')
@@ -724,16 +849,42 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           2,
           'number of jobs initially is correct',
         );
+        let staleModuleForRealmOneURL = `${testRealmURL.href}stale-module-${uuidv4()}.gts`;
+        let staleModuleForRealmTwoURL = `${realmURL}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForRealmOneURL}', '${staleModuleForRealmOneURL}', '{}', '[]', ${Date.now()}, '${testRealmURL.href}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForRealmTwoURL}', '${staleModuleForRealmTwoURL}', '{}', '[]', ${Date.now()}, '${realmURL}', 'public', '')`,
+        );
+        let seededRowsBefore = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url IN ('${staleModuleForRealmOneURL}', '${staleModuleForRealmTwoURL}')`,
+        );
+        assert.strictEqual(
+          seededRowsBefore.length,
+          2,
+          'stale module rows were seeded before full reindex',
+        );
         {
-          let response = await context.request2
+          let response = await context.request
             .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
             .set('Content-Type', 'application/json');
           assert.deepEqual(
             response.body.realms,
-            [testRealm2URL.href, realmURL],
+            [testRealmURL.href, realmURL],
             'indexed realms are correct',
           );
         }
+        let seededRowsAfter = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url IN ('${staleModuleForRealmOneURL}', '${staleModuleForRealmTwoURL}')`,
+        );
+        assert.strictEqual(
+          seededRowsAfter.length,
+          0,
+          'full reindex clears stale module rows for all realms',
+        );
         let finalJobs = await context.dbAdapter.execute('select * from jobs');
         assert.strictEqual(
           finalJobs.length,
@@ -753,10 +904,76 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('full reindex clears all modules cache entries', async function (assert) {
+        let endpoint = `test-realm-${uuidv4()}`;
+        let owner = 'realm/bot';
+        let ownerUserId = `@${owner}:localhost`;
+        let botRealmURL: string;
+        {
+          let response = await context.request
+            .post('/_create-realm')
+            .set('Accept', 'application/vnd.api+json')
+            .set('Content-Type', 'application/json')
+            .set(
+              'Authorization',
+              `Bearer ${createRealmServerJWT(
+                { user: ownerUserId, sessionRoom: 'session-room-test' },
+                realmSecretSeed,
+              )}`,
+            )
+            .send(
+              JSON.stringify({
+                data: {
+                  type: 'realm',
+                  attributes: {
+                    name: 'Bot Realm',
+                    endpoint,
+                  },
+                },
+              }),
+            );
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          botRealmURL = response.body.data.id;
+        }
+
+        let staleModuleForNonBotRealmURL = `${testRealmURL.href}stale-module-${uuidv4()}.gts`;
+        let staleModuleForBotRealmURL = `${botRealmURL}stale-module-${uuidv4()}.gts`;
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForNonBotRealmURL}', '${staleModuleForNonBotRealmURL}', '{}', '[]', ${Date.now()}, '${testRealmURL.href}', 'public', '')`,
+        );
+        await context.dbAdapter.execute(
+          `INSERT INTO modules (url, file_alias, definitions, deps, created_at, resolved_realm_url, cache_scope, auth_user_id)
+           VALUES ('${staleModuleForBotRealmURL}', '${staleModuleForBotRealmURL}', '{}', '[]', ${Date.now()}, '${botRealmURL}', 'public', '')`,
+        );
+
+        let response = await context.request
+          .get(`/_grafana-full-reindex?authHeader=${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+        let staleRowsForNonBotRealm = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForNonBotRealmURL}'`,
+        );
+        let staleRowsForBotRealm = await context.dbAdapter.execute(
+          `SELECT * FROM modules WHERE url = '${staleModuleForBotRealmURL}'`,
+        );
+        assert.strictEqual(
+          staleRowsForNonBotRealm.length,
+          0,
+          'full reindex clears stale module rows for non-bot realms',
+        );
+        assert.strictEqual(
+          staleRowsForBotRealm.length,
+          0,
+          'full reindex clears stale module rows for bot realms too',
+        );
+      });
+
       test('returns 401 when calling grafana full reindex endpoint without a grafana secret', async function (assert) {
         let initialJobs = await context.dbAdapter.execute('select * from jobs');
         {
-          let response = await context.request2
+          let response = await context.request
             .get(`/_grafana-full-reindex`)
             .set('Content-Type', 'application/json');
           assert.strictEqual(response.status, 401, 'HTTP 401 status');

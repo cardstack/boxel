@@ -214,3 +214,60 @@ export function installSearchRequestObserverPatch(): {
     },
   };
 }
+
+/**
+ * Simulate the background-tab RAF throttling that causes the render-ready
+ * stability loop to stall. This replaces `requestAnimationFrame` inside
+ * prerender pages with a version that delays each callback by `delayMs`.
+ * With the default 20-pass stability loop this makes a card that would
+ * normally settle in <1 s take 20 × delayMs.
+ */
+export function installThrottledRAFPatch(delayMs: number): {
+  restore: () => void;
+} {
+  let originalGetPage = PagePool.prototype.getPage;
+  let patchedPages = new WeakSet<object>();
+
+  PagePool.prototype.getPage = async function (this: PagePool, realm: string) {
+    let pageInfo = await originalGetPage.call(this, realm);
+    let page = pageInfo.page as any;
+    let originalEvaluate = page?.evaluate?.bind(page);
+
+    if (originalEvaluate && !patchedPages.has(page)) {
+      patchedPages.add(page);
+      let injected = false;
+      page.evaluate = async (...args: any[]) => {
+        if (!injected) {
+          injected = true;
+          await originalEvaluate((delay: number) => {
+            if ((globalThis as any).__boxelRAFThrottled) {
+              return;
+            }
+            (globalThis as any).__boxelRAFThrottled = true;
+            let nativeRAF = window.requestAnimationFrame.bind(window);
+            window.requestAnimationFrame = (callback: FrameRequestCallback) => {
+              return nativeRAF(() => {
+                // Use the native setTimeout (before the render-timer-stub
+                // replaces it) to add the delay.
+                let nativeSetTimeout =
+                  (globalThis as any).__boxelNativeSetTimeout ??
+                  window.setTimeout;
+                nativeSetTimeout(() => callback(performance.now()), delay);
+              });
+            };
+            // Stash native setTimeout before the render-timer-stub replaces it.
+            (globalThis as any).__boxelNativeSetTimeout = window.setTimeout;
+          }, delayMs);
+        }
+        return originalEvaluate(...args);
+      };
+    }
+    return { ...pageInfo, page };
+  };
+
+  return {
+    restore: () => {
+      PagePool.prototype.getPage = originalGetPage;
+    },
+  };
+}

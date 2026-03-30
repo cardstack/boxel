@@ -84,6 +84,7 @@ import {
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
   resolveCardReference,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -2831,7 +2832,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           fileMetaDoc.data,
           fileMetaDoc,
-          new URL(fileMetaDoc.data.id!),
+          cardIdToURL(fileMetaDoc.data.id!),
           { store, dependencyTrackingContext },
         )) as FileDef;
       } else {
@@ -2847,7 +2848,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           cardDoc.data,
           cardDoc,
-          new URL(cardDoc.data.id!),
+          cardIdToURL(cardDoc.data.id!),
           { store, dependencyTrackingContext },
         )) as CardDef;
       }
@@ -3007,6 +3008,10 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
+  // getKnownConsumedModules is fast now: the Loader caches the dependency
+  // graph traversal result in collectKnownModuleDependencies, and
+  // trimModuleIdentifier uses string ops + a cache instead of URL
+  // construction. No need for a caller-side skip cache here.
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
     trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }
@@ -3168,7 +3173,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = new URL(doc.data.id);
+    instance[relativeTo] = cardIdToURL(doc.data.id);
   }
 
   if (isCardInstance(instance)) {
@@ -3294,7 +3299,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let instanceRelativeTo =
     instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
-      ? new URL(instance.id)
+      ? cardIdToURL(instance.id)
       : undefined);
 
   function getFieldMeta(
@@ -3366,7 +3371,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       relativeTo:
         instanceRelativeTo ??
         (resource.id && typeof resource.id === 'string'
-          ? new URL(resource.id)
+          ? cardIdToURL(resource.id)
           : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
     });
@@ -3477,7 +3482,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       let relativeToVal =
         instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
-          ? new URL(instance.id)
+          ? cardIdToURL(instance.id)
           : undefined);
       let deserializedValue = await getDeserializedValue({
         card,

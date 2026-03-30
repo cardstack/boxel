@@ -5,6 +5,10 @@ import type { Server } from 'http';
 import { createServer } from 'http';
 import yargs from 'yargs';
 import { buildPrerenderManagerApp } from './manager-app';
+import {
+  isEnvironmentMode,
+  registerService,
+} from '../lib/dev-service-registry';
 
 let log = logger('prerender-manager');
 
@@ -37,7 +41,14 @@ let { app } = buildPrerenderManagerApp({
 });
 let _webServerInstance: Server | undefined;
 _webServerInstance = createServer(app.callback()).listen(port);
-log.info(`prerender manager HTTP listening on port ${port}`);
+_webServerInstance.on('listening', () => {
+  let actualPort =
+    (_webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+  if (isEnvironmentMode()) {
+    registerService(_webServerInstance!, 'prerender-mgr');
+  }
+  log.info(`prerender manager HTTP listening on port ${actualPort}`);
+});
 
 function shutdown(signal: NodeJS.Signals) {
   if (draining) return;

@@ -1,0 +1,26 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "SubmissionCardPortal",
+        "module": "../submission-card/submission-card-portal"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Submission Card Portal",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/cardstack-brand-guide"
+        }
+      }
+    }
+  }
+}

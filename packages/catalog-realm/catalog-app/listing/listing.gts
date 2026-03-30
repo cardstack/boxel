@@ -45,7 +45,7 @@ import { listingActions, isReady } from '../resources/listing-actions';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
-import CreateListingPRRequestCommand from '@cardstack/boxel-host/commands/create-listing-pr-request';
+import OpenCreatePRModalCommand from '@cardstack/boxel-host/commands/open-create-pr-modal';
 
 import { getMenuItems } from '@cardstack/runtime-common';
 
@@ -564,6 +564,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#6638ff';
+  static isListingDef = true;
 
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
@@ -585,8 +586,8 @@ export class Listing extends CardDef {
   protected getGenerateExampleMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
-    if (!params.commandContext) {
-      return undefined;
+    if (!params.commandContext || !params.canEdit) {
+      return;
     }
     const firstExample =
       Array.isArray(this.examples) && this.examples.length
@@ -618,12 +619,11 @@ export class Listing extends CardDef {
   private getUpdateSpecsMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
-    if (params.menuContext !== 'interact') {
+    if (!params.commandContext || !params.canEdit) {
       return;
     }
-    const commandContext = params.commandContext;
     const targetRealm = this[realmURL]?.href;
-    if (!commandContext || !targetRealm) {
+    if (!targetRealm) {
       return;
     }
 
@@ -632,7 +632,7 @@ export class Listing extends CardDef {
       id: 'update-listing-specs',
       icon: Refresh,
       action: () =>
-        new ListingUpdateSpecsCommand(commandContext).execute({
+        new ListingUpdateSpecsCommand(params.commandContext).execute({
           listing: this,
         }),
     };
@@ -641,20 +641,18 @@ export class Listing extends CardDef {
   [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
     let menuItems = super
       [getMenuItems](params)
-      .filter((item) => item.label?.toLowerCase() !== 'create listing with ai');
-    if (params.menuContext === 'interact') {
-      const extra = this.getGenerateExampleMenuItem(params);
-      if (extra) {
-        menuItems = [...menuItems, extra];
-      }
-      const updateSpecs = this.getUpdateSpecsMenuItem(params);
-      if (updateSpecs) {
-        menuItems = [...menuItems, updateSpecs];
-      }
-      const createPRMenuItem = this.getCreatePRMenuItem(params);
-      if (createPRMenuItem) {
-        menuItems = [...menuItems, createPRMenuItem];
-      }
+      .filter((item) => item.label?.toLowerCase() !== 'create listing');
+    const generateExample = this.getGenerateExampleMenuItem(params);
+    if (generateExample) {
+      menuItems.push(generateExample);
+    }
+    const updateSpecs = this.getUpdateSpecsMenuItem(params);
+    if (updateSpecs) {
+      menuItems.push(updateSpecs);
+    }
+    const createPRMenuItem = this.getCreatePRMenuItem(params);
+    if (createPRMenuItem) {
+      menuItems.push(createPRMenuItem);
     }
     return menuItems;
   }
@@ -662,23 +660,23 @@ export class Listing extends CardDef {
   private getCreatePRMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
-    if (params.menuContext !== 'interact') {
+    if (!params.commandContext || !params.canEdit) {
+      return;
+    }
+    if (!params.canEdit) {
       return;
     }
     if (!this[realmURL]?.href) {
-      return;
-    }
-    const commandContext = params.commandContext;
-    if (!commandContext) {
       return;
     }
 
     return {
       label: 'Make a PR',
       action: async () => {
-        await new CreateListingPRRequestCommand(commandContext).execute({
+        await new OpenCreatePRModalCommand(params.commandContext).execute({
           listingId: this.id,
           realm: this[realmURL]!.href,
+          listingName: this.name,
         });
       },
       icon: Package,

@@ -2,11 +2,18 @@
 
 DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_NEW_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog-new/'
+NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
+DEFAULT_EXTERNAL_CATALOG_REALM_URL='https://realms-staging.stack.cards/external-catalog/'
+EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
+DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://realms-staging.stack.cards/software-factory/'
+SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
 NODE_NO_WARNINGS=1 \
   NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   LOW_CREDIT_THRESHOLD=2000 \
+  OPENROUTER_REALM_URL='https://realms-staging.stack.cards/openrouter/' \
   ts-node \
   --transpileOnly worker-manager \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
@@ -23,6 +30,16 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
-  --fromUrl='https://realms-staging.stack.cards/skills/' \
-  --toUrl='https://realms-staging.stack.cards/skills/'
+   --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
+   --toUrl="${EXTERNAL_CATALOG_REALM_URL}" \
+  \
+  --fromUrl='@cardstack/skills/' \
+  --toUrl='https://realms-staging.stack.cards/skills/' \
+  \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl='https://realms-staging.stack.cards/openrouter/' \
+  \
+  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
+  
 
