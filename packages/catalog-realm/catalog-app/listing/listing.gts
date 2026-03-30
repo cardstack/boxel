@@ -663,6 +663,9 @@ export class Listing extends CardDef {
     if (!params.commandContext || !params.canEdit) {
       return;
     }
+    if (!params.canEdit) {
+      return;
+    }
     if (!this[realmURL]?.href) {
       return;
     }
