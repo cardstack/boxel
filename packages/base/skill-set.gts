@@ -29,7 +29,11 @@ function isFence(line: string): boolean {
 }
 
 function getModeLabel(mode: string): string {
-  return mode === 'full' ? 'Full' : mode === 'essential' ? 'Essential' : 'Link Only';
+  return mode === 'full'
+    ? 'Full'
+    : mode === 'essential'
+      ? 'Essential'
+      : 'Link Only';
 }
 
 // Normalize markdown header levels so the top-level header in any skill becomes H2.
@@ -45,7 +49,10 @@ function normalizeHeaders(markdown: string): string {
   let minLevel: number | undefined;
   for (const raw of lines) {
     const trimmed = raw.trim();
-    if (isFence(trimmed)) { insideFence = !insideFence; continue; }
+    if (isFence(trimmed)) {
+      insideFence = !insideFence;
+      continue;
+    }
     if (insideFence) continue;
     const m = trimmed.match(/^(#{1,6})\s+/);
     if (m) {
@@ -64,8 +71,15 @@ function normalizeHeaders(markdown: string): string {
   const out: string[] = [];
   for (const raw of lines) {
     const trimmed = raw.trim();
-    if (isFence(trimmed)) { insideFence = !insideFence; out.push(raw); continue; }
-    if (insideFence) { out.push(raw); continue; }
+    if (isFence(trimmed)) {
+      insideFence = !insideFence;
+      out.push(raw);
+      continue;
+    }
+    if (insideFence) {
+      out.push(raw);
+      continue;
+    }
     const m = raw.match(/^(\s*)(#{1,6})\s+(.*)$/);
     if (m) {
       const leading = m[1] ?? '';
@@ -245,7 +259,7 @@ export class SkillSet extends SkillPlus {
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: SkillSet) {
-      return this.cardInfo?.name || `Untitled ${SkillSet.displayName}`;
+      return this.cardInfo?.name || `Untitled Skill Set`;
     },
   });
 
@@ -306,7 +320,13 @@ export class SkillSet extends SkillPlus {
         const topicName =
           skillRef.topicName || skillRef.skill?.cardTitle || 'Untitled';
         const sectionNumber = i + 1;
-        items.push(Object.assign(new TocItemField(), { level: 2, text: `<b>${sectionNumber}</b> ${topicName}`, id: `skill-divider-${i}` }));
+        items.push(
+          Object.assign(new TocItemField(), {
+            level: 2,
+            text: `<b>${sectionNumber}</b> ${topicName}`,
+            id: `skill-divider-${i}`,
+          }),
+        );
         const mode = skillRef.inclusionMode || 'link-only';
         const rawContent =
           mode === 'full' && skillRef.skill?.instructions

@@ -55,20 +55,28 @@ export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
   }
   const headers: Array<TocItem> = [];
   const usedIds = new Set<string>();
+  const headingRe = /^ {0,3}(#{2,3})\s+(.+)$/;
+  let insideFence = false;
 
-  const headerRegex = /^ {0,3}(#{2,3})\s+(.+)$/gm;
-  let match;
+  for (const line of markdown.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) continue;
 
-  while ((match = headerRegex.exec(markdown)) !== null) {
-    const level = match[1].length;
-    let text = match[2].trim();
+    const m = headingRe.exec(line);
+    if (!m) continue;
+
+    const level = m[1].length;
 
     // Check for explicit ID: {#custom-id}
-    const idMatch = text.match(/\{#([a-z0-9-]+)\}/);
+    const idMatch = m[2].match(/\{#([a-z0-9-]+)\}/);
     const explicitId = idMatch ? idMatch[1] : null;
 
     // Remove {#id} from display text
-    text = text.replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
+    const text = m[2].replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
 
     // Generate base ID
     let baseId = explicitId || slugifyHeading(text);
@@ -90,21 +98,34 @@ export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
 
 // Pre-process markdown to inject anchor elements before each heading.
 // Uses parseMarkdownHeaders for ID generation so IDs are identical to the toc field.
+// Processes line-by-line to skip fenced code blocks.
 export function injectHeadingAnchors(markdown?: string): string {
   if (!markdown) return '';
 
   const headers = parseMarkdownHeaders(markdown);
   let idx = 0;
+  let insideFence = false;
+  const headingRe = /^ {0,3}(#{2,3})\s+(.+)$/;
 
-  return markdown.replace(
-    /^ {0,3}(#{2,3})\s+(.+)$/gm,
-    (match, hashes, text) => {
+  return markdown
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+        insideFence = !insideFence;
+        return line;
+      }
+      if (insideFence) return line;
+
+      const m = headingRe.exec(line);
+      if (!m) return line;
+
       const item = headers[idx++];
-      if (!item) return match;
-      const cleanText = text.replace(/\s*\{#[a-z0-9-]+\}\s*$/, '').trim();
-      return `<a id="${item.id}" aria-hidden="true"></a>\n${hashes} ${cleanText}`;
-    },
-  );
+      if (!item) return line;
+      const cleanText = m[2].replace(/\s*\{#[a-z0-9-]+\}\s*$/, '').trim();
+      return `<a id="${item.id}" aria-hidden="true"></a>\n${m[1]} ${cleanText}`;
+    })
+    .join('\n');
 }
 
 export class TocSection extends GlimmerComponent<{
@@ -122,7 +143,11 @@ export class TocSection extends GlimmerComponent<{
         <ul>
           {{#each @navItems as |item|}}
             <li
-              class={{if (gt item.level 3) 'toc-sub-subsection' (if (gt item.level 2) 'toc-subsection' 'toc-section-item')}}
+              class={{if
+                (gt item.level 3)
+                'toc-sub-subsection'
+                (if (gt item.level 2) 'toc-subsection' 'toc-section-item')
+              }}
             >
               <a
                 href='#{{item.id}}'
@@ -703,7 +728,7 @@ export class SkillPlusMarkdown extends SkillPlus {
       return (
         this.cardInfo?.name ??
         this.instructionsSource?.title ??
-        `Untitled ${SkillPlus.displayName}`
+        `Untitled Skill`
       );
     },
   });
