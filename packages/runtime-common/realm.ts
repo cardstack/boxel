@@ -1095,6 +1095,7 @@ export class Realm {
           ? 'card'
           : 'file';
       this.assertWriteSize(content, sizeType);
+      let isNewFile: boolean;
       if (typeof content === 'string') {
         let existingFile = await readFileAsText(path, (p) =>
           this.#adapter.openFile(p),
@@ -1104,6 +1105,9 @@ export class Realm {
           fileMetaRows.push({ path });
           continue;
         }
+        isNewFile = !existingFile;
+      } else {
+        isNewFile = !(await this.#adapter.exists(path));
       }
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
@@ -1121,6 +1125,11 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
+      this.broadcastRealmEvent({
+        eventName: 'update',
+        ...(isNewFile ? { added: path } : { updated: path }),
+        realmURL: this.url,
+      } as UpdateRealmEventContent);
       this.#sourceCache.invalidate(path);
       if (hasExecutableExtension(path)) {
         this.#moduleCache.invalidate(path);
@@ -1502,6 +1511,11 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
+    this.broadcastRealmEvent({
+      eventName: 'update',
+      removed: path,
+      realmURL: this.url,
+    } as UpdateRealmEventContent);
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
       this.#moduleCache.invalidate(path);
@@ -1533,6 +1547,13 @@ export class Realm {
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    for (let path of paths) {
+      this.broadcastRealmEvent({
+        eventName: 'update',
+        removed: path,
+        realmURL: this.url,
+      } as UpdateRealmEventContent);
+    }
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
     let invalidations = await this.updateIndexAndCollectInvalidations(urls, {

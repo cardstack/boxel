@@ -44,10 +44,14 @@ import {
   cardInfo,
   getTestPrerenderer,
   testCreatePrerenderAuth,
+  findRealmEvent,
   type RealmRequest,
   withRealmPath,
 } from './helpers';
-import { expectIncrementalIndexEvent } from './helpers/indexing';
+import {
+  expectIncrementalIndexEvent,
+  waitForIncrementalIndexEvent,
+} from './helpers/indexing';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -59,6 +63,7 @@ import type {
   MatrixEvent,
   RealmEvent,
   RealmEventContent,
+  UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
@@ -1196,6 +1201,177 @@ module(basename(__filename), function () {
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       }
+    });
+
+    test('emits update event with added when creating a file via API', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await request
+        .post('/')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          'added' in m.content,
+      ) as RealmEvent | undefined;
+
+      assert.ok(updateEvent, 'update event with added was emitted');
+      let content = updateEvent!.content as UpdateRealmEventContent;
+      assert.strictEqual(content.eventName, 'update');
+      assert.ok(
+        'added' in content && content.added.endsWith('.json'),
+        'added field contains the new file path',
+      );
+      assert.strictEqual(
+        content.realmURL,
+        testRealmHref,
+        'realmURL is correct',
+      );
+
+      // Verify update event was emitted before the incremental index event
+      let updateIdx = messages.indexOf(updateEvent!);
+      let indexEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
+      let indexIdx = messages.indexOf(indexEvent!);
+      assert.ok(
+        updateIdx < indexIdx,
+        'update event was emitted before incremental index event',
+      );
+    });
+
+    test('emits update event with updated when patching a file via API', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await request
+        .patch('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
+              },
+            },
+          }),
+        );
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          'updated' in m.content,
+      ) as RealmEvent | undefined;
+
+      assert.ok(updateEvent, 'update event with updated was emitted');
+      let content = updateEvent!.content as UpdateRealmEventContent;
+      assert.strictEqual(content.eventName, 'update');
+      assert.ok(
+        'updated' in content && content.updated === 'person-1.json',
+        'updated field contains the changed file path',
+      );
+      assert.strictEqual(
+        content.realmURL,
+        testRealmHref,
+        'realmURL is correct',
+      );
+    });
+
+    test('emits update event with removed when deleting a file via API', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await request
+        .delete('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          'removed' in m.content,
+      ) as RealmEvent | undefined;
+
+      assert.ok(updateEvent, 'update event with removed was emitted');
+      let content = updateEvent!.content as UpdateRealmEventContent;
+      assert.strictEqual(content.eventName, 'update');
+      assert.ok(
+        'removed' in content && content.removed === 'person-1.json',
+        'removed field contains the deleted file path',
+      );
+      assert.strictEqual(
+        content.realmURL,
+        testRealmHref,
+        'realmURL is correct',
+      );
+
+      // Verify update event was emitted before the incremental index event
+      let updateIdx = messages.indexOf(updateEvent!);
+      let indexEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
+      let indexIdx = messages.indexOf(indexEvent!);
+      assert.ok(
+        updateIdx < indexIdx,
+        'update event was emitted before incremental index event',
+      );
     });
 
     test('can make HEAD request to get realmURL and isPublicReadable status', async function (assert) {

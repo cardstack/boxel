@@ -76,6 +76,28 @@ export class DirectoryResource extends Resource<Args> {
               return;
             }
 
+            if (event.eventName === 'update') {
+              let filePath: string | undefined;
+              if ('added' in event) {
+                filePath = event.added;
+              } else if ('removed' in event) {
+                filePath = event.removed;
+              } else if ('updated' in event) {
+                filePath = event.updated;
+              }
+              if (!filePath) {
+                return;
+              }
+              let fileURL = new URL(filePath, event.realmURL).href;
+              let segments = fileURL.split('/');
+              segments.pop();
+              let fileDir = segments.join('/') + '/';
+              if (fileDir.startsWith(this.directoryURL)) {
+                this.readdir.perform();
+              }
+              return;
+            }
+
             if (event.eventName !== 'index') {
               return;
             }

@@ -111,6 +111,10 @@ export class SearchDataResource extends Resource<SearchDataArgs> {
             if (this.#previousQuery === undefined) {
               return;
             }
+            if (event.eventName === 'update') {
+              this.search.perform(this.#previousQuery);
+              return;
+            }
             if (
               event.eventName !== 'index' ||
               ('indexType' in event && event.indexType !== 'incremental')
