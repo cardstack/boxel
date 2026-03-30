@@ -1,6 +1,5 @@
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { modifier } from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -14,9 +13,11 @@ import {
   contains,
   containsMany,
   linksTo,
+  FieldDef,
   StringField,
   type BaseDefComponent,
 } from './card-api';
+import NumberField from './number';
 import MarkdownField from './markdown';
 import { Skill, CommandField } from './skill';
 import { MarkdownDef } from './markdown-file-def';
@@ -38,7 +39,15 @@ export function slugifyHeading(text: string): string {
   );
 }
 
-type TocItem = { level: number; text: string; id: string };
+type TocItem = { level: number; text: string; id: string; badge?: string };
+
+export class TocItemField extends FieldDef {
+  static displayName = 'TOC Item';
+  @field level = contains(NumberField);
+  @field text = contains(StringField);
+  @field id = contains(StringField);
+  @field badge = contains(StringField);
+}
 
 // Parse headers from markdown text with deterministic ID generation
 export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
@@ -47,20 +56,28 @@ export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
   }
   const headers: Array<TocItem> = [];
   const usedIds = new Set<string>();
+  const headingRe = /^ {0,3}(#{2,3})\s+(.+)$/;
+  let insideFence = false;
 
-  const headerRegex = /^(#{2,3})\s+(.+)$/gm;
-  let match;
+  for (const line of markdown.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) continue;
 
-  while ((match = headerRegex.exec(markdown)) !== null) {
-    const level = match[1].length;
-    let text = match[2].trim();
+    const m = headingRe.exec(line);
+    if (!m) continue;
+
+    const level = m[1].length;
 
     // Check for explicit ID: {#custom-id}
-    const idMatch = text.match(/\{#([a-z0-9-]+)\}/);
+    const idMatch = m[2].match(/\{#([a-z0-9-]+)\}/);
     const explicitId = idMatch ? idMatch[1] : null;
 
     // Remove {#id} from display text
-    text = text.replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
+    const text = m[2].replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
 
     // Generate base ID
     let baseId = explicitId || slugifyHeading(text);
@@ -80,42 +97,37 @@ export function parseMarkdownHeaders(markdown?: string): Array<TocItem> {
   return headers;
 }
 
-// Modifier to add IDs to rendered markdown headers for TOC markdown anchor links
-export const addHeaderIds = modifier((element: HTMLElement) => {
-  const headers = element.querySelectorAll('h2, h3, h4, h5, h6');
-  const usedIds = new Set<string>();
+// Pre-process markdown to inject anchor elements before each heading.
+// Uses parseMarkdownHeaders for ID generation so IDs are identical to the toc field.
+// Processes line-by-line to skip fenced code blocks.
+export function injectHeadingAnchors(markdown?: string): string {
+  if (!markdown) return '';
 
-  headers.forEach((header) => {
-    if (header.getAttribute('id')) return; // Skip if already has ID
+  const headers = parseMarkdownHeaders(markdown);
+  let idx = 0;
+  let insideFence = false;
+  const headingRe = /^ {0,3}(#{2,3})\s+(.+)$/;
 
-    const text = header.textContent || '';
+  return markdown
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('```') || trimmed.startsWith('~~~')) {
+        insideFence = !insideFence;
+        return line;
+      }
+      if (insideFence) return line;
 
-    // Check for explicit ID in text
-    const idMatch = text.match(/\{#([a-z0-9-]+)\}/);
-    let baseId: string;
+      const m = headingRe.exec(line);
+      if (!m) return line;
 
-    if (idMatch) {
-      baseId = idMatch[1];
-      // Remove {#id} from display
-      header.textContent = text.replace(/\s*\{#[a-z0-9-]+\}\s*/, '').trim();
-    } else {
-      baseId = slugifyHeading(text);
-    }
-
-    // Deduplicate IDs
-    let finalId = baseId;
-    let suffix = 2;
-    while (usedIds.has(finalId)) {
-      finalId = `${baseId}-${suffix}`;
-      suffix++;
-    }
-
-    if (finalId) {
-      header.setAttribute('id', finalId);
-      usedIds.add(finalId);
-    }
-  });
-});
+      const item = headers[idx++];
+      if (!item) return line;
+      const cleanText = m[2].replace(/\s*\{#[a-z0-9-]+\}\s*$/, '').trim();
+      return `<a id="${item.id}" aria-hidden="true"></a>\n${m[1]} ${cleanText}`;
+    })
+    .join('\n');
+}
 
 export class TocSection extends GlimmerComponent<{
   Args: {
@@ -132,12 +144,16 @@ export class TocSection extends GlimmerComponent<{
         <ul>
           {{#each @navItems as |item|}}
             <li
-              class={{if (gt item.level 2) 'toc-subsection' 'toc-section-item'}}
+              class={{if
+                (gt item.level 3)
+                'toc-sub-subsection'
+                (if (gt item.level 2) 'toc-subsection' 'toc-section-item')
+              }}
             >
               <a
                 href='#{{item.id}}'
                 {{on 'click' (fn this.scrollToItem item.id)}}
-              >{{item.text}}</a>
+              >{{#if item.badge}}<b>{{item.badge}}</b> {{/if}}{{item.text}}</a>
             </li>
           {{/each}}
         </ul>
@@ -185,13 +201,18 @@ export class TocSection extends GlimmerComponent<{
         padding-left: var(--boxel-sp);
         font-size: var(--boxel-font-size-xs);
       }
+      .toc-sub-subsection {
+        padding-left: calc(var(--boxel-sp) * 2);
+        font-size: var(--boxel-font-size-xs);
+      }
     </style>
   </template>
 
   private scrollToItem = (id: string, event: Event) => {
     event.preventDefault();
-    document
-      .querySelector(`#${id}`)
+    (event.currentTarget as HTMLElement)
+      .closest('.doc-layout')
+      ?.querySelector(`[id="${id}"]`)
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 }
@@ -590,8 +611,9 @@ export class DocLayout extends GlimmerComponent<{
 
   private scrollToTop = (event: Event) => {
     event.preventDefault();
-    document
-      .querySelector('#top')
+    (event.currentTarget as HTMLElement)
+      .closest('.doc-layout')
+      ?.querySelector('[id="top"]')
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 }
@@ -603,7 +625,7 @@ export class SkillPlus extends Skill {
   // override skill card's title field to be computed of cardInfo.name
   @field cardTitle = contains(StringField, {
     computeVia: function (this: SkillPlus) {
-      return this.cardInfo?.name ?? `Untitled ${SkillPlus.displayName}`;
+      return this.cardInfo?.name ?? `Untitled Skill`;
     },
   });
 
@@ -615,6 +637,18 @@ export class SkillPlus extends Skill {
   });
 
   @field instructions = contains(MarkdownField);
+  @field instructionsWithIds = contains(MarkdownField, {
+    computeVia: function (this: SkillPlus) {
+      return injectHeadingAnchors(this.instructions);
+    },
+  });
+  @field toc = containsMany(TocItemField, {
+    computeVia: function (this: SkillPlus) {
+      return parseMarkdownHeaders(this.instructions).map((item) =>
+        Object.assign(new TocItemField(), item),
+      );
+    },
+  });
   @field commands = containsMany(CommandField);
 
   static isolated: BaseDefComponent = class Isolated extends Component<
@@ -635,10 +669,7 @@ export class SkillPlus extends Skill {
       >
         <:navbar>
           {{#if @model.instructions}}
-            <TocSection
-              @sectionTitle='Content'
-              @navItems={{parseMarkdownHeaders @model.instructions}}
-            />
+            <TocSection @sectionTitle='Content' @navItems={{@model.toc}} />
           {{/if}}
           {{#if @model.commands.length}}
             <TocSection @sectionTitle='Appendix'>
@@ -650,12 +681,8 @@ export class SkillPlus extends Skill {
         </:navbar>
         <:default>
           {{#if @model.instructions}}
-            <article
-              class='instructions-article'
-              id='instructions'
-              {{addHeaderIds}}
-            >
-              <@fields.instructions />
+            <article class='instructions-article' id='instructions'>
+              <@fields.instructionsWithIds />
             </article>
           {{else}}
             <EmptyStateContainer>
@@ -702,7 +729,7 @@ export class SkillPlusMarkdown extends SkillPlus {
       return (
         this.cardInfo?.name ??
         this.instructionsSource?.title ??
-        `Untitled ${SkillPlus.displayName}`
+        `Untitled Skill`
       );
     },
   });
