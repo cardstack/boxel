@@ -83,27 +83,22 @@ test.describe('factory-test-realm e2e', () => {
     expect(handle.testRunId).toContain('Test Runs/hello-e2e');
     expect(['passed', 'failed', 'error']).toContain(handle.status);
 
-    // Read the TestRun card to verify it was completed.
-    // The realm may still be indexing the update, so poll briefly.
-    let cardUrl = `${realmUrl}${handle.testRunId}`;
-    let card: { data: { attributes: Record<string, unknown> } } | undefined;
-    for (let i = 0; i < 30; i++) {
-      let readResponse = await fetch(cardUrl, {
-        headers: {
-          Accept: 'application/vnd.card+source',
-          Authorization: authorization,
-        },
-      });
-      if (readResponse.ok) {
-        card = await readResponse.json();
-        if (card?.data?.attributes?.status !== 'running') break;
-      }
-      await new Promise((r) => setTimeout(r, 1000));
-    }
+    // The handle already tells us the final status. Read the card source
+    // file directly (not via the indexed card endpoint) to verify persistence.
+    let cardJsonUrl = `${realmUrl}${handle.testRunId}.json`;
+    let readResponse = await fetch(cardJsonUrl, {
+      headers: {
+        Accept: 'application/vnd.card+source',
+        Authorization: authorization,
+      },
+    });
 
-    expect(card).toBeTruthy();
-    expect(card!.data.attributes.status).not.toBe('running');
-    expect(card!.data.attributes.completedAt).toBeTruthy();
+    expect(readResponse.ok).toBe(true);
+    let card = (await readResponse.json()) as {
+      data: { attributes: Record<string, unknown> };
+    };
+    expect(card.data.attributes.status).not.toBe('running');
+    expect(card.data.attributes.completedAt).toBeTruthy();
   });
 
   test('failure path: deliberately failing spec produces status: failed with details', async ({
