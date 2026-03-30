@@ -469,11 +469,19 @@ export async function executeTestRunFromRealm(
       grepArgs = ['--grep', pattern];
     }
 
+    // Use the local playwright binary directly (avoids npx resolution overhead
+    // which can be slow or hang in CI).
+    let playwrightBin = resolve(
+      packageRoot,
+      'node_modules',
+      '.bin',
+      'playwright',
+    );
+
     let start = Date.now();
     let testRunProcess = spawnSync(
-      'npx',
+      playwrightBin,
       [
-        'playwright',
         'test',
         '--config',
         playwrightConfig,
@@ -486,6 +494,7 @@ export async function executeTestRunFromRealm(
         // @playwright/test and other dependencies from node_modules.
         cwd: packageRoot,
         encoding: 'utf8',
+        timeout: 120_000,
         env: { ...process.env, ...playwrightEnv },
       },
     );

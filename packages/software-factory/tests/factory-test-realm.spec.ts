@@ -87,7 +87,7 @@ test.describe('factory-test-realm e2e', () => {
     // The realm may still be indexing the update, so poll briefly.
     let cardUrl = `${realmUrl}${handle.testRunId}`;
     let card: { data: { attributes: Record<string, unknown> } } | undefined;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 30; i++) {
       let readResponse = await fetch(cardUrl, {
         headers: {
           Accept: 'application/vnd.card+source',
