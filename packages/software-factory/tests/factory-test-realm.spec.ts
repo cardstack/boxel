@@ -1,4 +1,7 @@
-import { resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
@@ -7,6 +10,7 @@ import {
   executeTestRunFromRealm,
   type TestRunRealmOptions,
 } from '../scripts/lib/factory-test-realm';
+import { pullRealmFiles } from '../scripts/lib/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -85,6 +89,41 @@ test.describe('factory-test-realm e2e', () => {
     // (error if Playwright couldn't produce a report, failed if it did).
     expect(['failed', 'error']).toContain(handle.status);
     expect(handle.status).not.toBe('passed');
+  });
+
+  test('pullRealmFiles downloads and unwraps spec files from the realm', async ({
+    realm,
+  }) => {
+    let realmUrl = realm.realmURL.href;
+    let authHeaders = realm.authorizationHeaders();
+    let authorization = authHeaders['Authorization'];
+
+    let tmpDir = mkdtempSync(join(tmpdir(), 'pull-test-'));
+    let result = await pullRealmFiles(realmUrl, tmpDir, {
+      authorization,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.files.length).toBeGreaterThan(0);
+
+    // The fixture has Tests/hello-passing.spec.ts — verify it was pulled
+    // and contains raw TypeScript (not a JSON wrapper).
+    let specPath = join(tmpDir, 'Tests', 'hello-passing.spec.ts');
+    expect(existsSync(specPath)).toBe(true);
+
+    let content = readFileSync(specPath, 'utf8');
+    // Should be raw TypeScript, not JSON
+    expect(content).toContain('import');
+    expect(content).toContain('test(');
+    expect(content).not.toContain('"data"');
+    expect(content).not.toContain('"type": "module"');
+
+    // Also verify .gts files are unwrapped
+    let gtsPath = join(tmpDir, 'hello.gts');
+    expect(existsSync(gtsPath)).toBe(true);
+    let gtsContent = readFileSync(gtsPath, 'utf8');
+    expect(gtsContent).toContain('CardDef');
+    expect(gtsContent).not.toContain('"data"');
   });
 
   test('error path: unreachable realm returns error immediately', async () => {
