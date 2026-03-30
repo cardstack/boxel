@@ -99,9 +99,7 @@ async function main() {
   let targetRealmUrl = args['target-realm-url'] as string;
 
   if (!targetRealmUrl) {
-    console.error(
-      'Usage: pnpm smoke:test-realm -- --target-realm-url <url>',
-    );
+    console.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
     console.error(
       '\nRequires MATRIX_USERNAME and MATRIX_PASSWORD environment variables.',
     );
@@ -147,7 +145,9 @@ async function main() {
   // Phase 1: Simulate LLM implementation output
   // -------------------------------------------------------------------------
 
-  console.log('--- Phase 1: Writing LLM implementation output to target realm ---\n');
+  console.log(
+    '--- Phase 1: Writing LLM implementation output to target realm ---\n',
+  );
 
   // 1. Card definition
   console.log('  Writing hello.gts (HelloCard definition)...');
@@ -163,7 +163,9 @@ async function main() {
     } as any,
     fetchOptions,
   );
-  console.log(defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`);
+  console.log(
+    defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
+  );
 
   // 2. Spec card instance pointing to the card definition
   console.log('  Writing Spec/hello-card.json (Spec card for HelloCard)...');

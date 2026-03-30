@@ -500,9 +500,10 @@ function buildMockFetch(
 
     calls.push({ url, method });
 
-    let cardPath = decodeURIComponent(
-      url.replace(targetRealmUrl, ''),
-    ).replace(/\.json$/, '');
+    let cardPath = decodeURIComponent(url.replace(targetRealmUrl, '')).replace(
+      /\.json$/,
+      '',
+    );
 
     if (method === 'GET') {
       let exists =

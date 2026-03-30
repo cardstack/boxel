@@ -20,7 +20,8 @@ import { pullRealmFiles } from '../scripts/lib/realm-operations';
 
 const testRealmOptions = {
   testRealmUrl: 'https://realms.example.test/user/personal-tests/',
-  testResultsModuleUrl: 'https://realms.example.test/software-factory/test-results',
+  testResultsModuleUrl:
+    'https://realms.example.test/software-factory/test-results',
 };
 
 // ---------------------------------------------------------------------------
@@ -64,9 +65,15 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     assert.strictEqual(attrs.passedCount, 2);
     assert.strictEqual(attrs.failedCount, 1);
     assert.strictEqual(attrs.results.length, 1);
-    assert.strictEqual(attrs.results[0].testName, 'sticky-note > renders fitted view');
+    assert.strictEqual(
+      attrs.results[0].testName,
+      'sticky-note > renders fitted view',
+    );
     assert.strictEqual(attrs.results[0].status, 'failed');
-    assert.strictEqual(attrs.results[0].message, 'Expected element to be visible');
+    assert.strictEqual(
+      attrs.results[0].message,
+      'Expected element to be visible',
+    );
     assert.strictEqual(attrs.results[0].stackTrace, undefined);
   });
 
@@ -99,7 +106,10 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
   });
 
   test('returns failed when unexpected > 0 even with no failure details', function (assert) {
-    let attrs = parseRunRealmTestsOutput({ expected: 1, unexpected: 2, failures: [] }, 500);
+    let attrs = parseRunRealmTestsOutput(
+      { expected: 1, unexpected: 2, failures: [] },
+      500,
+    );
 
     assert.strictEqual(attrs.status, 'failed');
     assert.strictEqual(attrs.failedCount, 2);
@@ -190,8 +200,14 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     );
 
     assert.strictEqual(doc.data.type, 'card');
-    let adoptsFrom = doc.data.meta.adoptsFrom as { module: string; name: string };
-    assert.strictEqual(adoptsFrom.module, testRealmOptions.testResultsModuleUrl);
+    let adoptsFrom = doc.data.meta.adoptsFrom as {
+      module: string;
+      name: string;
+    };
+    assert.strictEqual(
+      adoptsFrom.module,
+      testRealmOptions.testResultsModuleUrl,
+    );
     assert.strictEqual(adoptsFrom.name, 'TestRun');
   });
 
@@ -201,7 +217,10 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       testRealmOptions.testResultsModuleUrl,
     );
 
-    let results = doc.data.attributes!.results as { testName: string; status: string }[];
+    let results = doc.data.attributes!.results as {
+      testName: string;
+      status: string;
+    }[];
     assert.strictEqual(results.length, 3);
     assert.strictEqual(results[0].testName, 'test A');
     assert.strictEqual(results[0].status, 'pending');
@@ -209,15 +228,13 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(results[2].status, 'pending');
   });
 
-  test('sets status to running and counts to 0', function (assert) {
+  test('sets status to running', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
     );
 
     assert.strictEqual(doc.data.attributes!.status, 'running');
-    assert.strictEqual(doc.data.attributes!.passedCount, 0);
-    assert.strictEqual(doc.data.attributes!.failedCount, 0);
   });
 
   test('includes sequenceNumber', function (assert) {
@@ -237,8 +254,14 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       { ticketURL: '../Ticket/define-sticky-note-core' },
     );
 
-    let relationships = doc.data.relationships as Record<string, { links: { self: string | null } }>;
-    assert.strictEqual(relationships.ticket.links.self, '../Ticket/define-sticky-note-core');
+    let relationships = doc.data.relationships as Record<
+      string,
+      { links: { self: string | null } }
+    >;
+    assert.strictEqual(
+      relationships.ticket.links.self,
+      '../Ticket/define-sticky-note-core',
+    );
   });
 
   test('omits relationships when no ticketURL', function (assert) {
@@ -257,7 +280,10 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       { specRef: { module: './test-spec', name: 'default' } },
     );
 
-    let specRef = doc.data.attributes!.specRef as { module: string; name: string };
+    let specRef = doc.data.attributes!.specRef as {
+      module: string;
+      name: string;
+    };
     assert.strictEqual(specRef.module, './test-spec');
     assert.strictEqual(specRef.name, 'default');
   });
@@ -284,7 +310,12 @@ module('factory-test-realm > createTestRun', function () {
     let result = await createTestRun(
       'define-sticky-note',
       ['test A', 'test B'],
-      { ...testRealmOptions, authorization: 'Bearer test-token', fetch: mockFetch, sequenceNumber: 1 },
+      {
+        ...testRealmOptions,
+        authorization: 'Bearer test-token',
+        fetch: mockFetch,
+        sequenceNumber: 1,
+      },
     );
 
     assert.true(result.created);
@@ -309,11 +340,10 @@ module('factory-test-realm > createTestRun', function () {
       return new Response('Forbidden', { status: 403 });
     }) as typeof globalThis.fetch;
 
-    let result = await createTestRun(
-      'my-test',
-      ['test A'],
-      { ...testRealmOptions, fetch: mockFetch },
-    );
+    let result = await createTestRun('my-test', ['test A'], {
+      ...testRealmOptions,
+      fetch: mockFetch,
+    });
 
     assert.false(result.created);
     assert.true(result.error?.includes('403'));
@@ -324,11 +354,10 @@ module('factory-test-realm > createTestRun', function () {
       throw new Error('Network unreachable');
     }) as typeof globalThis.fetch;
 
-    let result = await createTestRun(
-      'my-test',
-      ['test A'],
-      { ...testRealmOptions, fetch: mockFetch },
-    );
+    let result = await createTestRun('my-test', ['test A'], {
+      ...testRealmOptions,
+      fetch: mockFetch,
+    });
 
     assert.false(result.created);
     assert.strictEqual(result.error, 'Network unreachable');
@@ -346,12 +375,26 @@ module('factory-test-realm > completeTestRun', function () {
     let existingCard = {
       data: {
         type: 'card',
-        attributes: { status: 'running', sequenceNumber: 1, passedCount: 0, failedCount: 0, results: [] },
-        meta: { adoptsFrom: { module: testRealmOptions.testResultsModuleUrl, name: 'TestRun' } },
+        attributes: {
+          status: 'running',
+          sequenceNumber: 1,
+          passedCount: 0,
+          failedCount: 0,
+          results: [],
+        },
+        meta: {
+          adoptsFrom: {
+            module: testRealmOptions.testResultsModuleUrl,
+            name: 'TestRun',
+          },
+        },
       },
     };
 
-    let mockFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    let mockFetch = (async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ) => {
       let urlStr = String(url);
       let method = init?.method ?? 'GET';
       calls.push({ url: urlStr, method });
@@ -399,11 +442,10 @@ module('factory-test-realm > completeTestRun', function () {
       results: [],
     };
 
-    let result = await completeTestRun(
-      'Test Runs/missing-1',
-      attrs,
-      { ...testRealmOptions, fetch: mockFetch },
-    );
+    let result = await completeTestRun('Test Runs/missing-1', attrs, {
+      ...testRealmOptions,
+      fetch: mockFetch,
+    });
 
     assert.false(result.updated);
     assert.true(result.error?.includes('Failed to read TestRun'));
@@ -415,25 +457,37 @@ module('factory-test-realm > completeTestRun', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-test-realm > resolveTestRun', function () {
-  function buildMockSearchFetch(testRuns: { id: string; status: string; sequenceNumber: number; results?: { testName: string; status: string }[] }[]) {
+  function buildMockSearchFetch(
+    testRuns: {
+      id: string;
+      status: string;
+      sequenceNumber: number;
+      results?: { testName: string; status: string }[];
+    }[],
+  ) {
     return (async (url: string | URL | Request, init?: RequestInit) => {
       let urlStr = String(url);
       let method = init?.method ?? 'GET';
 
       // Search endpoint
       if (urlStr.includes('_search') && method === 'QUERY') {
-        return new Response(JSON.stringify({ data: testRuns.map((tr) => ({
-          id: `https://realms.example.test/user/personal/${tr.id}`,
-          type: 'card',
-          attributes: {
-            status: tr.status,
-            sequenceNumber: tr.sequenceNumber,
-            results: tr.results ?? [],
+        return new Response(
+          JSON.stringify({
+            data: testRuns.map((tr) => ({
+              id: `https://realms.example.test/user/personal/${tr.id}`,
+              type: 'card',
+              attributes: {
+                status: tr.status,
+                sequenceNumber: tr.sequenceNumber,
+                results: tr.results ?? [],
+              },
+            })),
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/vnd.card+json' },
           },
-        })) }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/vnd.card+json' },
-        });
+        );
       }
 
       // Write endpoint (for createTestRun)
@@ -598,9 +652,7 @@ module('factory-test-realm > pullRealmFiles', function () {
       _url: string | URL | Request,
       init?: RequestInit,
     ) => {
-      capturedHeaders.push(
-        (init?.headers as Record<string, string>) ?? {},
-      );
+      capturedHeaders.push((init?.headers as Record<string, string>) ?? {});
       // Return empty mtimes so no file downloads happen
       return new Response(JSON.stringify({}), {
         status: 200,
@@ -655,7 +707,7 @@ module('factory-test-realm > pullRealmFiles', function () {
         return new Response(
           JSON.stringify({
             [`${realmUrl}hello.gts`]: 1000,
-            ['https://other.test/evil.gts']: 2000,  // outside realm
+            ['https://other.test/evil.gts']: 2000, // outside realm
           }),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         );
@@ -663,9 +715,13 @@ module('factory-test-realm > pullRealmFiles', function () {
       return new Response('content', { status: 200 });
     }) as typeof globalThis.fetch;
 
-    let result = await pullRealmFiles(realmUrl, `/tmp/sf-test-pull-${Date.now()}`, {
-      fetch: mockFetch,
-    });
+    let result = await pullRealmFiles(
+      realmUrl,
+      `/tmp/sf-test-pull-${Date.now()}`,
+      {
+        fetch: mockFetch,
+      },
+    );
 
     assert.strictEqual(result.files.length, 1);
     assert.strictEqual(result.files[0], 'hello.gts');
@@ -725,9 +781,7 @@ module('factory-test-realm > formatTestResultSummary', function () {
       status: 'failed',
       passedCount: 0,
       failedCount: 1,
-      failures: [
-        { testName: 'test', error: 'err', stackTrace: longStack },
-      ],
+      failures: [{ testName: 'test', error: 'err', stackTrace: longStack }],
       durationMs: 100,
     };
 

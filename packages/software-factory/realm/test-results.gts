@@ -78,11 +78,21 @@ export class TestResultEntry extends FieldDef {
           width: 1.25rem;
           text-align: center;
         }
-        .status-passed { color: var(--boxel-green, #16a34a); }
-        .status-failed { color: var(--boxel-red, #dc2626); }
-        .status-error { color: var(--boxel-orange, #ea580c); }
-        .status-pending { color: var(--boxel-400, #9ca3af); }
-        .test-name { flex: 1; }
+        .status-passed {
+          color: var(--boxel-green, #16a34a);
+        }
+        .status-failed {
+          color: var(--boxel-red, #dc2626);
+        }
+        .status-error {
+          color: var(--boxel-orange, #ea580c);
+        }
+        .status-pending {
+          color: var(--boxel-400, #9ca3af);
+        }
+        .test-name {
+          flex: 1;
+        }
         .duration {
           color: var(--boxel-400, #9ca3af);
           font-size: 0.75rem;
@@ -101,11 +111,23 @@ export class TestRun extends CardDef {
   @field ticket = linksTo(() => Ticket);
   @field specRef = contains(CodeRefField);
   @field status = contains(TestRunStatusField);
-  @field passedCount = contains(NumberField);
-  @field failedCount = contains(NumberField);
   @field durationMs = contains(NumberField);
   @field results = containsMany(TestResultEntry);
   @field errorMessage = contains(StringField);
+
+  @field passedCount = contains(NumberField, {
+    computeVia: function (this: TestRun) {
+      return (this.results ?? []).filter((r) => r.status === 'passed').length;
+    },
+  });
+
+  @field failedCount = contains(NumberField, {
+    computeVia: function (this: TestRun) {
+      return (this.results ?? []).filter(
+        (r) => r.status === 'failed' || r.status === 'error',
+      ).length;
+    },
+  });
 
   @field title = contains(StringField, {
     computeVia: function (this: TestRun) {
@@ -117,7 +139,9 @@ export class TestRun extends CardDef {
 
   static fitted = class Fitted extends Component<typeof TestRun> {
     get total() {
-      return (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0);
+      return (
+        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+      );
     }
 
     <template>
@@ -127,7 +151,8 @@ export class TestRun extends CardDef {
           <span class='status status-{{@model.status}}'>{{@model.status}}</span>
         </div>
         <div class='counts'>
-          {{@model.passedCount}}/{{this.total}} passed
+          {{@model.passedCount}}/{{this.total}}
+          passed
           {{#if @model.durationMs}}
             <span class='duration'>{{@model.durationMs}}ms</span>
           {{/if}}
@@ -156,10 +181,22 @@ export class TestRun extends CardDef {
           padding: 0.125rem 0.5rem;
           border-radius: 0.25rem;
         }
-        .status-passed { color: var(--boxel-green, #16a34a); background: #f0fdf4; }
-        .status-failed { color: var(--boxel-red, #dc2626); background: #fef2f2; }
-        .status-error { color: var(--boxel-orange, #ea580c); background: #fff7ed; }
-        .status-running { color: var(--boxel-blue, #2563eb); background: #eff6ff; }
+        .status-passed {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-failed {
+          color: var(--boxel-red, #dc2626);
+          background: #fef2f2;
+        }
+        .status-error {
+          color: var(--boxel-orange, #ea580c);
+          background: #fff7ed;
+        }
+        .status-running {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
         .counts {
           font-size: 0.85rem;
           color: var(--muted-foreground);
@@ -176,7 +213,9 @@ export class TestRun extends CardDef {
 
   static isolated = class Isolated extends Component<typeof TestRun> {
     get total() {
-      return (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0);
+      return (
+        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+      );
     }
 
     get failedResults() {
@@ -190,12 +229,16 @@ export class TestRun extends CardDef {
         <header>
           <div class='header-row'>
             <strong>TestRun #{{@model.sequenceNumber}}</strong>
-            <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+            <span
+              class='status status-{{@model.status}}'
+            >{{@model.status}}</span>
           </div>
           <div class='summary'>
-            {{@model.passedCount}}/{{this.total}} passed
+            {{@model.passedCount}}/{{this.total}}
+            passed
             {{#if @model.durationMs}}
-              in {{@model.durationMs}}ms
+              in
+              {{@model.durationMs}}ms
             {{/if}}
           </div>
         </header>
@@ -263,10 +306,22 @@ export class TestRun extends CardDef {
           padding: 0.125rem 0.5rem;
           border-radius: 0.25rem;
         }
-        .status-passed { color: var(--boxel-green, #16a34a); background: #f0fdf4; }
-        .status-failed { color: var(--boxel-red, #dc2626); background: #fef2f2; }
-        .status-error { color: var(--boxel-orange, #ea580c); background: #fff7ed; }
-        .status-running { color: var(--boxel-blue, #2563eb); background: #eff6ff; }
+        .status-passed {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-failed {
+          color: var(--boxel-red, #dc2626);
+          background: #fef2f2;
+        }
+        .status-error {
+          color: var(--boxel-orange, #ea580c);
+          background: #fff7ed;
+        }
+        .status-running {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
         .summary {
           font-size: 0.9rem;
           color: var(--muted-foreground);
@@ -286,7 +341,8 @@ export class TestRun extends CardDef {
           font-weight: 600;
           margin-bottom: 0.25rem;
         }
-        .failure-message, .failure-stack {
+        .failure-message,
+        .failure-stack {
           font-size: 0.8rem;
           font-family: monospace;
           white-space: pre-wrap;

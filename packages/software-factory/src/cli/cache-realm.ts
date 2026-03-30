@@ -29,11 +29,30 @@ async function main(): Promise<void> {
       ? parsedMetadataContext
       : undefined;
 
+  // Validate that the context's hostURL is still reachable. A stale
+  // support.json from a previous run can have a dead hostURL which
+  // causes the realm server to crash during template builds.
+  if (supportContext && 'hostURL' in supportContext && supportContext.hostURL) {
+    let hostURL = supportContext.hostURL;
+    try {
+      let response = await fetch(hostURL);
+      if (!response.ok) {
+        console.warn(
+          `Stale support context: hostURL ${hostURL} returned ${response.status}, ignoring cached context`,
+        );
+        supportContext = undefined;
+      }
+    } catch {
+      console.warn(
+        `Stale support context: hostURL ${hostURL} is not reachable, ignoring cached context`,
+      );
+      supportContext = undefined;
+    }
+  }
+
   let payload;
 
-  let useCombined = process.argv.includes('--combined');
-
-  if (useCombined && realmDirs.length > 1) {
+  if (realmDirs.length > 1) {
     // Combined template: one DB covering all realm fixtures.
     let fixtures = realmDirs.map((realmDir, i) => ({
       realmDir,

@@ -116,7 +116,11 @@ export async function readCardSource(
   realmUrl: string,
   cardPath: string,
   options?: RealmFetchOptions,
-): Promise<{ ok: boolean; document?: LooseSingleCardDocument; error?: string }> {
+): Promise<{
+  ok: boolean;
+  document?: LooseSingleCardDocument;
+  error?: string;
+}> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let url = new URL(cardPath, ensureTrailingSlash(realmUrl)).href;
 

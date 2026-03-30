@@ -1,6 +1,9 @@
 import type { FactoryBrief } from './factory-brief';
 import { formatErrorResponse, formatUnknownError } from './error-format';
 
+// Matches SupportedMimeType.CardSource from @cardstack/runtime-common.
+// Cannot import at runtime here because Playwright's ts-node context
+// crashes on decorators in runtime-common (see CS-10550).
 const cardSourceMimeType = 'application/vnd.card+source';
 
 interface CardDocument {
@@ -33,8 +36,6 @@ export interface FactoryBootstrapOptions {
   fetch?: typeof globalThis.fetch;
   darkfactoryModuleUrl?: string;
 }
-
-
 
 export async function bootstrapProjectArtifacts(
   brief: FactoryBrief,
