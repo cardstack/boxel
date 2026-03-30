@@ -161,6 +161,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         listingCard,
         targetRealm,
         firstOpenCardId ?? codeRef?.module,
+        codeRef.module,
       ),
     ]).catch((error) => {
       console.warn('Background autopatch failed:', error);
@@ -247,6 +248,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     listing: CardAPI.CardDef,
     targetRealm: string,
     resourceUrl: string, // can be module or card instance id
+    moduleUrl: string, // the module URL of the card type being listed
   ): Promise<Spec[]> {
     const resourceRealm =
       this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
@@ -272,7 +274,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
     };
 
     // Collect all modules (main + dependencies). Deduplication happens in sanitizeModuleList().
-    const modulesToCreate: string[] = [];
+    // The _dependencies endpoint excludes the queried resource itself, so we
+    // explicitly include the module URL to ensure a spec is created for it.
+    const modulesToCreate: string[] = [moduleUrl];
 
     jsonApiResponse.data?.forEach((entry) => {
       if (entry.attributes?.dependencies) {
