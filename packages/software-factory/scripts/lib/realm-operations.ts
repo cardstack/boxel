@@ -274,10 +274,10 @@ export async function createRealm(
     Authorization: options.authorization,
   };
 
-  let attributes: Record<string, string> = {
+  let attributes: Record<string, unknown> = {
     name: options.name,
     endpoint: options.endpoint,
-    iconURL: options.iconURL ?? iconURLFor(options.name) ?? '',
+    iconURL: options.iconURL ?? iconURLFor(options.name),
     backgroundURL: options.backgroundURL ?? getRandomBackgroundURL(),
   };
 
