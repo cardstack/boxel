@@ -489,7 +489,7 @@ jobs:
             -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
 
   realm-server-test:
-    name: Realm Server Tests (shard ${{ matrix.shard }})
+    name: Realm Server Tests
     needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
