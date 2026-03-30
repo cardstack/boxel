@@ -241,6 +241,15 @@ module('Integration | card-catalog', function (hooks) {
     test('can filter cards by selecting a realm', async function (assert) {
       // Open the realm picker and select only Base Workspace
       await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .hasAttribute(
+          'placeholder',
+          'Search for a realm',
+          'realm picker has correct search placeholder',
+        );
+
       await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
 
       // Only Base Workspace results should be shown

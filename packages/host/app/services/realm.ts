@@ -30,6 +30,8 @@ import type {
 import {
   Deferred,
   ensureTrailingSlash,
+  isRegisteredPrefix,
+  cardIdToURL,
   logger,
   SupportedMimeType,
   type RealmInfo,
@@ -795,6 +797,9 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): EnhancedRealmInfo => {
+    if (isRegisteredPrefix(url)) {
+      url = cardIdToURL(url).href;
+    }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
       this.identifyRealm.perform(url);
@@ -837,6 +842,9 @@ export default class RealmService extends Service {
   };
 
   async allUsersPermissions(url: string) {
+    if (isRegisteredPrefix(url)) {
+      url = cardIdToURL(url).href;
+    }
     let resource = this.knownRealm(url);
     if (!resource) {
       await this.identifyRealm.perform(url);

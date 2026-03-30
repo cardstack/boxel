@@ -20,13 +20,17 @@ interface Signature {
 }
 
 export default class LLMModeToggle extends Component<Signature> {
+  private get selected(): LLMMode {
+    return this.args.selected === 'act' ? 'act' : 'ask';
+  }
+
   <template>
     <div class='llm-mode-toggle' ...attributes>
       <Tooltip @placement='top'>
         <:trigger>
           <button
             type='button'
-            class='llm-mode-option {{if (eq @selected "ask") "selected"}}'
+            class='llm-mode-option {{if (eq this.selected "ask") "selected"}}'
             data-test-llm-mode-option='ask'
             disabled={{@disabled}}
             {{on 'click' (fn this.handleOptionClick 'ask')}}
@@ -45,7 +49,7 @@ export default class LLMModeToggle extends Component<Signature> {
         <:trigger>
           <button
             type='button'
-            class='llm-mode-option {{if (eq @selected "act") "selected"}}'
+            class='llm-mode-option {{if (eq this.selected "act") "selected"}}'
             data-test-llm-mode-option='act'
             disabled={{@disabled}}
             {{on 'click' (fn this.handleOptionClick 'act')}}
@@ -102,7 +106,7 @@ export default class LLMModeToggle extends Component<Signature> {
 
   @action
   private handleOptionClick(mode: LLMMode) {
-    if (mode !== this.args.selected) {
+    if (mode !== this.selected) {
       this.args.onChange(mode);
     }
   }
