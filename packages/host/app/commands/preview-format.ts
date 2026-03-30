@@ -1,13 +1,12 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import ShowCardCommand from './show-card';
 import SwitchSubmodeCommand from './switch-submode';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class PreviewFormatCommand extends HostBaseCommand<
   typeof BaseCommandModule.PreviewFormatInput

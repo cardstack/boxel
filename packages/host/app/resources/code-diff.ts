@@ -7,9 +7,9 @@ import { Resource } from 'ember-modify-based-class-resource';
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
-
 import ApplySearchReplaceBlockCommand from '../commands/apply-search-replace-block';
+
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 interface CodeDiffResourceArgs {
   named: {

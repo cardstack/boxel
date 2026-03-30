@@ -2,14 +2,13 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-import type { FileDef } from '@cardstack/base/file-api';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export default class ReadCardForAssistantCommand extends HostBaseCommand<
   typeof BaseCommandModule.CardIdCard,

@@ -57,8 +57,6 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef, BaseDef } from '@cardstack/base/card-api';
-
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
 import { PanelSection } from './code-submode/inner-container';
@@ -82,6 +80,7 @@ import type { SelectorItem } from './detail-panel-selector';
 import type { ModuleAnalysis } from '../../resources/module-contents';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;

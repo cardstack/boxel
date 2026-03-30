@@ -1,13 +1,5 @@
 import { on } from '@ember/modifier';
 
-import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
-
-import { Button } from '@cardstack/boxel-ui/components';
-import { CardContainer } from '@cardstack/boxel-ui/components';
-
-import { Command } from '@cardstack/runtime-common';
-
 import {
   CardDef,
   Component,
@@ -16,6 +8,13 @@ import {
   contains,
 } from '@cardstack/base/card-api';
 import { Skill } from '@cardstack/base/skill';
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+
+import { Button } from '@cardstack/boxel-ui/components';
+import { CardContainer } from '@cardstack/boxel-ui/components';
+
+import { Command } from '@cardstack/runtime-common';
 
 export class WeatherLocationInput extends CardDef {
   @field location = contains(StringField);

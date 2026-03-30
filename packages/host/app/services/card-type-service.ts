@@ -18,16 +18,11 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type {
-  BaseDef,
-  Field,
-  FieldType,
-} from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type ResetService from '../services/reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { BaseDef, Field, FieldType } from '@cardstack/base/card-api';
 
 export type CodeRefType = CodeRef & {
   displayName: string;

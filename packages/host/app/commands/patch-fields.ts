@@ -7,9 +7,6 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -17,6 +14,8 @@ import type { ValidateFieldPathResult } from '../lib/field-path-parser';
 
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 interface Configuration {
   cardType: typeof CardDef;

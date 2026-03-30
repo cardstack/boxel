@@ -29,11 +29,11 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { Submodes } from '../submode-switcher';
+
 import type { FileDef } from '@cardstack/base/file-api';
 
 import type { CodePatchStatus } from '@cardstack/base/matrix-event';
-
-import { Submodes } from '../submode-switcher';
 
 export default class AttachedFileDropdownMenu extends Component<{
   Args: {

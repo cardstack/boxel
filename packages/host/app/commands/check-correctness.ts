@@ -8,8 +8,6 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
@@ -17,6 +15,7 @@ import type CommandService from '../services/command-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 const cardIndexingTimeout = ENV.cardRenderTimeout;
 

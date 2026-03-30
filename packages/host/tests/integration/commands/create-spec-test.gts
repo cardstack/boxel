@@ -6,8 +6,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 
-import type { Spec } from '@cardstack/base/spec';
-
 import {
   testRealmURL,
   setupCardLogs,
@@ -21,6 +19,8 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { Spec } from '@cardstack/base/spec';
 
 module('Integration | Command | create-specs', function (hooks) {
   setupRenderingTest(hooks);

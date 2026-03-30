@@ -28,8 +28,6 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
   SECTION_DISPLAY_LIMIT_UNFOCUSED,
@@ -45,6 +43,7 @@ import { getCodeRefFromSearchKey } from './utils';
 import type { PrerenderedCard } from '../prerendered-card-search';
 
 import type { NewCardArgs } from './utils';
+import type { CardDef } from '@cardstack/base/card-api';
 import type { NamedArgs } from 'ember-modifier';
 
 interface ScrollToFocusedSectionSignature {

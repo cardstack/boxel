@@ -2,12 +2,11 @@ import { service } from '@ember/service';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-import type { BotTriggerEvent } from '@cardstack/base/matrix-event';
-
 import HostBaseCommand from '../../lib/host-base-command';
 
 import type MatrixService from '../../services/matrix-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { BotTriggerEvent } from '@cardstack/base/matrix-event';
 
 export default class SendBotTriggerEventCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendBotTriggerEventInput

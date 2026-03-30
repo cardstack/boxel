@@ -508,10 +508,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
-    await fillIn(
-      `[data-test-search-field]`,
-      `@cardstack/base/types/card`,
-    );
+    await fillIn(`[data-test-search-field]`, `@cardstack/base/types/card`);
 
     await waitFor('[data-test-card-catalog-item]', {
       count: 1,
@@ -1300,9 +1297,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click('[data-test-create-new-card-button]');
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
-    await click(
-      '[data-test-card-catalog-item="@cardstack/base/cards/skill"]',
-    );
+    await click('[data-test-card-catalog-item="@cardstack/base/cards/skill"]');
     await click('[data-test-card-catalog-go-button]');
 
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');

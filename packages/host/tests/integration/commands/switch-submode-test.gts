@@ -10,8 +10,6 @@ import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -23,6 +21,8 @@ import {
 import { CardDef, setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let store: StoreService;
 

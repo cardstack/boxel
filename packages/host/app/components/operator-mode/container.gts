@@ -34,8 +34,6 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardContext } from '@cardstack/base/card-api';
-
 import CardCatalogModal from '../card-catalog/modal';
 import PrerenderedCardSearch from '../prerendered-card-search';
 import { Submodes } from '../submode-switcher';
@@ -50,6 +48,7 @@ import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
+import type { CardContext } from '@cardstack/base/card-api';
 const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {

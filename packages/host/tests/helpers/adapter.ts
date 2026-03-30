@@ -27,16 +27,15 @@ import type {
   TokenClaims,
 } from '@cardstack/runtime-common/realm';
 
-import type {
-  FileWatcherEventContent,
-  RealmEventContent,
-} from '@cardstack/base/matrix-event';
-
 import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type {
+  FileWatcherEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 import type ms from 'ms';
 
 interface Dir {

@@ -11,8 +11,6 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import {
   testRealmURL,
   testModuleRealm,
@@ -28,6 +26,7 @@ import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { TestRealmAdapter } from '../../helpers/adapter';
+import type { CardDef } from '@cardstack/base/card-api';
 
 let loader: Loader;
 let cardApi: typeof import('@cardstack/base/card-api');

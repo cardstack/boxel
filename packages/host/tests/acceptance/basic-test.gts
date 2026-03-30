@@ -43,9 +43,9 @@ module('Acceptance | basic tests', function (hooks) {
     let { default: StringField } = await loader.import<
       typeof import('@cardstack/base/string')
     >(`${baseRealm.url}string`);
-    let { Spec } = await loader.import<
-      typeof import('@cardstack/base/spec')
-    >(`${baseRealm.url}spec`);
+    let { Spec } = await loader.import<typeof import('@cardstack/base/spec')>(
+      `${baseRealm.url}spec`,
+    );
 
     class Index extends CardDef {
       static isolated = class Isolated extends Component<typeof this> {

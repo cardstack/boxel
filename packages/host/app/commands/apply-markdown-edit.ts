@@ -1,11 +1,11 @@
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import { FieldPathParser } from '../lib/field-path-parser';
 import HostBaseCommand from '../lib/host-base-command';
 
 import GetCardCommand from './get-card';
 import PatchFieldsCommand from './patch-fields';
 import SendRequestViaProxyCommand from './send-request-via-proxy';
+
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 const escapeForTag = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

@@ -22,9 +22,6 @@ import ENV from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-
 import {
   testRealmURL,
   p,
@@ -33,6 +30,9 @@ import {
   getTypes,
   serializeCard,
 } from '../helpers';
+
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 let cardApi: typeof import('@cardstack/base/card-api');
 let string: typeof import('@cardstack/base/string');
@@ -2745,11 +2745,7 @@ module('Unit | query', function (hooks) {
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [
-          fancyPersonKey,
-          personKey,
-          '@cardstack/base/card-api/CardDef',
-        ],
+        types: [fancyPersonKey, personKey, '@cardstack/base/card-api/CardDef'],
         embedded_html: {
           [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
           [personKey]: '<div>Donald (Person embedded template)</div>',
@@ -2963,11 +2959,7 @@ module('Unit | query', function (hooks) {
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [
-          fancyPersonKey,
-          personKey,
-          '@cardstack/base/card-api/CardDef',
-        ],
+        types: [fancyPersonKey, personKey, '@cardstack/base/card-api/CardDef'],
         embedded_html: {
           [fancyPersonKey]: '<div>Jimmy (FancyPerson embedded template)</div>',
           [personKey]: '<div>Jimmy (Person embedded template)</div>',
@@ -2991,11 +2983,7 @@ module('Unit | query', function (hooks) {
         realm_version: 1,
         realm_url: testRealmURL,
         deps: [],
-        types: [
-          fancyPersonKey,
-          personKey,
-          '@cardstack/base/card-api/CardDef',
-        ],
+        types: [fancyPersonKey, personKey, '@cardstack/base/card-api/CardDef'],
         embedded_html: {
           [fancyPersonKey]: '<div>Donald (FancyPerson embedded template)</div>',
           [personKey]: '<div>Donald (Person embedded template)</div>',

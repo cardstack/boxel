@@ -13,9 +13,8 @@ import {
   specRef,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import type { SortOption } from './constants';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export interface NewCardArgs {
   ref: CodeRef;

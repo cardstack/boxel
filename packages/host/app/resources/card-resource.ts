@@ -11,9 +11,8 @@ import { isCardInstance, isFileDefInstance } from '@cardstack/runtime-common';
 
 import type { StoreReadType } from '@cardstack/runtime-common';
 
-import type { BaseDef } from '@cardstack/base/card-api';
-
 import type StoreService from '../services/store';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Args {
   named: {

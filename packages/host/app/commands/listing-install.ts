@@ -25,14 +25,13 @@ import type {
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 const log = logger('catalog:install');

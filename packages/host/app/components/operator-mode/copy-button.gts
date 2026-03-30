@@ -20,12 +20,11 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import consumeContext from '../../helpers/consume-context';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {

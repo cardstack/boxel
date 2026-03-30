@@ -16,15 +16,6 @@ import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document'
 import { createAtomicDocument } from '@cardstack/runtime-common/atomic-document';
 import { validateWriteSize } from '@cardstack/runtime-common/write-size-validation';
 
-import type {
-  BaseDef,
-  CardDef,
-  FieldDef,
-  Field,
-  SerializeOpts,
-} from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-
 import LimitedSet from '../lib/limited-set';
 
 import type EnvironmentService from './environment-service';
@@ -33,6 +24,14 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type Realm from './realm';
 import type ResetService from './reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type {
+  BaseDef,
+  CardDef,
+  FieldDef,
+  Field,
+  SerializeOpts,
+} from '@cardstack/base/card-api';
 
 export type CardSaveSubscriber = (
   url: URL,

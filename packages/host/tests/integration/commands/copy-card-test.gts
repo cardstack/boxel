@@ -7,8 +7,6 @@ import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -18,6 +16,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 const testRealm2URL = 'http://test-realm/test2/';
 

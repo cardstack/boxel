@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import { DEFAULT_REMIX_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 import { skillCardURL } from '../lib/utils';
 
@@ -15,6 +13,7 @@ import UpdateRoomSkillsCommand from './update-room-skills';
 
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import type { Listing } from '@cardstack/catalog/listing/listing';
 

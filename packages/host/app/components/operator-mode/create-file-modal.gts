@@ -53,10 +53,6 @@ import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type { Spec } from '@cardstack/base/spec';
-import type { SpecType } from '@cardstack/base/spec';
-
 import { cleanseString } from '../../lib/utils';
 
 import ModalContainer from '../modal-container';
@@ -71,6 +67,9 @@ import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
 import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
+import type { Spec } from '@cardstack/base/spec';
 
 export type NewFileType =
   | 'duplicate-instance'

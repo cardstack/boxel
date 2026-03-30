@@ -4,15 +4,10 @@ import { service } from '@ember/service';
 
 import { isValidFormat } from '@cardstack/runtime-common';
 
-import type {
-  BoxComponent,
-  CardDef,
-  Format,
-} from '@cardstack/base/card-api';
-
 import { getClass, getTypes } from './meta';
 
 import type { Model as ParentModel } from '../render';
+import type { BoxComponent, CardDef, Format } from '@cardstack/base/card-api';
 
 export interface Model {
   instance: CardDef;

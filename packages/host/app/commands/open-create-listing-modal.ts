@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class OpenCreateListingModalCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateInput

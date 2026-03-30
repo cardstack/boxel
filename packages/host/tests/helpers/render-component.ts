@@ -5,11 +5,7 @@ import { render, getContext } from '@ember/test-helpers';
 import type { Loader } from '@cardstack/runtime-common';
 import { baseRealm } from '@cardstack/runtime-common';
 
-import type {
-  BaseDef,
-  Format,
-  Field,
-} from '@cardstack/base/card-api';
+import type { BaseDef, Format, Field } from '@cardstack/base/card-api';
 
 import type { ComponentLike } from '@glint/template';
 

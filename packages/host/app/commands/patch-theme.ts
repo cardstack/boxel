@@ -1,9 +1,9 @@
-import type * as BaseCommandModule from '@cardstack/base/command';
-import type { Skill } from '@cardstack/base/skill';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import UseAiAssistantCommand from './ai-assistant';
+
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 export default class PatchThemeCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchThemeInput,

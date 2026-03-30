@@ -56,12 +56,6 @@ import {
   normalizeRenderError,
 } from '@cardstack/host/utils/render-error';
 
-import type {
-  CardStore,
-  CardDef,
-  FieldDef,
-} from '@cardstack/base/card-api';
-
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
 import percySnapshot from './percy-snapshot';
@@ -72,6 +66,7 @@ import { getTestRealmRegistry } from './test-realm-registry';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import type { CardStore, CardDef, FieldDef } from '@cardstack/base/card-api';
 
 import type { SimpleElement } from '@simple-dom/interface';
 

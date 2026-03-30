@@ -9,13 +9,12 @@ import {
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
-import type { FileDef } from '@cardstack/base/file-api';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,

@@ -11,13 +11,12 @@ import {
   type HtmlTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import type { FileDef } from '@cardstack/base/file-api';
-
 import type { RoomMember } from './member';
 
 import type MessageCodePatchResult from './message-code-patch-result';
 
 import type MessageCommand from './message-command';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { EventStatus } from 'matrix-js-sdk';
 
 const ErrorMessage: Record<string, string> = {

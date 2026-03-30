@@ -25,8 +25,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from '@cardstack/base/file-api';
-
 import {
   envSkillId,
   testRealmURL,
@@ -53,6 +51,8 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';

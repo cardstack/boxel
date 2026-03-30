@@ -30,25 +30,6 @@ import {
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { SerializedFile } from '@cardstack/base/file-api';
-import type {
-  MatrixEvent as DiscreteMatrixEvent,
-  RoomCreateEvent,
-  RoomNameEvent,
-  InviteEvent,
-  JoinEvent,
-  LeaveEvent,
-  CardMessageEvent,
-  DebugMessageEvent,
-  MessageEvent,
-  CommandResultEvent,
-  RealmServerEvent,
-  CodePatchResultEvent,
-  ActiveLLMEvent,
-} from '@cardstack/base/matrix-event';
-
-import type { Skill } from '@cardstack/base/skill';
-
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -65,6 +46,23 @@ import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type { SerializedFile } from '@cardstack/base/file-api';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  RoomCreateEvent,
+  RoomNameEvent,
+  InviteEvent,
+  JoinEvent,
+  LeaveEvent,
+  CardMessageEvent,
+  DebugMessageEvent,
+  MessageEvent,
+  CommandResultEvent,
+  RealmServerEvent,
+  CodePatchResultEvent,
+  ActiveLLMEvent,
+} from '@cardstack/base/matrix-event';
+import type { Skill } from '@cardstack/base/skill';
 import type { TaskInstance } from 'ember-concurrency';
 import type { IRoomEvent } from 'matrix-js-sdk';
 

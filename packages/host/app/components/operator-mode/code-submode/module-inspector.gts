@@ -84,11 +84,7 @@ import type StoreService from '@cardstack/host/services/store';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import type {
-  CardDef,
-  Format,
-  ViewCardFn,
-} from '@cardstack/base/card-api';
+import type { CardDef, Format, ViewCardFn } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { Spec } from '@cardstack/base/spec';
 

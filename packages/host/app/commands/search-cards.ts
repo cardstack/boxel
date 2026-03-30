@@ -3,13 +3,12 @@ import { service } from '@ember/service';
 import type { Filter } from '@cardstack/runtime-common';
 import { assertQuery } from '@cardstack/runtime-common';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchCardsByTypeAndTitleInput,

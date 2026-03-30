@@ -22,9 +22,9 @@ import {
   coerceTypes,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import { testRealmURL } from './index';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 const defaultIndexEntry = {
   realm_version: 1,

@@ -15,9 +15,6 @@ import CardStore, {
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-card-store';
 
-import type * as CardAPI from '@cardstack/base/card-api';
-import type { CardDef as CardInstance } from '@cardstack/base/card-api';
-
 import { saveCard, testRealmURL } from '../helpers';
 import {
   CardDef,
@@ -30,6 +27,9 @@ import {
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { CardDef as CardInstance } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 let loader: Loader;
 

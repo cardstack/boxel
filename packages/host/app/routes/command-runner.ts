@@ -16,16 +16,12 @@ import {
   parseBoxelHostCommandSpecifier,
 } from '@cardstack/runtime-common';
 
-import type {
-  CardDef,
-  CardDefConstructor,
-} from '@cardstack/base/card-api';
-
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import type RealmService from '../services/realm';
+import type { CardDef, CardDefConstructor } from '@cardstack/base/card-api';
 
 const commandRequestStorageKeyPrefix = 'boxel-command-request:';
 const commandRequestTtlMs = 5 * 60 * 1000;

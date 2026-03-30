@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import SendRequestViaProxyCommand from './send-request-via-proxy';
@@ -9,6 +7,7 @@ import SendRequestViaProxyCommand from './send-request-via-proxy';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type RealmServerService from '../services/realm-server';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class SummarizeSessionCommand extends HostBaseCommand<
   typeof BaseCommandModule.SummarizeSessionInput,

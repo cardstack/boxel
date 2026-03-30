@@ -8,8 +8,6 @@ import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 import CopyAndEditCommand from '@cardstack/host/commands/copy-and-edit';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -19,6 +17,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 const otherRealmURL = 'http://other-realm/test2/';
 

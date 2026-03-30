@@ -17,10 +17,6 @@ import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assista
 import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
-import type { Skill } from '@cardstack/base/skill';
-
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -32,6 +28,9 @@ import {
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
+import type { Skill } from '@cardstack/base/skill';
 
 let commandService: CommandService;
 

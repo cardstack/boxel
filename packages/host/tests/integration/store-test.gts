@@ -38,10 +38,6 @@ import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
-import type { CardDef as CardDefType } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-import type { RealmEventContent } from '@cardstack/base/matrix-event';
-
 import {
   testRealmURL,
   setupLocalIndexing,
@@ -70,6 +66,9 @@ import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type { TestRealmAdapter } from '../helpers/adapter';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 module('Integration | Store', function (hooks) {
   setupRenderingTest(hooks);

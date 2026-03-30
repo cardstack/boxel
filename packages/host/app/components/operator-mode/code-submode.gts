@@ -64,14 +64,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type {
-  BaseDef,
-  CardDef,
-  Format,
-  CardContext,
-} from '@cardstack/base/card-api';
-import type { SpecType } from '@cardstack/base/spec';
-
 import {
   CodeModePanelWidths,
   CodeModePanelHeights,
@@ -93,6 +85,13 @@ import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
+import type {
+  BaseDef,
+  CardDef,
+  Format,
+  CardContext,
+} from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
 
 interface Signature {
   Args: {

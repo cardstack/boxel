@@ -14,11 +14,6 @@ import {
 } from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
-import type * as CardAPI from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-
-import type { Spec } from '@cardstack/base/spec';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import CreateSpecCommand from './create-specs';
@@ -32,6 +27,9 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Spec } from '@cardstack/base/spec';
 
 type ListingType = 'card' | 'skill' | 'theme' | 'field';
 const listingSubClass: Record<ListingType, string> = {

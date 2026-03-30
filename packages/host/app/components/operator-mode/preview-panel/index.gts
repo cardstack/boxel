@@ -41,6 +41,11 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import type RealmService from '@cardstack/host/services/realm';
 
+import FormatChooser from '../code-submode/format-chooser';
+
+import FittedFormatGallery from './fitted-format-gallery';
+import MetadataPanel from './metadata-panel';
+
 import type {
   BaseDef,
   CardContext,
@@ -48,11 +53,6 @@ import type {
   Format,
   ViewCardFn,
 } from '@cardstack/base/card-api';
-
-import FormatChooser from '../code-submode/format-chooser';
-
-import FittedFormatGallery from './fitted-format-gallery';
-import MetadataPanel from './metadata-panel';
 
 interface Signature {
   Element: HTMLElement;

@@ -15,10 +15,10 @@ import {
 } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { primitive as primitiveType } from '@cardstack/base/card-api';
-
 import { setupLocalIndexing, setupOnSave, setupCardLogs } from '../helpers';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { primitive as primitiveType } from '@cardstack/base/card-api';
 
 let cardApi: typeof import('@cardstack/base/card-api');
 let string: typeof import('@cardstack/base/string');

@@ -19,8 +19,6 @@ import { StackItem } from '@cardstack/host/lib/stack-item';
 import type { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type * as CardAPI from '@cardstack/base/card-api';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -33,6 +31,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {

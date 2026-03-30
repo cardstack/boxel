@@ -31,8 +31,6 @@ import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import { AiAssistantMessageDrafts } from '@cardstack/host/utils/local-storage-keys';
 
-import type { BoxelContext } from '@cardstack/base/matrix-event';
-
 import {
   setupLocalIndexing,
   setupOnSave,
@@ -69,6 +67,8 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { BoxelContext } from '@cardstack/base/matrix-event';
 
 async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-attach-button]');
@@ -1172,9 +1172,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-card]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
-    await click(
-      `[data-test-card-catalog-item="@cardstack/base/types/card"]`,
-    );
+    await click(`[data-test-card-catalog-item="@cardstack/base/types/card"]`);
 
     await click(`[data-test-card-catalog-go-button]`);
 

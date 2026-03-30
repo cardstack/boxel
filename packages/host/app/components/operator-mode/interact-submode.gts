@@ -61,13 +61,6 @@ import {
 
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
-import type {
-  CardContext,
-  CardDef,
-  Format,
-} from '@cardstack/base/card-api';
-import type { Spec } from '@cardstack/base/spec';
-
 import consumeContext from '../../helpers/consume-context';
 
 import CopyButton from './copy-button';
@@ -93,6 +86,8 @@ import type Realm from '../../services/realm';
 import type RealmServer from '../../services/realm-server';
 import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
+import type { CardContext, CardDef, Format } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 

@@ -15,6 +15,10 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import GetEventsFromRoomCommand from './get-events-from-room';
+
+import type LoaderService from '../services/loader-service';
+import type MessageService from '../services/message-service';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type {
@@ -24,11 +28,6 @@ import type {
   RealmEventContent,
   Tool,
 } from '@cardstack/base/matrix-event';
-
-import GetEventsFromRoomCommand from './get-events-from-room';
-
-import type LoaderService from '../services/loader-service';
-import type MessageService from '../services/message-service';
 
 export async function waitForMatrixEvent(
   commandContext: CommandContext,

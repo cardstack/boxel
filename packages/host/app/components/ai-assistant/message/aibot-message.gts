@@ -34,9 +34,9 @@ import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
 import type CommandService from '@cardstack/host/services/command-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import type { CodePatchStatus } from '@cardstack/base/matrix-event';
-
 import Message from './text-content';
+
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLDivElement;

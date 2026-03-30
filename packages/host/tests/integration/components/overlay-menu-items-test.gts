@@ -12,8 +12,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { GetMenuItemParams } from '@cardstack/base/card-api';
-
 import {
   testRealmURL,
   testModuleRealm,
@@ -27,6 +25,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { GetMenuItemParams } from '@cardstack/base/card-api';
 
 let loader: Loader;
 let setCardInOperatorModeState: (leftCards: string[]) => void;

@@ -5,8 +5,6 @@ import { module, test } from 'qunit';
 
 import { Deferred, baseRealm, type Realm } from '@cardstack/runtime-common';
 
-import type { RealmEventContent } from '@cardstack/base/matrix-event';
-
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   setupAcceptanceTestRealm,
@@ -19,6 +17,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 module('Acceptance | file def', function (hooks) {
   let realm: Realm;

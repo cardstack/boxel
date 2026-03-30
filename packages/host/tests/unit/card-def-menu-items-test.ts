@@ -9,12 +9,9 @@ import {
   type Loader,
 } from '@cardstack/runtime-common';
 
-import type {
-  CardDef,
-  GetMenuItemParams,
-} from '@cardstack/base/card-api';
-
 import { setupRenderingTest } from '../helpers/setup';
+
+import type { CardDef, GetMenuItemParams } from '@cardstack/base/card-api';
 
 let getDefaultCardMenuItems: (
   card: CardDef,

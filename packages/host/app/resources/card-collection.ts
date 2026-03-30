@@ -17,9 +17,8 @@ import {
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Args {
   named: {

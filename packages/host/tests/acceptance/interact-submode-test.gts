@@ -19,11 +19,6 @@ import {
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
-import type {
-  IncrementalIndexEventContent,
-  RealmEventContent,
-} from '@cardstack/base/matrix-event';
-
 import {
   percySnapshot,
   testRealmURL,
@@ -35,6 +30,11 @@ import {
   setupInteractSubmodeTests,
   testRealm2URL,
 } from '../helpers/interact-submode-setup';
+
+import type {
+  IncrementalIndexEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 module('Acceptance | interact submode tests', function (hooks) {
   let realm: Realm;

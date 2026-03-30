@@ -4,14 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as CardAPI from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-import type { FileDef } from '@cardstack/base/file-api';
-import type {
-  CardMessageContent,
-  Tool,
-} from '@cardstack/base/matrix-event';
-
 import { addPatchTools } from '../commands/utils';
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -20,6 +12,10 @@ import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { CardMessageContent, Tool } from '@cardstack/base/matrix-event';
 
 export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   typeof BaseCommandModule.SendAiAssistantMessageInput,

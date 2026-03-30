@@ -9,8 +9,6 @@ import { baseRealm, type Loader } from '@cardstack/runtime-common';
 import ApplyMarkdownEditCommand from '@cardstack/host/commands/apply-markdown-edit';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -24,6 +22,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {

@@ -17,8 +17,6 @@ import {
 
 import { isReady } from '@cardstack/host/resources/file';
 
-import type { BaseDef } from '@cardstack/base/card-api';
-
 import {
   moduleContentsResource,
   type State,
@@ -32,6 +30,7 @@ import type LoaderService from './loader-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 import type { Ready } from '../resources/file';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 export default class CodeSemanticsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;

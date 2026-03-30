@@ -21,8 +21,6 @@ import ENV from '@cardstack/host/config/environment';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardMessageContent } from '@cardstack/base/matrix-event';
-
 import {
   testRealmURL,
   setupCardLogs,
@@ -33,6 +31,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardMessageContent } from '@cardstack/base/matrix-event';
 
 class MockRouterService extends Service {
   replaceWith(_route: any, _args: any) {

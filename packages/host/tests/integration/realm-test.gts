@@ -16,9 +16,6 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type * as CardAPI from '@cardstack/base/card-api';
-import type * as StringFieldMod from '@cardstack/base/string';
-
 import {
   testRealmURL,
   testRealmInfo,
@@ -43,6 +40,9 @@ import {
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as StringFieldMod from '@cardstack/base/string';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 

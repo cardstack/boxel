@@ -2,12 +2,8 @@ import Route from '@ember/routing/route';
 
 import { cardTypeIcon } from '@cardstack/runtime-common';
 
-import type {
-  CardOrFieldTypeIcon,
-  CardDef,
-} from '@cardstack/base/card-api';
-
 import type { Model as ParentModel } from '../render';
+import type { CardOrFieldTypeIcon, CardDef } from '@cardstack/base/card-api';
 
 export interface Model {
   Component: CardOrFieldTypeIcon;

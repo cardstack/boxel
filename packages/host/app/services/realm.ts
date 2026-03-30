@@ -42,11 +42,6 @@ import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type {
-  IndexRealmEventContent,
-  RealmEventContent,
-} from '@cardstack/base/matrix-event';
-
 import {
   syncTokenToServiceWorker,
   syncAllTokensToServiceWorker,
@@ -59,6 +54,10 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type {
+  IndexRealmEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 const log = logger('service:realm');
 

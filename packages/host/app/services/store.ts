@@ -68,12 +68,6 @@ import {
   resolveCardReference,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, BaseDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-import type { FileDef } from '@cardstack/base/file-api';
-
-import type { RealmEventContent } from '@cardstack/base/matrix-event';
-
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -103,6 +97,10 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type { SearchResource } from '../resources/search';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 

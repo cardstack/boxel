@@ -9,11 +9,10 @@ import { Button } from '@cardstack/boxel-ui/components';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 
-import type { FileDef } from '@cardstack/base/file-api';
-
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Element: HTMLButtonElement;

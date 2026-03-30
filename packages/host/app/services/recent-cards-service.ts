@@ -13,15 +13,14 @@ import {
   trimJsonExtension,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, BaseDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-
 import { RecentCards } from '../utils/local-storage-keys';
 
 import type CardService from './card-service';
 import type RecentFilesService from './recent-files-service';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export interface RecentCard {
   cardId: string;

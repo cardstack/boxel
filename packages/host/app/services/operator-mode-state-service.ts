@@ -46,10 +46,6 @@ import type RealmServer from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { CardDef, Format } from '@cardstack/base/card-api';
-
-import type { BoxelContext } from '@cardstack/base/matrix-event';
-
 import { removeFileExtension } from '../components/card-search/utils';
 
 import { ModuleInspectorSelections } from '../utils/local-storage-keys';
@@ -68,6 +64,8 @@ import type StoreService from './store';
 import type { Stack } from '../components/operator-mode/interact-submode';
 
 import type IndexController from '../controllers';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type { BoxelContext } from '@cardstack/base/matrix-event';
 
 export interface CreateListingModalPayload {
   codeRef: CodeRef;

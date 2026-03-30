@@ -12,8 +12,6 @@ import TransformCardsCommand from '@cardstack/host/commands/transform-cards';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import type * as CommandModule from '@cardstack/base/command';
-
 import {
   setupCardLogs,
   setupIntegrationTestRealm,
@@ -24,6 +22,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CommandModule from '@cardstack/base/command';
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {

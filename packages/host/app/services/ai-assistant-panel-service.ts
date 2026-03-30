@@ -12,12 +12,6 @@ import window from 'ember-window-mock';
 import { isCardInstance } from '@cardstack/runtime-common';
 import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef, Format } from '@cardstack/base/card-api';
-import type * as CommandModule from '@cardstack/base/command';
-import type { FileDef } from '@cardstack/base/file-api';
-
-import type { Skill as SkillCard } from '@cardstack/base/skill';
-
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
 import SummarizeSessionCommand from '../commands/summarize-session';
@@ -39,6 +33,10 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 import type StoreService from './store';
 import type { Message } from '../lib/matrix-classes/message';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as CommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Skill as SkillCard } from '@cardstack/base/skill';
 
 export interface SessionRoomData {
   roomId: string;

@@ -1,9 +1,5 @@
 import { service } from '@ember/service';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-import type { SpecType } from '@cardstack/base/spec';
-
 import HostBaseCommand from '../lib/host-base-command';
 import { devSkillId } from '../lib/utils';
 
@@ -11,6 +7,9 @@ import OneShotLlmRequestCommand from './one-shot-llm-request';
 import PatchCardInstanceCommand from './patch-card-instance';
 
 import type CommandService from '../services/command-service';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { SpecType } from '@cardstack/base/spec';
 
 export default class GenerateReadmeSpecCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateReadmeSpecInput,

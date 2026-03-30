@@ -48,15 +48,14 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import type { CardContext } from '@cardstack/base/card-api';
-import type { Spec } from '@cardstack/base/spec';
-
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../../resources/element-tracker';
 import Overlays from '../overlays';
 
 import type { CardDefOrId } from '../stack-item';
+import type { CardContext } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {

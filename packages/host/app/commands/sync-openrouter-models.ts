@@ -3,12 +3,11 @@ import { service } from '@ember/service';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const BATCH_SIZE = 20;

@@ -18,11 +18,6 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type {
-  IncrementalIndexEventContent,
-  IndexRealmEventContent,
-} from '@cardstack/base/matrix-event';
-
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
   percySnapshot,
@@ -37,6 +32,11 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type {
+  IncrementalIndexEventContent,
+  IndexRealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = `http://test-realm/test2/`;
 const readOnlyRealmURL = `http://test-realm/test-read-only/`;

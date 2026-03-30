@@ -4,8 +4,6 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type { CardDef } from '@cardstack/base/card-api';
-
 import {
   testRealmURL,
   setupCardLogs,
@@ -18,6 +16,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef } from '@cardstack/base/card-api';
 
 module('Integration | loading', function (hooks) {
   setupRenderingTest(hooks);

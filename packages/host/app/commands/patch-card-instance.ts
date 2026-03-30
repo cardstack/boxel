@@ -9,15 +9,13 @@ import {
   generateJsonSchemaForCardType,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import type { CardDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CommandService from '../services/command-service';
-
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 interface Configuration {
   cardType: typeof CardDef;

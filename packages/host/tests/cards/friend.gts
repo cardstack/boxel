@@ -1,9 +1,4 @@
-import {
-  contains,
-  linksTo,
-  field,
-  CardDef,
-} from '@cardstack/base/card-api';
+import { contains, linksTo, field, CardDef } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 
 export class Friend extends CardDef {

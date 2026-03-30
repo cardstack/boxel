@@ -10,10 +10,10 @@ import {
 
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 
-import type { FileDef } from '@cardstack/base/file-api';
-
 import AttachButton from './attach-button';
 import AttachedItems from './attached-items';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type { WithBoundArgs } from '@glint/template';
 import type { TrackedSet } from 'tracked-built-ins';

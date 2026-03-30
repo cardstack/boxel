@@ -38,9 +38,6 @@ import {
   type SerializedError,
 } from '@cardstack/runtime-common/error';
 
-import type { CardDef, BaseDef } from '@cardstack/base/card-api';
-import type * as CardAPI from '@cardstack/base/card-api';
-
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 import { ensureMessageIncludesUrl, stripSelfDeps } from '../utils/render-error';
@@ -53,6 +50,8 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export type Model = {
   id: string;
