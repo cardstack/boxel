@@ -11,6 +11,7 @@ import difference from 'lodash/difference';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  cardIdToURL,
   isCardInstance,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -317,7 +318,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
-        realmURL: this.realm.realmOfURL(new URL(skillCard.sourceUrl))?.href,
+        realmURL: this.realm.realmOfURL(cardIdToURL(skillCard.sourceUrl))?.href,
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
