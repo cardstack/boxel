@@ -80,9 +80,6 @@ module.exports = function (defaults) {
               process: 'process',
             }),
             new webpack.IgnorePlugin({
-              resourceRegExp: /^https:\/\/cardstack\.com\/(base|catalog|skills|openrouter)/,
-            }),
-            new webpack.IgnorePlugin({
               resourceRegExp: /^@cardstack\/(base|catalog|skills|openrouter)\//,
             }),
             new MomentLocalesPlugin({
