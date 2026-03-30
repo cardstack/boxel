@@ -27,6 +27,7 @@ export async function createTestRun(
       sequenceNumber: seq,
       ticketURL: options.ticketURL,
       specRef: options.specRef,
+      projectCardUrl: options.projectCardUrl,
     },
   );
 

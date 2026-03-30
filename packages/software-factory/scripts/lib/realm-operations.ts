@@ -481,14 +481,25 @@ async function addRealmToMatrixAccountData(
 
   if (!existingRealms.includes(realmUrl)) {
     existingRealms.push(realmUrl);
-    await fetchImpl(accountDataUrl, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${matrixAuth.accessToken}`,
-      },
-      body: JSON.stringify({ realms: existingRealms }),
-    });
+    try {
+      let putResponse = await fetchImpl(accountDataUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${matrixAuth.accessToken}`,
+        },
+        body: JSON.stringify({ realms: existingRealms }),
+      });
+      if (!putResponse.ok) {
+        console.warn(
+          `Warning: failed to update Matrix account data for realm ${realmUrl}: HTTP ${putResponse.status}`,
+        );
+      }
+    } catch (err) {
+      console.warn(
+        `Warning: failed to update Matrix account data for realm ${realmUrl}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }
 

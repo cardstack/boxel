@@ -274,10 +274,11 @@ The current behavior is described in prose, but not encoded as a decision engine
 
 The execution loop involves operations with causal dependencies that must execute in sequence. For example, the verify step requires:
 
-1. Write test spec to the test realm (via `realm-write`)
-2. Execute tests against the target realm (via `run-realm-tests`)
-3. Parse and save test results to the test realm
-4. Feed results back to the agent for the next iteration
+1. Write test spec to the target realm `Tests/` folder (via `realm-write`)
+2. Write a `TestRun` card to the target realm `Test Runs/` folder (via `realm-write`)
+3. Execute tests against the target realm (via `run-realm-tests`); any data created during execution is stored in the test artifacts realm
+4. Parse and save test results back to the `TestRun` card in the target realm
+5. Feed results back to the agent for the next iteration
 
 The current `AgentAction[]` model is a flat array — it does not express causal ordering between actions. The orchestrator must either:
 

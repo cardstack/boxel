@@ -370,7 +370,7 @@ export async function executeTestRunFromRealm(
   // Step 2b: Cancel all indexing jobs on the test artifacts realm.
   if (testArtifactsRealmUrl) {
     await cancelAllIndexingJobs(testArtifactsRealmUrl, {
-      authorization: options.authorization,
+      authorization: testArtifactsAuthorization,
       fetch: options.fetch,
     });
   }
@@ -511,12 +511,17 @@ export async function executeTestRunFromRealm(
       };
     }
 
-    await completeTestRun(testRunId, attrs, completeOptions);
+    let completeResult = await completeTestRun(
+      testRunId,
+      attrs,
+      completeOptions,
+    );
 
     return {
       testRunId,
       status: attrs.status,
       ...(attrs.errorMessage ? { errorMessage: attrs.errorMessage } : {}),
+      ...(completeResult.error ? { error: completeResult.error } : {}),
     };
   } catch (err) {
     let errorMessage = err instanceof Error ? err.message : String(err);
