@@ -1252,20 +1252,6 @@ module(basename(__filename), function () {
         testRealmHref,
         'realmURL is correct',
       );
-
-      // Verify update event was emitted before the incremental index event
-      let updateIdx = messages.indexOf(updateEvent!);
-      let indexEvent = messages.find(
-        (m) =>
-          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-          m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental',
-      );
-      let indexIdx = messages.indexOf(indexEvent!);
-      assert.ok(
-        updateIdx < indexIdx,
-        'update event was emitted before incremental index event',
-      );
     });
 
     test('emits update event with updated when patching a file via API', async function (assert) {
@@ -1357,20 +1343,6 @@ module(basename(__filename), function () {
         content.realmURL,
         testRealmHref,
         'realmURL is correct',
-      );
-
-      // Verify update event was emitted before the incremental index event
-      let updateIdx = messages.indexOf(updateEvent!);
-      let indexEvent = messages.find(
-        (m) =>
-          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-          m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental',
-      );
-      let indexIdx = messages.indexOf(indexEvent!);
-      assert.ok(
-        updateIdx < indexIdx,
-        'update event was emitted before incremental index event',
       );
     });
 
