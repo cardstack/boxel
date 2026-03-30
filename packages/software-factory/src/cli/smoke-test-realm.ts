@@ -30,7 +30,11 @@
  *     --target-realm-url <realm-url>
  */
 
-import { parseArgs } from '../../scripts/lib/boxel';
+import {
+  getRealmServerToken,
+  matrixLogin,
+  parseArgs,
+} from '../../scripts/lib/boxel';
 import { executeTestRunFromRealm } from '../../scripts/lib/factory-test-realm';
 import { writeCardSource } from '../../scripts/lib/realm-operations';
 import { createBoxelRealmFetch } from '../realm-auth';
@@ -115,30 +119,94 @@ async function main() {
     new URL(targetRealmUrl).origin + '/',
   ).href;
 
+  let realmServerUrl = new URL(targetRealmUrl).origin + '/';
+  let realmPath = new URL(targetRealmUrl).pathname.replace(/^\//, '').replace(/\/$/, '');
+  // The endpoint for _create-realm is just the realm name (not username/realm).
+  // The username is determined from the JWT. Extract just the last segment.
+  let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
+
   console.log('=== Factory Test Realm Smoke Test ===\n');
   console.log(`Target realm: ${targetRealmUrl}`);
+  console.log(`Realm server: ${realmServerUrl}`);
   console.log(`Test results module: ${testResultsModuleUrl}`);
 
-  // Authenticate
+  // Authenticate via Matrix to get a realm server JWT for realm creation
+  let matrixAuth = await matrixLogin();
+  let serverToken = await getRealmServerToken(matrixAuth);
+  console.log(`Auth: server token obtained\n`);
+
+  let fetchImpl = globalThis.fetch;
+  let authorization: string | undefined = serverToken;
+
+  // -------------------------------------------------------------------------
+  // Phase 0: Ensure the target realm exists
+  // -------------------------------------------------------------------------
+
+  console.log('--- Phase 0: Ensuring target realm exists ---\n');
+
+  // Check if realm already exists
+  let realmCheckResponse = await fetchImpl(targetRealmUrl, {
+    headers: { Accept: 'application/json', ...(authorization ? { Authorization: authorization } : {}) },
+  });
+
+  if (realmCheckResponse.ok) {
+    console.log(`  Realm already exists: ${targetRealmUrl}\n`);
+  } else {
+    console.log(`  Creating realm: ${realmEndpoint}...`);
+    let createHeaders: Record<string, string> = {
+      Accept: 'application/vnd.api+json',
+      'Content-Type': 'application/vnd.api+json',
+    };
+    if (authorization) {
+      createHeaders['Authorization'] = authorization;
+    }
+
+    let createResponse = await fetchImpl(`${realmServerUrl}_create-realm`, {
+      method: 'POST',
+      headers: createHeaders,
+      body: JSON.stringify({
+        data: {
+          type: 'realm',
+          attributes: {
+            name: 'Smoke Test Realm',
+            endpoint: realmEndpoint,
+          },
+        },
+      }),
+    });
+
+    if (createResponse.ok) {
+      let result = (await createResponse.json()) as { data?: { id?: string } };
+      console.log(`  Created: ${result.data?.id ?? targetRealmUrl}\n`);
+    } else {
+      let body = await createResponse.text();
+      if (body.includes('already exists')) {
+        console.log(`  Realm already exists (endpoint in use)\n`);
+      } else {
+        console.error(`  Failed to create realm: HTTP ${createResponse.status}: ${body.slice(0, 300)}`);
+        process.exit(1);
+      }
+    }
+  }
+
+  // Get realm-scoped auth now that the realm exists
   let realmFetch = createBoxelRealmFetch(targetRealmUrl);
-  let authorization: string | undefined;
   try {
-    let testResponse = await realmFetch(targetRealmUrl, {
+    let authResponse = await realmFetch(targetRealmUrl, {
       headers: { Accept: 'application/json' },
     });
-    authorization = testResponse.headers.get('authorization') ?? undefined;
-    console.log(
-      `Auth: ${testResponse.ok ? 'authenticated' : `failed (${testResponse.status})`}\n`,
-    );
-  } catch (err) {
-    console.log(
-      `Auth: using realm fetch (${err instanceof Error ? err.message : 'unknown'})\n`,
-    );
+    let realmAuth = authResponse.headers.get('authorization');
+    if (realmAuth) {
+      authorization = realmAuth;
+    }
+  } catch {
+    // keep server token as fallback
   }
+  fetchImpl = realmFetch as unknown as typeof globalThis.fetch;
 
   let fetchOptions = {
     authorization,
-    fetch: realmFetch as unknown as typeof globalThis.fetch,
+    fetch: fetchImpl,
   };
 
   // -------------------------------------------------------------------------
