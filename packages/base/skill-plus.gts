@@ -39,7 +39,7 @@ export function slugifyHeading(text: string): string {
   );
 }
 
-type TocItem = { level: number; text: string; id: string };
+type TocItem = { level: number; text: string; id: string; badge?: string };
 
 export class TocItemField extends FieldDef {
   static displayName = 'TOC Item';
