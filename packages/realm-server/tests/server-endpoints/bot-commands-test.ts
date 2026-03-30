@@ -65,7 +65,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-      assert.strictEqual(response.status, 205, 'HTTP 201 status');
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
       assert.strictEqual(
         response.body.data.attributes.botId,
         botRegistrationId,
