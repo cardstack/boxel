@@ -5,13 +5,13 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import UrlField from 'https://cardstack.com/base/url';
-import DateField from 'https://cardstack.com/base/date';
-import ColorField from 'https://cardstack.com/base/color';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
+import UrlField from '@cardstack/base/url';
+import DateField from '@cardstack/base/date';
+import ColorField from '@cardstack/base/color';
 
 import { dayjsFormat, gt } from '@cardstack/boxel-ui/helpers';
 

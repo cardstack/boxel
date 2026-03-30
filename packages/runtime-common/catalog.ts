@@ -1,11 +1,11 @@
 import { isEqual, uniqWith, kebabCase } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
-import type { Spec } from 'https://cardstack.com/base/spec';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { RealmPaths, join } from './paths';
+import type { Spec } from '@cardstack/base/spec';
+import type { CardDef } from '@cardstack/base/card-api';
+import { join } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
 import { resolveAdoptedCodeRef } from './code-ref';
-import { realmURL } from './constants';
+import { realmURL, baseRealm } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
 import { cardIdToURL } from './card-reference-resolver';
@@ -13,7 +13,9 @@ import { cardIdToURL } from './card-reference-resolver';
 // @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
-const baseRealmPath = new RealmPaths(new URL('https://cardstack.com/base/'));
+function isInBaseRealm(id: string): boolean {
+  return id.startsWith(baseRealm.url);
+}
 
 // sourceCodeRef -- (installs module) --> targetCodeRef
 // sourceCodeRef: code ref of the code from the source realm
@@ -170,7 +172,7 @@ function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(cardIdToURL(codeRef.module))) {
+  if (isInBaseRealm(codeRef.module)) {
     return codeRef;
   } else {
     let targetModule = resolver.target(cardIdToURL(codeRef.module).href);
@@ -192,7 +194,7 @@ export function planModuleInstall(
     return { module: s.moduleHref, name: s.ref.name };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (isInBaseRealm(sourceCodeRef.module)) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
@@ -214,10 +216,10 @@ export function planInstanceInstall(
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
     let lid = resolver.local(cardIdToURL(instance.id).href);
-    if (baseRealmPath.inRealm(cardIdToURL(instance.id))) {
+    if (isInBaseRealm(instance.id)) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (!isInBaseRealm(sourceCodeRef.module)) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,

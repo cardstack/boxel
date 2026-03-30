@@ -4,8 +4,8 @@ import { isCardInstance, logger } from '@cardstack/runtime-common';
 // Conventional module-scoped logger (pattern used elsewhere like store & realm events)
 const oneShotLogger = logger('llm:oneshot');
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { Skill } from 'https://cardstack.com/base/skill';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 

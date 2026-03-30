@@ -6,11 +6,11 @@ import {
   containsMany,
   Component,
   FieldDef,
-} from 'https://cardstack.com/base/card-api'; // ⁽¹⁾ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api'; // ⁽¹⁾ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DateTimeField from '@cardstack/base/datetime';
 import { Button, Pill } from '@cardstack/boxel-ui/components'; // ⁽²⁾ UI components
 import {
   formatDateTime,

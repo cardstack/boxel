@@ -12,11 +12,11 @@ import window from 'ember-window-mock';
 import { isCardInstance } from '@cardstack/runtime-common';
 import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as CommandModule from 'https://cardstack.com/base/command';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as CommandModule from '@cardstack/base/command';
+import type { FileDef } from '@cardstack/base/file-api';
 
-import type { Skill as SkillCard } from 'https://cardstack.com/base/skill';
+import type { Skill as SkillCard } from '@cardstack/base/skill';
 
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
@@ -89,7 +89,7 @@ export default class AiAssistantPanelService extends Service {
 
   private commandModuleResource = importResource(
     this,
-    () => 'https://cardstack.com/base/command',
+    () => '@cardstack/base/command',
   );
 
   get commandModule() {

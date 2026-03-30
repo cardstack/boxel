@@ -1,5 +1,5 @@
-import { Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { Swatch } from '@cardstack/boxel-ui/components';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
 import ColorPickerField from './color-field/components/color-picker-field';

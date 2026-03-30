@@ -1,4 +1,4 @@
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import { CardContext } from '@cardstack/base/card-api';
 import { Listing } from '../../listing/listing';
 
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';

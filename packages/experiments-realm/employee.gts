@@ -2,8 +2,8 @@ import {
   contains,
   field,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { Person } from './person';
 
 export class Employee extends Person {

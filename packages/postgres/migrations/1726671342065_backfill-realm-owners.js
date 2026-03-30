@@ -10,8 +10,8 @@ exports.up = (pgm) => {
            ('https://realms-staging.stack.cards/experiments/', 'users', true, true, false),
            ('https://realms-staging.stack.cards/catalog/', '@catalog_realm:stack.cards', true, true, true),
            ('https://realms-staging.stack.cards/catalog/', '*', true, false, false),
-           ('https://cardstack.com/base/', '@base_realm:stack.cards', true, true, true),
-           ('https://cardstack.com/base/', '*', true, false, false)
+           ('@cardstack/base/', '@base_realm:stack.cards', true, true, true),
+           ('@cardstack/base/', '*', true, false, false)
          ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
          DO UPDATE SET
            realm_url   = EXCLUDED.realm_url,
@@ -31,8 +31,8 @@ exports.up = (pgm) => {
            ('https://app.boxel.ai/experiments/', 'users', true, true, false),
            ('https://app.boxel.ai/catalog/', '@catalog_realm:boxel.ai', true, true, true),
            ('https://app.boxel.ai/catalog/', '*', true, false, false),
-           ('https://cardstack.com/base/', '@base_realm:boxel.ai', true, true, true),
-           ('https://cardstack.com/base/', '*', true, false, false)
+           ('@cardstack/base/', '@base_realm:boxel.ai', true, true, true),
+           ('@cardstack/base/', '*', true, false, false)
          ON CONFLICT ON CONSTRAINT realm_user_permissions_pkey
          DO UPDATE SET
            realm_url   = EXCLUDED.realm_url,
@@ -46,8 +46,8 @@ exports.up = (pgm) => {
       pgm.sql(
         `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner)
          VALUES
-           ('https://cardstack.com/base/', '@base_realm:localhost', true, true, true),
-           ('https://cardstack.com/base/', '*', true, false, false),
+           ('@cardstack/base/', '@base_realm:localhost', true, true, true),
+           ('@cardstack/base/', '*', true, false, false),
            ('http://localhost:4201/seed/', '@seed_realm:localhost', true, true, true),
            ('http://localhost:4201/experiments/', '@experiments_realm:localhost', true, true, true),
            ('http://localhost:4201/experiments/', '*', true, false, false),
@@ -84,7 +84,7 @@ exports.down = (pgm) => {
         "DELETE FROM realm_user_permissions WHERE realm_url = 'https://realms-staging.stack.cards/experiments/' AND username = '@experiments_realm:stack.cards'",
       );
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://cardstack.com/base/' AND username = '@base_realm:stack.cards'",
+        "DELETE FROM realm_user_permissions WHERE realm_url = '@cardstack/base/' AND username = '@base_realm:stack.cards'",
       );
       break;
     case 'production':
@@ -95,12 +95,12 @@ exports.down = (pgm) => {
         "DELETE FROM realm_user_permissions WHERE realm_url = 'https://app.boxel.ai/experiments/' AND username = '@experiments_realm:boxel.ai'",
       );
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://cardstack.com/base/' AND username = '@base_realm:boxel.ai'",
+        "DELETE FROM realm_user_permissions WHERE realm_url = '@cardstack/base/' AND username = '@base_realm:boxel.ai'",
       );
       break;
     default:
       pgm.sql(
-        "DELETE FROM realm_user_permissions WHERE realm_url = 'https://cardstack.com/base/' AND username = '@base_realm:localhost'",
+        "DELETE FROM realm_user_permissions WHERE realm_url = '@cardstack/base/' AND username = '@base_realm:localhost'",
       );
       pgm.sql(
         "DELETE FROM realm_user_permissions WHERE realm_url = 'http://localhost:4201/seed/' AND username = '@seed_realm:localhost'",

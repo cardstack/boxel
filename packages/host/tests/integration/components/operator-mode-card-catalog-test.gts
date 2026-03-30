@@ -510,7 +510,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
       `[data-test-search-field]`,
-      `https://cardstack.com/base/types/card`,
+      `@cardstack/base/types/card`,
     );
 
     await waitFor('[data-test-card-catalog-item]', {
@@ -1301,7 +1301,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+      '[data-test-card-catalog-item="@cardstack/base/cards/skill"]',
     );
     await click('[data-test-card-catalog-go-button]');
 

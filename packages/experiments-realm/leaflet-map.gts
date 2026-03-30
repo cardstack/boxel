@@ -1,11 +1,11 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef } from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import Modifier, { NamedArgs } from 'ember-modifier';
 import { action } from '@ember/object';
 import MapIcon from '@cardstack/boxel-icons/map';

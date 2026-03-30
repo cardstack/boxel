@@ -368,7 +368,7 @@ test.describe('Skills', () => {
     await page.locator('[data-test-search-field]').fill('Skill');
     await page
       .locator(
-        '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
+        '[data-test-card-catalog-item="@cardstack/base/cards/skill"]',
       )
       .click();
     await page.locator('[data-test-card-catalog-go-button]').click();

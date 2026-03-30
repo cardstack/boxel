@@ -1,10 +1,10 @@
 import {
   Component as BoxelComponent,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import Component from '@glimmer/component';
-import StringField from 'https://cardstack.com/base/string';
-import { contains, field } from 'https://cardstack.com/base/card-api';
+import StringField from '@cardstack/base/string';
+import { contains, field } from '@cardstack/base/card-api';
 import { on } from '@ember/modifier';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -37,7 +37,7 @@ import {
 import Modifier from 'ember-modifier';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import BooleanField from 'https://cardstack.com/base/boolean';
+import BooleanField from '@cardstack/base/boolean';
 import { tracked } from '@glimmer/tracking';
 import ChessIcon from '@cardstack/boxel-icons/chess';
 

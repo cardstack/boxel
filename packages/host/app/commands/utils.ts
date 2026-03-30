@@ -15,15 +15,15 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type {
   CardMessageEvent,
   CommandResultEvent,
   MatrixEvent,
   RealmEventContent,
   Tool,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 import GetEventsFromRoomCommand from './get-events-from-room';
 

@@ -4,7 +4,7 @@ import {
   SEPARATOR_MARKER,
 } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

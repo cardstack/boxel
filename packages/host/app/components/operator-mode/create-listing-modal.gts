@@ -34,7 +34,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {};

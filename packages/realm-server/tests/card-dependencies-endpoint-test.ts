@@ -60,7 +60,7 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
-            result.includes('https://cardstack.com/base/card-api'),
+            result.includes('@cardstack/base/card-api'),
             'card-api is a dependency',
           );
           assert.false(
@@ -80,7 +80,7 @@ module(basename(__filename), function () {
           let result: string[] = JSON.parse(response.text.trim());
 
           assert.ok(
-            result.includes('https://cardstack.com/base/card-api'),
+            result.includes('@cardstack/base/card-api'),
             'card-api is a dependency',
           );
           assert.false(

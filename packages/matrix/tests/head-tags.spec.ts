@@ -109,8 +109,8 @@ test.describe('Head tags', () => {
       import { action } from '@ember/object';
       import { consume } from 'ember-provide-consume-context';
       import { on } from '@ember/modifier';
-      import { contains, field, CardDef, Component, type CardCrudFunctions } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component, type CardCrudFunctions } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class DefaultHeadCard extends CardDef {
@@ -154,8 +154,8 @@ test.describe('Head tags', () => {
       import { action } from '@ember/object';
       import { consume } from 'ember-provide-consume-context';
       import { on } from '@ember/modifier';
-      import { contains, field, CardDef, Component, type CardCrudFunctions } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component, type CardCrudFunctions } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 
       export class CustomHeadCard extends CardDef {

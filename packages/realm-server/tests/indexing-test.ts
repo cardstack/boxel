@@ -57,9 +57,9 @@ function makeTestRealmFileSystem(): Record<
 > {
   return {
     'person.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
-      import NumberField from "https://cardstack.com/base/number";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import NumberField from "@cardstack/base/number";
 
       export class Person extends CardDef {
         @field firstName = contains(StringField);
@@ -90,7 +90,7 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'pet-person.gts': `
-      import { contains, linksTo, field, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+      import { contains, linksTo, field, CardDef, Component, StringField } from "@cardstack/base/card-api";
       import { Pet } from "./pet";
 
       export class PetPerson extends CardDef {
@@ -107,16 +107,16 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'pet.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Pet extends CardDef {
         @field firstName = contains(StringField);
       }
     `,
     'fancy-person.gts': `
-      import { contains, field, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { Person } from "./person";
 
       export class FancyPerson extends Person {
@@ -134,8 +134,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'post.gts': `
-      import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, linksTo, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
       import { Person } from "./person";
 
       export class Post extends CardDef {
@@ -151,8 +151,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -167,8 +167,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'boom2.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -182,8 +182,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'atom-boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -198,8 +198,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'embedded-boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -214,8 +214,8 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'fitted-boom.gts': `
-      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Boom extends CardDef {
         @field firstName = contains(StringField);
@@ -395,15 +395,15 @@ function makeTestRealmFileSystem(): Record<
         attributes: {},
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
         },
       },
     },
     'address.gts': `
-      import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-      import StringField from "https://cardstack.com/base/string";
+      import { contains, field, FieldDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
 
       export class Address extends FieldDef {
         @field street = contains(StringField);
@@ -411,7 +411,7 @@ function makeTestRealmFileSystem(): Record<
       }
     `,
     'order-page.gts': `
-      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
       import { Address } from "./address";
 
       export class OrderPage extends CardDef {
@@ -440,7 +440,7 @@ function makeTestRealmFileSystem(): Record<
       import {
         FileDef as BaseFileDef,
         FileContentMismatchError,
-      } from "https://cardstack.com/base/file-api";
+      } from "@cardstack/base/file-api";
 
       export class FileDef extends BaseFileDef {
         static async extractAttributes() {
@@ -1069,7 +1069,7 @@ module(basename(__filename), function () {
         'deps include mismatch extractor module',
       );
       assert.ok(
-        deps.includes('https://cardstack.com/base/file-api'),
+        deps.includes('@cardstack/base/file-api'),
         'deps include base file-api for fallback',
       );
     });
@@ -1078,7 +1078,7 @@ module(basename(__filename), function () {
       // Mutate the index row so we can validate that the response must come from the index,
       // not from filesystem metadata.
       await testDbAdapter.execute(
-        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/file-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"@cardstack/base/file-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
       );
       let response = await fetch(`${testRealm}random-file.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },
@@ -1105,7 +1105,7 @@ module(basename(__filename), function () {
       assert.deepEqual(
         doc.data.meta?.adoptsFrom,
         {
-          module: 'https://cardstack.com/base/text-file-def',
+          module: '@cardstack/base/text-file-def',
           name: 'TextFileDef',
         },
         'adoptsFrom sourced from pristine file resource',
@@ -1169,8 +1169,8 @@ module(basename(__filename), function () {
               permissions: permissions.provider,
               fileSystem: {
                 'article.gts': `
-                import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { contains, field, CardDef, Component } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 export class Article extends CardDef {
                   @field title = contains(StringField);
                 }
@@ -1183,7 +1183,7 @@ module(basename(__filename), function () {
               permissions: permissions.consumer,
               fileSystem: {
                 'website.gts': `
-                import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+                import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";
                 import { Article } from "${testRealm1URL}article" // importing from another realm;
                 export class Website extends CardDef {
                   @field linkedArticle = linksTo(Article);
@@ -1719,8 +1719,8 @@ module(basename(__filename), function () {
         await realm.write(
           'pet.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Pet extends CardDef {
             @field firstName = contains(StringField);
           }
@@ -1747,8 +1747,8 @@ module(basename(__filename), function () {
         await realm.write(
           'person.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -1782,7 +1782,7 @@ module(basename(__filename), function () {
         await realm.write(
           'filedef-mismatch.gts',
           `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { buildName } from "./filedef-helper";
 
           export class FileDef extends BaseFileDef {
@@ -1956,7 +1956,7 @@ module(basename(__filename), function () {
         await realm.write(
           'deep-card.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
           import { MiddleField } from "./middle-field";
 
           export class DeepCard extends CardDef {
@@ -2032,7 +2032,7 @@ module(basename(__filename), function () {
           await realm.write(
             'middle-field.gts',
             `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
           import { LeafField } from "./leaf-field";
 
           export class MiddleField extends FieldDef {
@@ -2132,8 +2132,8 @@ module(basename(__filename), function () {
         await realm.write(
           'leaf-field.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class LeafField extends FieldDef {
             @field value = contains(StringField);
@@ -2216,8 +2216,8 @@ module(basename(__filename), function () {
         await realm.write(
           'module-a.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { value } from "./module-b";
 
           export class ModuleCard extends CardDef {
@@ -2332,8 +2332,8 @@ module(basename(__filename), function () {
         await realm.write(
           'person-rel.gts',
           `
-          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class PersonRel extends CardDef {
             @field name = contains(StringField);
@@ -2367,7 +2367,7 @@ module(basename(__filename), function () {
         await realm.write(
           'connection-field.gts',
           `
-          import { Component, FieldDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import { Component, FieldDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
           import { PersonRel } from "./person-rel";
 
           export class ConnectionField extends FieldDef {
@@ -2406,7 +2406,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-consumer.gts',
           `
-          import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
           import { ConnectionField } from "./connection-field";
 
           export class RelationshipConsumer extends CardDef {
@@ -2602,8 +2602,8 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-target.gts',
           `
-            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class QueryRelTarget extends CardDef {
               @field cardTitle = contains(StringField);
@@ -2620,8 +2620,8 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-consumer.gts',
           `
-            import { CardDef, Component, contains, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { CardDef, Component, contains, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class QueryRelConsumer extends CardDef {
               @field cardTitle = contains(StringField);
@@ -2754,8 +2754,8 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-overlap-target.gts',
           `
-            import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class QueryRelOverlapTarget extends CardDef {
               @field cardTitle = contains(StringField);
@@ -2772,7 +2772,7 @@ module(basename(__filename), function () {
         await realm.write(
           'query-rel-overlap-consumer.gts',
           `
-            import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+            import { CardDef, Component, field, linksTo, linksToMany } from "@cardstack/base/card-api";
 
             export class QueryRelOverlapConsumer extends CardDef {
               @field direct = linksTo(() => CardDef);
@@ -2893,8 +2893,8 @@ module(basename(__filename), function () {
         await realm.write(
           'second-rel.gts',
           `
-          import { CardDef, Component, contains, field } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class SecondRel extends CardDef {
             @field name = contains(StringField);
@@ -2946,8 +2946,8 @@ module(basename(__filename), function () {
         await realm.write(
           'first-rel.gts',
           `
-          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { SecondRel } from "./second-rel";
 
           export class FirstRel extends CardDef {
@@ -3005,7 +3005,7 @@ module(basename(__filename), function () {
         await realm.write(
           'css-relationship-consumer.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
           import { FirstRel } from "./first-rel";
 
           export class CssRelationshipConsumer extends CardDef {
@@ -3109,8 +3109,8 @@ module(basename(__filename), function () {
         await realm.write(
           'loop-card.gts',
           `
-          import { CardDef, Component, contains, field, linksTo } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, Component, contains, field, linksTo } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class LoopCard extends CardDef {
             @field name = contains(StringField);
@@ -3146,7 +3146,7 @@ module(basename(__filename), function () {
         await realm.write(
           'loop-consumer.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
           import { LoopCard } from "./loop-card";
 
           export class LoopConsumer extends CardDef {
@@ -3282,7 +3282,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-parent.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
 
           export class RelationshipParent extends CardDef {
             @field child = linksTo(() => CardDef);
@@ -3314,7 +3314,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-grandparent.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
 
           export class RelationshipGrandParent extends CardDef {
             @field parent = linksTo(() => CardDef);
@@ -3420,8 +3420,8 @@ module(basename(__filename), function () {
         await realm.write(
           'missing-child.gts',
           `
-          import { CardDef, contains, field } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { CardDef, contains, field } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class MissingChild extends CardDef {
             @field title = contains(StringField);
@@ -3499,7 +3499,7 @@ module(basename(__filename), function () {
         await realm.write(
           'filedef-mismatch.gts',
           `
-          import { FileDef as BaseFileDef } from "https://cardstack.com/base/file-api";
+          import { FileDef as BaseFileDef } from "@cardstack/base/file-api";
           import { MissingChild } from "./missing-child";
 
           export class FileDef extends BaseFileDef {
@@ -3511,8 +3511,8 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-file-parent.gts',
           `
-          import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import { FileDef } from "https://cardstack.com/base/file-api";
+          import { CardDef, Component, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
 
           export class RelationshipFileParent extends CardDef {
             @field attachment = linksTo(() => FileDef);
@@ -3543,7 +3543,7 @@ module(basename(__filename), function () {
         await realm.write(
           'relationship-file-grandparent.gts',
           `
-          import { CardDef, Component, field, linksTo } from "https://cardstack.com/base/card-api";
+          import { CardDef, Component, field, linksTo } from "@cardstack/base/card-api";
 
           export class RelationshipFileGrandParent extends CardDef {
             @field parent = linksTo(() => CardDef);
@@ -3681,7 +3681,7 @@ module(basename(__filename), function () {
           import {
             FileDef as BaseFileDef,
             FileContentMismatchError,
-          } from "https://cardstack.com/base/file-api";
+          } from "@cardstack/base/file-api";
 
           export class FileDef extends BaseFileDef {
             static async extractAttributes() {
@@ -3749,8 +3749,8 @@ module(basename(__filename), function () {
         await realm.write(
           'file-relationship-consumer.gts',
           `
-          import { CardDef, Component, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-          import { FileDef } from "https://cardstack.com/base/file-api";
+          import { CardDef, Component, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
 
           export class FileRelationshipConsumer extends CardDef {
             @field primaryFile = linksTo(() => FileDef);
@@ -3860,8 +3860,8 @@ module(basename(__filename), function () {
         await realm.write(
           'post.gts',
           `
-        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Person } from "./person";
 
         export class Post extends CardDef {
@@ -3895,8 +3895,8 @@ module(basename(__filename), function () {
         await realm.write(
           'pet.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           import { Name } from "./name";
 
           export class Pet extends CardDef {
@@ -3943,8 +3943,8 @@ module(basename(__filename), function () {
         await realm.write(
           'name.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Name extends FieldDef {
             @field firstName = contains(StringField);
@@ -3973,7 +3973,7 @@ module(basename(__filename), function () {
         await realm.write(
           'pet.gts',
           `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
           import { Name } from "./name";
 
           export class Pet extends CardDef {
@@ -4014,8 +4014,8 @@ module(basename(__filename), function () {
         await realm.write(
           'name.gts',
           `
-          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, FieldDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Name extends FieldDef {
             @field firstName = contains(StringField);
@@ -4065,8 +4065,8 @@ module(basename(__filename), function () {
         await realm.write(
           'person.gts',
           `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
 
           export class Person extends CardDef {
             @field firstName = contains(StringField);
@@ -4155,8 +4155,8 @@ module(basename(__filename), function () {
         await realm.write(
           'post.gts',
           `
-        import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Person } from "./person";
 
         export class Post extends CardDef {
@@ -4186,8 +4186,8 @@ module(basename(__filename), function () {
         mapOfWrites.set(
           'place.gts',
           `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class Place extends CardDef {
           @field name = contains(StringField);
         }
@@ -4196,8 +4196,8 @@ module(basename(__filename), function () {
         mapOfWrites.set(
           'country.gts',
           `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class Country extends CardDef {
           @field name = contains(StringField);
         }
@@ -4235,8 +4235,8 @@ module(basename(__filename), function () {
         mapOfWrites.set(
           'city.gts',
           `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class City extends CardDef {
           @field name = contains(StringField);
         }

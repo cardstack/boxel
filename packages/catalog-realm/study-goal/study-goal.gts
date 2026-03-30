@@ -4,13 +4,13 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number'; // ⁽¹⁾ Added for progress tracking
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number'; // ⁽¹⁾ Added for progress tracking
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import TextAreaField from '@cardstack/base/text-area';
 import { Button, Pill } from '@cardstack/boxel-ui/components'; // ² UI components
 import {
   formatDateTime,

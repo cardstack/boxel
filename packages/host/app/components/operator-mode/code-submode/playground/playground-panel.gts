@@ -78,9 +78,9 @@ import type {
   FieldDef,
   Format,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';

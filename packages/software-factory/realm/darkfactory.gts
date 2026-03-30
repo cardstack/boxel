@@ -6,14 +6,14 @@ import {
   containsMany,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import DateField from 'https://cardstack.com/base/date';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import enumField from 'https://cardstack.com/base/enum';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateTimeField from '@cardstack/base/datetime';
+import DateField from '@cardstack/base/date';
+import MarkdownField from '@cardstack/base/markdown';
+import TextAreaField from '@cardstack/base/text-area';
+import enumField from '@cardstack/base/enum';
 
 export const TicketStatusField = enumField(StringField, {
   options: [

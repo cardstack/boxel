@@ -5,7 +5,7 @@ import {
   containsMany,
   StringField,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { ChipsEditor } from './components/chips-editor';
 
 // BucketList Isolated View - now uses the reusable ChipsComponent

@@ -57,7 +57,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
             },
           },
-          'home.gts': `import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+          'home.gts': `import { Component, CardDef } from '@cardstack/base/card-api';
                       export class Home extends CardDef {
                         static isolated = class Isolated extends Component<typeof this> {
                           <template>
@@ -70,8 +70,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                             field,
                             Component,
                             CardDef,
-                          } from 'https://cardstack.com/base/card-api';
-                          import StringField from 'https://cardstack.com/base/string';
+                          } from '@cardstack/base/card-api';
+                          import StringField from '@cardstack/base/string';
 
                           export class Person extends CardDef {
                             static displayName = 'Person';
@@ -102,7 +102,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             },
           },
           'isolated-card.gts': `
-              import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+              import { Component, CardDef } from '@cardstack/base/card-api';
 
               export class IsolatedCard extends CardDef {
                 static isolated = class Isolated extends Component<typeof this> {
@@ -126,7 +126,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'dollar-sign-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class DollarSignCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -151,7 +151,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'head-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class HeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -182,7 +182,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'unsafe-head-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class UnsafeHeadCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -217,7 +217,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
 
           'scoped-css-card.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class ScopedCssCard extends CardDef {
               static isolated = class Isolated extends Component<typeof this> {
@@ -252,7 +252,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           // can only be found by iterating over serialized.included resources.
 
           'linked-css-base.gts': `
-            import { Component, CardDef } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef } from '@cardstack/base/card-api';
 
             export class LinkedCssBase extends CardDef {
               static embedded = class Embedded extends Component<typeof this> {
@@ -264,7 +264,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
 
           'linked-css-child.gts': `
-            import { Component } from 'https://cardstack.com/base/card-api';
+            import { Component } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssChild extends LinkedCssBase {
@@ -292,7 +292,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
             `,
 
           'linked-css-parent.gts': `
-            import { Component, CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
+            import { Component, CardDef, field, linksTo } from '@cardstack/base/card-api';
             import { LinkedCssBase } from './linked-css-base.gts';
 
             export class LinkedCssParent extends CardDef {
@@ -350,7 +350,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'Theme',
                 },
               },
@@ -367,7 +367,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
               },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/brand-guide',
+                  module: '@cardstack/base/brand-guide',
                   name: 'default',
                 },
               },
@@ -1310,7 +1310,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/brand-guide',
+                      module: '@cardstack/base/brand-guide',
                       name: 'default',
                     },
                   },
@@ -1342,7 +1342,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
                   },
                   meta: {
                     adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
+                      module: '@cardstack/base/card-api',
                       name: 'CardDef',
                     },
                   },

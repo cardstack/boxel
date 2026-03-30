@@ -4,9 +4,9 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';

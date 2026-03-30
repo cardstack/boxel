@@ -32,8 +32,8 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import {
   windowErrorHandler,

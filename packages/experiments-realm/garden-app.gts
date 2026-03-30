@@ -1,6 +1,6 @@
 // @ts-expect-error: Module '/catalog/app-card' may not be available during compilation
 import { AppCard } from '/experiments/app-card';
-// import { Component } from 'https://cardstack.com/base/card-api';
+// import { Component } from '@cardstack/base/card-api';
 import FlowerIcon from '@cardstack/boxel-icons/flower';
 
 export class GardenAppCard extends AppCard {

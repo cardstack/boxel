@@ -9,7 +9,7 @@ import { baseRealm, type Loader } from '@cardstack/runtime-common';
 import ApplyMarkdownEditCommand from '@cardstack/host/commands/apply-markdown-edit';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import {
   setupCardLogs,
@@ -115,8 +115,8 @@ module('Integration | commands | apply-markdown-edit', function (hooks) {
         mockMatrixUtils,
         contents: {
           'article.gts': `
-          import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-          import MarkdownField from "https://cardstack.com/base/markdown";
+          import { CardDef, field, contains } from "@cardstack/base/card-api";
+          import MarkdownField from "@cardstack/base/markdown";
 
           export class Article extends CardDef {
             static displayName = 'Article';

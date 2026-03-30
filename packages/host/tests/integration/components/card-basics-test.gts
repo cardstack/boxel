@@ -38,7 +38,7 @@ import {
 import type {
   BaseDef,
   SignatureFor,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import {
   cleanWhiteSpace,

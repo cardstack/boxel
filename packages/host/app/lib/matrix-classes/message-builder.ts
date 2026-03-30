@@ -38,8 +38,8 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CommandStatus } from 'https://cardstack.com/base/command';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { CommandStatus } from '@cardstack/base/command';
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
@@ -48,8 +48,8 @@ import type {
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
-} from 'https://cardstack.com/base/matrix-event';
-import type { Skill } from 'https://cardstack.com/base/skill';
+} from '@cardstack/base/matrix-event';
+import type { Skill } from '@cardstack/base/skill';
 
 import { Message } from './message';
 import MessageCodePatchResult from './message-code-patch-result';

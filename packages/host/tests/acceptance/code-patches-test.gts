@@ -51,8 +51,8 @@ import type { TestContextWithSave } from '../helpers';
 let mockedFileContent = 'Hello, world!';
 
 const testCardContent = `
-import { CardDef, Component, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, Component, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';

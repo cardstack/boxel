@@ -1,6 +1,6 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { JsonField } from 'https://cardstack.com/base/commands/search-card-result';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { JsonField } from '@cardstack/base/commands/search-card-result';
 import { Command } from '@cardstack/runtime-common';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import { GithubEventCard } from '../github-event/github-event';

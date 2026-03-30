@@ -8,7 +8,7 @@ import {
   type CardContext,
   type BaseDef,
   type BoxComponent,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { type PrerenderedCardLike } from '@cardstack/runtime-common';
 

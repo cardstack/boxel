@@ -88,9 +88,9 @@ import type {
   CardDef,
   Format,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import type { ComponentLike } from '@glint/template';
 

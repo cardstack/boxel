@@ -27,7 +27,7 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "@cardstack/boxel-host/commands/*": ["app/commands/*"],
-      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/base/*": ["../base/*"],
       "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],

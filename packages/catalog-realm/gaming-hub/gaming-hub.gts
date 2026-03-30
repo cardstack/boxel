@@ -5,9 +5,9 @@ import {
   linksTo,
   Component,
   getComponent,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 
 import { Button, CardContainer } from '@cardstack/boxel-ui/components';
 

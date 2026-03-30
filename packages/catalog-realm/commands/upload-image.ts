@@ -2,9 +2,9 @@ import { tracked } from '@glimmer/tracking';
 
 import { isCardInstance, Command } from '@cardstack/runtime-common';
 
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import UrlField from 'https://cardstack.com/base/url';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import UrlField from '@cardstack/base/url';
+import StringField from '@cardstack/base/string';
 
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import SendRequestViaProxyCommand from '@cardstack/boxel-host/commands/send-request-via-proxy';

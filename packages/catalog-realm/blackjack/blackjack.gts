@@ -6,7 +6,7 @@ import {
   containsMany,
   linksTo,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import RecordGameResultCommand from '../commands/record-game-result';
 import {
   GameResult,
@@ -22,9 +22,9 @@ import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
 import ValidationSteps, {
   type ValidationStep,
 } from '../components/validation-steps';

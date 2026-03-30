@@ -132,7 +132,7 @@ module(basename(__filename), function () {
                       isPrimitive: true,
                       isComputed: false,
                       fieldOrCard: {
-                        module: 'https://cardstack.com/base/string',
+                        module: '@cardstack/base/string',
                         name: 'default',
                       },
                       serializerName: undefined,
@@ -180,7 +180,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains, StringField, Component } from 'https://cardstack.com/base/card-api';
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Person extends CardDef {
                 static displayName = "Person";
                 @field name = contains(StringField);

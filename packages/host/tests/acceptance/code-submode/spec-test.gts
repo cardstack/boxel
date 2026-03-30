@@ -44,8 +44,8 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class PersonField extends FieldDef {
     static displayName = 'PersonField';
@@ -82,8 +82,8 @@ const personCardSource = `
 `;
 
 const person1CardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Person1 extends CardDef {
     static displayName = 'Person1';
@@ -91,8 +91,8 @@ const person1CardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class PetField extends FieldDef {
     static displayName = 'PetField';
@@ -125,8 +125,8 @@ const petCardSource = `
 `;
 
 const employeeCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export default class Employee extends CardDef {
     static displayName = 'Employee';
@@ -140,8 +140,8 @@ const employeeCardSource = `
 `;
 
 const newSkillCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import { Skill } from 'https://cardstack.com/base/skill';
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import { Skill } from '@cardstack/base/skill';
 
   export class NewSkill extends Skill {
     static displayName = 'NewSkill';
@@ -153,7 +153,7 @@ const newSkillCardSource = `
 `;
 
 const specCardSource = `
-  import { Spec } from 'https://cardstack.com/base/spec';
+  import { Spec } from '@cardstack/base/spec';
 
   export class TestSpec extends Spec {
     static displayName = 'TestSpec';
@@ -166,7 +166,7 @@ const primitiveFieldCardSource = `
     Component,
     FieldDef,
     primitive,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
    export class PrimitiveField extends FieldDef {
     static displayName = 'PrimitiveField';
@@ -179,8 +179,8 @@ const primitiveFieldCardSource = `
 `;
 
 const quoteFieldCardSource = `
-  import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, FieldDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class QuoteField extends FieldDef {
     static displayName = 'QuoteField';
@@ -204,7 +204,7 @@ const polymorphicFieldCardSource = `
     contains,
     StringField,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
   import { on } from '@ember/modifier';
 
   export class TestField extends FieldDef {

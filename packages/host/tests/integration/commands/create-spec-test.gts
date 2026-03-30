@@ -6,7 +6,7 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CreateSpecCommand from '@cardstack/host/commands/create-specs';
 
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { Spec } from '@cardstack/base/spec';
 
 import {
   testRealmURL,
@@ -84,19 +84,19 @@ module('Integration | Command | create-specs', function (hooks) {
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
-          'test-card.gts': `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+          'test-card.gts': `import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class TestCard extends CardDef {
   static displayName = 'Test Card';
   @field name = contains(StringField);
 }`,
-          'test-field.gts': `import { FieldDef } from 'https://cardstack.com/base/card-api';
+          'test-field.gts': `import { FieldDef } from '@cardstack/base/card-api';
 
 export class TestField extends FieldDef {
   static displayName = 'Test Field';
 }`,
-          'app-card.gts': `import { CardDef } from 'https://cardstack.com/base/card-api';
+          'app-card.gts': `import { CardDef } from '@cardstack/base/card-api';
 
 export class AppCard extends CardDef {
   static displayName = 'App Card';
@@ -111,7 +111,7 @@ export default class TestComponent extends Component {
 export default class TestCommand extends Command {
   static displayName = 'Test Command';
 }`,
-          'test-spec.gts': `import { Spec } from 'https://cardstack.com/base/spec';
+          'test-spec.gts': `import { Spec } from '@cardstack/base/spec';
 
 export class TestSpec extends Spec {
   static displayName = 'Test Spec';

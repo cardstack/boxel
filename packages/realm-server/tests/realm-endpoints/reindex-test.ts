@@ -3,7 +3,7 @@ import { basename, join } from 'path';
 import { readFileSync, utimesSync, writeFileSync } from 'fs';
 import type { SuperTest, Test } from 'supertest';
 import type { Realm } from '@cardstack/runtime-common';
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
 import type { Server } from 'http';
 import type { DirResult } from 'tmp';
 import {
@@ -21,8 +21,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Person extends CardDef {
   static displayName = 'Person';
@@ -46,8 +46,8 @@ import {
   field,
   Component,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Article extends CardDef {
   static displayName = 'Article';

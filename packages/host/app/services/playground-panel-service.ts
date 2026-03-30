@@ -16,8 +16,8 @@ import type {
   CardDef,
   BaseDef,
   Format,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import type CardService from './card-service';
 import type OperatorModeStateService from './operator-mode-state-service';

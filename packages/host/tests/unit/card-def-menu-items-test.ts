@@ -12,7 +12,7 @@ import {
 import type {
   CardDef,
   GetMenuItemParams,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { setupRenderingTest } from '../helpers/setup';
 

@@ -7,7 +7,7 @@ import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import {
   setupIntegrationTestRealm,
@@ -39,8 +39,8 @@ module('Integration | commands | copy-card', function (hooks) {
         realmURL: testRealmURL,
         contents: {
           'pet.gts': `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Pet extends CardDef {
             static displayName = 'Pet';
             @field firstName = contains(StringField);
@@ -72,7 +72,7 @@ module('Integration | commands | copy-card', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/cards-grid',
+                  module: '@cardstack/base/cards-grid',
                   name: 'CardsGrid',
                 },
               },

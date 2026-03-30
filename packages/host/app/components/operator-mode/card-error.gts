@@ -11,7 +11,7 @@ import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import { htmlComponent } from '../../lib/html-component';
 

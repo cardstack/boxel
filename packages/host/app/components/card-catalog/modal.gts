@@ -28,7 +28,7 @@ import {
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import {
   suggestCardChooserTitle,

@@ -31,7 +31,7 @@ NODE_ENV=development \
   --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
   \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl="${REALM_BASE_URL}/base/" \
   \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \

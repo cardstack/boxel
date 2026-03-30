@@ -4,15 +4,15 @@ import {
   Component,
   CardDef,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
+import StringField from '@cardstack/base/string';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { GridContainer } from '@cardstack/boxel-ui/components';
-import BigIntegerField from 'https://cardstack.com/base/big-integer';
-import NumberField from 'https://cardstack.com/base/number';
+import BigIntegerField from '@cardstack/base/big-integer';
+import NumberField from '@cardstack/base/number';
 import { Chain } from './chain';
-import EthereumAddressField from 'https://cardstack.com/base/ethereum-address';
+import EthereumAddressField from '@cardstack/base/ethereum-address';
 import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
 
 export class Transaction extends CardDef {

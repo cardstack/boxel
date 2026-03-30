@@ -291,7 +291,7 @@ export function createErrorTestCases() {
   return {
     syntaxError: {
       name: 'Syntax Error',
-      source: `import { CardDef } from 'https://cardstack.com/base/card-api';
+      source: `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
   // Malformed syntax that prettier cannot parse
@@ -302,7 +302,7 @@ export class MyCard extends CardDef {
 
     configError: {
       name: 'Config Error',
-      source: `import { CardDef } from 'https://cardstack.com/base/card-api';
+      source: `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`,
@@ -320,7 +320,7 @@ export class MyCard extends CardDef {
     largeFile: {
       name: 'Large File',
       source: `${'// Large comment line\n'.repeat(5000)}
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
 export class MyCard extends CardDef {
   @field name = contains(StringField);
 }`,
@@ -341,13 +341,13 @@ export function createConcurrentTestData(count: number = 5): Array<{
   const testData = [];
 
   for (let i = 0; i < count; i++) {
-    const source = `import { CardDef } from 'https://cardstack.com/base/card-api';
+    const source = `import { CardDef } from '@cardstack/base/card-api';
 export class MyCard${i} extends CardDef {
   @field name${i} = contains(StringField);
 }`;
 
-    const expectedOutput = `import StringField from 'https://cardstack.com/base/string';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+    const expectedOutput = `import StringField from '@cardstack/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 
 export class MyCard${i} extends CardDef {
   @field name${i} = contains(StringField);
@@ -369,9 +369,9 @@ export class MyCard${i} extends CardDef {
  */
 export function createLargeFileTestCase(lineCount: number): string {
   const imports = [
-    "import { CardDef } from 'https://cardstack.com/base/card-api';",
-    "import { field, contains } from 'https://cardstack.com/base/card-api';",
-    "import StringField from 'https://cardstack.com/base/string';",
+    "import { CardDef } from '@cardstack/base/card-api';",
+    "import { field, contains } from '@cardstack/base/card-api';",
+    "import StringField from '@cardstack/base/string';",
     "import { tracked } from '@glimmer/tracking';",
     "import { action } from '@ember/object';",
     "import { fn } from '@ember/helper';",

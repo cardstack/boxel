@@ -5,7 +5,7 @@ import { module, test } from 'qunit';
 
 import { Deferred, baseRealm, type Realm } from '@cardstack/runtime-common';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -59,11 +59,11 @@ module('Acceptance | file def', function (hooks) {
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let markdown: typeof import('https://cardstack.com/base/markdown');
-    let markdownFileDef: typeof import('https://cardstack.com/base/markdown-file-def');
-    let skillModule: typeof import('https://cardstack.com/base/skill');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let markdown: typeof import('@cardstack/base/markdown');
+    let markdownFileDef: typeof import('@cardstack/base/markdown-file-def');
+    let skillModule: typeof import('@cardstack/base/skill');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

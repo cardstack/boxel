@@ -11,7 +11,7 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import {
   testRealmURL,
@@ -30,7 +30,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { TestRealmAdapter } from '../../helpers/adapter';
 
 let loader: Loader;
-let cardApi: typeof import('https://cardstack.com/base/card-api');
+let cardApi: typeof import('@cardstack/base/card-api');
 let setCardInOperatorModeState: (
   leftCards: string[],
   rightCards?: string[],
@@ -101,8 +101,8 @@ module('Integration | card-delete', function (hooks) {
       ].filter((a) => a.length > 0);
       operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
 
@@ -137,7 +137,7 @@ module('Integration | card-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

@@ -21,7 +21,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type {
   IncrementalIndexEventContent,
   IndexRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 import {
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -109,8 +109,8 @@ module('Integration | card-copy', function (hooks) {
       ].filter((a) => a.length > 0);
       operatorModeStateService.restore({ stacks });
     };
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
 
@@ -175,7 +175,7 @@ module('Integration | card-copy', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -250,7 +250,7 @@ module('Integration | card-copy', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -291,7 +291,7 @@ module('Integration | card-copy', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -640,7 +640,7 @@ module('Integration | card-copy', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

@@ -48,8 +48,8 @@ module(basename(__filename), function () {
         });
         test('can write single new module', async function (assert) {
           let source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);
@@ -105,24 +105,24 @@ module(basename(__filename), function () {
         });
         test('can write multiple new modules', async function (assert) {
           let place1Source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);
               }
               `.trim();
           let place2Source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place2 extends CardDef {
                 static displayName = 'Place2';
                 @field name = contains(StringField);
               }
               `.trim();
           let countrySource = `
-              import { field, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Country extends CardDef {
                 static displayName = 'Country';
                 @field name = contains(StringField);
@@ -333,16 +333,16 @@ module(basename(__filename), function () {
         });
         test('can write multiple modules that depend on each other', async function (assert) {
           let place1Source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             export class Place extends CardDef {
               static displayName = 'Place';
               @field name = contains(StringField);
             }
             `.trim();
           let place2Source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             import { Place } from './place'
             export class Place2 extends Place {
               static displayName = 'Place2';
@@ -427,8 +427,8 @@ module(basename(__filename), function () {
 
         test('can write multiple instances that depend on each other', async function (assert) {
           let placeSource = `
-              import { field, CardDef, contains, linksTo } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains, linksTo } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               import { Country } from './country'
               export class Place extends CardDef {
                 static displayName = 'Place';
@@ -437,8 +437,8 @@ module(basename(__filename), function () {
               }
               `.trim();
           let countrySource = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Country extends CardDef {
                 static displayName = 'Country';
                 @field name = contains(StringField);
@@ -558,8 +558,8 @@ module(basename(__filename), function () {
         });
         test('can write new instance with new module', async function (assert) {
           let source = `
-            import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            import { field, CardDef, contains } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
             export class Place extends CardDef {
               static displayName = 'Place';
               @field name = contains(StringField);
@@ -624,8 +624,8 @@ module(basename(__filename), function () {
 
         test('update is a no-op when content is unchanged', async function (assert) {
           let source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);
@@ -737,8 +737,8 @@ module(basename(__filename), function () {
         });
         test('returns error when resource already exists', async function (assert) {
           let source = `
-              import { field, CardDef, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { field, CardDef, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
               export class Place extends CardDef {
                 static displayName = 'Place';
                 @field name = contains(StringField);

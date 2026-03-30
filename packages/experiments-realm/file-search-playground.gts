@@ -4,24 +4,24 @@ import {
   linksToMany,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
-import enumField from 'https://cardstack.com/base/enum';
-import { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
+import { FileDef } from '@cardstack/base/file-api';
 
 const fileSearchQuery = {
   filter: {
     every: [
       {
         type: {
-          module: 'https://cardstack.com/base/file-api',
+          module: '@cardstack/base/file-api',
           name: 'FileDef',
         },
       },
       {
         on: {
-          module: 'https://cardstack.com/base/file-api',
+          module: '@cardstack/base/file-api',
           name: 'FileDef',
         },
         contains: {

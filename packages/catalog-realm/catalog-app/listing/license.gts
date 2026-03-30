@@ -3,8 +3,8 @@ import {
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import TextAreaField from '@cardstack/base/text-area';
 
 export class License extends CardDef {
   static displayName = 'License';

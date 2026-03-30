@@ -5,9 +5,9 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 
 // Position field to define where a statement appears relative to another
 class PositionField extends FieldDef {

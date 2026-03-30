@@ -1,7 +1,7 @@
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 // ¹ UI file: all Component templates — imports schemas, adds fitted/embedded/isolated views
 
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn, concat } from '@ember/helper';

@@ -1,7 +1,7 @@
 import { array } from '@ember/helper';
 import { gt } from '@cardstack/boxel-ui/helpers';
-import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
-import { Component, realmURL } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, linksTo } from '@cardstack/base/card-api';
+import { Component, realmURL } from '@cardstack/base/card-api';
 import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';

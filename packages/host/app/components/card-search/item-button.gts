@@ -11,7 +11,7 @@ import { isCardInstance } from '@cardstack/runtime-common';
 
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 import CardRenderer from '../card-renderer';
 
@@ -37,7 +37,7 @@ interface Signature {
 // Render CardDef default fitted template for visual consistency of cards in search results
 let resultsCardRef = {
   name: 'CardDef',
-  module: 'https://cardstack.com/base/card-api',
+  module: '@cardstack/base/card-api',
 };
 
 function isNewCardArgs(item: ItemType): item is NewCardArgs {

@@ -11,8 +11,8 @@ import { isCardInstance, isLocalId, localId } from '@cardstack/runtime-common';
 
 import { SpecSelection } from '@cardstack/host/utils/local-storage-keys';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import type CardService from './card-service';
 import type ResetService from './reset';

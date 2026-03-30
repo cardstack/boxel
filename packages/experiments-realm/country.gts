@@ -4,8 +4,8 @@ import {
   Component,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import World from '@cardstack/boxel-icons/world';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';

@@ -30,7 +30,7 @@ import type {
 import type {
   FileWatcherEventContent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 
@@ -49,7 +49,7 @@ interface File {
   content: string | object | Uint8Array;
 }
 
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type CardAPI = typeof import('@cardstack/base/card-api');
 
 class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}

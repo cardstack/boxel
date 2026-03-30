@@ -31,9 +31,9 @@ module('Acceptance | code submode | file def navigation', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let fileApi: typeof import('@cardstack/base/file-api');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);

@@ -10,8 +10,8 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import {
   buildAttachedFileURLs,

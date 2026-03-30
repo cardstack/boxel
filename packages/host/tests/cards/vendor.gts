@@ -3,8 +3,8 @@ import {
   field,
   CardDef,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 import { PaymentMethod } from './payment-method';
 

@@ -3,8 +3,8 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import BaseDateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import BaseDateField from '@cardstack/base/date';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { gt, eq, not } from '@cardstack/boxel-ui/helpers';

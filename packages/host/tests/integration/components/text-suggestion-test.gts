@@ -21,8 +21,8 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
 let loader: Loader;
 
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {

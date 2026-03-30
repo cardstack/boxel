@@ -21,21 +21,21 @@ import {
 import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-utils';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
-import type { default as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
+import type { default as Base64ImageFieldType } from '@cardstack/base/base64-image';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as FileAPI from '@cardstack/base/file-api';
 import type {
   FileDef,
   SerializedFile,
-} from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/file-api';
 import type {
   CommandDefinitionSchema,
   Tool,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
-import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
-import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type { MatrixEvent } from '@cardstack/base/matrix-event';
+import type * as SkillModule from '@cardstack/base/skill';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';

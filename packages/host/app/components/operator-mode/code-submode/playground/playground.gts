@@ -5,7 +5,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 import { isFieldDef, isFileDef, isPrimitive } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import type { BaseDef, ViewCardFn } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, ViewCardFn } from '@cardstack/base/card-api';
 
 import PlaygroundPanel from './playground-panel';
 

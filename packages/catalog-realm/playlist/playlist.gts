@@ -5,13 +5,13 @@ import {
   contains,
   linksToMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import UrlField from 'https://cardstack.com/base/url';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import UrlField from '@cardstack/base/url';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import TextAreaField from '@cardstack/base/text-area';
 import MusicIcon from '@cardstack/boxel-icons/music';
 import { and, gt, eq, add } from '@cardstack/boxel-ui/helpers';
 import { tracked } from '@glimmer/tracking';

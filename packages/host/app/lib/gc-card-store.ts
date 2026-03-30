@@ -30,9 +30,9 @@ import type {
   CardStore,
   GetSearchResourceFuncOpts,
   StoreSearchResource,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export type ReferenceCount = Map<string, number>;
 

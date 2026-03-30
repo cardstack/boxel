@@ -45,9 +45,9 @@ import {
   waitForRealmState,
 } from '@cardstack/host/commands/utils';
 
-import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/command';
+import type { SearchCardsByTypeAndTitleInput } from '@cardstack/base/command';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
+import type { Skill } from '@cardstack/base/skill';
 
 import {
   setupLocalIndexing,

@@ -47,8 +47,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
+import type { BaseDef, FieldType } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 
 import { SelectedTypePill } from './create-file-modal';
 
@@ -127,7 +127,7 @@ export default class EditFieldModal extends Component<Signature> {
     // When adding a new field, we want to default to the base string card
     if (!field) {
       let ref = {
-        module: 'https://cardstack.com/base/card-api', // This seems fundamental enough to be hardcoded
+        module: '@cardstack/base/card-api', // This seems fundamental enough to be hardcoded
         name: 'StringField',
       };
       this.isFieldDef = true;

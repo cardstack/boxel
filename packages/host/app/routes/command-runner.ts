@@ -19,7 +19,7 @@ import {
 import type {
   CardDef,
   CardDefConstructor,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
 

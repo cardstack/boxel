@@ -34,7 +34,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type MessageService from '@cardstack/host/services/message-service';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardContext } from '@cardstack/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 import PrerenderedCardSearch from '../prerendered-card-search';

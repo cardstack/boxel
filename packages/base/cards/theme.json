@@ -5,13 +5,13 @@
       "cardTitle": "Theme",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/theme",
+        "module": "@cardstack/base/theme",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

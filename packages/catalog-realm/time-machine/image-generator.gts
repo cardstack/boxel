@@ -4,13 +4,13 @@ import {
   contains,
   linksToMany,
   type CardContext,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
-import StringField from 'https://cardstack.com/base/string';
-import BaseImageCard from 'https://cardstack.com/base/image';
+import StringField from '@cardstack/base/string';
+import BaseImageCard from '@cardstack/base/image';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 import { or, not } from '@cardstack/boxel-ui/helpers';

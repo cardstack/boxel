@@ -31,7 +31,7 @@ const DEFAULT_REALM_MAPPINGS = [
   // {
   //   prefix: '@cardstack/base/',
   //   urls: [
-  //     'https://cardstack.com/base/',
+  //     '@cardstack/base/',
   //   ],
   // },
 ];

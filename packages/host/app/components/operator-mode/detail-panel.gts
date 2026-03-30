@@ -57,7 +57,7 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 

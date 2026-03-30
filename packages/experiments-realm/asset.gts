@@ -5,8 +5,8 @@ import {
   FieldDef,
   Component,
   relativeTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import CurrencyIcon from '@cardstack/boxel-icons/currency';
 import CircleDotIcon from '@cardstack/boxel-icons/circle-dot';
 

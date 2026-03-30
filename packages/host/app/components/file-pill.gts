@@ -14,7 +14,7 @@ import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
 import type { FileUploadStatus } from '@cardstack/host/lib/file-upload-state';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 

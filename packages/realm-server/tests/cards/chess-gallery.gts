@@ -1,11 +1,11 @@
-import DateField from 'https://cardstack.com/base/date';
+import DateField from '@cardstack/base/date';
 import {
   FieldDef,
   field,
   contains,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 
 // This is intentionally using a FieldDef so it can replicate the error in
 // https://linear.app/cardstack/issue/CS-7797/indexer-hangs-when-encountering-instance-json-that-refers-to-a-field

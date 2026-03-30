@@ -364,7 +364,7 @@ export async function startIsolatedRealmStack({
     `--toUrl=${actualRealmURL.href}`,
     `--fromUrl=${publicBaseRealmURL.href}`,
     `--toUrl=${actualBaseRealmURL.href}`,
-    '--fromUrl=https://cardstack.com/base/',
+    '--fromUrl=@cardstack/base/',
     `--toUrl=${publicBaseRealmURL.href}`,
     `--fromUrl=${sourceRealmURL.href}`,
     `--toUrl=${actualSourceRealmURL.href}`,

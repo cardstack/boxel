@@ -21,8 +21,8 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
 import { getLivePrerenderedSearch } from '../resources/live-prerendered-search';

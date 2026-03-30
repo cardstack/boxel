@@ -16,8 +16,8 @@ import {
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as StringFieldMod from 'https://cardstack.com/base/string';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as StringFieldMod from '@cardstack/base/string';
 
 import {
   testRealmURL,
@@ -80,7 +80,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -116,7 +116,7 @@ module('Integration | realm', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/card-api',
+            module: '@cardstack/base/card-api',
             name: 'CardDef',
           },
           lastModified: adapter.lastModifiedMap.get(
@@ -411,7 +411,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -480,7 +480,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -556,7 +556,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -592,7 +592,7 @@ module('Integration | realm', function (hooks) {
               type: 'card',
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -2722,7 +2722,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2732,7 +2732,7 @@ module('Integration | realm', function (hooks) {
           data: {
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -2903,10 +2903,10 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve card source delete request', async function (assert) {
     let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
+      '@cardstack/base/card-api',
     );
     let { default: StringField } = await loader.import<typeof StringFieldMod>(
-      'https://cardstack.com/base/string',
+      '@cardstack/base/string',
     );
 
     class Person extends CardDef {
@@ -3028,7 +3028,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3419,7 +3419,7 @@ module('Integration | realm', function (hooks) {
             attributes: {},
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
@@ -3475,7 +3475,7 @@ module('Integration | realm', function (hooks) {
 
   test('requests do not contain entries that match patterns in ignore files', async function (assert) {
     const cardSource = `
-      import { CardDef } from 'https://cardstack.com/base/card-api';
+      import { CardDef } from '@cardstack/base/card-api';
       export class Post extends CardDef {}
     `;
 
@@ -3656,7 +3656,7 @@ posts/ignore-me.gts
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'FieldDef',
               },
             },

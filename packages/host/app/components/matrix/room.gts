@@ -75,8 +75,8 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';

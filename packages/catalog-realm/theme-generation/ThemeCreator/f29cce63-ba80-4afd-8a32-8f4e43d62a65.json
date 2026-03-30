@@ -12,7 +12,7 @@
       "prompt": "Create a theme in deep crimson, with bold contrast, minimal typography, and clean UI surfaces suitable for dashboards.",
       "codeRef": {
         "name": "default",
-        "module": "https://cardstack.com/base/structured-theme"
+        "module": "@cardstack/base/structured-theme"
       },
       "cardInfo": {
         "notes": null,

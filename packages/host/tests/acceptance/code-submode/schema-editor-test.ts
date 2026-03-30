@@ -34,7 +34,7 @@ import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -48,7 +48,7 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -89,10 +89,10 @@ const employeeCardSource = `
     linksTo,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import BooleanField from 'https://cardstack.com/base/boolean';
-  import DateField from 'https://cardstack.com/base/date';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import BooleanField from '@cardstack/base/boolean';
+  import DateField from '@cardstack/base/date';
   import { Person } from './person';
 
   class Supervisor extends Person {
@@ -145,8 +145,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -191,8 +191,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -227,7 +227,7 @@ const ambiguousDisplayNamesCardSource = `
     field,
     linksTo,
     Component,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
 
   export class Editor extends CardDef {
     static displayName = 'Author Bio';
@@ -621,10 +621,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -648,11 +648,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-search-field]', 'Date');
 
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/date-field"]',
     );
 
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/date-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/date-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -722,10 +722,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
@@ -902,10 +902,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Edit the field to be a "contains" BigInteger field, named friendCount
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
     );
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]',
+      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'friendCount');
@@ -985,7 +985,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       assert.codeEqual(
         content,
         `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -1049,7 +1049,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       assert.codeEqual(
         content,
         `
-  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component, StringField } from "@cardstack/base/card-api";
   import { Friend } from './friend';
 
   export class Person extends CardDef {
@@ -1125,7 +1125,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor('[data-test-tooltip-content]');
     assert
       .dom('[data-test-tooltip-content]')
-      .hasText('https://cardstack.com/base/card-api (BaseDef)');
+      .hasText('@cardstack/base/card-api (BaseDef)');
 
     await triggerEvent(
       '[data-test-card-schema="Base"] [data-test-card-schema-navigational-button]',

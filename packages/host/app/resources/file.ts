@@ -17,7 +17,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';

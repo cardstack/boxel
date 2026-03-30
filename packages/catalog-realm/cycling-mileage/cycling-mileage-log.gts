@@ -5,10 +5,10 @@ import {
   FieldDef,
   StringField,
   field,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import { Component } from 'https://cardstack.com/base/card-api';
-import Date from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import { Component } from '@cardstack/base/card-api';
+import Date from '@cardstack/base/date';
 import {
   Chart,
   registerables,

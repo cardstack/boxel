@@ -85,8 +85,8 @@ module('Acceptance | host mode tests', function (hooks) {
     setExpiresInSec(60 * 60);
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
 
@@ -203,15 +203,15 @@ module('Acceptance | host mode tests', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
           },
         },
         'broken-card.gts': `
-          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class BrokenCard extends CardDef {
             static displayName = 'BrokenCard';
             @field name = contains(StringField);

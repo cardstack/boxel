@@ -22,7 +22,7 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/base/*": ["../base/*"],
       "@cardstack/host/tests/*": ["../host/tests/*"],
       "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"]
     },

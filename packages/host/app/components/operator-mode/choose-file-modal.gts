@@ -39,7 +39,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import IndexedFileTree from '../editor/indexed-file-tree';
 

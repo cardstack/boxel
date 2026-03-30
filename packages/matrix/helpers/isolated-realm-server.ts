@@ -245,7 +245,7 @@ export async function startServer({
     `--toUrl='http://localhost:4205/skills/'`,
   ]);
   workerArgs = workerArgs.concat([
-    `--fromUrl='https://cardstack.com/base/'`,
+    `--fromUrl='@cardstack/base/'`,
     `--toUrl='http://localhost:4205/base/'`,
   ]);
 
@@ -288,7 +288,7 @@ export async function startServer({
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,
     `--path='${baseRealmDir}'`,
-    `--fromUrl='https://cardstack.com/base/'`,
+    `--fromUrl='@cardstack/base/'`,
     `--toUrl='http://localhost:4205/base/'`,
   ]);
 

@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { SupportedMimeType } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 

@@ -2,8 +2,8 @@ import { service } from '@ember/service';
 
 import { isBotTriggerEvent } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { BotTriggerEvent } from 'https://cardstack.com/base/matrix-event';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { BotTriggerEvent } from '@cardstack/base/matrix-event';
 
 import HostBaseCommand from '../../lib/host-base-command';
 

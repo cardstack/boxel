@@ -7,8 +7,8 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { BaseDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Args: {

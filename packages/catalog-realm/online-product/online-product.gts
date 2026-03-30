@@ -3,12 +3,12 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import UrlField from 'https://cardstack.com/base/url';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import UrlField from '@cardstack/base/url';
+import TextAreaField from '@cardstack/base/text-area';
 
 import { Button, Pill } from '@cardstack/boxel-ui/components';
 import {

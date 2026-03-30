@@ -11,7 +11,7 @@ import { isCardInstance, isFileDefInstance } from '@cardstack/runtime-common';
 
 import type { StoreReadType } from '@cardstack/runtime-common';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 import type StoreService from '../services/store';
 

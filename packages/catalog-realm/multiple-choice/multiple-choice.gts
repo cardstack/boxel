@@ -1,13 +1,13 @@
-import NumberField from 'https://cardstack.com/base/number';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   field,
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq, or, bool } from '@cardstack/boxel-ui/helpers';

@@ -4,8 +4,8 @@ import {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { Friend } from './friend';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 import UsersIcon from '@cardstack/boxel-icons/users';

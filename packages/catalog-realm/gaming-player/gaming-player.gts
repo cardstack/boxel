@@ -5,15 +5,15 @@ import {
   containsMany,
   linksToMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import UrlField from 'https://cardstack.com/base/url';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import EmailField from 'https://cardstack.com/base/email';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import UrlField from '@cardstack/base/url';
+import MarkdownField from '@cardstack/base/markdown';
+import EmailField from '@cardstack/base/email';
 
 import { formatNumber, gt, lt, subtract } from '@cardstack/boxel-ui/helpers';
 

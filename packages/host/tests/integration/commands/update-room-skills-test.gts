@@ -16,8 +16,8 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 import UpdateRoomSkillsCommand from '@cardstack/host/commands/update-room-skills';
 import RealmService from '@cardstack/host/services/realm';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
 
 import {
   setupCardLogs,

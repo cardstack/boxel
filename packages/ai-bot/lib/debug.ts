@@ -2,7 +2,7 @@ import { setTitle } from './set-title';
 import type OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import {
   getPromptParts,
   isRecognisedDebugCommand,

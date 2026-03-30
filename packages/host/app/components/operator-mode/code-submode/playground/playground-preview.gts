@@ -19,8 +19,8 @@ import type {
   CardDef,
   FieldDef,
   Format,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface Signature {
   Args: {

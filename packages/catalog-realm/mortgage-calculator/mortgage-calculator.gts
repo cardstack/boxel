@@ -1,10 +1,10 @@
-import NumberField from 'https://cardstack.com/base/number';
+import NumberField from '@cardstack/base/number';
 import {
   CardDef,
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { concat } from '@ember/helper';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';

@@ -5,10 +5,10 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
-import ColorField from 'https://cardstack.com/base/color';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
+import ColorField from '@cardstack/base/color';
 import { concat } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';

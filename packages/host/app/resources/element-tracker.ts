@@ -10,7 +10,7 @@ import type {
   CardDef,
   Format,
   FieldType,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import type { ArgsFor } from 'ember-modifier';
 

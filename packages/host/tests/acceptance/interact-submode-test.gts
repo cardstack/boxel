@@ -22,7 +22,7 @@ import type { Realm } from '@cardstack/runtime-common/realm';
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 import {
   percySnapshot,

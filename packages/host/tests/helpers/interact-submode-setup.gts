@@ -54,12 +54,12 @@ export function setupInteractSubmodeTests(
     setupAuthEndpoints();
 
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
-    let string: typeof import('https://cardstack.com/base/string');
-    let spec: typeof import('https://cardstack.com/base/spec');
-    let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let fileApi: typeof import('https://cardstack.com/base/file-api');
-    let imageFileApi: typeof import('https://cardstack.com/base/image-file-def');
+    let cardApi: typeof import('@cardstack/base/card-api');
+    let string: typeof import('@cardstack/base/string');
+    let spec: typeof import('@cardstack/base/spec');
+    let cardsGrid: typeof import('@cardstack/base/cards-grid');
+    let fileApi: typeof import('@cardstack/base/file-api');
+    let imageFileApi: typeof import('@cardstack/base/image-file-def');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     spec = await loader.import(`${baseRealm.url}spec`);

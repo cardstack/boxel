@@ -5,11 +5,11 @@ import {
   contains,
   linksToMany,
   type CardContext,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import PackageIcon from '@cardstack/boxel-icons/package';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BaseImageCard from 'https://cardstack.com/base/image';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BaseImageCard from '@cardstack/base/image';
 import ImageField from '../fields/image';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';

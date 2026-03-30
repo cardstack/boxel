@@ -11,7 +11,7 @@ import {
   type HtmlTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type { RoomMember } from './member';
 

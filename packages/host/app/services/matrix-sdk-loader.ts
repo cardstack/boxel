@@ -11,8 +11,8 @@ import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as FileAPI from 'https://cardstack.com/base/file-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as FileAPI from '@cardstack/base/file-api';
 
 import type MatrixService from './matrix-service';
 import type NetworkService from './network';

@@ -68,7 +68,7 @@ import type {
   CardContext,
   CardCrudFunctions,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {

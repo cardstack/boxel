@@ -18,7 +18,7 @@ import SubscribeToRealms from '@cardstack/host/helpers/subscribe-to-realms';
 
 import { renderComponent } from '@cardstack/host/tests/helpers/render-component';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 import {
   testRealmURL,

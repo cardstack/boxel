@@ -22,8 +22,8 @@ import type {
   BaseDef,
   Field,
   FieldType,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';

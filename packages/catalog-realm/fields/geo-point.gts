@@ -3,8 +3,8 @@ import {
   contains,
   FieldDef,
   field,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
 
 import GeoPointEditField from './geo-point/components/geo-point-edit-field';

@@ -56,7 +56,7 @@ import {
 import { setupApplicationTest } from '../helpers/setup';
 
 const indexCardSource = `
-  import { CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "@cardstack/base/card-api";
 
   export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
@@ -75,8 +75,8 @@ const postalCodeFieldSource = `
     field,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class PostalCode extends FieldDef {
     static displayName = 'Postal Code';
@@ -99,8 +99,8 @@ const addressFieldSource = `
     field,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
   import { PostalCode } from './postal-code';
 
   export class Address extends FieldDef {
@@ -132,8 +132,8 @@ const countryCardSource = `
     field,
     Component,
     CardDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class Country extends CardDef {
     static displayName = 'Country';
@@ -160,7 +160,7 @@ const tripsFieldSource = `
     field,
     Component,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
+  } from '@cardstack/base/card-api';
   import { Country } from './country';
 
   export class Trips extends FieldDef {
@@ -178,8 +178,8 @@ const tripsFieldSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
   import { Address } from './address';
@@ -220,8 +220,8 @@ const personCardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
@@ -261,10 +261,10 @@ const employeeCardSource = `
     field,
     Component,
     CardDef
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
-  import DateField from 'https://cardstack.com/base/date';
-  import BooleanField from 'https://cardstack.com/base/boolean';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
+  import DateField from '@cardstack/base/date';
+  import BooleanField from '@cardstack/base/boolean';
   import { Person } from './person';
 
   export class Isolated extends Component<typeof Employee> {
@@ -299,8 +299,8 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-  } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -345,8 +345,8 @@ const inThisFileSource = `
 `;
 
 const friendCardSource = `
-  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringField from "https://cardstack.com/base/string";
+  import { contains, linksTo, field, CardDef, Component } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
@@ -2198,8 +2198,8 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('card preview live updates when there is a change in module', async function (assert) {
       const personGts = `
-        import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         import { Friend } from './friend';
         import { Pet } from "./pet";
         import { Address } from './address';

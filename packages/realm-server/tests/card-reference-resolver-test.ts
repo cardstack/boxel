@@ -182,7 +182,7 @@ module(basename(__filename), function () {
 
     test('resolves linksTo relationship with absolute URL and prefix-form resource ID', async function (assert) {
       // This mirrors the bug where a card at @cardstack/skills/Skill/boxel-environment
-      // has a relationship pointing to https://cardstack.com/base/Theme/brand-guide.
+      // has a relationship pointing to @cardstack/base/Theme/brand-guide.
       // relativizeDocument (via resolveCardReference) must handle the absolute
       // URL without using the prefix-form base.
       let doc: SingleCardDocument = {
@@ -193,7 +193,7 @@ module(basename(__filename), function () {
           relationships: {
             theme: {
               links: {
-                self: 'https://cardstack.com/base/Theme/brand-guide',
+                self: '@cardstack/base/Theme/brand-guide',
               },
             },
           },
@@ -214,7 +214,7 @@ module(basename(__filename), function () {
       assert.ok(rel, 'relationship exists after relativization');
       assert.strictEqual(
         rel.links.self,
-        'https://cardstack.com/base/Theme/brand-guide',
+        '@cardstack/base/Theme/brand-guide',
         'absolute URL to another realm is preserved as-is',
       );
     });

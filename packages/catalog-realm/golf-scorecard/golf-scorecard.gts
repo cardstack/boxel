@@ -5,11 +5,11 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import DateField from 'https://cardstack.com/base/date';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import DateField from '@cardstack/base/date';
+import BooleanField from '@cardstack/base/boolean';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import TrophyIcon from '@cardstack/boxel-icons/trophy';
 

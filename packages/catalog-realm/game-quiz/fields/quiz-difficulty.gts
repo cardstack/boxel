@@ -2,14 +2,14 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import {
   Component,
   FieldDef,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 class QuizDifficultyEdit extends Component<typeof QuizDifficultyField> {
   @tracked label = this.args.model.label;

@@ -30,8 +30,8 @@ import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 import LimitedSet from '../lib/limited-set';
 

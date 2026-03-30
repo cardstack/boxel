@@ -5,9 +5,9 @@ import {
   CardDef,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api'; // ² Core imports
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown'; // ³ Markdown for content
+} from '@cardstack/base/card-api'; // ² Core imports
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown'; // ³ Markdown for content
 import { gt } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open'; // ⁴ Document icon

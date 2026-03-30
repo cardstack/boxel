@@ -60,7 +60,7 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -71,13 +71,13 @@ module('Acceptance | workspace-chooser-delete', function (hooks) {
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/card-api',
+                module: '@cardstack/base/card-api',
                 name: 'CardDef',
               },
             },
           },
         },
-        'person.gts': `import { CardDef } from "https://cardstack.com/base/card-api";
+        'person.gts': `import { CardDef } from "@cardstack/base/card-api";
 
 export class Person extends CardDef {}
 `,
@@ -102,7 +102,7 @@ export class Person extends CardDef {}
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },
@@ -129,7 +129,7 @@ export class Person extends CardDef {}
             type: 'card',
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/cards-grid',
+                module: '@cardstack/base/cards-grid',
                 name: 'CardsGrid',
               },
             },

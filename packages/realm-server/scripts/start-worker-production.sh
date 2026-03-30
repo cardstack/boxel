@@ -19,7 +19,7 @@ NODE_NO_WARNINGS=1 \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
   --matrixURL='https://matrix.boxel.ai' \
   \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='https://app.boxel.ai/base/' \
   \
   --fromUrl='https://app.boxel.ai/experiments/' \

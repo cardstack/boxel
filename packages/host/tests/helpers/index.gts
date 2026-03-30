@@ -60,7 +60,7 @@ import type {
   CardStore,
   CardDef,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { TestRealmAdapter } from './adapter';
 import { testRealmServerMatrixUsername, setupMockMatrix } from './mock-matrix';
@@ -103,7 +103,7 @@ export {
 
 const { sqlSchema } = ENV;
 
-type CardAPI = typeof import('https://cardstack.com/base/card-api');
+type CardAPI = typeof import('@cardstack/base/card-api');
 type ModuleHooks = {
   after: (callback: () => void | Promise<void>) => void;
 };
@@ -994,7 +994,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1023,7 +1023,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1052,7 +1052,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1081,7 +1081,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'ModelConfiguration',
         },
       },
@@ -1120,7 +1120,7 @@ export const SYSTEM_CARD_FIXTURE_CONTENTS: RealmContents = {
       },
       meta: {
         adoptsFrom: {
-          module: 'https://cardstack.com/base/system-card',
+          module: '@cardstack/base/system-card',
           name: 'SystemCard',
         },
       },

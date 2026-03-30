@@ -1,6 +1,6 @@
 import { on } from '@ember/modifier';
 
-import { Component, realmURL } from 'https://cardstack.com/base/card-api';
+import { Component, realmURL } from '@cardstack/base/card-api';
 import type { Query } from '@cardstack/runtime-common';
 
 import { eq, or } from '@cardstack/boxel-ui/helpers';
