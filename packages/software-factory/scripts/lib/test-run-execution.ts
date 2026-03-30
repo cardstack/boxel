@@ -205,6 +205,7 @@ export async function resolveTestRun(
     ...realmOptions,
     sequenceNumber,
     ticketURL: options.ticketURL,
+    projectCardUrl: options.projectCardUrl,
     specRef: options.specRef,
   });
 

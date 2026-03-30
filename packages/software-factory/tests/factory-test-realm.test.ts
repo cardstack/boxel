@@ -370,7 +370,48 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     );
   });
 
-  test('omits relationships when no ticketURL', function (assert) {
+  test('includes project relationship when projectCardUrl is provided', function (assert) {
+    let doc = buildTestRunCardDocument(
+      ['test A'],
+      testRealmOptions.testResultsModuleUrl,
+      { projectCardUrl: 'http://localhost:4201/test/Projects/hello-world' },
+    );
+
+    let relationships = doc.data.relationships as Record<
+      string,
+      { links: { self: string | null } }
+    >;
+    assert.strictEqual(
+      relationships.project.links.self,
+      'http://localhost:4201/test/Projects/hello-world',
+    );
+  });
+
+  test('includes both project and ticket relationships', function (assert) {
+    let doc = buildTestRunCardDocument(
+      ['test A'],
+      testRealmOptions.testResultsModuleUrl,
+      {
+        projectCardUrl: 'http://localhost:4201/test/Projects/hello-world',
+        ticketURL: '../Ticket/implement-feature',
+      },
+    );
+
+    let relationships = doc.data.relationships as Record<
+      string,
+      { links: { self: string | null } }
+    >;
+    assert.strictEqual(
+      relationships.project.links.self,
+      'http://localhost:4201/test/Projects/hello-world',
+    );
+    assert.strictEqual(
+      relationships.ticket.links.self,
+      '../Ticket/implement-feature',
+    );
+  });
+
+  test('omits relationships when no ticketURL or projectCardUrl', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,

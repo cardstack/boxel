@@ -130,10 +130,14 @@ export function buildTestRunCardDocument(
   let relationships:
     | Record<string, { links: { self: string | null } }>
     | undefined;
-  if (options?.ticketURL) {
-    relationships = {
-      ticket: { links: { self: options.ticketURL } },
-    };
+  if (options?.projectCardUrl || options?.ticketURL) {
+    relationships = {};
+    if (options?.projectCardUrl) {
+      relationships.project = { links: { self: options.projectCardUrl } };
+    }
+    if (options?.ticketURL) {
+      relationships.ticket = { links: { self: options.ticketURL } };
+    }
   }
 
   return {

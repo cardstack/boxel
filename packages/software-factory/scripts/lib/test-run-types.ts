@@ -43,6 +43,7 @@ export interface TestRunRealmOptions {
 export interface CreateTestRunOptions {
   sequenceNumber?: number;
   ticketURL?: string;
+  projectCardUrl?: string;
   specRef?: ResolvedCodeRef;
 }
 
