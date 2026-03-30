@@ -557,12 +557,12 @@ export function runCommand(command: string, args: string[], cwd: string) {
 }
 
 export function cleanupStaleSynapseContainers() {
-  // Only clean up test harness Synapse containers (synapsedocker-* prefix).
+  // Only clean up test harness Synapse containers (sf-test-synapse-* prefix).
   // Do NOT touch boxel-synapse* containers — those belong to the dev
   // environment (mise run dev-all) and killing them breaks the dev server.
   let result = spawnSync(
     'docker',
-    ['ps', '-aq', '--filter', 'name=synapsedocker-'],
+    ['ps', '-aq', '--filter', 'name=sf-test-synapse-'],
     {
       cwd: workspaceRoot,
       encoding: 'utf8',
