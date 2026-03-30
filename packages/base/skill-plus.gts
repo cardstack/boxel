@@ -1,6 +1,5 @@
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { modifier } from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui/components';
@@ -611,7 +610,9 @@ export class SkillPlus extends Skill {
   });
   @field toc = containsMany(TocItemField, {
     computeVia: function (this: SkillPlus) {
-      return parseMarkdownHeaders(this.instructions);
+      return parseMarkdownHeaders(this.instructions).map((item) =>
+        Object.assign(new TocItemField(), item),
+      );
     },
   });
   @field commands = containsMany(CommandField);

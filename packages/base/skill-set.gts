@@ -273,7 +273,7 @@ export class SkillSet extends SkillPlus {
     // Slice from this.toc so IDs match the anchors in instructionsWithIds exactly.
     computeVia: function (this: SkillSet) {
       const count = parseMarkdownHeaders(this.frontMatter).length;
-      return (this.toc as unknown as Array<{ level: number; text: string; id: string }>).slice(0, count);
+      return (this.toc as TocItemField[]).slice(0, count);
     },
   });
 
@@ -281,9 +281,7 @@ export class SkillSet extends SkillPlus {
     // Slice from this.toc so IDs match the anchors in instructionsWithIds exactly.
     computeVia: function (this: SkillSet) {
       const count = parseMarkdownHeaders(this.backMatter).length;
-      return count > 0
-        ? (this.toc as unknown as Array<{ level: number; text: string; id: string }>).slice(-count)
-        : [];
+      return count > 0 ? (this.toc as TocItemField[]).slice(-count) : [];
     },
   });
 
@@ -291,7 +289,7 @@ export class SkillSet extends SkillPlus {
     // Heading IDs come from this.toc (same dedup context as instructionsWithIds).
     // normalizeHeaders gives accurate per-skill heading counts in the combined doc.
     computeVia: function (this: SkillSet) {
-      const allToc = this.toc as unknown as Array<{ level: number; text: string; id: string }>;
+      const allToc = this.toc as TocItemField[];
       const frontCount = parseMarkdownHeaders(this.frontMatter).length;
       const backCount = parseMarkdownHeaders(this.backMatter).length;
       const contentHeadings = allToc.slice(
@@ -299,7 +297,7 @@ export class SkillSet extends SkillPlus {
         backCount > 0 ? allToc.length - backCount : undefined,
       );
 
-      const items: Array<{ level: number; text: string; id: string }> = [];
+      const items: TocItemField[] = [];
       let headingIdx = 0;
 
       for (let i = 0; i < (this.relatedSkills?.length ?? 0); i++) {
@@ -307,7 +305,7 @@ export class SkillSet extends SkillPlus {
         if (!skillRef) continue;
         const topicName =
           skillRef.topicName || skillRef.skill?.cardTitle || 'Untitled';
-        items.push({ level: 2, text: topicName, id: `skill-divider-${i}` });
+        items.push(Object.assign(new TocItemField(), { level: 2, text: topicName, id: `skill-divider-${i}` }));
         const mode = skillRef.inclusionMode || 'link-only';
         const rawContent =
           mode === 'full' && skillRef.skill?.instructions
@@ -321,7 +319,7 @@ export class SkillSet extends SkillPlus {
         ).length;
         for (let j = 0; j < skillHeadingCount; j++) {
           const heading = contentHeadings[headingIdx++];
-          if (heading) items.push({ level: 3, text: heading.text, id: heading.id });
+          if (heading) items.push(heading);
         }
       }
 
