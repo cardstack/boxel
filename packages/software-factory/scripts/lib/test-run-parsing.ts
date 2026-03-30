@@ -25,18 +25,26 @@ export function parseRunRealmTestsOutput(
     rawFailures = extractPlaywrightFailures(playwrightReport.suites);
   }
 
-  let results: TestResultEntryData[] = rawFailures.map((f) => {
-    let { message, stackTrace } = splitErrorAndStack(f.error);
-    return {
-      testName: f.title,
-      status: 'failed' as const,
-      message,
-      ...(stackTrace ? { stackTrace: stackTrace.slice(0, 500) } : {}),
-    };
-  });
+  // Build results from ALL tests (passing + failing), not just failures.
+  let results: TestResultEntryData[];
+  if (playwrightReport.suites) {
+    results = extractAllPlaywrightResults(playwrightReport.suites);
+  } else {
+    results = rawFailures.map((f) => {
+      let { message, stackTrace } = splitErrorAndStack(f.error);
+      return {
+        testName: f.title,
+        status: 'failed' as const,
+        message,
+        ...(stackTrace ? { stackTrace: stackTrace.slice(0, 500) } : {}),
+      };
+    });
+  }
 
-  let status: TestRunAttributes['status'] =
-    unexpected > 0 || results.length > 0 ? 'failed' : 'passed';
+  let hasFailures =
+    unexpected > 0 ||
+    results.some((r) => r.status === 'failed' || r.status === 'error');
+  let status: TestRunAttributes['status'] = hasFailures ? 'failed' : 'passed';
 
   // If no tests ran at all, check for Playwright-level errors (e.g. module not found).
   if (expected === 0 && unexpected === 0 && rawFailures.length === 0) {
@@ -59,10 +67,22 @@ export function parseRunRealmTestsOutput(
     status = 'error';
   }
 
+  // When results include both passing and failing entries (Playwright format),
+  // derive counts from results to match the card's computed fields.
+  // For legacy format (failures only), use the stats counts.
+  let hasPassingResults = results.some((r) => r.status === 'passed');
+  let passedCount = hasPassingResults
+    ? results.filter((r) => r.status === 'passed').length
+    : expected;
+  let failedCount = hasPassingResults
+    ? results.filter((r) => r.status === 'failed' || r.status === 'error')
+        .length
+    : unexpected;
+
   return {
     status,
-    passedCount: expected,
-    failedCount: unexpected,
+    passedCount,
+    failedCount,
     durationMs,
     results,
   };
@@ -84,7 +104,11 @@ interface PlaywrightSpec {
   title?: string;
   ok?: boolean;
   tests?: {
-    results?: { status?: string; errors?: { message?: string }[] }[];
+    results?: {
+      status?: string;
+      duration?: number;
+      errors?: { message?: string }[];
+    }[];
   }[];
 }
 
@@ -110,6 +134,37 @@ function extractPlaywrightFailures(
     }
   }
   return failures;
+}
+
+function extractAllPlaywrightResults(
+  suites: PlaywrightSuite[],
+): TestResultEntryData[] {
+  let results: TestResultEntryData[] = [];
+  for (let suite of suites) {
+    if (suite.suites) {
+      results.push(...extractAllPlaywrightResults(suite.suites));
+    }
+    for (let spec of suite.specs ?? []) {
+      let testResult = spec.tests?.[0]?.results?.[0];
+      let status: TestResultEntryData['status'] = spec.ok ? 'passed' : 'failed';
+      let entry: TestResultEntryData = {
+        testName: spec.title ?? 'unknown',
+        status,
+        durationMs: testResult?.duration,
+      };
+      if (!spec.ok && testResult?.errors?.[0]?.message) {
+        let { message, stackTrace } = splitErrorAndStack(
+          testResult.errors[0].message,
+        );
+        entry.message = message;
+        if (stackTrace) {
+          entry.stackTrace = stackTrace.slice(0, 500);
+        }
+      }
+      results.push(entry);
+    }
+  }
+  return results;
 }
 
 /**

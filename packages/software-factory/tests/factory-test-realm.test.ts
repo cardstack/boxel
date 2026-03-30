@@ -144,6 +144,112 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     let attrs = parseRunRealmTestsOutput(output, 100);
     assert.true((attrs.results[0].stackTrace?.length ?? 0) <= 500);
   });
+
+  test('parses Playwright JSON report with passing tests into results', function (assert) {
+    let report = {
+      stats: { expected: 2, unexpected: 0 },
+      suites: [
+        {
+          specs: [
+            {
+              title: 'hello card renders greeting',
+              ok: true,
+              tests: [{ results: [{ status: 'passed', duration: 1200 }] }],
+            },
+            {
+              title: 'hello card shows title',
+              ok: true,
+              tests: [{ results: [{ status: 'passed', duration: 800 }] }],
+            },
+          ],
+        },
+      ],
+    } as unknown as RunRealmTestsOutput;
+
+    let attrs = parseRunRealmTestsOutput(report, 2500);
+
+    assert.strictEqual(attrs.status, 'passed');
+    assert.strictEqual(attrs.results.length, 2);
+    assert.strictEqual(
+      attrs.results[0].testName,
+      'hello card renders greeting',
+    );
+    assert.strictEqual(attrs.results[0].status, 'passed');
+    assert.strictEqual(attrs.results[0].durationMs, 1200);
+    assert.strictEqual(attrs.results[1].testName, 'hello card shows title');
+    assert.strictEqual(attrs.results[1].status, 'passed');
+    assert.strictEqual(attrs.passedCount, 2);
+    assert.strictEqual(attrs.failedCount, 0);
+  });
+
+  test('parses Playwright JSON report with mixed pass/fail results', function (assert) {
+    let report = {
+      stats: { expected: 1, unexpected: 1 },
+      suites: [
+        {
+          specs: [
+            {
+              title: 'passes',
+              ok: true,
+              tests: [{ results: [{ status: 'passed', duration: 500 }] }],
+            },
+            {
+              title: 'fails',
+              ok: false,
+              tests: [
+                {
+                  results: [
+                    {
+                      status: 'failed',
+                      duration: 300,
+                      errors: [{ message: 'Expected true to be false' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as RunRealmTestsOutput;
+
+    let attrs = parseRunRealmTestsOutput(report, 1000);
+
+    assert.strictEqual(attrs.status, 'failed');
+    assert.strictEqual(attrs.results.length, 2);
+    assert.strictEqual(attrs.results[0].status, 'passed');
+    assert.strictEqual(attrs.results[1].status, 'failed');
+    assert.strictEqual(attrs.results[1].message, 'Expected true to be false');
+    assert.strictEqual(attrs.passedCount, 1);
+    assert.strictEqual(attrs.failedCount, 1);
+  });
+
+  test('parses Playwright JSON report with nested suites', function (assert) {
+    let report = {
+      stats: { expected: 1, unexpected: 0 },
+      suites: [
+        {
+          suites: [
+            {
+              specs: [
+                {
+                  title: 'nested test',
+                  ok: true,
+                  tests: [{ results: [{ status: 'passed', duration: 100 }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as unknown as RunRealmTestsOutput;
+
+    let attrs = parseRunRealmTestsOutput(report, 200);
+
+    assert.strictEqual(attrs.results.length, 1);
+    assert.strictEqual(attrs.results[0].testName, 'nested test');
+    assert.strictEqual(attrs.results[0].status, 'passed');
+  });
 });
 
 // ---------------------------------------------------------------------------
