@@ -32,17 +32,17 @@ The software factory uses four different realm roles that should stay distinct:
 - target realm
   - the user-specified realm passed to `factory:go`
   - receives the generated `Project`, `Ticket`, `KnowledgeArticle`, and implementation artifacts
-- test realm
-  - a dedicated realm created by the factory alongside the target realm
-  - receives AI-generated test code, test fixtures, and test result artifacts
-  - the test harness executes tests from this realm against cards in the target realm
-  - test output saved here is fed back into the agentic loop as verification evidence
-  - naming convention: `<target-realm-name>-tests` (e.g., `personal-tests`)
+- test artifacts realm
+  - a dedicated realm auto-created by the factory, named after the target realm (e.g., `smoke-1` → `smoke-1-test-artifacts`)
+  - receives only card instances created during test execution (not specs or test results)
+  - each test run gets its own folder (`Run 1/`, `Run 2/`) to prevent collision between runs
+  - the test artifacts realm URL is persisted on the Project card's `testArtifactsRealmUrl` field
+  - specs live in the target realm's `Tests/` folder; TestRun cards live in the target realm's `Test Runs/` folder
 - fixture realm
   - disposable test input used only for development-time verification of the factory itself
   - may adopt from the public source realm but should not be treated as user output
 
-Normal factory output should land in the target realm, not in `packages/software-factory/realm`. AI-generated tests and their execution results should land in the test realm, keeping implementation artifacts and verification artifacts separated.
+Normal factory output should land in the target realm, not in `packages/software-factory/realm`. AI-generated test specs and TestRun result cards live in the target realm (co-located with the implementation). Only card instances created during test execution (test data) go to the test artifacts realm.
 
 If we intentionally include output-like examples in the source realm, they should be clearly labeled as examples and live in an obviously non-canonical location such as `SampleOutput/` or `Examples/`.
 
