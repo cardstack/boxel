@@ -505,9 +505,12 @@ export async function startFactorySupportServices(): Promise<{
     let { synapseStart, synapseStop } = await loadSynapseModule();
     let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
 
+    // stopExisting: false — the test harness uses a dynamic port, so it
+    // doesn't conflict with the dev Synapse (boxel-synapse on port 8008).
+    // Stopping existing containers kills the dev environment.
     let synapse = await synapseStart(
       { suppressRegistrationSecretFile: true, dynamicHostPort: true },
-      true,
+      false,
     );
     let matrixURL =
       process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL(synapse);
