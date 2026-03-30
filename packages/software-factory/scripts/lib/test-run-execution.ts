@@ -11,6 +11,7 @@ import { join, relative, resolve } from 'node:path';
 
 import {
   cancelAllIndexingJobs,
+  createRealm,
   ensureTrailingSlash,
   pullRealmFiles,
   readCardSource,
@@ -83,57 +84,32 @@ export async function ensureTestArtifactsRealm(
 
   let testArtifactsRealmUrl = '';
   let created = false;
-  let fetchImpl = options.fetch ?? globalThis.fetch;
-  let serverUrl = ensureTrailingSlash(options.realmServerUrl);
 
   for (let attempt = 0; attempt < 5; attempt++) {
     let tryEndpoint = attempt === 0 ? endpoint : `${endpoint}-${attempt + 1}`;
-    let headers: Record<string, string> = {
-      Accept: 'application/vnd.api+json',
-      'Content-Type': 'application/vnd.api+json',
+    let result = await createRealm(options.realmServerUrl, {
+      name: realmName,
+      endpoint: tryEndpoint,
+      authorization: options.authorization ?? '',
+      fetch: options.fetch,
+    });
+
+    if (result.created) {
+      testArtifactsRealmUrl = result.realmUrl;
+      created = true;
+      break;
+    }
+
+    // 400 "already exists" → try next endpoint
+    if (result.error?.includes('already exists')) {
+      continue;
+    }
+
+    return {
+      testArtifactsRealmUrl: '',
+      created: false,
+      error: `Failed to create test artifacts realm: ${result.error}`,
     };
-    if (options.authorization) {
-      headers['Authorization'] = options.authorization;
-    }
-
-    try {
-      let response = await fetchImpl(`${serverUrl}_create-realm`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          data: {
-            type: 'realm',
-            attributes: { name: realmName, endpoint: tryEndpoint },
-          },
-        }),
-      });
-
-      if (response.ok) {
-        let result = (await response.json()) as {
-          data?: { id?: string };
-        };
-        testArtifactsRealmUrl = result.data?.id ?? '';
-        created = true;
-        break;
-      }
-
-      let body = await response.text();
-      if (response.status === 400 && body.includes('already exists')) {
-        continue;
-      }
-
-      return {
-        testArtifactsRealmUrl: '',
-        created: false,
-        error: `Failed to create test artifacts realm: HTTP ${response.status}: ${body.slice(0, 300)}`,
-      };
-    } catch (err) {
-      return {
-        testArtifactsRealmUrl: '',
-        created: false,
-        error: `Failed to create test artifacts realm: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
   }
 
   if (!testArtifactsRealmUrl) {
@@ -382,7 +358,13 @@ export async function executeTestRunFromRealm(
       let errorMessage = `Failed to pull spec files: ${pullResult.error}`;
       await completeTestRun(
         testRunId,
-        { status: 'error', passedCount: 0, failedCount: 0, errorMessage, results: [] },
+        {
+          status: 'error',
+          passedCount: 0,
+          failedCount: 0,
+          errorMessage,
+          results: [],
+        },
         realmOptions,
       );
       return { testRunId, status: 'error', errorMessage };
@@ -394,7 +376,13 @@ export async function executeTestRunFromRealm(
       let errorMessage = 'No spec files found in the target realm';
       await completeTestRun(
         testRunId,
-        { status: 'error', passedCount: 0, failedCount: 0, errorMessage, results: [] },
+        {
+          status: 'error',
+          passedCount: 0,
+          failedCount: 0,
+          errorMessage,
+          results: [],
+        },
         realmOptions,
       );
       return { testRunId, status: 'error', errorMessage };
@@ -483,7 +471,13 @@ export async function executeTestRunFromRealm(
     try {
       await completeTestRun(
         testRunId,
-        { status: 'error', passedCount: 0, failedCount: 0, errorMessage, results: [] },
+        {
+          status: 'error',
+          passedCount: 0,
+          failedCount: 0,
+          errorMessage,
+          results: [],
+        },
         realmOptions,
       );
     } catch {

@@ -15,6 +15,7 @@ import {
   type ActiveBoxelProfile,
   type MatrixAuth,
 } from '../scripts/lib/boxel';
+import { createRealm as createRealmViaApi } from '../scripts/lib/realm-operations';
 import { formatErrorResponse, formatUnknownError } from './error-format';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -108,37 +109,18 @@ async function createRealm(
   let matrixAuth = await matrixLogin(profile);
   let serverToken = await getRealmServerToken(matrixAuth);
 
-  let response = await fetchImpl(
-    new URL('_create-realm', resolution.serverUrl),
-    {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: serverToken,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'realm',
-          attributes: {
-            endpoint,
-            name: endpoint,
-            iconURL: iconURLFor(endpoint),
-            backgroundURL: getRandomBackgroundURL(),
-          },
-        },
-      }),
-    },
-  );
+  let createResult = await createRealmViaApi(resolution.serverUrl, {
+    name: endpoint,
+    endpoint,
+    iconURL: iconURLFor(endpoint),
+    backgroundURL: getRandomBackgroundURL(),
+    authorization: serverToken,
+    fetch: fetchImpl,
+  });
 
-  if (response.ok) {
-    let json = (await response.json()) as {
-      data?: {
-        id?: unknown;
-      };
-    };
+  if (createResult.created) {
     let canonicalRealmUrl = normalizeCreatedRealmUrl(
-      json.data?.id,
+      createResult.realmUrl,
       resolution.url,
     );
 
@@ -164,9 +146,7 @@ async function createRealm(
     };
   }
 
-  let text = await formatErrorResponse(response);
-
-  if (response.status === 400 && /already exists on this server/.test(text)) {
+  if (createResult.error?.includes('already exists on this server')) {
     let authorization = await getRealmAuthorization(matrixAuth, resolution.url);
     return {
       createdRealm: false,
@@ -176,7 +156,7 @@ async function createRealm(
   }
 
   throw new Error(
-    `Failed to create target realm ${resolution.url}: HTTP ${response.status} ${text}`.trim(),
+    `Failed to create target realm ${resolution.url}: ${createResult.error}`.trim(),
   );
 }
 

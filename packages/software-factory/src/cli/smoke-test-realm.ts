@@ -37,11 +37,10 @@ import {
 } from '../../scripts/lib/boxel';
 import { executeTestRunFromRealm } from '../../scripts/lib/factory-test-realm';
 import {
+  createRealm,
   getRealmScopedAuth,
-  waitForRealmReady,
   writeCardSource,
 } from '../../scripts/lib/realm-operations';
-import { createBoxelRealmFetch } from '../realm-auth';
 
 // ---------------------------------------------------------------------------
 // Sample LLM output — what the agent would produce in the implementation phase
@@ -116,7 +115,9 @@ async function main() {
       process.exit(1);
     }
     targetRealmUrl = `http://localhost:4201/${username}/smoke-test-realm/`;
-    console.log(`No --target-realm-url specified, using default: ${targetRealmUrl}\n`);
+    console.log(
+      `No --target-realm-url specified, using default: ${targetRealmUrl}\n`,
+    );
   }
 
   if (!targetRealmUrl.endsWith('/')) {
@@ -129,7 +130,9 @@ async function main() {
   ).href;
 
   let realmServerUrl = new URL(targetRealmUrl).origin + '/';
-  let realmPath = new URL(targetRealmUrl).pathname.replace(/^\//, '').replace(/\/$/, '');
+  let realmPath = new URL(targetRealmUrl).pathname
+    .replace(/^\//, '')
+    .replace(/\/$/, '');
   // The endpoint for _create-realm is just the realm name (not username/realm).
   // The username is determined from the JWT. Extract just the last segment.
   let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
@@ -161,56 +164,29 @@ async function main() {
 
   console.log('--- Phase 0: Ensuring target realm exists ---\n');
 
-  // Check if realm already exists
-  let realmCheckResponse = await fetchImpl(targetRealmUrl, {
-    headers: { Accept: 'application/json', ...(authorization ? { Authorization: authorization } : {}) },
+  console.log(`  Creating realm: ${realmEndpoint}...`);
+  let createResult = await createRealm(realmServerUrl, {
+    name: 'Smoke Test Realm',
+    endpoint: realmEndpoint,
+    authorization: authorization ?? '',
   });
 
-  if (realmCheckResponse.ok) {
-    console.log(`  Realm already exists: ${targetRealmUrl}\n`);
+  if (createResult.created) {
+    console.log(`  Created: ${createResult.realmUrl}\n`);
+  } else if (createResult.error?.includes('already exists')) {
+    console.log(`  Realm already exists.\n`);
   } else {
-    console.log(`  Creating realm: ${realmEndpoint}...`);
-    let createHeaders: Record<string, string> = {
-      Accept: 'application/vnd.api+json',
-      'Content-Type': 'application/vnd.api+json',
-    };
-    if (authorization) {
-      createHeaders['Authorization'] = authorization;
-    }
-
-    let createResponse = await fetchImpl(`${realmServerUrl}_create-realm`, {
-      method: 'POST',
-      headers: createHeaders,
-      body: JSON.stringify({
-        data: {
-          type: 'realm',
-          attributes: {
-            name: 'Smoke Test Realm',
-            endpoint: realmEndpoint,
-          },
-        },
-      }),
-    });
-
-    if (createResponse.ok) {
-      let result = (await createResponse.json()) as { data?: { id?: string } };
-      console.log(`  Created: ${result.data?.id ?? targetRealmUrl}\n`);
-    } else {
-      let body = await createResponse.text();
-      if (body.includes('already exists')) {
-        console.log(`  Realm already exists (endpoint in use)\n`);
-      } else {
-        console.error(`  Failed to create realm: HTTP ${createResponse.status}: ${body.slice(0, 300)}`);
-        process.exit(1);
-      }
-    }
+    console.error(`  Failed to create realm: ${createResult.error}`);
+    process.exit(1);
   }
 
   // Get realm-scoped JWT now that the realm exists
   console.log('  Authenticating with new realm...');
   let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
   if (realmAuth.error) {
-    console.warn(`  Warning: could not get realm-scoped auth: ${realmAuth.error}`);
+    console.warn(
+      `  Warning: could not get realm-scoped auth: ${realmAuth.error}`,
+    );
   } else {
     // Find the token for our target realm
     let realmToken = realmAuth.tokens[targetRealmUrl];
@@ -218,7 +194,9 @@ async function main() {
       authorization = realmToken;
       console.log('  Realm-scoped JWT obtained.\n');
     } else {
-      console.warn(`  Warning: no token for ${targetRealmUrl} in realm-auth response\n`);
+      console.warn(
+        `  Warning: no token for ${targetRealmUrl} in realm-auth response\n`,
+      );
     }
   }
 

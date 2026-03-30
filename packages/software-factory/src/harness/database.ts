@@ -585,7 +585,9 @@ export async function buildCombinedTemplateDatabase({
   templateDatabaseName: string;
 }): Promise<void> {
   if (realmFixtures.length === 0) {
-    throw new Error('buildCombinedTemplateDatabase requires at least one realm fixture');
+    throw new Error(
+      'buildCombinedTemplateDatabase requires at least one realm fixture',
+    );
   }
 
   await logTimed(

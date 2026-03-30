@@ -9,6 +9,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  iconURLFor,
+  getRandomBackgroundURL,
+} from '@cardstack/runtime-common/realm-display-defaults';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -234,6 +238,87 @@ export async function cancelAllIndexingJobs(
 }
 
 // ---------------------------------------------------------------------------
+// Realm Creation
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a new realm on the realm server via `_create-realm`.
+ * Returns the canonical realm URL on success.
+ */
+/**
+ * Create a new realm on the realm server via `_create-realm`.
+ * Returns the canonical realm URL on success.
+ *
+ * Note: callers should obtain realm-scoped auth separately via
+ * `getRealmScopedAuth` AFTER any post-creation setup (e.g., Matrix
+ * account data updates) — the realm server may not return the new
+ * realm's JWT until it's fully registered.
+ */
+export async function createRealm(
+  realmServerUrl: string,
+  options: {
+    name: string;
+    endpoint: string;
+    iconURL?: string;
+    backgroundURL?: string;
+    authorization: string;
+    fetch?: typeof globalThis.fetch;
+  },
+): Promise<{ realmUrl: string; created: boolean; error?: string }> {
+  let fetchImpl = options.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
+
+  let headers: Record<string, string> = {
+    Accept: 'application/vnd.api+json',
+    'Content-Type': 'application/vnd.api+json',
+    Authorization: options.authorization,
+  };
+
+  let attributes: Record<string, string> = {
+    name: options.name,
+    endpoint: options.endpoint,
+    iconURL: options.iconURL ?? iconURLFor(options.name) ?? '',
+    backgroundURL: options.backgroundURL ?? getRandomBackgroundURL(),
+  };
+
+  try {
+    let response = await fetchImpl(`${normalizedUrl}_create-realm`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        data: { type: 'realm', attributes },
+      }),
+    });
+
+    if (response.ok) {
+      let result = (await response.json()) as { data?: { id?: string } };
+      return { realmUrl: result.data?.id ?? '', created: true };
+    }
+
+    let body: string;
+    try {
+      body = await response.text();
+    } catch {
+      body = 'server returned a non-serialized object body';
+    }
+    if (body.includes('[object Object]')) {
+      body = 'server returned a non-serialized object body';
+    }
+    return {
+      realmUrl: '',
+      created: false,
+      error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+    };
+  } catch (err) {
+    return {
+      realmUrl: '',
+      created: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Realm Authentication
 // ---------------------------------------------------------------------------
 
@@ -336,7 +421,10 @@ export async function pullRealmFiles(
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
 
   // _mtimes requires Accept: application/vnd.api+json (SupportedMimeType.Mtimes)
-  let headers = buildAuthHeaders(options?.authorization, 'application/vnd.api+json');
+  let headers = buildAuthHeaders(
+    options?.authorization,
+    'application/vnd.api+json',
+  );
 
   // Fetch mtimes to discover all file paths.
   let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
