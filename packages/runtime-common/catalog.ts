@@ -7,6 +7,7 @@ import type { ResolvedCodeRef } from './code-ref';
 import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL, baseRealm } from './constants';
 import { logger } from './log';
+import { RealmPaths } from './paths';
 import type { LocalPath } from './paths';
 import { cardIdToURL } from './card-reference-resolver';
 
