@@ -282,18 +282,22 @@ module('Acceptance | host mode tests', function (hooks) {
     let store = getService('store') as StoreService;
     let originalGet = store.get.bind(store);
     let gate = new Deferred<void>();
+    let pending = new Deferred<void>();
     let targetId = `${testHostModeRealmURL}Pet/non-existent.json`;
     store.get = (async (...args: Parameters<StoreService['get']>) => {
       let [id] = args;
       if (id === targetId) {
+        pending.fulfill();
         await gate.promise;
       }
       return (originalGet as StoreService['get'])(...args);
     }) as StoreService['get'];
 
     let visitPromise = visit('/test/Pet/non-existent.json');
-    await waitFor('[data-test-host-loading]');
-    assert.dom('[data-test-host-loading]').exists();
+    await pending.promise; // store.get is now blocked — loading state is active
+    assert
+      .dom('[data-test-host-loading]')
+      .doesNotExist('Loading screen is never shown on host mode');
     gate.fulfill();
 
     await visitPromise;
