@@ -644,15 +644,15 @@ export class Listing extends CardDef {
       .filter((item) => item.label?.toLowerCase() !== 'create listing');
     const generateExample = this.getGenerateExampleMenuItem(params);
     if (generateExample) {
-      menuItems = [...menuItems, generateExample];
+      menuItems.push(generateExample);
     }
     const updateSpecs = this.getUpdateSpecsMenuItem(params);
     if (updateSpecs) {
-      menuItems = [...menuItems, updateSpecs];
+      menuItems.push(updateSpecs);
     }
     const createPRMenuItem = this.getCreatePRMenuItem(params);
     if (createPRMenuItem) {
-      menuItems = [...menuItems, createPRMenuItem];
+      menuItems.push(createPRMenuItem);
     }
     return menuItems;
   }
