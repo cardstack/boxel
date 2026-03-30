@@ -68,6 +68,7 @@ export default class RealmPicker extends Component<Signature> {
           @selected={{@selected}}
           @onChange={{@onChange}}
           @placeholder={{@placeholder}}
+          @searchPlaceholder='Search for a realm'
           @maxSelectedDisplay={{3}}
           @renderInPlace={{false}}
           @matchTriggerWidth={{false}}

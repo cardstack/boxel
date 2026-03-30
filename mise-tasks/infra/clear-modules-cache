@@ -1,0 +1,9 @@
+#!/bin/sh
+#MISE description="Clear the modules cache in the database"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+echo "Clearing modules cache..."
+PGPORT="${PGPORT:-5435}" PGDATABASE="${PGDATABASE:-boxel}" \
+  NODE_NO_WARNINGS=1 \
+  ts-node --transpileOnly scripts/clear-modules-cache.ts

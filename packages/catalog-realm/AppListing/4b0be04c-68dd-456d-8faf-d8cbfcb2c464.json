@@ -113,51 +113,6 @@
           "self": null
         }
       },
-      "examples.0": {
-        "links": {
-          "self": "../gaming-hub/GamingHub/zlata-voidwalker"
-        }
-      },
-      "examples.1": {
-        "links": {
-          "self": "../gaming-hub/GamingHub/alex-shadowblade"
-        }
-      },
-      "examples.2": {
-        "links": {
-          "self": "../gaming-hub/GamingHub/diego-stratmaxx"
-        }
-      },
-      "examples.3": {
-        "links": {
-          "self": "../gaming-hub/GamingHub/kai-thunderstrike"
-        }
-      },
-      "examples.4": {
-        "links": {
-          "self": "../gaming-hub/GamingHub/maya-phoenixrise"
-        }
-      },
-      "examples.5": {
-        "links": {
-          "self": "../gaming-hub/GamingHub/ravi-cosmicrift"
-        }
-      },
-      "examples.6": {
-        "links": {
-          "self": "../game-record/GameRecord/zlata-cyberpunk"
-        }
-      },
-      "examples.7": {
-        "links": {
-          "self": "../game-record/GameRecord/zlata-hollow-knight"
-        }
-      },
-      "examples.8": {
-        "links": {
-          "self": "../game-record/GameRecord/zlata-valorant"
-        }
-      },
       "categories.0": {
         "links": {
           "self": "../Category/video-games-interactive"
