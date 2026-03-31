@@ -247,7 +247,10 @@ module('factory-tool-executor integration > realm-api requests', function () {
         'Bearer realm-jwt-for-user',
       );
       assert.strictEqual(captured!.headers.accept, SupportedMimeType.CardJson);
-      assert.strictEqual(captured!.headers['content-type'], SupportedMimeType.JSON);
+      assert.strictEqual(
+        captured!.headers['content-type'],
+        SupportedMimeType.JSON,
+      );
       assert.strictEqual(captured!.body, query);
     } finally {
       await stopServer(server);
@@ -428,7 +431,10 @@ module('factory-tool-executor integration > realm-api requests', function () {
       assert.strictEqual(result.exitCode, 0);
       assert.strictEqual(captured!.method, 'POST');
       assert.strictEqual(captured!.url, '/user/target/_server-session');
-      assert.strictEqual(captured!.headers['content-type'], SupportedMimeType.JSON);
+      assert.strictEqual(
+        captured!.headers['content-type'],
+        SupportedMimeType.JSON,
+      );
 
       let body = JSON.parse(captured!.body);
       assert.strictEqual(
