@@ -2,7 +2,7 @@
 
 **CRITICAL Import Syntax:**
 ```gts
-import enumField from 'https://cardstack.com/base/enum'; // Default import, not { enumField }
+import enumField from '@cardstack/base/enum'; // Default import, not { enumField }
 ```
 
 **Quick Start:**
@@ -41,10 +41,10 @@ Use `enumField(BaseField, { options })` to create a `FieldDef` with constrained 
 
 ```gts
 // ✅ CORRECT
-import enumField from 'https://cardstack.com/base/enum';
+import enumField from '@cardstack/base/enum';
 
 // ❌ WRONG
-import { enumField } from 'https://cardstack.com/base/enum';
+import { enumField } from '@cardstack/base/enum';
 ```
 
 ## Quick Start
@@ -136,7 +136,7 @@ To make `null` selectable:
 
 **Define:**
 ```gts
-import enumField from 'https://cardstack.com/base/enum';
+import enumField from '@cardstack/base/enum';
 const Priority = enumField(StringField, { options: ['High', 'Medium', 'Low'] });
 ```
 
@@ -182,9 +182,9 @@ Both resolve to `@configuration.enum.options` for templates/formats.
 ## Complete Example
 
 ```gts
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import enumField from 'https://cardstack.com/base/enum';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
 import ArrowUpIcon from '@cardstack/boxel-icons/arrow-up';
 import ArrowDownIcon from '@cardstack/boxel-icons/arrow-down';
 

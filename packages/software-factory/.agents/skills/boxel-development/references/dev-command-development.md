@@ -6,8 +6,8 @@ Commands extend `Command<InputCardDef, OutputCardDef | undefined>` and execute w
 
 ```gts
 import { Command } from '@cardstack/runtime-common';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 class MyInput extends CardDef {
   @field targetRealm = contains(StringField);

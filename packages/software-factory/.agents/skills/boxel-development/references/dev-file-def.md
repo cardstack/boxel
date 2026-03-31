@@ -37,24 +37,24 @@ FileDef                          → any file
 ## Import Paths
 
 ```gts
-import FileDef from 'https://cardstack.com/base/file-api';
+import FileDef from '@cardstack/base/file-api';
 
 // Image types
-import ImageDef from 'https://cardstack.com/base/image-file-def';
-import PngDef from 'https://cardstack.com/base/png-image-def';
-import JpgDef from 'https://cardstack.com/base/jpg-image-def';
-import SvgDef from 'https://cardstack.com/base/svg-image-def';
-import GifDef from 'https://cardstack.com/base/gif-image-def';
-import WebpDef from 'https://cardstack.com/base/webp-image-def';
-import AvifDef from 'https://cardstack.com/base/avif-image-def';
+import ImageDef from '@cardstack/base/image-file-def';
+import PngDef from '@cardstack/base/png-image-def';
+import JpgDef from '@cardstack/base/jpg-image-def';
+import SvgDef from '@cardstack/base/svg-image-def';
+import GifDef from '@cardstack/base/gif-image-def';
+import WebpDef from '@cardstack/base/webp-image-def';
+import AvifDef from '@cardstack/base/avif-image-def';
 
 // Document / text types
-import MarkdownDef from 'https://cardstack.com/base/markdown-file-def';
-import TextFileDef from 'https://cardstack.com/base/text-file-def';
-import TsFileDef from 'https://cardstack.com/base/ts-file-def';
-import GtsFileDef from 'https://cardstack.com/base/gts-file-def';
-import JsonFileDef from 'https://cardstack.com/base/json-file-def';
-import CsvFileDef from 'https://cardstack.com/base/csv-file-def';
+import MarkdownDef from '@cardstack/base/markdown-file-def';
+import TextFileDef from '@cardstack/base/text-file-def';
+import TsFileDef from '@cardstack/base/ts-file-def';
+import GtsFileDef from '@cardstack/base/gts-file-def';
+import JsonFileDef from '@cardstack/base/json-file-def';
+import CsvFileDef from '@cardstack/base/csv-file-def';
 ```
 
 ---
@@ -86,11 +86,11 @@ Additional fields added by subtype:
 ## Using FileDef in Cards
 
 ```gts
-import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
-import ImageDef from 'https://cardstack.com/base/image-file-def';
-import PngDef from 'https://cardstack.com/base/png-image-def';
-import FileDef from 'https://cardstack.com/base/file-api';
-import MarkdownDef from 'https://cardstack.com/base/markdown-file-def';
+import { CardDef, field, linksTo } from '@cardstack/base/card-api';
+import ImageDef from '@cardstack/base/image-file-def';
+import PngDef from '@cardstack/base/png-image-def';
+import FileDef from '@cardstack/base/file-api';
+import MarkdownDef from '@cardstack/base/markdown-file-def';
 
 export class ProductListing extends CardDef {
   @field photo = linksTo(PngDef); // Specifically PNG
@@ -143,7 +143,7 @@ These are completely different and are **not interchangeable**:
 |                          | `MarkdownDef`                                                                   | `MarkdownField`                                                             |
 | ------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **Kind**                 | FileDef — a `.md` file in the realm                                             | FieldDef — inline text stored in the card's JSON                            |
-| **Import**               | `https://cardstack.com/base/markdown-file-def`                                  | `https://cardstack.com/base/markdown`                                       |
+| **Import**               | `@cardstack/base/markdown-file-def`                                  | `@cardstack/base/markdown`                                       |
 | **Declaration**          | `@field notes = linksTo(MarkdownDef)`                                           | `@field notes = contains(MarkdownField)`                                    |
 | **Stored as**            | Separate `.md` file referenced by URL                                           | String embedded in the card's `.json`                                       |
 | **Has own URL?**         | ✅ Yes — shareable and reusable                                                 | ❌ No — owned by the containing card                                        |

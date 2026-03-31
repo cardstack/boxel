@@ -11,8 +11,8 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { SerializedFile } from '@cardstack/base/file-api';
 
 import type { Message } from './message';
 

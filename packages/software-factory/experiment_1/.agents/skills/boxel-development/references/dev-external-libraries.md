@@ -42,8 +42,8 @@ Here is an example where we are:
 - adding some artificial delay using `await timeout(ms)` from `ember-concurrency`. Caution:  do not use `setTimeout`.
 
 ```
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Button } from '@cardstack/boxel-ui/components';

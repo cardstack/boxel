@@ -19,7 +19,7 @@ export class Payment extends FieldDef {
 The auto-fix will add the missing import:
 
 ```js
-import { FieldDef } from 'https://cardstack.com/base/card-api';
+import { FieldDef } from '@cardstack/base/card-api';
 
 export class Payment extends FieldDef {
   // ...
@@ -40,8 +40,8 @@ export class Payment extends FieldDef {
 Will be fixed to:
 
 ```js
-import { FieldDef, field, linksTo, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { FieldDef, field, linksTo, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Payment extends FieldDef {
   @field chain = linksTo(Chain);
@@ -52,7 +52,7 @@ export class Payment extends FieldDef {
 ### Partially imported card-api exports
 
 ```js
-import { contains, field } from 'https://cardstack.com/base/card-api';
+import { contains, field } from '@cardstack/base/card-api';
 
 export class Payment extends FieldDef {
   @field address = contains(StringField);
@@ -62,8 +62,8 @@ export class Payment extends FieldDef {
 Will be fixed to:
 
 ```js
-import { contains, field, FieldDef } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { contains, field, FieldDef } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class Payment extends FieldDef {
   @field address = contains(StringField);
@@ -87,11 +87,11 @@ Example configuration:
       "error",
       {
         "importMappings": {
-          "FieldDef": ["FieldDef", "https://cardstack.com/base/card-api"],
-          "field": ["field", "https://cardstack.com/base/card-api"],
-          "contains": ["contains", "https://cardstack.com/base/card-api"],
-          "linksTo": ["linksTo", "https://cardstack.com/base/card-api"],
-          "StringField": ["default", "https://cardstack.com/base/string"]
+          "FieldDef": ["FieldDef", "@cardstack/base/card-api"],
+          "field": ["field", "@cardstack/base/card-api"],
+          "contains": ["contains", "@cardstack/base/card-api"],
+          "linksTo": ["linksTo", "@cardstack/base/card-api"],
+          "StringField": ["default", "@cardstack/base/string"]
         }
       }
     ]

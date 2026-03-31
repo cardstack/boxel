@@ -55,7 +55,7 @@ http://realm/recipe-card.gts (new)
 ╔═══ SEARCH ════╗
 ╠═══════════════╣
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
-import { CardDef } from 'https://cardstack.com/base/card-api'; // ¹
+import { CardDef } from '@cardstack/base/card-api'; // ¹
 export class RecipeCard extends CardDef { // ²
   static displayName = 'Recipe';
 }

@@ -11,7 +11,7 @@ import {
   type LocalPath,
 } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from '@cardstack/base/file-api';
 
 import type NetworkService from './network';
 import type ResetService from './reset';

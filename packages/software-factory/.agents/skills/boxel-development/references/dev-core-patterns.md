@@ -43,9 +43,9 @@ import {
   containsMany,
   linksToMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 import { Author } from './author';
 
@@ -86,8 +86,8 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import LocationIcon from '@cardstack/boxel-icons/map-pin';
 import { concat } from '@ember/helper';
 

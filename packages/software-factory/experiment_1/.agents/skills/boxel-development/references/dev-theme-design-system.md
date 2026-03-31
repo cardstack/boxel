@@ -11,7 +11,7 @@
 "relationships": {
   "cardInfo.theme": {
     "links": {
-      "self": "https://cardstack.com/base/Theme/cardstack-brand-guide"
+      "self": "@cardstack/base/Theme/cardstack-brand-guide"
     }
   }
 }
@@ -27,19 +27,19 @@
   },
 }
 ```
-- IMPORTANT: Never set `cardInfo.theme` on ThemeCards (cards adopting from `https://cardstack.com/base/theme/default` or its subclasses) to avoid cycles.
+- IMPORTANT: Never set `cardInfo.theme` on ThemeCards (cards adopting from `@cardstack/base/theme/default` or its subclasses) to avoid cycles.
 
 #### ThemeCard Types
 
-A ThemeCard is an instance of a card definition that inherits from `https://cardstack.com/base/theme/default` or from one of its subclasses.
+A ThemeCard is an instance of a card definition that inherits from `@cardstack/base/theme/default` or from one of its subclasses.
 
 | Type | URL | Description |
 |------|-----|-------------|
-| Base Theme | `https://cardstack.com/base/theme/default` | Root base class |
-| Structured Theme | `https://cardstack.com/base/structured-theme/default` | MINIMUM template — includes all theme variables (except Brand variables) |
-| Style Reference | `https://cardstack.com/base/style-reference/default` | Extends `StructuredTheme` — adds fields for inspiration images, terms, and style description |
-| Detailed Style Reference | `https://cardstack.com/base/detailed-style-reference/default` | **PREFERRED** — extends `StyleReference` with detailed design system description |
-| Brand Guide | `https://cardstack.com/base/brand-guide/default` | Extends `DetailedStyleReference` — adds brand-specific variables for colors and typography |
+| Base Theme | `@cardstack/base/theme/default` | Root base class |
+| Structured Theme | `@cardstack/base/structured-theme/default` | MINIMUM template — includes all theme variables (except Brand variables) |
+| Style Reference | `@cardstack/base/style-reference/default` | Extends `StructuredTheme` — adds fields for inspiration images, terms, and style description |
+| Detailed Style Reference | `@cardstack/base/detailed-style-reference/default` | **PREFERRED** — extends `StyleReference` with detailed design system description |
+| Brand Guide | `@cardstack/base/brand-guide/default` | Extends `DetailedStyleReference` — adds brand-specific variables for colors and typography |
 
 > **When creating a Theme card:** Prefer `DetailedStyleReference`. At minimum, fill in `rootVariables` and `typography`. Add font URLs to `cssImports` as a string array — no `@import` needed (the system handles imports).
 

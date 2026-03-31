@@ -228,20 +228,20 @@ These realms contain shared definitions you can import from:
 
 **Production:**
 
-- `https://cardstack.com/base/` - Core types (CardDef, FieldDef, etc.)
+- `@cardstack/base/` - Core types (CardDef, FieldDef, etc.)
 - `https://app.boxel.ai/catalog/` - Catalog cards
 - `https://app.boxel.ai/skills/` - Skill cards
 
 **Staging:**
 
-- `https://cardstack.com/base/` - Same core types
+- `@cardstack/base/` - Same core types
 - `https://realms-staging.stack.cards/catalog/`
 - `https://realms-staging.stack.cards/skills/`
 
 ## Common Import Patterns
 
 ```gts
-// Core imports (always from cardstack.com/base)
+// Core imports (always from @cardstack/base)
 import {
   CardDef,
   FieldDef,
@@ -254,13 +254,13 @@ import {
   NumberField,
   BooleanField,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 // Import from same workspace
 import { Author } from './author';
 
 // Import from base realm
-import { Skill } from 'https://cardstack.com/base/skill';
+import { Skill } from '@cardstack/base/skill';
 ```
 
 ## Query Structure (for API searches)
