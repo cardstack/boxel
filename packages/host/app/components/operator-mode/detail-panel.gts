@@ -449,9 +449,18 @@ export default class DetailPanel extends Component<Signature> {
       await command.execute({ openCardIds, codeRef, targetRealm });
     } else {
       const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
-      const openCardIds = this.args.cardInstance?.id
+      let openCardIds: string[] = this.args.cardInstance?.id
         ? [this.args.cardInstance.id]
         : [];
+      if (!openCardIds.length) {
+        let targetRealms = [targetRealm];
+        let instances = await this.store.search(
+          { filter: { type: codeRef } },
+          targetRealms,
+        );
+        let firstInstanceId = instances.find((c) => c.id)?.id;
+        openCardIds = firstInstanceId ? [firstInstanceId] : [];
+      }
       await command.execute({
         codeRef,
         openCardIds,

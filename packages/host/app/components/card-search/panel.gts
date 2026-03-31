@@ -18,6 +18,7 @@ import {
   type getCardCollection,
   CardContextName,
   GetCardCollectionContextName,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import {
@@ -26,6 +27,7 @@ import {
 } from '@cardstack/runtime-common/helpers/card-type-display-name';
 
 import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
@@ -51,6 +53,7 @@ interface Signature {
     searchKey: string;
     baseFilter?: Filter;
     availableRealmUrls?: string[];
+    consumingRealm?: URL;
   };
   Blocks: {
     default: [
@@ -72,6 +75,7 @@ interface Signature {
         | 'activeSort'
         | 'onSortChange'
         | 'filteredRecentCards'
+        | 'initialFocusedSection'
       >,
       string,
     ];
@@ -79,6 +83,7 @@ interface Signature {
 }
 
 export default class SearchPanel extends Component<Signature> {
+  @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
   @service declare private recentCardsService: RecentCards;
   @consume(CardContextName) declare private cardContext:
@@ -87,7 +92,28 @@ export default class SearchPanel extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
 
-  @tracked private selectedRealms: PickerOption[] = [];
+  @tracked private selectedRealms: PickerOption[] = this.initialSelectedRealms;
+
+  private get initialSelectedRealms(): PickerOption[] {
+    let consumingRealm = this.args.consumingRealm;
+    if (!consumingRealm) {
+      return [];
+    }
+    let realmURL = consumingRealm.href;
+    let info = this.realm.info(realmURL);
+    let label = info?.name ?? realmURL;
+    let icon = info?.iconURL ?? undefined;
+    return [{ id: realmURL, icon, label, type: 'option' }];
+  }
+
+  private get initialFocusedSectionId(): string | null {
+    let consumingRealm = this.args.consumingRealm;
+    if (!consumingRealm) {
+      return null;
+    }
+    return `realm:${consumingRealm.href}`;
+  }
+
   @tracked private activeSort: SortOption = SORT_OPTIONS[0];
 
   @cached
@@ -101,6 +127,16 @@ export default class SearchPanel extends Component<Signature> {
   // Non-tracked: persists across resource re-runs without creating
   // tracking dependencies. Updated by onTypeChange and the resource itself.
   private _previousSelectedTypes: PickerOption[] = [];
+
+  private get defaultSelectedTypeNames(): Set<string> {
+    return new Set(
+      (getFilterTypeRefs(this.args.baseFilter, this.args.searchKey) ?? [])
+        .filter((ref) => !ref.negated)
+        .map((ref) => ref.ref)
+        .filter(isResolvedCodeRef)
+        .map((ref) => ref.name),
+    );
+  }
 
   private get selectedRealmURLs(): string[] {
     const hasSelectAll = this.selectedRealms.some(
@@ -215,7 +251,10 @@ export default class SearchPanel extends Component<Signature> {
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
 
     if (hadSelectAll) {
-      value.selected = [];
+      let defaultSelected = value.options.filter((opt) =>
+        this.defaultSelectedTypeNames.has(opt.id),
+      );
+      value.selected = defaultSelected.length > 0 ? defaultSelected : [];
     } else if (
       this.searchResource.instances.length === 0 &&
       this.args.searchKey?.trim() &&
@@ -293,6 +332,7 @@ export default class SearchPanel extends Component<Signature> {
         activeSort=this.activeSort
         onSortChange=this.onSortChange
         filteredRecentCards=this.baseFilteredRecentCards
+        initialFocusedSection=this.initialFocusedSectionId
       )
       this.joinedSelectedRealmURLs
     }}

@@ -1,9 +1,9 @@
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -12,29 +12,29 @@ import onKeyMod from 'ember-keyboard/modifiers/on-key';
 import {
   Button,
   FieldContainer,
-  type PickerOption,
+  IconButton,
+  LoadingIndicator,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 import {
+  chooseCard,
   isResolvedCodeRef,
+  removeFileExtension,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { cardTypeIcon } from '@cardstack/runtime-common/helpers/card-type-display-name';
-
 import ListingCreateCommand from '@cardstack/host/commands/listing-create';
-import CardInstancePicker from '@cardstack/host/components/card-instance-picker';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
+import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
-import { getSearch } from '@cardstack/host/resources/search';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {};
@@ -45,25 +45,7 @@ export default class CreateListingModal extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
 
-  @tracked private selectedExamples: PickerOption[] = [];
-
-  private instancesSearch = getSearch<CardDef>(this, getOwner(this)!, () =>
-    this.codeRef ? { filter: { type: this.codeRef } } : undefined,
-  );
-
-  private get instances(): CardDef[] {
-    return this.instancesSearch.instances as CardDef[];
-  }
-
-  @cached
-  get instanceOptions(): PickerOption[] {
-    return this.instances.map((instance) => ({
-      id: instance.id,
-      label: instance.cardTitle ?? instance.id,
-      icon: cardTypeIcon(instance),
-      type: 'option' as const,
-    }));
-  }
+  @tracked private _selectedExampleURLs: string[] | null = null;
 
   private get payload() {
     return this.operatorModeStateService.createListingModalPayload;
@@ -91,36 +73,61 @@ export default class CreateListingModal extends Component<Signature> {
   }
 
   private get codeRefId(): string {
-    return this.payload?.openCardIds?.[0] ?? this.codeRef?.module ?? '';
+    return this.codeRef?.module ?? '';
   }
 
   private get selectedExampleURLs(): string[] {
-    const selected = this.effectiveSelected;
-    const hasSelectAll = selected.some((opt) => opt.type === 'select-all');
-    if (hasSelectAll || selected.length === 0) {
-      return this.instances.map((i) => i.id);
+    return this._selectedExampleURLs ?? this.payload?.openCardIds ?? [];
+  }
+
+  private get shouldShowExampleRow(): boolean {
+    return (this.payload?.declarationKind ?? 'card') === 'card';
+  }
+
+  private get selectedExampleCardUrls(): string[] {
+    return this.selectedExampleURLs.map((url) =>
+      url.endsWith('.json') ? url : `${url}.json`,
+    );
+  }
+
+  private get selectedExampleRealms(): string[] {
+    let realms = this.selectedExampleURLs.flatMap((cardUrl) => {
+      try {
+        let realmURL = this.realm.realmOfURL(new URL(cardUrl))?.href;
+        return realmURL ? [realmURL] : [];
+      } catch (_error) {
+        return [];
+      }
+    });
+    return [...new Set(realms)];
+  }
+
+  private chooseExamples = task(async () => {
+    let codeRef = this.codeRef;
+    if (!codeRef) {
+      return;
     }
-    return selected.map((opt) => opt.id).filter(Boolean);
-  }
-
-  private get initialSelected(): PickerOption[] {
-    const openCardIds = this.payload?.openCardIds;
-    if (openCardIds?.length) {
-      return this.instanceOptions.filter((opt) => openCardIds.includes(opt.id));
+    let consumingRealm = this.payload?.targetRealm
+      ? new URL(this.payload.targetRealm)
+      : undefined;
+    let selected = await chooseCard(
+      { filter: { type: codeRef } },
+      {
+        multiSelect: true,
+        consumingRealm,
+        preselectedCardUrls: this.selectedExampleURLs,
+      },
+    );
+    if (selected) {
+      this._selectedExampleURLs = selected;
     }
-    // Opened from module (no specific instance) → auto-select first instance
-    let first = this.instanceOptions[0];
-    return first ? [first] : [];
-  }
+  });
 
-  private get effectiveSelected(): PickerOption[] {
-    return this.selectedExamples.length > 0
-      ? this.selectedExamples
-      : this.initialSelected;
-  }
-
-  @action private onExampleChange(selected: PickerOption[]) {
-    this.selectedExamples = selected;
+  @action private removeSelectedExample(urlToRemove: string) {
+    let normalizedUrlToRemove = removeFileExtension(urlToRemove);
+    this._selectedExampleURLs = this.selectedExampleURLs.filter(
+      (url) => url !== normalizedUrlToRemove,
+    );
   }
 
   private createListing = task(async () => {
@@ -165,12 +172,12 @@ export default class CreateListingModal extends Component<Signature> {
       await backgroundWork;
     }
 
-    this.selectedExamples = [];
+    this._selectedExampleURLs = null;
     this.operatorModeStateService.dismissCreateListingModal();
   });
 
   @action private onClose() {
-    this.selectedExamples = [];
+    this._selectedExampleURLs = null;
     this.operatorModeStateService.dismissCreateListingModal();
   }
 
@@ -208,21 +215,76 @@ export default class CreateListingModal extends Component<Signature> {
             </div>
           </FieldContainer>
 
-          {{#if this.instanceOptions.length}}
+          {{#if this.shouldShowExampleRow}}
             <FieldContainer @label='Examples' class='field'>
-              <div class='field-contents' data-test-examples-container>
-                <CardInstancePicker
-                  @placeholder='Select examples to include in the listing'
-                  @options={{this.instanceOptions}}
-                  @selected={{this.effectiveSelected}}
-                  @onChange={{this.onExampleChange}}
-                  @maxSelectedDisplay={{3}}
-                  data-test-create-listing-examples
-                />
+              <div
+                class='field-contents examples-field'
+                data-test-create-listing-examples
+              >
+                {{#if this.selectedExampleURLs.length}}
+                  <div
+                    class='selected-examples-list'
+                    data-test-selected-examples
+                  >
+                    <PrerenderedCardSearch
+                      @query={{hash}}
+                      @cardUrls={{this.selectedExampleCardUrls}}
+                      @format='atom'
+                      @realms={{this.selectedExampleRealms}}
+                      @isLive={{false}}
+                    >
+                      <:loading>
+                        <div class='selected-example-loading'>
+                          <LoadingIndicator />
+                        </div>
+                      </:loading>
+                      <:response as |cards|>
+                        {{#each cards key='url' as |card|}}
+                          <div
+                            class='selected-example-atom'
+                            data-test-selected-example-chip={{card.url}}
+                            data-test-selected-example={{card.url}}
+                          >
+                            <card.component />
+                            <IconButton
+                              class='selected-example-remove-button'
+                              @icon={{IconX}}
+                              @height='10'
+                              @width='10'
+                              aria-label='Remove example'
+                              {{on
+                                'click'
+                                (fn this.removeSelectedExample card.url)
+                              }}
+                              data-test-selected-example-remove={{card.url}}
+                            />
+                          </div>
+                        {{/each}}
+                      </:response>
+                    </PrerenderedCardSearch>
+                  </div>
+                {{/if}}
+                <Button
+                  @size='small'
+                  @loading={{this.chooseExamples.isRunning}}
+                  {{on 'click' (perform this.chooseExamples)}}
+                  data-test-choose-examples-button
+                >
+                  {{#if this.selectedExampleURLs.length}}
+                    {{this.selectedExampleURLs.length}}
+                    {{if
+                      (eq this.selectedExampleURLs.length 1)
+                      'example'
+                      'examples'
+                    }}
+                    selected
+                  {{else}}
+                    Add Examples
+                  {{/if}}
+                </Button>
               </div>
             </FieldContainer>
           {{/if}}
-
         </:content>
         <:footer>
           <div class='footer-buttons'>
@@ -272,6 +334,65 @@ export default class CreateListingModal extends Component<Signature> {
       .create-listing-modal :deep(.dialog-box__content) {
         display: flex;
         flex-direction: column;
+      }
+      .examples-field {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        align-items: center;
+      }
+      .selected-examples-list {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+        min-width: 0;
+      }
+      .selected-example-atom {
+        position: relative;
+        min-width: 0;
+        display: inline-flex;
+        align-items: center;
+      }
+      .selected-example-atom :deep([data-test-card-format='atom']) {
+        min-width: 0;
+      }
+      .selected-example-atom
+        :deep(.field-component-card.atom-format.display-container-true) {
+        padding-right: calc(
+          var(--boxel-sp-xs) + var(--boxel-icon-sm) + var(--boxel-sp-6xs)
+        );
+      }
+      .selected-example-atom :deep(.card) {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+      }
+      .selected-example-remove-button {
+        --icon-color: var(--boxel-700);
+        --icon-bg: transparent;
+        --icon-border: transparent;
+        --boxel-icon-button-width: var(--boxel-icon-sm);
+        --boxel-icon-button-height: var(--boxel-icon-sm);
+        position: absolute;
+        top: 50%;
+        right: var(--boxel-sp-4xs);
+        transform: translateY(-50%);
+        border-radius: 999px;
+        opacity: 0.72;
+      }
+      .selected-example-remove-button:hover,
+      .selected-example-remove-button:focus-visible {
+        --icon-bg: var(--boxel-200);
+        --icon-border: var(--boxel-200);
+        --icon-color: var(--boxel-900);
+        opacity: 1;
+      }
+      .selected-example-loading {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2rem;
+        min-height: 1.5rem;
       }
       :deep(.create-listing) {
         height: 30rem;
