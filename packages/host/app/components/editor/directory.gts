@@ -119,6 +119,7 @@ export default class Directory extends Component<Args> {
             class='file-tree-menu-anchor'
             aria-hidden='true'
             tabindex='-1'
+            style={{this.anchorStyle}}
             {{bindings}}
           ></button>
         </:trigger>
@@ -127,6 +128,8 @@ export default class Directory extends Component<Args> {
             class='file-tree-context-menu-list'
             @items={{this.menuItems}}
             @closeMenu={{dd.close}}
+            {{on 'mouseenter' this.cancelCloseMenuTimer}}
+            {{on 'mouseleave' this.startCloseMenuTimer}}
           />
         </:content>
       </BoxelDropdown>
@@ -231,15 +234,18 @@ export default class Directory extends Component<Args> {
   );
 
   @tracked private selectedFile?: LocalPath;
+  @tracked private anchorStyle = '';
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
   private dropdownApi?: BoxelDropdownAPI;
   private menuEntryPath?: LocalPath;
+  private closeMenuTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     registerDestructor(this, () => {
       this.dropdownApi = undefined;
       this.menuEntryPath = undefined;
+      clearTimeout(this.closeMenuTimer);
     });
   }
 
@@ -300,6 +306,8 @@ export default class Directory extends Component<Args> {
   @action
   private clearFileMenu() {
     this.menuEntryPath = undefined;
+    this.anchorStyle = '';
+    clearTimeout(this.closeMenuTimer);
   }
 
   @action
@@ -310,7 +318,28 @@ export default class Directory extends Component<Args> {
     e.preventDefault();
     e.stopPropagation();
     this.menuEntryPath = entryPath;
+    // Position the hidden anchor to match the clicked trigger so that
+    // ember-basic-dropdown calculates the correct dropdown position.
+    // We use a tracked anchorStyle so Glimmer preserves it through re-renders.
+    const triggerRect = (
+      e.currentTarget as HTMLElement
+    ).getBoundingClientRect();
+    this.anchorStyle = `top: ${triggerRect.top}px; left: ${triggerRect.left}px; width: ${triggerRect.width}px; height: ${triggerRect.height}px;`;
+    this.startCloseMenuTimer();
     this.dropdownApi?.actions.open(e);
+  }
+
+  @action
+  private startCloseMenuTimer() {
+    clearTimeout(this.closeMenuTimer);
+    this.closeMenuTimer = setTimeout(() => {
+      this.dropdownApi?.actions.close();
+    }, 800);
+  }
+
+  @action
+  private cancelCloseMenuTimer() {
+    clearTimeout(this.closeMenuTimer);
   }
 
   @action
