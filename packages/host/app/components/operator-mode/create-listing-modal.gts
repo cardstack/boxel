@@ -353,7 +353,8 @@ export default class CreateListingModal extends Component<Signature> {
         display: inline-flex;
         align-items: center;
       }
-      .selected-example-atom :deep([data-test-card-format='atom']) {
+      .selected-example-atom
+        :deep(.field-component-card.atom-format.display-container-true) {
         min-width: 0;
       }
       .selected-example-atom
