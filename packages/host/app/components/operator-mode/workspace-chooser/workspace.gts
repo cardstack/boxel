@@ -161,9 +161,10 @@ export default class Workspace extends Component<Signature> {
       </div>
       {{#if this.showDeleteModal}}
         <ModalContainer
-          @title='Delete Workspace'
+          @title=''
           @onClose={{this.closeDeleteModal}}
           @size='medium'
+          @centered={{true}}
           @cardContainerClass='delete-modal'
           data-test-delete-modal={{@realmURL}}
         >
@@ -549,6 +550,13 @@ export default class Workspace extends Component<Signature> {
       :global(.delete-modal) {
         border-radius: 20px;
         max-width: 650px;
+        height: auto;
+      }
+      :global(.delete-modal .dialog-box__header) {
+        display: none;
+      }
+      :global(.delete-modal .dialog-box__content) {
+        padding: var(--boxel-sp-lg) 30px;
       }
       .delete-modal__header {
         display: flex;
