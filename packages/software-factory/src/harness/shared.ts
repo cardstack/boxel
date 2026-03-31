@@ -18,9 +18,10 @@ import { logger } from '../logger';
 // that sets HOST_URL=http://localhost:4200) would be inherited by child
 // processes that don't explicitly override it, causing them to talk to
 // a different Matrix/realm server than the hermetic test infrastructure.
-if (process.env.NODE_ENV === 'test') {
-  delete process.env.HOST_URL;
-}
+// This module is only imported by harness code (test infrastructure),
+// so it's safe to strip unconditionally — NODE_ENV may be 'test' or
+// 'development' depending on how the harness is invoked.
+delete process.env.HOST_URL;
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 

@@ -131,14 +131,24 @@ export class SpecResult extends FieldDef {
       return this.args.model.results?.length ?? 0;
     }
 
+    get isComplete() {
+      return !(this.args.model.results ?? []).some(
+        (r) => r.status === 'pending',
+      );
+    }
+
     <template>
       <div class='spec-result'>
         <div class='spec-header'>
           <span class='spec-name'>{{this.args.model.specName}}</span>
-          <span class='spec-counts'>
-            {{this.args.model.passedCount}}/{{this.total}}
-            passed
-          </span>
+          {{#if this.isComplete}}
+            <span class='spec-counts'>
+              {{this.args.model.passedCount}}/{{this.total}}
+              passed
+            </span>
+          {{else}}
+            <span class='spec-counts'>running...</span>
+          {{/if}}
         </div>
         <div class='spec-entries'>
           <@fields.results />
