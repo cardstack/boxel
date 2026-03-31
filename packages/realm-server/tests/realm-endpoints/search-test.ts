@@ -1121,6 +1121,34 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           );
         });
 
+        test(`can filter using 'in' with the id field`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: {
+                  id: [`${realmHref}mango`, `${realmHref}ringo`],
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            2,
+            'total count is correct',
+          );
+          let ids = response.body.data.map((d: any) => d.id).sort();
+          assert.deepEqual(
+            ids,
+            [`${realmHref}mango`, `${realmHref}ringo`],
+            'correct cards returned by id',
+          );
+        });
+
         test(`can negate an 'in' filter with 'not'`, async function (assert) {
           let response = await request
             .post(searchPath)

@@ -908,6 +908,33 @@ module('Unit | query', function (hooks) {
     assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
   });
 
+  test(`can filter using 'in' with the id field`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+      { card: ringo, data: { search_doc: { name: 'Ringo' } } },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          in: { id: [mango.id, ringo.id] },
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(results),
+      [mango.id, ringo.id],
+      'results are correct',
+    );
+  });
+
   test(`can search with a 'not' filter`, async function (assert) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
