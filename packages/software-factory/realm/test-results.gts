@@ -128,9 +128,7 @@ export class SpecResult extends FieldDef {
 
   static embedded = class Embedded extends Component<typeof SpecResult> {
     get total() {
-      return (
-        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
-      );
+      return this.args.model.results?.length ?? 0;
     }
 
     <template>

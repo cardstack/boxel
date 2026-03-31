@@ -171,6 +171,10 @@ function extractResultsFromSuite(
   return results;
 }
 
+// Maps each top-level Playwright suite to a SpecResult. With a single unnamed
+// project (our playwright.realm.config.ts), top-level suites correspond to
+// spec files. Multi-project configs add a project wrapper layer — revisit
+// if named projects are introduced.
 function extractGroupedPlaywrightResults(
   suites: PlaywrightSuite[],
 ): SpecResultData[] {
