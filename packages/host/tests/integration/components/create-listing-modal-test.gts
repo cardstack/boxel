@@ -124,9 +124,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
         `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
       )
       .exists();
-    assert
-      .dom('[data-test-choose-examples-button]')
-      .hasText('1 example selected');
+    assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
 
   test('clicking a selected example remove icon removes it', async function (assert) {

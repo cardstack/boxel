@@ -2742,7 +2742,7 @@ export class ExportedCard extends ExportedCardParent {
       .exists({ count: 1 }, 'mango instance is shown as atom');
     assert
       .dom('[data-test-choose-examples-button]')
-      .hasText('1 example selected', 'button shows pre-selected count');
+      .hasText('Add Examples', 'button remains the default label');
   });
 
   test('cancel button in Create Listing modal closes the modal', async function (assert) {
