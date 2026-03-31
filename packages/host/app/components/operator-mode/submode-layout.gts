@@ -645,7 +645,7 @@ export default class SubmodeLayout extends Component<Signature> {
         transform: translate(-50%, -50%);
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--boxel-sp-xs);
         pointer-events: auto;
         z-index: 9999;
       }
@@ -653,20 +653,20 @@ export default class SubmodeLayout extends Component<Signature> {
         appearance: none;
         background-color: rgb(42 32 64 / 90%);
         border: 1px solid rgba(255 255 255 / 25%);
-        border-radius: 7px;
+        border-radius: var(--boxel-border-radius-sm);
         color: var(--boxel-light);
         --icon-color: var(--boxel-light);
         cursor: pointer;
         font: 400 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
-        padding: 6px 14px;
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
         text-align: left;
         transition:
           border-color 0.15s ease,
           background-color 0.15s ease;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--boxel-sp-2xs);
       }
       .sort-dropdown-trigger:hover {
         background-color: rgba(255 255 255 / 12%);
@@ -678,7 +678,7 @@ export default class SubmodeLayout extends Component<Signature> {
       }
       .sort-dropdown-arrow {
         --icon-color: var(--boxel-light);
-        margin-left: 2px;
+        margin-left: var(--boxel-sp-6xs);
         flex-shrink: 0;
       }
 

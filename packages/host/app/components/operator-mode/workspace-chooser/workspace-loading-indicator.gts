@@ -18,14 +18,14 @@ const WorkspaceLoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   </ItemContainer>
   <style scoped>
     .workspace {
-      min-width: 250px;
-      width: 250px;
-      height: 166px;
+      min-width: var(--boxel-xxs-container);
+      width: var(--boxel-xxs-container);
+      height: 10.375rem;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      border-radius: 15px;
+      border-radius: var(--boxel-border-radius-xl);
       border: none;
       background-color: rgba(0, 0, 0, 0.5);
       overflow: hidden;
@@ -37,12 +37,12 @@ const WorkspaceLoadingIndicator: TemplateOnlyComponent<Signature> = <template>
     }
     .loading-small-icon {
       position: absolute;
-      width: 20px;
-      height: 20px;
+      width: var(--boxel-icon-sm);
+      height: var(--boxel-icon-sm);
       top: var(--boxel-sp-xs);
       left: var(--boxel-sp-xs);
       background: var(--boxel-dark);
-      border-radius: 5px;
+      border-radius: var(--boxel-border-radius-sm);
     }
   </style>
 </template>;

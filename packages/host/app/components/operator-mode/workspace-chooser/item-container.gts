@@ -14,12 +14,12 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
     </button>
     <style scoped>
       .workspace {
-        min-width: 250px;
-        width: 250px;
-        height: 166px;
+        min-width: var(--boxel-xxs-container);
+        width: var(--boxel-xxs-container);
+        height: 10.375rem;
         display: flex;
         flex-direction: column;
-        border-radius: 15px;
+        border-radius: var(--boxel-border-radius-xl);
         border: none;
         overflow: hidden;
         padding: 0;
@@ -29,7 +29,7 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
         content: '';
         position: absolute;
         inset: 0;
-        border-radius: 15px;
+        border-radius: var(--boxel-border-radius-xl);
         border: 1px solid
           var(--item-container-border-color, rgba(255 255 255 / 15%));
         pointer-events: none;

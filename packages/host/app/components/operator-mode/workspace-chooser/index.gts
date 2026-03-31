@@ -184,7 +184,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       .workspace-chooser {
         opacity: 0;
         position: absolute;
-        background-color: #1a1628;
+        background-color: var(--boxel-800);
         height: 100%;
         width: 100%;
         animation: fadeIn 0.5s ease-in forwards;
@@ -196,20 +196,20 @@ export default class WorkspaceChooser extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-lg);
         height: 100%;
-        padding: calc(5rem + 60px) 5rem 5rem;
+        padding: calc(5rem + 3.75rem) 5rem 5rem;
         overflow: auto;
         scrollbar-width: thin;
         scrollbar-color: rgba(255 255 255 / 20%) transparent;
       }
       .workspace-chooser__content::-webkit-scrollbar {
-        width: 8px;
+        width: 0.5rem;
       }
       .workspace-chooser__content::-webkit-scrollbar-track {
         background: transparent;
       }
       .workspace-chooser__content::-webkit-scrollbar-thumb {
         background: rgba(255 255 255 / 20%);
-        border-radius: 4px;
+        border-radius: var(--boxel-border-radius-xs);
       }
       .workspace-chooser__content::-webkit-scrollbar-thumb:hover {
         background: rgba(255 255 255 / 35%);
@@ -230,8 +230,8 @@ export default class WorkspaceChooser extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .section-header-icon {
-        --icon-color: #00ffba;
-        color: #00ffba;
+        --icon-color: var(--boxel-teal);
+        color: var(--boxel-teal);
         flex-shrink: 0;
       }
       .workspace-chooser__title {
@@ -242,7 +242,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       .workspace-list {
         display: flex;
         flex-wrap: wrap;
-        gap: calc(var(--boxel-sp-lg) + 20px);
+        gap: calc(var(--boxel-sp-lg) + var(--boxel-sp-lg));
         padding: var(--boxel-sp-xs) 0;
       }
       .section-empty {
