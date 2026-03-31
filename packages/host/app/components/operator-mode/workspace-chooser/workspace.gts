@@ -20,7 +20,7 @@ import {
   RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar, gt, not } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, cssVar, gt } from '@cardstack/boxel-ui/helpers';
 import {
   Group,
   IconGlobe,
@@ -359,7 +359,9 @@ export default class Workspace extends Component<Signature> {
         flex-shrink: 0;
         position: relative;
         z-index: 1;
-        border-radius: calc(var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm));
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
         display: flex;
         box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
       }
@@ -441,7 +443,8 @@ export default class Workspace extends Component<Signature> {
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
         border: none;
-        border-radius: 0 0 var(--boxel-border-radius-xl) var(--boxel-border-radius-xl);
+        border-radius: 0 0 var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl);
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-2xs);
@@ -624,7 +627,9 @@ export default class Workspace extends Component<Signature> {
       .delete-modal__realm-icon-wrapper {
         position: relative;
         flex-shrink: 0;
-        border-radius: calc(var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm));
+        border-radius: calc(
+          var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm)
+        );
         display: flex;
       }
       .delete-modal__realm-icon-wrapper::after {

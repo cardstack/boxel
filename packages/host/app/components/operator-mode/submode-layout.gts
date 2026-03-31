@@ -26,6 +26,7 @@ import {
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { cardIdToURL } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -61,8 +62,6 @@ import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
-
-import type { Icon } from '@cardstack/boxel-ui/icons';
 
 interface SortOption {
   label: string;
