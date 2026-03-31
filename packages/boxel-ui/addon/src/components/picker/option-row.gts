@@ -59,8 +59,17 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
 
   <template>
     <div
-      class={{cn 'picker-option-row' picker-option-row--selected=@isSelected}}
+      class={{cn
+        'picker-option-row'
+        picker-option-row--selected=@isSelected
+        picker-option-row--disabled=@option.disabled
+      }}
       data-test-boxel-picker-option-selected={{if @isSelected 'true' 'false'}}
+      data-test-boxel-picker-option-disabled={{if
+        @option.disabled
+        'true'
+        'false'
+      }}
       data-test-boxel-picker-option-row={{@option.id}}
       data-test-boxel-picker-option-label={{@option.label}}
       {{on 'mouseenter' this.handleMouseEnter}}
@@ -138,6 +147,12 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         color: var(--boxel-dark);
         background-color: var(--boxel-100);
         border-radius: 4px;
+      }
+
+      .picker-option-row--disabled {
+        opacity: 0.4;
+        pointer-events: none;
+        cursor: default;
       }
 
       .picker-option-row__checkbox {

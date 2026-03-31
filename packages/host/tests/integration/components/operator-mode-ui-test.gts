@@ -941,7 +941,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (14)',
+        'Any Type (13)',
         'select-all shows count of all realm types',
       );
 
@@ -1002,7 +1002,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText(
-        'Any Type (14)',
+        'Any Type (13)',
         'select-all shows count of all realm types',
       );
 
@@ -1011,7 +1011,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     );
     assert.strictEqual(
       nonSelectAllOptions.length,
-      14,
+      13,
       'all realm types are shown even without recent cards',
     );
   });
@@ -1258,5 +1258,72 @@ module('Integration | operator-mode | ui', function (hooks) {
       iconElements.length > 0,
       'at least one type option shows an icon',
     );
+  });
+
+  test('clearing type picker search restores all types and preserves selection', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    // Open search sheet
+    await click(`[data-test-open-search-field]`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+    await settled();
+
+    // Open type picker and wait for options to load
+    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+    await waitFor('[data-test-boxel-picker-option-label="Pet"]');
+
+    // Count initial options
+    let initialOptionCount = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+    ).length;
+    assert.ok(
+      initialOptionCount > 1,
+      'multiple type options are shown initially',
+    );
+
+    // Search for a specific type in the type picker search
+    await fillIn('[data-test-boxel-picker-search] input', 'Pet');
+
+    // Filtered results should show fewer options
+    let filteredOptionCount = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+    ).length;
+    assert.ok(
+      filteredOptionCount <= initialOptionCount,
+      'search filters the type options',
+    );
+
+    // Select Pet
+    await click('[data-test-boxel-picker-option-label="Pet"]');
+
+    // Clear the type picker search
+    await fillIn('[data-test-boxel-picker-search] input', '');
+
+    // All types should be restored
+    await waitFor('[data-test-boxel-picker-option-label="Person"]');
+    let restoredOptionCount = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+    ).length;
+    assert.strictEqual(
+      restoredOptionCount,
+      initialOptionCount,
+      'all type options are restored after clearing search',
+    );
+
+    // Pet should still be selected (checked)
+    assert
+      .dom(
+        '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
+      )
+      .exists('Pet selection is preserved after clearing search');
   });
 });

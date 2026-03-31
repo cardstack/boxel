@@ -5,6 +5,7 @@ import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Args: {
+    disableSelectAll?: boolean;
     options: PickerOption[];
     selected: PickerOption[];
     onChange: (selected: PickerOption[]) => void;
@@ -31,6 +32,7 @@ export default class TypePicker extends Component<Signature> {
       label: `Any Type (${count})`,
       shortLabel: `Any`,
       type: 'select-all',
+      ...(this.args.disableSelectAll ? { disabled: true } : {}),
     };
   }
 

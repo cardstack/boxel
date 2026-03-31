@@ -15,6 +15,7 @@ import PickerOptionRow from './option-row.gts';
 import PickerLabeledTrigger from './trigger-labeled.gts';
 
 export type PickerOption = {
+  disabled?: boolean;
   icon?: Icon | string;
   id: string;
   label: string;
@@ -317,6 +318,12 @@ export default class Picker extends Component<PickerSignature> {
   }
 
   onChange = (selected: PickerOption[]) => {
+    // Ignore clicks on disabled options
+    const lastAdded = selected.find((opt) => !this.args.selected.includes(opt));
+    if (lastAdded?.disabled) {
+      return;
+    }
+
     const selectAllOptions = selected.filter((option) => {
       return option.type === 'select-all';
     });

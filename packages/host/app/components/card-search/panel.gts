@@ -19,6 +19,7 @@ import {
   type getCardCollection,
   baseCardRef,
   baseFieldRef,
+  baseRef,
   CardContextName,
   GetCardCollectionContextName,
   internalKeyFor,
@@ -73,6 +74,7 @@ interface Signature {
         | 'isLoadingTypes'
         | 'isLoadingMoreTypes'
         | 'typesTotalCount'
+        | 'disableSelectAll'
       >,
       WithBoundArgs<
         typeof SearchContent,
@@ -80,6 +82,7 @@ interface Signature {
         | 'selectedRealmURLs'
         | 'selectedCardTypes'
         | 'baseFilter'
+        | 'skipTypeFiltering'
         | 'searchResource'
         | 'activeSort'
         | 'onSortChange'
@@ -177,6 +180,8 @@ export default class SearchPanel extends Component<Signature> {
     async (realmURLs: string[], searchKey: string) => {
       if (searchKey) {
         await timeout(300); // debounce search
+      } else {
+        await Promise.resolve(); // yield to avoid autotracking assertion
       }
       if (isDestroyed(this) || isDestroying(this)) return;
       this._isLoadingTypes = true;
@@ -231,12 +236,17 @@ export default class SearchPanel extends Component<Signature> {
     const baseKeys = new Set([
       internalKeyFor(baseCardRef, undefined),
       internalKeyFor(baseFieldRef, undefined),
+      internalKeyFor(baseRef, undefined),
     ]);
     if ([...refs].every((r) => baseKeys.has(r))) {
       return undefined;
     }
 
     return refs;
+  }
+
+  private get hasNonRootBaseFilter(): boolean {
+    return this.baseFilterCodeRefs !== undefined;
   }
 
   @use private typeFilter = resource(() => {
@@ -252,10 +262,21 @@ export default class SearchPanel extends Component<Signature> {
     const allowedCodeRefs = this.baseFilterCodeRefs;
     const optionsById = new Map<string, PickerOption>();
 
+    const rootTypeKeys = new Set([
+      internalKeyFor(baseCardRef, undefined),
+      internalKeyFor(baseFieldRef, undefined),
+      internalKeyFor(baseRef, undefined),
+    ]);
+
     for (const item of this._typeSummariesData) {
       const name = item.attributes.displayName;
       const codeRef = item.id;
       if (!name) {
+        continue;
+      }
+
+      // Never show root types — they are internal meta types
+      if (rootTypeKeys.has(codeRef)) {
         continue;
       }
 
@@ -289,8 +310,13 @@ export default class SearchPanel extends Component<Signature> {
     if (hadSelectAll) {
       // If baseFilter constrains to specific types and they exist in options,
       // auto-select them instead of defaulting to "Any Type"
-      if (allowedCodeRefs && allowedCodeRefs.size > 0) {
-        const autoSelected = [...allowedCodeRefs]
+      const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter, '');
+      const baseRefs =
+        baseTypeRefs
+          ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
+          .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
+      if (baseRefs.length > 0) {
+        const autoSelected = baseRefs
           .filter((ref) => optionsById.has(ref))
           .map((ref) => optionsById.get(ref)!);
         value.selected = autoSelected.length > 0 ? autoSelected : [];
@@ -348,6 +374,7 @@ export default class SearchPanel extends Component<Signature> {
   @action
   private onTypeSearchChange(term: string) {
     this._typeSearchKey = term;
+    this.fetchTypeSummariesTask.perform(this.selectedRealmURLs, term);
   }
 
   private loadMoreTypesTask = restartableTask(async () => {
@@ -405,6 +432,7 @@ export default class SearchPanel extends Component<Signature> {
         isLoadingTypes=this._isLoadingTypes
         isLoadingMoreTypes=this._isLoadingMoreTypes
         typesTotalCount=this.typeFilter.options.length
+        disableSelectAll=this.hasNonRootBaseFilter
       )
       (component
         SearchContent
@@ -412,6 +440,7 @@ export default class SearchPanel extends Component<Signature> {
         selectedRealmURLs=this.selectedRealmURLs
         selectedCardTypes=this.typeFilter.selected
         baseFilter=@baseFilter
+        skipTypeFiltering=this.hasNonRootBaseFilter
         searchResource=this.searchResource
         activeSort=this.activeSort
         onSortChange=this.onSortChange

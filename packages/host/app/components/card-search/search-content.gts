@@ -146,6 +146,7 @@ interface Signature {
     onSelectAll?: (cards: string[]) => void;
     onDeselectAll?: () => void;
     baseFilter?: Filter;
+    skipTypeFiltering?: boolean;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
@@ -273,16 +274,21 @@ export default class SearchContent extends Component<Signature> {
   private get sortedRecentCards(): CardDef[] {
     let cards = [...(this.args.filteredRecentCards ?? [])];
 
-    // Apply type picker filter (from TypePicker selection)
-    const pickerSelectedTypeNames = new Set(
-      (this.args.selectedCardTypes ?? [])
-        .filter((opt) => opt.type !== 'select-all')
-        .map((opt) => opt.label),
-    );
-    if (pickerSelectedTypeNames.size > 0) {
-      cards = cards.filter((card) =>
-        pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
+    // Apply type picker filter (from TypePicker selection).
+    // Skip when baseFilter has a non-root type — the server already
+    // constrains results via the adoption chain, and recent cards are
+    // pre-filtered by filterCardsByTypeRefs which handles subtypes.
+    if (!this.args.skipTypeFiltering) {
+      const pickerSelectedTypeNames = new Set(
+        (this.args.selectedCardTypes ?? [])
+          .filter((opt) => opt.type !== 'select-all')
+          .map((opt) => opt.label),
       );
+      if (pickerSelectedTypeNames.size > 0) {
+        cards = cards.filter((card) =>
+          pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
+        );
+      }
     }
 
     if (this.args.isCompact) {
@@ -416,6 +422,13 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get filteredSearchResults(): PrerenderedCard[] {
+    // When baseFilter has a non-root type (e.g. Pet), the server already
+    // constrains results via the adoption chain. Skip client-side type
+    // filtering to avoid exact-match excluding subtypes like BoomPet.
+    if (this.args.skipTypeFiltering) {
+      return this.args.searchResource.instances;
+    }
+
     const selectedCodeRefs = new Set<string>();
     for (const opt of this.args.selectedCardTypes ?? []) {
       if (opt.type === 'select-all') {

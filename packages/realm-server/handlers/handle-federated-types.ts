@@ -69,8 +69,8 @@ export default function handleFederatedTypes({
       let lowerSearch = searchKey.toLowerCase();
       allEntries = allEntries.filter(
         (entry) =>
-          entry.attributes.displayName.toLowerCase().includes(lowerSearch) ||
-          entry.id.toLowerCase().includes(lowerSearch),
+          entry.attributes.displayName?.toLowerCase().includes(lowerSearch) ||
+          entry.id?.toLowerCase().includes(lowerSearch),
       );
     }
 
