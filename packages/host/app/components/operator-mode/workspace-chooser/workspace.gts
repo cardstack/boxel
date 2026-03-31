@@ -155,24 +155,18 @@ export default class Workspace extends Component<Signature> {
                     <Home width='13' height='13' />
                   </span>
                 </:trigger>
-                <:default>Hosted on the web</:default>
+                <:content>Hosted on the web</:content>
               </Tooltip>
             {{/if}}
             <Tooltip @placement='top'>
               <:trigger>
                 <this.visibilityIcon width='12' height='12' />
               </:trigger>
-              <:default>
+              <:content>
                 {{this.visibilityLabel}}
-              </:default>
+              </:content>
             </Tooltip>
-            {{this.visibility}}
-            {{#if (not this.hasPublishedRealms)}}
-              <span
-                class='realm-url'
-                data-test-realm-url={{@realmURL}}
-              >{{@realmURL}}</span>
-            {{/if}}
+            <span class='visibility-label'>{{this.visibility}}</span>
           </span>
         </div>
       </div>
@@ -289,10 +283,10 @@ export default class Workspace extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        width: 250px;
-        height: 166px;
+        width: var(--boxel-xxs-container);
+        height: 10.375rem;
         box-sizing: border-box;
-        border-radius: 15px;
+        border-radius: var(--boxel-border-radius-xl);
         border: 1px solid rgba(255 255 255 / 25%);
         pointer-events: none;
         z-index: 20;
@@ -302,16 +296,16 @@ export default class Workspace extends Component<Signature> {
       }
       .tile-favorite-btn {
         position: absolute;
-        top: 8px;
-        left: 8px;
+        top: 0.5rem;
+        left: 0.5rem;
         z-index: 3;
-        color: white;
-        --icon-color: white;
+        color: var(--boxel-light);
+        --icon-color: var(--boxel-light);
         opacity: 0;
         transition: opacity 0.15s ease;
         background: none;
         border: none;
-        padding: 4px;
+        padding: var(--boxel-sp-4xs);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -323,30 +317,30 @@ export default class Workspace extends Component<Signature> {
       .tile-favorite-btn:hover {
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
-        border-radius: 6px;
+        border-radius: var(--boxel-border-radius-sm);
       }
       .tile-favorite-btn.is-favorited {
-        color: #00ffba;
-        --icon-color: #00ffba;
+        color: var(--boxel-teal);
+        --icon-color: var(--boxel-teal);
         opacity: 1;
       }
       .tile-menu-btn {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: 0.5rem;
+        right: 0.5rem;
         z-index: 3;
-        color: white;
+        color: var(--boxel-light);
         opacity: 0;
         transition: opacity 0.15s ease;
-        border-radius: 6px;
-        width: 24px;
-        height: 24px;
+        border-radius: var(--boxel-border-radius-sm);
+        width: var(--boxel-button-xs);
+        height: var(--boxel-button-xs);
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        --boxel-icon-button-width: 24px;
-        --boxel-icon-button-height: 24px;
+        --boxel-icon-button-width: var(--boxel-button-xs);
+        --boxel-icon-button-height: var(--boxel-button-xs);
       }
       .workspace-card:hover .tile-menu-btn,
       .tile-menu-btn:focus-within {
@@ -375,7 +369,7 @@ export default class Workspace extends Component<Signature> {
         flex-shrink: 0;
         position: relative;
         z-index: 1;
-        border-radius: calc(var(--boxel-border-radius-xs) + 6px);
+        border-radius: calc(var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm));
         display: flex;
         box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
       }
@@ -389,7 +383,7 @@ export default class Workspace extends Component<Signature> {
         pointer-events: none;
       }
       .workspace-realm-icon {
-        --boxel-realm-icon-size: 42px;
+        --boxel-realm-icon-size: 2.625rem;
         --boxel-realm-icon-border-radius: calc(
           var(--boxel-border-radius-xs) + 6px
         );
@@ -408,7 +402,7 @@ export default class Workspace extends Component<Signature> {
         width: 100%;
         text-wrap: nowrap;
         text-align: center;
-        letter-spacing: 0.4pt;
+        letter-spacing: var(--boxel-lsp);
       }
       .name {
         color: var(--boxel-light);
@@ -424,16 +418,23 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-5xs);
         --icon-color: var(--boxel-400);
       }
+      .visibility :deep([data-tooltip-trigger]) {
+        display: inline-flex;
+        align-items: center;
+      }
+      .visibility-label {
+        margin-left: var(--boxel-sp-6xs);
+      }
       .hosted-icon {
-        color: #00ffba;
+        color: var(--boxel-teal);
         display: flex;
         align-items: center;
-        margin-right: 2px;
+        margin-right: var(--boxel-sp-6xs);
       }
       .realm-url {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-500);
-        max-width: 140px;
+        max-width: 8.75rem;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -443,18 +444,18 @@ export default class Workspace extends Component<Signature> {
       }
       .host-trigger {
         position: absolute;
-        top: calc(166px - 36px);
+        top: calc(10.375rem - 2.25rem);
         left: 0;
-        width: 250px;
-        height: 36px;
+        width: var(--boxel-xxs-container);
+        height: 2.25rem;
         background: rgba(0 0 0 / 40%);
         backdrop-filter: blur(6px);
         border: none;
-        border-radius: 0 0 15px 15px;
+        border-radius: 0 0 var(--boxel-border-radius-xl) var(--boxel-border-radius-xl);
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 0 10px 0 15px;
+        gap: var(--boxel-sp-2xs);
+        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-sm);
         cursor: pointer;
         opacity: 0;
         transition: opacity 0.5s ease;
@@ -467,14 +468,14 @@ export default class Workspace extends Component<Signature> {
         transition: none;
       }
       .trigger-house {
-        color: #00ffba;
+        color: var(--boxel-teal);
         display: flex;
         align-items: center;
         flex-shrink: 0;
       }
       .trigger-url {
-        font-size: 11px;
-        color: white;
+        font-size: var(--boxel-font-size-2xs);
+        color: var(--boxel-light);
         font-weight: 500;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -483,35 +484,35 @@ export default class Workspace extends Component<Signature> {
         text-align: left;
       }
       .trigger-chevron {
-        font-size: 12px;
-        color: white;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--boxel-light);
         flex-shrink: 0;
       }
       .host-dropdown {
         position: absolute;
-        top: 166px;
+        top: 10.375rem;
         left: 0;
-        width: 250px;
-        background: white;
-        border-radius: 10px;
+        width: var(--boxel-xxs-container);
+        background: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
         box-shadow: 0 4px 16px rgba(0 0 0 / 25%);
         z-index: 10;
-        padding: 10px 0 6px;
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-2xs);
         display: flex;
         flex-direction: column;
       }
       .dropdown-header {
-        font-size: 11px;
+        font-size: var(--boxel-font-size-2xs);
         font-weight: 600;
-        color: #444;
-        padding: 0 12px 8px;
+        color: var(--boxel-550);
+        padding: 0 var(--boxel-sp-sm) 0.5rem;
         border-bottom: 1px solid rgba(0 0 0 / 8%);
         display: block;
       }
       .dropdown-list {
         list-style: none;
         margin: 0;
-        padding: 4px 6px;
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-2xs);
       }
       .dropdown-list li {
         margin: 0;
@@ -521,11 +522,11 @@ export default class Workspace extends Component<Signature> {
         width: 100%;
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 6px 8px;
+        gap: 0.5rem;
+        padding: var(--boxel-sp-2xs) 0.5rem;
         background: none;
         border: none;
-        border-radius: 6px;
+        border-radius: var(--boxel-border-radius-sm);
         cursor: pointer;
         text-align: left;
       }
@@ -533,8 +534,8 @@ export default class Workspace extends Component<Signature> {
         background: rgba(0 0 0 / 6%);
       }
       .option-url {
-        font-size: 12px;
-        color: #1a1628;
+        font-size: var(--boxel-font-size-xs);
+        color: var(--boxel-dark);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -576,8 +577,8 @@ export default class Workspace extends Component<Signature> {
         display: flex;
       }
       :deep(.workspace-chooser-delete-modal) {
-        border-radius: 20px;
-        max-width: 650px;
+        border-radius: var(--boxel-border-radius-xxl);
+        max-width: var(--boxel-md-container);
         height: auto;
         display: flex;
         flex-direction: column;
@@ -586,7 +587,7 @@ export default class Workspace extends Component<Signature> {
         display: none;
       }
       :deep(.workspace-chooser-delete-modal > .dialog-box__content) {
-        padding: var(--boxel-sp-lg) 30px;
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl);
         overflow: visible;
         height: auto;
         flex: none;
@@ -600,7 +601,7 @@ export default class Workspace extends Component<Signature> {
       :deep(.workspace-chooser-delete-modal > .dialog-box__footer) {
         height: auto;
         flex: none;
-        padding: 0 30px 30px;
+        padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
         border-top: none;
       }
       .delete-modal__header {
@@ -609,31 +610,31 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-sm);
       }
       .delete-modal__warning-icon {
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        color: #ff5050;
+        width: var(--boxel-icon-lg);
+        height: var(--boxel-icon-lg);
+        min-width: var(--boxel-icon-lg);
+        color: var(--boxel-danger);
         flex-shrink: 0;
       }
       .delete-modal__title {
-        font-size: 26px;
+        font-size: 1.625rem;
         font-weight: 700;
-        color: black;
+        color: var(--boxel-dark);
         margin: 0;
       }
       .delete-modal__workspace-card {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        background: #f4f4f4;
-        border-radius: 13px;
-        padding: 15px;
-        min-height: 82px;
+        background: var(--boxel-light-100);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp);
+        min-height: 5.125rem;
       }
       .delete-modal__realm-icon-wrapper {
         position: relative;
         flex-shrink: 0;
-        border-radius: calc(var(--boxel-border-radius-xs) + 6px);
+        border-radius: calc(var(--boxel-border-radius-xs) + var(--boxel-border-radius-sm));
         display: flex;
       }
       .delete-modal__realm-icon-wrapper::after {
@@ -646,7 +647,7 @@ export default class Workspace extends Component<Signature> {
         pointer-events: none;
       }
       .delete-modal__realm-icon {
-        --boxel-realm-icon-size: 42px;
+        --boxel-realm-icon-size: 2.625rem;
         --boxel-realm-icon-border-radius: calc(
           var(--boxel-border-radius-xs) + 6px
         );
@@ -655,63 +656,63 @@ export default class Workspace extends Component<Signature> {
       .delete-modal__workspace-info {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: var(--boxel-sp-4xs);
       }
       .delete-modal__workspace-name {
-        font-size: 14px;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 700;
-        color: black;
+        color: var(--boxel-dark);
       }
       .delete-modal__workspace-meta {
-        font-size: 14px;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 400;
-        color: black;
+        color: var(--boxel-dark);
       }
       .delete-modal__warning-box {
-        background: #ffe9e9;
-        border-radius: 13px;
-        padding: 24px;
+        background: var(--boxel-danger-bg);
+        border-radius: var(--boxel-border-radius-lg);
+        padding: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
       }
       .delete-modal__warning-text {
         margin: 0;
-        font-size: 14px;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 700;
-        color: black;
+        color: var(--boxel-dark);
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: var(--boxel-sp-2xs);
       }
       .delete-modal__realms {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        margin-top: 4px;
+        gap: 0.5rem;
+        margin-top: var(--boxel-sp-4xs);
       }
       .delete-modal__realms-title {
         margin: 0;
-        font-size: 14px;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 700;
-        color: black;
+        color: var(--boxel-dark);
       }
       .delete-modal__realms-list {
         margin: 0;
-        padding-left: 21px;
+        padding-left: var(--boxel-sp-lg);
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 0.5rem;
       }
       .delete-modal__realms-list li {
-        font-size: 14px;
+        font-size: var(--boxel-font-size-sm);
         font-weight: 500;
-        color: black;
+        color: var(--boxel-dark);
         list-style: disc;
       }
       .delete-modal__error {
-        color: #ff5050;
-        font-size: 14px;
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         margin: 0;
       }
@@ -729,41 +730,41 @@ export default class Workspace extends Component<Signature> {
       }
       .delete-modal__cancel {
         background: none;
-        border: 1px solid #939393;
-        border-radius: 20px;
-        padding: 0 20px;
-        height: 40px;
-        font-size: 14px;
+        border: 1px solid var(--boxel-450);
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 var(--boxel-sp-lg);
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 700;
-        color: black;
+        color: var(--boxel-dark);
         cursor: pointer;
         transition:
           border-color 0.15s ease,
           background 0.15s ease;
       }
       .delete-modal__cancel:hover {
-        border-color: #555;
-        background: #f4f4f4;
+        border-color: var(--boxel-550);
+        background: var(--boxel-light-100);
       }
       .delete-modal__confirm {
-        background: #ff5050;
+        background: var(--boxel-danger);
         border: none;
-        border-radius: 20px;
-        padding: 0 24px;
-        height: 40px;
-        font-size: 14px;
+        border-radius: var(--boxel-border-radius-xxl);
+        padding: 0 1.5rem;
+        height: var(--boxel-button-tall);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 700;
-        color: white;
+        color: var(--boxel-light);
         cursor: pointer;
         transition: background 0.15s ease;
       }
       .delete-modal__confirm:hover {
-        background: #e03e3e;
+        background: var(--boxel-danger-hover);
       }
       .delete-modal__disclaimer {
-        font-size: 12px;
+        font-size: var(--boxel-font-size-xs);
         font-weight: 700;
-        color: #ff5050;
+        color: var(--boxel-danger);
       }
       .delete-modal__spinner {
         --boxel-loading-indicator-size: 2rem;
