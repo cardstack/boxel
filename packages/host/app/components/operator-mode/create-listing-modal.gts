@@ -16,8 +16,7 @@ import {
   LoadingIndicator,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { IconX } from '@cardstack/boxel-ui/icons';
+import { IconX, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
   chooseCard,
@@ -78,6 +77,10 @@ export default class CreateListingModal extends Component<Signature> {
 
   private get selectedExampleURLs(): string[] {
     return this._selectedExampleURLs ?? this.payload?.openCardIds ?? [];
+  }
+
+  private get hasSelectedExamples(): boolean {
+    return this.selectedExampleURLs.length > 0;
   }
 
   private get shouldShowExampleRow(): boolean {
@@ -222,7 +225,7 @@ export default class CreateListingModal extends Component<Signature> {
                 class='field-contents examples-field'
                 data-test-create-listing-examples
               >
-                {{#if this.selectedExampleURLs.length}}
+                {{#if this.hasSelectedExamples}}
                   <div
                     class='selected-examples-list'
                     data-test-selected-examples
@@ -264,24 +267,19 @@ export default class CreateListingModal extends Component<Signature> {
                       </:response>
                     </PrerenderedCardSearch>
                   </div>
+                {{else}}
+                  <span class='no-examples-message'>No examples selected</span>
                 {{/if}}
                 <Button
+                  class='add-examples-button'
                   @size='small'
+                  @kind='muted'
                   @loading={{this.chooseExamples.isRunning}}
                   {{on 'click' (perform this.chooseExamples)}}
                   data-test-choose-examples-button
                 >
-                  {{#if this.selectedExampleURLs.length}}
-                    {{this.selectedExampleURLs.length}}
-                    {{if
-                      (eq this.selectedExampleURLs.length 1)
-                      'example'
-                      'examples'
-                    }}
-                    selected
-                  {{else}}
-                    Add Examples
-                  {{/if}}
+                  <IconPlus width='12px' height='12px' />
+                  Add Examples
                 </Button>
               </div>
             </FieldContainer>
@@ -336,17 +334,43 @@ export default class CreateListingModal extends Component<Signature> {
         display: flex;
         flex-direction: column;
       }
+      .field-contents {
+        display: flex;
+        align-items: center;
+        gap: var(--horizontal-gap);
+      }
       .examples-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .add-examples-button {
+        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        align-self: flex-start;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .no-examples-message {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-500);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--boxel-sp-sm);
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius);
+        min-height: 3rem;
+        width: 100%;
+      }
+      .selected-examples-list {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
-        align-items: center;
-      }
-      .selected-examples-list {
-        display: inline-flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
         min-width: 0;
+        padding: var(--boxel-sp-sm);
+        background-color: var(--boxel-100);
+        border-radius: var(--boxel-border-radius);
+        width: 100%;
+        align-items: start;
       }
       .selected-example-atom {
         position: relative;
@@ -394,7 +418,8 @@ export default class CreateListingModal extends Component<Signature> {
         align-items: center;
         justify-content: center;
         min-width: 2rem;
-        min-height: 1.5rem;
+        min-height: 3rem;
+        width: 100%;
       }
       :deep(.create-listing) {
         height: 30rem;
@@ -436,11 +461,6 @@ export default class CreateListingModal extends Component<Signature> {
       .field :deep(.content) {
         flex-grow: 1;
         min-width: 0;
-      }
-      .field-contents {
-        display: flex;
-        align-items: center;
-        gap: var(--horizontal-gap);
       }
       .realm-icon {
         --boxel-realm-icon-size: 1rem;
