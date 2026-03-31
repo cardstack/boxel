@@ -120,7 +120,9 @@ module('Integration | components | create-listing-modal', function (hooks) {
       .dom('[data-test-selected-examples] [data-test-card-format="atom"]')
       .exists({ count: 1 });
     assert
-      .dom(`[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`)
+      .dom(
+        `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+      )
       .exists();
     assert
       .dom('[data-test-choose-examples-button]')
@@ -174,5 +176,4 @@ module('Integration | components | create-listing-modal', function (hooks) {
     assert.dom('[data-test-create-listing-examples]').doesNotExist();
     assert.dom('[data-test-choose-examples-button]').doesNotExist();
   });
-
 });

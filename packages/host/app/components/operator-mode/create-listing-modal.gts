@@ -125,7 +125,6 @@ export default class CreateListingModal extends Component<Signature> {
 
   @action private removeSelectedExample(urlToRemove: string) {
     let normalizedUrlToRemove = removeFileExtension(urlToRemove);
-    let before = this.selectedExampleURLs;
     this._selectedExampleURLs = this.selectedExampleURLs.filter(
       (url) => removeFileExtension(url) !== normalizedUrlToRemove,
     );
