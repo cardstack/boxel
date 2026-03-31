@@ -5,6 +5,10 @@ import { createJWT as createRealmServerJWT } from '../../utils/jwt';
 import { realmSecretSeed, insertUser } from '../helpers';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers';
+import {
+  extractRealmFromPrBody,
+  extractPrNumberFromPayload,
+} from '../../handlers/webhook-filter-handlers';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
   module('Webhook Receiver Endpoint', function (hooks) {
@@ -543,6 +547,103 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         response.body.commandsExecuted,
         1,
         'command was enqueued for execution',
+      );
+    });
+  });
+
+  module('extractRealmFromPrBody', function () {
+    test('extracts realm from production Submission Card URL', function (assert) {
+      let body = [
+        '## Summary',
+        'Some description',
+        '---',
+        '- Listing Name: Recipe Card Definition',
+        '- Room ID: `!IUlOGgAWjwfwemOykG:boxel.ai`',
+        '- User ID: `@richard.tan:boxel.ai`',
+        '- Number of Files: 1',
+        '- Submission Card: [https://app.boxel.ai/richard.tan/ric-test-1/SubmissionCard/f0028a1c-777a-4d34-9f93-8f02667484d5](https://app.boxel.ai/richard.tan/ric-test-1/SubmissionCard/f0028a1c-777a-4d34-9f93-8f02667484d5)',
+      ].join('\n');
+
+      assert.strictEqual(
+        extractRealmFromPrBody(body),
+        'https://app.boxel.ai/richard.tan/ric-test-1/',
+      );
+    });
+
+    test('extracts realm from staging Submission Card URL', function (assert) {
+      let body = [
+        '## Summary',
+        '- Submission Card: [https://realms-staging.stack.cards/chuan16/pure-creativity/SubmissionCard/01166122-d67f-4950-a708-b451564b30cb](https://realms-staging.stack.cards/chuan16/pure-creativity/SubmissionCard/01166122-d67f-4950-a708-b451564b30cb)',
+      ].join('\n');
+
+      assert.strictEqual(
+        extractRealmFromPrBody(body),
+        'https://realms-staging.stack.cards/chuan16/pure-creativity/',
+      );
+    });
+
+    test('extracts realm from local Submission Card URL', function (assert) {
+      let body = [
+        '## Summary',
+        '- Submission Card: [http://localhost:4201/experiments/SubmissionCard/5e3c8a93-24b1-4143-958a-a65270110c52](http://localhost:4201/experiments/SubmissionCard/5e3c8a93-24b1-4143-958a-a65270110c52)',
+      ].join('\n');
+
+      assert.strictEqual(
+        extractRealmFromPrBody(body),
+        'http://localhost:4201/experiments/',
+      );
+    });
+
+    test('returns null when no Submission Card line exists', function (assert) {
+      let body = '## Summary\nSome PR description without submission card';
+      assert.strictEqual(extractRealmFromPrBody(body), null);
+    });
+
+    test('returns null for null/undefined body', function (assert) {
+      assert.strictEqual(extractRealmFromPrBody(null), null);
+      assert.strictEqual(extractRealmFromPrBody(undefined), null);
+    });
+  });
+
+  module('extractPrNumberFromPayload', function () {
+    test('extracts PR number from pull_request event', function (assert) {
+      assert.strictEqual(
+        extractPrNumberFromPayload({
+          action: 'opened',
+          pull_request: { number: 296, body: '...' },
+        }),
+        296,
+      );
+    });
+
+    test('extracts PR number from check_run event', function (assert) {
+      assert.strictEqual(
+        extractPrNumberFromPayload({
+          action: 'completed',
+          check_run: {
+            pull_requests: [{ number: 42 }],
+          },
+        }),
+        42,
+      );
+    });
+
+    test('extracts PR number from check_suite event', function (assert) {
+      assert.strictEqual(
+        extractPrNumberFromPayload({
+          action: 'completed',
+          check_suite: {
+            pull_requests: [{ number: 99 }],
+          },
+        }),
+        99,
+      );
+    });
+
+    test('returns null when no PR number found', function (assert) {
+      assert.strictEqual(
+        extractPrNumberFromPayload({ action: 'created', comment: {} }),
+        null,
       );
     });
   });
