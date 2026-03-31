@@ -11,10 +11,9 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
+import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
-
-import type { Message } from './message';
 
 type CommandStatus = 'applied' | 'ready' | 'applying' | 'invalid';
 

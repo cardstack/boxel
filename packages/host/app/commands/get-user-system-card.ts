@@ -2,11 +2,10 @@ import { service } from '@ember/service';
 
 import ENV from '@cardstack/host/config/environment';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 const { defaultSystemCardId } = ENV;
 

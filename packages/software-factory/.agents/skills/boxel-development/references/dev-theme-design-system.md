@@ -37,8 +37,8 @@
 
 A ThemeCard is an instance of a card definition that inherits from `@cardstack/base/theme/default` or from one of its subclasses.
 
-| Type                     | URL                                                           | Description                                                                                  |
-| ------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Type                     | URL                                                | Description                                                                                  |
+| ------------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | Base Theme               | `@cardstack/base/theme/default`                    | Root base class                                                                              |
 | Structured Theme         | `@cardstack/base/structured-theme/default`         | MINIMUM template — includes all theme variables (except Brand variables)                     |
 | Style Reference          | `@cardstack/base/style-reference/default`          | Extends `StructuredTheme` — adds fields for inspiration images, terms, and style description |

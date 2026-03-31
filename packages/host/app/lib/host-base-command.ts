@@ -5,10 +5,9 @@ import { Command, type CommandContext } from '@cardstack/runtime-common';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import type LoaderService from '../services/loader-service';
 import type { CardDefConstructor } from '@cardstack/base/card-api';
 import type * as BaseCommandModule from '@cardstack/base/command';
-
-import type LoaderService from '../services/loader-service';
 
 export default abstract class HostBaseCommand<
   CardInputType extends CardDefConstructor | undefined,

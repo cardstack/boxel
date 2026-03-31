@@ -81,12 +81,7 @@ export class BlogPost extends CardDef {
 **CRITICAL:** Every FieldDef file must import FieldDef and MUST be exported:
 
 ```gts
-import {
-  FieldDef,
-  field,
-  contains,
-  Component,
-} from '@cardstack/base/card-api';
+import { FieldDef, field, contains, Component } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import LocationIcon from '@cardstack/boxel-icons/map-pin';
 import { concat } from '@ember/helper';

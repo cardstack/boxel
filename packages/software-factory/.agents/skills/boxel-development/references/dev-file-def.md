@@ -143,7 +143,7 @@ These are completely different and are **not interchangeable**:
 |                          | `MarkdownDef`                                                                   | `MarkdownField`                                                             |
 | ------------------------ | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | **Kind**                 | FileDef — a `.md` file in the realm                                             | FieldDef — inline text stored in the card's JSON                            |
-| **Import**               | `@cardstack/base/markdown-file-def`                                  | `@cardstack/base/markdown`                                       |
+| **Import**               | `@cardstack/base/markdown-file-def`                                             | `@cardstack/base/markdown`                                                  |
 | **Declaration**          | `@field notes = linksTo(MarkdownDef)`                                           | `@field notes = contains(MarkdownField)`                                    |
 | **Stored as**            | Separate `.md` file referenced by URL                                           | String embedded in the card's `.json`                                       |
 | **Has own URL?**         | ✅ Yes — shareable and reusable                                                 | ❌ No — owned by the containing card                                        |

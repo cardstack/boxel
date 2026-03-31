@@ -1,12 +1,11 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class CopyCardToRealmCommand extends HostBaseCommand<
   typeof BaseCommandModule.CopyCardToRealmInput,

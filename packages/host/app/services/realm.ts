@@ -262,9 +262,7 @@ class RealmResource {
       let resolvedURL = isRegisteredPrefix(this.realmURL)
         ? cardIdToURL(this.realmURL)
         : new URL(this.realmURL);
-      let token = await this.matrixService.createRealmSession(
-        resolvedURL,
-      );
+      let token = await this.matrixService.createRealmSession(resolvedURL);
       this.token = token;
     } catch (e: any) {
       console.error(`RealmService - Failed to login to realm: ${e.message}`, e);
