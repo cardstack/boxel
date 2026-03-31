@@ -76,39 +76,23 @@ export class DirectoryResource extends Resource<Args> {
               return;
             }
 
-            if (event.eventName === 'update') {
-              let filePath: string | undefined;
-              if ('added' in event) {
-                filePath = event.added;
-              } else if ('removed' in event) {
-                filePath = event.removed;
-              }
-              if (!filePath) {
-                return;
-              }
-              let fileURL = new URL(filePath, event.realmURL).href;
-              let segments = fileURL.split('/');
-              segments.pop();
-              let fileDir = segments.join('/') + '/';
-              if (fileDir.startsWith(this.directoryURL)) {
-                this.readdir.perform();
-              }
+            if (event.eventName !== 'update') {
               return;
             }
-
-            if (event.eventName !== 'index') {
+            let filePath: string | undefined;
+            if ('added' in event) {
+              filePath = event.added;
+            } else if ('removed' in event) {
+              filePath = event.removed;
+            }
+            if (!filePath) {
               return;
             }
-
-            if (!('updatedFile' in event)) {
-              return;
-            }
-
-            let { updatedFile } = event as { updatedFile: string };
-            let segments = updatedFile.split('/');
+            let fileURL = new URL(filePath, event.realmURL).href;
+            let segments = fileURL.split('/');
             segments.pop();
-            let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
-            if (updatedDir.startsWith(this.directoryURL)) {
+            let fileDir = segments.join('/') + '/';
+            if (fileDir.startsWith(this.directoryURL)) {
               this.readdir.perform();
             }
           },
