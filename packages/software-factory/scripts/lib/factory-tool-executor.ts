@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { SupportedMimeType } from '../../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import {
   iconURLFor,
   getRandomBackgroundURL,

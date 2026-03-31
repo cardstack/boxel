@@ -15,7 +15,7 @@ import {
   getRandomBackgroundURL,
 } from '@cardstack/runtime-common/realm-display-defaults';
 
-import { SupportedMimeType } from '../../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 export { SupportedMimeType };
 

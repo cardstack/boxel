@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { SupportedMimeType } from '../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import { bootstrapProjectArtifacts } from '../src/factory-bootstrap';
 import type { FactoryBrief } from '../src/factory-brief';

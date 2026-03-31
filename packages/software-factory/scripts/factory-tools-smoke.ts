@@ -8,7 +8,7 @@
  *   pnpm factory:tools-smoke
  */
 
-import { SupportedMimeType } from '../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import type { AgentAction } from './lib/factory-agent';
 import {

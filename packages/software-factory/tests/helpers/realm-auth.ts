@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-import { SupportedMimeType } from '../../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 export interface StubServer {
   stop(): Promise<void>;

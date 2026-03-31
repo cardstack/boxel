@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { BrowserContext, Page } from '@playwright/test';
 
-import { SupportedMimeType } from '../../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 import { readSupportContext } from '../../src/runtime-metadata';
 
 type BrowserAuth = {

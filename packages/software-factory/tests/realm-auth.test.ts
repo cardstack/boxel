@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { module, test } from 'qunit';
 
-import { SupportedMimeType } from '../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import {
   createBoxelRealmFetch,

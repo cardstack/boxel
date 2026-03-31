@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
-import { SupportedMimeType } from '../../src/mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import { defaultSupportMetadataFile } from '../../src/runtime-metadata';
 

@@ -1,4 +1,4 @@
-import { SupportedMimeType } from './mime-types';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import type { FactoryBrief } from './factory-brief';
 import { formatErrorResponse, formatUnknownError } from './error-format';
