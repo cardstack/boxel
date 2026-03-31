@@ -263,9 +263,10 @@ async function main() {
 
   console.log('--- Phase 0: Ensuring target realm exists ---\n');
 
+  let realmDisplayName = realmEndpoint.replace(/-/g, ' ');
   console.log(`  Creating realm: ${realmEndpoint}...`);
   let createResult = await createRealm(realmServerUrl, {
-    name: 'Smoke Test Realm',
+    name: realmDisplayName,
     endpoint: realmEndpoint,
     authorization: authorization ?? '',
     matrixAuth: {
@@ -392,9 +393,7 @@ async function main() {
   // Phase 2: Run both specs in a single TestRun
   // -------------------------------------------------------------------------
 
-  console.log(
-    '\n--- Phase 2: Running both specs in a single TestRun ---\n',
-  );
+  console.log('\n--- Phase 2: Running both specs in a single TestRun ---\n');
 
   let matrixAuthForRealm = {
     userId: matrixAuth.userId,
@@ -406,10 +405,7 @@ async function main() {
     targetRealmUrl,
     testResultsModuleUrl,
     slug: 'hello-smoke',
-    specPaths: [
-      'Tests/hello-smoke.spec.ts',
-      'Tests/hello-failing.spec.ts',
-    ],
+    specPaths: ['Tests/hello-smoke.spec.ts', 'Tests/hello-failing.spec.ts'],
     testNames: [
       'hello card renders greeting',
       'hello card has wrong greeting (deliberately fails)',
@@ -427,9 +423,9 @@ async function main() {
   if (handle.errorMessage) {
     console.log(`  Error:       ${handle.errorMessage}`);
   }
-  if ((handle as Record<string, unknown>).error) {
+  if ((handle as unknown as Record<string, unknown>).error) {
     console.log(
-      `  Complete error: ${(handle as Record<string, unknown>).error}`,
+      `  Complete error: ${(handle as unknown as Record<string, unknown>).error}`,
     );
   }
 
