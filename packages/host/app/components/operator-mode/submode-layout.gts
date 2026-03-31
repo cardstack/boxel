@@ -19,17 +19,13 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Avatar,
-  BoxelDropdown,
+  BoxelSelect,
   IconButton,
-  Menu,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
-import { bool, cn, MenuItem, not } from '@cardstack/boxel-ui/helpers';
+import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
-import {
-  BoxelIconWithText,
-  DropdownArrowDown,
-} from '@cardstack/boxel-ui/icons';
+import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
 
 import { cardIdToURL } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -65,6 +61,14 @@ import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
+
+import type { Icon } from '@cardstack/boxel-ui/icons';
+
+interface SortOption {
+  label: string;
+  icon: Icon;
+  value: 'default' | 'hosted-only';
+}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -110,33 +114,19 @@ type PanelWidths = {
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
-  @tracked private sortOrder: 'default' | 'hosted-only' = 'default';
+  private sortOptions: SortOption[] = [
+    { label: 'View All', icon: Shapes, value: 'default' },
+    { label: 'Hosted Only', icon: Home, value: 'hosted-only' },
+  ];
 
-  @action private setSortOrder(value: 'default' | 'hosted-only') {
-    this.sortOrder = value;
+  @tracked private selectedSortOption: SortOption = this.sortOptions[0]!;
+
+  @action private onSortChange(option: SortOption) {
+    this.selectedSortOption = option;
   }
 
-  private get sortLabel() {
-    return this.sortOrder === 'hosted-only' ? 'Hosted Only' : 'View All';
-  }
-
-  private get sortIcon() {
-    return this.sortOrder === 'hosted-only' ? Home : Shapes;
-  }
-
-  private get sortMenuItems() {
-    return [
-      new MenuItem({
-        label: 'View All',
-        icon: Shapes,
-        action: () => this.setSortOrder('default'),
-      }),
-      new MenuItem({
-        label: 'Hosted Only',
-        icon: Home,
-        action: () => this.setSortOrder('hosted-only'),
-      }),
-    ];
+  private get sortOrder(): 'default' | 'hosted-only' {
+    return this.selectedSortOption.value;
   }
 
   private aiPanelWidths: PanelWidths = new TrackedObject({
@@ -439,30 +429,19 @@ export default class SubmodeLayout extends Component<Signature> {
             />
             {{#if this.workspaceChooserOpened}}
               <div class='sort-controls'>
-                <BoxelDropdown @autoClose={{true}}>
-                  <:trigger as |bindings|>
-                    <button
-                      class='sort-dropdown-trigger'
-                      aria-label='Filter workspaces'
-                      data-test-sort-dropdown-trigger
-                      {{bindings}}
-                    >
-                      <this.sortIcon width='16' height='16' />
-                      {{this.sortLabel}}
-                      <DropdownArrowDown
-                        width='12'
-                        height='12'
-                        class='sort-dropdown-arrow'
-                      />
-                    </button>
-                  </:trigger>
-                  <:content as |dd|>
-                    <Menu
-                      @items={{this.sortMenuItems}}
-                      @closeMenu={{dd.close}}
-                    />
-                  </:content>
-                </BoxelDropdown>
+                <BoxelSelect
+                  class='sort-select'
+                  @options={{this.sortOptions}}
+                  @selected={{this.selectedSortOption}}
+                  @onChange={{this.onSortChange}}
+                  @matchTriggerWidth={{false}}
+                  aria-label='Filter workspaces'
+                  data-test-sort-dropdown-trigger
+                  as |option|
+                >
+                  <option.icon width='16' height='16' />
+                  {{option.label}}
+                </BoxelSelect>
               </div>
             {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
@@ -649,37 +628,14 @@ export default class SubmodeLayout extends Component<Signature> {
         pointer-events: auto;
         z-index: 9999;
       }
-      .sort-dropdown-trigger {
-        appearance: none;
-        background-color: rgb(42 32 64 / 90%);
-        border: 1px solid rgba(255 255 255 / 25%);
-        border-radius: var(--boxel-border-radius-sm);
-        color: var(--boxel-light);
+      .sort-select {
+        --boxel-select-background-color: rgb(42 32 64 / 90%);
+        --boxel-select-border-color: rgba(255 255 255 / 25%);
+        --boxel-select-text-color: var(--boxel-light);
+        --boxel-select-focus-border-color: rgba(255 255 255 / 50%);
         --icon-color: var(--boxel-light);
-        cursor: pointer;
         font: 400 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
-        padding: var(--boxel-sp-2xs) var(--boxel-sp-sm);
-        text-align: left;
-        transition:
-          border-color 0.15s ease,
-          background-color 0.15s ease;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-2xs);
-      }
-      .sort-dropdown-trigger:hover {
-        background-color: rgba(255 255 255 / 12%);
-        border-color: rgba(255 255 255 / 50%);
-      }
-      .sort-dropdown-trigger:focus {
-        outline: none;
-        border-color: rgba(255 255 255 / 50%);
-      }
-      .sort-dropdown-arrow {
-        --icon-color: var(--boxel-light);
-        margin-left: var(--boxel-sp-6xs);
-        flex-shrink: 0;
       }
 
       .submode-switcher {
