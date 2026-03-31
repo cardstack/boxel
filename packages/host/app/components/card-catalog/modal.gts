@@ -76,6 +76,7 @@ type State = {
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
+  preselectConsumingRealm?: boolean;
 };
 
 function isNewCardArgs(item: string | NewCardArgs): item is NewCardArgs {
@@ -112,6 +113,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @baseFilter={{state.baseFilter}}
             @availableRealmUrls={{state.availableRealmUrls}}
             @consumingRealm={{state.consumingRealm}}
+            @preselectConsumingRealm={{state.preselectConsumingRealm}}
             as |Bar Content|
           >
             <ModalContainer
@@ -260,6 +262,7 @@ export default class CardCatalogModal extends Component<Signature> {
       createNewCard?: CreateNewCard;
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
+      preselectConsumingRealm?: boolean;
       preselectedCardUrls?: string[];
     },
   ): Promise<undefined | string | string[]> {
@@ -299,6 +302,7 @@ export default class CardCatalogModal extends Component<Signature> {
         multiSelect?: boolean;
         preselectedCardTypeQuery?: Query;
         consumingRealm?: URL;
+        preselectConsumingRealm?: boolean;
         preselectedCardUrls?: string[];
       } = {},
     ) => {
@@ -365,6 +369,7 @@ export default class CardCatalogModal extends Component<Signature> {
         multiSelect: opts?.multiSelect ?? false,
         hasPreselectedCard: preselectedCardUrls.length > 0,
         consumingRealm: opts.consumingRealm,
+        preselectConsumingRealm: opts.preselectConsumingRealm,
       });
       this.stateStack.push(cardCatalogState);
       return await request.deferred.promise;

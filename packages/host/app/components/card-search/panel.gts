@@ -18,7 +18,6 @@ import {
   type getCardCollection,
   CardContextName,
   GetCardCollectionContextName,
-  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import {
@@ -54,6 +53,7 @@ interface Signature {
     baseFilter?: Filter;
     availableRealmUrls?: string[];
     consumingRealm?: URL;
+    preselectConsumingRealm?: boolean;
   };
   Blocks: {
     default: [
@@ -94,9 +94,13 @@ export default class SearchPanel extends Component<Signature> {
 
   @tracked private selectedRealms: PickerOption[] = this.initialSelectedRealms;
 
+  private get shouldPreselectConsumingRealm(): boolean {
+    return Boolean(this.args.preselectConsumingRealm);
+  }
+
   private get initialSelectedRealms(): PickerOption[] {
     let consumingRealm = this.args.consumingRealm;
-    if (!consumingRealm) {
+    if (!this.shouldPreselectConsumingRealm || !consumingRealm) {
       return [];
     }
     let realmURL = consumingRealm.href;
@@ -108,7 +112,7 @@ export default class SearchPanel extends Component<Signature> {
 
   private get initialFocusedSectionId(): string | null {
     let consumingRealm = this.args.consumingRealm;
-    if (!consumingRealm) {
+    if (!this.shouldPreselectConsumingRealm || !consumingRealm) {
       return null;
     }
     return `realm:${consumingRealm.href}`;
@@ -127,19 +131,6 @@ export default class SearchPanel extends Component<Signature> {
   // Non-tracked: persists across resource re-runs without creating
   // tracking dependencies. Updated by onTypeChange and the resource itself.
   private _previousSelectedTypes: PickerOption[] = [];
-
-  private get defaultSelectedTypeNames(): Set<string> {
-    if (!this.args.consumingRealm) {
-      return new Set();
-    }
-    return new Set(
-      (getFilterTypeRefs(this.args.baseFilter, this.args.searchKey) ?? [])
-        .filter((ref) => !ref.negated)
-        .map((ref) => ref.ref)
-        .filter(isResolvedCodeRef)
-        .map((ref) => ref.name),
-    );
-  }
 
   private get selectedRealmURLs(): string[] {
     const hasSelectAll = this.selectedRealms.some(
@@ -254,10 +245,7 @@ export default class SearchPanel extends Component<Signature> {
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
 
     if (hadSelectAll) {
-      let defaultSelected = value.options.filter((opt) =>
-        this.defaultSelectedTypeNames.has(opt.id),
-      );
-      value.selected = defaultSelected.length > 0 ? defaultSelected : [];
+      value.selected = [];
     } else if (
       this.searchResource.instances.length === 0 &&
       this.args.searchKey?.trim() &&

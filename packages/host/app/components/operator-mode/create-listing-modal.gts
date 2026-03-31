@@ -115,6 +115,7 @@ export default class CreateListingModal extends Component<Signature> {
       {
         multiSelect: true,
         consumingRealm,
+        preselectConsumingRealm: true,
         preselectedCardUrls: this.selectedExampleURLs,
       },
     );

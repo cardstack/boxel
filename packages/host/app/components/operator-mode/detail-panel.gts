@@ -454,11 +454,19 @@ export default class DetailPanel extends Component<Signature> {
         : [];
       if (!openCardIds.length) {
         let targetRealms = [targetRealm];
-        let instances = await this.store.search(
-          { filter: { type: codeRef } },
-          targetRealms,
-        );
-        let firstInstanceId = instances.find((c) => c.id)?.id;
+        let firstInstanceId: string | undefined;
+        try {
+          let instances = await this.store.search(
+            { filter: { type: codeRef } },
+            targetRealms,
+          );
+          firstInstanceId = instances.find((c) => c.id)?.id;
+        } catch (error) {
+          console.warn(
+            'Failed to prefetch instances for create listing modal',
+            error,
+          );
+        }
         openCardIds = firstInstanceId ? [firstInstanceId] : [];
       }
       await command.execute({
