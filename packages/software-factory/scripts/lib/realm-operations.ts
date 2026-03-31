@@ -8,18 +8,18 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  type LooseSingleCardDocument,
+  SupportedMimeType,
+  ensureTrailingSlash,
+} from '@cardstack/runtime-common';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   iconURLFor,
   getRandomBackgroundURL,
 } from '@cardstack/runtime-common/realm-display-defaults';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-export const cardSourceMimeType = 'application/vnd.card+source';
+export { SupportedMimeType, ensureTrailingSlash };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,15 +38,9 @@ export interface SearchRealmOptions extends RealmFetchOptions {
 // Helpers
 // ---------------------------------------------------------------------------
 
-// Note: also exists in @cardstack/runtime-common/paths but not exported
-// from the package index. Kept here to avoid subpath import issues.
-export function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
 export function buildAuthHeaders(
   authorization?: string,
-  accept = 'application/json',
+  accept = SupportedMimeType.JSON,
 ): Record<string, string> {
   let headers: Record<string, string> = { Accept: accept };
   if (authorization) {
@@ -59,8 +53,8 @@ export function buildCardSourceHeaders(
   authorization?: string,
 ): Record<string, string> {
   let headers: Record<string, string> = {
-    Accept: cardSourceMimeType,
-    'Content-Type': cardSourceMimeType,
+    Accept: SupportedMimeType.CardSource,
+    'Content-Type': SupportedMimeType.CardSource,
   };
   if (authorization) {
     headers['Authorization'] = authorization;
@@ -86,8 +80,8 @@ export async function searchRealm(
   let searchUrl = `${normalizedUrl}_search`;
 
   let headers: Record<string, string> = {
-    Accept: 'application/vnd.card+json',
-    'Content-Type': 'application/json',
+    Accept: SupportedMimeType.CardJson,
+    'Content-Type': SupportedMimeType.JSON,
   };
   if (options?.authorization) {
     headers['Authorization'] = options.authorization;
@@ -132,7 +126,10 @@ export async function readCardSource(
   try {
     let response = await fetchImpl(url, {
       method: 'GET',
-      headers: buildAuthHeaders(options?.authorization, cardSourceMimeType),
+      headers: buildAuthHeaders(
+        options?.authorization,
+        SupportedMimeType.CardSource,
+      ),
     });
 
     if (!response.ok) {
@@ -244,8 +241,8 @@ export async function cancelAllIndexingJobs(
   let cancelUrl = `${normalizedUrl}_cancel-indexing-job`;
 
   let headers: Record<string, string> = {
-    Accept: 'application/json',
-    'Content-Type': 'application/json',
+    Accept: SupportedMimeType.JSON,
+    'Content-Type': SupportedMimeType.JSON,
   };
   if (options?.authorization) {
     headers['Authorization'] = options.authorization;
@@ -307,8 +304,8 @@ export async function createRealm(
   let normalizedUrl = ensureTrailingSlash(realmServerUrl);
 
   let headers: Record<string, string> = {
-    Accept: 'application/vnd.api+json',
-    'Content-Type': 'application/vnd.api+json',
+    Accept: SupportedMimeType.JSONAPI,
+    'Content-Type': SupportedMimeType.JSONAPI,
     Authorization: options.authorization,
   };
 
@@ -386,8 +383,8 @@ export async function getRealmScopedAuth(
     let response = await fetchImpl(`${normalizedUrl}_realm-auth`, {
       method: 'POST',
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: SupportedMimeType.JSON,
+        'Content-Type': SupportedMimeType.JSON,
         Authorization: serverToken,
       },
     });
@@ -485,7 +482,7 @@ async function addRealmToMatrixAccountData(
       let putResponse = await fetchImpl(accountDataUrl, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': SupportedMimeType.JSON,
           Authorization: `Bearer ${matrixAuth.accessToken}`,
         },
         body: JSON.stringify({ realms: existingRealms }),
@@ -523,10 +520,9 @@ export async function pullRealmFiles(
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
 
-  // _mtimes requires Accept: application/vnd.api+json (SupportedMimeType.Mtimes)
   let headers = buildAuthHeaders(
     options?.authorization,
-    'application/vnd.api+json',
+    SupportedMimeType.JSONAPI,
   );
 
   // Fetch mtimes to discover all file paths.
@@ -577,7 +573,10 @@ export async function pullRealmFiles(
     try {
       let fileResponse = await fetchImpl(fullUrl, {
         method: 'GET',
-        headers: buildAuthHeaders(options?.authorization, cardSourceMimeType),
+        headers: buildAuthHeaders(
+          options?.authorization,
+          SupportedMimeType.CardSource,
+        ),
       });
 
       if (!fileResponse.ok) {

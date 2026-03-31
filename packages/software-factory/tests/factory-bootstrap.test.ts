@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import {
   bootstrapProjectArtifacts,
   deriveProjectCode,
@@ -531,7 +533,7 @@ function buildMockFetch(
           } satisfies Record<string, unknown>);
         return new Response(JSON.stringify(payload), {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': SupportedMimeType.JSON },
         });
       }
 

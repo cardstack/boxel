@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import { expect, test } from './fixtures';
 import {
   getRealmToken,
@@ -46,7 +48,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   // uses a fixture that doesn't include Wiki cards
   let briefServer = createServer((request, response) => {
     if (request.url === '/brief/sticky-note') {
-      response.writeHead(200, { 'content-type': 'application/json' });
+      response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
       response.end(stickyNoteFixture);
     } else {
       response.writeHead(404);
@@ -135,7 +137,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     ).href;
     let projectResponse = await fetch(projectUrl, {
       headers: {
-        Accept: 'application/vnd.card+source',
+        Accept: SupportedMimeType.CardSource,
         Authorization: targetRealmToken,
       },
     });

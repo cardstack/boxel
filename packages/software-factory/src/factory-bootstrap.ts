@@ -1,10 +1,7 @@
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import type { FactoryBrief } from './factory-brief';
 import { formatErrorResponse, formatUnknownError } from './error-format';
-
-// Matches SupportedMimeType.CardSource from @cardstack/runtime-common.
-// Cannot import at runtime here because Playwright's ts-node context
-// crashes on decorators in runtime-common (see CS-10550).
-const cardSourceMimeType = 'application/vnd.card+source';
 
 interface CardDocument {
   data: {
@@ -466,7 +463,7 @@ async function createCardIfMissing(
 
   let existsResponse = await fetchImpl(cardUrl, {
     method: 'GET',
-    headers: { Accept: cardSourceMimeType },
+    headers: { Accept: SupportedMimeType.CardSource },
   });
 
   if (existsResponse.ok) {
@@ -476,8 +473,8 @@ async function createCardIfMissing(
   let writeResponse = await fetchImpl(writeUrl, {
     method: 'POST',
     headers: {
-      Accept: cardSourceMimeType,
-      'Content-Type': cardSourceMimeType,
+      Accept: SupportedMimeType.CardSource,
+      'Content-Type': SupportedMimeType.CardSource,
     },
     body: JSON.stringify(document, null, 2),
   });
@@ -503,7 +500,7 @@ async function hasInProgressTicket(
     let url = new URL(path, realmUrl).href;
     let response = await fetchImpl(url, {
       method: 'GET',
-      headers: { Accept: cardSourceMimeType },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
 
     if (!response.ok) {
@@ -532,7 +529,7 @@ async function patchTicketStatus(
 
   let getResponse = await fetchImpl(url, {
     method: 'GET',
-    headers: { Accept: cardSourceMimeType },
+    headers: { Accept: SupportedMimeType.CardSource },
   });
 
   if (!getResponse.ok) {
@@ -548,8 +545,8 @@ async function patchTicketStatus(
   let patchResponse = await fetchImpl(writeUrl, {
     method: 'POST',
     headers: {
-      Accept: cardSourceMimeType,
-      'Content-Type': cardSourceMimeType,
+      Accept: SupportedMimeType.CardSource,
+      'Content-Type': SupportedMimeType.CardSource,
     },
     body: JSON.stringify(existing, null, 2),
   });
@@ -579,7 +576,7 @@ async function waitForCardToBeReadable(
     try {
       let response = await fetchImpl(cardUrl, {
         method: 'GET',
-        headers: { Accept: cardSourceMimeType },
+        headers: { Accept: SupportedMimeType.CardSource },
       });
 
       if (response.ok) {

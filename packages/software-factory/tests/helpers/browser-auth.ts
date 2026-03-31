@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { BrowserContext, Page } from '@playwright/test';
 
+import {
+  SupportedMimeType,
+  ensureTrailingSlash,
+} from '@cardstack/runtime-common';
+
 import { readSupportContext } from '../../src/runtime-metadata';
 
 type BrowserAuth = {
@@ -49,10 +54,6 @@ const defaultUsername =
 const defaultSeed =
   process.env.SOFTWARE_FACTORY_BROWSER_SECRET_SEED ?? "shhh! it's a secret";
 
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
 function getBrowserProfile(): BoxelProfile {
   let username = (
     process.env.SOFTWARE_FACTORY_BROWSER_USERNAME ?? defaultUsername
@@ -77,7 +78,7 @@ async function matrixLogin(profile = getBrowserProfile()) {
     {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': SupportedMimeType.JSON,
       },
       body: JSON.stringify({
         identifier: {
@@ -119,7 +120,7 @@ async function getOpenIdToken(matrixAuth: {
     {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': SupportedMimeType.JSON,
         Authorization: `Bearer ${matrixAuth.accessToken}`,
       },
       body: '{}',
@@ -147,8 +148,8 @@ async function getRealmServerToken(
   let response = await fetch(new URL('_server-session', realmURL), {
     method: 'POST',
     headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+      Accept: SupportedMimeType.JSON,
+      'Content-Type': SupportedMimeType.JSON,
     },
     body: JSON.stringify(openIdToken),
   });
@@ -180,8 +181,8 @@ async function getRealmAuthTokens(
   let response = await fetch(new URL('_realm-auth', realmURL), {
     method: 'POST',
     headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
+      Accept: SupportedMimeType.JSON,
+      'Content-Type': SupportedMimeType.JSON,
       Authorization: serverToken,
     },
   });

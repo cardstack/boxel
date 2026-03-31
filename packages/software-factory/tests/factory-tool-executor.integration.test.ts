@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import { ToolExecutor } from '../scripts/lib/factory-tool-executor';
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
 
@@ -41,7 +43,7 @@ function startTestServer(
 
       handler(captured, (status, responseBody, headers) => {
         res.writeHead(status, {
-          'Content-Type': 'application/json',
+          'Content-Type': SupportedMimeType.JSON,
           ...headers,
         });
         res.end(
@@ -110,7 +112,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
       );
       assert.strictEqual(
         captured!.headers.accept,
-        'application/vnd.card+source',
+        SupportedMimeType.CardSource,
       );
     } finally {
       await stopServer(server);
@@ -154,7 +156,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
       );
       assert.strictEqual(
         captured!.headers['content-type'],
-        'application/vnd.card+source',
+        SupportedMimeType.CardSource,
       );
       assert.strictEqual(
         captured!.body,
@@ -244,8 +246,8 @@ module('factory-tool-executor integration > realm-api requests', function () {
         captured!.headers.authorization,
         'Bearer realm-jwt-for-user',
       );
-      assert.strictEqual(captured!.headers.accept, 'application/vnd.card+json');
-      assert.strictEqual(captured!.headers['content-type'], 'application/json');
+      assert.strictEqual(captured!.headers.accept, SupportedMimeType.CardJson);
+      assert.strictEqual(captured!.headers['content-type'], SupportedMimeType.JSON);
       assert.strictEqual(captured!.body, query);
     } finally {
       await stopServer(server);
@@ -289,7 +291,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
       assert.strictEqual(captured!.url, '/user/target/_atomic');
       assert.strictEqual(
         captured!.headers['content-type'],
-        'application/vnd.api+json',
+        SupportedMimeType.JSONAPI,
       );
       assert.strictEqual(
         captured!.headers.authorization,
@@ -376,10 +378,10 @@ module('factory-tool-executor integration > realm-api requests', function () {
         captured!.headers.authorization,
         'Bearer realm-server-jwt-minted',
       );
-      assert.strictEqual(captured!.headers.accept, 'application/vnd.api+json');
+      assert.strictEqual(captured!.headers.accept, SupportedMimeType.JSONAPI);
       assert.strictEqual(
         captured!.headers['content-type'],
-        'application/vnd.api+json',
+        SupportedMimeType.JSONAPI,
       );
 
       let body = JSON.parse(captured!.body);
@@ -426,7 +428,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
       assert.strictEqual(result.exitCode, 0);
       assert.strictEqual(captured!.method, 'POST');
       assert.strictEqual(captured!.url, '/user/target/_server-session');
-      assert.strictEqual(captured!.headers['content-type'], 'application/json');
+      assert.strictEqual(captured!.headers['content-type'], SupportedMimeType.JSON);
 
       let body = JSON.parse(captured!.body);
       assert.strictEqual(

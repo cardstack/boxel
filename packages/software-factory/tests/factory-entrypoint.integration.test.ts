@@ -4,6 +4,8 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 const packageRoot = resolve(__dirname, '..');
 const stickyNoteFixture = readFileSync(
   resolve(__dirname, '../realm/Wiki/sticky-note.json'),
@@ -51,13 +53,13 @@ module('factory-entrypoint integration', function () {
     let createdCardPaths = new Set<string>();
     let server = createServer((request, response) => {
       if (request.url === '/software-factory/Wiki/sticky-note') {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(stickyNoteFixture);
       } else if (
         request.url === '/_matrix/client/v3/login' &&
         request.method === 'POST'
       ) {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(
           JSON.stringify({
             access_token: 'matrix-access-token',
@@ -70,7 +72,7 @@ module('factory-entrypoint integration', function () {
           '/_matrix/client/v3/user/%40hassan%3Alocalhost/openid/request_token' &&
         request.method === 'POST'
       ) {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(
           JSON.stringify({
             access_token: 'openid-token',
@@ -84,7 +86,7 @@ module('factory-entrypoint integration', function () {
         request.method === 'POST'
       ) {
         response.writeHead(200, {
-          'content-type': 'application/json',
+          'content-type': SupportedMimeType.JSON,
           Authorization: 'Bearer realm-server-token',
         });
         response.end('{}');
@@ -96,7 +98,7 @@ module('factory-entrypoint integration', function () {
           request.headers.authorization,
           'Bearer realm-server-token',
         );
-        response.writeHead(201, { 'content-type': 'application/json' });
+        response.writeHead(201, { 'content-type': SupportedMimeType.JSON });
         response.end(
           JSON.stringify({
             data: {
@@ -110,17 +112,17 @@ module('factory-entrypoint integration', function () {
           '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
         request.method === 'GET'
       ) {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(JSON.stringify({ realms: [] }));
       } else if (
         request.url ===
           '/_matrix/client/v3/user/%40hassan%3Alocalhost/account_data/app.boxel.realms' &&
         request.method === 'PUT'
       ) {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end('{}');
       } else if (request.url === '/_realm-auth' && request.method === 'POST') {
-        response.writeHead(200, { 'content-type': 'application/json' });
+        response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(
           JSON.stringify({
             [canonicalTargetRealmUrl]: 'Bearer target-realm-token',
@@ -140,7 +142,7 @@ module('factory-entrypoint integration', function () {
       ) {
         // Realm session for target realm auth
         response.writeHead(201, {
-          'content-type': 'application/json',
+          'content-type': SupportedMimeType.JSON,
           Authorization: 'Bearer target-realm-token',
         });
         response.end('');
@@ -152,7 +154,7 @@ module('factory-entrypoint integration', function () {
           .replace('/hassan/personal/', '')
           .replace(/\.json$/, '');
         if (createdCardPaths.has(cardPath)) {
-          response.writeHead(200, { 'content-type': 'application/json' });
+          response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
           response.end(
             JSON.stringify({
               data: {
@@ -306,7 +308,7 @@ module('factory-entrypoint integration', function () {
 
   test('factory:go fails clearly when MATRIX_USERNAME is missing', async function (assert) {
     let server = createServer((_request, response) => {
-      response.writeHead(200, { 'content-type': 'application/json' });
+      response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
       response.end(stickyNoteFixture);
     });
 

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
   iconURLFor,
   getRandomBackgroundURL,
@@ -585,7 +586,7 @@ export class ToolExecutor {
     let accountDataUrl = `${baseUrl}_matrix/client/v3/user/${encodedUserId}/account_data/app.boxel.realms`;
     let authHeaders = {
       Authorization: `Bearer ${matrixAccessToken}`,
-      'Content-Type': 'application/json',
+      'Content-Type': SupportedMimeType.JSON,
     };
 
     // GET current realm list
@@ -761,7 +762,7 @@ function buildRealmApiRequest(
   authorization?: string,
 ): RealmApiRequestParams {
   let headers: Record<string, string> = {
-    Accept: 'application/json',
+    Accept: SupportedMimeType.JSON,
   };
 
   if (authorization) {
@@ -775,7 +776,7 @@ function buildRealmApiRequest(
       let accept =
         typeof toolArgs['accept'] === 'string'
           ? toolArgs['accept']
-          : 'application/vnd.card+source';
+          : SupportedMimeType.CardSource;
       return {
         url: `${realmUrl}${path}`,
         method: 'GET',
@@ -790,7 +791,7 @@ function buildRealmApiRequest(
       let contentType =
         typeof toolArgs['content-type'] === 'string'
           ? toolArgs['content-type']
-          : 'application/vnd.card+source';
+          : SupportedMimeType.CardSource;
       return {
         url: `${realmUrl}${path}`,
         method: 'POST',
@@ -817,7 +818,7 @@ function buildRealmApiRequest(
         method: 'POST',
         headers: {
           ...headers,
-          'Content-Type': 'application/vnd.api+json',
+          'Content-Type': SupportedMimeType.JSONAPI,
         },
         body: JSON.stringify({ 'atomic:operations': JSON.parse(operations) }),
       };
@@ -831,8 +832,8 @@ function buildRealmApiRequest(
         method: 'QUERY',
         headers: {
           ...headers,
-          Accept: 'application/vnd.card+json',
-          'Content-Type': 'application/json',
+          Accept: SupportedMimeType.CardJson,
+          'Content-Type': SupportedMimeType.JSON,
         },
         body: query,
       };
@@ -855,8 +856,8 @@ function buildRealmApiRequest(
         method: 'POST',
         headers: {
           ...headers,
-          Accept: 'application/vnd.api+json',
-          'Content-Type': 'application/vnd.api+json',
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': SupportedMimeType.JSONAPI,
         },
         body: JSON.stringify({
           data: {
@@ -878,7 +879,7 @@ function buildRealmApiRequest(
       return {
         url: `${serverUrl}_server-session`,
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': SupportedMimeType.JSON },
         body: JSON.stringify({ access_token: openidToken }),
       };
     }
@@ -888,7 +889,7 @@ function buildRealmApiRequest(
       return {
         url: `${serverUrl}_realm-auth`,
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': SupportedMimeType.JSON },
       };
     }
 

@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import type { AgentAction, ToolResult } from '../scripts/lib/factory-agent';
 import {
   ToolExecutor,
@@ -291,7 +293,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ card: 'data' }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -328,7 +330,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -360,7 +362,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -388,7 +390,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ data: [] }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -417,7 +419,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -468,7 +470,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedHeaders = new Headers(init?.headers as HeadersInit);
         return new Response(JSON.stringify({}), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -498,7 +500,7 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -533,7 +535,7 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
@@ -577,7 +579,7 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
@@ -621,7 +623,7 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
@@ -660,7 +662,7 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
@@ -707,7 +709,7 @@ module('factory-tool-executor > realm-api execution', function () {
             }),
             {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': SupportedMimeType.JSON },
             },
           );
         }
@@ -716,14 +718,14 @@ module('factory-tool-executor > realm-api execution', function () {
             JSON.stringify({ realms: ['https://existing.test/'] }),
             {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': SupportedMimeType.JSON },
             },
           );
         }
         // PUT account_data
         return new Response('{}', {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
@@ -774,7 +776,7 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
@@ -812,7 +814,7 @@ module('factory-tool-executor > realm-api execution', function () {
         return new Response(null, {
           status: 201,
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': SupportedMimeType.JSON,
             Authorization: 'Bearer realm-server-jwt-123',
           },
         });
@@ -858,7 +860,7 @@ module('factory-tool-executor > auth header propagation', function () {
         capturedHeaders = new Headers(init?.headers as HeadersInit);
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
       getCapturedHeaders: () => capturedHeaders,
@@ -1049,7 +1051,7 @@ module('factory-tool-executor > auth header propagation', function () {
           return new Response(null, {
             status: 201,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': SupportedMimeType.JSON,
               Authorization: 'Bearer minted-realm-server-jwt',
             },
           });
@@ -1077,7 +1079,7 @@ module('factory-tool-executor > auth header propagation', function () {
           capturedHeaders = new Headers(init?.headers as HeadersInit);
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           });
         }) as typeof globalThis.fetch,
       }),
@@ -1225,7 +1227,7 @@ module('factory-tool-executor > timeout', function () {
               resolve(
                 new Response('{}', {
                   status: 200,
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': SupportedMimeType.JSON },
                 }),
               ),
             5000,
@@ -1261,7 +1263,7 @@ function createMockFetch(
   return (async () => {
     return new Response(JSON.stringify(body), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': SupportedMimeType.JSON },
     });
   }) as typeof globalThis.fetch;
 }

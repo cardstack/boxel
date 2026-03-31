@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
+
 import { FactoryEntrypointUsageError } from '../src/factory-entrypoint-errors';
 import {
   bootstrapFactoryTargetRealm,
@@ -180,7 +182,7 @@ module('factory-target-realm', function (hooks) {
           {
             status: 200,
             headers: {
-              'content-type': 'application/json',
+              'content-type': SupportedMimeType.JSON,
             },
           },
         );
@@ -202,7 +204,7 @@ module('factory-target-realm', function (hooks) {
           {
             status: 200,
             headers: {
-              'content-type': 'application/json',
+              'content-type': SupportedMimeType.JSON,
             },
           },
         );
@@ -213,7 +215,7 @@ module('factory-target-realm', function (hooks) {
         response = new Response('{}', {
           status: 200,
           headers: {
-            'content-type': 'application/json',
+            'content-type': SupportedMimeType.JSON,
             Authorization: 'Bearer realm-server-token',
           },
         });
@@ -254,7 +256,7 @@ module('factory-target-realm', function (hooks) {
           {
             status: 201,
             headers: {
-              'content-type': 'application/json',
+              'content-type': SupportedMimeType.JSON,
             },
           },
         );
@@ -262,7 +264,7 @@ module('factory-target-realm', function (hooks) {
         // Return empty account data (no realms yet)
         response = new Response(JSON.stringify({ realms: [] }), {
           status: 200,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': SupportedMimeType.JSON },
         });
       } else if (request.url === accountDataUrl && request.method === 'PUT') {
         let body = (await request.json()) as { realms: string[] };
@@ -284,7 +286,7 @@ module('factory-target-realm', function (hooks) {
           {
             status: 200,
             headers: {
-              'content-type': 'application/json',
+              'content-type': SupportedMimeType.JSON,
             },
           },
         );
@@ -298,7 +300,7 @@ module('factory-target-realm', function (hooks) {
         );
         assert.strictEqual(
           request.headers.get('Accept'),
-          'application/vnd.api+json',
+          SupportedMimeType.JSONAPI,
         );
         response = new Response(null, {
           status: 200,
@@ -346,7 +348,7 @@ module('factory-target-realm', function (hooks) {
           }),
           {
             status: 200,
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': SupportedMimeType.JSON },
           },
         );
       }
@@ -364,7 +366,7 @@ module('factory-target-realm', function (hooks) {
           }),
           {
             status: 200,
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': SupportedMimeType.JSON },
           },
         );
       }
@@ -373,7 +375,7 @@ module('factory-target-realm', function (hooks) {
         return new Response('{}', {
           status: 200,
           headers: {
-            'content-type': 'application/json',
+            'content-type': SupportedMimeType.JSON,
             Authorization: 'Bearer realm-server-token',
           },
         });
