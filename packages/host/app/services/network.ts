@@ -4,7 +4,6 @@ import Service, { service } from '@ember/service';
 import {
   VirtualNetwork,
   authorizationMiddleware,
-  baseRealm,
   registerCardReferencePrefix,
   fetcher,
 } from '@cardstack/runtime-common';
