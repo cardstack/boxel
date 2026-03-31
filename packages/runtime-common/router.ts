@@ -47,7 +47,8 @@ function formatUnknownError(error: unknown): string {
 
 export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 
-export { SupportedMimeType } from './supported-mime-type';
+import { SupportedMimeType } from './supported-mime-type';
+export { SupportedMimeType };
 
 function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {
