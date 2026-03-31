@@ -99,43 +99,15 @@ interface PickerAfterOptionsSignature {
   };
 }
 
-class PickerAfterOptions extends Component<PickerAfterOptionsSignature> {
+class PickerLoadingOverlay extends Component<PickerAfterOptionsSignature> {
   get isLoading(): boolean {
     return !!this.args.extra?.['isLoading'];
-  }
-
-  get hasMore(): boolean {
-    return !!this.args.extra?.['hasMore'];
-  }
-
-  get isLoadingMore(): boolean {
-    return !!this.args.extra?.['isLoadingMore'];
-  }
-
-  get onLoadMore(): (() => void) | undefined {
-    return this.args.extra?.['onLoadMore'] as (() => void) | undefined;
   }
 
   <template>
     {{#if this.isLoading}}
       <div class='picker-full-loading-overlay' data-test-picker-loading>
         <LoadingIndicator class='picker-full-loading-spinner' />
-      </div>
-    {{else if this.hasMore}}
-      <div
-        class='picker-infinite-scroll'
-        {{loadMoreSentinel
-          this.onLoadMore
-          this.isLoadingMore
-          enabled=this.hasMore
-        }}
-        data-test-picker-infinite-scroll
-      >
-        {{#if this.isLoadingMore}}
-          <div class='picker-bottom-loading' data-test-picker-loading-more>
-            <LoadingIndicator class='picker-loading-spinner' />
-          </div>
-        {{/if}}
       </div>
     {{/if}}
 
@@ -150,19 +122,6 @@ class PickerAfterOptions extends Component<PickerAfterOptionsSignature> {
       .picker-full-loading-spinner {
         width: 24px;
         height: 24px;
-      }
-      .picker-infinite-scroll {
-        min-height: 1px;
-      }
-      .picker-bottom-loading {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: var(--boxel-sp-xxs) 0;
-      }
-      .picker-loading-spinner {
-        width: 20px;
-        height: 20px;
       }
     </style>
   </template>
@@ -286,6 +245,11 @@ export default class Picker extends Component<PickerSignature> {
     return lastSelected === option;
   };
 
+  isLastOption = (option: PickerOption): boolean => {
+    const sorted = this.sortedOptions;
+    return sorted.length > 0 && sorted[sorted.length - 1] === option;
+  };
+
   get hasUnselected() {
     const unselected = this.sortedOptions.filter(
       (o) => o.type !== 'select-all' && !this.isVisuallyInSelectedSection(o),
@@ -331,9 +295,6 @@ export default class Picker extends Component<PickerSignature> {
       onSearchTermChange: this.onSearchTermChange,
       maxSelectedDisplay: this.args.maxSelectedDisplay,
       isLoading: this.args.isLoading,
-      isLoadingMore: this.args.isLoadingMore,
-      hasMore: this.args.hasMore,
-      onLoadMore: this.args.onLoadMore,
     };
   }
 
@@ -349,12 +310,8 @@ export default class Picker extends Component<PickerSignature> {
     if (this.args.afterOptionsComponent) {
       return this.args.afterOptionsComponent;
     }
-    if (
-      this.args.hasMore !== undefined ||
-      this.args.onLoadMore !== undefined ||
-      this.args.isLoading
-    ) {
-      return PickerAfterOptions;
+    if (this.args.isLoading) {
+      return PickerLoadingOverlay;
     }
     return undefined;
   }
@@ -444,6 +401,21 @@ export default class Picker extends Component<PickerSignature> {
       {{#if (this.displayDivider option)}}
         <div class='picker-divider' data-test-boxel-picker-divider></div>
       {{/if}}
+      {{#if (this.isLastOption option)}}
+        {{#if @hasMore}}
+          <div
+            class='picker-load-more-sentinel'
+            {{loadMoreSentinel @onLoadMore @isLoadingMore enabled=@hasMore}}
+            data-test-picker-infinite-scroll
+          >
+            {{#if @isLoadingMore}}
+              <div class='picker-bottom-loading' data-test-picker-loading-more>
+                <LoadingIndicator class='picker-loading-spinner' />
+              </div>
+            {{/if}}
+          </div>
+        {{/if}}
+      {{/if}}
     </BoxelMultiSelectBasic>
 
     {{! template-lint-disable require-scoped-style }}
@@ -453,6 +425,10 @@ export default class Picker extends Component<PickerSignature> {
         background-color: var(--boxel-200);
         margin: var(--boxel-sp-2xs) 0;
         width: 100%;
+      }
+
+      .boxel-picker__dropdown {
+        padding-bottom: var(--boxel-sp-3xs);
       }
 
       .boxel-picker__dropdown--loading .picker-before-options {
@@ -482,6 +458,20 @@ export default class Picker extends Component<PickerSignature> {
 
       .fitted-template :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute;
+      }
+
+      .picker-load-more-sentinel {
+        min-height: 1px;
+      }
+      .picker-bottom-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--boxel-sp-xxs) 0;
+      }
+      .picker-loading-spinner {
+        width: 20px;
+        height: 20px;
       }
     </style>
   </template>

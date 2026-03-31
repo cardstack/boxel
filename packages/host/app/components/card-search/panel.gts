@@ -17,6 +17,8 @@ import type { PickerOption } from '@cardstack/boxel-ui/components';
 import {
   type Filter,
   type getCardCollection,
+  baseCardRef,
+  baseFieldRef,
   CardContextName,
   GetCardCollectionContextName,
   internalKeyFor,
@@ -222,7 +224,19 @@ export default class SearchPanel extends Component<Signature> {
         refs.add(internalKeyFor(ref, undefined));
       }
     }
-    return refs.size > 0 ? refs : undefined;
+    if (refs.size === 0) return undefined;
+
+    // CardDef/FieldDef are root types — all card types inherit from them,
+    // so filtering by them would incorrectly show zero results. Skip.
+    const baseKeys = new Set([
+      internalKeyFor(baseCardRef, undefined),
+      internalKeyFor(baseFieldRef, undefined),
+    ]);
+    if ([...refs].every((r) => baseKeys.has(r))) {
+      return undefined;
+    }
+
+    return refs;
   }
 
   @use private typeFilter = resource(() => {
@@ -273,7 +287,16 @@ export default class SearchPanel extends Component<Signature> {
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
 
     if (hadSelectAll) {
-      value.selected = [];
+      // If baseFilter constrains to specific types and they exist in options,
+      // auto-select them instead of defaulting to "Any Type"
+      if (allowedCodeRefs && allowedCodeRefs.size > 0) {
+        const autoSelected = [...allowedCodeRefs]
+          .filter((ref) => optionsById.has(ref))
+          .map((ref) => optionsById.get(ref)!);
+        value.selected = autoSelected.length > 0 ? autoSelected : [];
+      } else {
+        value.selected = [];
+      }
     } else if (this._isLoadingTypes || this._isLoadingMoreTypes) {
       // Type summaries still loading — keep previous selections
       // to avoid jarring UI changes.
