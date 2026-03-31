@@ -1,7 +1,14 @@
+import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
+import Home from '@cardstack/boxel-icons/home';
+import Shapes from '@cardstack/boxel-icons/shapes';
+
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { IconGlobe, Lock, StarFilled } from '@cardstack/boxel-ui/icons';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -12,17 +19,36 @@ import AddWorkspace from './add-workspace';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
+interface SortOption {
+  label: string;
+  icon: Icon;
+  value: 'default' | 'hosted-only';
+}
+
 interface Signature {
   Element: HTMLDivElement;
-  Args: {
-    sortOrder: 'default' | 'hosted-only';
-  };
+  Args: {};
 }
 
 export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+
+  private sortOptions: SortOption[] = [
+    { label: 'View All', icon: Shapes, value: 'default' },
+    { label: 'Hosted Only', icon: Home, value: 'hosted-only' },
+  ];
+
+  @tracked private selectedSortOption: SortOption = this.sortOptions[0]!;
+
+  @action private onSortChange(option: SortOption) {
+    this.selectedSortOption = option;
+  }
+
+  private get sortOrder(): 'default' | 'hosted-only' {
+    return this.selectedSortOption.value;
+  }
 
   private get displayCatalogWorkspaces() {
     return (
@@ -51,7 +77,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   };
 
   private filterByHosted(urls: string[]): string[] {
-    if (this.args.sortOrder === 'hosted-only') {
+    if (this.sortOrder === 'hosted-only') {
       return urls.filter(this.isHosted);
     }
     return urls;
@@ -77,7 +103,7 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   private get userWorkspacesEmptyMessage(): string | null {
     if (
-      this.args.sortOrder === 'hosted-only' &&
+      this.sortOrder === 'hosted-only' &&
       this.filteredUserRealmURLs.length === 0
     ) {
       return 'No matching results';
@@ -87,7 +113,7 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   private get catalogEmptyMessage(): string | null {
     if (
-      this.args.sortOrder === 'hosted-only' &&
+      this.sortOrder === 'hosted-only' &&
       this.filteredCatalogRealmURLs.length === 0
     ) {
       return 'No matching results';
@@ -107,6 +133,21 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
+      <div class='sort-controls'>
+        <BoxelSelect
+          class='sort-select'
+          @options={{this.sortOptions}}
+          @selected={{this.selectedSortOption}}
+          @onChange={{this.onSortChange}}
+          @matchTriggerWidth={{false}}
+          aria-label='Filter workspaces'
+          data-test-sort-dropdown-trigger
+          as |option|
+        >
+          <option.icon width='16' height='16' />
+          {{option.label}}
+        </BoxelSelect>
+      </div>
       <div class='workspace-chooser__content boxel-dark-scrollbar'>
         <div class='sections-wrapper'>
           <div class='workspace-section' data-test-favorites-section>
@@ -189,6 +230,25 @@ export default class WorkspaceChooser extends Component<Signature> {
         width: 100%;
         animation: fadeIn 0.5s ease-in forwards;
         z-index: var(--host-workspace-chooser-z-index);
+      }
+      .sort-controls {
+        position: absolute;
+        left: 50%;
+        top: var(--operator-mode-spacing);
+        height: var(--operator-mode-top-bar-item-height);
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        z-index: 1;
+      }
+      .sort-select {
+        --boxel-select-background-color: rgb(42 32 64 / 90%);
+        --boxel-select-border-color: rgba(255 255 255 / 25%);
+        --boxel-select-text-color: var(--boxel-light);
+        --boxel-select-focus-border-color: rgba(255 255 255 / 50%);
+        --icon-color: var(--boxel-light);
+        font: 400 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp);
       }
       .workspace-chooser__content {
         display: flex;

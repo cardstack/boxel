@@ -7,8 +7,6 @@ import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import Home from '@cardstack/boxel-icons/home';
-import Shapes from '@cardstack/boxel-icons/shapes';
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 
@@ -19,14 +17,12 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import {
   Avatar,
-  BoxelSelect,
   IconButton,
   ResizablePanelGroup,
 } from '@cardstack/boxel-ui/components';
 import { bool, cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIconWithText } from '@cardstack/boxel-ui/icons';
-import type { Icon } from '@cardstack/boxel-ui/icons';
 
 import { cardIdToURL } from '@cardstack/runtime-common';
 import type { ResolvedCodeRef } from '@cardstack/runtime-common';
@@ -62,12 +58,6 @@ import type RecentCardsService from '../../services/recent-cards-service';
 import type StoreService from '../../services/store';
 import type { SearchSheetMode } from '../search-sheet';
 import type { Submode } from '../submode-switcher';
-
-interface SortOption {
-  label: string;
-  icon: Icon;
-  value: 'default' | 'hosted-only';
-}
 
 interface Signature {
   Element: HTMLDivElement;
@@ -113,21 +103,6 @@ type PanelWidths = {
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
-  private sortOptions: SortOption[] = [
-    { label: 'View All', icon: Shapes, value: 'default' },
-    { label: 'Hosted Only', icon: Home, value: 'hosted-only' },
-  ];
-
-  @tracked private selectedSortOption: SortOption = this.sortOptions[0]!;
-
-  @action private onSortChange(option: SortOption) {
-    this.selectedSortOption = option;
-  }
-
-  private get sortOrder(): 'default' | 'hosted-only' {
-    return this.selectedSortOption.value;
-  }
-
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -426,23 +401,6 @@ export default class SubmodeLayout extends Component<Signature> {
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-workspace-chooser-toggle
             />
-            {{#if this.workspaceChooserOpened}}
-              <div class='sort-controls'>
-                <BoxelSelect
-                  class='sort-select'
-                  @options={{this.sortOptions}}
-                  @selected={{this.selectedSortOption}}
-                  @onChange={{this.onSortChange}}
-                  @matchTriggerWidth={{false}}
-                  aria-label='Filter workspaces'
-                  data-test-sort-dropdown-trigger
-                  as |option|
-                >
-                  <option.icon width='16' height='16' />
-                  {{option.label}}
-                </BoxelSelect>
-              </div>
-            {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -474,7 +432,7 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser @sortOrder={{this.sortOrder}} />
+            <WorkspaceChooser />
           {{/if}}
 
           {{yield
@@ -610,30 +568,15 @@ export default class SubmodeLayout extends Component<Signature> {
         max-width: 100%;
         padding: var(--operator-mode-spacing);
         z-index: var(--host-top-bar-z-index);
+        pointer-events: none;
 
         display: flex;
         align-items: center;
         gap: var(--operator-mode-spacing);
       }
 
-      .sort-controls {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        display: flex;
-        align-items: center;
+      .submode-layout-top-bar > * {
         pointer-events: auto;
-        z-index: 9999;
-      }
-      .sort-select {
-        --boxel-select-background-color: rgb(42 32 64 / 90%);
-        --boxel-select-border-color: rgba(255 255 255 / 25%);
-        --boxel-select-text-color: var(--boxel-light);
-        --boxel-select-focus-border-color: rgba(255 255 255 / 50%);
-        --icon-color: var(--boxel-light);
-        font: 400 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
       }
 
       .submode-switcher {
