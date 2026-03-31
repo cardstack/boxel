@@ -672,14 +672,7 @@ export default class Workspace extends Component<Signature> {
 
   @cached
   private get realmInfo() {
-    const info = this.realm.info(this.args.realmURL);
-    if (info.name === 'Boxel Skills') {
-      return { ...info, iconURL: '/assets/images/wrench-realm-icon.svg' };
-    }
-    if (info.name === 'Cardstack Catalog') {
-      return { ...info, iconURL: '/assets/images/boxel-icon-figma.svg' };
-    }
-    return info;
+    return this.realm.info(this.args.realmURL);
   }
 
   private get name() {
