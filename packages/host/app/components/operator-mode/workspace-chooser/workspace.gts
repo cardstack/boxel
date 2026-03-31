@@ -565,6 +565,12 @@ export default class Workspace extends Component<Signature> {
         overflow: visible;
         height: auto;
         flex: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      :deep(.workspace-chooser-delete-modal > .dialog-box__content > * + *) {
+        margin-top: 0;
       }
       :deep(.workspace-chooser-delete-modal > .dialog-box__footer) {
         height: auto;
