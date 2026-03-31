@@ -32,6 +32,7 @@ import {
   CardContextName,
   isSpecCard,
   loadCardDef,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -172,7 +173,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       return;
     }
 
-    const selectedUrl = new URL(this.selectedId);
+    const selectedUrl = cardIdToURL(this.selectedId);
     await this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 

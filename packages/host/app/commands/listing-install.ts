@@ -4,6 +4,7 @@ import type {
   ListingPathResolver,
   ModuleResource,
   LooseCardResource,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   type ResolvedCodeRef,
@@ -16,8 +17,10 @@ import {
   isCardInstance,
   isSingleCardDocument,
   type Relationship,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
-import { logger } from '@cardstack/runtime-common';
+import { logger   cardIdToURL,
+} from '@cardstack/runtime-common';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -106,7 +109,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let sourceOperations = await Promise.all(
       plan.modulesToInstall.map(async (moduleMeta: CopyModuleMeta) => {
         let { sourceModule, targetModule } = moduleMeta;
-        let res = await this.cardService.getSource(new URL(sourceModule));
+        let res = await this.cardService.getSource(cardIdToURL(sourceModule));
         let moduleResource: ModuleResource = {
           type: 'source',
           attributes: { content: res.content },

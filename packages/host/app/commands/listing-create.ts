@@ -5,12 +5,14 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import type {
   LooseSingleCardDocument,
   ResolvedCodeRef,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   isCardInstance,
   SupportedMimeType,
   isFieldDef,
   isResolvedCodeRef,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
@@ -97,7 +99,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
 
       // Only allow modulesToCreate that belong to a realm we can read
-      const url = new URL(dep);
+      const url = cardIdToURL(dep);
       const realmURL = this.realm.realmOfURL(url);
       if (!realmURL) {
         return false;

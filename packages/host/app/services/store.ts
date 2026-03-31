@@ -1606,7 +1606,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async extractFileMetaDirectly(
     url: string,
   ): Promise<SingleFileMetaDocument | CardError> {
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(url));
+    let fileDefCodeRef = resolveFileDefCodeRef(cardIdToURL(url));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

@@ -47,7 +47,7 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
         return false;
       }
       try {
-        const url = new URL(dep);
+        const url = cardIdToURL(dep);
         const realmURL = this.realm.realmOfURL(url);
         if (!realmURL) {
           return false;

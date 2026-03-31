@@ -192,7 +192,7 @@ export async function buildModuleModel(
   context: ModuleModelContext,
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
-  let moduleURL = trimExecutableExtension(new URL(id));
+  let moduleURL = trimExecutableExtension(cardIdToURL(id));
   registerBoxelTransitionTo(context.router);
 
   if (parsedOptions.clearCache) {
@@ -282,7 +282,7 @@ export async function buildModuleModel(
         let consumes = (
           await context.loaderService.loader.getConsumedModules(id)
         ).filter((u) => u !== id);
-        deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+        deps = consumes.map((d) => trimExecutableExtension(cardIdToURL(d)).href);
         let lastModifiedRFC7321 = response.headers.get('last-modified');
         let createdAtRFC7321 = response.headers.get('x-created');
         if (!lastModifiedRFC7321) {

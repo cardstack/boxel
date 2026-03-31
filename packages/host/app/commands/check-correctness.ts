@@ -4,6 +4,7 @@ import {
   isCardDocumentString,
   isCardErrorJSONAPI,
   type CardErrorJSONAPI,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -191,14 +192,14 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
     targetRef: string,
   ): { moduleURL: URL; realmURL: URL; fileURL: URL } | undefined {
     try {
-      let fileURL = new URL(targetRef);
+      let fileURL = cardIdToURL(targetRef);
       let realmURL = this.realm.realmOfURL(fileURL);
       if (!realmURL) {
         return undefined;
       }
 
       let moduleHref = fileURL.href.replace(/\.gts$/, '');
-      let moduleURL = new URL(moduleHref);
+      let moduleURL = cardIdToURL(moduleHref);
       return { moduleURL, realmURL, fileURL };
     } catch {
       return undefined;
@@ -262,7 +263,7 @@ export default class CheckCorrectnessCommand extends HostBaseCommand<
 
   private async isEmptyFileContent(targetRef: string): Promise<boolean> {
     try {
-      let fileUrl = new URL(targetRef);
+      let fileUrl = cardIdToURL(targetRef);
       let { status, content } = await this.cardService.getSource(fileUrl);
       return status === 200 && content.trim() === '';
     } catch {

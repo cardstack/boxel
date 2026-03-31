@@ -46,6 +46,7 @@ import {
   isCardInstance,
   resolveFileDefCodeRef,
   SupportedMimeType,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -1485,7 +1486,7 @@ export default class Room extends Component<Signature> {
     bytes: Uint8Array,
   ): Promise<FileDef> {
     let sourceUrl = this.buildLocalSourceUrl(localFile.name);
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
+    let fileDefCodeRef = resolveFileDefCodeRef(cardIdToURL(sourceUrl));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

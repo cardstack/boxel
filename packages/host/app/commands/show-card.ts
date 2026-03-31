@@ -1,10 +1,12 @@
 import { service } from '@ember/service';
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type { ResolvedCodeRef   cardIdToURL,
+} from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,
   isCardErrorJSONAPI,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -70,7 +72,7 @@ export default class ShowCardCommand extends HostBaseCommand<
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
         await operatorModeStateService.updateCodePath(
-          new URL(cardDefRef.module + '.gts'),
+          cardIdToURL(cardDefRef.module + '.gts'),
           'preview',
         );
       }

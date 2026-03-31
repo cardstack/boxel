@@ -28,6 +28,7 @@ import {
   isSpecCard,
   type Permissions,
   PermissionsContextName,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import {
@@ -49,6 +50,7 @@ import {
   type Query,
   type CardErrorJSONAPI,
   type PrerenderedCardLike,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
@@ -425,7 +427,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return undefined;
     }
     try {
-      let cardURL = new URL(selectedCardId);
+      let cardURL = cardIdToURL(selectedCardId);
       return this.realm.realmOfURL(cardURL)?.href;
     } catch {
       return undefined;
