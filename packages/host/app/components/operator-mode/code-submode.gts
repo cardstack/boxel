@@ -40,6 +40,7 @@ import {
   type getCard,
   type LocalPath,
   CardContextName,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -629,8 +630,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private async openSearchResultInEditor(cardId: string) {
     let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
+      ? cardIdToURL(cardId)
+      : cardIdToURL(cardId + '.json');
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 

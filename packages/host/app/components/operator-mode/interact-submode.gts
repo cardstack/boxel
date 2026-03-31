@@ -49,6 +49,7 @@ import {
   type LocalPath,
   type ResolvedCodeRef,
   type Filter,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import CopyCardToStackCommand from '@cardstack/host/commands/copy-card-to-stack';
@@ -419,7 +420,7 @@ export default class InteractSubmode extends Component {
         title: loadedCard.cardTitle,
       };
     } else {
-      let cardUrl = card instanceof URL ? card : new URL(card as string);
+      let cardUrl = card instanceof URL ? card : cardIdToURL(card as string);
       let loadedCard = await this.store.get(cardUrl.href);
       if (isCardInstance(loadedCard)) {
         cardToDelete = {
@@ -499,7 +500,7 @@ export default class InteractSubmode extends Component {
   private openSelectedSearchResultInStack = restartableTask(
     async (cardId: string) => {
       let waiterToken = waiter.beginAsync();
-      let url = new URL(cardId);
+      let url = cardIdToURL(cardId);
       try {
         let searchSheetTrigger = this.searchSheetTrigger; // Will be set by showSearchWithTrigger
 

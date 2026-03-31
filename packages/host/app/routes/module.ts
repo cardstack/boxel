@@ -30,6 +30,7 @@ import {
   getFieldDefinitions,
   CardError,
   unixTime,
+  cardIdToURL,
   type RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import {
@@ -385,7 +386,7 @@ async function makeDefinition(
     return {
       type: 'definition',
       definition,
-      moduleURL: trimExecutableExtension(new URL(url)).href,
+      moduleURL: trimExecutableExtension(cardIdToURL(url)).href,
       types: typesMaybeError.types.map(({ refURL }) => refURL),
     };
   } catch (err: any) {

@@ -18,6 +18,7 @@ import {
 
 import {
   isResolvedCodeRef,
+  cardIdToURL,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -153,7 +154,7 @@ export default class CreateListingModal extends Component<Signature> {
       }
       await this.operatorModeStateService.updateSubmode(Submodes.Code);
       await this.operatorModeStateService.updateCodePath(
-        new URL(cardUrl + '.json'),
+        cardIdToURL(cardUrl + '.json'),
         'preview',
       );
       this.operatorModeStateService.updateCardPreviewFormat('isolated');

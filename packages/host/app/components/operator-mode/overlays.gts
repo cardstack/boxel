@@ -12,7 +12,7 @@ import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
 
-import { localId as localIdSymbol } from '@cardstack/runtime-common';
+import { cardIdToURL, localId as localIdSymbol } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -258,7 +258,7 @@ export default class Overlays extends Component<OverlaySignature> {
       format = canWrite ? format : 'isolated';
       if (this.args.viewCard) {
         let target =
-          typeof cardDefOrId === 'string' ? new URL(cardId) : cardDefOrId;
+          typeof cardDefOrId === 'string' ? cardIdToURL(cardId) : cardDefOrId;
         await this.args.viewCard(
           target,
           format,

@@ -7,6 +7,7 @@ import {
   identifyCard,
   internalKeyFor,
   baseRealm,
+  cardIdToURL,
   moduleFrom,
   getAncestor,
   SupportedMimeType,
@@ -116,7 +117,7 @@ export default class CardTypeService extends Service {
     let moduleIdentifier = moduleFrom(ref);
     let moduleInfo =
       this.moduleInfoCache.get(moduleIdentifier) ??
-      (await this.fetchModuleInfo(new URL(moduleIdentifier)));
+      (await this.fetchModuleInfo(cardIdToURL(moduleIdentifier)));
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
     let { id: _remove, ...fields } = api.getFields(card, {
