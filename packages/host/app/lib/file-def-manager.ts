@@ -338,7 +338,7 @@ export default class FileDefManagerImpl
         const content = JSON.stringify(entry.serialization);
         const contentHash = await this.getContentHash(content);
         let fileDef = this.fileAPI.createFileDef({
-          sourceUrl: unresolveCardReference(entry.card.id),
+          sourceUrl: entry.card.id ? unresolveCardReference(entry.card.id) : '',
           name: entry.card.cardTitle,
           contentType: SupportedMimeType.CardJson,
           contentHash,
