@@ -18,6 +18,7 @@ import {
   LoadingIndicator,
   Menu,
   RealmIcon,
+  Tooltip,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem, cssVar, gt } from '@cardstack/boxel-ui/helpers';
 import {
@@ -150,12 +151,27 @@ export default class Workspace extends Component<Signature> {
           <span class='name' data-test-workspace-name>{{this.name}}</span>
           <span class='visibility' data-test-workspace-visibility>
             {{#if this.hasPublishedRealms}}
-              <span class='hosted-icon'>
-                <Home width='13' height='13' />
-              </span>
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <span class='hosted-icon'>
+                    <Home width='13' height='13' />
+                  </span>
+                </:trigger>
+                <:default>Hosted on the web</:default>
+              </Tooltip>
             {{/if}}
-            <this.visibilityIcon width='12' height='12' />
+            <Tooltip @placement='top'>
+              <:trigger>
+                <this.visibilityIcon width='12' height='12' />
+              </:trigger>
+              <:default>
+                {{this.visibilityLabel}}
+              </:default>
+            </Tooltip>
             {{this.visibility}}
+            {{#if (not this.hasPublishedRealms)}}
+              <span class='realm-url' data-test-realm-url={{@realmURL}}>{{@realmURL}}</span>
+            {{/if}}
           </span>
         </div>
       </div>
@@ -412,6 +428,14 @@ export default class Workspace extends Component<Signature> {
         display: flex;
         align-items: center;
         margin-right: 2px;
+      }
+      .realm-url {
+        font-size: var(--boxel-font-xs);
+        color: var(--boxel-500);
+        max-width: 140px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .info--hidden {
         visibility: hidden;
@@ -857,6 +881,19 @@ export default class Workspace extends Component<Signature> {
         return Lock;
       default:
         throw new Error('unknown realm visibility');
+    }
+  }
+
+  private get visibilityLabel() {
+    switch (this.visibility) {
+      case 'public':
+        return 'Public workspace';
+      case 'shared':
+        return 'Shared workspace';
+      case 'private':
+        return 'Private workspace';
+      default:
+        return '';
     }
   }
 
