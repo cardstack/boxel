@@ -624,7 +624,6 @@ export default class SubmodeLayout extends Component<Signature> {
         transform: translate(-50%, -50%);
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
         pointer-events: auto;
         z-index: 9999;
       }
