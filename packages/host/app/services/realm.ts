@@ -30,6 +30,8 @@ import type {
 import {
   Deferred,
   ensureTrailingSlash,
+  isRegisteredPrefix,
+  cardIdToURL,
   logger,
   SupportedMimeType,
   type RealmInfo,
@@ -195,6 +197,10 @@ class RealmResource {
     return !!this.claims?.permissions?.includes('write');
   }
 
+  get isRealmOwner() {
+    return !!this.claims?.permissions?.includes('realm-owner');
+  }
+
   private loggingIn: Promise<void> | undefined;
 
   async login(): Promise<void> {
@@ -269,15 +275,21 @@ class RealmResource {
   });
 
   logout(): void {
-    this.token = undefined;
+    this.clearRealmSession();
+    window.localStorage.removeItem(SessionLocalStorageKey);
+    syncTokenToServiceWorker(this.realmURL, undefined);
+  }
+
+  clearRealmSession(): void {
+    this.auth = { type: 'anonymous' };
+    SessionStorage.remove(this.realmURL);
+    syncTokenToServiceWorker(this.realmURL, undefined);
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
     this.fetchInfoTask.cancelAll();
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
-    window.localStorage.removeItem(SessionLocalStorageKey);
-    syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
   private fetchingInfo: Promise<void> | undefined;
@@ -785,6 +797,9 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): EnhancedRealmInfo => {
+    if (isRegisteredPrefix(url)) {
+      url = cardIdToURL(url).href;
+    }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
       this.identifyRealm.perform(url);
@@ -827,6 +842,9 @@ export default class RealmService extends Service {
   };
 
   async allUsersPermissions(url: string) {
+    if (isRegisteredPrefix(url)) {
+      url = cardIdToURL(url).href;
+    }
     let resource = this.knownRealm(url);
     if (!resource) {
       await this.identifyRealm.perform(url);
@@ -846,6 +864,18 @@ export default class RealmService extends Service {
     await this.knownRealm(url)?.setHostHome(hostHome);
   }
 
+  removeRealm(url: string) {
+    let resource = this._realms.get(url);
+    if (resource) {
+      resource.clearRealmSession();
+    } else {
+      SessionStorage.remove(url);
+      syncTokenToServiceWorker(url, undefined);
+    }
+    this._realms.delete(url);
+    this.currentKnownRealms.delete(url);
+  }
+
   isPublic = (url: string): boolean => {
     return this.knownRealm(url)?.isPublic ?? false;
   };
@@ -856,6 +886,10 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  isRealmOwner = (url: string): boolean => {
+    return this.knownRealm(url)?.isRealmOwner ?? false;
   };
 
   url = (url: string): string | undefined => {
@@ -1317,6 +1351,18 @@ let SessionStorage = {
       );
     }
     syncTokenToServiceWorker(realmURL, token);
+  },
+  remove(realmURL: string) {
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    let session = JSON.parse(sessionStr);
+    if (realmURL in session) {
+      delete session[realmURL];
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify(session),
+      );
+    }
   },
 };
 

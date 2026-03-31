@@ -1,0 +1,42 @@
+#!/bin/sh
+#MISE description="Start test worker manager"
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE dir="packages/realm-server"
+
+if [ -n "$ENV_MODE" ]; then
+  SERVICE_NAME_ARG="--serviceName=worker-test"
+  MIGRATE_ARG="--migrateDB"
+
+  # Ensure per-environment test database exists
+  REPO_ROOT="$(cd "../.." && pwd)"
+  sh "$REPO_ROOT/scripts/ensure-branch-db.sh" "test_${ENV_SLUG}"
+else
+  SERVICE_NAME_ARG=""
+  MIGRATE_ARG=""
+fi
+
+NODE_ENV=test \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE_TEST}" \
+  NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  LOW_CREDIT_THRESHOLD=2000 \
+  ts-node \
+  --transpileOnly worker-manager \
+  --port="${WORKER_TEST_PORT}" \
+  --matrixURL="${MATRIX_URL_VAL}" \
+  --prerendererUrl="${PRERENDER_MGR_URL}" \
+  $SERVICE_NAME_ARG \
+  $MIGRATE_ARG \
+  \
+  --fromUrl="${REALM_TEST_URL}/node-test/" \
+  --toUrl="${REALM_TEST_URL}/node-test/" \
+  \
+  --fromUrl="${REALM_TEST_URL}/test/" \
+  --toUrl="${REALM_TEST_URL}/test/" \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl="${REALM_BASE_URL}/base/" \
+  --fromUrl='@cardstack/skills/' \
+  --toUrl="${REALM_BASE_URL}/skills/"

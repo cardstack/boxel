@@ -29,6 +29,7 @@ module.exports = function (defaults) {
       ],
     },
   });
+
   return compatBuild(app, Webpack, {
     staticAddonTrees: true,
     staticAddonTestSupportTrees: true,

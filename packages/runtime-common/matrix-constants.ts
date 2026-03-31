@@ -32,6 +32,7 @@ export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
 export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
+export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
 export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.6';

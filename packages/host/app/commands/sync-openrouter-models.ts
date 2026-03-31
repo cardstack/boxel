@@ -11,7 +11,7 @@ import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 20;
 
 interface OpenRouterApiModel {
   id: string;

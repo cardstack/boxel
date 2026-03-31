@@ -7,6 +7,7 @@ import type { CommandRequest } from '../commands';
 import { encodeCommandRequests } from '../commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_RELOAD_BILLING_DATA_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
@@ -18,6 +19,7 @@ import type { MatrixEvent } from 'matrix-js-sdk';
 import type { PromptParts } from './types';
 import { encodeUri } from 'matrix-js-sdk/lib/utils';
 import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import { isTextBasedContentType } from './modality';
 
 function getLog() {
   return logger('ai-bot');
@@ -77,6 +79,7 @@ export async function sendErrorEvent(
   roomId: string,
   error: any,
   eventIdToReplace: string | undefined,
+  opts?: { reloadBillingData?: boolean },
 ) {
   try {
     let errorMessage = getErrorMessage(error);
@@ -89,6 +92,7 @@ export async function sendErrorEvent(
       {
         isStreamingFinished: true,
         errorMessage,
+        [APP_BOXEL_RELOAD_BILLING_DATA_KEY]: opts?.reloadBillingData ?? false,
       },
     );
   } catch (e) {
@@ -333,10 +337,7 @@ export async function downloadFile(
   if (!fileUrl) {
     throw new Error('Attached file URL is missing');
   }
-  if (
-    !attachedFile?.contentType?.includes('text/') &&
-    !attachedFile.contentType?.includes('application/vnd.card+json')
-  ) {
+  if (!isTextBasedContentType(attachedFile?.contentType)) {
     throw new Error(
       `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
     );

@@ -16,7 +16,7 @@ import { IndexRunner } from '../index-runner';
 import type { Stats } from '../worker';
 
 export { fromScratchIndex, incrementalIndex };
-const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 40 * 60;
+const DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC = 60 * 60;
 const envTimeoutSec = Number(
   (
     globalThis as {
@@ -236,6 +236,7 @@ registerQueueJobDefinition({
 const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
   log,
   reportStatus,
+  reportProgress,
   dbAdapter,
   matrixURL,
   indexWriter,
@@ -268,6 +269,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
       definitionLookup,
       jobInfo,
       reportStatus,
+      onProgress: reportProgress,
       auth,
       fetch: _fetch,
       prerenderer,
@@ -292,6 +294,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
 const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   log,
   reportStatus,
+  reportProgress,
   dbAdapter,
   matrixURL,
   indexWriter,
@@ -325,6 +328,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       definitionLookup,
       jobInfo,
       reportStatus,
+      onProgress: reportProgress,
       auth,
       fetch: _fetch,
       prerenderer,

@@ -15,6 +15,7 @@ import {
   insertPlan,
   realmSecretSeed,
   createVirtualNetwork,
+  waitUntil,
 } from './helpers';
 import { createJWT as createRealmServerJWT } from '../utils/jwt';
 import {
@@ -134,34 +135,20 @@ module(basename(__filename), function () {
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      // Mock OpenRouter response
+      // Mock OpenRouter response (includes usage.cost so credits can be
+      // deducted directly without polling the generation cost API)
       const mockOpenRouterResponse = {
         id: 'gen-test-123',
         choices: [{ text: 'Test response from OpenRouter' }],
-        usage: { total_tokens: 150 },
+        usage: { total_tokens: 150, cost: 0.003 },
       };
 
-      // Mock generation cost API response
-      const mockCostResponse = {
-        data: {
-          id: 'gen-test-123',
-          total_cost: 0.003,
-          total_tokens: 150,
-          model: 'openai/gpt-3.5-turbo',
-        },
-      };
-
-      // Set up fetch to return different responses based on URL
+      // Set up fetch to return OpenRouter response
       mockFetch.callsFake(
         async (input: string | URL | Request, _init?: RequestInit) => {
           const url = typeof input === 'string' ? input : input.toString();
 
-          if (url.includes('/generation?id=')) {
-            return new Response(JSON.stringify(mockCostResponse), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            });
-          } else if (url.includes('/chat/completions')) {
+          if (url.includes('/chat/completions')) {
             return new Response(JSON.stringify(mockOpenRouterResponse), {
               status: 200,
               headers: { 'content-type': 'application/json' },
@@ -207,35 +194,38 @@ module(basename(__filename), function () {
 
         // Verify fetch was called correctly (allowing unrelated fetches)
         const calls = mockFetch.getCalls();
-        const chatCallIndex = calls.findIndex((call) => {
+        const chatCall = calls.find((call) => {
           const url = call.args[0];
           const href = typeof url === 'string' ? url : url?.toString();
           return Boolean(href && href.includes('/chat/completions'));
         });
-        const generationCallIndex = calls.findIndex((call) => {
-          const url = call.args[0];
-          const href = typeof url === 'string' ? url : url?.toString();
-          return Boolean(href && href.includes('/generation?id='));
-        });
 
-        assert.true(chatCallIndex >= 0, 'Fetch should call chat completions');
-        assert.true(
-          generationCallIndex >= 0,
-          'Fetch should call generation cost API',
-        );
-        assert.true(
-          chatCallIndex < generationCallIndex,
-          'Generation cost should be fetched after chat completions',
-        );
+        assert.ok(chatCall, 'Fetch should call chat completions');
 
         // Verify authorization header was set correctly
-        const firstCallHeaders = calls[chatCallIndex].args[1]
-          ?.headers as Record<string, string>;
-        // Note: The actual authorization header will include the JWT token, not the API key
-        // The API key is added by the proxy handler, not the test
+        const chatCallHeaders = chatCall!.args[1]?.headers as Record<
+          string,
+          string
+        >;
         assert.true(
-          firstCallHeaders?.Authorization?.startsWith('Bearer '),
+          chatCallHeaders?.Authorization?.startsWith('Bearer '),
           'Should set authorization header',
+        );
+
+        // Verify credits were deducted (0.003 USD * 1000 = 3 credits)
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 47;
+          },
+          { timeoutMessage: 'Credits should be deducted (50 - 3 = 47)' },
         );
       } finally {
         mockFetch.restore();

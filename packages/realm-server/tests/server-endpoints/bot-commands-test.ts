@@ -10,12 +10,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let context = setupServerEndpointsTest(hooks);
 
     test('requires auth to add bot command', async function (assert) {
-      let response = await context.request2.post('/_bot-commands').send({});
+      let response = await context.request.post('/_bot-commands').send({});
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
     test('requires auth to list bot commands', async function (assert) {
-      let response = await context.request2.get('/_bot-commands');
+      let response = await context.request.get('/_bot-commands');
       assert.strictEqual(response.status, 401, 'HTTP 401 status');
     });
 
@@ -39,7 +39,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -139,7 +139,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       ]);
 
       let commandSpecifier = '@cardstack/boxel-host/commands/show-card/default';
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -245,7 +245,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .get('/_bot-commands')
         .set(
           'Authorization',
@@ -291,7 +291,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -329,7 +329,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -367,7 +367,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         'user@example.com',
       );
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -416,7 +416,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -460,7 +460,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let baseRequest = context.request2
+      let baseRequest = context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -527,7 +527,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .post('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -594,7 +594,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let deleteResponse = await context.request2
+      let deleteResponse = await context.request
         .delete('/_bot-registration')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')
@@ -663,7 +663,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `)`,
       ]);
 
-      let response = await context.request2
+      let response = await context.request
         .delete('/_bot-commands')
         .set('Accept', 'application/vnd.api+json')
         .set('Content-Type', 'application/vnd.api+json')

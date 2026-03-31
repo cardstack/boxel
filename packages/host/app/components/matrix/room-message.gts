@@ -41,6 +41,7 @@ interface Signature {
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
+    isMostRecentMessage?: boolean;
     retryAction?: () => void;
     isPending?: boolean;
     registerScroller: (args: {
@@ -185,6 +186,7 @@ export default class RoomMessage extends Component<Signature> {
         @eventId={{this.message.eventId}}
         @index={{@index}}
         @isLastAssistantMessage={{this.isLastAssistantMessage}}
+        @isMostRecentMessage={{@isMostRecentMessage}}
         @userMessageThisMessageIsRespondingTo={{this.userMessageThisMessageIsRespondingTo}}
         @registerScroller={{@registerScroller}}
         @unregisterScroller={{@unregisterScroller}}
@@ -200,6 +202,7 @@ export default class RoomMessage extends Component<Signature> {
         @files={{this.message.attachedFiles}}
         @attachedCardsAsFiles={{this.message.attachedCardsAsFiles}}
         @errorMessage={{this.errorMessage}}
+        @reloadBillingData={{this.message.reloadBillingData}}
         @isDebugMessage={{this.message.isDebugMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -253,9 +256,6 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return `This message has been processing for a long time (more than ${STREAMING_TIMEOUT_MINUTES} minutes), possibly due to a delay in response time, or due to a system error.`; // Will show a "Wait longer" and "Retry" button
     }
-    if (this.attachedCardCollection?.cardErrors.length === 0) {
-      return undefined;
-    }
-    return 'Error rendering attached cards.';
+    return undefined;
   }
 }

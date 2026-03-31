@@ -23,13 +23,16 @@ import LogLevel, { type LogLevelDesc } from 'loglevel';
 
 const DEFAULT_LOG_LEVEL = 'info';
 
-const validLevels = [
+// We historically documented @cardstack/logger-style `none`, while the
+// underlying loglevel package uses `silent`. Accept both spellings and
+// normalize to `silent` before configuring loglevel.
+const canonicalLevels = [
   'trace',
   'debug',
   'info',
   'warn',
   'error',
-  'silent',
+  'none',
   0,
   1,
   2,
@@ -37,6 +40,7 @@ const validLevels = [
   4,
   5,
 ];
+const validLevels = [...canonicalLevels, 'silent'];
 
 interface LogDefinitions {
   [logName: string]: LogLevel.LogLevelDesc;
@@ -49,7 +53,7 @@ export function makeLogDefinitions(
     serializedLogLevels.split(',').map((pattern) => {
       let [logName, level] = pattern.split('=');
       assertLogLevelDesc(level);
-      return [logName, level];
+      return [logName, normalizeLogLevelDesc(level)];
     }),
   );
 }
@@ -87,10 +91,16 @@ function getLevelForLog(
   return matchingLogName ? logDefinitions[matchingLogName] : DEFAULT_LOG_LEVEL;
 }
 
-function assertLogLevelDesc(level: any): asserts level is LogLevelDesc {
+function normalizeLogLevelDesc(level: LogLevelDesc | 'none'): LogLevelDesc {
+  return level === 'none' ? 'silent' : level;
+}
+
+function assertLogLevelDesc(
+  level: any,
+): asserts level is LogLevelDesc | 'none' {
   if (!validLevels.includes(level)) {
     throw new Error(
-      `${level} is not a valid log level. valid values are ${validLevels.join()}`,
+      `${level} is not a valid log level. valid values are ${canonicalLevels.join()} (silent is accepted as an alias for none)`,
     );
   }
 }

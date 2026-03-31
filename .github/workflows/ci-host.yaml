@@ -25,26 +25,61 @@ permissions:
   pull-requests: write
 
 jobs:
+  check-percy:
+    name: Check if Percy is needed
+    runs-on: ubuntu-latest
+    outputs:
+      percy_needed: ${{ steps.check.outputs.percy_needed }}
+    steps:
+      - name: Check for UI-relevant changes
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "percy_needed=true" >> "$GITHUB_OUTPUT"
+            echo "Not a pull request — Percy will always run"
+            exit 0
+          fi
+
+          CHANGED_FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
+
+          percy_needed=false
+          while IFS= read -r file; do
+            case "$file" in
+              packages/host/*|packages/boxel-ui/*|packages/boxel-icons/*|packages/base/*|packages/catalog-realm/*|packages/runtime-common/*)
+                percy_needed=true
+                echo "UI-relevant change detected: $file"
+                break
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          echo "percy_needed=$percy_needed" >> "$GITHUB_OUTPUT"
+          if [ "$percy_needed" = "true" ]; then
+            echo "Percy will run — UI-relevant changes detected"
+          else
+            echo "Percy will be skipped — no UI-relevant changes"
+          fi
+
   test-web-assets:
     name: Build test web assets
     uses: ./.github/workflows/test-web-assets.yaml
     with:
       skip_catalog: true
+    concurrency:
+      group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
 
-  host-test:
-    name: Host Tests
+  live-test:
+    name: Live Tests (realm)
     runs-on: ubuntu-latest
     needs: test-web-assets
-    strategy:
-      fail-fast: false
-      matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-        shardTotal: [16]
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
+      group: boxel-live-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Download test web assets
@@ -58,25 +93,72 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
 
-      - name: Serve boxel-icons
-        run: pnpm serve &> /tmp/icon-server.log &
-        working-directory: packages/boxel-icons
+      - name: Disable TCP/UDP network offloading
+        run: sudo ethtool -K eth0 tx off rx off
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:host | tee -a /tmp/server.log &
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+
+      - name: Install D-Bus helpers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dbus-x11 upower
+          sudo service dbus restart
+          sudo service upower restart
+
+      - name: Live test suite
+        run: dbus-run-session -- pnpm test:live
+        working-directory: packages/host
+        env:
+          DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
+
+      - name: Upload junit report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: host-live-test-report
+          path: junit/host-live.xml
+          retention-days: 30
+      - name: Print realm server logs
+        if: ${{ !cancelled() }}
+        run: cat /tmp/server.log
+
+  host-test:
+    name: Host Tests
+    runs-on: ubuntu-latest
+    needs: [test-web-assets, check-percy]
+    strategy:
+      fail-fast: false
+      matrix:
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shardTotal: [16]
+    concurrency:
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
 
       # this is to hopefully address the CI network flakiness that we
       # occasionally see in host tests.
       # https://github.com/actions/runner-images/issues/1187#issuecomment-686735760
       - name: Disable TCP/UDP network offloading
         run: sudo ethtool -K eth0 tx off rx off
-      - name: Serve host dist (test assets) for realm server
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm serve:dist &
-          working-directory: packages/host
-          wait-for: 3m
-          wait-on: http-get://localhost:4200
-      - name: Start realm servers
-        run: pnpm start:services-for-host-tests | tee -a /tmp/server.log &
-        working-directory: packages/realm-server
+      - name: Start test services (icons + host dist + realm servers)
+        run: mise run test-services:host | tee -a /tmp/server.log &
         env:
           SKIP_CATALOG: true
       - name: create realm users
@@ -92,21 +174,29 @@ jobs:
 
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
+          if [ "$PERCY_ENABLED" = "true" ]; then
+            TEST_CMD="pnpm test-with-percy"
+          else
+            echo "::notice::Skipping Percy snapshots — no UI-relevant changes detected"
+            TEST_CMD="pnpm test:wait-for-servers"
+          fi
+
           set +e
-          dbus-run-session -- pnpm test-with-percy 2>&1 | tee /tmp/test-output.log
+          dbus-run-session -- $TEST_CMD 2>&1 | tee /tmp/test-output.log
           exit_code=${PIPESTATUS[0]}
           if [ $exit_code -ne 0 ] && grep -q "ChunkLoadError" /tmp/test-output.log; then
             echo ""
             echo "::warning::ChunkLoadError detected — retrying shard ${{ matrix.shardIndex }}..."
             echo ""
-            dbus-run-session -- pnpm test-with-percy
+            dbus-run-session -- $TEST_CMD
             exit_code=$?
           fi
           exit $exit_code
         env:
+          PERCY_ENABLED: ${{ needs.check-percy.outputs.percy_needed }}
           SKIP_CATALOG: true
           PERCY_GZIP: true
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          PERCY_TOKEN: ${{ needs.check-percy.outputs.percy_needed == 'true' && secrets.PERCY_TOKEN_HOST || '' }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
@@ -115,87 +205,99 @@ jobs:
 
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: host-test-report-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Print realm server logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: cat /tmp/server.log
       - name: Extract worker and prerender logs
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           grep -E '^\[start:worker-development' /tmp/server.log > /tmp/worker-manager.log || true
           grep -E '^\[start:prerender-dev' /tmp/server.log > /tmp/prerender-server.log || true
           grep -E '^\[start:prerender-manager-dev' /tmp/server.log > /tmp/prerender-manager.log || true
           grep -E '^\[start:development' /tmp/server.log > /tmp/start-development.log || true
           grep -E '^\[start:test-realms|^\[start:worker-test' /tmp/server.log > /tmp/test-realms.log || true
+          grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
+          grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: worker-manager-log-${{ matrix.shardIndex }}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: prerender-server-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: prerender-manager-log-${{ matrix.shardIndex }}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload start:development log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: start-development-log-${{ matrix.shardIndex }}
           path: /tmp/start-development.log
           retention-days: 30
       - name: Upload test-realms log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: test-realms-log-${{ matrix.shardIndex }}
           path: /tmp/test-realms.log
           retention-days: 30
-      - name: Upload testem log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
-        with:
-          name: testem-log-${{ matrix.shardIndex }}
-          path: junit/host-testem.log
-          retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
           retention-days: 30
+      - name: Upload host-dist log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: host-dist-log-${{ matrix.shardIndex }}
+          path: /tmp/host-dist.log
+          retention-days: 30
+      - name: Upload testem log
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: testem-log-${{ matrix.shardIndex }}
+          path: junit/host-testem.log
+          retention-days: 30
 
   host-percy-finalize:
     name: Finalise Percy
-    if: always()
-    needs: host-test
+    if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
+    concurrency:
+      group: host-percy-finalize-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: [host-test, check-percy]
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Finalise Percy
@@ -207,12 +309,15 @@ jobs:
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
-    if: always()
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: host-merge-reports-and-publish-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
     needs: host-test
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
       - name: Download JUnit reports from GitHub Actions Artifacts
@@ -234,7 +339,7 @@ jobs:
 
       - name: Upload merged report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           name: host-test-report-merged
           path: host.xml
@@ -242,7 +347,7 @@ jobs:
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
-        if: always()
+        if: ${{ !cancelled() }}
         with:
           junit_files: host.xml
           check_name: Host Test Results

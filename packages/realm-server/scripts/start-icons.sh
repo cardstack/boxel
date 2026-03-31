@@ -1,5 +1,8 @@
 #! /bin/sh
 
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPTS_DIR/../../../scripts/env-slug.sh"
+
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
   # In environment mode, use port 0 (dynamic) and register with Traefik.
   # http-server doesn't support port 0, so we pick a free port ourselves.
@@ -9,7 +12,7 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   ICONS_PID=$!
 
   # Register icons service with Traefik via a small node script
-  ENV_SLUG=$(echo "$BOXEL_ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | sed 's|/|-|g; s|[^a-z0-9-]||g; s|-\+|-|g; s|^-\|-$||g')
+  ENV_SLUG=$(resolve_env_slug)
   node -e "
     const fs = require('fs');
     const path = require('path');

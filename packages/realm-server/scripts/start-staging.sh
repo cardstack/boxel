@@ -25,6 +25,7 @@ EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTE
 NODE_NO_WARNINGS=1 \
   LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix-staging.stack.cards \
+  MATRIX_SERVER_NAME=stack.cards \
   BOXEL_HOST_URL=https://realms-staging.stack.cards \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='staging.boxel.dev' \
@@ -60,7 +61,7 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \
-  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
   --path='/persistent/boxel-homepage' \

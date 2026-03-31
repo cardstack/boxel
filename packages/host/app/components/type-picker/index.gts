@@ -56,6 +56,7 @@ export default class TypePicker extends Component<Signature> {
       @options={{this.allOptions}}
       @selected={{this.selected}}
       @onChange={{@onChange}}
+      @searchPlaceholder='Search for a type'
       @maxSelectedDisplay={{3}}
       @renderInPlace={{false}}
       @matchTriggerWidth={{false}}

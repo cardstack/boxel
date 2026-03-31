@@ -2,10 +2,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
 import { hash } from '@ember/helper';
 import { action } from '@ember/object';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
@@ -14,6 +17,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+  type CardErrorJSONAPI,
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
@@ -44,6 +48,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     isLastAssistantMessage: boolean;
+    isMostRecentMessage?: boolean;
     userMessageThisMessageIsRespondingTo?: Message;
     profileAvatar?: ComponentLike;
     collectionResource?: ReturnType<getCardCollection>;
@@ -63,6 +68,7 @@ interface Signature {
       element: HTMLElement;
     }) => void;
     errorMessage?: string;
+    reloadBillingData?: boolean;
     isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
@@ -233,6 +239,40 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
   }
 }
 
+interface ReloadBillingOnInsertSignature {
+  Args: {
+    Named: {
+      shouldReloadBillingData: boolean;
+      reload: () => void;
+    };
+  };
+}
+
+// In the future if we implement subscription to credit consumption, we can remove this modifier
+// It's currently used to reload the billing data when an out of credits error message is shown so that we can
+// conditionally display the "buy more credits" button, or "credits added" message + retry button
+class ReloadBillingOnInsert extends Modifier<ReloadBillingOnInsertSignature> {
+  private hasReloaded = false;
+
+  private runReload(reload: () => void) {
+    reload();
+  }
+
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    {
+      shouldReloadBillingData,
+      reload,
+    }: ReloadBillingOnInsertSignature['Args']['Named'],
+  ) {
+    if (shouldReloadBillingData && !this.hasReloaded) {
+      this.hasReloaded = true;
+      scheduleOnce('afterRender', this, this.runReload, reload);
+    }
+  }
+}
+
 function isThinkingMessage(s: string | null | undefined) {
   if (!s) {
     return false;
@@ -247,8 +287,48 @@ function isPresent(val: SafeString | string | null | undefined) {
   return val ? val !== '' : false;
 }
 
-function collectionResourceError(id: string | null | undefined) {
-  return 'Cannot render ' + id;
+export function attachedCardErrorMessages(errors: CardErrorJSONAPI[]) {
+  let unreachableCount = 0;
+  let runtimeErrorCount = 0;
+  let genericErrorCount = 0;
+
+  for (let error of errors) {
+    if (isUnreachableCardError(error)) {
+      unreachableCount++;
+    } else if (error.status >= 500) {
+      runtimeErrorCount++;
+    } else {
+      genericErrorCount++;
+    }
+  }
+
+  return [
+    ...(unreachableCount > 0
+      ? [
+          unreachableCount === 1
+            ? `The card is unreachable. It may have been deleted, or you don't have permission to see it.`
+            : `These cards are unreachable. They may have been deleted, or you don't have permission to see them.`,
+        ]
+      : []),
+    ...(runtimeErrorCount > 0
+      ? [
+          runtimeErrorCount === 1
+            ? `This card could not be displayed because it hit a runtime error.`
+            : `Some cards could not be displayed because they hit runtime errors.`,
+        ]
+      : []),
+    ...(genericErrorCount > 0
+      ? [
+          genericErrorCount === 1
+            ? `This card could not be displayed because it has an error.`
+            : `Some cards could not be displayed because they have errors.`,
+        ]
+      : []),
+  ];
+}
+
+function isUnreachableCardError(error: CardErrorJSONAPI) {
+  return [403, 404].includes(error.status);
 }
 
 export default class AiAssistantMessage extends Component<Signature> {
@@ -287,6 +367,12 @@ export default class AiAssistantMessage extends Component<Signature> {
     }
   }
 
+  private reloadBillingDataTask = task(async () => {
+    if (!this.billingService.loadingSubscriptionData) {
+      await this.billingService.loadSubscriptionData();
+    }
+  });
+
   <template>
     <section
       class={{cn
@@ -298,6 +384,10 @@ export default class AiAssistantMessage extends Component<Signature> {
         index=@index
         registerScroller=@registerScroller
         unregisterScroller=@unregisterScroller
+      }}
+      {{ReloadBillingOnInsert
+        shouldReloadBillingData=this.shouldReloadBillingData
+        reload=(perform this.reloadBillingDataTask)
       }}
       data-test-ai-assistant-message
       data-test-ai-assistant-message-pending={{@isPending}}
@@ -373,17 +463,25 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{else}}
             <Alert @type='error' as |Alert|>
               <Alert.Messages @messages={{this.errorMessages}} />
-              <div class='alert-action-buttons-row'>
-                {{#if @waitAction}}
-                  <Alert.Action
-                    @actionName='Wait longer'
-                    @action={{@waitAction}}
-                  />
-                {{/if}}
-                {{#if @retryAction}}
-                  <Alert.Action @actionName='Retry' @action={{@retryAction}} />
-                {{/if}}
-              </div>
+              {{#if this.hasAlertActions}}
+                <div
+                  class='alert-action-buttons-row'
+                  data-test-alert-action-buttons-row
+                >
+                  {{#if @waitAction}}
+                    <Alert.Action
+                      @actionName='Wait longer'
+                      @action={{@waitAction}}
+                    />
+                  {{/if}}
+                  {{#if @retryAction}}
+                    <Alert.Action
+                      @actionName='Retry'
+                      @action={{@retryAction}}
+                    />
+                  {{/if}}
+                </div>
+              {{/if}}
             </Alert>
           {{/if}}
         {{/if}}
@@ -483,10 +581,20 @@ export default class AiAssistantMessage extends Component<Signature> {
   private get errorMessages() {
     return [
       ...(this.args.errorMessage ? [this.args.errorMessage] : []),
-      ...(this.args.collectionResource?.cardErrors.map((error) =>
-        collectionResourceError(error.id),
-      ) ?? []),
+      ...attachedCardErrorMessages(
+        this.args.collectionResource?.cardErrors ?? [],
+      ),
     ];
+  }
+
+  private get hasAlertActions() {
+    return Boolean(this.args.waitAction || this.args.retryAction);
+  }
+
+  private get shouldReloadBillingData() {
+    return Boolean(
+      this.args.reloadBillingData && this.args.isMostRecentMessage,
+    );
   }
 
   private get isOutOfCreditsErrorMessage(): boolean {

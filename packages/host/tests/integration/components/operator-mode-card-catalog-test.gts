@@ -20,7 +20,7 @@ import {
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { testRealmURL } from '../../helpers';
+import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
 import { setupOperatorModeTests } from './operator-mode/setup';
@@ -413,7 +413,15 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-option-row]');
 
-      // "Any Type" should be present but disabled (non-root baseFilter)
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .hasAttribute(
+          'placeholder',
+          'Search for a type',
+          'type picker has correct search placeholder',
+        );
+
+      // "Any Type" should be present with count
       assert
         .dom(
           '[data-test-boxel-picker-option-row="select-all"][data-test-boxel-picker-option-disabled="true"]',
@@ -1043,6 +1051,7 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click(`[data-test-open-search-field]`);
     await fillIn(`[data-test-search-field]`, 'ma');
     await waitFor('[data-test-search-sheet-show-only]');
+    await percySnapshot(assert);
     await click('[data-test-search-sheet-show-only]');
     const collapsedBlocks = document.querySelectorAll(
       '.search-result-block--collapsed',

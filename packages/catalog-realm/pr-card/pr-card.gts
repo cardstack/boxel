@@ -6,6 +6,7 @@ import {
   contains,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
@@ -18,7 +19,7 @@ import type { GithubEventCard } from '../github-event/github-event';
 import { HeaderSection } from './components/isolated/header-section';
 import { CiSection } from './components/isolated/ci-section';
 import { ReviewSection } from './components/isolated/review-section';
-import { SummarySection } from './components/isolated/summary-section';
+import { MergeableSection } from './components/isolated/mergeable-section';
 
 import {
   renderPrActionLabel,
@@ -29,6 +30,7 @@ import {
   buildLatestReviewByReviewer,
   computeLatestReviewState,
   findLatestChangesRequestedEvent,
+  findLatestApprovedEvent,
   buildGithubEventCardRef,
   searchEventQuery,
   buildRealmHrefs,
@@ -144,11 +146,6 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     );
   }
 
-  get prBodySummary() {
-    let body = this.latestPrEventInstance?.payload?.pull_request?.body?.trim();
-    return body || 'No pull request summary provided.';
-  }
-
   // ── CI ──
   get ciItems() {
     return buildCiItems(
@@ -171,29 +168,74 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return computeLatestReviewState(this.latestReviewByReviewer);
   }
 
-  get latestPrReviewCommentEventInstance() {
-    return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+  get latestPrReviewEventInstance() {
+    let state = this.latestReviewState;
+    if (state === 'changes_requested') {
+      return findLatestChangesRequestedEvent(this.latestReviewByReviewer);
+    }
+    if (state === 'approved') {
+      return findLatestApprovedEvent(this.latestReviewByReviewer);
+    }
+    return null;
   }
 
-  get latestChangesRequestedReviewerName() {
-    return (
-      this.latestPrReviewCommentEventInstance?.payload?.review?.user?.login ??
-      'Unknown reviewer'
-    );
-  }
-
-  get latestChangesRequestedComment() {
+  get latestReviewComment() {
     let comment =
-      this.latestPrReviewCommentEventInstance?.payload?.review?.body?.trim();
+      this.latestPrReviewEventInstance?.payload?.review?.body?.trim();
     return comment || '-';
   }
 
-  get latestChangesRequestedReviewUrl() {
-    return this.latestPrReviewCommentEventInstance?.payload?.review?.html_url;
+  get latestReviewCommentUrl() {
+    return this.latestPrReviewEventInstance?.payload?.review?.html_url;
   }
 
   get hasReview() {
-    return !!this.latestPrReviewCommentEventInstance;
+    return !!this.latestPrReviewEventInstance;
+  }
+
+  get latestReviewerName() {
+    return (
+      this.latestPrReviewEventInstance?.payload?.review?.user?.login ??
+      null
+    );
+  }
+
+  // ── Mergeability ──
+  get isClosed() {
+    let label = this.latestPrActionLabel;
+    return label === 'Closed' || label === 'Merged';
+  }
+
+  get isDraft() {
+    return this.latestPrActionLabel === 'Draft';
+  }
+
+  get mergeBlockReasons(): string[] {
+    if (this.isClosed) return [];
+    let reasons: string[] = [];
+    if (this.isDraft) {
+      reasons.push('This pull request is still a work in progress');
+    }
+    let { ciItems } = this;
+    if (ciItems.some((i) => i.state === 'failure')) {
+      reasons.push('Some checks were not successful');
+    } else if (ciItems.some((i) => i.state === 'in_progress')) {
+      reasons.push('Some checks are still in progress');
+    }
+    let reviewState = this.latestReviewState;
+    if (reviewState === 'changes_requested') {
+      reasons.push('Changes were requested by a reviewer');
+    } else if (reviewState !== 'approved') {
+      reasons.push(
+        'At least 1 approving review is required by reviewers with write access',
+      );
+    }
+    return reasons;
+  }
+
+  get isMergeable() {
+    if (this.isClosed) return false;
+    return this.mergeBlockReasons.length === 0;
   }
 
   <template>
@@ -222,14 +264,22 @@ class IsolatedTemplate extends Component<typeof PrCard> {
           <hr class='status-divider' />
           <ReviewSection
             @reviewState={{this.latestReviewState}}
-            @reviewerName={{this.latestChangesRequestedReviewerName}}
-            @comment={{this.latestChangesRequestedComment}}
-            @reviewUrl={{this.latestChangesRequestedReviewUrl}}
+            @reviewerName={{this.latestReviewerName}}
+            @comment={{this.latestReviewComment}}
+            @reviewUrl={{this.latestReviewCommentUrl}}
             @hasReview={{this.hasReview}}
           />
         </section>
 
-        <SummarySection @summary={{this.prBodySummary}} />
+        <MergeableSection
+          @isMergeable={{this.isMergeable}}
+          @isClosedOrMerged={{this.isClosed}}
+          @blockReasons={{this.mergeBlockReasons}}
+        />
+
+        {{#if @model.prSummary}}
+          <@fields.prSummary />
+        {{/if}}
       </div>
     </article>
 
@@ -238,7 +288,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         display: flex;
         flex-direction: column;
         height: 100%;
-        overflow: hidden;
+        overflow-y: auto;
       }
 
       /* ── Body ── */
@@ -248,7 +298,6 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         flex-direction: column;
         background: var(--card, #ffffff);
         color: var(--card-foreground, #1f2328);
-        overflow-y: auto;
       }
 
       /* ── Status columns ── */
@@ -262,6 +311,17 @@ class IsolatedTemplate extends Component<typeof PrCard> {
         background: var(--border, var(--boxel-border-color));
         flex-shrink: 0;
         margin: var(--boxel-sp-lg) 0;
+      }
+
+      /* ── Summary section ── */
+      .pr-card :deep(.markdown-content) {
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
+      }
+      .pr-card :deep(.markdown-content) > h2 {
+        margin-top: 0;
+      }
+      .pr-card :deep(.markdown-content) > ul {
+        list-style-position: inside;
       }
     </style>
   </template>
@@ -376,11 +436,6 @@ class FittedTemplate extends Component<typeof PrCard> {
     );
   }
 
-  get prBodySummary() {
-    let body = this.latestPrEventInstance?.payload?.pull_request?.body?.trim();
-    return body || 'No pull request summary provided.';
-  }
-
   // ── CI ──
   get ciItems() {
     return buildCiItems(
@@ -444,6 +499,21 @@ class FittedTemplate extends Component<typeof PrCard> {
 
   get latestReviewState() {
     return computeLatestReviewState(this.latestReviewByReviewer);
+  }
+
+  // ── Mergeability ──
+  get isClosed() {
+    let label = this.latestPrActionLabel;
+    return label === 'Closed' || label === 'Merged';
+  }
+
+  get isMergeBlocked() {
+    if (this.isClosed) return false;
+    if (this.latestPrActionLabel === 'Draft') return true;
+    if (this.ciItems.some((i) => i.state === 'failure')) return true;
+    if (this.ciItems.some((i) => i.state === 'in_progress')) return true;
+    if (this.latestReviewState !== 'approved') return true;
+    return false;
   }
 
   copyBranchName = async () => {
@@ -527,16 +597,35 @@ class FittedTemplate extends Component<typeof PrCard> {
       {{#if (eq this.latestReviewState 'changes_requested')}}
         <div class='review-status-row review-status-row--changes'>
           <span class='review-status-label'>Changes Requested</span>
+          {{#if this.isMergeBlocked}}
+            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
+              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
+            </Pill>
+          {{/if}}
         </div>
       {{else if (eq this.latestReviewState 'approved')}}
         <div class='review-status-row review-status-row--approved'>
           <span class='review-status-label'>Approved</span>
+          {{#if this.isMergeBlocked}}
+            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
+              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
+            </Pill>
+          {{/if}}
+        </div>
+      {{else}}
+        <div class='review-status-row review-status-row--pending'>
+          <span class='review-status-label'>Pending Review</span>
+          {{#if this.isMergeBlocked}}
+            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
+              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
+            </Pill>
+          {{/if}}
         </div>
       {{/if}}
 
-      <div class='summary-section'>
-        <p class='summary-content'>{{this.prBodySummary}}</p>
-      </div>
+      {{#if @model.prSummary}}
+        <@fields.prSummary />
+      {{/if}}
     </article>
 
     <style scoped>
@@ -725,6 +814,7 @@ class FittedTemplate extends Component<typeof PrCard> {
       .review-status-row {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
         border-bottom: 1px solid var(--border, var(--boxel-border-color));
       }
@@ -742,6 +832,9 @@ class FittedTemplate extends Component<typeof PrCard> {
           var(--card, #ffffff)
         );
       }
+      .review-status-row--pending {
+        background: color-mix(in srgb, #9a6700 8%, var(--card, #ffffff));
+      }
       .review-status-label {
         font-size: var(--boxel-font-sm);
         font-weight: 600;
@@ -749,34 +842,36 @@ class FittedTemplate extends Component<typeof PrCard> {
       .review-status-row--changes .review-status-label {
         color: var(--destructive, #d73a49);
       }
+      .review-status-row--pending .review-status-label {
+        color: #9a6700;
+      }
       .review-status-row--approved .review-status-label {
         color: var(--chart-1, #28a745);
       }
-      /* ── Summary ── */
-      .summary-section {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm);
-        background: var(--card, #ffffff);
-        border-top: 1px solid var(--border, var(--boxel-border-color));
-        height: 100%;
+      /* ── Merge blocked pill ── */
+      .merge-blocked-pill {
+        --boxel-pill-border-radius: 2em;
       }
-      .summary-content {
-        margin: 0;
-        border: 1px solid var(--border, var(--boxel-border-color));
-        border-radius: var(--radius, 6px);
-        padding: var(--boxel-sp-sm);
-        background: var(--muted, #f6f8fa);
-        color: var(--card-foreground, #1f2328);
-        line-height: 1.7;
-        white-space: pre-line;
-        overflow-wrap: anywhere;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 7;
-        text-overflow: ellipsis;
+      .merge-blocked-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: #fff;
+        text-align: center;
+      }
+      /* ── Summary ── */
+      .pr-card :deep(.markdown-content) {
+        padding: var(--boxel-sp-sm) var(--boxel-sp);
+      }
+      .pr-card :deep(.markdown-content) > h2 {
+        margin-top: 0;
+      }
+      .pr-card :deep(.markdown-content) > ul {
+        list-style-position: inside;
+      }
+      .pr-card :deep(.markdown-content) > ul li {
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       /* ── Container queries ── */
@@ -973,6 +1068,7 @@ export class PrCard extends CardDef {
   @field prUrl = contains(StringField);
   @field prTitle = contains(StringField);
   @field branchName = contains(StringField);
+  @field prSummary = contains(MarkdownField);
 
   // === Provenance (set on the card instance) ===
   @field submittedBy = contains(StringField);

@@ -18,6 +18,8 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 import {
   baseFileRef,
   CardError,
+  cardIdToURL,
+  isRegisteredPrefix,
   hasExecutableExtension,
   isCardError,
   isCardInstance,
@@ -230,6 +232,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!id) {
       return;
     }
+    id = asURL(id);
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
     currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
@@ -253,6 +256,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!id) {
       return;
     }
+    id = asURL(id);
     let readType: StoreReadType = opts?.type ?? 'card';
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
@@ -274,7 +278,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     } else {
-      this.subscribeToRealm(new URL(id));
+      this.subscribeToRealm(cardIdToURL(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
       this.wireUpNewReference(id, readType);
@@ -427,6 +431,7 @@ export default class StoreService extends Service implements StoreInterface {
     id: string,
     opts?: { type?: StoreReadType },
   ): T | CardErrorJSONAPI | undefined {
+    id = asURL(id);
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return this.store.getFileMetaInstanceOrError<T & FileDef>(id);
@@ -444,6 +449,7 @@ export default class StoreService extends Service implements StoreInterface {
     id: string,
     opts?: { type?: StoreReadType },
   ): CardErrorJSONAPI | undefined {
+    id = asURL(id);
     let readType = opts?.type ?? 'card';
     if (readType === 'file-meta') {
       return this.store.getFileMetaError(id);
@@ -519,6 +525,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async delete(id: string): Promise<void> {
+    id = asURL(id);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -593,7 +600,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let linkedCards = await this.loadPatchedInstances(
       patch,
-      instance.id ? new URL(instance.id) : undefined,
+      instance.id ? cardIdToURL(instance.id) : undefined,
     );
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
@@ -863,6 +870,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getSaveState(id: string): AutoSaveState | undefined {
+    id = asURL(id);
     return this.autoSaveStates.get(id);
   }
 
@@ -876,6 +884,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   getReferenceCount(id: string) {
+    id = asURL(id);
     return this.referenceCount.get(id) ?? 0;
   }
 
@@ -1059,10 +1068,17 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let invalidations = event.invalidations as string[];
 
-    if (invalidations.find((i) => hasExecutableExtension(i))) {
-      // the invalidation included code changes too. in this case we
-      // need to flush the loader so that we can pick up any updated
-      // code before re-running the card
+    if (
+      invalidations.find(
+        (i) =>
+          hasExecutableExtension(i) &&
+          this.loaderService.loader.isModuleLoaded(i),
+      )
+    ) {
+      // the invalidation included code changes to modules that are already
+      // loaded. in this case we need to flush the loader so that we can pick
+      // up the updated code before re-running the card. net-new modules that
+      // have never been loaded don't require a loader reset.
       this.loaderService.resetLoader();
       this.store.reset();
       this.reestablishReferences.perform();
@@ -1311,7 +1327,7 @@ export default class StoreService extends Service implements StoreInterface {
       return this.createFileMetaFromSerialized(
         resource,
         doc,
-        new URL(resource.id),
+        cardIdToURL(resource.id),
         dependencyTrackingContext,
       ) as Promise<T>;
     }
@@ -1326,7 +1342,7 @@ export default class StoreService extends Service implements StoreInterface {
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
-      relativeTo: new URL(resource.id),
+      relativeTo: cardIdToURL(resource.id),
       dependencyTrackingContext,
     }) as Promise<T>;
   }
@@ -1415,7 +1431,7 @@ export default class StoreService extends Service implements StoreInterface {
         deferred?.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T;
       }
-      if (isLocalId(id)) {
+      if (isLocalId(id) && !isRegisteredPrefix(id)) {
         // we might have lost the local id via a loader refresh, try loading from remote id instead
         let remoteId = this.store.getRemoteIds(id)?.[0];
         if (!remoteId) {
@@ -1425,14 +1441,18 @@ export default class StoreService extends Service implements StoreInterface {
         }
         id = remoteId;
       }
-      let url = id; // after this point we know we are dealing with a remote id, e.g. url
+      // Resolve registered prefix IDs (e.g. @cardstack/skills/...) to actual
+      // URLs so they can be used for fetching.
+      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
       if (!doc) {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
-          let result = await this.cardService.getSource(new URL(`${url}.json`));
+          let result = await this.cardService.getSource(
+            cardIdToURL(`${url}.json`),
+          );
           if (result.status === 200) {
             json = JSON.parse(result.content);
           } else {
@@ -1457,7 +1477,7 @@ export default class StoreService extends Service implements StoreInterface {
           // Source-mode loads in render context don't include realm metadata.
           // Query-backed relationship fields require realmURL to build their
           // fallback search query.
-          let realmURL = this.realm.realmOfURL(new URL(url))?.href;
+          let realmURL = this.realm.realmOfURL(cardIdToURL(url))?.href;
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
@@ -1470,7 +1490,7 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = await this.createFromSerialized(
         doc.data,
         doc,
-        new URL(doc.data.id!), // instances from the server will have id's
+        cardIdToURL(doc.data.id!), // instances from the server will have id's
         opts?.dependencyTrackingContext,
       );
       // in case the url is an alias for the id (like index card without the
@@ -1543,10 +1563,10 @@ export default class StoreService extends Service implements StoreInterface {
         deferred.fulfill(existingInstance as T | CardErrorJSONAPI);
         return existingInstance as T | CardErrorJSONAPI;
       }
-      if (isLocalId(id)) {
+      if (isLocalId(id) && !isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
-      let url = id;
+      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
       let fileMetaDoc: SingleFileMetaDocument | CardError;
       if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
         fileMetaDoc = await this.extractFileMetaDirectly(url);
@@ -1562,7 +1582,7 @@ export default class StoreService extends Service implements StoreInterface {
       let fileInstance = await api.createFromSerialized(
         fileMetaDoc.data,
         fileMetaDoc,
-        fileMetaDoc.data.id ? new URL(fileMetaDoc.data.id) : new URL(url),
+        fileMetaDoc.data.id ? cardIdToURL(fileMetaDoc.data.id) : new URL(url),
         {
           store: this.store,
           dependencyTrackingContext: opts?.dependencyTrackingContext,
@@ -1635,10 +1655,11 @@ export default class StoreService extends Service implements StoreInterface {
   ) {
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
-      instance = this.store.getCard(idOrInstance);
-      if (!instance) {
+      let maybeInstance = this.peek(idOrInstance);
+      if (!isCardInstance(maybeInstance)) {
         return;
       }
+      instance = maybeInstance;
     } else {
       instance = idOrInstance;
     }
@@ -1865,7 +1886,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (isNew) {
           api.setId(instance, json.data.id!);
-          this.subscribeToRealm(new URL(instance.id));
+          this.subscribeToRealm(cardIdToURL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
           );
@@ -1874,7 +1895,7 @@ export default class StoreService extends Service implements StoreInterface {
           await this.startAutoSaving(instance);
         }
         if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(new URL(json.data.id!), json);
+          this.onSaveSubscriber(cardIdToURL(json.data.id!), json);
         }
         return instance;
       } catch (err) {
@@ -2062,10 +2083,17 @@ function needsServerStateMerge(
   );
 }
 
+export function asURL(urlOrDoc: string): string;
+export function asURL(urlOrDoc: LooseSingleCardDocument): string | undefined;
+export function asURL(
+  urlOrDoc: string | LooseSingleCardDocument,
+): string | undefined;
 export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
-  return typeof urlOrDoc === 'string'
-    ? urlOrDoc.replace(/\.json$/, '')
-    : urlOrDoc.data.id;
+  if (typeof urlOrDoc !== 'string') {
+    return urlOrDoc.data.id;
+  }
+  let id = urlOrDoc.replace(/\.json$/, '');
+  return isLocalId(id) ? id : resolveCardReference(id, undefined);
 }
 
 function isSystemCardDefaultId(

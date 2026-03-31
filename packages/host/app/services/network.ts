@@ -67,6 +67,14 @@ export default class NetworkService extends Service {
         (rest) => new URL(rest, catalogURL).href,
       );
     }
+    if (config.resolvedSkillsRealmURL) {
+      let skillsURL = withTrailingSlash(config.resolvedSkillsRealmURL);
+      registerCardReferencePrefix('@cardstack/skills/', skillsURL);
+      virtualNetwork.addImportMap(
+        '@cardstack/skills/',
+        (rest) => new URL(rest, skillsURL).href,
+      );
+    }
     if (config.resolvedOpenRouterRealmURL) {
       let openRouterURL = withTrailingSlash(config.resolvedOpenRouterRealmURL);
       registerCardReferencePrefix('@cardstack/openrouter/', openRouterURL);

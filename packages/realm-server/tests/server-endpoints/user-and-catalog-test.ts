@@ -3,7 +3,7 @@ import { basename } from 'path';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import { realmSecretSeed, testRealmInfo } from '../helpers';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt';
-import { setupServerEndpointsTest, testRealm2URL } from './helpers';
+import { setupServerEndpointsTest, testRealmURL } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -28,7 +28,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
 
       test('can create a user', async function (assert) {
         let ownerUserId = '@mango-new:localhost';
-        let response = await context.request2
+        let response = await context.request
           .post('/_user')
           .set('Accept', 'application/json')
           .set('Content-Type', 'application/json')
@@ -68,12 +68,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       });
 
       test('can not create a user without a jwt', async function (assert) {
-        let response = await context.request2.post('/_user').send({});
+        let response = await context.request.post('/_user').send({});
         assert.strictEqual(response.status, 401, 'HTTP 401 status');
       });
 
       test('can fetch catalog realms', async function (assert) {
-        let response = await context.request2
+        let response = await context.request
           .get('/_catalog-realms')
           .set('Accept', 'application/json');
 
@@ -82,7 +82,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           data: [
             {
               type: 'catalog-realm',
-              id: `${testRealm2URL}`,
+              id: `${testRealmURL}`,
               attributes: {
                 ...testRealmInfo,
               },
@@ -102,7 +102,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           return null;
         };
         context.virtualNetwork.mount(failedRealmInfoMock, { prepend: true });
-        let response = await context.request2
+        let response = await context.request
           .get('/_catalog-realms')
           .set('Accept', 'application/json');
 

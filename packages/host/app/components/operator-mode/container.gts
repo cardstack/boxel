@@ -41,6 +41,8 @@ import PrerenderedCardSearch from '../prerendered-card-search';
 import { Submodes } from '../submode-switcher';
 
 import ChooseFileModal from './choose-file-modal';
+import CreateListingModal from './create-listing-modal';
+import CreatePRModal from './create-pr-modal';
 
 import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
@@ -54,6 +56,7 @@ interface Signature {
   Args: {
     onClose: () => void;
   };
+  Element: HTMLElement;
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
@@ -141,8 +144,10 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode'>
+    <div class='operator-mode' ...attributes>
       <ChooseFileModal />
+      <CreateListingModal />
+      <CreatePRModal />
       <CardCatalogModal />
       <FromElseWhere @name='modal-elsewhere' />
 

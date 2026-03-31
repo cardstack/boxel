@@ -11,6 +11,7 @@ import {
   isUrlLike,
   type Expression,
   type StatusArgs,
+  type IndexingProgressEvent,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
@@ -28,6 +29,12 @@ import {
   registerService,
   deregisterService,
 } from './lib/dev-service-registry';
+import { IndexingEventSink } from './indexing-event-sink';
+import {
+  renderIndexingDashboard,
+  type PendingJob,
+} from './handlers/handle-indexing-dashboard';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 
 /* About the Worker Manager
  *
@@ -37,6 +44,12 @@ import {
  */
 
 let log = logger('worker-manager');
+const runtimeMetadataFile =
+  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_METADATA_FILE;
+
+function writeRuntimeMetadata(payload: unknown): void {
+  writeRuntimeMetadataFile(runtimeMetadataFile, 'worker-manager', payload);
+}
 
 // This is an ENV var we get from ECS that looks like:
 // http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
@@ -116,6 +129,13 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
+function isIndexingDashboardEnabled(): boolean {
+  return !ECS_CONTAINER_METADATA_URI;
+}
+
+let eventSink: IndexingEventSink | undefined = isIndexingDashboardEnabled()
+  ? new IndexingEventSink()
+  : undefined;
 
 process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
@@ -142,6 +162,53 @@ if (port != null) {
     ctxt.body = JSON.stringify(result);
     ctxt.status = isReady ? 200 : 503;
   });
+  if (eventSink) {
+    let getPendingJobs = async (): Promise<PendingJob[]> => {
+      let rows = (await query([
+        `SELECT j.id, j.job_type, j.args, j.priority, EXTRACT(EPOCH FROM j.created_at) * 1000 AS created_at_ms`,
+        `FROM jobs j`,
+        `WHERE j.status = 'unfulfilled'`,
+        `AND j.job_type IN ('from-scratch-index', 'incremental-index')`,
+        `AND NOT EXISTS (`,
+        `  SELECT 1 FROM job_reservations jr`,
+        `  WHERE jr.job_id = j.id AND jr.completed_at IS NULL`,
+        `)`,
+        `ORDER BY j.created_at ASC`,
+      ])) as {
+        id: string;
+        job_type: string;
+        args: { realmURL?: string };
+        priority: number;
+        created_at_ms: string;
+      }[];
+      return rows.map((r) => ({
+        jobId: Number(r.id),
+        jobType: r.job_type,
+        realmURL: r.args?.realmURL ?? 'unknown',
+        priority: r.priority,
+        createdAt: Number(r.created_at_ms),
+      }));
+    };
+
+    router.get('/_indexing-dashboard', async (ctxt: Koa.Context) => {
+      ctxt.set('Content-Type', 'text/html; charset=utf-8');
+      let pending = await getPendingJobs();
+      ctxt.body = renderIndexingDashboard({
+        ...eventSink.getSnapshot(),
+        pending,
+      });
+      ctxt.status = 200;
+    });
+    router.get('/_indexing-status', async (ctxt: Koa.Context) => {
+      ctxt.set('Content-Type', 'application/json');
+      let pending = await getPendingJobs();
+      ctxt.body = JSON.stringify({
+        ...eventSink.getSnapshot(),
+        pending,
+      });
+      ctxt.status = 200;
+    });
+  }
 
   webServer
     .use(router.routes())
@@ -172,6 +239,11 @@ if (port != null) {
   webServerInstance.on('listening', () => {
     let actualPort =
       (webServerInstance!.address() as import('net').AddressInfo).port ?? port;
+    writeRuntimeMetadata({
+      pid: process.pid,
+      port: actualPort,
+      url: `http://127.0.0.1:${actualPort}`,
+    });
     if (isEnvironmentMode()) {
       registerService(webServerInstance!, serviceName);
     }
@@ -211,6 +283,10 @@ const shutdown = (onShutdown?: () => void) => {
 
 process.on('SIGINT', () => shutdown());
 process.on('SIGTERM', () => shutdown());
+process.on('disconnect', () => {
+  log.info(`Parent IPC disconnected, shutting down worker manager...`);
+  shutdown();
+});
 process.on('uncaughtException', (err) => {
   log.error(`Uncaught exception in worker manager:`, err);
   shutdown();
@@ -528,6 +604,18 @@ async function startWorker(
           } else {
             currentState = undefined;
             (worker as any).__boxelIndexState = undefined;
+          }
+        } else if (
+          eventSink &&
+          typeof message === 'string' &&
+          message.startsWith('progress|')
+        ) {
+          try {
+            let payload = message.substring('progress|'.length);
+            let progressEvent = JSON.parse(payload) as IndexingProgressEvent;
+            eventSink.handleEvent(progressEvent);
+          } catch (e) {
+            log.error(`Failed to parse progress event: ${e}`);
           }
         }
       });

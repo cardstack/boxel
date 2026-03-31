@@ -143,12 +143,13 @@ export async function startPrerenderServer(
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
     BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+    LOG_LEVELS:
+      process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
   let prerenderArgs = [
     '--transpileOnly',
     'prerender/prerender-server',
     `--port=${port}`,
-    '--silent',
   ];
 
   let child = spawn('ts-node', prerenderArgs, {
@@ -240,6 +241,10 @@ export async function startServer({
     `--toUrl='http://localhost:4205/test/'`,
   ];
   workerArgs = workerArgs.concat([
+    `--fromUrl='@cardstack/skills/'`,
+    `--toUrl='http://localhost:4205/skills/'`,
+  ]);
+  workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4205/base/'`,
   ]);
@@ -277,7 +282,7 @@ export async function startServer({
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
-    `--fromUrl='http://localhost:4205/skills/'`,
+    `--fromUrl='@cardstack/skills/'`,
     `--toUrl='http://localhost:4205/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
@@ -294,6 +299,9 @@ export async function startServer({
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     env: {
       ...process.env,
+      // Matrix tests don't exercise GitHub PR creation, so disable that route
+      // to avoid pulling Octokit into the realm server startup path.
+      DISABLE_GITHUB_PR_ROUTE: 'true',
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
     },

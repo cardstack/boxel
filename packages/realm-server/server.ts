@@ -225,6 +225,7 @@ export class RealmServer {
           grafanaSecret: this.grafanaSecret,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
+          serveHostApp: this.serveHostApp,
           serveIndex: this.serveIndex,
           serveFromRealm: this.serveFromRealm,
           sendEvent: this.sendEvent,
@@ -238,7 +239,13 @@ export class RealmServer {
           prerenderer: this.prerenderer,
         }),
       )
-      .use(proxyAsset('/auth-service-worker.js', this.assetsURL))
+      .use(
+        proxyAsset('/auth-service-worker.js', this.assetsURL, {
+          requestHeaders: {
+            'accept-encoding': 'identity',
+          },
+        }),
+      )
       .use(this.serveIndex)
       .use(this.serveFromRealm);
 
@@ -506,6 +513,19 @@ export class RealmServer {
     return;
   };
 
+  private serveHostApp = async (ctxt: Koa.Context, next: Koa.Next) => {
+    let acceptHeader = (ctxt.header.accept ?? '').toLowerCase();
+    if (!acceptHeader.includes('text/html')) {
+      return next();
+    }
+
+    ctxt.type = 'html';
+    ctxt.body = injectHeadHTML(
+      await this.retrieveIndexHTML(),
+      `<title>Boxel</title>\n${this.defaultIconLinks().join('\n')}`,
+    );
+  };
+
   private findRealmForRequestURL(requestURL: URL): Realm | undefined {
     return this.realms.find((candidate) => {
       let realmURL = new URL(candidate.url);
@@ -652,6 +672,18 @@ export class RealmServer {
       this.promiseForIndexHTML = deferred.promise;
     }
 
+    let rewriteRealmURL = (url?: string) => {
+      if (!url) {
+        return url;
+      }
+
+      let parsed = new URL(url);
+      return new URL(
+        `${parsed.pathname}${parsed.search}${parsed.hash}`,
+        this.serverURL,
+      ).href;
+    };
+
     let indexHTML = (await this.getIndexHTML()).replace(
       /(<meta name="@cardstack\/host\/config\/environment" content=")([^"].*)(">)/,
       (_match, g1, g2, g3) => {
@@ -674,7 +706,25 @@ export class RealmServer {
         config = merge({}, config, {
           hostsOwnAssets: false,
           assetsURL: this.assetsURL.href,
+          matrixURL: this.matrixClient.matrixURL.href.replace(/\/$/, ''),
+          matrixServerName:
+            process.env.MATRIX_SERVER_NAME ||
+            this.matrixClient.matrixURL.hostname,
           realmServerURL: this.serverURL.href,
+          resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
+          resolvedCatalogRealmURL: rewriteRealmURL(
+            config.resolvedCatalogRealmURL,
+          ),
+          resolvedExternalCatalogRealmURL: rewriteRealmURL(
+            config.resolvedExternalCatalogRealmURL,
+          ),
+          resolvedSkillsRealmURL: rewriteRealmURL(
+            config.resolvedSkillsRealmURL,
+          ),
+          resolvedOpenRouterRealmURL: rewriteRealmURL(
+            config.resolvedOpenRouterRealmURL,
+          ),
+          defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
           cardSizeLimitBytes: this.cardSizeLimitBytes,
           fileSizeLimitBytes: this.fileSizeLimitBytes,
           publishedRealmDomainOverrides:
@@ -824,6 +874,10 @@ export class RealmServer {
       undefined,
       userInitiatedPriority,
     );
+    let actualRealmURL = this.virtualNetwork.mapURL(url, 'virtual-to-real');
+    if (actualRealmURL && actualRealmURL.href !== url) {
+      this.virtualNetwork.addURLMapping(new URL(url), actualRealmURL);
+    }
 
     return {
       realm,

@@ -23,6 +23,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_RELOAD_BILLING_DATA_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
   APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
@@ -59,6 +60,14 @@ import type { RoomMember } from './member';
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
 };
+
+function shouldReloadBillingData(content: object) {
+  return Boolean(
+    (content as { [APP_BOXEL_RELOAD_BILLING_DATA_KEY]?: boolean })[
+      APP_BOXEL_RELOAD_BILLING_DATA_KEY
+    ],
+  );
+}
 
 export default class MessageBuilder {
   constructor(
@@ -169,6 +178,7 @@ export default class MessageBuilder {
       message.clientGeneratedId = this.clientGeneratedId;
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
+      message.reloadBillingData = shouldReloadBillingData(event.content);
       message.attachedCardIds = this.attachedCardIds;
       message.attachedCardsAsFiles = this.attachedCardsAsFiles;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
@@ -178,6 +188,7 @@ export default class MessageBuilder {
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
       message.setIsCanceled(!!event.content.isCanceled);
+      message.reloadBillingData = shouldReloadBillingData(event.content);
     }
     if (event.type === APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE) {
       message.isDebugMessage = true;
@@ -214,6 +225,7 @@ export default class MessageBuilder {
       : null;
     message.setUpdated(new Date());
     message.errorMessage = this.errorMessage;
+    message.reloadBillingData = shouldReloadBillingData(this.event.content);
 
     let encodedCommandRequests =
       (this.event.content as CardMessageContent)[

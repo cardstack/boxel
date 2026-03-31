@@ -45,6 +45,49 @@ Both catalogs are controlled by the same `SKIP_CATALOG` flag — setting `SKIP_C
 
 To learn more about Boxel and Cards, see our [documentation](./docs/README.md)
 
+## mise Tasks
+
+Development services are managed as [mise](https://mise.jdx.dev/) file-based tasks in `mise-tasks/`.
+
+### Task layout
+
+```
+mise-tasks/
+  lib/env-vars.sh              # Shared env computation (sourced by .mise.toml)
+  infra/
+    ensure-traefik             # Ensure Traefik is running (env mode only)
+    ensure-pg, stop-pg         # Start/stop PostgreSQL
+    ensure-db                  # Ensure per-environment database exists
+    ensure-synapse             # Ensure Synapse + user registration
+    start-synapse, stop-synapse # Start/stop Synapse manually
+    start-admin, stop-admin    # Matrix admin console (port 8080)
+    wait-for-prerender         # Wait for prerender server
+  services/
+    realm-server               # Full development realm server
+    realm-server-base          # Base realm only (for matrix tests)
+    worker, worker-base,       # Worker managers
+      worker-test
+    prerender, prerender-mgr   # Prerender server + manager
+    icons                      # Boxel icons HTTP server
+    host-build                 # Build and watch the host app
+    ai-bot                     # AI bot
+    bot-runner                 # Bot runner
+  dev                          # Full dev stack (realm server + workers + test realms)
+  dev-all                      # Host app + full dev stack (single command)
+  dev-minimal                  # Dev stack without optional realms
+  dev-without-matrix           # Dev stack (expects Matrix already running)
+  build:ui                     # Build boxel-icons + boxel-ui (in dependency order)
+  test-services:host           # Services for host test suite
+  test-services:matrix         # Services for matrix test suite
+  test-services:realm-server   # Services for realm-server test suite
+  ci:serve-test-assets         # Serve icons + host dist (CI only)
+  stop-environment                  # Stop all services for an environment
+```
+
+All tasks automatically receive environment variables from `mise-tasks/lib/env-vars.sh` (service URLs, ports, database names, paths). In environment mode (`BOXEL_ENVIRONMENT` set), these point to Traefik hostnames with dynamic ports. In standard mode, they use fixed localhost ports.
+
+To list all available tasks: `mise tasks ls`
+
 ## Running the Host App
 
 There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production, or have staging or production as the backing infrastructure.
@@ -71,52 +114,66 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm start` in the host/ workspace to serve the ember app.
-3. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
+3. `mise run dev` from the repo root to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 mise run dev`.
+
+Alternatively, you can run everything with a single command from the repo root:
+
+```bash
+mise run dev-all
+```
+
+This starts the host app first, waits for it to be ready, then starts the realm server and all supporting services.
 
 The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
-When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
+When you are done running the app you can stop the synapse server:
 
 ```
-pnpm stop:synapse
+mise run infra:stop-synapse
 ```
 
 ### Realm server Hosted App
 
 In order to run the realm server hosted app:
 
-1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
-2. `pnpm start:all` in the realm-server/ to serve the base and experiments realms
+1. `mise run services:host-build` to re-build the host app (this step can be omitted if you do not want host app re-builds)
+2. `mise run dev` to serve the base and experiments realms
 
 You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the experiments realm's app is at `http://localhost:4201/experiments`.
 
 Live reloads are not available in this mode, however, if you use start the server with the environment variable `DISABLE_MODULE_CACHING=true` you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
-#### Using `start:all`
+#### Using `mise run dev`
 
-Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `start:all`:
+Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `mise run dev`:
 
-| Port  | Description                                                                                   | Running `start:all` | Running `start:base` |
-| ----- | --------------------------------------------------------------------------------------------- | ------------------- | -------------------- |
-| :4201 | `/base` base realm                                                                            | ✅                  | ✅                   |
-| :4201 | `/skills` skills realm                                                                        | ✅                  | 🚫                   |
-| :4201 | `/experiments` experiments realm                                                              | ✅                  | 🚫                   |
-| :4202 | `/test` host test realm, `/node-test` node test realm                                         | ✅                  | 🚫                   |
-| :4205 | `/test` realm for matrix client tests (playwright controlled)                                 | 🚫                  | 🚫                   |
-| :4206 | Boxel icons server                                                                            | ✅                  | 🚫                   |
-| :4210 | Development Worker Manager (spins up 1 worker by default)                                     | ✅                  | 🚫                   |
-| :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅                  | 🚫                   |
-| :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅                  | 🚫                   |
-| :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅                  | 🚫                   |
-| :4221 | Prerender server                                                                              | 🚫                  | 🚫                   |
-| :4222 | Prerender manager                                                                             | 🚫                  | 🚫                   |
-| :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅                  | 🚫                   |
-| :5435 | Postgres DB                                                                                   | ✅                  | 🚫                   |
-| :8008 | Matrix synapse server                                                                         | ✅                  | 🚫                   |
+| Port  | Description                                                                                   | `mise run dev` | `mise run services:realm-server-base` |
+| ----- | --------------------------------------------------------------------------------------------- | -------------- | ------------------------------------- |
+| :4201 | `/base` base realm                                                                            | ✅             | ✅                                    |
+| :4201 | `/skills` skills realm                                                                        | ✅             | 🚫                                    |
+| :4201 | `/experiments` experiments realm                                                              | ✅             | 🚫                                    |
+| :4202 | `/test` host test realm, `/node-test` node test realm                                         | ✅             | 🚫                                    |
+| :4205 | `/test` realm for matrix client tests (playwright controlled)                                 | 🚫             | 🚫                                    |
+| :4206 | Boxel icons server                                                                            | ✅             | 🚫                                    |
+| :4210 | Development Worker Manager (spins up 1 worker by default)                                     | ✅             | 🚫                                    |
+| :4211 | Test Worker Manager (spins up 1 worker by default)                                            | ✅             | 🚫                                    |
+| :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker)                     | ✅             | 🚫                                    |
+| :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅             | 🚫                                    |
+| :4221 | Prerender server                                                                              | ✅             | 🚫                                    |
+| :4222 | Prerender manager                                                                             | ✅             | 🚫                                    |
+| :5001 | Mail user interface for viewing emails sent to local SMTP                                     | ✅             | 🚫                                    |
+| :5435 | Postgres DB                                                                                   | ✅             | 🚫                                    |
+| :8008 | Matrix synapse server                                                                         | ✅             | 🚫                                    |
 
-#### Using `start:development`
+#### Using `mise run services:realm-server`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. In order to use `start:development` you must also make sure to run `start:worker-development` in order to start the workers which are normally started in `start:all`.
+You can also use `mise run services:realm-server` if you want the functionality of `mise run dev`, but without running the test realms. This will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /experiments realm. You must also make sure to run `mise run services:worker` in order to start the workers which are normally started in `mise run dev`.
+
+#### Indexing dashboard
+
+In development, you can visit an indexing dashboard at [`http://localhost:4210/_indexing-dashboard`](http://localhost:4210/_indexing-dashboard) to view the status of all active indexing jobs across all workers.
+
+In environment mode, this is at `http://worker.environment-name.localhost/_indexing-dashboard`.
 
 ### Card Pre-rendering
 
@@ -128,17 +185,12 @@ Boxel supports server-side rendering of cards via a lightweight prerender servic
 
 #### Pre-rendering start scripts
 
-From `packages/realm-server`:
+To run individually from the repo root:
 
-1. Prerender manager
+1. Prerender manager: `mise run services:prerender-mgr` (defaults to port 4222)
+2. Prerender server: `mise run services:prerender` (defaults to port 4221)
 
-- `pnpm start:prerender-manager-dev` (defaults to port 4222)
-
-2. Prerender server
-
-- `pnpm start:prerender-dev` (defaults to port 4221)
-
-First start the pre-rendering manager. Then start the prerender server. (TBD: incorporate into start:all)
+Start the manager first, then the server. Both are automatically started as part of `mise run dev`.
 
 #### Pre-rendering Environment variables
 
@@ -186,7 +238,7 @@ The realm server uses the request accept header to determine the type of request
 
 ### Database
 
-Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `pnpm start:all`. You can manually start and stop the `boxel-pg` docker container using `pnpm start:pg` and `pnpm stop:pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
+Boxel uses a Postgres database. In development, the Postgres database runs within a docker container, `boxel-pg`, that is started as part of `mise run dev`. You can manually start and stop the `boxel-pg` docker container using `mise run infra:ensure-pg` and `mise run infra:stop-pg`. The postgres database runs on port 5435 so that it doesn't conflict with a natively installed postgres that may be running on your system.
 
 When running tests for matrix tests we isolate the database between each test run by actually creating a new database for each test with a random database name (e.g. `test_db_1234567`). The test databases can be dropped by running `pnpm test:cleanup` from the `packages/matrix` workspace, this will drop all databases that match the pattern `test_db_%`.
 
@@ -196,7 +248,7 @@ If you wish to drop the development databases you can execute:
 pnpm full-reset
 ```
 
-You can then run `pnpm migrate up` (with `PGDATABASE` set accordingly if you want to migrate a database other than `boxel`) or just start the realm server (`pnpm start:all`) to create the database again.
+You can then run `pnpm migrate up` (with `PGDATABASE` set accordingly if you want to migrate a database other than `boxel`) or just start the realm server (`mise run dev`) to create the database again.
 
 To interact with your local database directly you can use psql:
 
@@ -240,18 +292,18 @@ This will create a new SQLite schema based on the current postgres DB (the schem
 
 The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`.
 
-This server is automatically started as part of the `pnpm start:all` script, but if you wish to control it separately, from `packages/matrix`, execute:
+This server is automatically started as part of `mise run dev`, but if you wish to control it separately:
 
 ```
-pnpm start:synapse
+mise run infra:start-synapse
 ```
 
 The local Matrix server will be running at `http://localhost:8008`.
 
-To stop the matrix server, from `packages/matrix`, execute:
+To stop the matrix server:
 
 ```
-pnpm stop:synapse
+mise run infra:stop-synapse
 ```
 
 #### Matrix Administration
@@ -260,32 +312,32 @@ Matrix administration requires an administrative user and a special client in or
 
 First you must create an administrative user:
 
-1. start the matrix server `pnpm start:synapse`
+1. start the matrix server `mise run infra:start-synapse`
 2. run a script to create an administrative user:
    ```
    docker exec -it boxel-synapse register_new_matrix_user http://localhost:8008 -c /data/homeserver.yaml -u admin -p your_admin_password --admin
    ```
    Alternatively, you can execute `pnpm register-test-admin` and utilize the following credentials: `user: admin` and `password: password`.
 
-After you have created an administrative user and can start the admin console by executing the following in the packages/matrix workspace:
+After you have created an administrative user and can start the admin console:
 
 ```
-pnpm start:admin
+mise run infra:start-admin
 ```
 
 Then visit `http://localhost:8080`, and enter the admin user's username (`admin`) and the password, also enter in your matrix server url `http://localhost:8008` in the homeserver URL field, and click "Signin".
 
 Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS SSM Parameter Store.
 
-To stop the admin console run the following in the packages/matrix workspace:
+To stop the admin console:
 
 ```
-pnpm stop:admin
+mise run infra:stop-admin
 ```
 
 #### SMTP Server
 
-Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of running `pnpm start:all` in the `packages/realm-server` workspace.
+Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of `mise run dev`.
 
 ## Boxel UI Component Explorer
 
@@ -320,7 +372,7 @@ STRIPE_API_KEY=... pnpm sync-stripe-products
 4. Go to `packages/realm-server`, pass STRIPE_WEBHOOK_SECRET & STRIPE_API_KEY environment value and start the realm server. STRIPE_WEBHOOK_SECRET is the value you got from stripe cli in Step 2.
 
 ```
-STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... pnpm start:all
+STRIPE_WEBHOOK_SECRET=... STRIPE_API_KEY=... mise run dev
 ```
 
 5. Perform "Setup up Secure Payment Method" flow. Subscribe with valid test card [here](https://docs.stripe.com/testing#cards)
@@ -398,7 +450,7 @@ There are currently 5 test suites:
 
 To run the `packages/host/` workspace tests start the following servers:
 
-1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards
+1. `mise run dev` from the repo root to serve _both_ the base realm and the realm that serves the test cards
 2. `pnpm start` in the `packages/host/` workspace to serve ember
 
 The tests are available at `http://localhost:4200/tests`
@@ -409,8 +461,12 @@ First make sure to generate the host app's `dist/` output in order to support ca
 
 To run the `packages/realm-server/` workspace tests start:
 
-1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
-2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests. `TEST_MODULE=realm-endpoints-test.ts pnpm test-module` is an example of how to run a single test module.
+1. `mise run dev` from the repo root to serve _both_ the base realm and the realm that serves the test cards for node.
+2. Run the realm server tests:
+
+- `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests in full (~1hr).
+- `TEST_MODULES="types-endpoint-test.ts|another-test-module.ts" pnpm test` in the `packages/realm-server/` workspace to run tests for a subset of modules.
+- `TEST_MODULE="types-endpoint-test.ts" pnpm test-module` in the `packages/realm-server/` workspace to run tests for a specific module.
 
 ### Boxel UI
 
@@ -419,10 +475,10 @@ To run the `packages/realm-server/` workspace tests start:
 
 ### Matrix tests
 
-This test suite contains tests that exercise matrix functionality. These tests are located at `packages/matrix/tests`, and are executed using the [Playwright](https://playwright.dev/) test runner. To run the tests from the command line, first make sure that the matrix server is not already running. You can stop the matrix server by executing the following from `packages/matrix`
+This test suite contains tests that exercise matrix functionality. These tests are located at `packages/matrix/tests`, and are executed using the [Playwright](https://playwright.dev/) test runner. To run the tests from the command line, first make sure that the matrix server is not already running:
 
 ```
-pnpm stop:synapse
+mise run infra:stop-synapse
 ```
 
 The matrix client relies upon the host app and the realm servers. Start the host app from the `packages/host` folder:
@@ -431,10 +487,10 @@ The matrix client relies upon the host app and the realm servers. Start the host
 pnpm start
 ```
 
-Then start the realm server for matrix tests (does not start the matrix server). From the `packages/realm-server` folder:
+Then start the realm server for matrix tests (does not start the matrix server). From the repo root:
 
 ```
-MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests
+MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix
 ```
 
 Then to run the tests from the CLI execute the following from `packages/matrix`:
@@ -467,7 +523,9 @@ If the isolated realm server fails to get stopped you may see an error about por
 
 ## Environment mode: parallel environments
 
-“Environment mode” lets us run multiple Boxel environments simultaneously. This is experimental and opt-in via a `BOXEL_ENVIRONMENT` environment variable.
+“Environment mode” lets multiple Boxel environments run simultaneously on the same machine. It is opt-in via the `BOXEL_ENVIRONMENT` environment variable. When set, all services use dynamic ports and register with a Traefik reverse proxy so each environment gets its own `*.localhost` hostnames.
+
+All environment configuration is centralized in `mise-tasks/lib/env-vars.sh`, which is automatically sourced by every mise task. The slug computation used for hostnames and database names lives in `scripts/env-slug.sh`.
 
 Here’s an example using Git worktrees and a `parallel` environment name:
 
@@ -479,30 +537,42 @@ cd ../parallel
 pnpm install
 ```
 
-In a tab for the UI:
+Start everything with a single command:
 
 ```bash
+BOXEL_ENVIRONMENT=parallel mise run dev-all
+```
+
+Or start services in separate tabs:
+
+```bash
+# Tab 1: host app
 BOXEL_ENVIRONMENT=parallel pnpm --filter @cardstack/host start
+
+# Tab 2: realm server (skip catalog for faster startup)
+BOXEL_ENVIRONMENT=parallel SKIP_CATALOG=true mise run dev
+
+# Tab 3 (optional): AI bot
+BOXEL_ENVIRONMENT=parallel mise run services:ai-bot
 ```
 
-In a tab for the realm server, skipping building the catalog since it takes a long time to index:
+In environment mode, services are available at:
 
-```bash
-BOXEL_ENVIRONMENT=parallel SKIP_CATALOG=true pnpm --filter @cardstack/realm-server start:all
+| Service       | Hostname                                  |
+| ------------- | ----------------------------------------- |
+| Host app      | `http://host.<slug>.localhost`            |
+| Realm server  | `http://realm-server.<slug>.localhost`    |
+| Matrix        | `http://matrix.<slug>.localhost`          |
+| Icons         | `http://icons.<slug>.localhost`           |
+
+Where `<slug>` is the lowercased, sanitized form of `BOXEL_ENVIRONMENT` (e.g., `feature/my-branch` becomes `feature-my-branch`).
+
+### Utility: stop an environment
+
+Terminate all processes for an environment and clean up Traefik configs:
+
 ```
-
-Optionally, for the AI bot:
-
-```bash
-BOXEL_ENVIRONMENT=parallel OPENROUTER_API_KEY=your_api_key pnpm --filter @cardstack/ai-bot start:development
-```
-
-### Utility script
-
-Run this script to terminate any dangling processes:
-
-```
-./scripts/stop-branch.sh
+mise run stop-environment [environment-name]
 ```
 
 It also has a `--drop-db` flag if you need to start over, and `--dry-run` to see what processes would be terminated.

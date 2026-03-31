@@ -374,6 +374,58 @@ function registerAuthRoutes() {
       });
     },
   });
+
+  registerRealmServerRoute({
+    path: '/_delete-realm',
+    handler: async (req, _url, state: RealmServerMockState) => {
+      let body = (await req.json()) as {
+        data?: { id?: string; type?: string };
+      };
+      let realmURL = body.data?.id;
+      if (!realmURL || body.data?.type !== 'realm') {
+        return new Response(
+          JSON.stringify({ errors: ['Request body must include a realm id'] }),
+          {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+        );
+      }
+
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      let permissions = state.realmPermissions.get(normalizedRealmURL);
+      if (!permissions?.includes('realm-owner')) {
+        return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
+          status: 403,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        });
+      }
+
+      let namespace = new URL(normalizedRealmURL).pathname
+        .split('/')
+        .filter(Boolean)
+        .at(-2);
+      if (namespace !== 'testuser') {
+        return new Response(
+          JSON.stringify({
+            errors: ['You can only delete realms that you created'],
+          }),
+          {
+            status: 403,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+        );
+      }
+
+      state.realmPermissions.delete(normalizedRealmURL);
+      getTestRealmRegistry().delete(normalizedRealmURL);
+
+      return new Response(null, {
+        status: 204,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
+      });
+    },
+  });
 }
 
 function getSearchableRealmForURL(

@@ -2,6 +2,7 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import type { FetcherMiddlewareHandler } from '@cardstack/runtime-common';
@@ -41,17 +42,24 @@ export default class LoaderService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
-    // this clears the fetch cache in between tests
-    this.resetState();
+    if (isTesting()) {
+      // clears the fetch cache and SSR-injected scoped styles in between tests
+      this.resetState();
+    }
     registerDestructor(this, () => this.resetState());
   }
 
   public resetState() {
-    // this clears the fetch cache in between logins, the idea being that we
-    // don't want to leak modules from private realms between sessions.
-    clearFetchCache();
-    clearInjectedScopedCSS();
-    clearKnownFileMetaUrls();
+    this.clearSessionCaches();
+  }
+
+  public resetSessionBoundary(reason?: string) {
+    this.resetTime = undefined;
+    log.debug(`resetting loader for session boundary (${reason ?? ''})`);
+    this.clearSessionCaches();
+    this.loader = this.loader
+      ? Loader.cloneLoader(this.loader)
+      : this.makeInstance();
   }
 
   public resetLoader(options?: { clearFetchCache?: boolean; reason?: string }) {
@@ -112,6 +120,14 @@ export default class LoaderService extends Service {
     let fetch = fetcher(this.network.fetch, middlewareStack);
     let loader = new Loader(fetch, this.network.resolveImport);
     return loader;
+  }
+
+  private clearSessionCaches() {
+    // This clears cached module fetches and scoped styles at session/test
+    // boundaries so private realm assets do not leak across owners.
+    clearFetchCache();
+    clearInjectedScopedCSS();
+    clearKnownFileMetaUrls();
   }
 }
 

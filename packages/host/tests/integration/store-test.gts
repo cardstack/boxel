@@ -24,6 +24,8 @@ import {
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
 } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -170,6 +172,10 @@ module('Integration | Store', function (hooks) {
     await realmService.login(testRealmURL);
   });
 
+  hooks.afterEach(function () {
+    unregisterCardReferencePrefix('@test-prefix/');
+  });
+
   test('can peek a card instance', async function (assert) {
     storeService.addReference(`${testRealmURL}Person/hassan`);
     await storeService.flush();
@@ -254,6 +260,81 @@ module('Integration | Store', function (hooks) {
   test('peek for an uncached returns undefined', async function (assert) {
     let instance = storeService.peek(`${testRealmURL}Person/does-not-exist`);
     assert.strictEqual(instance, undefined, 'instance is undefined');
+  });
+
+  test<TestContextWithSave>('can use registered prefix ids across store APIs', async function (assert) {
+    registerCardReferencePrefix('@test-prefix/', testRealmURL);
+
+    storeService.addReference('@test-prefix/Person/hassan');
+    await storeService.flush();
+
+    let byPrefix = storeService.peek('@test-prefix/Person/hassan');
+    let byUrl = storeService.peek(`${testRealmURL}Person/hassan`);
+
+    assert.true(isCardInstance(byPrefix), 'prefix id resolves to a card');
+    assert.strictEqual(
+      byPrefix,
+      byUrl,
+      'prefix id and resolved URL return the same instance',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount('@test-prefix/Person/hassan'),
+      1,
+      'prefix id and resolved URL share a single reference count',
+    );
+    assert.strictEqual(
+      storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+      1,
+      'resolved URL sees the same reference count',
+    );
+
+    storeService.dropReference('@test-prefix/Person/hassan');
+
+    assert.strictEqual(
+      storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+      0,
+      'dropping a prefix reference clears the resolved URL reference count',
+    );
+
+    let saveFinished = new Deferred<void>();
+    this.onSave((url) => {
+      if (url.href === `${testRealmURL}Person/hassan`) {
+        assert.strictEqual(url.href, `${testRealmURL}Person/hassan`);
+        assert.strictEqual(
+          storeService.getReferenceCount(`${testRealmURL}Person/hassan`),
+          0,
+          'save() does not create a separate resolved-url reference count',
+        );
+        assert.strictEqual(
+          storeService.getReferenceCount('@test-prefix/Person/hassan'),
+          0,
+          'save() does not create a separate prefix reference count',
+        );
+        saveFinished.fulfill();
+      }
+    });
+
+    storeService.save('@test-prefix/Person/hassan');
+    await saveFinished;
+
+    storeService.addReference('@test-prefix/Person/boris');
+    await storeService.flush();
+
+    await storeService.delete('@test-prefix/Person/boris');
+
+    assert.strictEqual(
+      storeService.peek('@test-prefix/Person/boris'),
+      undefined,
+      'delete() clears the prefix-form card identity from the store',
+    );
+    assert.strictEqual(
+      storeService.peek(`${testRealmURL}Person/boris`),
+      undefined,
+      'delete() clears the resolved card identity from the store',
+    );
+
+    let file = await testRealmAdapter.openFile(`Person/boris.json`);
+    assert.strictEqual(file, undefined, 'delete() removes the remote card');
   });
 
   test('peekError returns the server state error when a stale instance exists', async function (assert) {

@@ -1,5 +1,5 @@
 const GITHUB_API_BASE = 'https://api.github.com';
-const HARDCODED_REVIEWER = 'tintinthong';
+const GITHUB_TEAM_REVIEWERS = ['ecosystem-team'];
 
 export interface OpenPullRequestParams {
   owner: string;
@@ -86,7 +86,7 @@ export class OctokitGitHubClient implements GitHubClient {
       method: 'POST',
       path: `/repos/${params.owner}/${params.repo}/pulls/${createdPR.number}/requested_reviewers`,
       body: {
-        reviewers: [HARDCODED_REVIEWER],
+        team_reviewers: GITHUB_TEAM_REVIEWERS,
       },
     });
 

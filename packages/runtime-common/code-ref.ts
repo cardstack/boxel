@@ -18,6 +18,7 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
+import { cardIdToURL } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
@@ -127,6 +128,14 @@ export function isFieldDef(field: any): field is typeof FieldDef {
 
 export function isFileDef(def: any): def is typeof FileDef {
   return isBaseDef(def) && 'isFileDef' in def;
+}
+
+export function isListingDef(def: any): boolean {
+  return isCardDef(def) && 'isListingDef' in def;
+}
+
+export function isListingInstance(card: any): boolean {
+  return isListingDef(card?.constructor);
 }
 
 export function isFieldInstance<T extends FieldDef>(
@@ -406,7 +415,7 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   }
   let resolved = codeRefWithAbsoluteURL(
     adoptsFrom,
-    instance[relativeTo] || new URL(instance.id),
+    instance[relativeTo] || cardIdToURL(instance.id),
   );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
@@ -422,11 +431,8 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (typeof id !== 'string') {
       return undefined;
     }
-    if (typeof URL.canParse === 'function' && !URL.canParse(id)) {
-      return undefined;
-    }
     try {
-      return new URL(id);
+      return cardIdToURL(id);
     } catch {
       return undefined;
     }

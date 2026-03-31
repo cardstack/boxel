@@ -1,4 +1,4 @@
-import { RealmPaths } from '@cardstack/runtime-common';
+import { cardIdToURL, RealmPaths } from '@cardstack/runtime-common';
 
 /**
  * Normalizes realm URLs by ensuring they have trailing slashes and
@@ -33,7 +33,7 @@ export function normalizeRealms(realms: string[]): string[] {
  * // Returns: 'http://localhost:4201/test/'
  */
 export function resolveCardRealmUrl(cardId: string, realms: string[]): string {
-  let cardUrl = new URL(cardId);
+  let cardUrl = cardIdToURL(cardId);
   for (let realm of realms) {
     let realmUrl = new URL(realm);
     let realmPaths = new RealmPaths(realmUrl);

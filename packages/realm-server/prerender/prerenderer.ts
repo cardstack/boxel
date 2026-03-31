@@ -10,7 +10,7 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
-import { PagePool } from './page-pool';
+import { PagePool, StandbyTargetNotReadyError } from './page-pool';
 import { RenderRunner } from './render-runner';
 import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import { toAffinityKey } from './affinity';
@@ -86,6 +86,13 @@ export class Prerenderer {
     this.#affinityIdleEvictMs = this.#resolveAffinityIdleEvictMs();
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
+      if (e instanceof StandbyTargetNotReadyError) {
+        log.debug(
+          'Prerenderer startup skipped standby warmup because the Boxel host target is not ready yet:',
+          e,
+        );
+        return;
+      }
       log.warn('Failed to warm standby pages during prerenderer startup:', e);
     });
   }

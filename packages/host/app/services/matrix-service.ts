@@ -502,6 +502,7 @@ export default class MatrixService extends Service {
       // only so tests and app reloads do not accidentally wipe durable state.
       clearLocalStorage(window.localStorage);
       this.reset.resetAll();
+      this.loaderService.resetSessionBoundary('logout');
       this.unbindEventListeners();
       await client?.logout(true);
       // when user logs out we transition them back to an empty stack with the
@@ -645,6 +646,19 @@ export default class MatrixService extends Service {
     // since mutating the original object would modify the Matrix client’s store
     // and prevent updates from being sent back to the server.
     let newRealms = [...realms, realmURLString];
+    await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
+      realms: newRealms,
+    });
+    await this.realmServer.setAvailableRealmURLs(newRealms);
+  }
+
+  public async removeRealmFromAccountData(realmURLString: string) {
+    let { realms = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_REALMS_EVENT_TYPE,
+      )) as { realms: string[] }) ?? {};
+
+    let newRealms = realms.filter((realmURL) => realmURL !== realmURLString);
     await this.client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
       realms: newRealms,
     });

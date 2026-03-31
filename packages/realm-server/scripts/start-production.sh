@@ -25,6 +25,7 @@ EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTE
 NODE_NO_WARNINGS=1 \
   LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix.boxel.ai \
+  MATRIX_SERVER_NAME=boxel.ai \
   BOXEL_HOST_URL=https://app.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   PUBLISHED_REALM_BOXEL_SPACE_DOMAIN='boxel.space' \
@@ -60,7 +61,7 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \
-  --fromUrl='https://app.boxel.ai/skills/' \
+  --fromUrl='@cardstack/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
   \
   --path='/persistent/boxel-homepage' \

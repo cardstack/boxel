@@ -1,0 +1,134 @@
+import * as QUnit from 'qunit';
+
+/**
+ * Discovers all .gts/.ts module URLs in a realm using the _mtimes endpoint,
+ * which returns a flat map of every file URL in the realm in one request.
+ * Only modules that export a `runTests` function will actually register tests.
+ *
+ * @param {string} realmURL - The base realm URL (e.g. "http://localhost:4201/catalog/")
+ * @returns {Promise<string[]>} Absolute module URLs (without the file extension)
+ */
+async function discoverTestModules(realmURL) {
+  const resp = await fetch(`${realmURL}_mtimes`, {
+    headers: { Accept: 'application/vnd.api+json' },
+  });
+  const {
+    data: {
+      attributes: { mtimes },
+    },
+  } = await resp.json();
+
+  return Object.keys(mtimes)
+    .filter((url) => url.endsWith('.gts') || url.endsWith('.ts'))
+    .map((url) => url.replace(/\.(gts|ts)$/, ''));
+}
+
+// eslint-disable-next-line ember/no-test-import-export
+export async function loadRealmTests(application) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const qunitAny = /** @type {any} */ (QUnit);
+
+  const qunitFilter = urlParams.get('filter');
+  const qunitModule = urlParams.get('module');
+
+  if (qunitFilter) {
+    QUnit.config.filter = qunitFilter;
+  }
+  if (qunitModule) {
+    QUnit.config.module = qunitModule;
+  }
+
+  const realmURL =
+    urlParams.get('realmURL') ?? 'http://localhost:4201/catalog/';
+
+  const [
+    helpers,
+    mockMatrix,
+    setupHelpers,
+    adapter,
+    renderComponent,
+    baseRealm,
+    universalEmberTestSupport,
+    emberOwner,
+  ] = await Promise.all([
+    import('@cardstack/host/tests/helpers'),
+    import('@cardstack/host/tests/helpers/mock-matrix'),
+    import('@cardstack/host/tests/helpers/setup'),
+    import('@cardstack/host/tests/helpers/adapter'),
+    import('@cardstack/host/tests/helpers/render-component'),
+    import('@cardstack/host/tests/helpers/base-realm'),
+    import('@universal-ember/test-support'),
+    import('@ember/owner'),
+  ]);
+
+  const loaderInstance = application.buildInstance({
+    rootElement: '#ember-testing-loader',
+  });
+  await loaderInstance.boot();
+  let loader = loaderInstance.lookup('service:loader-service').loader;
+
+  loader.shimModule('qunit', QUnit);
+  loader.shimModule('@cardstack/host/tests/helpers', helpers);
+  loader.shimModule('@cardstack/host/tests/helpers/mock-matrix', mockMatrix);
+  loader.shimModule('@cardstack/host/tests/helpers/setup', setupHelpers);
+  loader.shimModule('@cardstack/host/tests/helpers/adapter', adapter);
+  loader.shimModule(
+    '@cardstack/host/tests/helpers/render-component',
+    renderComponent,
+  );
+  loader.shimModule('@cardstack/host/tests/helpers/base-realm', baseRealm);
+  loader.shimModule('@universal-ember/test-support', universalEmberTestSupport);
+  loader.shimModule('@ember/owner', emberOwner);
+
+  const testModules = await discoverTestModules(realmURL);
+
+  const capturedModules = new Set();
+  const originalModule = QUnit.module;
+  qunitAny.module = function (...args) {
+    const [name] = args;
+    if (typeof name === 'string') {
+      capturedModules.add(name);
+    }
+    // @ts-expect-error QUnit.module has multiple call signatures
+    return originalModule.apply(this, args);
+  };
+
+  try {
+    for (const moduleURL of testModules) {
+      let mod;
+      try {
+        mod = await loader.import(moduleURL);
+      } catch {
+        // skip files that fail to import (e.g. cards with unresolvable deps)
+        continue;
+      }
+      if (typeof mod.runTests === 'function') {
+        mod.runTests();
+      }
+    }
+  } finally {
+    qunitAny.module = originalModule;
+    await loaderInstance.destroy();
+  }
+
+  if (capturedModules.size === 0) {
+    console.warn(
+      `[live-test] No realm test modules found. Searched ${testModules.length} module(s) in ${realmURL}`,
+    );
+    QUnit.module('Live Tests', function () {
+      QUnit.test('no realm tests found', function (assert) {
+        assert.ok(true, 'No realm test modules discovered');
+      });
+    });
+  } else {
+    console.log(`[live-test] Found ${capturedModules.size} test module(s):`, [
+      ...capturedModules,
+    ]);
+  }
+
+  QUnit.config.testFilter = (testInfo) => capturedModules.has(testInfo.module);
+
+  if (!QUnit.config.started) {
+    QUnit.start();
+  }
+}
