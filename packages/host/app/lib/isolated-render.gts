@@ -1,12 +1,10 @@
 import { destroy } from '@ember/destroyable';
 
 import type Owner from '@ember/owner';
-// @ts-expect-error
-import {
-  renderComponent as glimmerRenderComponent,
-  inTransaction,
-} from '@glimmer/runtime';
-// @ts-expect-error
+// prettier-ignore
+// @ts-ignore - no types for @glimmer/runtime
+import { renderComponent as glimmerRenderComponent, inTransaction } from '@glimmer/runtime';
+// @ts-ignore - no types for @glimmer/validator
 import { resetTracking } from '@glimmer/validator';
 
 import { CardError } from '@cardstack/runtime-common/error';
