@@ -242,8 +242,8 @@ export default class CreateListingModal extends Component<Signature> {
                         {{#each cards key='url' as |card|}}
                           <div
                             class='selected-example-atom'
-                            data-test-selected-example-chip={{card.url}}
                             data-test-selected-example={{card.url}}
+                            data-test-card-format='atom'
                           >
                             <card.component />
                             <IconButton

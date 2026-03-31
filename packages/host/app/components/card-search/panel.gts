@@ -129,6 +129,9 @@ export default class SearchPanel extends Component<Signature> {
   private _previousSelectedTypes: PickerOption[] = [];
 
   private get defaultSelectedTypeNames(): Set<string> {
+    if (!this.args.consumingRealm) {
+      return new Set();
+    }
     return new Set(
       (getFilterTypeRefs(this.args.baseFilter, this.args.searchKey) ?? [])
         .filter((ref) => !ref.negated)

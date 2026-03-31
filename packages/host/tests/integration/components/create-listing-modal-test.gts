@@ -110,7 +110,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
 
     await waitFor('[data-test-create-listing-modal]');
     await waitFor(
-      `[data-test-selected-example-chip="${testRealmURL}Pet/mango.json"]`,
+      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
     );
 
     assert
@@ -153,7 +153,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
     );
 
     assert
-      .dom(`[data-test-selected-example-chip="${testRealmURL}Pet/mango.json"]`)
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
       .doesNotExist();
     assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
