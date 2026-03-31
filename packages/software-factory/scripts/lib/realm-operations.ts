@@ -8,18 +8,20 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import {
-  type LooseSingleCardDocument,
-  SupportedMimeType,
-  ensureTrailingSlash,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   iconURLFor,
   getRandomBackgroundURL,
 } from '@cardstack/runtime-common/realm-display-defaults';
 
-export { SupportedMimeType, ensureTrailingSlash };
+import { SupportedMimeType } from '../../src/mime-types';
+
+export { SupportedMimeType };
+
+export function ensureTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`;
+}
 
 // ---------------------------------------------------------------------------
 // Types

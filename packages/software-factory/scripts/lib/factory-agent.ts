@@ -1,4 +1,4 @@
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '../../src/mime-types';
 
 import { createBoxelRealmFetch } from '../../src/realm-auth';
 
