@@ -385,10 +385,7 @@ export class TestRun extends CardDef {
           gap: 1rem;
         }
         .linked-card {
-          max-height: 5rem;
-          overflow: hidden;
-          border: 1px solid var(--boxel-200, #e5e7eb);
-          border-radius: 0.5rem;
+          margin-bottom: 0.5rem;
         }
         .header-row {
           display: flex;
