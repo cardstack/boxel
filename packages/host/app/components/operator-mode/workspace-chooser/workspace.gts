@@ -61,13 +61,12 @@ export default class Workspace extends Component<Signature> {
     {{else}}
       <div
         class='workspace-card {{if this.isHostDropdownOpen "is-open"}}'
+        data-test-workspace={{this.name}}
         {{on 'mouseleave' this.closeHostDropdown}}
+        {{on 'click' this.openWorkspace}}
         ...attributes
       >
-        <ItemContainer
-          data-test-workspace={{this.name}}
-          {{on 'click' this.openWorkspace}}
-        >
+        <ItemContainer>
           <div
             class='tile-icon'
             style={{cssVar
@@ -89,10 +88,10 @@ export default class Workspace extends Component<Signature> {
           @variant='ghost'
           @width='16'
           @height='16'
-          {{on 'click' this.toggleFavorite}}
+          {{on 'click' this.onFavoriteClick}}
           data-test-workspace-favorite-btn={{@realmURL}}
         />
-        <div class='tile-menu-btn'>
+        <div class='tile-menu-btn' {{on 'click' this.stopPropagation}}>
           <BoxelDropdown @autoClose={{true}}>
             <:trigger as |bindings|>
               <ContextButton
@@ -819,6 +818,15 @@ export default class Workspace extends Component<Signature> {
         disabled: !this.canDeleteWorkspace,
       }),
     ];
+  }
+
+  @action onFavoriteClick(event: MouseEvent) {
+    event.stopPropagation();
+    this.toggleFavorite();
+  }
+
+  @action stopPropagation(event: MouseEvent) {
+    event.stopPropagation();
   }
 
   @action async toggleFavorite() {
