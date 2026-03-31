@@ -931,7 +931,7 @@ module(
             'Build a personal portfolio page with your background, skills, and contact information',
           );
         await click('[data-test-create-this-for-me]');
-        await waitFor('[data-test-room-settled]');
+        await waitFor('[data-test-message-idx="0"] [data-test-attached-card]');
         assertMessages(assert, [
           {
             from: 'testuser',
@@ -1027,7 +1027,7 @@ module(
           .hasValue(typedPrompt);
 
         await click('[data-test-create-this-for-me]');
-        await waitFor('[data-test-room-settled]');
+        await waitFor('[data-test-message-idx="0"] [data-test-attached-card]');
         assertMessages(assert, [
           {
             from: 'testuser',
