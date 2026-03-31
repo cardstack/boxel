@@ -231,6 +231,7 @@ export default class AddWorkspace extends Component<Signature> {
     <ItemContainer
       {{on 'click' (fn this.setIsModalOpen true)}}
       class='container'
+      title='New Workspace'
       data-test-add-workspace
     >
       <div class='content'>

@@ -202,7 +202,7 @@ export default class Workspace extends Component<Signature> {
                 <span class='delete-modal__workspace-name'>{{this.name}}</span>
                 {{#if this.loadDeleteSummaryTask.isRunning}}
                   <span class='delete-modal__workspace-meta'>
-                    Checking what will be removed from this workspace...
+                    Checking what will be removed from this workspace…
                   </span>
                 {{else if this.deleteSummaryText}}
                   <span class='delete-modal__workspace-meta'>

@@ -187,30 +187,30 @@ module('Acceptance | workspace-chooser', function (hooks) {
     test('sort dropdown renders with View All as default', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      assert.dom('.sort-dropdown-trigger').includesText('View All');
+      assert.dom('[data-test-sort-dropdown-trigger]').includesText('View All');
     });
 
     test('can switch to Hosted Only filter', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      await click('.sort-dropdown-trigger');
+      await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
-      assert.dom('.sort-dropdown-trigger').includesText('Hosted Only');
+      assert.dom('[data-test-sort-dropdown-trigger]').includesText('Hosted Only');
     });
 
     test('can switch back to View All filter', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      await click('.sort-dropdown-trigger');
+      await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
-      assert.dom('.sort-dropdown-trigger').includesText('Hosted Only');
+      assert.dom('[data-test-sort-dropdown-trigger]').includesText('Hosted Only');
 
-      await click('.sort-dropdown-trigger');
+      await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="View All"]');
 
-      assert.dom('.sort-dropdown-trigger').includesText('View All');
+      assert.dom('[data-test-sort-dropdown-trigger]').includesText('View All');
     });
   });
 
@@ -233,7 +233,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       });
 
       // Switch to hosted-only
-      await click('.sort-dropdown-trigger');
+      await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
       assert
@@ -267,7 +267,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         },
       });
 
-      await click('.sort-dropdown-trigger');
+      await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
       assert
@@ -295,7 +295,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .exists();
 
       // Switch to hosted-only — workspace A is not hosted
-      await click('.sort-dropdown-trigger');
+      await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
       assert.dom('[data-test-favorites-empty]').hasText('No matching results');

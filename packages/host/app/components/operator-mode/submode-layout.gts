@@ -444,6 +444,7 @@ export default class SubmodeLayout extends Component<Signature> {
                     <button
                       class='sort-dropdown-trigger'
                       aria-label='Filter workspaces'
+                      data-test-sort-dropdown-trigger
                       {{bindings}}
                     >
                       <this.sortIcon width='16' height='16' />

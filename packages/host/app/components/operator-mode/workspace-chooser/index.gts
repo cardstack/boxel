@@ -41,34 +41,28 @@ export default class WorkspaceChooser extends Component<Signature> {
     );
   }
 
-  private get filteredUserRealmURLs() {
-    let urls = this.realmServer.userRealmURLs;
+  private isHosted = (url: string): boolean => {
+    let info = this.realm.info(url);
+    return !!(
+      info.lastPublishedAt &&
+      typeof info.lastPublishedAt === 'object' &&
+      Object.keys(info.lastPublishedAt).length > 0
+    );
+  };
+
+  private filterByHosted(urls: string[]): string[] {
     if (this.args.sortOrder === 'hosted-only') {
-      return urls.filter((url) => {
-        let info = this.realm.info(url);
-        return (
-          info.lastPublishedAt &&
-          typeof info.lastPublishedAt === 'object' &&
-          Object.keys(info.lastPublishedAt).length > 0
-        );
-      });
+      return urls.filter(this.isHosted);
     }
     return urls;
   }
 
+  private get filteredUserRealmURLs() {
+    return this.filterByHosted(this.realmServer.userRealmURLs);
+  }
+
   private get filteredCatalogRealmURLs() {
-    let urls = this.communityRealmURLs;
-    if (this.args.sortOrder === 'hosted-only') {
-      return urls.filter((url) => {
-        let info = this.realm.info(url);
-        return (
-          info.lastPublishedAt &&
-          typeof info.lastPublishedAt === 'object' &&
-          Object.keys(info.lastPublishedAt).length > 0
-        );
-      });
-    }
-    return urls;
+    return this.filterByHosted(this.communityRealmURLs);
   }
 
   private get favoriteRealmURLs() {
@@ -78,17 +72,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       ...(this.realmServer.catalogRealmURLs ?? []),
     ];
     let filtered = favorites.filter((url) => allURLs.includes(url));
-    if (this.args.sortOrder === 'hosted-only') {
-      return filtered.filter((url) => {
-        let info = this.realm.info(url);
-        return (
-          info.lastPublishedAt &&
-          typeof info.lastPublishedAt === 'object' &&
-          Object.keys(info.lastPublishedAt).length > 0
-        );
-      });
-    }
-    return filtered;
+    return this.filterByHosted(filtered);
   }
 
   private get userWorkspacesEmptyMessage(): string | null {
