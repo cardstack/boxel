@@ -1,11 +1,6 @@
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 import { modifier } from 'ember-modifier'; // ¹ Modifier for DOM manipulation
-import {
-  Component,
-  CardDef,
-  field,
-  contains,
-} from '@cardstack/base/card-api'; // ² Core imports
+import { Component, CardDef, field, contains } from '@cardstack/base/card-api'; // ² Core imports
 import StringField from '@cardstack/base/string';
 import MarkdownField from '@cardstack/base/markdown'; // ³ Markdown for content
 import { gt } from '@cardstack/boxel-ui/helpers';
