@@ -112,11 +112,11 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
 
     expect(summary.command).toBe('factory:go');
     expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
-    expect(summary.bootstrap.projectId).toBe('Project/sticky-note-mvp');
+    expect(summary.bootstrap.projectId).toBe('Projects/sticky-note-mvp');
     expect(summary.bootstrap.ticketIds).toHaveLength(3);
     expect(summary.bootstrap.knowledgeArticleIds).toHaveLength(2);
     expect(summary.bootstrap.activeTicket.id).toBe(
-      'Ticket/sticky-note-define-core',
+      'Tickets/sticky-note-define-core',
     );
     expect(summary.bootstrap.activeTicket.status).toBe('created');
 
@@ -129,8 +129,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       summary.targetRealm.url,
     );
 
-    let projectUrl = new URL('Project/sticky-note-mvp', summary.targetRealm.url)
-      .href;
+    let projectUrl = new URL(
+      'Projects/sticky-note-mvp',
+      summary.targetRealm.url,
+    ).href;
     let projectResponse = await fetch(projectUrl, {
       headers: {
         Accept: 'application/vnd.card+source',

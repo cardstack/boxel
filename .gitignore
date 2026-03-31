@@ -13,3 +13,4 @@ test-results/.last-run.json
 traefik/dynamic/*.yml
 .mise.local.toml
 packages/openrouter-realm/OpenRouterModel/
+packages/host/dist

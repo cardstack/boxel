@@ -27,8 +27,8 @@ Ticket: "Create a StickyNote card with title and body fields"
   },
   {
     "type": "create_test",
-    "path": "TestSpec/sticky-note.spec.ts",
-    "realm": "test",
+    "path": "Tests/sticky-note.spec.ts",
+    "realm": "target",
     "content": "import { test, expect } from '@playwright/test';\n\ntest('StickyNote renders title and body', async ({ page }) => {\n  // test implementation\n});\n"
   }
 ]

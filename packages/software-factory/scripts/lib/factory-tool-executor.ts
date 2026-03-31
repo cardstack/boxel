@@ -8,6 +8,7 @@ import {
 
 import type { AgentAction, ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
+import { ensureTrailingSlash } from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -899,10 +900,6 @@ function buildRealmApiRequest(
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 function looksLikeUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://');

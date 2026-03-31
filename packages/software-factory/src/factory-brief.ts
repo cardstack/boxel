@@ -5,6 +5,7 @@ const wikiLinkPattern = /\[\[([^[\]]+)\]\]/g;
 const markdownHeadingReplacePattern = /^\s*#{1,6}\s+/gm;
 const markdownListReplacePattern = /^\s*[-*+]\s+/gm;
 const whitespacePattern = /\s+/g;
+// Matches SupportedMimeType.CardSource from @cardstack/runtime-common (see CS-10550).
 const cardSourceMimeType = 'application/vnd.card+source';
 
 export interface FactoryBrief {

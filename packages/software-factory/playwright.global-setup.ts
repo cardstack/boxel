@@ -28,6 +28,10 @@ const bootstrapTargetRealmDir = resolve(
   packageRoot,
   'test-fixtures/bootstrap-target',
 );
+const testRealmRunnerDir = resolve(
+  packageRoot,
+  'test-fixtures/test-realm-runner',
+);
 const realmDir = existsSync(configuredRealmDir)
   ? configuredRealmDir
   : fallbackRealmDir;
@@ -295,7 +299,9 @@ export default async function globalSetup() {
     )}s`,
   );
 
-  let preparedRealmDirs = [...new Set([realmDir, bootstrapTargetRealmDir])];
+  let preparedRealmDirs = [
+    ...new Set([realmDir, bootstrapTargetRealmDir, testRealmRunnerDir]),
+  ];
   let preparedTemplates = await prepareTemplatesForRealms(
     preparedRealmDirs,
     payload.context,

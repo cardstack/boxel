@@ -36,15 +36,16 @@ The testing strategy assumes four separate realm roles:
   - publishes shared modules, briefs, templates, and other software-factory inputs
 - target realm
   - the user-selected realm where the factory writes generated tickets, knowledge articles, and implementation artifacts
-- test realm
-  - a dedicated realm created alongside the target realm (named `<target-realm-name>-tests`)
-  - receives AI-generated test specs, test fixtures, and structured test result artifacts
-  - the test harness executes tests from this realm against cards in the target realm
-  - test output saved here is fed back into the agentic loop as verification evidence
+- test artifacts realm
+  - a dedicated realm auto-created by the factory, named after the target realm (e.g., `my-project` → `my-project-test-artifacts`)
+  - receives only card instances created during test execution (test data), not specs or results
+  - each test run gets its own folder (`Run 1/`, `Run 2/`) to prevent collision between runs
+  - the URL is persisted on the Project card's `testArtifactsRealmUrl` field
+  - test specs live in the target realm's `Tests/` folder; TestRun result cards live in the target realm's `Test Runs/` folder
 - fixture realm
   - disposable test data used to verify source-realm publishing and target-realm behavior during development
 
-Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm. AI-generated tests and their results belong in the test realm, keeping implementation and verification artifacts separated.
+Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm. AI-generated test specs and TestRun cards belong in the target realm (co-located with the implementation). Only card instances created during test execution go to the test artifacts realm.
 
 If the source realm includes output-like examples, they should be clearly labeled as samples rather than mixed into the canonical published tracker surface.
 
@@ -55,14 +56,16 @@ The factory requires the agent to produce tests alongside implementation code. T
 Flow per ticket:
 
 1. agent implements the card or feature in the target realm
-2. agent generates test specs in the test realm (`TestSpec/<ticket-slug>.spec.ts`)
-3. test harness executes tests from the test realm against the target realm
-4. test results are saved as structured artifacts in the test realm (`TestResult/<ticket-slug>.json`)
-5. if tests fail, the full test output (errors, stack traces, optional screenshots) is fed back to the agent
-6. agent iterates on implementation and/or tests until all tests pass
-7. passing test results serve as durable verification evidence for the ticket
+2. agent generates test specs in the target realm (`Tests/<ticket-slug>.spec.ts`)
+3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Test Runs/<slug>-<seq>.json`) with `status: running`
+4. spec files are pulled from the target realm locally; Playwright runs them against the live target realm
+5. card instances created by specs during execution are written to the test artifacts realm (`Run <seq>/` folder) via `BOXEL_TEST_ARTIFACTS_FOLDER_URL`
+6. test results (all passing + failing) are parsed from the Playwright JSON report and written back to the TestRun card
+7. if tests fail, the full test output (errors, stack traces) is available on the TestRun card and fed back to the agent
+8. agent iterates on implementation and/or tests until all tests pass
+9. passing TestRun cards serve as durable verification evidence for the ticket, linked to the Project card
 
-This loop is the primary quality gate. A ticket cannot be marked done without at least one passing test in the test realm.
+This loop is the primary quality gate. A ticket cannot be marked done without at least one passing TestRun in the target realm.
 
 ## Core Principle
 

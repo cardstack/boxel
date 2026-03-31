@@ -141,7 +141,7 @@ module('factory-bootstrap', function () {
         },
       );
 
-      assert.strictEqual(result.project.id, 'Project/sticky-note-mvp');
+      assert.strictEqual(result.project.id, 'Projects/sticky-note-mvp');
       assert.strictEqual(result.project.status, 'created');
       assert.strictEqual(result.knowledgeArticles.length, 2);
       assert.strictEqual(result.knowledgeArticles[0].status, 'created');
@@ -152,7 +152,7 @@ module('factory-bootstrap', function () {
       assert.strictEqual(result.tickets[2].status, 'created');
       assert.strictEqual(
         result.activeTicket.id,
-        'Ticket/sticky-note-define-core',
+        'Tickets/sticky-note-define-core',
       );
     });
 
@@ -173,18 +173,18 @@ module('factory-bootstrap', function () {
 
       assert.strictEqual(
         result.tickets[0].id,
-        'Ticket/sticky-note-define-core',
+        'Tickets/sticky-note-define-core',
       );
       assert.strictEqual(
         result.tickets[1].id,
-        'Ticket/sticky-note-design-views',
+        'Tickets/sticky-note-design-views',
       );
       assert.strictEqual(
         result.tickets[2].id,
-        'Ticket/sticky-note-add-integration',
+        'Tickets/sticky-note-add-integration',
       );
 
-      let ticket1 = writtenBodies['Ticket/sticky-note-define-core'] as {
+      let ticket1 = writtenBodies['Tickets/sticky-note-define-core'] as {
         data: {
           attributes: { ticketId: string; status: string; summary: string };
         };
@@ -193,13 +193,13 @@ module('factory-bootstrap', function () {
       assert.strictEqual(ticket1.data.attributes.status, 'in_progress');
       assert.true(ticket1.data.attributes.summary.includes('Sticky Note'));
 
-      let ticket2 = writtenBodies['Ticket/sticky-note-design-views'] as {
+      let ticket2 = writtenBodies['Tickets/sticky-note-design-views'] as {
         data: { attributes: { ticketId: string; status: string } };
       };
       assert.strictEqual(ticket2.data.attributes.ticketId, 'SN-2');
       assert.strictEqual(ticket2.data.attributes.status, 'backlog');
 
-      let ticket3 = writtenBodies['Ticket/sticky-note-add-integration'] as {
+      let ticket3 = writtenBodies['Tickets/sticky-note-add-integration'] as {
         data: { attributes: { ticketId: string; status: string } };
       };
       assert.strictEqual(ticket3.data.attributes.ticketId, 'SN-3');
@@ -217,7 +217,7 @@ module('factory-bootstrap', function () {
         }),
       });
 
-      let project = writtenBodies['Project/sticky-note-mvp'] as {
+      let project = writtenBodies['Projects/sticky-note-mvp'] as {
         data: {
           attributes: {
             projectName: string;
@@ -263,7 +263,7 @@ module('factory-bootstrap', function () {
       });
 
       let briefContext = writtenBodies[
-        'KnowledgeArticle/sticky-note-brief-context'
+        'Knowledge Articles/sticky-note-brief-context'
       ] as {
         data: {
           attributes: {
@@ -288,7 +288,7 @@ module('factory-bootstrap', function () {
       );
 
       let onboarding = writtenBodies[
-        'KnowledgeArticle/sticky-note-agent-onboarding'
+        'Knowledge Articles/sticky-note-agent-onboarding'
       ] as {
         data: {
           attributes: {
@@ -319,7 +319,7 @@ module('factory-bootstrap', function () {
         }),
       });
 
-      let ticket1 = writtenBodies['Ticket/sticky-note-define-core'] as {
+      let ticket1 = writtenBodies['Tickets/sticky-note-define-core'] as {
         data: { attributes: { description: string } };
       };
       assert.true(
@@ -329,7 +329,7 @@ module('factory-bootstrap', function () {
         'first ticket description derived from Core Mechanics section',
       );
 
-      let ticket3 = writtenBodies['Ticket/sticky-note-add-integration'] as {
+      let ticket3 = writtenBodies['Tickets/sticky-note-add-integration'] as {
         data: { attributes: { description: string } };
       };
       assert.true(
@@ -366,8 +366,8 @@ module('factory-bootstrap', function () {
 
     test('creates only missing artifacts on partial rerun', async function (assert) {
       let existingPaths = new Set([
-        'Project/sticky-note-mvp',
-        'KnowledgeArticle/sticky-note-brief-context',
+        'Projects/sticky-note-mvp',
+        'Knowledge Articles/sticky-note-brief-context',
       ]);
 
       let result = await bootstrapProjectArtifacts(
@@ -402,11 +402,11 @@ module('factory-bootstrap', function () {
         },
       );
 
-      assert.strictEqual(result.project.id, 'Project/my-widget-mvp');
+      assert.strictEqual(result.project.id, 'Projects/my-widget-mvp');
       assert.strictEqual(result.project.status, 'created');
       assert.strictEqual(result.tickets.length, 3);
 
-      let project = writtenBodies['Project/my-widget-mvp'] as {
+      let project = writtenBodies['Projects/my-widget-mvp'] as {
         data: { attributes: { projectName: string; objective: string } };
       };
       assert.strictEqual(project.data.attributes.projectName, 'My Widget MVP');
@@ -434,10 +434,10 @@ module('factory-bootstrap', function () {
         },
       );
 
-      assert.strictEqual(result.project.id, 'Project/my-app-v2-0-beta-mvp');
+      assert.strictEqual(result.project.id, 'Projects/my-app-v2-0-beta-mvp');
       assert.strictEqual(
         result.tickets[0].id,
-        'Ticket/my-app-v2-0-beta-define-core',
+        'Tickets/my-app-v2-0-beta-define-core',
       );
     });
 
@@ -500,7 +500,10 @@ function buildMockFetch(
 
     calls.push({ url, method });
 
-    let cardPath = url.replace(targetRealmUrl, '').replace(/\.json$/, '');
+    let cardPath = decodeURIComponent(url.replace(targetRealmUrl, '')).replace(
+      /\.json$/,
+      '',
+    );
 
     if (method === 'GET') {
       let exists =

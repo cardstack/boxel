@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { formatErrorResponse } from '../../src/error-format';
+import { ensureTrailingSlash } from './realm-operations';
 
 const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');
 
@@ -82,10 +83,6 @@ export type ParsedArgValue = string | boolean | string[];
 export type ParsedArgs = Record<string, ParsedArgValue | undefined> & {
   _: string[];
 };
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 function parseProfilesConfig(): BoxelProfilesConfig {
   if (!existsSync(PROFILES_FILE)) {

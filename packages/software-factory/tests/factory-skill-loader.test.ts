@@ -72,7 +72,7 @@ function writeSkill(
 
 function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
   return {
-    id: 'Ticket/test-ticket',
+    id: 'Tickets/test-ticket',
     title: 'Test ticket',
     description: 'A test ticket for unit testing',
     ...overrides,
@@ -81,7 +81,7 @@ function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
 
 function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
   return {
-    id: 'Project/test-project',
+    id: 'Projects/test-project',
     ...overrides,
   };
 }
@@ -248,7 +248,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledge: [
         {
-          id: 'KnowledgeArticle/custom',
+          id: 'Knowledge Articles/custom',
           tags: ['skill:custom-skill', 'not-a-skill'],
         },
       ],
@@ -268,7 +268,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledge: [
         {
-          id: 'KnowledgeArticle/custom',
+          id: 'Knowledge Articles/custom',
           skills: ['extra-skill-a', 'extra-skill-b'],
         },
       ],
@@ -286,7 +286,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledgeBase: [
         {
-          id: 'KnowledgeArticle/from-schema',
+          id: 'Knowledge Articles/from-schema',
           skills: ['schema-skill'],
         },
       ],
@@ -305,7 +305,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let ticket = makeTicket({
       relatedKnowledge: [
         {
-          id: 'KnowledgeArticle/ticket-knowledge',
+          id: 'Knowledge Articles/ticket-knowledge',
           tags: ['skill:ticket-skill'],
         },
       ],
@@ -328,7 +328,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledge: [
         {
-          id: 'KnowledgeArticle/dup',
+          id: 'Knowledge Articles/dup',
           skills: ['boxel-development'],
         },
       ],

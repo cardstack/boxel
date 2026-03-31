@@ -1,5 +1,4 @@
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   iconURLFor,
@@ -15,6 +14,7 @@ import {
   type ActiveBoxelProfile,
   type MatrixAuth,
 } from '../scripts/lib/boxel';
+import { createRealm as createRealmViaApi } from '../scripts/lib/realm-operations';
 import { formatErrorResponse, formatUnknownError } from './error-format';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -108,45 +108,26 @@ async function createRealm(
   let matrixAuth = await matrixLogin(profile);
   let serverToken = await getRealmServerToken(matrixAuth);
 
-  let response = await fetchImpl(
-    new URL('_create-realm', resolution.serverUrl),
-    {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: serverToken,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'realm',
-          attributes: {
-            endpoint,
-            name: endpoint,
-            iconURL: iconURLFor(endpoint),
-            backgroundURL: getRandomBackgroundURL(),
-          },
-        },
-      }),
+  let createResult = await createRealmViaApi(resolution.serverUrl, {
+    name: endpoint,
+    endpoint,
+    iconURL: iconURLFor(endpoint),
+    backgroundURL: getRandomBackgroundURL(),
+    authorization: serverToken,
+    fetch: fetchImpl,
+    matrixAuth: {
+      userId: matrixAuth.userId,
+      accessToken: matrixAuth.accessToken,
+      matrixUrl: matrixAuth.credentials.matrixUrl,
     },
-  );
+  });
 
-  if (response.ok) {
-    let json = (await response.json()) as {
-      data?: {
-        id?: unknown;
-      };
-    };
+  if (createResult.created) {
     let canonicalRealmUrl = normalizeCreatedRealmUrl(
-      json.data?.id,
+      createResult.realmUrl,
       resolution.url,
     );
 
-    await appendRealmToMatrixAccountData(
-      matrixAuth,
-      canonicalRealmUrl,
-      fetchImpl,
-    );
     let authorization = await getRealmAuthorization(
       matrixAuth,
       canonicalRealmUrl,
@@ -164,9 +145,7 @@ async function createRealm(
     };
   }
 
-  let text = await formatErrorResponse(response);
-
-  if (response.status === 400 && /already exists on this server/.test(text)) {
+  if (createResult.error?.includes('already exists on this server')) {
     let authorization = await getRealmAuthorization(matrixAuth, resolution.url);
     return {
       createdRealm: false,
@@ -176,49 +155,8 @@ async function createRealm(
   }
 
   throw new Error(
-    `Failed to create target realm ${resolution.url}: HTTP ${response.status} ${text}`.trim(),
+    `Failed to create target realm ${resolution.url}: ${createResult.error}`.trim(),
   );
-}
-
-async function appendRealmToMatrixAccountData(
-  matrixAuth: MatrixAuth,
-  realmUrl: string,
-  fetchImpl: typeof globalThis.fetch,
-): Promise<void> {
-  let accountDataUrl = new URL(
-    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
-    matrixAuth.credentials.matrixUrl,
-  ).href;
-
-  let existingRealms: string[] = [];
-
-  let getResponse = await fetchImpl(accountDataUrl, {
-    headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
-  });
-  if (getResponse.ok) {
-    let data = (await getResponse.json()) as { realms?: string[] };
-    existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
-  }
-
-  if (!existingRealms.includes(realmUrl)) {
-    existingRealms.push(realmUrl);
-  }
-
-  let putResponse = await fetchImpl(accountDataUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${matrixAuth.accessToken}`,
-    },
-    body: JSON.stringify({ realms: existingRealms }),
-  });
-
-  if (!putResponse.ok) {
-    let text = await formatErrorResponse(putResponse);
-    throw new Error(
-      `Failed to update Matrix account data with realm ${realmUrl}: HTTP ${putResponse.status} ${text}`.trim(),
-    );
-  }
 }
 
 async function waitForRealmReady(

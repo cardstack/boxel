@@ -100,15 +100,16 @@ function assertUsableHostDist(hostPackageDir: string): void {
 
   try {
     let config = JSON.parse(decodeURIComponent(match[1]));
+    // Only reject Ember test builds where autoboot is explicitly disabled and
+    // the rootElement is #ember-testing. Development and production builds are
+    // both usable by the harness. This keeps worktree setups working without
+    // requiring a full production build pipeline.
     if (
-      config?.environment === 'test' ||
-      config?.APP?.autoboot === false ||
+      config?.APP?.autoboot === false &&
       config?.APP?.rootElement === '#ember-testing'
     ) {
       throw new Error(
-        `Host dist at ${hostPackageDir}/dist is a test build and cannot power the software-factory harness (environment=${String(
-          config?.environment,
-        )}, autoboot=${String(config?.APP?.autoboot)}, rootElement=${String(
+        `Host dist at ${hostPackageDir}/dist is an Ember test build and cannot power the software-factory harness (autoboot=${String(config?.APP?.autoboot)}, rootElement=${String(
           config?.APP?.rootElement,
         )}). The harness needs a normal host app build so /_standby can boot. Run \`cd ${hostPackageDir} && mise exec -- pnpm build\` and retry.`,
       );
@@ -504,9 +505,12 @@ export async function startFactorySupportServices(): Promise<{
     let { synapseStart, synapseStop } = await loadSynapseModule();
     let { getSynapseURL } = await loadMatrixEnvironmentConfigModule();
 
+    // stopExisting: false — the test harness uses a dynamic port, so it
+    // doesn't conflict with the dev Synapse (boxel-synapse on port 8008).
+    // Stopping existing containers kills the dev environment.
     let synapse = await synapseStart(
       { suppressRegistrationSecretFile: true, dynamicHostPort: true },
-      true,
+      false,
     );
     let matrixURL =
       process.env.SOFTWARE_FACTORY_MATRIX_URL ?? getSynapseURL(synapse);
