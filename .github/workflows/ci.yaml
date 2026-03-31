@@ -494,85 +494,13 @@ jobs:
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
+      group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
       matrix:
-        testModule:
-          [
-            "auth-client-test.ts",
-            "billing-test.ts",
-            "card-dependencies-endpoint-test.ts",
-            "card-endpoints-test.ts",
-            "card-reference-resolver-test.ts",
-            "card-source-endpoints-test.ts",
-            "definition-lookup-test.ts",
-            "file-watcher-events-test.ts",
-            "indexing-event-sink-test.ts",
-            "indexing-test.ts",
-            "runtime-dependency-tracker-test.ts",
-            "transpile-test.ts",
-            "module-syntax-test.ts",
-            "node-realm-test.ts",
-            "permissions/permission-checker-test.ts",
-            "prerendering-test.ts",
-            "prerender-server-test.ts",
-            "prerender-manager-test.ts",
-            "prerender-proxy-test.ts",
-            "remote-prerenderer-test.ts",
-            "queue-test.ts",
-            "realm-endpoints/cancel-indexing-job-test.ts",
-            "realm-endpoints/dependencies-test.ts",
-            "realm-endpoints/directory-test.ts",
-            "realm-endpoints/info-test.ts",
-            "realm-endpoints/invalidate-urls-test.ts",
-            "realm-endpoints/lint-test.ts",
-            "realm-endpoints/mtimes-test.ts",
-            "realm-endpoints/permissions-test.ts",
-            "realm-endpoints/publishability-test.ts",
-            "realm-endpoints/reindex-test.ts",
-            "realm-endpoints/search-test.ts",
-            "realm-endpoints/user-test.ts",
-            "realm-endpoints-test.ts",
-            "sanitize-head-html-test.ts",
-            "search-prerendered-test.ts",
-            "types-endpoint-test.ts",
-            "server-config-test.ts",
-            "server-endpoints/authentication-test.ts",
-            "server-endpoints/bot-commands-test.ts",
-            "server-endpoints/bot-registration-test.ts",
-            "server-endpoints/delete-realm-test.ts",
-            "server-endpoints/download-realm-test.ts",
-            "server-endpoints/index-responses-test.ts",
-            "server-endpoints/maintenance-endpoints-test.ts",
-            "server-endpoints/queue-status-test.ts",
-            "server-endpoints/realm-lifecycle-test.ts",
-            "server-endpoints/search-test.ts",
-            "server-endpoints/info-test.ts",
-            "server-endpoints/search-prerendered-test.ts",
-            "server-endpoints/stripe-session-test.ts",
-            "server-endpoints/stripe-webhook-test.ts",
-            "server-endpoints/user-and-catalog-test.ts",
-            "server-endpoints/incoming-webhook-test.ts",
-            "server-endpoints/webhook-commands-test.ts",
-            "server-endpoints/webhook-receiver-test.ts",
-            "server-endpoints/federated-types-test.ts",
-            "virtual-network-test.ts",
-            "atomic-endpoints-test.ts",
-            "request-forward-test.ts",
-            "publish-unpublish-realm-test.ts",
-            "boxel-domain-availability-test.ts",
-            "claim-boxel-domain-test.ts",
-            "command-parsing-utils-test.ts",
-            "delete-boxel-claimed-domain-test.ts",
-            "get-boxel-claimed-domain-test.ts",
-            "realm-auth-test.ts",
-            "run-command-task-test.ts",
-            "queries-test.ts",
-            "session-room-queries-test.ts",
-            "full-reindex-test.ts",
-          ]
+        shardIndex: [1, 2, 3, 4, 5, 6]
+        shardTotal: [6]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
@@ -586,6 +514,10 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
+      - name: Compute shard test modules
+        id: shard_modules
+        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
+        working-directory: packages/realm-server
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
@@ -595,7 +527,15 @@ jobs:
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
         env:
-          TEST_MODULE: ${{matrix.testModule}}
+          TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
+          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
+      - name: Upload junit report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-report-${{ matrix.shardIndex }}
+          path: junit/realm-server-${{ matrix.shardIndex }}.xml
+          retention-days: 30
       - name: Print realm server logs
         if: ${{ !cancelled() }}
         run: cat /tmp/server.log
@@ -603,7 +543,7 @@ jobs:
         id: artifact_name
         if: ${{ !cancelled() }}
         run: |
-          export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
+          export SAFE_ARTIFACT_NAME=shard-${{ matrix.shardIndex }}
           echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
       - name: Extract worker and prerender logs
         if: ${{ !cancelled() }}
@@ -671,6 +611,39 @@ jobs:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
           retention-days: 30
+
+  realm-server-merge-reports:
+    name: Merge Realm Server reports and publish
+    if: ${{ !cancelled() && (needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true') }}
+    concurrency:
+      group: realm-server-merge-reports-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    needs: [change-check, realm-server-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download JUnit reports
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          path: all-realm-server-reports
+          pattern: realm-server-test-report-*
+          merge-multiple: true
+      - name: Merge reports
+        run: npx junit-report-merger realm-server.xml "./all-realm-server-reports/*.xml"
+      - name: Upload merged report
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-report-merged
+          path: realm-server.xml
+          retention-days: 30
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
+        if: ${{ !cancelled() }}
+        with:
+          junit_files: realm-server.xml
+          check_name: Realm Server Test Results
 
   software-factory-test:
     name: Software Factory Tests
