@@ -33,7 +33,7 @@ NODE_NO_WARNINGS=1 \
    --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
    --toUrl="${EXTERNAL_CATALOG_REALM_URL}" \
   \
-  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
   --fromUrl='@cardstack/openrouter/' \

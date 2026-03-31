@@ -3008,6 +3008,29 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .exists();
   });
 
+  test('ask/act toggle defaults to ask on new session', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    assert
+      .dom('[data-test-llm-mode-option="ask"]')
+      .hasClass('selected', 'Ask is selected by default on new session');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .doesNotHaveClass('selected', 'Act is not selected by default');
+  });
+
   test('new session inherits llm mode from current room', async function (assert) {
     await visitOperatorMode({
       stacks: [

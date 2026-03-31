@@ -30,6 +30,21 @@ import * as ContentTagGlobal from 'content-tag';
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;
+const testModules = process.env.TEST_MODULES?.trim();
+
+if (testModules) {
+  const modules = parseModules(testModules);
+  if (modules.length > 0) {
+    QUnit.config.filter = buildModuleFilter(modules);
+    console.log(
+      `Filtering tests to modules from TEST_MODULES: ${modules.join(', ')}`,
+    );
+  } else {
+    console.warn(
+      'TEST_MODULES was provided but no module names were parsed. Running full suite.',
+    );
+  }
+}
 
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish.
@@ -185,3 +200,21 @@ import './sanitize-head-html-test';
 import './node-realm-test';
 import './session-room-queries-test';
 import './indexing-event-sink-test';
+
+function parseModules(value: string): string[] {
+  return value
+    .split(/[|,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/^['"]+|['"]+$/g, ''));
+}
+
+function buildModuleFilter(modulesToMatch: string[]): string {
+  const escaped = modulesToMatch.map((moduleName) => escapeRegex(moduleName));
+  const pattern = `^(?:${escaped.join('|')})(?:\\s>\\s|:)`;
+  return `/${pattern}/`;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '\\/');
+}

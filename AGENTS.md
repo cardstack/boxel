@@ -116,6 +116,8 @@
   `pnpm test`
 - Run a single module:
   `TEST_MODULE=card-endpoints-test.ts pnpm test-module`
+- Run a list of modules:
+  `TEST_MODULES=card-endpoints-test.ts|another-module-test.ts pnpm test`
 - Focusing on single test or module:
   Add `.only` to module/test declaration (`test.only('returns a 201 response', ...)`)
   Then run `pnpm test`
