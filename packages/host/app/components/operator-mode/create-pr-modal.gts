@@ -92,7 +92,7 @@ export default class CreatePRModal extends Component<Signature> {
         },
       },
     });
-    if (typeof listingId === 'string') {
+    if (listingId) {
       this.selectedListingId = listingId;
     }
   });
