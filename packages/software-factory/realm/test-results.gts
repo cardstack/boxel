@@ -332,14 +332,18 @@ export class TestRun extends CardDef {
         {{#if @model.project}}
           <section>
             <h2>Project</h2>
-            <@fields.project @format="fitted" />
+            <div class='linked-card'>
+              <@fields.project @format="fitted" />
+            </div>
           </section>
         {{/if}}
 
         {{#if @model.ticket}}
           <section>
             <h2>Ticket</h2>
-            <@fields.ticket @format="fitted" />
+            <div class='linked-card'>
+              <@fields.ticket @format="fitted" />
+            </div>
           </section>
         {{/if}}
 
@@ -379,6 +383,12 @@ export class TestRun extends CardDef {
           padding: 1.5rem;
           display: grid;
           gap: 1rem;
+        }
+        .linked-card {
+          max-height: 5rem;
+          overflow: hidden;
+          border: 1px solid var(--boxel-200, #e5e7eb);
+          border-radius: 0.5rem;
         }
         .header-row {
           display: flex;
