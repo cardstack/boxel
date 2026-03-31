@@ -82,8 +82,6 @@ export class DirectoryResource extends Resource<Args> {
                 filePath = event.added;
               } else if ('removed' in event) {
                 filePath = event.removed;
-              } else if ('updated' in event) {
-                filePath = event.updated;
               }
               if (!filePath) {
                 return;
