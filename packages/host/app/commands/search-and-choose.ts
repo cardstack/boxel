@@ -3,8 +3,6 @@ import { service } from '@ember/service';
 import { logger } from '@cardstack/runtime-common';
 import { isResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import { prettifyPrompts } from '../utils/prettify-prompts';
@@ -16,6 +14,8 @@ import { SearchCardsByTypeAndTitleCommand } from './search-cards';
 const log = logger('commands:search-and-choose');
 
 import type StoreService from '../services/store';
+
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class SearchAndChooseCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchAndChooseInput,
