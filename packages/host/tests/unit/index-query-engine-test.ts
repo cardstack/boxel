@@ -740,6 +740,174 @@ module('Unit | query', function (hooks) {
     );
   });
 
+  test(`can filter using 'in'`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+      { card: ringo, data: { search_doc: { name: 'Ringo' } } },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          in: { name: ['Mango', 'Ringo'] },
+          on: type,
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(results),
+      [mango.id, ringo.id],
+      'results are correct',
+    );
+  });
+
+  test(`can filter using 'in' with a single value`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          in: { name: ['Mango'] },
+          on: type,
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(results), [mango.id], 'results are correct');
+  });
+
+  test(`can filter using 'in' with an empty array`, async function (assert) {
+    let { mango, vangogh } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          in: { name: [] },
+          on: type,
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 0, 'the total results meta is correct');
+    assert.deepEqual(getIds(results), [], 'results are correct');
+  });
+
+  test(`can filter using 'in' with null values`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: null } } },
+      { card: ringo, data: { search_doc: { name: 'Ringo' } } },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          in: { name: ['Mango', null] },
+          on: type,
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 2, 'the total results meta is correct');
+    assert.deepEqual(
+      getIds(results),
+      [mango.id, vangogh.id],
+      'results are correct',
+    );
+  });
+
+  test(`can filter using 'in' thru nested fields`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      {
+        card: mango,
+        data: {
+          search_doc: {
+            name: 'Mango',
+            address: { city: 'Barksville' },
+          },
+        },
+      },
+      {
+        card: vangogh,
+        data: {
+          search_doc: {
+            name: 'Van Gogh',
+            address: { city: 'Barksville' },
+          },
+        },
+      },
+      {
+        card: ringo,
+        data: {
+          search_doc: {
+            name: 'Ringo',
+            address: { city: 'Waggington' },
+          },
+        },
+      },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          in: { 'address.city': ['Waggington'] },
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(results), [ringo.id], 'results are correct');
+  });
+
+  test(`can negate an 'in' filter with 'not'`, async function (assert) {
+    let { mango, vangogh, ringo } = testCards;
+    await setupIndex(dbAdapter, [
+      { card: mango, data: { search_doc: { name: 'Mango' } } },
+      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
+      { card: ringo, data: { search_doc: { name: 'Ringo' } } },
+    ]);
+
+    let type = await personCardType(testCards);
+    let { cards: results, meta } = await indexQueryEngine.searchCards(
+      new URL(testRealmURL),
+      {
+        filter: {
+          on: type,
+          not: { in: { name: ['Mango', 'Ringo'] } },
+        },
+      },
+    );
+
+    assert.strictEqual(meta.page.total, 1, 'the total results meta is correct');
+    assert.deepEqual(getIds(results), [vangogh.id], 'results are correct');
+  });
+
   test(`can search with a 'not' filter`, async function (assert) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [

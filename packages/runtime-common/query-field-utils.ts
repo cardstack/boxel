@@ -21,6 +21,7 @@ import {
 
 const EMPTY_PREDICATE_KEYS = new Set([
   'eq',
+  'in',
   'contains',
   'range',
   'any',
