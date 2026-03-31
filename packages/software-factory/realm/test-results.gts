@@ -379,6 +379,10 @@ export class TestRun extends CardDef {
           padding: 1.5rem;
           display: grid;
           gap: 1rem;
+          overflow: hidden;
+        }
+        .surface > section {
+          overflow: hidden;
         }
         .header-row {
           display: flex;
@@ -433,6 +437,7 @@ export class TestRun extends CardDef {
           font-family: monospace;
           white-space: pre-wrap;
           overflow-x: auto;
+          max-width: 100%;
           margin: 0.25rem 0;
           color: var(--muted-foreground);
         }
