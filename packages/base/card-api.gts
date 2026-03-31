@@ -2832,7 +2832,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           fileMetaDoc.data,
           fileMetaDoc,
-          new URL(fileMetaDoc.data.id!),
+          cardIdToURL(fileMetaDoc.data.id!),
           { store, dependencyTrackingContext },
         )) as FileDef;
       } else {
@@ -2848,7 +2848,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           cardDoc.data,
           cardDoc,
-          new URL(cardDoc.data.id!),
+          cardIdToURL(cardDoc.data.id!),
           { store, dependencyTrackingContext },
         )) as CardDef;
       }
@@ -3173,7 +3173,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = new URL(doc.data.id);
+    instance[relativeTo] = cardIdToURL(doc.data.id);
   }
 
   if (isCardInstance(instance)) {
@@ -3299,7 +3299,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let instanceRelativeTo =
     instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
-      ? new URL(instance.id)
+      ? cardIdToURL(instance.id)
       : undefined);
 
   function getFieldMeta(
@@ -3482,7 +3482,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       let relativeToVal =
         instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
-          ? new URL(instance.id)
+          ? cardIdToURL(instance.id)
           : undefined);
       let deserializedValue = await getDeserializedValue({
         card,

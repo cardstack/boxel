@@ -28,7 +28,7 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='@cardstack/catalog/' \
   --toUrl="${CATALOG_REALM_URL}" \
   \
-  --fromUrl='https://app.boxel.ai/skills/' \
+  --fromUrl='@cardstack/skills/' \
   --toUrl='https://app.boxel.ai/skills/' \
   \
   --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
