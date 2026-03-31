@@ -516,7 +516,7 @@ jobs:
           cp -a .test-web-assets-artifact/. ./
       - name: Compute shard test modules
         id: shard_modules
-        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} 6)" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(node scripts/shard-test-modules.js ${{ matrix.shardIndex }} ${{ matrix.shardTotal }})" >> "$GITHUB_OUTPUT"
         working-directory: packages/realm-server
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
