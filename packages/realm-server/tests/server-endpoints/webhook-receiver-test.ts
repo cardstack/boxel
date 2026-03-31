@@ -526,6 +526,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         pull_request: {
           number: 42,
           html_url: 'https://github.com/test/repo/pull/42',
+          body: '- Submission Card: [http://localhost:4201/user/realm/SubmissionCard/abc-123](http://localhost:4201/user/realm/SubmissionCard/abc-123)',
         },
         sender: { login: 'testuser' },
       });
@@ -547,6 +548,502 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         response.body.commandsExecuted,
         1,
         'command was enqueued for execution',
+      );
+    });
+  });
+
+  module('Origin-based filtering', function (hooks) {
+    let context = setupServerEndpointsTest(hooks);
+
+    test('rejects event when PR origin does not match filter realm', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let jwt = `Bearer ${createRealmServerJWT(
+        { user: matrixUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      )}`;
+
+      let createWebhookResponse = await context.request
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register command for production realm
+      await context.request
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-event`,
+              filter: {
+                type: 'github-event',
+                eventType: 'pull_request',
+                realm: 'https://app.boxel.ai/submissions/',
+              },
+            },
+          },
+        });
+
+      // Send event from a STAGING PR (different origin)
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: {
+          number: 100,
+          body: '- Submission Card: [https://realms-staging.stack.cards/user/realm/SubmissionCard/abc-123](https://realms-staging.stack.cards/user/realm/SubmissionCard/abc-123)',
+        },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'command was rejected because PR origin does not match filter realm',
+      );
+    });
+
+    test('accepts event when PR origin matches filter realm', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let jwt = `Bearer ${createRealmServerJWT(
+        { user: matrixUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      )}`;
+
+      let createWebhookResponse = await context.request
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register command for production realm
+      await context.request
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-event`,
+              filter: {
+                type: 'github-event',
+                eventType: 'pull_request',
+                realm: 'https://app.boxel.ai/submissions/',
+              },
+            },
+          },
+        });
+
+      // Send event from a PRODUCTION PR (same origin)
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: {
+          number: 200,
+          body: '- Submission Card: [https://app.boxel.ai/richard.tan/my-realm/SubmissionCard/def-456](https://app.boxel.ai/richard.tan/my-realm/SubmissionCard/def-456)',
+        },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        1,
+        'command was accepted because PR origin matches filter realm',
+      );
+    });
+
+    test('rejects event when realm cannot be resolved from payload', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let jwt = `Bearer ${createRealmServerJWT(
+        { user: matrixUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      )}`;
+
+      let createWebhookResponse = await context.request
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      await context.request
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-event`,
+              filter: {
+                type: 'github-event',
+                eventType: 'pull_request',
+                realm: 'https://app.boxel.ai/submissions/',
+              },
+            },
+          },
+        });
+
+      // Send event with no Submission Card in PR body
+      let payload = JSON.stringify({
+        action: 'opened',
+        pull_request: {
+          number: 999,
+          body: '## Summary\nNo submission card here',
+        },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'pull_request')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'command was rejected because realm could not be resolved (fail-closed)',
+      );
+    });
+  });
+
+  module('check_run DB lookup routing', function (hooks) {
+    let context = setupServerEndpointsTest(hooks);
+
+    test('check_run event matches via PrCard DB lookup', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let jwt = `Bearer ${createRealmServerJWT(
+        { user: matrixUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      )}`;
+
+      // Insert a PrCard into boxel_index
+      let prCardId = uuidv4();
+      let prCardUrl = `https://app.boxel.ai/submissions/PrCard/${prCardId}`;
+      await query(context.dbAdapter, [
+        `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, is_deleted, indexed_at)`,
+        `VALUES (`,
+        param(prCardUrl),
+        `,`,
+        param(prCardUrl),
+        `,`,
+        param('https://app.boxel.ai/submissions/'),
+        `,`,
+        param(1),
+        `,`,
+        param('instance'),
+        `,`,
+        `'{}'::jsonb`,
+        `,`,
+        `'{"prNumber": "55"}'::jsonb`,
+        `,`,
+        `'[]'::jsonb`,
+        `,`,
+        param(false),
+        `,`,
+        param(Date.now()),
+        `)`,
+      ]);
+
+      let createWebhookResponse = await context.request
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      await context.request
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-event`,
+              filter: {
+                type: 'github-event',
+                eventType: 'check_run',
+                realm: 'https://app.boxel.ai/submissions/',
+              },
+            },
+          },
+        });
+
+      let payload = JSON.stringify({
+        action: 'completed',
+        check_run: {
+          id: 1,
+          pull_requests: [{ number: 55 }],
+        },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'check_run')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        1,
+        'check_run matched via PrCard DB lookup',
+      );
+    });
+
+    test('check_run event rejected when PrCard origin differs from filter realm', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let jwt = `Bearer ${createRealmServerJWT(
+        { user: matrixUserId, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      )}`;
+
+      // Insert a PrCard in STAGING
+      let prCardId = uuidv4();
+      let prCardUrl = `https://realms-staging.stack.cards/submissions/PrCard/${prCardId}`;
+      await query(context.dbAdapter, [
+        `INSERT INTO boxel_index (url, file_alias, realm_url, realm_version, type, pristine_doc, search_doc, deps, is_deleted, indexed_at)`,
+        `VALUES (`,
+        param(prCardUrl),
+        `,`,
+        param(prCardUrl),
+        `,`,
+        param('https://realms-staging.stack.cards/submissions/'),
+        `,`,
+        param(1),
+        `,`,
+        param('instance'),
+        `,`,
+        `'{}'::jsonb`,
+        `,`,
+        `'{"prNumber": "77"}'::jsonb`,
+        `,`,
+        `'[]'::jsonb`,
+        `,`,
+        param(false),
+        `,`,
+        param(Date.now()),
+        `)`,
+      ]);
+
+      let createWebhookResponse = await context.request
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+
+      let webhookId = createWebhookResponse.body.data.id;
+      let webhookPath = createWebhookResponse.body.data.attributes.webhookPath;
+      let signingSecret =
+        createWebhookResponse.body.data.attributes.signingSecret;
+
+      // Register command for PRODUCTION realm
+      await context.request
+        .post('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwt)
+        .send({
+          data: {
+            type: 'webhook-command',
+            attributes: {
+              incomingWebhookId: webhookId,
+              command: `http://test-realm/commands/process-github-event`,
+              filter: {
+                type: 'github-event',
+                eventType: 'check_run',
+                realm: 'https://app.boxel.ai/submissions/',
+              },
+            },
+          },
+        });
+
+      // check_run for PR #77 — PrCard is in staging, command is production
+      let payload = JSON.stringify({
+        action: 'completed',
+        check_run: {
+          id: 2,
+          pull_requests: [{ number: 77 }],
+        },
+      });
+      let signature =
+        'sha256=' +
+        createHmac('sha256', signingSecret)
+          .update(payload, 'utf8')
+          .digest('hex');
+
+      let response = await context.request
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set('X-Hub-Signature-256', signature)
+        .set('X-GitHub-Event', 'check_run')
+        .send(payload);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.strictEqual(
+        response.body.commandsExecuted,
+        0,
+        'check_run rejected — PrCard origin (staging) does not match filter realm (production)',
       );
     });
   });

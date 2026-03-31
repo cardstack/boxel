@@ -86,6 +86,10 @@ function extractPrBodyFromPayload(payload: Record<string, any>): string | null {
 /**
  * Look up the realm URL for a PrCard with the given PR number by querying
  * the card index database.
+ *
+ * The query restricts results to PrCard instances (URL contains '/PrCard/')
+ * to avoid matching GithubEventCard instances which also carry a prNumber
+ * field but may exist in a different realm.
  */
 async function lookupRealmByPrNumber(
   dbAdapter: DBAdapter,
@@ -95,9 +99,11 @@ async function lookupRealmByPrNumber(
     let rows = await query(dbAdapter, [
       `SELECT realm_url FROM boxel_index`,
       `WHERE type = 'instance'`,
-      `AND is_deleted = FALSE`,
+      `AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+      `AND url LIKE '%/PrCard/%'`,
       `AND search_doc->>'prNumber' =`,
       param(String(prNumber)),
+      `ORDER BY indexed_at DESC`,
       `LIMIT 1`,
     ]);
     if (rows.length > 0) {
@@ -110,34 +116,45 @@ async function lookupRealmByPrNumber(
 }
 
 /**
- * Resolve the realm URL dynamically from the GitHub webhook payload.
+ * Resolve the origin of the realm that a GitHub webhook event belongs to.
  *
  * Strategy:
- * 1. If the payload contains a PR body, extract the realm from the Submission Card URL
- * 2. Otherwise, look up the PrCard by prNumber in the index DB
- * 3. Fall back to the static filter.realm if neither works
+ * 1. If the payload contains a PR body, extract the origin from the Submission Card URL
+ * 2. Otherwise, look up the PrCard by prNumber in the index DB and extract its origin
+ *
+ * Returns null if the origin cannot be determined.
  */
-async function resolveRealmFromPayload(
+async function resolveOriginFromPayload(
   payload: Record<string, any>,
-  filter: Record<string, any>,
   dbAdapter?: DBAdapter,
 ): Promise<string | null> {
   // Strategy 1: Extract from PR body (available on pull_request, pull_request_review events)
   let prBody = extractPrBodyFromPayload(payload);
   let realm = extractRealmFromPrBody(prBody);
-  if (realm) return realm;
+  if (realm) {
+    try {
+      return new URL(realm).origin;
+    } catch {
+      // fall through
+    }
+  }
 
   // Strategy 2: Look up PrCard by prNumber (for check_run, check_suite events)
   if (dbAdapter) {
     let prNumber = extractPrNumberFromPayload(payload);
     if (prNumber != null) {
-      realm = await lookupRealmByPrNumber(dbAdapter, prNumber);
-      if (realm) return realm;
+      let realmUrl = await lookupRealmByPrNumber(dbAdapter, prNumber);
+      if (realmUrl) {
+        try {
+          return new URL(realmUrl).origin;
+        } catch {
+          // fall through
+        }
+      }
     }
   }
 
-  // Strategy 3: Fall back to static filter.realm
-  return (filter.realm as string) ?? null;
+  return null;
 }
 
 /**
@@ -166,37 +183,32 @@ class GithubEventFilterHandler implements WebhookFilterHandler {
     // If that's not available, fall back to the full resolution strategy
     // (which may query the DB for check_run/check_suite events).
     if (filter.realm) {
-      let prBody = extractPrBodyFromPayload(payload);
-      let resolvedRealm = extractRealmFromPrBody(prBody);
+      let resolvedOrigin = await resolveOriginFromPayload(payload, dbAdapter);
 
-      if (!resolvedRealm && dbAdapter) {
-        let prNumber = extractPrNumberFromPayload(payload);
-        if (prNumber != null) {
-          resolvedRealm = await lookupRealmByPrNumber(dbAdapter, prNumber);
-        }
-      }
-
-      if (resolvedRealm) {
+      if (resolvedOrigin) {
         try {
           let filterOrigin = new URL(filter.realm as string).origin;
-          let resolvedOrigin = new URL(resolvedRealm).origin;
           if (filterOrigin !== resolvedOrigin) {
             return false;
           }
         } catch {
+          // filter.realm is malformed — reject to avoid bypassing origin check
           console.warn(
-            `Failed to compare realm origins for webhook filter ` +
-              `(filter.realm=${filter.realm}, resolvedRealm=${resolvedRealm}), ` +
-              `allowing match as fallback`,
+            `Failed to parse filter.realm URL (${filter.realm}), rejecting match`,
           );
+          return false;
         }
       } else {
+        // Could not resolve origin from payload — reject the match to prevent
+        // cross-environment broadcast. This is the safer default: if we can't
+        // determine which environment the PR belongs to, don't process it.
         let prNumber = extractPrNumberFromPayload(payload);
         console.warn(
-          `Could not resolve realm from webhook payload ` +
-            `(eventType=${eventType}, prNumber=${prNumber ?? 'unknown'}). ` +
-            `Falling back to broadcast — event will be processed by all environments.`,
+          `Could not resolve realm origin from webhook payload ` +
+            `(eventType=${eventType}, prNumber=${prNumber ?? 'unknown'}), ` +
+            `rejecting match`,
         );
+        return false;
       }
     }
 
@@ -207,16 +219,16 @@ class GithubEventFilterHandler implements WebhookFilterHandler {
     payload: Record<string, any>,
     headers: Koa.Context['req']['headers'],
     filter: Record<string, any>,
-    dbAdapter?: DBAdapter,
   ): Promise<Record<string, any>> {
     let eventType = (headers['x-github-event'] as string) ?? '';
 
-    let realm = await resolveRealmFromPayload(payload, filter, dbAdapter);
+    // Always use the static filter.realm (the submissions realm) for the
+    // command input. The dynamic origin check in matches() already ensures
+    // we only reach here for the correct environment.
+    let realm = filter.realm as string | undefined;
     if (!realm) {
       throw new Error(
-        'Could not determine realm for github-event webhook command: ' +
-          'no Submission Card URL found in PR body, no PrCard found in index, ' +
-          'and no static realm configured in filter',
+        'realm must be provided in the filter for github-event webhook commands',
       );
     }
 
@@ -230,14 +242,9 @@ class GithubEventFilterHandler implements WebhookFilterHandler {
   async getRealmURL(
     filter: Record<string, any>,
     commandURL: string,
-    payload?: Record<string, any>,
-    _headers?: Koa.Context['req']['headers'],
-    dbAdapter?: DBAdapter,
   ): Promise<string> {
-    if (payload) {
-      let realm = await resolveRealmFromPayload(payload, filter, dbAdapter);
-      if (realm) return realm;
-    }
+    // Always use the static filter.realm. The dynamic origin check in
+    // matches() already ensures we only reach here for the correct environment.
     return (
       (filter.realm as string | undefined) ??
       new URL('/submissions/', commandURL).href
