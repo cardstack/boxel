@@ -140,6 +140,11 @@ export function getSearchTerm(searchKey: string): string | undefined {
 // which produces impossible SQL (the query engine shares one cross-join alias
 // for all tableValuedEach('types') references).
 function stripTypeFromFilter(filter: Filter): Filter | undefined {
+  // Preserve the `on` property (TypedFilter) so field-scoped filters
+  // like {on: specRef, every: [{eq: {isCard: true}}]} keep their type context.
+  const on =
+    'on' in filter ? (filter as Filter & { on: CodeRef }).on : undefined;
+
   if (isCardTypeFilter(filter) && Object.keys(filter).length === 1) {
     return undefined;
   }
@@ -148,21 +153,21 @@ function stripTypeFromFilter(filter: Filter): Filter | undefined {
       .map((f) => stripTypeFromFilter(f))
       .filter((f): f is Filter => f !== undefined);
     if (children.length === 0) return undefined;
-    if (children.length === 1) return children[0];
-    return { every: children };
+    if (children.length === 1) return on ? { ...children[0], on } : children[0];
+    return on ? { every: children, on } : { every: children };
   }
   if (isAnyFilter(filter)) {
     const children = filter.any
       .map((f) => stripTypeFromFilter(f))
       .filter((f): f is Filter => f !== undefined);
     if (children.length === 0) return undefined;
-    if (children.length === 1) return children[0];
-    return { any: children };
+    if (children.length === 1) return on ? { ...children[0], on } : children[0];
+    return on ? { any: children, on } : { any: children };
   }
   if (isNotFilter(filter)) {
     const inner = stripTypeFromFilter(filter.not);
     if (!inner) return undefined;
-    return { not: inner };
+    return on ? { not: inner, on } : { not: inner };
   }
   return filter;
 }
