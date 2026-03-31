@@ -80,19 +80,16 @@ export default class Workspace extends Component<Signature> {
             </div>
           </div>
         </ItemContainer>
-        <button
+        <ContextButton
           class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'
-          type='button'
+          @label={{if this.isFavorited 'Unfavorite' 'Favorite'}}
+          @icon={{if this.isFavorited StarFilled Star}}
+          @variant='ghost'
+          @width='16'
+          @height='16'
           {{on 'click' this.toggleFavorite}}
-          aria-label={{if this.isFavorited 'Unfavorite' 'Favorite'}}
           data-test-workspace-favorite-btn={{@realmURL}}
-        >
-          {{#if this.isFavorited}}
-            <StarFilled width='16' height='16' />
-          {{else}}
-            <Star width='16' height='16' />
-          {{/if}}
-        </button>
+        />
         <div class='tile-menu-btn'>
           <BoxelDropdown @autoClose={{true}}>
             <:trigger as |bindings|>
@@ -303,13 +300,6 @@ export default class Workspace extends Component<Signature> {
         --icon-color: var(--boxel-light);
         opacity: 0;
         transition: opacity 0.15s ease;
-        background: none;
-        border: none;
-        padding: var(--boxel-sp-4xs);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
       .workspace-card:hover .tile-favorite-btn {
         opacity: 1;
