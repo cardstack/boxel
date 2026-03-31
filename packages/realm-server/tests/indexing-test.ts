@@ -1496,7 +1496,10 @@ module(basename(__filename), function () {
               let urls = rows[0].args.changes
                 .map((change) => change.url)
                 .sort();
-              return urls.length === expectedUrls.length ? rows[0] : undefined;
+              return urls.length === expectedUrls.length &&
+                urls.every((url, i) => url === expectedUrls[i])
+                ? rows[0]
+                : undefined;
             },
             {
               timeout: 3000,
