@@ -196,7 +196,9 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
-      assert.dom('[data-test-sort-dropdown-trigger]').includesText('Hosted Only');
+      assert
+        .dom('[data-test-sort-dropdown-trigger]')
+        .includesText('Hosted Only');
     });
 
     test('can switch back to View All filter', async function (assert) {
@@ -205,7 +207,9 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="Hosted Only"]');
 
-      assert.dom('[data-test-sort-dropdown-trigger]').includesText('Hosted Only');
+      assert
+        .dom('[data-test-sort-dropdown-trigger]')
+        .includesText('Hosted Only');
 
       await click('[data-test-sort-dropdown-trigger]');
       await click('[data-test-boxel-menu-item-text="View All"]');
