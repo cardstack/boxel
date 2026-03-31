@@ -36,6 +36,17 @@ diff --git a/dist/ember.prod.js b/dist/ember.prod.js
              return {
                symbols: {
                  locals: locals,
+diff --git a/dist/ember-template-compiler.js b/dist/ember-template-compiler.js
+--- a/dist/ember-template-compiler.js
++++ b/dist/ember-template-compiler.js
+@@ -16479,7 +16479,6 @@
+           if (typeof module === 'object' && module.exports) {
+             module.exports = emberTemplateCompilerIndex;
+           }
+-          console.log('\n\n--------\n+ Your app is using the legacy ember-template-compiler.js AMD bundle. This will be removed in ember-source 7.0. See https://deprecations.emberjs.com/id/using-amd-bundles for more details.\n--------');
+
+ })((() => {
+       try {
 diff --git a/dist/packages/@glimmer/opcode-compiler/index.js b/dist/packages/@glimmer/opcode-compiler/index.js
 --- a/dist/packages/@glimmer/opcode-compiler/index.js
 +++ b/dist/packages/@glimmer/opcode-compiler/index.js
