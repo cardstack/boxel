@@ -5,13 +5,17 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import CircleAlert from '@cardstack/boxel-icons/circle-alert';
 import Home from '@cardstack/boxel-icons/home';
 import { dropTask, task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
 
 import {
   BoxelDropdown,
+  Button,
   ContextButton,
+  LoadingIndicator,
   Menu,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
@@ -30,7 +34,7 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 
-import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
+import ModalContainer from '@cardstack/host/components/modal-container';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -156,81 +160,100 @@ export default class Workspace extends Component<Signature> {
         </div>
       </div>
       {{#if this.showDeleteModal}}
-        <DeleteModal
-          @itemToDelete={{this.workspaceToDelete}}
-          @onCancel={{this.closeDeleteModal}}
-          @onConfirm={{this.confirmDeleteWorkspace}}
-          @isDeleteRunning={{this.deleteWorkspaceTask.isRunning}}
-          @error={{this.deleteError}}
+        <ModalContainer
+          @title='Delete Workspace'
+          @onClose={{this.closeDeleteModal}}
           @size='medium'
-          @containerClass='workspace-delete-dialog'
+          @cardContainerClass='delete-modal'
+          data-test-delete-modal={{@realmURL}}
         >
           <:content>
-            <div class='workspace-delete-copy'>
-              <header class='workspace-delete-header'>
-                <p class='workspace-delete-title'>Delete Workspace</p>
-              </header>
+            <div class='delete-modal__header'>
+              <CircleAlert class='delete-modal__warning-icon' />
+              <h2 class='delete-modal__title'>Delete Workspace</h2>
+            </div>
 
-              <section class='workspace-delete-summary-card'>
-                <div class='workspace-delete-summary-row'>
-                  <RealmIcon
-                    class='workspace-delete-summary-icon'
-                    @realmInfo={{this.realmInfo}}
-                  />
-                  <div class='workspace-delete-summary-body'>
-                    <p class='workspace-delete-summary-name'>{{this.name}}</p>
-                    {{#if this.loadDeleteSummaryTask.isRunning}}
-                      <p class='workspace-delete-summary-text'>
-                        Checking what will be removed from this workspace...
-                      </p>
-                    {{else if this.deleteSummaryText}}
-                      <p class='workspace-delete-summary-text'>
-                        Contains
-                        {{this.deleteSummaryText}}
-                      </p>
-                    {{/if}}
-                  </div>
-                </div>
-              </section>
-
-              <div class='workspace-delete-danger-panel'>
-                <p class='workspace-delete-warning'>
-                  This permanently deletes the workspace and any custom domains
-                  tied to it.
-                </p>
-
-                {{#if this.hasPublishedRealms}}
-                  <div class='workspace-delete-published'>
-                    <p class='workspace-delete-published-title'>
-                      Published
-                      {{pluralize 'realm' this.publishedRealmURLs.length}}
-                      that will also be removed
-                    </p>
-                    <ul class='workspace-delete-published-list'>
-                      {{#each this.publishedRealmURLs as |publishedRealmURL|}}
-                        <li>
-                          <a
-                            href={{publishedRealmURL}}
-                            target='_blank'
-                            rel='noopener noreferrer'
-                          >
-                            {{publishedRealmURL}}
-                          </a>
-                        </li>
-                      {{/each}}
-                    </ul>
-                  </div>
+            <div class='delete-modal__workspace-card'>
+              <div class='delete-modal__realm-icon-wrapper'>
+                <RealmIcon
+                  class='delete-modal__realm-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+              </div>
+              <div class='delete-modal__workspace-info'>
+                <span class='delete-modal__workspace-name'>{{this.name}}</span>
+                {{#if this.loadDeleteSummaryTask.isRunning}}
+                  <span class='delete-modal__workspace-meta'>
+                    Checking what will be removed from this workspace...
+                  </span>
+                {{else if this.deleteSummaryText}}
+                  <span class='delete-modal__workspace-meta'>
+                    Contains
+                    <strong>{{this.deleteSummaryText}}</strong>
+                  </span>
                 {{/if}}
-
-                <p
-                  class='workspace-delete-warning workspace-delete-warning--strong'
-                >
-                  Links to cards in this workspace may stop working elsewhere.
-                </p>
               </div>
             </div>
+
+            <div class='delete-modal__warning-box'>
+              <p class='delete-modal__warning-text'>
+                <strong>
+                  This permanently deletes the workspace and any custom domains
+                  tied to it.
+                </strong>
+                <strong>
+                  Links to cards in this workspace may stop working elsewhere.
+                </strong>
+              </p>
+              {{#if this.hasPublishedRealms}}
+                <div class='delete-modal__realms'>
+                  <p class='delete-modal__realms-title'>
+                    Published
+                    {{pluralize 'realm' this.publishedRealmURLs.length}}
+                    that will also be removed
+                  </p>
+                  <ul class='delete-modal__realms-list'>
+                    {{#each this.publishedRealmURLs as |publishedRealmURL|}}
+                      <li>{{publishedRealmURL}}</li>
+                    {{/each}}
+                  </ul>
+                </div>
+              {{/if}}
+            </div>
+
+            {{#if this.deleteError}}
+              <p class='delete-modal__error'>{{this.deleteError}}</p>
+            {{/if}}
           </:content>
-        </DeleteModal>
+          <:footer>
+            <div class='delete-modal__footer'>
+              <div class='delete-modal__actions'>
+                {{#if this.deleteWorkspaceTask.isRunning}}
+                  <LoadingIndicator class='delete-modal__spinner' />
+                {{else}}
+                  <Button
+                    {{on 'click' this.closeDeleteModal}}
+                    class='delete-modal__cancel'
+                    data-test-cancel-delete-button
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    type='button'
+                    class='delete-modal__confirm'
+                    data-test-confirm-delete-button
+                    {{on 'click' (perform this.deleteWorkspaceTask)}}
+                  >
+                    Delete this workspace
+                  </button>
+                {{/if}}
+              </div>
+              <span class='delete-modal__disclaimer'>
+                This action is not reversible
+              </span>
+            </div>
+          </:footer>
+        </ModalContainer>
       {{/if}}
     {{/if}}
     <style scoped>
@@ -523,123 +546,174 @@ export default class Workspace extends Component<Signature> {
       .workspace-menu__list {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
-      .workspace-delete-copy {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        margin: 0;
-        text-align: left;
+      :global(.delete-modal) {
+        border-radius: 20px;
+        max-width: 650px;
       }
-      .workspace-delete-copy p {
-        margin: 0;
-      }
-      .workspace-delete-header {
-        padding-bottom: var(--boxel-sp);
-      }
-      .workspace-delete-title {
-        color: var(--boxel-dark);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-xl);
-        line-height: 1.1;
-        font-family: var(--boxel-font-family);
-        letter-spacing: -0.02em;
-      }
-      .workspace-delete-summary-card {
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
-        color: var(--boxel-dark);
-        background: var(--boxel-50);
-        border: var(--boxel-border-card);
-        border-radius: var(--boxel-border-radius-xxl);
-      }
-      .workspace-delete-summary-row {
+      .delete-modal__header {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
       }
-      .workspace-delete-summary-icon {
+      .delete-modal__warning-icon {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        color: #ff5050;
         flex-shrink: 0;
-        --boxel-realm-icon-size: var(--boxel-icon-lg);
-        --boxel-realm-icon-border-radius: 999px;
-        box-shadow: 0 0 0 2px rgb(255 255 255 / 90%);
       }
-      .workspace-delete-summary-body {
+      .delete-modal__title {
+        font-size: 26px;
+        font-weight: 700;
+        color: black;
+        margin: 0;
+      }
+      .delete-modal__workspace-card {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        background: #f4f4f4;
+        border-radius: 13px;
+        padding: 15px;
+        min-height: 82px;
+      }
+      .delete-modal__realm-icon-wrapper {
+        position: relative;
+        flex-shrink: 0;
+        border-radius: calc(var(--boxel-border-radius-xs) + 6px);
+        display: flex;
+      }
+      .delete-modal__realm-icon-wrapper::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 50%);
+        z-index: 1;
+        pointer-events: none;
+      }
+      .delete-modal__realm-icon {
+        --boxel-realm-icon-size: 42px;
+        --boxel-realm-icon-border-radius: calc(
+          var(--boxel-border-radius-xs) + 6px
+        );
+        --boxel-realm-icon-background-color: var(--boxel-light);
+      }
+      .delete-modal__workspace-info {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-6xs);
+        gap: 4px;
       }
-      .workspace-delete-summary-name {
-        color: var(--boxel-dark);
+      .delete-modal__workspace-name {
+        font-size: 14px;
         font-weight: 700;
-        font-size: 1.125rem;
-        line-height: 1.15;
-        font-family: var(--boxel-font-family);
-        letter-spacing: -0.02em;
+        color: black;
       }
-      .workspace-delete-summary-text {
-        color: var(--boxel-450);
+      .delete-modal__workspace-meta {
+        font-size: 14px;
         font-weight: 400;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        font-family: var(--boxel-font-family);
+        color: black;
       }
-      .workspace-delete-danger-panel {
+      .delete-modal__warning-box {
+        background: #ffe9e9;
+        border-radius: 13px;
+        padding: 24px;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
-        background: rgb(255 90 90 / 9%);
-        border: 1px solid rgb(255 90 90 / 18%);
-        border-radius: var(--boxel-border-radius-xxl);
       }
-      .workspace-delete-warning {
-        color: var(--boxel-dark);
-        font-weight: 600;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        font-family: var(--boxel-font-family);
-      }
-      .workspace-delete-warning--strong {
+      .delete-modal__warning-text {
+        margin: 0;
+        font-size: 14px;
         font-weight: 700;
-        font-size: var(--boxel-font-size);
-        line-height: var(--boxel-line-height);
-      }
-      .workspace-delete-published {
+        color: black;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-sm) var(--boxel-sp);
-        background: var(--boxel-light);
-        border-radius: var(--boxel-border-radius-xl);
+        gap: 6px;
       }
-      .workspace-delete-published-title {
-        color: var(--boxel-dark);
-        font-weight: 700;
-        font-size: var(--boxel-font-size-sm);
-        line-height: 1.25;
-        font-family: var(--boxel-font-family);
+      .delete-modal__realms {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 4px;
       }
-      .workspace-delete-published-list {
+      .delete-modal__realms-title {
         margin: 0;
-        padding-left: var(--boxel-sp);
-        text-align: left;
+        font-size: 14px;
+        font-weight: 700;
+        color: black;
       }
-      .workspace-delete-published-list li + li {
-        margin-top: var(--boxel-sp-5xs);
+      .delete-modal__realms-list {
+        margin: 0;
+        padding-left: 21px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
-      .workspace-delete-published-list a {
-        color: var(--boxel-blue);
+      .delete-modal__realms-list li {
+        font-size: 14px;
+        font-weight: 500;
+        color: black;
+        list-style: disc;
+      }
+      .delete-modal__error {
+        color: #ff5050;
+        font-size: 14px;
         font-weight: 600;
-        font-size: var(--boxel-font-size-sm);
-        line-height: var(--boxel-line-height-sm);
-        font-family: var(--boxel-font-family);
-        word-break: break-all;
-        text-decoration-thickness: 1px;
-        text-underline-offset: 0.12em;
+        margin: 0;
       }
-      :global(.workspace-delete-dialog) {
-        background-color: var(--boxel-light-100);
-        padding: var(--boxel-sp-2xl) var(--boxel-sp-2xl) var(--boxel-sp-xl);
-        border-radius: var(--boxel-border-radius-xxl);
+      .delete-modal__footer {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--boxel-sp-xs);
+        width: 100%;
+      }
+      .delete-modal__actions {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+        align-items: center;
+      }
+      .delete-modal__cancel {
+        background: none;
+        border: 1px solid #939393;
+        border-radius: 20px;
+        padding: 0 20px;
+        height: 40px;
+        font-size: 14px;
+        font-weight: 700;
+        color: black;
+        cursor: pointer;
+        transition:
+          border-color 0.15s ease,
+          background 0.15s ease;
+      }
+      .delete-modal__cancel:hover {
+        border-color: #555;
+        background: #f4f4f4;
+      }
+      .delete-modal__confirm {
+        background: #ff5050;
+        border: none;
+        border-radius: 20px;
+        padding: 0 24px;
+        height: 40px;
+        font-size: 14px;
+        font-weight: 700;
+        color: white;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+      .delete-modal__confirm:hover {
+        background: #e03e3e;
+      }
+      .delete-modal__disclaimer {
+        font-size: 12px;
+        font-weight: 700;
+        color: #ff5050;
+      }
+      .delete-modal__spinner {
+        --boxel-loading-indicator-size: 2rem;
       }
     </style>
   </template>
@@ -758,13 +832,6 @@ export default class Workspace extends Component<Signature> {
     }
   }
 
-  private get workspaceToDelete() {
-    return {
-      id: this.args.realmURL,
-      name: this.name,
-    };
-  }
-
   private get canDeleteWorkspace() {
     return this.realm.isRealmOwner(this.args.realmURL);
   }
@@ -818,10 +885,6 @@ export default class Workspace extends Component<Signature> {
     }
     this.showDeleteModal = false;
     this.deleteError = undefined;
-  }
-
-  @action confirmDeleteWorkspace() {
-    this.deleteWorkspaceTask.perform();
   }
 
   private loadDeleteSummaryTask = dropTask(async () => {
