@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { module, test } from 'qunit';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '../src/mime-types';
 
 const packageRoot = resolve(__dirname, '..');
 const stickyNoteFixture = readFileSync(

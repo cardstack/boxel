@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '../src/mime-types';
 
 import { expect, test } from './fixtures';
 import {

@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '../mime-types';
 
 import {
   readPreparedTemplateMetadata,

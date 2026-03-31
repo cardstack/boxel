@@ -1,7 +1,6 @@
-import {
-  type LooseSingleCardDocument,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+import { SupportedMimeType } from './mime-types';
 
 const markdownLinkPattern = /\[([^\]]+)\]\([^)]+\)/g;
 const wikiLinkPattern = /\[\[([^[\]]+)\]\]/g;
