@@ -4,11 +4,11 @@ import type {
   ListingPathResolver,
   ModuleResource,
   LooseCardResource,
-  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   type ResolvedCodeRef,
   RealmPaths,
+  logger,
   join,
   planModuleInstall,
   planInstanceInstall,
@@ -18,8 +18,6 @@ import {
   isSingleCardDocument,
   type Relationship,
   cardIdToURL,
-} from '@cardstack/runtime-common';
-import { logger   cardIdToURL,
 } from '@cardstack/runtime-common';
 import type {
   AtomicOperation,

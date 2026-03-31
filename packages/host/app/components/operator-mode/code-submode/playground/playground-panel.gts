@@ -50,7 +50,6 @@ import {
   type Query,
   type CardErrorJSONAPI,
   type PrerenderedCardLike,
-  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import Overlays from '@cardstack/host/components/operator-mode/overlays';

@@ -1,7 +1,6 @@
 import { service } from '@ember/service';
 
-import type { ResolvedCodeRef   cardIdToURL,
-} from '@cardstack/runtime-common';
+import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,

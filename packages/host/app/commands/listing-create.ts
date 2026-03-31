@@ -5,7 +5,6 @@ import { isScopedCSSRequest } from 'glimmer-scoped-css';
 import type {
   LooseSingleCardDocument,
   ResolvedCodeRef,
-  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   isCardInstance,
