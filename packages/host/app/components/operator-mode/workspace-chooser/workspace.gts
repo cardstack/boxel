@@ -546,21 +546,27 @@ export default class Workspace extends Component<Signature> {
       .workspace-menu__list {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
-      :global(.workspace-chooser-delete-modal) {
+      :global(.boxel-modal__inner > .workspace-chooser-delete-modal) {
         border-radius: 20px;
         max-width: 650px;
         height: auto;
+        display: flex;
+        flex-direction: column;
       }
-      :global(.workspace-chooser-delete-modal .dialog-box__header) {
+      :global(.workspace-chooser-delete-modal > .dialog-box__header) {
         display: none;
       }
-      :global(.workspace-chooser-delete-modal .dialog-box__content) {
+      :global(.workspace-chooser-delete-modal > .dialog-box__content) {
         padding: var(--boxel-sp-lg) 30px;
         overflow: visible;
         height: auto;
+        flex: none;
       }
-      :global(.workspace-chooser-delete-modal .dialog-box__footer) {
+      :global(.workspace-chooser-delete-modal > .dialog-box__footer) {
         height: auto;
+        flex: none;
+        padding: 0 30px 30px;
+        border-top: none;
       }
       .delete-modal__header {
         display: flex;
