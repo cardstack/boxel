@@ -95,6 +95,12 @@ let handleWindowResizeModifier = modifier(
   },
 );
 
+let captureElement = modifier(
+  (element, [onInsert]: [(element: Element) => void]) => {
+    onInsert(element);
+  },
+);
+
 type PanelWidths = {
   defaultWidth: number | null;
   minWidth: number | null;
@@ -103,6 +109,7 @@ type PanelWidths = {
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
+  @tracked private topBarCenterElement: Element | null = null;
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -116,6 +123,11 @@ export default class SubmodeLayout extends Component<Signature> {
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
   declare private doSearch: (term: string) => void;
+
+  @action
+  private storeTopBarCenterElement(element: Element) {
+    this.topBarCenterElement = element;
+  }
 
   @action
   private onLayoutChange(layout: number[]) {
@@ -401,6 +413,12 @@ export default class SubmodeLayout extends Component<Signature> {
               {{on 'click' this.toggleWorkspaceChooser}}
               data-test-workspace-chooser-toggle
             />
+            {{#if this.workspaceChooserOpened}}
+              <div
+                class='submode-layout-top-bar-center'
+                {{captureElement this.storeTopBarCenterElement}}
+              ></div>
+            {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -432,7 +450,9 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser />
+            <WorkspaceChooser
+              @topBarCenterElement={{this.topBarCenterElement}}
+            />
           {{/if}}
 
           {{yield
@@ -568,15 +588,17 @@ export default class SubmodeLayout extends Component<Signature> {
         max-width: 100%;
         padding: var(--operator-mode-spacing);
         z-index: var(--host-top-bar-z-index);
-        pointer-events: none;
 
         display: flex;
         align-items: center;
         gap: var(--operator-mode-spacing);
       }
 
-      .submode-layout-top-bar > * {
-        pointer-events: auto;
+      .submode-layout-top-bar-center {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        min-width: 0;
       }
 
       .submode-switcher {

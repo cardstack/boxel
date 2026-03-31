@@ -27,7 +27,9 @@ interface SortOption {
 
 interface Signature {
   Element: HTMLDivElement;
-  Args: {};
+  Args: {
+    topBarCenterElement: Element | null;
+  };
 }
 
 export default class WorkspaceChooser extends Component<Signature> {
@@ -133,21 +135,25 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
-      <div class='sort-controls'>
-        <BoxelSelect
-          class='sort-select'
-          @options={{this.sortOptions}}
-          @selected={{this.selectedSortOption}}
-          @onChange={{this.onSortChange}}
-          @matchTriggerWidth={{false}}
-          aria-label='Filter workspaces'
-          data-test-sort-dropdown-trigger
-          as |option|
-        >
-          <option.icon width='16' height='16' />
-          {{option.label}}
-        </BoxelSelect>
-      </div>
+      {{#if @topBarCenterElement}}
+        {{#in-element @topBarCenterElement}}
+          <div class='sort-controls'>
+            <BoxelSelect
+              class='sort-select'
+              @options={{this.sortOptions}}
+              @selected={{this.selectedSortOption}}
+              @onChange={{this.onSortChange}}
+              @matchTriggerWidth={{false}}
+              aria-label='Filter workspaces'
+              data-test-sort-dropdown-trigger
+              as |option|
+            >
+              <option.icon width='16' height='16' />
+              {{option.label}}
+            </BoxelSelect>
+          </div>
+        {{/in-element}}
+      {{/if}}
       <div class='workspace-chooser__content boxel-dark-scrollbar'>
         <div class='sections-wrapper'>
           <div class='workspace-section' data-test-favorites-section>
@@ -232,14 +238,8 @@ export default class WorkspaceChooser extends Component<Signature> {
         z-index: var(--host-workspace-chooser-z-index);
       }
       .sort-controls {
-        position: absolute;
-        left: 50%;
-        top: var(--operator-mode-spacing);
-        height: var(--operator-mode-top-bar-item-height);
-        transform: translateX(-50%);
         display: flex;
         align-items: center;
-        z-index: 1;
       }
       .sort-select {
         --boxel-select-background-color: rgb(42 32 64 / 90%);
