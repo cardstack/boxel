@@ -102,6 +102,78 @@ export class TestResultEntry extends FieldDef {
   };
 }
 
+export class SpecResult extends FieldDef {
+  static displayName = 'Spec Result';
+
+  @field specRef = contains(CodeRefField);
+  @field results = containsMany(TestResultEntry);
+
+  @field passedCount = contains(NumberField, {
+    computeVia: function (this: SpecResult) {
+      return (this.results ?? []).filter((r) => r.status === 'passed').length;
+    },
+  });
+
+  @field failedCount = contains(NumberField, {
+    computeVia: function (this: SpecResult) {
+      return (this.results ?? []).filter(
+        (r) => r.status === 'failed' || r.status === 'error',
+      ).length;
+    },
+  });
+
+  get specName() {
+    return this.specRef?.module ?? 'default';
+  }
+
+  static embedded = class Embedded extends Component<typeof SpecResult> {
+    get total() {
+      return (
+        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+      );
+    }
+
+    <template>
+      <div class='spec-result'>
+        <div class='spec-header'>
+          <span class='spec-name'>{{this.args.model.specName}}</span>
+          <span class='spec-counts'>
+            {{this.args.model.passedCount}}/{{this.total}}
+            passed
+          </span>
+        </div>
+        <div class='spec-entries'>
+          <@fields.results />
+        </div>
+      </div>
+      <style scoped>
+        .spec-result {
+          margin-bottom: 0.75rem;
+        }
+        .spec-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 0.25rem 0;
+          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
+          margin-bottom: 0.25rem;
+        }
+        .spec-name {
+          font-weight: 600;
+          font-size: 0.85rem;
+        }
+        .spec-counts {
+          font-size: 0.8rem;
+          color: var(--muted-foreground);
+        }
+        .spec-entries {
+          padding-left: 0.5rem;
+        }
+      </style>
+    </template>
+  };
+}
+
 export class TestRun extends CardDef {
   static displayName = 'Test Run';
 
@@ -110,23 +182,26 @@ export class TestRun extends CardDef {
   @field completedAt = contains(DateTimeField);
   @field project = linksTo(() => Project);
   @field ticket = linksTo(() => Ticket);
-  @field specRef = contains(CodeRefField);
   @field status = contains(TestRunStatusField);
   @field durationMs = contains(NumberField);
-  @field results = containsMany(TestResultEntry);
+  @field specResults = containsMany(SpecResult);
   @field errorMessage = contains(StringField);
 
   @field passedCount = contains(NumberField, {
     computeVia: function (this: TestRun) {
-      return (this.results ?? []).filter((r) => r.status === 'passed').length;
+      return (this.specResults ?? []).reduce(
+        (sum, sr) => sum + (sr.passedCount ?? 0),
+        0,
+      );
     },
   });
 
   @field failedCount = contains(NumberField, {
     computeVia: function (this: TestRun) {
-      return (this.results ?? []).filter(
-        (r) => r.status === 'failed' || r.status === 'error',
-      ).length;
+      return (this.specResults ?? []).reduce(
+        (sum, sr) => sum + (sr.failedCount ?? 0),
+        0,
+      );
     },
   });
 
@@ -220,8 +295,11 @@ export class TestRun extends CardDef {
     }
 
     get failedResults() {
-      return (this.args.model.results ?? []).filter(
-        (r) => r.status === 'failed' || r.status === 'error',
+      return (this.args.model.specResults ?? []).flatMap(
+        (sr) =>
+          (sr.results ?? []).filter(
+            (r) => r.status === 'failed' || r.status === 'error',
+          ),
       );
     }
 
@@ -258,13 +336,6 @@ export class TestRun extends CardDef {
           </section>
         {{/if}}
 
-        {{#if @model.specRef}}
-          <section>
-            <h2>Spec</h2>
-            <@fields.specRef />
-          </section>
-        {{/if}}
-
         {{#if @model.errorMessage}}
           <section>
             <h2>Error</h2>
@@ -289,10 +360,10 @@ export class TestRun extends CardDef {
           </section>
         {{/if}}
 
-        {{#if @model.results.length}}
+        {{#if @model.specResults.length}}
           <section>
-            <h2>All Results</h2>
-            <@fields.results />
+            <h2>Results by Spec</h2>
+            <@fields.specResults />
           </section>
         {{/if}}
       </article>

@@ -1,6 +1,7 @@
 import type { TestResult } from './factory-agent';
 import type {
   RunRealmTestsOutput,
+  SpecResultData,
   TestResultEntryData,
   TestRunAttributes,
 } from './test-run-types';
@@ -26,11 +27,11 @@ export function parseRunRealmTestsOutput(
   }
 
   // Build results from ALL tests (passing + failing), not just failures.
-  let results: TestResultEntryData[];
+  let specResults: SpecResultData[];
   if (playwrightReport.suites) {
-    results = extractAllPlaywrightResults(playwrightReport.suites);
+    specResults = extractGroupedPlaywrightResults(playwrightReport.suites);
   } else {
-    results = rawFailures.map((f) => {
+    let results: TestResultEntryData[] = rawFailures.map((f) => {
       let { message, stackTrace } = splitErrorAndStack(f.error);
       return {
         testName: f.title,
@@ -39,11 +40,13 @@ export function parseRunRealmTestsOutput(
         ...(stackTrace ? { stackTrace: stackTrace.slice(0, 500) } : {}),
       };
     });
+    specResults = results.length > 0 ? [{ results }] : [];
   }
 
+  let allResults = specResults.flatMap((sr) => sr.results);
   let hasFailures =
     unexpected > 0 ||
-    results.some((r) => r.status === 'failed' || r.status === 'error');
+    allResults.some((r) => r.status === 'failed' || r.status === 'error');
   let status: TestRunAttributes['status'] = hasFailures ? 'failed' : 'passed';
 
   // If no tests ran at all, check for Playwright-level errors (e.g. module not found).
@@ -61,7 +64,7 @@ export function parseRunRealmTestsOutput(
         failedCount: 0,
         durationMs,
         errorMessage: errorMessage || 'No tests found',
-        results: [],
+        specResults: [],
       };
     }
     status = 'error';
@@ -70,12 +73,12 @@ export function parseRunRealmTestsOutput(
   // When results include both passing and failing entries (Playwright format),
   // derive counts from results to match the card's computed fields.
   // For legacy format (failures only), use the stats counts.
-  let hasPassingResults = results.some((r) => r.status === 'passed');
+  let hasPassingResults = allResults.some((r) => r.status === 'passed');
   let passedCount = hasPassingResults
-    ? results.filter((r) => r.status === 'passed').length
+    ? allResults.filter((r) => r.status === 'passed').length
     : expected;
   let failedCount = hasPassingResults
-    ? results.filter((r) => r.status === 'failed' || r.status === 'error')
+    ? allResults.filter((r) => r.status === 'failed' || r.status === 'error')
         .length
     : unexpected;
 
@@ -84,7 +87,7 @@ export function parseRunRealmTestsOutput(
     passedCount,
     failedCount,
     durationMs,
-    results,
+    specResults,
   };
 }
 
@@ -96,6 +99,7 @@ interface PlaywrightJsonReport {
 }
 
 interface PlaywrightSuite {
+  title?: string;
   specs?: PlaywrightSpec[];
   suites?: PlaywrightSuite[];
 }
@@ -136,35 +140,44 @@ function extractPlaywrightFailures(
   return failures;
 }
 
-function extractAllPlaywrightResults(
-  suites: PlaywrightSuite[],
+function extractResultsFromSuite(
+  suite: PlaywrightSuite,
 ): TestResultEntryData[] {
   let results: TestResultEntryData[] = [];
-  for (let suite of suites) {
-    if (suite.suites) {
-      results.push(...extractAllPlaywrightResults(suite.suites));
-    }
-    for (let spec of suite.specs ?? []) {
-      let testResult = spec.tests?.[0]?.results?.[0];
-      let status: TestResultEntryData['status'] = spec.ok ? 'passed' : 'failed';
-      let entry: TestResultEntryData = {
-        testName: spec.title ?? 'unknown',
-        status,
-        durationMs: testResult?.duration,
-      };
-      if (!spec.ok && testResult?.errors?.[0]?.message) {
-        let { message, stackTrace } = splitErrorAndStack(
-          testResult.errors[0].message,
-        );
-        entry.message = message;
-        if (stackTrace) {
-          entry.stackTrace = stackTrace.slice(0, 500);
-        }
-      }
-      results.push(entry);
+  if (suite.suites) {
+    for (let nested of suite.suites) {
+      results.push(...extractResultsFromSuite(nested));
     }
   }
+  for (let spec of suite.specs ?? []) {
+    let testResult = spec.tests?.[0]?.results?.[0];
+    let status: TestResultEntryData['status'] = spec.ok ? 'passed' : 'failed';
+    let entry: TestResultEntryData = {
+      testName: spec.title ?? 'unknown',
+      status,
+      durationMs: testResult?.duration,
+    };
+    if (!spec.ok && testResult?.errors?.[0]?.message) {
+      let { message, stackTrace } = splitErrorAndStack(
+        testResult.errors[0].message,
+      );
+      entry.message = message;
+      if (stackTrace) {
+        entry.stackTrace = stackTrace.slice(0, 500);
+      }
+    }
+    results.push(entry);
+  }
   return results;
+}
+
+function extractGroupedPlaywrightResults(
+  suites: PlaywrightSuite[],
+): SpecResultData[] {
+  return suites.map((suite) => ({
+    specRef: { module: suite.title ?? 'default', name: 'default' },
+    results: extractResultsFromSuite(suite),
+  }));
 }
 
 /**
@@ -191,8 +204,16 @@ export function parseToolResultOutput(
         failedCount: 0,
         durationMs,
         errorMessage: errorMsg,
-        results: [
-          { testName: '(test harness)', status: 'error', message: errorMsg },
+        specResults: [
+          {
+            results: [
+              {
+                testName: '(test harness)',
+                status: 'error',
+                message: errorMsg,
+              },
+            ],
+          },
         ],
       };
     }
@@ -206,8 +227,12 @@ export function parseToolResultOutput(
         failedCount: 0,
         durationMs,
         errorMessage: msg,
-        results: [
-          { testName: '(test harness)', status: 'error', message: msg },
+        specResults: [
+          {
+            results: [
+              { testName: '(test harness)', status: 'error', message: msg },
+            ],
+          },
         ],
       };
     }
@@ -225,7 +250,13 @@ export function parseToolResultOutput(
     failedCount: 0,
     durationMs,
     errorMessage: msg,
-    results: [{ testName: '(test harness)', status: 'error', message: msg }],
+    specResults: [
+      {
+        results: [
+          { testName: '(test harness)', status: 'error', message: msg },
+        ],
+      },
+    ],
   };
 }
 

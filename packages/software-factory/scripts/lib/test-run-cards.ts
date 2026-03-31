@@ -3,6 +3,7 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { readCardSource, writeCardSource } from './realm-operations';
 import type {
   CreateTestRunOptions,
+  SpecResultData,
   TestResultEntryData,
   TestRunAttributes,
   TestRunRealmOptions,
@@ -75,7 +76,7 @@ export async function completeTestRun(
     status: attrs.status,
     completedAt: new Date().toISOString(),
     durationMs: attrs.durationMs,
-    results: attrs.results,
+    specResults: attrs.specResults,
   };
   if (attrs.errorMessage) {
     completionAttrs.errorMessage = attrs.errorMessage;
@@ -128,16 +129,19 @@ export function buildTestRunCardDocument(
     status: 'pending' as const,
   }));
 
+  let specResults: SpecResultData[] = [
+    {
+      ...(options?.specRef ? { specRef: options.specRef } : {}),
+      results,
+    },
+  ];
+
   let attributes: Record<string, unknown> = {
     sequenceNumber: options?.sequenceNumber ?? 1,
     runAt: new Date().toISOString(),
     status: 'running',
-    results,
+    specResults,
   };
-
-  if (options?.specRef) {
-    attributes.specRef = options.specRef;
-  }
 
   let relationships:
     | Record<string, { links: { self: string | null } }>

@@ -71,7 +71,7 @@ export interface TestRunAttributes {
   failedCount: number;
   durationMs?: number;
   errorMessage?: string;
-  results: TestResultEntryData[];
+  specResults: SpecResultData[];
 }
 
 /** Shape of a single test result entry within a TestRun card. */
@@ -81,6 +81,12 @@ export interface TestResultEntryData {
   message?: string;
   stackTrace?: string;
   durationMs?: number;
+}
+
+/** Shape of a spec result group within a TestRun card. */
+export interface SpecResultData {
+  specRef?: ResolvedCodeRef;
+  results: TestResultEntryData[];
 }
 
 // ---------------------------------------------------------------------------

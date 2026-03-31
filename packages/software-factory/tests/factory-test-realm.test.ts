@@ -42,7 +42,7 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     assert.strictEqual(attrs.status, 'passed');
     assert.strictEqual(attrs.passedCount, 3);
     assert.strictEqual(attrs.failedCount, 0);
-    assert.strictEqual(attrs.results.length, 0);
+    assert.strictEqual(attrs.specResults.length, 0);
     assert.strictEqual(attrs.durationMs, 1500);
   });
 
@@ -64,17 +64,18 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     assert.strictEqual(attrs.status, 'failed');
     assert.strictEqual(attrs.passedCount, 2);
     assert.strictEqual(attrs.failedCount, 1);
-    assert.strictEqual(attrs.results.length, 1);
+    assert.strictEqual(attrs.specResults.length, 1);
+    assert.strictEqual(attrs.specResults[0].results.length, 1);
     assert.strictEqual(
-      attrs.results[0].testName,
+      attrs.specResults[0].results[0].testName,
       'sticky-note > renders fitted view',
     );
-    assert.strictEqual(attrs.results[0].status, 'failed');
+    assert.strictEqual(attrs.specResults[0].results[0].status, 'failed');
     assert.strictEqual(
-      attrs.results[0].message,
+      attrs.specResults[0].results[0].message,
       'Expected element to be visible',
     );
-    assert.strictEqual(attrs.results[0].stackTrace, undefined);
+    assert.strictEqual(attrs.specResults[0].results[0].stackTrace, undefined);
   });
 
   test('splits error message from stack trace', function (assert) {
@@ -93,8 +94,15 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
 
     let attrs = parseRunRealmTestsOutput(output, 800);
 
-    assert.strictEqual(attrs.results[0].message, 'Expect received to be true');
-    assert.true(attrs.results[0].stackTrace?.includes('Object.<anonymous>'));
+    assert.strictEqual(
+      attrs.specResults[0].results[0].message,
+      'Expect received to be true',
+    );
+    assert.true(
+      attrs.specResults[0].results[0].stackTrace?.includes(
+        'Object.<anonymous>',
+      ),
+    );
   });
 
   test('returns error status for empty output', function (assert) {
@@ -128,9 +136,10 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
 
     let attrs = parseRunRealmTestsOutput(output, 2000);
 
-    assert.strictEqual(attrs.results.length, 3);
-    assert.strictEqual(attrs.results[0].testName, 'test A');
-    assert.strictEqual(attrs.results[2].testName, 'test C');
+    assert.strictEqual(attrs.specResults.length, 1);
+    assert.strictEqual(attrs.specResults[0].results.length, 3);
+    assert.strictEqual(attrs.specResults[0].results[0].testName, 'test A');
+    assert.strictEqual(attrs.specResults[0].results[2].testName, 'test C');
   });
 
   test('truncates stack traces to 500 chars', function (assert) {
@@ -142,7 +151,9 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     };
 
     let attrs = parseRunRealmTestsOutput(output, 100);
-    assert.true((attrs.results[0].stackTrace?.length ?? 0) <= 500);
+    assert.true(
+      (attrs.specResults[0].results[0].stackTrace?.length ?? 0) <= 500,
+    );
   });
 
   test('parses Playwright JSON report with passing tests into results', function (assert) {
@@ -169,15 +180,14 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     let attrs = parseRunRealmTestsOutput(report, 2500);
 
     assert.strictEqual(attrs.status, 'passed');
-    assert.strictEqual(attrs.results.length, 2);
-    assert.strictEqual(
-      attrs.results[0].testName,
-      'hello card renders greeting',
-    );
-    assert.strictEqual(attrs.results[0].status, 'passed');
-    assert.strictEqual(attrs.results[0].durationMs, 1200);
-    assert.strictEqual(attrs.results[1].testName, 'hello card shows title');
-    assert.strictEqual(attrs.results[1].status, 'passed');
+    assert.strictEqual(attrs.specResults.length, 1);
+    let results = attrs.specResults[0].results;
+    assert.strictEqual(results.length, 2);
+    assert.strictEqual(results[0].testName, 'hello card renders greeting');
+    assert.strictEqual(results[0].status, 'passed');
+    assert.strictEqual(results[0].durationMs, 1200);
+    assert.strictEqual(results[1].testName, 'hello card shows title');
+    assert.strictEqual(results[1].status, 'passed');
     assert.strictEqual(attrs.passedCount, 2);
     assert.strictEqual(attrs.failedCount, 0);
   });
@@ -216,10 +226,12 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
     let attrs = parseRunRealmTestsOutput(report, 1000);
 
     assert.strictEqual(attrs.status, 'failed');
-    assert.strictEqual(attrs.results.length, 2);
-    assert.strictEqual(attrs.results[0].status, 'passed');
-    assert.strictEqual(attrs.results[1].status, 'failed');
-    assert.strictEqual(attrs.results[1].message, 'Expected true to be false');
+    assert.strictEqual(attrs.specResults.length, 1);
+    let results = attrs.specResults[0].results;
+    assert.strictEqual(results.length, 2);
+    assert.strictEqual(results[0].status, 'passed');
+    assert.strictEqual(results[1].status, 'failed');
+    assert.strictEqual(results[1].message, 'Expected true to be false');
     assert.strictEqual(attrs.passedCount, 1);
     assert.strictEqual(attrs.failedCount, 1);
   });
@@ -246,9 +258,11 @@ module('factory-test-realm > parseRunRealmTestsOutput', function () {
 
     let attrs = parseRunRealmTestsOutput(report, 200);
 
-    assert.strictEqual(attrs.results.length, 1);
-    assert.strictEqual(attrs.results[0].testName, 'nested test');
-    assert.strictEqual(attrs.results[0].status, 'passed');
+    assert.strictEqual(attrs.specResults.length, 1);
+    let results = attrs.specResults[0].results;
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].testName, 'nested test');
+    assert.strictEqual(results[0].status, 'passed');
   });
 });
 
@@ -271,7 +285,7 @@ module('factory-test-realm > parseToolResultOutput', function () {
 
     assert.strictEqual(attrs.status, 'error');
     assert.true(attrs.errorMessage?.includes('HTTP 500'));
-    assert.strictEqual(attrs.results[0].status, 'error');
+    assert.strictEqual(attrs.specResults[0].results[0].status, 'error');
   });
 
   test('handles unparseable raw output', function (assert) {
@@ -317,16 +331,17 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(adoptsFrom.name, 'TestRun');
   });
 
-  test('pre-populates results as pending', function (assert) {
+  test('pre-populates specResults with pending entries', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A', 'test B', 'test C'],
       testRealmOptions.testResultsModuleUrl,
     );
 
-    let results = doc.data.attributes!.results as {
-      testName: string;
-      status: string;
+    let specResults = doc.data.attributes!.specResults as {
+      results: { testName: string; status: string }[];
     }[];
+    assert.strictEqual(specResults.length, 1);
+    let results = specResults[0].results;
     assert.strictEqual(results.length, 3);
     assert.strictEqual(results[0].testName, 'test A');
     assert.strictEqual(results[0].status, 'pending');
@@ -420,19 +435,20 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(doc.data.relationships, undefined);
   });
 
-  test('includes specRef when provided', function (assert) {
+  test('includes specRef in specResults when provided', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
       { specRef: { module: './test-spec', name: 'default' } },
     );
 
-    let specRef = doc.data.attributes!.specRef as {
-      module: string;
-      name: string;
-    };
-    assert.strictEqual(specRef.module, './test-spec');
-    assert.strictEqual(specRef.name, 'default');
+    let specResults = doc.data.attributes!.specResults as {
+      specRef?: { module: string; name: string };
+      results: unknown[];
+    }[];
+    assert.strictEqual(specResults.length, 1);
+    assert.strictEqual(specResults[0].specRef?.module, './test-spec');
+    assert.strictEqual(specResults[0].specRef?.name, 'default');
   });
 });
 
@@ -527,7 +543,7 @@ module('factory-test-realm > completeTestRun', function () {
           sequenceNumber: 1,
           passedCount: 0,
           failedCount: 0,
-          results: [],
+          specResults: [],
         },
         meta: {
           adoptsFrom: {
@@ -560,7 +576,7 @@ module('factory-test-realm > completeTestRun', function () {
       passedCount: 3,
       failedCount: 0,
       durationMs: 1500,
-      results: [],
+      specResults: [],
     };
 
     let result = await completeTestRun(
@@ -586,7 +602,7 @@ module('factory-test-realm > completeTestRun', function () {
       passedCount: 1,
       failedCount: 0,
       durationMs: 100,
-      results: [],
+      specResults: [],
     };
 
     let result = await completeTestRun('Test Runs/missing-1', attrs, {
@@ -609,7 +625,9 @@ module('factory-test-realm > resolveTestRun', function () {
       id: string;
       status: string;
       sequenceNumber: number;
-      results?: { testName: string; status: string }[];
+      specResults?: {
+        results?: { testName: string; status: string }[];
+      }[];
     }[],
   ) {
     return (async (url: string | URL | Request, init?: RequestInit) => {
@@ -626,7 +644,7 @@ module('factory-test-realm > resolveTestRun', function () {
               attributes: {
                 status: tr.status,
                 sequenceNumber: tr.sequenceNumber,
-                results: tr.results ?? [],
+                specResults: tr.specResults ?? [],
               },
             })),
           }),
@@ -688,9 +706,13 @@ module('factory-test-realm > resolveTestRun', function () {
           id: 'Test Runs/my-ticket-2',
           status: 'running',
           sequenceNumber: 2,
-          results: [
-            { testName: 'test A', status: 'passed' },
-            { testName: 'test B', status: 'pending' },
+          specResults: [
+            {
+              results: [
+                { testName: 'test A', status: 'passed' },
+                { testName: 'test B', status: 'pending' },
+              ],
+            },
           ],
         },
       ]),
