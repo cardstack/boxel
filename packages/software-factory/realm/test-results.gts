@@ -333,7 +333,7 @@ export class TestRun extends CardDef {
           <section>
             <h2>Project</h2>
             <div class='linked-card'>
-              <@fields.project @format="fitted" />
+              <@fields.project @format="embedded" />
             </div>
           </section>
         {{/if}}
@@ -342,7 +342,7 @@ export class TestRun extends CardDef {
           <section>
             <h2>Ticket</h2>
             <div class='linked-card'>
-              <@fields.ticket @format="fitted" />
+              <@fields.ticket @format="embedded" />
             </div>
           </section>
         {{/if}}
