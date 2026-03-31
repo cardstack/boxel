@@ -61,10 +61,10 @@ export default class Workspace extends Component<Signature> {
       <div
         class='workspace-card {{if this.isHostDropdownOpen "is-open"}}'
         {{on 'mouseleave' this.closeHostDropdown}}
+        data-test-workspace={{this.name}}
         ...attributes
       >
         <ItemContainer
-          data-test-workspace={{this.name}}
           {{on 'click' this.openWorkspace}}
         >
           <div
