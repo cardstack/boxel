@@ -295,11 +295,10 @@ export class TestRun extends CardDef {
     }
 
     get failedResults() {
-      return (this.args.model.specResults ?? []).flatMap(
-        (sr) =>
-          (sr.results ?? []).filter(
-            (r) => r.status === 'failed' || r.status === 'error',
-          ),
+      return (this.args.model.specResults ?? []).flatMap((sr) =>
+        (sr.results ?? []).filter(
+          (r) => r.status === 'failed' || r.status === 'error',
+        ),
       );
     }
 
