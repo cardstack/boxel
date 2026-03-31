@@ -164,7 +164,6 @@ export default class Workspace extends Component<Signature> {
           @title=''
           @onClose={{this.closeDeleteModal}}
           @size='medium'
-          @centered={{true}}
           @cardContainerClass='workspace-chooser-delete-modal'
           data-test-delete-modal={{@realmURL}}
         >
@@ -557,6 +556,11 @@ export default class Workspace extends Component<Signature> {
       }
       :global(.workspace-chooser-delete-modal .dialog-box__content) {
         padding: var(--boxel-sp-lg) 30px;
+        overflow: visible;
+        height: auto;
+      }
+      :global(.workspace-chooser-delete-modal .dialog-box__footer) {
+        height: auto;
       }
       .delete-modal__header {
         display: flex;
