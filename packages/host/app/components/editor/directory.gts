@@ -128,8 +128,10 @@ export default class Directory extends Component<Args> {
             class='file-tree-context-menu-list'
             @items={{this.menuItems}}
             @closeMenu={{dd.close}}
-            {{on 'mouseenter' this.cancelCloseMenuTimer}}
-            {{on 'mouseleave' this.startCloseMenuTimer}}
+            {{on 'pointerenter' this.cancelCloseMenuTimer}}
+            {{on 'pointerleave' this.startCloseMenuTimer}}
+            {{on 'focusin' this.cancelCloseMenuTimer}}
+            {{on 'focusout' this.startCloseMenuTimer}}
           />
         </:content>
       </BoxelDropdown>
