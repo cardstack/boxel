@@ -194,7 +194,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-boxel-menu-item-text="Hosted Only"]');
+      await click('[data-test-option="1"]');
 
       assert
         .dom('[data-test-sort-dropdown-trigger]')
@@ -205,14 +205,14 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-boxel-menu-item-text="Hosted Only"]');
+      await click('[data-test-option="1"]');
 
       assert
         .dom('[data-test-sort-dropdown-trigger]')
         .includesText('Hosted Only');
 
       await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-boxel-menu-item-text="View All"]');
+      await click('[data-test-option="0"]');
 
       assert.dom('[data-test-sort-dropdown-trigger]').includesText('View All');
     });
@@ -238,7 +238,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       // Switch to hosted-only
       await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-boxel-menu-item-text="Hosted Only"]');
+      await click('[data-test-option="1"]');
 
       assert
         .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
@@ -272,7 +272,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       });
 
       await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-boxel-menu-item-text="Hosted Only"]');
+      await click('[data-test-option="1"]');
 
       assert
         .dom('[data-test-favorites-list] [data-test-workspace="Workspace A"]')
@@ -300,7 +300,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       // Switch to hosted-only — workspace A is not hosted
       await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-boxel-menu-item-text="Hosted Only"]');
+      await click('[data-test-option="1"]');
 
       assert.dom('[data-test-favorites-empty]').hasText('No matching results');
     });
