@@ -20,7 +20,7 @@ import {
   RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar, gt } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, cssVar, gt, not } from '@cardstack/boxel-ui/helpers';
 import {
   Group,
   IconGlobe,
@@ -65,9 +65,7 @@ export default class Workspace extends Component<Signature> {
         data-test-workspace={{this.name}}
         ...attributes
       >
-        <ItemContainer
-          {{on 'click' this.openWorkspace}}
-        >
+        <ItemContainer {{on 'click' this.openWorkspace}}>
           <div
             class='tile-icon'
             style={{cssVar
@@ -170,7 +168,10 @@ export default class Workspace extends Component<Signature> {
             </Tooltip>
             {{this.visibility}}
             {{#if (not this.hasPublishedRealms)}}
-              <span class='realm-url' data-test-realm-url={{@realmURL}}>{{@realmURL}}</span>
+              <span
+                class='realm-url'
+                data-test-realm-url={{@realmURL}}
+              >{{@realmURL}}</span>
             {{/if}}
           </span>
         </div>
