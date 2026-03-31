@@ -165,7 +165,7 @@ export default class Workspace extends Component<Signature> {
           @onClose={{this.closeDeleteModal}}
           @size='medium'
           @centered={{true}}
-          @cardContainerClass='delete-modal'
+          @cardContainerClass='workspace-chooser-delete-modal'
           data-test-delete-modal={{@realmURL}}
         >
           <:content>
@@ -547,15 +547,15 @@ export default class Workspace extends Component<Signature> {
       .workspace-menu__list {
         --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
-      :global(.delete-modal) {
+      :global(.workspace-chooser-delete-modal) {
         border-radius: 20px;
         max-width: 650px;
         height: auto;
       }
-      :global(.delete-modal .dialog-box__header) {
+      :global(.workspace-chooser-delete-modal .dialog-box__header) {
         display: none;
       }
-      :global(.delete-modal .dialog-box__content) {
+      :global(.workspace-chooser-delete-modal .dialog-box__content) {
         padding: var(--boxel-sp-lg) 30px;
       }
       .delete-modal__header {
