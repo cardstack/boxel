@@ -14,6 +14,7 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
+import SearchPanel from '@cardstack/host/components/card-search/panel';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
@@ -1325,5 +1326,98 @@ module('Integration | operator-mode | ui', function (hooks) {
         '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
       )
       .exists('Pet selection is preserved after clearing search');
+  });
+
+  test('selected types are preserved after clearing type search when selection is beyond first page', async function (assert) {
+    // Use a small page size so selected types may not be in the first page
+    let originalPageSize = SearchPanel.PAGE_SIZE;
+    SearchPanel.PAGE_SIZE = 3;
+
+    try {
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+      await waitFor(`[data-test-cards-grid-item]`);
+
+      // Open search sheet
+      await click(`[data-test-open-search-field]`);
+      assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+      await settled();
+
+      // Open type picker and wait for initial options to load
+      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+      await waitFor('[data-test-boxel-picker-option-row]');
+
+      // Search for "Pet" in the type picker to find it (may be beyond first page)
+      await fillIn('[data-test-boxel-picker-search] input', 'Pet');
+      await waitFor('[data-test-boxel-picker-option-label="Pet"]');
+
+      // Select Pet
+      await click('[data-test-boxel-picker-option-label="Pet"]');
+      assert
+        .dom(
+          '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
+        )
+        .exists('Pet is selected');
+
+      // Clear the type picker search — this triggers a fresh fetch from page 0
+      // With PAGE_SIZE=3, Pet (alphabetically late) wouldn't be in the first page
+      // The recursive fetch should load additional pages to find it
+      await fillIn('[data-test-boxel-picker-search] input', '');
+
+      // Pet should still be selected after clearing the search
+      assert
+        .dom(
+          '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
+        )
+        .exists(
+          'Pet selection is preserved even when it is beyond the first page of results',
+        );
+    } finally {
+      SearchPanel.PAGE_SIZE = originalPageSize;
+    }
+  });
+
+  test('type picker total count reflects API total, not loaded options count', async function (assert) {
+    // Use a small page size so only some types are loaded initially
+    let originalPageSize = SearchPanel.PAGE_SIZE;
+    SearchPanel.PAGE_SIZE = 3;
+
+    try {
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+      await waitFor(`[data-test-cards-grid-item]`);
+
+      // Open search sheet
+      await click(`[data-test-open-search-field]`);
+      assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+      await settled();
+
+      // Open type picker
+      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+      await waitFor('[data-test-boxel-picker-option-row]');
+
+      // "Any Type" count should reflect the total from the API (13 types),
+      // not just the currently loaded page (3 types with PAGE_SIZE=3)
+      assert
+        .dom('[data-test-boxel-picker-option-row="select-all"]')
+        .containsText(
+          'Any Type (13)',
+          'select-all shows total count from API, not loaded options count',
+        );
+    } finally {
+      SearchPanel.PAGE_SIZE = originalPageSize;
+    }
   });
 });

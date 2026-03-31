@@ -17,7 +17,6 @@ import {
   type Filter,
   type getCard,
   GetCardContextName,
-  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
@@ -421,36 +420,6 @@ export default class SearchContent extends Component<Signature> {
     } as UrlSection;
   }
 
-  private get filteredSearchResults(): PrerenderedCard[] {
-    // When baseFilter has a non-root type (e.g. Pet), the server already
-    // constrains results via the adoption chain. Skip client-side type
-    // filtering to avoid exact-match excluding subtypes like BoomPet.
-    if (this.args.skipTypeFiltering) {
-      return this.args.searchResource.instances;
-    }
-
-    const selectedCodeRefs = new Set<string>();
-    for (const opt of this.args.selectedCardTypes ?? []) {
-      if (opt.type === 'select-all') {
-        continue;
-      }
-      selectedCodeRefs.add(opt.id);
-    }
-
-    const allCards = this.args.searchResource.instances;
-    if (selectedCodeRefs.size === 0) {
-      return allCards;
-    }
-    return allCards.filter((card) => {
-      if (!card.usedRenderType) {
-        return false;
-      }
-      return selectedCodeRefs.has(
-        internalKeyFor(card.usedRenderType, undefined),
-      );
-    });
-  }
-
   private get cardsByQuerySection(): SearchSheetSection[] | null {
     if (this.searchKeyIsURL) {
       return null;
@@ -461,7 +430,7 @@ export default class SearchContent extends Component<Signature> {
       return null;
     }
 
-    const cards = this.filteredSearchResults;
+    const cards = this.args.searchResource.instances;
     const byRealm = new Map<string, PrerenderedCard[]>();
 
     for (const card of cards) {
@@ -565,7 +534,7 @@ export default class SearchContent extends Component<Signature> {
   private get allCards(): string[] {
     const urls: string[] = [];
     // Cards from search results (realm sections) - respects type filter
-    for (const card of this.filteredSearchResults) {
+    for (const card of this.args.searchResource.instances) {
       if (card.url) {
         urls.push(card.url.replace(/\.json$/, ''));
       }

@@ -111,6 +111,7 @@ export default class SearchPanel extends Component<Signature> {
   @tracked private _isLoadingTypes = false;
   @tracked private _isLoadingMoreTypes = false;
   @tracked private _hasMoreTypes = false;
+  @tracked private _typesTotalCount = 0;
 
   @cached
   private get recentCardCollection(): ReturnType<getCardCollection> {
@@ -174,7 +175,7 @@ export default class SearchPanel extends Component<Signature> {
   }
 
   @tracked private _currentPage = 0;
-  private static PAGE_SIZE = 25;
+  static PAGE_SIZE = 25;
 
   private fetchTypeSummariesTask = restartableTask(
     async (realmURLs: string[], searchKey: string) => {
@@ -195,12 +196,50 @@ export default class SearchPanel extends Component<Signature> {
         if (isDestroyed(this) || isDestroying(this)) return;
 
         this._typeSummariesData = result.data;
+        this._typesTotalCount = result.meta.page.total;
         this._hasMoreTypes = result.data.length < result.meta.page.total;
+
+        // If there are selected types not yet in the fetched results,
+        // keep fetching more pages until they're all found (or no more pages).
+        const selectedIds = new Set(
+          this._previousSelectedTypes
+            .filter((opt) => opt.type !== 'select-all')
+            .map((opt) => opt.id),
+        );
+
+        if (selectedIds.size > 0 && this._hasMoreTypes) {
+          while (this._hasMoreTypes) {
+            const fetchedIds = new Set(
+              this._typeSummariesData.map((d) => d.id),
+            );
+            if ([...selectedIds].every((id) => fetchedIds.has(id))) break;
+
+            const nextPage = this._currentPage + 1;
+            let moreResult = await this.realmServer.fetchCardTypeSummaries(
+              realmURLs,
+              {
+                searchKey: searchKey || undefined,
+                page: { number: nextPage, size: SearchPanel.PAGE_SIZE },
+              },
+            );
+            if (isDestroyed(this) || isDestroying(this)) return;
+
+            this._currentPage = nextPage;
+            this._typeSummariesData = [
+              ...this._typeSummariesData,
+              ...moreResult.data,
+            ];
+            this._hasMoreTypes =
+              this._typeSummariesData.length < moreResult.meta.page.total;
+          }
+        }
+
         this._isLoadingTypes = false;
       } catch (e) {
         console.error('Failed to fetch card type summaries', e);
         if (!isDestroyed(this) && !isDestroying(this)) {
           this._typeSummariesData = [];
+          this._typesTotalCount = 0;
           this._hasMoreTypes = false;
           this._isLoadingTypes = false;
         }
@@ -341,19 +380,25 @@ export default class SearchPanel extends Component<Signature> {
     return value;
   });
 
-  private searchResource = getPrerenderedSearch(this, getOwner(this)!, () => ({
-    query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
-      ? undefined
-      : buildSearchQuery(
-          this.args.searchKey,
-          this.activeSort,
-          this.args.baseFilter,
-        ),
-    format: 'fitted' as const,
-    realms: this.selectedRealmURLs,
-    isLive: true,
-    cardComponentModifier: this.cardComponentModifier,
-  }));
+  private searchResource = getPrerenderedSearch(this, getOwner(this)!, () => {
+    // Consume typeFilter.selected outside the ternary so the tracking
+    // dependency is always established, even when the query is skipped.
+    const selectedTypeIds = this.typeFilter.selected.map((opt) => opt.id);
+    return {
+      query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
+        ? undefined
+        : buildSearchQuery(
+            this.args.searchKey,
+            this.activeSort,
+            this.args.baseFilter,
+            selectedTypeIds,
+          ),
+      format: 'fitted' as const,
+      realms: this.selectedRealmURLs,
+      isLive: true,
+      cardComponentModifier: this.cardComponentModifier,
+    };
+  });
 
   @action
   private onRealmChange(selected: PickerOption[]) {
@@ -431,7 +476,7 @@ export default class SearchPanel extends Component<Signature> {
         hasMoreTypes=this._hasMoreTypes
         isLoadingTypes=this._isLoadingTypes
         isLoadingMoreTypes=this._isLoadingMoreTypes
-        typesTotalCount=this.typeFilter.options.length
+        typesTotalCount=this._typesTotalCount
         disableSelectAll=this.hasNonRootBaseFilter
       )
       (component
