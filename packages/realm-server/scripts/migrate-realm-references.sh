@@ -34,7 +34,8 @@
 #   # Equivalent explicit form
 #   ./migrate-realm-references.sh --dry-run https://realms-staging.stack.cards/catalog/ @cardstack/catalog/ /persistent/catalog /persistent/experiments
 #
-#   # More shortcut examples
+#   # Base realm uses https://cardstack.com/base/ in all environments
+#   ./migrate-realm-references.sh -e development -r base ./realms/
 #   ./migrate-realm-references.sh -e production -r base /persistent/base /persistent/catalog /persistent/experiments
 #   ./migrate-realm-references.sh -e development -r skills ./realms/
 #
@@ -99,7 +100,13 @@ if [ -n "$ENV" ] || [ -n "$REALM" ]; then
       ;;
   esac
 
-  FIND_STR="${BASE_URL}${REALM}/"
+  # The base realm used https://cardstack.com/base/ as its canonical URL
+  # across all environments (not the per-environment realm server URL).
+  if [ "$REALM" = "base" ]; then
+    FIND_STR="https://cardstack.com/base/"
+  else
+    FIND_STR="${BASE_URL}${REALM}/"
+  fi
   REPLACEMENT="@cardstack/${REALM}/"
 
   echo "Resolved: $FIND_STR -> $REPLACEMENT"
