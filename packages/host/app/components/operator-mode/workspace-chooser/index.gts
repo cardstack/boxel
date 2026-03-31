@@ -107,7 +107,7 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   <template>
     <div class='workspace-chooser' data-test-workspace-chooser>
-      <div class='workspace-chooser__content'>
+      <div class='workspace-chooser__content boxel-dark-scrollbar'>
         <div class='sections-wrapper'>
           <div class='workspace-section' data-test-favorites-section>
             <div class='section-header'>
@@ -198,21 +198,6 @@ export default class WorkspaceChooser extends Component<Signature> {
         height: 100%;
         padding: calc(5rem + 3.75rem) 5rem 5rem;
         overflow: auto;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255 255 255 / 20%) transparent;
-      }
-      .workspace-chooser__content::-webkit-scrollbar {
-        width: 0.5rem;
-      }
-      .workspace-chooser__content::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .workspace-chooser__content::-webkit-scrollbar-thumb {
-        background: rgba(255 255 255 / 20%);
-        border-radius: var(--boxel-border-radius-xs);
-      }
-      .workspace-chooser__content::-webkit-scrollbar-thumb:hover {
-        background: rgba(255 255 255 / 35%);
       }
       .sections-wrapper {
         display: flex;
