@@ -332,14 +332,14 @@ export class TestRun extends CardDef {
         {{#if @model.project}}
           <section>
             <h2>Project</h2>
-            <@fields.project />
+            <@fields.project @format="fitted" />
           </section>
         {{/if}}
 
         {{#if @model.ticket}}
           <section>
             <h2>Ticket</h2>
-            <@fields.ticket />
+            <@fields.ticket @format="fitted" />
           </section>
         {{/if}}
 
@@ -379,10 +379,6 @@ export class TestRun extends CardDef {
           padding: 1.5rem;
           display: grid;
           gap: 1rem;
-          overflow: hidden;
-        }
-        .surface > section {
-          overflow: hidden;
         }
         .header-row {
           display: flex;
