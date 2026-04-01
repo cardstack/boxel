@@ -239,6 +239,55 @@ module('normalizeQueryDefinition', function () {
     });
   });
 
+  test('resolves in filter with array interpolation from containsMany field', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let instance = { tags: ['red', 'blue', 'green'] };
+    let relativeTo = new URL('https://realm.example/cards/instance');
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: { in: { color: '$this.tags' } },
+      },
+      realmURL,
+      fieldName: 'matchingItems',
+      resolvePathValue: (path) => resolvePath(instance, path),
+      relativeTo,
+    });
+
+    let targetRef = codeRefWithAbsoluteURL(
+      fieldDefinition.fieldOrCard,
+      relativeTo,
+    );
+    assert.deepEqual(normalized?.query.filter, {
+      in: { color: ['red', 'blue', 'green'] },
+      on: targetRef,
+    });
+  });
+
+  test('aborts in filter when interpolated array is undefined', function (assert) {
+    let realmURL = new URL('https://realm.example/');
+    let instance = {};
+    let relativeTo = new URL('https://realm.example/cards/instance');
+
+    let normalized = normalizeQueryDefinition({
+      fieldDefinition,
+      queryDefinition: {
+        filter: { in: { color: '$this.tags' } },
+      },
+      realmURL,
+      fieldName: 'matchingItems',
+      resolvePathValue: (path) => resolvePath(instance, path),
+      relativeTo,
+    });
+
+    assert.strictEqual(
+      normalized,
+      null,
+      'query is aborted when in value is undefined',
+    );
+  });
+
   test('resolves live instances via custom path resolver', function (assert) {
     let realmURL = new URL('https://realm.example/');
     let instance = { address: { city: 'Paris' } };
