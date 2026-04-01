@@ -74,6 +74,13 @@ export class CommandRunner {
       // TODO: This inline handling for 'pr-listing-create' is a workaround.
       // In the absence, user-based proxy request which allows user to register auth tokens with an external api call
       if (eventContent.type === 'pr-listing-create') {
+        // The workflow card URL was created by the host and passed via the bot trigger input
+        let workflowCardUrl =
+          typeof input.workflowCardUrl === 'string'
+            ? input.workflowCardUrl
+            : null;
+
+        // Step 1: Prepare submission files (patches existing workflow card)
         let result = await this.enqueueRunCommand({
           runAs,
           realmURL,
@@ -92,23 +99,60 @@ export class CommandRunner {
             realmURL,
             command,
           });
+          if (workflowCardUrl) {
+            await this.patchWorkflowStatus(
+              runAs,
+              realmURL,
+              workflowCardUrl,
+              'error',
+              errorMessage,
+            );
+          }
           throw new Error(errorMessage);
         }
+
+        // Use the workflow card URL from input (host-created) or fall back to command result
+        let cardUrlFromResult = getCardUrl(result.cardResultString);
+        workflowCardUrl = workflowCardUrl ?? cardUrlFromResult;
+
+        // Step 2: Create the GitHub PR (workflow card already in 'creating-pr' status)
         let { prResult, submissionCardUrl } = await this.createPR({
           runAs,
           eventContent,
           result,
         });
-        // TODO: createAndLinkPrCard must remain a separate step from CreateSubmissionCommand
-        // we need prResult (branchName) before we can issue the command
-        // solve the TODO for user-based proxy command first
-        if (prResult && submissionCardUrl) {
+
+        // submissionCardUrl is the card returned by the command (the workflow card)
+        // Use the workflow card URL for linking the PrCard
+        let cardToLink = workflowCardUrl ?? submissionCardUrl;
+
+        // Step 3: Create PrCard and link it to the workflow card
+        if (prResult && cardToLink) {
+          if (workflowCardUrl) {
+            await this.patchWorkflowStatus(
+              runAs,
+              realmURL,
+              workflowCardUrl,
+              'creating-pr-card',
+            );
+          }
+
           await this.createAndLinkPrCard({
             runAs,
             realmURL,
-            submissionCardUrl,
+            submissionCardUrl: cardToLink,
             prResult,
           });
+
+          // Step 4: Mark workflow as 'ready'
+          if (workflowCardUrl) {
+            await this.patchWorkflowStatus(
+              runAs,
+              realmURL,
+              workflowCardUrl,
+              'ready',
+            );
+          }
         }
         return result;
       }
@@ -229,6 +273,38 @@ export class CommandRunner {
         },
       },
     });
+  }
+
+  private async patchWorkflowStatus(
+    runAs: string,
+    realmURL: string,
+    workflowCardUrl: string,
+    status: string,
+    errorMessage?: string,
+  ): Promise<void> {
+    try {
+      let patch: Record<string, any> = {
+        attributes: {
+          submissionStatus: status,
+          ...(errorMessage ? { submissionError: errorMessage } : {}),
+        },
+      };
+      await this.enqueueRunCommand({
+        runAs,
+        realmURL,
+        command: PATCH_CARD_INSTANCE_COMMAND,
+        commandInput: {
+          cardId: workflowCardUrl,
+          patch,
+        },
+      });
+    } catch (error) {
+      log.error('failed to patch workflow status', {
+        workflowCardUrl,
+        status,
+        error,
+      });
+    }
   }
 
   private async getCommandsForRegistration(
