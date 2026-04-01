@@ -2,13 +2,12 @@ import { setComponentManager } from '@ember/component';
 import { capabilities } from '@ember/component';
 import { setComponentTemplate } from '@ember/component';
 
-import templateOnly from '@ember/component/template-only';
 import { htmlSafe, type SafeString } from '@ember/template';
 import { precompileTemplate } from '@ember/template-compilation';
 
-import { modifier } from 'ember-modifier';
+import { template } from '@ember/template-compiler/runtime';
 
-import { compiler } from '@cardstack/runtime-common/etc';
+import { modifier } from 'ember-modifier';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -72,10 +71,7 @@ export function htmlComponent(
     if (cache.has(source)) {
       component = cache.get(source)!;
     } else {
-      component = setComponentTemplate(
-        compiler.compile(source, { strictMode: true }),
-        templateOnly(),
-      ) as TopElement;
+      component = template(source) as TopElement;
       cache.set(source, component);
     }
 

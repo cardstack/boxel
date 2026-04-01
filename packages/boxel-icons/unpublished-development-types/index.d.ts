@@ -2,7 +2,7 @@
 // These will *not* be published as part of your addon, so be careful that your published code does not rely on them!
 
 import '@glint/environment-ember-loose';
-import 'ember-source/types/stable';
+import 'ember-source/types';
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
