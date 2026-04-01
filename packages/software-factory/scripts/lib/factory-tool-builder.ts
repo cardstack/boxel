@@ -13,6 +13,7 @@ import type { ToolResult } from './factory-agent';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { executeTestRunFromRealm } from './test-run-execution';
+import type { ExecuteTestRunOptions, TestRunHandle } from './test-run-types';
 import {
   writeModuleSource,
   writeCardSource,
@@ -54,6 +55,8 @@ export interface ToolBuilderConfig {
     accessToken: string;
     matrixUrl: string;
   };
+  /** Override for executeTestRunFromRealm (injectable for testing). */
+  executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
 }
 
 export interface ToolCallEntry {
@@ -327,7 +330,8 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         config.testResultsModuleUrl ??
         `${ensureTrailingSlash(targetRealmUrl)}test-results`;
 
-      let result = await executeTestRunFromRealm({
+      let executeFn = config.executeTestRun ?? executeTestRunFromRealm;
+      let result = await executeFn({
         targetRealmUrl,
         testResultsModuleUrl,
         slug: args.slug as string,

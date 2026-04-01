@@ -12,6 +12,10 @@ import {
 } from '../scripts/lib/factory-tool-builder';
 import type { ToolExecutor } from '../scripts/lib/factory-tool-executor';
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import type {
+  ExecuteTestRunOptions,
+  TestRunHandle,
+} from '../scripts/lib/test-run-types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -693,5 +697,141 @@ module('factory-tool-builder > card write validation', function () {
 
     assert.false(result.ok);
     assert.true(result.error.includes('Failed to parse'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// run_tests tool
+// ---------------------------------------------------------------------------
+
+module('factory-tool-builder > run_tests', function () {
+  test('run_tests tool is built and has correct parameters', function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig();
+    let tools = buildFactoryTools(config, executor, registry);
+    let runTestsTool = findTool(tools, 'run_tests');
+
+    assert.strictEqual(runTestsTool.name, 'run_tests');
+    let params = runTestsTool.parameters as {
+      required?: string[];
+      properties?: Record<string, unknown>;
+    };
+    assert.true(params.required!.includes('slug'));
+    assert.true(params.required!.includes('specPaths'));
+    assert.true('testNames' in params.properties!);
+    assert.true('projectCardUrl' in params.properties!);
+  });
+
+  test('run_tests passes correct options to executeTestRun', async function (assert) {
+    let capturedOptions: ExecuteTestRunOptions | undefined;
+    let mockHandle: TestRunHandle = {
+      testRunId: 'TestRun/run-1',
+      status: 'passed',
+    };
+
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({
+      serverToken: 'Bearer server-jwt',
+      testResultsModuleUrl:
+        'https://realms.example.test/user/target/test-results',
+      matrixAuth: {
+        userId: '@factory:localhost',
+        accessToken: 'matrix-token',
+        matrixUrl: 'https://matrix.example.test/',
+      },
+      executeTestRun: async (options: ExecuteTestRunOptions) => {
+        capturedOptions = options;
+        return mockHandle;
+      },
+    });
+    let tools = buildFactoryTools(config, executor, registry);
+    let runTestsTool = findTool(tools, 'run_tests');
+
+    let result = await runTestsTool.execute({
+      slug: 'define-sticky-note',
+      specPaths: ['Tests/sticky-note.spec.ts'],
+      testNames: ['renders fitted view'],
+      projectCardUrl: 'https://realms.example.test/user/target/Project/mvp',
+    });
+
+    assert.ok(capturedOptions, 'executeTestRun was called');
+    assert.strictEqual(capturedOptions!.targetRealmUrl, TARGET_REALM);
+    assert.strictEqual(
+      capturedOptions!.testResultsModuleUrl,
+      'https://realms.example.test/user/target/test-results',
+    );
+    assert.strictEqual(capturedOptions!.slug, 'define-sticky-note');
+    assert.deepEqual(capturedOptions!.specPaths, ['Tests/sticky-note.spec.ts']);
+    assert.deepEqual(capturedOptions!.testNames, ['renders fitted view']);
+    assert.strictEqual(capturedOptions!.authorization, TARGET_TOKEN);
+    assert.strictEqual(capturedOptions!.serverToken, 'Bearer server-jwt');
+    assert.strictEqual(capturedOptions!.testRealmUrl, TEST_REALM);
+    assert.strictEqual(
+      capturedOptions!.projectCardUrl,
+      'https://realms.example.test/user/target/Project/mvp',
+    );
+    assert.deepEqual(capturedOptions!.matrixAuth, {
+      userId: '@factory:localhost',
+      accessToken: 'matrix-token',
+      matrixUrl: 'https://matrix.example.test/',
+    });
+
+    // Verify the result is passed through
+    let handle = result as TestRunHandle;
+    assert.strictEqual(handle.testRunId, 'TestRun/run-1');
+    assert.strictEqual(handle.status, 'passed');
+  });
+
+  test('run_tests uses default testResultsModuleUrl when not configured', async function (assert) {
+    let capturedOptions: ExecuteTestRunOptions | undefined;
+
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({
+      executeTestRun: async (options: ExecuteTestRunOptions) => {
+        capturedOptions = options;
+        return { testRunId: 'TestRun/run-1', status: 'passed' as const };
+      },
+    });
+    let tools = buildFactoryTools(config, executor, registry);
+    let runTestsTool = findTool(tools, 'run_tests');
+
+    await runTestsTool.execute({
+      slug: 'test-slug',
+      specPaths: ['Tests/test.spec.ts'],
+    });
+
+    assert.strictEqual(
+      capturedOptions!.testResultsModuleUrl,
+      `${TARGET_REALM}test-results`,
+    );
+  });
+
+  test('run_tests uses target realm JWT for authorization', async function (assert) {
+    let capturedOptions: ExecuteTestRunOptions | undefined;
+
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({
+      executeTestRun: async (options: ExecuteTestRunOptions) => {
+        capturedOptions = options;
+        return { testRunId: 'TestRun/run-1', status: 'passed' as const };
+      },
+    });
+    let tools = buildFactoryTools(config, executor, registry);
+    let runTestsTool = findTool(tools, 'run_tests');
+
+    await runTestsTool.execute({
+      slug: 'auth-test',
+      specPaths: ['Tests/auth.spec.ts'],
+    });
+
+    assert.strictEqual(
+      capturedOptions!.authorization,
+      TARGET_TOKEN,
+      'should use target realm JWT',
+    );
   });
 });
