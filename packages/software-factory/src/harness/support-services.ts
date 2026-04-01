@@ -71,8 +71,12 @@ function ensureBoxelUIDist(hostPackageDir: string): void {
       'dist',
     );
     if (
-      existsSync(join(rootRepoBoxelUIDistDir, 'components.js')) &&
-      existsSync(join(rootRepoBoxelUIDistDir, 'helpers.js'))
+      [
+        join(rootRepoBoxelUIDistDir, 'components.js'),
+        join(rootRepoBoxelUIDistDir, 'helpers.js'),
+        join(rootRepoBoxelUIDistDir, 'icons.js'),
+        join(rootRepoBoxelUIDistDir, 'styles', 'global.css'),
+      ].every((p) => existsSync(p))
     ) {
       supportLog.info(
         `symlinking boxel-ui dist from root repo: ${rootRepoBoxelUIDistDir} -> ${boxelUIDistDir}`,
