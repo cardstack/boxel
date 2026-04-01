@@ -146,25 +146,35 @@ export async function setRealmRedirects(page: Page) {
   );
 
   // In env mode, rewrite the Ember app's baked-in matrixURL config to point
-  // to the test Synapse. This must happen before the app boots, and covers
-  // all connection types (fetch, WebSocket).
+  // to the test Synapse. We intercept HTML document responses at the network
+  // level so the rewrite happens before the browser parses the HTML.
+  // The meta tag content is percent-encoded, so we replace the encoded form.
+  // Also redirect Matrix API calls from the dev Synapse to the test Synapse.
   if (isEnvironmentMode()) {
     let slug = getEnvironmentSlug();
     let devMatrixUrl = `http://matrix.${slug}.localhost`;
     let testMatrixUrl = `http://matrix-test.${slug}.localhost`;
-    await page.context().addInitScript(
-      ({ devUrl, testUrl }) => {
-        let meta = document.querySelector(
-          'meta[name="@cardstack/host/config/environment"]',
-        );
-        if (meta) {
-          let content = decodeURIComponent(meta.getAttribute('content') || '');
-          content = content.split(devUrl).join(testUrl);
-          meta.setAttribute('content', encodeURIComponent(content));
-        }
-      },
-      { devUrl: devMatrixUrl, testUrl: testMatrixUrl },
-    );
+    let devMatrixEncoded = encodeURIComponent(devMatrixUrl);
+    let testMatrixEncoded = encodeURIComponent(testMatrixUrl);
+
+    // Rewrite matrixURL in HTML document responses
+    await page.route('**/test*', async (route) => {
+      if (route.request().resourceType() === 'document') {
+        let response = await route.fetch();
+        let body = await response.text();
+        body = body.split(devMatrixEncoded).join(testMatrixEncoded);
+        await route.fulfill({ response, body });
+      } else {
+        await route.continue();
+      }
+    });
+
+    // Redirect all Matrix API/WebSocket calls to the test Synapse
+    await page.route(`${devMatrixUrl}/**`, async (route) => {
+      let url = route.request().url();
+      let newUrl = url.replace(devMatrixUrl, testMatrixUrl);
+      await route.continue({ url: newUrl });
+    });
   }
 }
 

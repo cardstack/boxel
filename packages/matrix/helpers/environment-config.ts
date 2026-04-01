@@ -73,6 +73,19 @@ export function getSynapseURL(synapse?: {
   if (_synapseURLOverride) {
     return _synapseURLOverride;
   }
+  // In Playwright worker processes, _synapseURLOverride isn't set (it was set
+  // in the global.setup process). Fall back to MATRIX_TEST_CONTEXT which IS
+  // shared via env var.
+  if (process.env.MATRIX_TEST_CONTEXT) {
+    try {
+      let ctx = JSON.parse(process.env.MATRIX_TEST_CONTEXT);
+      if (ctx.matrixUrl) {
+        return ctx.matrixUrl;
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
   if (synapse?.baseUrl) {
     return synapse.baseUrl;
   }

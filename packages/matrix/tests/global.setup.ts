@@ -14,15 +14,38 @@ import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
-  deregisterServiceFromTraefik,
+  getSynapseContainerName,
+  registerServiceWithTraefik,
   setSynapseURL,
 } from '../helpers/environment-config';
 
-const MATRIX_TEST_SYNAPSE_SERVICE = 'matrix-test';
+// The test Synapse MUST overwrite the dev 'matrix' Traefik route because
+// Playwright's page.route cannot intercept WebSocket connections. The Ember
+// app's Matrix client uses WebSockets, so it must connect to the test Synapse
+// at the same hostname the Ember config expects (matrix.*.localhost).
+// The dev Synapse container stays running; only the Traefik route is swapped.
+// Teardown restores the dev route.
+const MATRIX_TEST_SYNAPSE_SERVICE = 'matrix';
 const MATRIX_TEST_SMTP_SERVICE = 'smtp-test';
 
 export default async function setup() {
   const envMode = isEnvironmentMode();
+
+  // Save the dev Synapse's port so we can restore the Traefik route in teardown
+  let devSynapsePort: number | undefined;
+  if (envMode) {
+    try {
+      let { execSync } = await import('child_process');
+      let output = execSync(
+        `docker port ${getSynapseContainerName()} 8008/tcp`,
+        { encoding: 'utf-8' },
+      ).trim();
+      devSynapsePort = parseInt(output.split('\n')[0].split(':').pop()!, 10);
+    } catch {
+      // Dev Synapse not running — nothing to restore
+    }
+  }
+
   await smtpStart({ traefikServiceName: MATRIX_TEST_SMTP_SERVICE });
   const synapse = await synapseStart(
     {
@@ -108,8 +131,10 @@ export default async function setup() {
   });
   return async () => {
     await synapseStop(synapse.synapseId);
-    if (envMode) {
-      deregisterServiceFromTraefik(MATRIX_TEST_SYNAPSE_SERVICE);
+    // Restore the dev Synapse's Traefik route (the test Synapse overwrote it)
+    if (envMode && devSynapsePort) {
+      registerServiceWithTraefik('matrix', devSynapsePort);
+      console.log(`Restored dev Synapse route (port ${devSynapsePort})`);
     }
     await realmServer.stop();
     await prerenderServer.stop();

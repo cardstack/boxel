@@ -163,9 +163,11 @@ export async function startPrerenderServer(
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    // Point the prerender at the isolated realm server. Initial standby
-    // creation will fail while the realm server is booting/indexing, but
-    // the prerender retries and on-demand page creation works once ready.
+    // Point the prerender at the isolated realm server itself. It proxies
+    // the host app's index.html and serves realm content on the same origin,
+    // avoiding CORS issues between host.*.localhost and realm-server.*.localhost.
+    // Standby creation will fail during initial boot but succeeds once indexing
+    // completes (the prerender retries automatically).
     BOXEL_HOST_URL: envMode
       ? serverIndexUrl
       : (process.env.HOST_URL ?? 'http://localhost:4200'),
@@ -281,8 +283,10 @@ export async function startServer({
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
+  // Use 'matrix' (not 'matrix-test') because the test Synapse overwrites the
+  // dev Synapse's Traefik route — see global.setup.ts for why.
   let matrixURL = envMode
-    ? `http://matrix-test.${envSlug}.localhost`
+    ? `http://matrix.${envSlug}.localhost`
     : `http://localhost:${synapse.port}`;
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
