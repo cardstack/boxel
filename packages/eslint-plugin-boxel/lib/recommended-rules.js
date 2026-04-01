@@ -6,6 +6,7 @@
  */
 module.exports = {
   "@cardstack/boxel/missing-card-api-import": "error",
+  "@cardstack/boxel/no-css-position-fixed": "error",
   "@cardstack/boxel/no-duplicate-imports": "error",
   "@cardstack/boxel/no-forbidden-head-tags": "error",
   "@cardstack/boxel/no-new-url-for-card-id": "error",
