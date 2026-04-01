@@ -481,11 +481,25 @@ export class ToolExecutor {
         }
 
         case 'realm-search': {
+          let rawQuery = toolArgs['query'];
+          if (typeof rawQuery !== 'string') {
+            ok = false;
+            output = {
+              error:
+                "Invalid 'query' argument for realm-search: expected a JSON string.",
+            };
+            break;
+          }
           let query: Record<string, unknown>;
           try {
-            query = JSON.parse(String(toolArgs['query']));
+            query = JSON.parse(rawQuery);
           } catch {
-            query = {};
+            ok = false;
+            output = {
+              error:
+                "Invalid JSON for 'query' in realm-search: expected valid JSON.",
+            };
+            break;
           }
           let result = await searchRealm(
             String(toolArgs['realm-url']),

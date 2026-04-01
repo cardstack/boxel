@@ -359,8 +359,30 @@ export async function getServerSession(
     }
 
     // Fallback: check response body
-    let data = (await response.json()) as { token?: string };
-    return { token: data.token };
+    let bodyText = await response.text();
+    if (!bodyText.trim()) {
+      return {
+        error: '_server-session succeeded but no token was returned',
+      };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bodyText);
+    } catch {
+      return {
+        error: '_server-session succeeded but response body was not valid JSON',
+      };
+    }
+
+    let data = parsed as { token?: string };
+    if (typeof data.token === 'string' && data.token.length > 0) {
+      return { token: data.token };
+    }
+
+    return {
+      error: '_server-session succeeded but no token was returned',
+    };
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : String(err),
