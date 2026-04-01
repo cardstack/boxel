@@ -1620,7 +1620,7 @@ module(basename(__filename), function () {
           withWorker: true,
           prerenderer,
           dir: basePath,
-          realmURL: baseRealm.url,
+          realmURL: localBaseRealmURL.href,
           virtualNetwork,
           publisher,
           runner,

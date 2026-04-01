@@ -185,7 +185,7 @@ module(basename(__filename), function () {
       assert.ok(
         (res.body.data.attributes.deps as string[]).find((d) =>
           d.match(
-            /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+            /^@cardstack\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
           ),
         ),
         `glimmer scoped css from ${baseCardRef.module} is a dep`,
