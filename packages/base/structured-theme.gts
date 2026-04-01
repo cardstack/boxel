@@ -33,12 +33,19 @@ import {
   NavSection,
   ThemeVisualizer,
   CssFieldEditor,
+  CardContainerCss,
   ResetButton,
   SimpleNavBar,
   type SectionSignature,
 } from './default-templates/theme-dashboard';
 
 export const GUIDE_SECTIONS = [
+  {
+    id: 'card-container-css',
+    navTitle: 'Card Container',
+    title: 'Card Container CSS',
+    fieldName: null,
+  },
   {
     id: 'import-css',
     navTitle: 'Import CSS',
@@ -144,7 +151,7 @@ class Isolated extends Component<typeof StructuredTheme> {
       <:default>
         <GridContainer class='structured-theme-grid'>
           <ThemeVisualizer
-            @toggleDarkMode={{this.toggleDarkMode}}
+            @toggleDarkMode={{if @model.hasDarkMode this.toggleDarkMode}}
             @isDarkMode={{this.isDarkMode}}
           >
             <:colorPalette>
@@ -164,7 +171,13 @@ class Isolated extends Component<typeof StructuredTheme> {
               @title={{if section.title section.title section.navTitle}}
               @hideSectionCounter={{true}}
             >
-              {{#if (eq section.id 'import-css')}}
+              {{#if (eq section.id 'card-container-css')}}
+                {{#if @model.cssVariables}}
+                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                {{else}}
+                  <p><em>No theme variables added</em></p>
+                {{/if}}
+              {{else if (eq section.id 'import-css')}}
                 <CssFieldEditor @setCss={{@model.setCss}} />
               {{else if section.fieldName}}
                 {{#let (get @fields section.fieldName) as |FieldContent|}}
@@ -259,6 +272,10 @@ export default class StructuredTheme extends Theme {
 
   get darkModeStyles() {
     return sanitizeHtmlSafe(extractCssVariables(this.cssVariables, '.dark'));
+  }
+
+  get hasDarkMode() {
+    return this.darkModeVariables?.cssRuleMap?.size;
   }
 
   setCss = (content: string) => {

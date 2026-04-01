@@ -1,11 +1,7 @@
 import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
 import { Component } from './card-api';
-import {
-  ThemeTypographyField,
-  calculateTypographyVariables,
-  type CssVariableFieldEntry,
-} from './structured-theme-variables';
+import { ThemeTypographyField } from './structured-theme-variables';
 
 export default class BrandTypography extends ThemeTypographyField {
   static displayName = 'Brand Typography';
@@ -119,9 +115,4 @@ export default class BrandTypography extends ThemeTypographyField {
       </style>
     </template>
   };
-
-  get cssVariableFields(): CssVariableFieldEntry[] | undefined {
-    let cssVariableFields = calculateTypographyVariables(this, 'brand');
-    return cssVariableFields;
-  }
 }

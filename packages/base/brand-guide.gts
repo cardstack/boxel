@@ -35,7 +35,6 @@ import BrandFunctionalPalette, {
   formatSwatchName,
 } from './brand-functional-palette';
 import BrandLogo from './brand-logo';
-import CSSValueField from './css-value';
 import { mergeRuleMaps } from './structured-theme';
 import DetailedStyleRef from './detailed-style-reference';
 import {
@@ -44,14 +43,13 @@ import {
   NavSection,
   ModeToggle,
   CssFieldEditor,
+  CardContainerCss,
 } from './default-templates/theme-dashboard';
 
 const sharedBrandVarsMap: Record<string, string> = {
   '--primary': '--brand-primary',
   '--secondary': '--brand-secondary',
   '--accent': '--brand-accent',
-  '--spacing': '--brand-spacing',
-  '--radius': '--brand-radius',
 };
 
 const rootToBrandVariableMapping: Record<string, string> = {
@@ -80,6 +78,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           @title={{@model.cardTitle}}
           @description={{@model.cardDescription}}
           @isDarkMode={{this.isDarkMode}}
+          @version={{@model.version}}
         >
           <:meta>
             {{#if @model.markUsage.primaryMark1}}
@@ -95,11 +94,13 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         </ThemeDashboardHeader>
       </:header>
       <:default>
-        <ModeToggle
-          class='brand-guide-mode-toggle'
-          @toggleDarkMode={{this.toggleDarkMode}}
-          @isDarkMode={{this.isDarkMode}}
-        />
+        {{#if @model.hasDarkMode}}
+          <ModeToggle
+            class='brand-guide-mode-toggle'
+            @toggleDarkMode={{this.toggleDarkMode}}
+            @isDarkMode={{this.isDarkMode}}
+          />
+        {{/if}}
         <GridContainer class='brand-guide-grid'>
           {{#each this.sectionsWithContent as |section|}}
             <NavSection @id={{section.id}} @title={{section.title}}>
@@ -215,6 +216,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     </div>
                   {{/if}}
                 </div>
+              {{else if (eq section.id 'card-container-css')}}
+                {{#if @model.cssVariables}}
+                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                {{/if}}
               {{else if (eq section.id 'import-css')}}
                 <CssFieldEditor @setCss={{@model.setCss}} />
               {{else if (eq section.id 'inspirations')}}
@@ -450,6 +455,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         return true;
       }
 
+      if (section.id === 'card-container-css') {
+        return Boolean(this.args.model.cssVariables);
+      }
+
       if (section.id === 'brand-palette') {
         return this.hasBrandPaletteContent;
       }
@@ -491,10 +500,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
     return Boolean(
       model.colorPalette ||
-        model.typographySystem ||
-        model.geometricLanguage ||
-        model.materialVocabulary ||
-        model.wallpaperImages?.length,
+      model.typographySystem ||
+      model.geometricLanguage ||
+      model.materialVocabulary ||
+      model.wallpaperImages?.length,
     );
   }
 }
@@ -635,12 +644,9 @@ export default class BrandGuide extends DetailedStyleRef {
     return combinedRules;
   }
 
-  // Color Palettes
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(BrandFunctionalPalette);
   @field typography = contains(BrandTypography);
-  @field cornerRadius = contains(CSSValueField);
-  @field spacing = contains(CSSValueField);
   @field markUsage = contains(BrandLogo);
 
   // CSS Variables computed from field entries
