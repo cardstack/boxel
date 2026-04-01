@@ -2,11 +2,20 @@
   "name": "eslint-plugin-cardstack-host",
   "version": "1.0.0",
   "description": "Custom ESLint rules for the Boxel host app",
-  "main": "index.js",
+  "main": "lib/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "update:eslint-docs": "eslint-doc-generator",
+    "update": "node ./scripts/update-rules.js && pnpm run update:eslint-docs"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Cardstack",
+  "license": "ISC",
+  "dependencies": {
+    "requireindex": "catalog:"
+  },
+  "devDependencies": {
+    "eslint": "catalog:",
+    "eslint-doc-generator": "catalog:"
+  }
 }
