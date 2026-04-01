@@ -12,6 +12,17 @@ import jwt from 'jsonwebtoken';
 import '../setup-logger';
 import { logger } from '../logger';
 
+// Strip ambient env vars that could break the hermetic test seal.
+// The harness always sets HOST_URL explicitly via context.hostURL when
+// spawning child processes — an ambient HOST_URL (e.g. from a dev shell
+// that sets HOST_URL=http://localhost:4200) would be inherited by child
+// processes that don't explicitly override it, causing them to talk to
+// a different Matrix/realm server than the hermetic test infrastructure.
+// This module is only imported by harness code (test infrastructure),
+// so it's safe to strip unconditionally — NODE_ENV may be 'test' or
+// 'development' depending on how the harness is invoked.
+delete process.env.HOST_URL;
+
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
 export type RealmPermissions = Record<string, RealmAction[]>;

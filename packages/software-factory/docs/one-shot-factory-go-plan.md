@@ -469,7 +469,10 @@ Helper module for managing test execution and results in the test realm.
 - `TestRunStatusField` — enum: running, passed, failed, error
 - `TestResultStatusField` — enum: pending, passed, failed, error
 - `TestResultEntry` (FieldDef) — testName, status, message, stackTrace, durationMs
-- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), specRef (CodeRefField), status, passedCount, failedCount, durationMs, results (containsMany), errorMessage, title (computed)
+- `SpecResult` (FieldDef) — specRef (CodeRefField), results (containsMany TestResultEntry), passedCount (computed), failedCount (computed)
+- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), status, passedCount (computed, rolled up from specResults), failedCount (computed, rolled up from specResults), durationMs, specResults (containsMany SpecResult), errorMessage, title (computed)
+
+A TestRun contains multiple SpecResults, each grouping test results under a spec reference. The specRef's `module` field identifies the spec file (e.g., the Playwright suite title). Counts on TestRun are aggregated across all SpecResults.
 
 #### Return Type
 

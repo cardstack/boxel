@@ -3,6 +3,7 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { readCardSource, writeCardSource } from './realm-operations';
 import type {
   CreateTestRunOptions,
+  SpecResultData,
   TestResultEntryData,
   TestRunAttributes,
   TestRunRealmOptions,
@@ -58,16 +59,27 @@ export async function completeTestRun(
     fetch: options.fetch,
   };
 
-  let readResult = await readCardSource(
-    options.testRealmUrl,
-    testRunId,
-    fetchOptions,
-  );
+  // Retry the read — after a long spawnSync (Playwright), TCP connections
+  // may be stale causing the first fetch to fail with "fetch failed".
+  let readResult: Awaited<ReturnType<typeof readCardSource>> | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    readResult = await readCardSource(
+      options.testRealmUrl,
+      testRunId,
+      fetchOptions,
+    );
+    if (readResult.ok && readResult.document) {
+      break;
+    }
+    if (attempt < 2) {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
 
-  if (!readResult.ok || !readResult.document) {
+  if (!readResult?.ok || !readResult?.document) {
     return {
       updated: false,
-      error: `Failed to read TestRun: ${readResult.error}`,
+      error: `Failed to read TestRun: ${readResult?.error}`,
     };
   }
 
@@ -75,7 +87,7 @@ export async function completeTestRun(
     status: attrs.status,
     completedAt: new Date().toISOString(),
     durationMs: attrs.durationMs,
-    results: attrs.results,
+    specResults: attrs.specResults,
   };
   if (attrs.errorMessage) {
     completionAttrs.errorMessage = attrs.errorMessage;
@@ -128,16 +140,19 @@ export function buildTestRunCardDocument(
     status: 'pending' as const,
   }));
 
+  let specResults: SpecResultData[] = [
+    {
+      ...(options?.specRef ? { specRef: options.specRef } : {}),
+      results,
+    },
+  ];
+
   let attributes: Record<string, unknown> = {
     sequenceNumber: options?.sequenceNumber ?? 1,
     runAt: new Date().toISOString(),
     status: 'running',
-    results,
+    specResults,
   };
-
-  if (options?.specRef) {
-    attributes.specRef = options.specRef;
-  }
 
   let relationships:
     | Record<string, { links: { self: string | null } }>

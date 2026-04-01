@@ -57,10 +57,10 @@ Flow per ticket:
 
 1. agent implements the card or feature in the target realm
 2. agent generates test specs in the target realm (`Tests/<ticket-slug>.spec.ts`)
-3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Test Runs/<slug>-<seq>.json`) with `status: running`
+3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Test Runs/<slug>-<seq>.json`) with `status: running` and pre-populated `specResults` containing pending entries
 4. spec files are pulled from the target realm locally; Playwright runs them against the live target realm
 5. card instances created by specs during execution are written to the test artifacts realm (`Run <seq>/` folder) via `BOXEL_TEST_ARTIFACTS_FOLDER_URL`
-6. test results (all passing + failing) are parsed from the Playwright JSON report and written back to the TestRun card
+6. test results are parsed from the Playwright JSON report, grouped by spec (top-level Playwright suite) into `SpecResult` entries, and written back to the TestRun card's `specResults` field. Each SpecResult has a `specRef` (CodeRefField with `module` = suite title, `name` = "default") and its own `passedCount`/`failedCount` computeds. TestRun's `passedCount`/`failedCount` are rolled up across all SpecResults.
 7. if tests fail, the full test output (errors, stack traces) is available on the TestRun card and fed back to the agent
 8. agent iterates on implementation and/or tests until all tests pass
 9. passing TestRun cards serve as durable verification evidence for the ticket, linked to the Project card
