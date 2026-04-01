@@ -33,7 +33,9 @@ export function render(
   owner: Owner,
   format?: Format,
 ): void {
-  // clear any previous render work
+  // `renderComponent()` creates a live Glimmer tree. Dropping the DOM nodes
+  // without destroying the previous render leaks that tree across rerenders.
+  teardown(element);
   removeChildren(element);
 
   let {
