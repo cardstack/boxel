@@ -1804,6 +1804,9 @@ importers:
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
+      '@cardstack/eslint-plugin-host':
+        specifier: workspace:*
+        version: link:../eslint-plugin-cardstack-host
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
@@ -2110,9 +2113,6 @@ importers:
       eslint-config-prettier:
         specifier: 'catalog:'
         version: 9.1.2(eslint@8.57.1)
-      eslint-plugin-cardstack-host:
-        specifier: workspace:*
-        version: link:../eslint-plugin-cardstack-host
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.7.5(@babel/core@7.28.6)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
