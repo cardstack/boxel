@@ -1745,6 +1745,7 @@ class ToolExecutor {
   async execute(
     toolName: string,
     toolArgs: Record<string, unknown>,
+    options?: { authorization?: string },
   ): Promise<ToolResult>;
 }
 ```

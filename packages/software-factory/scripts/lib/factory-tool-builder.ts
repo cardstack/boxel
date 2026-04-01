@@ -12,24 +12,19 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { ToolResult } from './factory-agent';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
+import { executeTestRunFromRealm } from './test-run-execution';
 import {
   writeModuleSource,
   writeCardSource,
   readCardSource,
   searchRealm,
+  ensureTrailingSlash,
   type RealmFetchOptions,
 } from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const MODULE_EXTENSIONS: ReadonlySet<string> = new Set([
-  '.gts',
-  '.ts',
-  '.js',
-  '.gjs',
-]);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,8 +44,16 @@ export interface ToolBuilderConfig {
   realmTokens: Record<string, string>;
   /** Realm server JWT for server-level operations (_create-realm, _realm-auth, _server-session). */
   serverToken?: string;
+  /** Module URL for the TestRun card definition (e.g., `<realmUrl>test-results`). */
+  testResultsModuleUrl?: string;
   /** Fetch implementation (injectable for testing). */
   fetch?: typeof globalThis.fetch;
+  /** Matrix auth for test realm creation (required for run_tests when project card is provided). */
+  matrixAuth?: {
+    userId: string;
+    accessToken: string;
+    matrixUrl: string;
+  };
 }
 
 export interface ToolCallEntry {
@@ -95,6 +98,7 @@ export function buildFactoryTools(
     buildSearchRealmTool(config),
     buildUpdateTicketTool(config),
     buildCreateKnowledgeTool(config),
+    buildRunTestsTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -118,14 +122,16 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'write_file',
     description:
-      'Write a file to a realm. Routes .gts/.ts files as raw module source, .json files as card source.',
+      'Write a file to a realm. Uses card+source MIME type so the realm server accepts the raw content as-is. ' +
+      'The path must include the file extension (e.g., "my-card.gts", "Card/1.json"). ' +
+      'For card instances, the caller must include the .json extension.',
     parameters: {
       type: 'object',
       properties: {
         path: {
           type: 'string',
           description:
-            'Realm-relative file path (e.g., "my-card.gts" or "Card/1.json")',
+            'Realm-relative file path with extension (e.g., "my-card.gts", "Card/1.json")',
         },
         content: { type: 'string', description: 'File content' },
         realm: {
@@ -141,21 +147,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
       let content = args.content as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-
-      if (isModuleFile(path)) {
-        return writeModuleSource(realmUrl, path, content, fetchOptions);
-      } else {
-        let document: LooseSingleCardDocument;
-        try {
-          document = JSON.parse(content) as LooseSingleCardDocument;
-        } catch {
-          return {
-            ok: false,
-            error: `Failed to parse content as JSON for card write: ${path}`,
-          };
-        }
-        return writeCardSource(realmUrl, path, document, fetchOptions);
-      }
+      return writeModuleSource(realmUrl, path, content, fetchOptions);
     },
   };
 }
@@ -295,6 +287,67 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
+function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'run_tests',
+    description:
+      'Execute Playwright tests against the target realm. Pulls test spec files from the realm, ' +
+      'runs them via the Playwright harness, and returns structured test results (pass/fail counts, ' +
+      'failure details with error messages and stack traces).',
+    parameters: {
+      type: 'object',
+      properties: {
+        slug: {
+          type: 'string',
+          description:
+            'Ticket slug used to name the test run (e.g., "define-sticky-note-core")',
+        },
+        specPaths: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Realm-relative paths to Playwright test files (e.g., ["Tests/sticky-note.spec.ts"])',
+        },
+        testNames: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Specific test names to run (empty array runs all tests in the spec files)',
+        },
+        projectCardUrl: {
+          type: 'string',
+          description:
+            'URL to the Project card (used to read/write testArtifactsRealmUrl)',
+        },
+      },
+      required: ['slug', 'specPaths'],
+    },
+    execute: async (args) => {
+      let targetRealmUrl = config.targetRealmUrl;
+      let authorization = resolveAuthForUrl(config, targetRealmUrl);
+      let testResultsModuleUrl =
+        config.testResultsModuleUrl ??
+        `${ensureTrailingSlash(targetRealmUrl)}test-results`;
+
+      let result = await executeTestRunFromRealm({
+        targetRealmUrl,
+        testResultsModuleUrl,
+        slug: args.slug as string,
+        specPaths: args.specPaths as string[],
+        testNames: (args.testNames as string[]) ?? [],
+        authorization,
+        fetch: config.fetch,
+        projectCardUrl: args.projectCardUrl as string | undefined,
+        testRealmUrl: config.testRealmUrl,
+        matrixAuth: config.matrixAuth,
+        serverToken: config.serverToken,
+      });
+
+      return result;
+    },
+  };
+}
+
 function buildSignalDoneTool(): FactoryTool {
   return {
     name: 'signal_done',
@@ -416,7 +469,7 @@ function buildFetchOptions(
   realmUrl: string,
 ): RealmFetchOptions {
   return {
-    authorization: config.realmTokens[realmUrl],
+    authorization: resolveAuthForUrl(config, realmUrl),
     fetch: config.fetch,
   };
 }
@@ -443,13 +496,4 @@ function resolveAuthForUrl(
     return config.realmTokens[withoutSlash];
   }
   return undefined;
-}
-
-function isModuleFile(path: string): boolean {
-  let dotIndex = path.lastIndexOf('.');
-  if (dotIndex === -1) {
-    return false;
-  }
-  let ext = path.slice(dotIndex);
-  return MODULE_EXTENSIONS.has(ext);
 }

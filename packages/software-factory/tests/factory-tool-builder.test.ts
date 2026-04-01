@@ -164,8 +164,8 @@ module('factory-tool-builder > tool building', function () {
 // write_file: file routing (.gts vs .json)
 // ---------------------------------------------------------------------------
 
-module('factory-tool-builder > write_file routing', function () {
-  test('routes .gts file to writeModuleSource with raw text body', async function (assert) {
+module('factory-tool-builder > write_file', function () {
+  test('writes .gts file with raw text body', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -203,7 +203,7 @@ module('factory-tool-builder > write_file routing', function () {
     assert.strictEqual(requests[0].body, 'export function helper() {}');
   });
 
-  test('routes .json file to writeCardSource with parsed JSON body', async function (assert) {
+  test('writes .json file as raw content (no JSON parsing)', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -223,28 +223,8 @@ module('factory-tool-builder > write_file routing', function () {
     assert.true(result.ok);
     assert.strictEqual(requests[0].url, `${TARGET_REALM}Card/1.json`);
     assert.strictEqual(requests[0].method, 'POST');
-    // writeCardSource sends JSON.stringify(document, null, 2)
-    assert.strictEqual(
-      requests[0].body,
-      JSON.stringify(JSON.parse(cardJson), null, 2),
-    );
-  });
-
-  test('returns error for .json with invalid JSON content', async function (assert) {
-    let { fetch: mockFetch } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let result = (await writeTool.execute({
-      path: 'Card/broken.json',
-      content: 'not valid json {{{',
-    })) as { ok: boolean; error: string };
-
-    assert.false(result.ok);
-    assert.true(result.error.includes('Failed to parse'));
+    // writeModuleSource sends raw content as-is
+    assert.strictEqual(requests[0].body, cardJson);
   });
 });
 
