@@ -1,19 +1,15 @@
-import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
 import { Client as PgClient } from 'pg';
 
 import {
-  baseRealmDir,
   baseRealmURLFor,
   builderDatabaseNameForCacheKey,
   DEFAULT_BASE_REALM_PERMISSIONS,
   DEFAULT_MIGRATED_TEMPLATE_DB,
   DEFAULT_SOURCE_REALM_PERMISSIONS,
+  findAvailablePort,
   logTimed,
   pgAdminConnectionConfig,
   quotePgIdentifier,
-  shouldIgnoreFixturePath,
-  sourceRealmDir,
   sourceRealmURLFor,
   templateLog,
   waitUntil,
@@ -549,69 +545,49 @@ export async function warnIfSnapshotLooksCold(
   );
 }
 
-function countFixtureFiles(dir: string): number {
-  let count = 0;
-  function visit(currentDir: string, relativePath: string) {
-    for (let entry of readdirSync(currentDir, { withFileTypes: true })) {
-      let entryRelativePath = relativePath
-        ? `${relativePath}/${entry.name}`
-        : entry.name;
-      if (shouldIgnoreFixturePath(entryRelativePath)) {
-        continue;
-      }
-      let fullPath = join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        visit(fullPath, entryRelativePath);
-      } else if (entry.isFile()) {
-        count++;
-      }
-    }
-  }
-  try {
-    visit(dir, '');
-  } catch {
-    // If we can't count files, just return 0 and skip progress reporting
-  }
-  return count;
+interface IndexingStatus {
+  active: {
+    realmURL: string;
+    totalFiles: number;
+    filesCompleted: number;
+  }[];
+  pending: { realmURL: string }[];
 }
 
-async function queryIndexedCount(databaseName: string): Promise<{
-  indexed: number;
-  errors: number;
-}> {
-  let client = new PgClient({
-    ...pgAdminConnectionConfig(databaseName),
-    connectionTimeoutMillis: 2000,
-  });
+async function queryIndexingStatus(
+  workerManagerPort: number,
+): Promise<IndexingStatus | undefined> {
   try {
-    await client.connect();
-    let { rows } = await client.query<{ total: number; errors: number }>(
-      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE has_error)::int AS errors FROM boxel_index`,
+    let response = await fetch(
+      `http://localhost:${workerManagerPort}/_indexing-status`,
     );
-    return { indexed: rows[0]?.total ?? 0, errors: rows[0]?.errors ?? 0 };
-  } catch {
-    return { indexed: 0, errors: 0 };
-  } finally {
-    try {
-      await client.end();
-    } catch {
-      // best effort cleanup
+    if (!response.ok) {
+      return undefined;
     }
+    return (await response.json()) as IndexingStatus;
+  } catch {
+    return undefined;
   }
 }
 
 /**
- * Start a progress reporter that polls the database for indexing status and
- * writes updates to stderr. Returns a stop function.
+ * Start a progress reporter that polls the worker-manager's
+ * /_indexing-status JSON endpoint for precise indexing progress.
+ * The port must be pre-allocated by the caller via findAvailablePort()
+ * and passed to startIsolatedRealmStack as workerManagerPort.
  */
 function startIndexingProgressReporter(
-  databaseName: string,
-  estimatedTotal: number,
-): { stop: () => void } {
+  workerManagerPort: number,
+  totalRealms: number,
+): {
+  stop: () => void;
+} {
   let stopped = false;
   let polling = false;
-  let lastReported = -1;
+  let lastCompleted = -1;
+  let lastTotal = -1;
   let startedAt = Date.now();
+  let seenRealms = new Set<string>();
 
   let report = async () => {
     if (stopped || polling) {
@@ -619,29 +595,55 @@ function startIndexingProgressReporter(
     }
     polling = true;
     try {
-      let { indexed, errors } = await queryIndexedCount(databaseName);
+      let elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
+      let status = await queryIndexingStatus(workerManagerPort);
       if (stopped) {
         return;
       }
-      // Only report when the count changes or on the first poll.
-      if (indexed === lastReported) {
+      if (!status) {
+        process.stderr.write(`\r  indexing: waiting for status ${elapsed}s`);
         return;
       }
-      lastReported = indexed;
 
-      let elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
-      let errorSuffix = errors > 0 ? ` (${errors} errors)` : '';
-      if (estimatedTotal > 0) {
-        let pct = Math.min(100, Math.round((indexed / estimatedTotal) * 100));
+      let current = status.active[0];
+      let filesCompleted = current?.filesCompleted ?? 0;
+      let totalFiles = current?.totalFiles ?? 0;
+      lastCompleted = filesCompleted;
+      lastTotal = totalFiles;
+
+      // Track which realms we've seen to compute remaining count.
+      if (current) {
+        seenRealms.add(current.realmURL);
+      }
+      let remaining = Math.max(0, totalRealms - seenRealms.size);
+
+      let realmName = current
+        ? new URL(current.realmURL).pathname.replace(/\/$/, '').split('/').pop()
+        : undefined;
+      let realmLabel = realmName ? ` ${realmName}` : '';
+      let remainingLabel =
+        remaining > 0
+          ? ` (${remaining} realm${remaining > 1 ? 's' : ''} remaining)`
+          : '';
+
+      if (totalFiles > 0) {
+        let pct = Math.min(
+          100,
+          Math.round((filesCompleted / totalFiles) * 100),
+        );
         let barWidth = 30;
         let filled = Math.round((pct / 100) * barWidth);
         let bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
         process.stderr.write(
-          `\r  indexing [${bar}] ${indexed}/${estimatedTotal} files (${pct}%) ${elapsed}s${errorSuffix}`,
+          `\r  indexing${realmLabel} [${bar}] ${filesCompleted}/${totalFiles} files (${pct}%) ${elapsed}s${remainingLabel}`,
+        );
+      } else if (status.active.length > 0) {
+        process.stderr.write(
+          `\r  indexing${realmLabel}: discovering files... ${elapsed}s${remainingLabel}`,
         );
       } else {
         process.stderr.write(
-          `\r  indexing ${indexed} files indexed ${elapsed}s${errorSuffix}`,
+          `\r  indexing: waiting for realm server ${elapsed}s`,
         );
       }
     } finally {
@@ -650,7 +652,6 @@ function startIndexingProgressReporter(
   };
 
   let interval = setInterval(() => void report(), 2000);
-  // Do an immediate first check after a brief delay to let the DB initialize.
   let initialTimeout = setTimeout(() => void report(), 3000);
 
   return {
@@ -658,11 +659,10 @@ function startIndexingProgressReporter(
       stopped = true;
       clearInterval(interval);
       clearTimeout(initialTimeout);
-      // Clear the progress line and print final status.
-      if (lastReported >= 0) {
+      if (lastCompleted >= 0) {
         let elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
         process.stderr.write(
-          `\r  indexing complete: ${lastReported} files indexed in ${elapsed}s\n`,
+          `\r  indexing complete: ${lastCompleted}/${lastTotal} files in ${elapsed}s\n`,
         );
       }
     },
@@ -782,17 +782,11 @@ export async function buildCombinedTemplateDatabase({
         username: `additional_realm_${i}`,
       }));
 
-      // Estimate total files for progress reporting.
-      let estimatedTotal =
-        realmFixtures.reduce(
-          (sum, f) => sum + countFixtureFiles(f.realmDir),
-          0,
-        ) +
-        countFixtureFiles(sourceRealmDir) +
-        countFixtureFiles(baseRealmDir);
+      let wmPort = await findAvailablePort();
+      // base + source + each fixture realm
       let progress = startIndexingProgressReporter(
-        builderDatabaseName,
-        estimatedTotal,
+        wmPort,
+        2 + realmFixtures.length,
       );
 
       let stack;
@@ -806,6 +800,7 @@ export async function buildCombinedTemplateDatabase({
           migrateDB: !hasMigratedTemplate,
           fullIndexOnStartup: true,
           additionalRealms,
+          workerManagerPort: wmPort,
         });
       } catch (error) {
         progress.stop();
@@ -884,15 +879,9 @@ export async function buildTemplateDatabase({
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
 
-      // Estimate total files for progress reporting: fixture + source realm + base realm.
-      let estimatedTotal =
-        countFixtureFiles(realmDir) +
-        countFixtureFiles(sourceRealmDir) +
-        countFixtureFiles(baseRealmDir);
-      let progress = startIndexingProgressReporter(
-        builderDatabaseName,
-        estimatedTotal,
-      );
+      let wmPort = await findAvailablePort();
+      // base + source + test realm
+      let progress = startIndexingProgressReporter(wmPort, 3);
 
       let stack;
       try {
@@ -904,6 +893,7 @@ export async function buildTemplateDatabase({
           context,
           migrateDB: !hasMigratedTemplate,
           fullIndexOnStartup: true,
+          workerManagerPort: wmPort,
         });
       } catch (error) {
         progress.stop();

@@ -277,6 +277,7 @@ export async function startIsolatedRealmStack({
   migrateDB,
   fullIndexOnStartup,
   additionalRealms,
+  workerManagerPort: explicitWorkerManagerPort,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -286,6 +287,10 @@ export async function startIsolatedRealmStack({
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
   additionalRealms?: AdditionalRealm[];
+  /** When provided, the worker-manager will listen on this port instead of
+   *  picking one dynamically. This lets callers know the port upfront (e.g.
+   *  for progress monitoring via /_indexing-status). */
+  workerManagerPort?: number;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
@@ -396,7 +401,7 @@ export async function startIsolatedRealmStack({
   let workerArgs = [
     '--transpileOnly',
     'worker-manager',
-    `--port=${DEFAULT_WORKER_MANAGER_PORT}`,
+    `--port=${explicitWorkerManagerPort ?? DEFAULT_WORKER_MANAGER_PORT}`,
     `--matrixURL=${context.matrixURL}`,
     `--prerendererUrl=${prerenderURL}`,
     `--fromUrl=${realmURL.href}`,
