@@ -33,10 +33,15 @@ Then configure the rules you want to use under the rules section:
 ✅ Set in the `recommended` configuration.\
 🔧 Automatically fixable by the [`--fix` CLI option](https://eslint.org/docs/user-guide/command-line-interface#--fix).
 
-| Name                                                                   | Description                                                                                     | 💼 | 🔧 |
-| :--------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------- | :- | :- |
-| [missing-card-api-import](docs/rules/missing-card-api-import.md)       | disallow usage of card-api with missing imports with auto-fix                                   | ✅  | 🔧 |
-| [template-missing-invokable](docs/rules/template-missing-invokable.md) | disallow missing helpers, modifiers, or components in \<template\> with auto-fix to import them | ✅  | 🔧 |
+| Name                                                                   | Description                                                                                                        | 💼 | 🔧 |
+| :--------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------- | :- | :- |
+| [missing-card-api-import](docs/rules/missing-card-api-import.md)       | disallow usage of card-api with missing imports with auto-fix                                                      | ✅  | 🔧 |
+| [no-css-position-fixed](docs/rules/no-css-position-fixed.md)           | disallow `position: fixed` in card CSS because cards should not break out of their bounding box                    |    |    |
+| [no-duplicate-imports](docs/rules/no-duplicate-imports.md)             | Prevent duplicate imports from the same module                                                                     | ✅  | 🔧 |
+| [no-forbidden-head-tags](docs/rules/no-forbidden-head-tags.md)         | disallow forbidden HTML elements in `static head` templates — only `<title>`, `<meta>`, and `<link>` are permitted | ✅  |    |
+| [no-literal-realm-urls](docs/rules/no-literal-realm-urls.md)           | Disallow environment-specific realm URLs in code; use portable prefixes like @cardstack/catalog/ instead           |    | 🔧 |
+| [no-percy-direct-import](docs/rules/no-percy-direct-import.md)         | Forbid importing percySnapshot directly from @percy/ember; use @cardstack/host/tests/helpers instead               | ✅  | 🔧 |
+| [template-missing-invokable](docs/rules/template-missing-invokable.md) | disallow missing helpers, modifiers, or components in \<template\> with auto-fix to import them                    | ✅  | 🔧 |
 
 <!-- end auto-generated rules list -->
 
