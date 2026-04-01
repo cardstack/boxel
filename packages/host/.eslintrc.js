@@ -7,7 +7,7 @@ const sharedBrowserConfig = {
   plugins: [
     'ember',
     '@typescript-eslint',
-    'cardstack-host',
+    '@cardstack/host',
     '@cardstack/boxel',
   ],
   extends: [
@@ -18,7 +18,7 @@ const sharedBrowserConfig = {
     'plugin:prettier/recommended',
     'plugin:qunit-dom/recommended',
     'plugin:@cardstack/boxel/recommended',
-    'plugin:cardstack-host/recommended',
+    'plugin:@cardstack/host/recommended',
   ],
   rules: {
     '@typescript-eslint/consistent-type-imports': [

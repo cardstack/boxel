@@ -1,4 +1,4 @@
-# Ensure every host command module is imported, shimmed, and exported (`cardstack-host/host-commands-registered`)
+# Ensure every host command module is imported, shimmed, and exported (`@cardstack/host/host-commands-registered`)
 
 💼 This rule is enabled in the ✅ `recommended` config.
 

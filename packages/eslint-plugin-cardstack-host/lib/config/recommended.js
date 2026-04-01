@@ -1,5 +1,5 @@
 module.exports = {
-  plugins: ['cardstack-host'],
+  plugins: ['@cardstack/host'],
   rules: {
     ...require('../recommended-rules'),
   },

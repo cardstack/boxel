@@ -1,5 +1,5 @@
 {
-  "name": "eslint-plugin-cardstack-host",
+  "name": "@cardstack/eslint-plugin-host",
   "version": "1.0.0",
   "description": "Custom ESLint rules for the Boxel host app",
   "main": "lib/index.js",

@@ -14,7 +14,7 @@ function generate(filename, filter) {
     .map((fileName) => [fileName, require(path.join(root, fileName))]);
 
   const recommendedRules = rules.reduce((obj, entry) => {
-    const name = `cardstack-host/${entry[0]}`;
+    const name = `@cardstack/host/${entry[0]}`;
     if (filter(entry)) {
       obj[name] = 'error';
     }

@@ -4,11 +4,11 @@ Custom ESLint rules for the Boxel host app.
 
 ## Usage
 
-Add `cardstack-host` to the plugins section of your `.eslintrc` configuration file:
+Add `@cardstack/host` to the plugins section of your `.eslintrc` configuration file:
 
 ```json
 {
-  "plugins": ["cardstack-host"]
+  "plugins": ["@cardstack/host"]
 }
 ```
 
@@ -17,7 +17,7 @@ Then configure the rules you want to use under the rules section:
 ```json
 {
   "rules": {
-    "cardstack-host/rule-name": "error"
+    "@cardstack/host/rule-name": "error"
   }
 }
 ```
