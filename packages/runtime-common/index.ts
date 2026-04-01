@@ -418,6 +418,8 @@ interface CardChooserOpts {
   };
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
+  preselectConsumingRealm?: boolean;
+  preselectedCardUrls?: string[];
 }
 
 export interface CardChooser {

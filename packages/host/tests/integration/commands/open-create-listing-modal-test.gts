@@ -31,7 +31,32 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
     await withCachedRealmSetup(async () =>
       setupIntegrationTestRealm({
         mockMatrixUtils,
-        contents: {},
+        contents: {
+          'pet.gts': `
+            import {
+              CardDef,
+              Component,
+              FieldDef,
+              contains,
+              field,
+            } from "https://cardstack.com/base/card-api";
+            import StringField from "https://cardstack.com/base/string";
+
+            export class PetName extends FieldDef {
+              static displayName = 'Pet Name';
+            }
+
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+
+              @field name = contains(StringField);
+
+              static isolated = class Isolated extends Component<typeof this> {
+                <template><@fields.name /></template>
+              };
+            }
+          `,
+        },
       }),
     );
   });
@@ -60,6 +85,7 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
       },
       targetRealm: testRealmURL,
       openCardIds: [`${testRealmURL}Pet/mango`],
+      declarationKind: 'card',
     });
   });
 
@@ -89,6 +115,34 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
       payload?.openCardIds,
       [],
       'openCardIds is empty when not provided',
+    );
+    assert.strictEqual(
+      payload?.declarationKind,
+      'card',
+      'card defs are tagged as card listings',
+    );
+  });
+
+  test('stores modal payload with examples hidden for field defs', async function (assert) {
+    let commandService = getService('command-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+
+    let command = new OpenCreateListingModalCommand(
+      commandService.commandContext,
+    );
+
+    await command.execute({
+      codeRef: {
+        module: `${testRealmURL}pet`,
+        name: 'PetName',
+      },
+      targetRealm: testRealmURL,
+    } as never);
+
+    assert.strictEqual(
+      operatorModeStateService.createListingModalPayload?.declarationKind,
+      'field',
+      'examples are hidden for field defs',
     );
   });
 
