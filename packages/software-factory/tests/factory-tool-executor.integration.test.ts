@@ -94,13 +94,9 @@ module('factory-tool-executor integration > realm-api requests', function () {
         authorization: 'Bearer realm-jwt-for-user',
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-read',
-        toolArgs: {
-          'realm-url': realmUrl,
-          path: 'Card/hello.gts',
-        },
+      let result = await executor.execute('realm-read', {
+        'realm-url': realmUrl,
+        path: 'Card/hello.gts',
       });
 
       assert.strictEqual(result.exitCode, 0, 'exitCode is 0');
@@ -137,14 +133,10 @@ module('factory-tool-executor integration > realm-api requests', function () {
         authorization: 'Bearer realm-jwt-for-user',
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-write',
-        toolArgs: {
-          'realm-url': realmUrl,
-          path: 'CardDef/my-card.gts',
-          content: 'export class MyCard extends CardDef {}',
-        },
+      let result = await executor.execute('realm-write', {
+        'realm-url': realmUrl,
+        path: 'CardDef/my-card.gts',
+        content: 'export class MyCard extends CardDef {}',
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -185,13 +177,9 @@ module('factory-tool-executor integration > realm-api requests', function () {
         authorization: 'Bearer realm-jwt-for-user',
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-delete',
-        toolArgs: {
-          'realm-url': realmUrl,
-          path: 'Card/old-card.json',
-        },
+      let result = await executor.execute('realm-delete', {
+        'realm-url': realmUrl,
+        path: 'Card/old-card.json',
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -230,13 +218,9 @@ module('factory-tool-executor integration > realm-api requests', function () {
         },
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-search',
-        toolArgs: {
-          'realm-url': realmUrl,
-          query,
-        },
+      let result = await executor.execute('realm-search', {
+        'realm-url': realmUrl,
+        query,
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -280,13 +264,9 @@ module('factory-tool-executor integration > realm-api requests', function () {
         { op: 'remove', href: './Card/old.json' },
       ];
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-atomic',
-        toolArgs: {
-          'realm-url': realmUrl,
-          operations: JSON.stringify(ops),
-        },
+      let result = await executor.execute('realm-atomic', {
+        'realm-url': realmUrl,
+        operations: JSON.stringify(ops),
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -325,12 +305,8 @@ module('factory-tool-executor integration > realm-api requests', function () {
         authorization: 'Bearer realm-server-jwt-xyz',
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-auth',
-        toolArgs: {
-          'realm-server-url': `${origin}/user/target/`,
-        },
+      let result = await executor.execute('realm-auth', {
+        'realm-server-url': `${origin}/user/target/`,
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -364,14 +340,10 @@ module('factory-tool-executor integration > realm-api requests', function () {
         authorization: 'Bearer realm-server-jwt-minted',
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-create',
-        toolArgs: {
-          'realm-server-url': `${origin}/user/target/`,
-          name: 'New Realm',
-          endpoint: 'user/new-realm',
-        },
+      let result = await executor.execute('realm-create', {
+        'realm-server-url': `${origin}/user/target/`,
+        name: 'New Realm',
+        endpoint: 'user/new-realm',
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -419,13 +391,9 @@ module('factory-tool-executor integration > realm-api requests', function () {
         testRealmUrl: `${origin}/user/target-tests/`,
       });
 
-      let result = await executor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-server-session',
-        toolArgs: {
-          'realm-server-url': `${origin}/user/target/`,
-          'openid-token': 'matrix-openid-access-token',
-        },
+      let result = await executor.execute('realm-server-session', {
+        'realm-server-url': `${origin}/user/target/`,
+        'openid-token': 'matrix-openid-access-token',
       });
 
       assert.strictEqual(result.exitCode, 0);
@@ -483,14 +451,13 @@ module('factory-tool-executor integration > realm-api requests', function () {
         testRealmUrl: `${origin}/user/target-tests/`,
       });
 
-      let sessionResult = await sessionExecutor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-server-session',
-        toolArgs: {
+      let sessionResult = await sessionExecutor.execute(
+        'realm-server-session',
+        {
           'realm-server-url': serverUrl,
           'openid-token': 'e2e-openid-token',
         },
-      });
+      );
 
       assert.strictEqual(sessionResult.exitCode, 0);
       let jwt = (sessionResult.output as { token: string }).token;
@@ -504,14 +471,10 @@ module('factory-tool-executor integration > realm-api requests', function () {
         authorization: jwt,
       });
 
-      let createResult = await createExecutor.execute({
-        type: 'invoke_tool',
-        tool: 'realm-create',
-        toolArgs: {
-          'realm-server-url': serverUrl,
-          name: 'E2E Scratch',
-          endpoint: 'user/e2e-scratch',
-        },
+      let createResult = await createExecutor.execute('realm-create', {
+        'realm-server-url': serverUrl,
+        name: 'E2E Scratch',
+        endpoint: 'user/e2e-scratch',
       });
 
       assert.strictEqual(createResult.exitCode, 0);
@@ -554,10 +517,8 @@ module('factory-tool-executor integration > safety constraints', function () {
       });
 
       try {
-        await executor.execute({
-          type: 'invoke_tool',
-          tool: 'shell-exec-arbitrary',
-          toolArgs: { command: 'rm -rf /' },
+        await executor.execute('shell-exec-arbitrary', {
+          command: 'rm -rf /',
         });
         assert.ok(false, 'should have thrown');
       } catch (err) {
@@ -592,10 +553,8 @@ module('factory-tool-executor integration > safety constraints', function () {
       });
 
       try {
-        await executor.execute({
-          type: 'invoke_tool',
-          tool: 'search-realm',
-          toolArgs: { realm: sourceUrl },
+        await executor.execute('search-realm', {
+          realm: sourceUrl,
         });
         assert.ok(false, 'should have thrown');
       } catch (err) {
@@ -628,13 +587,9 @@ module('factory-tool-executor integration > safety constraints', function () {
       });
 
       try {
-        await executor.execute({
-          type: 'invoke_tool',
-          tool: 'realm-read',
-          toolArgs: {
-            'realm-url': 'https://evil.example.test/hacker/realm/',
-            path: 'secrets.json',
-          },
+        await executor.execute('realm-read', {
+          'realm-url': 'https://evil.example.test/hacker/realm/',
+          path: 'secrets.json',
         });
         assert.ok(false, 'should have thrown');
       } catch (err) {

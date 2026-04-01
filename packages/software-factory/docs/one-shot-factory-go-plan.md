@@ -161,64 +161,186 @@ Rules:
 - derive stable identifiers from the brief intent where possible
 - record assumptions explicitly when the brief is underspecified
 
+### Terminology: "Spec" Disambiguation
+
+**IMPORTANT:** "Spec" has two completely different meanings in this system. All code, docs, and prompts must use the qualified form to avoid confusion:
+
+1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance that adopts from `https://cardstack.com/base/spec#Spec`. This is a **catalog entry** describing a card for inclusion in the Boxel catalog. It has fields like `ref` (CodeRef pointing to the card definition), `specType` (`'card'`|`'field'`|`'component'`), `readMe` (markdown description), `cardTitle`, and `cardDescription`. Example: `Spec/sticky-note.json` describes the StickyNote card.
+
+2. **Playwright test file** (`Tests/` folder, `.spec.ts` files) — A TypeScript Playwright test file that runs browser-level verification against the live realm. Example: `Tests/sticky-note.spec.ts` tests that StickyNote renders correctly.
+
+Never use bare "spec" without qualification. Use **"Catalog Spec card"** for #1 and **"Playwright test file"** or **"test file"** for #2.
+
 ### Phase 4: Execution Loop
+
+The execution loop uses an **executable tool functions** model. Instead of the agent returning a declarative `AgentAction[]` array that the orchestrator interprets, the agent is given callable tool functions and invokes them directly during its turn, seeing results inline. This gives the agent read-then-act capability within a single LLM session.
 
 Required behavior:
 
 1. pick the active or next available ticket
-2. inspect related project and knowledge cards
-3. implement the ticket in the target realm
-4. generate tests for the implemented work in the test realm
-5. execute tests via the test harness against the target realm
-6. save test results as artifacts in the test realm
-7. if tests fail, feed test output back to the agent and return to step 3
-8. if tests pass, update `agentNotes`, `updatedAt`, and `status`
-9. create or update knowledge cards when meaningful decisions occur
-10. continue until:
-    - the MVP is done
-    - a blocker requires user input
-    - verification cannot proceed
+2. resolve skills for the current ticket via `SkillResolver`
+3. load skills from `.agents/skills/` via `SkillLoader`
+4. build executable tool functions (wrapping realm operations, scripts, and signals with auth + safety middleware)
+5. assemble `AgentContext` (project, ticket, knowledge, skills, test results)
+6. call `agent.run(context, tools)` — agent calls tools during its turn, seeing results inline
+7. inspect `AgentRunResult` — if `needs_iteration` (tests failed), update context with test results and go to step 6
+8. if `done` — save results, update ticket status, advance to next ticket
+9. if `blocked` — record clarification, stop
+10. `maxIterations` (default: 5) prevents infinite loops
+
+#### Concrete Data Flow Per Iteration
+
+The agent is given tool functions and calls them directly during its LLM turn. The orchestrator mediates each tool call (validate, execute, return result), but the agent drives the flow.
+
+```
+1. Orchestrator builds tool functions and calls agent.run(context, tools)
+
+2. Agent calls tools during its turn, seeing results inline:
+   Agent: search_realm({ realm: targetRealmUrl, type_name: "StickyNote" })
+   → Tool returns: { data: [] }  (no existing StickyNote)
+
+   Agent: write_file({ path: "sticky-note.gts", content: "import { CardDef, ... } ...", realm: "target" })
+   → Tool returns: { ok: true }
+
+   Agent: write_file({ path: "StickyNote/welcome-note.json", content: "{ \"data\": { ... } }", realm: "target" })
+   → Tool returns: { ok: true }
+
+   Agent: write_file({ path: "Spec/sticky-note.json", content: "{ \"data\": { ... } }", realm: "target" })
+   → Tool returns: { ok: true }
+
+   Agent: write_file({ path: "Tests/sticky-note.spec.ts", content: "import { test, expect } ...", realm: "target" })
+   → Tool returns: { ok: true }
+
+   Agent: signal_done()
+   → Session ends
+
+3. Each tool call goes through safety middleware:
+   - write_file routes .gts/.ts → writeModuleSource(), .json → writeCardSource()
+   - realm selection: tool arg realm === 'test' → testRealmUrl, else → targetRealmUrl
+   - auth: per-realm JWT from realmTokens[realmUrl]
+
+4. After agent signals done, orchestrator runs tests:
+   executeTestRunFromRealm({ targetRealmUrl, specPaths, ... })
+
+5. If tests fail: orchestrator reads TestRun card for failure details,
+   builds TestResult, feeds into AgentContext.testResults,
+   and calls agent.run() again — the agent can read its previous
+   writes and test failures to self-correct.
+```
+
+The agent calls tools directly via the LLM's native tool-use protocol. Each tool implementation enforces safety constraints (realm protection, auth, logging) before executing. The orchestrator still owns test execution as a separate phase after the agent finishes its turn.
+
+#### Catalog Spec Card Requirement
+
+For each top-level card defined in the brief, the agent must create a Catalog Spec card instance in the target realm's `Spec/` folder. This is the catalog entry that makes the card discoverable. Only the top-level card needs a Catalog Spec card — not every helper field or sub-component.
+
+The Catalog Spec card shape (from `packages/base/spec.gts`):
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": { "module": "../sticky-note", "name": "StickyNote" },
+      "specType": "card",
+      "readMe": "# StickyNote\n\nA simple sticky note card with title and body fields.",
+      "cardTitle": "Sticky Note",
+      "cardDescription": "A sticky note card for quick notes",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": "../StickyNote/welcome-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
+```
+
+Key fields:
+
+- `ref.module`: relative path from the Catalog Spec card instance to the `.gts` definition (e.g., `../sticky-note` from `Spec/sticky-note.json`)
+- `ref.name`: the exported class name
+- `specType`: `'card'` for CardDef, `'field'` for FieldDef, `'component'` for standalone components
+- `readMe`: markdown documentation for the card
+- `cardTitle` / `cardDescription`: human-readable title and short description
+- `linkedExamples`: a `linksToMany` relationship pointing to sample card instances that demonstrate the card in use. The agent must create at least one sample instance (e.g., `StickyNote/welcome-note.json`) and link it here.
+
+#### Sample Card Instances
+
+The agent must create at least one sample card instance for the top-level card. Sample instances serve as:
+
+- **Catalog examples** — linked from the Catalog Spec card via `linkedExamples`, they appear in the catalog as usage demonstrations
+- **Test fixtures** — Playwright test files can navigate to these instances to verify rendering
+
+Sample instances live in the target realm alongside other card instances (e.g., `StickyNote/welcome-note.json`). They should have realistic, meaningful attribute values — not empty or placeholder data.
+
+Reference: `src/cli/smoke-test-realm.ts` creates a Catalog Spec card as part of its smoke test. Real-world Catalog Spec cards live in `packages/catalog-realm/Spec/`.
+
+#### Auth Model
+
+The execution loop uses three distinct JWT levels:
+
+1. **Realm server JWT** (`serverToken`) — obtained via `matrixLogin()` + `getRealmServerToken()`. Used for server-level operations like `_create-realm` and `_realm-auth`.
+2. **Per-realm JWTs** (`realmTokens: Record<string, string>`) — obtained via `getRealmScopedAuth(realmServerUrl, serverToken)`. Each realm URL maps to its own JWT. Used for all realm reads/writes (`writeCardSource`, `writeModuleSource`, `readCardSource`, `searchRealm`).
+3. **Test artifacts realm JWT** — a per-realm JWT for the auto-created test artifacts realm, obtained separately after that realm is created. Handled internally by `executeTestRunFromRealm()`.
+
+Each tool's `execute` function looks up the correct per-realm JWT based on which realm the operation targets.
+
+#### Tool Availability
+
+Boxel-cli tools (`boxel-sync`, `boxel-push`, `boxel-pull`, etc.) are excluded from the agent's tool registry until CS-10520 lands (boxel-cli auth integration). The `ToolRegistry` is constructed with only `SCRIPT_TOOLS` and `REALM_API_TOOLS`. All file operations use the realm HTTP API directly.
 
 Test generation rule:
 
-- the agent must produce at least one test per ticket before a ticket can be marked as done
-- tests live in the test realm, not the target realm, to keep implementation and verification separate
-- test artifacts include both the test source code and the structured test execution results
+- the agent must produce at least one Playwright test file per ticket before a ticket can be marked as done
+- Playwright test files live in the target realm's `Tests/` folder (e.g., `Tests/<ticket-slug>.spec.ts`)
+- test artifacts include both the Playwright test source code and the structured test execution results (TestRun cards)
 - failed test output is the primary feedback signal that drives the implement-verify loop
 
 ### Phase 5: Verification
 
-Verification is mandatory. Every ticket must have AI-generated tests before it can be marked done.
+Verification is mandatory. Every ticket must have AI-generated Playwright test files before it can be marked done.
 
 Test generation policy:
 
-- the agent creates test files in the test realm that exercise the cards and behavior implemented for the current ticket
+- the agent creates Playwright test files in the target realm's `Tests/` folder that exercise the cards and behavior implemented for the current ticket
 - for Boxel card work, tests should at minimum verify that card instances render correctly in fitted, isolated, and embedded views
 - additional tests should cover card-specific behavior, field values, relationships, and interactions
 - the agent should start with the smallest meaningful test and expand coverage if the first test passes trivially
 
 Test execution policy:
 
-- the test harness runs tests from the test realm against the target realm
-- test results (pass/fail, error messages, screenshots if applicable) are saved as structured artifacts in the test realm
+- the orchestrator owns test execution — the agent writes test files via `write_file` tool calls, and the orchestrator triggers test execution as a separate phase after the agent finishes its turn
+- Playwright test files are pulled from the target realm to a local temp directory, then run via Playwright against the live target realm
+- test results (pass/fail, error messages, stack traces) are saved as `TestRun` card instances in the target realm's `Test Runs/` folder
 - on failure, the full test output is fed back to the agent as context for the next implementation attempt
-- on success, the test artifact serves as durable proof that the ticket was verified
+- on success, the TestRun card serves as durable proof that the ticket was verified
 
-Target realm artifact structure (test specs and results co-located with implementation):
+Target realm artifact structure (Playwright test files and results co-located with implementation):
 
-- `Tests/<ticket-slug>.spec.ts` — the generated test source (in target realm)
+- `Tests/<ticket-slug>.spec.ts` — the generated Playwright test source (in target realm)
 - `Test Runs/<ticket-slug>-<seq>.json` — TestRun card instance with status, results, timing (in target realm)
+- `Spec/<card-name>.json` — Catalog Spec card for the top-level card (in target realm)
 
 Test artifacts realm (auto-created from project name, e.g., `Sticky Notes Test Artifacts`):
 
 - `Run 1/` — card instances created during test run 1
 - `Run 2/` — card instances created during test run 2
 
-All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Tests/`.
+All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Tests/`, `Spec/`.
 
 Implementation note:
 
-- the Playwright harness in `packages/software-factory` is reused to execute AI-generated tests
+- the Playwright harness in `packages/software-factory` is reused to execute AI-generated Playwright test files
 - this gives the factory a real browser-level verification path for generated cards
 - the test harness output format should match what the agent needs to diagnose failures and iterate
 - the test artifacts realm is auto-created from the project name and its URL is persisted on the Project card (`testArtifactsRealmUrl` field)
@@ -270,23 +392,17 @@ The current behavior is described in prose, but not encoded as a decision engine
 - when to capture knowledge
 - when to ask the user a question
 
-### 7. Sequential Async Tool Calls and Long-Running Operations
+### 7. Long-Running Operations
 
-The execution loop involves operations with causal dependencies that must execute in sequence. For example, the verify step requires:
+With executable tool functions, the agent handles sequential tool calls naturally — it calls tools in order, sees results, and reacts. However, the execution loop still involves long-running operations like test execution (~10 minutes per run) that require special handling:
 
-1. Write test spec to the target realm `Tests/` folder (via `realm-write`)
-2. Write a `TestRun` card to the target realm `Test Runs/` folder (via `realm-write`)
+1. Write test spec to the target realm `Tests/` folder (via `write_file`)
+2. Write a `TestRun` card to the target realm `Test Runs/` folder (via `write_file`)
 3. Execute tests against the target realm (via `run-realm-tests`); any data created during execution is stored in the test artifacts realm
 4. Parse and save test results back to the `TestRun` card in the target realm
 5. Feed results back to the agent for the next iteration
 
-The current `AgentAction[]` model is a flat array — it does not express causal ordering between actions. The orchestrator must either:
-
-- **Implicit sequencing**: The orchestrator always runs writes before test execution, treating the action array as an unordered set that it sequences according to hardcoded rules (write → execute → parse → iterate).
-- **Explicit sequencing**: Extend the action model to support ordered groups or dependency edges, so the agent can express "write this, then run that."
-- **Orchestrator-owned verification step**: The orchestrator owns the test execution step entirely — the agent only produces `create_test`/`update_test` actions, and the orchestrator triggers test execution as a separate phase after all file writes complete. This is the approach implied by the current Phase 4/5 design.
-
-The third approach (orchestrator-owned verification) is the simplest and most aligned with the current plan. The agent never invokes `run-realm-tests` directly — the orchestrator does, after executing all agent-requested writes.
+With executable tool functions, the agent naturally sequences its operations — it calls `write_file` for implementation, then `write_file` for tests, then `signal_done`. The orchestrator triggers test execution as a separate phase after the agent finishes its turn. The agent could also call `run_tests` directly as a tool, but the orchestrator owns the post-turn verification step to ensure tests always run.
 
 **Long-running test execution**: Test execution can take ~10 minutes per run. The orchestrator process may be interrupted by SIGTERM or SIGKILL during this time. The system must be able to resume from where it left off:
 
@@ -448,7 +564,7 @@ Helper module for managing test execution and results in the test realm.
 
 #### Key Design Decisions
 
-- **Test spec writing uses normal `realm-write`** — no special mechanism. The agent's `create_test`/`update_test` actions route through the same ToolExecutor.
+- **Test spec writing uses `write_file` tool calls** — no special mechanism. The agent writes test files to the target realm's `Tests/` folder via the same `write_file` tool used for implementation files.
 - **Test results are `TestRun` card instances**, not plain JSON files. A new card definition (`realm/test-results.gts`) defines `TestRun` (CardDef) and `TestResultEntry` (FieldDef).
 - **TestRun is created at start** with `status: running` and pre-populated `pending` result entries. The card ID is the primary handle returned to callers.
 - **Incremental updates**: Each test result is written to the card as it completes (pending → passed/failed), enabling precise resume after interruption.
@@ -469,7 +585,10 @@ Helper module for managing test execution and results in the test realm.
 - `TestRunStatusField` — enum: running, passed, failed, error
 - `TestResultStatusField` — enum: pending, passed, failed, error
 - `TestResultEntry` (FieldDef) — testName, status, message, stackTrace, durationMs
-- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), specRef (CodeRefField), status, passedCount, failedCount, durationMs, results (containsMany), errorMessage, title (computed)
+- `SpecResult` (FieldDef) — specRef (CodeRefField), results (containsMany TestResultEntry), passedCount (computed), failedCount (computed)
+- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), status, passedCount (computed, rolled up from specResults), failedCount (computed, rolled up from specResults), durationMs, specResults (containsMany SpecResult), errorMessage, title (computed)
+
+A TestRun contains multiple SpecResults, each grouping test results under a spec reference. The specRef's `module` field identifies the spec file (e.g., the Playwright suite title). Counts on TestRun are aggregated across all SpecResults.
 
 #### Return Type
 
@@ -558,13 +677,14 @@ For the first version, a single model handles all factory tasks. Later versions 
 
 ### `FactoryAgent` Interface
 
-The orchestration loop communicates with the LLM through a `FactoryAgent` interface. This interface defines the contract between the deterministic orchestration code and the nondeterministic AI backend.
+The orchestration loop communicates with the LLM through a `FactoryAgent` interface. Instead of returning a declarative action array, the agent is given executable tool functions and calls them directly during its turn via the LLM's native tool-use protocol.
 
 ```typescript
 interface FactoryAgentConfig {
   model: string; // OpenRouter model ID
   realmServerUrl: string; // for proxied API calls
   authorization?: string; // realm server JWT
+  maxSkillTokens?: number; // optional cap on skill context size
 }
 
 interface AgentContext {
@@ -572,7 +692,6 @@ interface AgentContext {
   ticket: TicketCard; // active ticket
   knowledge: KnowledgeArticle[]; // relevant knowledge cards
   skills: ResolvedSkill[]; // active skills for this ticket (see Skills Integration)
-  tools: ToolManifest[]; // available tools for this ticket (see Tools Integration)
   testResults?: TestResult; // previous test run output (if iterating)
   targetRealmUrl: string;
   testRealmUrl: string;
@@ -584,35 +703,35 @@ interface ResolvedSkill {
   references?: string[]; // loaded reference file contents (for skills with references/)
 }
 
-// Every AgentAction is a tool call. The `type` field selects which tool
-// the orchestrator executes. High-level action types like `create_file`
-// are convenience aliases that the orchestrator maps to the underlying
-// realm-api tool calls (e.g., `create_file` → `realm-write`).
-// The agent can also use `invoke_tool` directly for any registered tool.
+// Tool functions are provided to the agent at runtime. Each tool has a
+// JSON Schema definition (for the LLM) and an execute function (for the
+// orchestrator to run when the LLM calls it).
 
-interface AgentAction {
-  type:
-    | 'create_file' // convenience: realm-write to target realm
-    | 'update_file' // convenience: realm-write to target realm
-    | 'create_test' // convenience: realm-write to test realm
-    | 'update_test' // convenience: realm-write to test realm
-    | 'update_ticket' // convenience: realm-write to update ticket card
-    | 'create_knowledge' // convenience: realm-write to create/update knowledge card
-    | 'invoke_tool' // invoke any registered tool directly
-    | 'request_clarification' // signal: stop and ask the user
-    | 'done'; // signal: ticket is complete
-  path?: string; // realm-relative path for file actions
-  content?: string; // file content or message
-  realm?: 'target' | 'test'; // which realm the action targets
-  tool?: string; // tool name for invoke_tool actions
-  toolArgs?: Record<string, unknown>; // arguments for the tool
+interface FactoryTool {
+  name: string; // unique tool identifier
+  description: string; // what the tool does (LLM-readable)
+  parameters: Record<string, unknown>; // JSON Schema for the tool's input
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+interface AgentRunResult {
+  status: 'done' | 'blocked' | 'needs_iteration';
+  clarification?: string; // set when status === 'blocked'
+  toolCallLog: ToolCallEntry[]; // all tool calls made during this run
+}
+
+interface ToolCallEntry {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
+  durationMs: number;
 }
 
 interface FactoryAgent {
-  // Given context, produce the next set of actions for one implementation step.
-  // The orchestrator calls this in a loop until the agent returns a 'done' action
-  // or a 'request_clarification' action.
-  plan(context: AgentContext): Promise<AgentAction[]>;
+  // Run the agent with the given context and tools. The agent calls tools
+  // during its turn via native tool-use, seeing results inline. Returns
+  // when the agent signals done, blocked, or the orchestrator intervenes.
+  run(context: AgentContext, tools: FactoryTool[]): Promise<AgentRunResult>;
 }
 ```
 
@@ -623,54 +742,76 @@ The execution loop in `factory-loop.ts` drives the agent:
 ```
 1.  orchestrator resolves skills for the current ticket (via SkillResolver)
 2.  orchestrator loads resolved skills from .agents/skills/ (via SkillLoader)
-3.  orchestrator builds tool manifest from registry (via ToolRegistry)
-4.  orchestrator assembles AgentContext from realm state + skills + tools
-5.  orchestrator calls agent.plan(context)
-6.  agent returns AgentAction[] — each action is a tool call the orchestrator executes
-7.  orchestrator validates each action against the tool registry and safety constraints
-8.  orchestrator executes actions via the appropriate ToolExecutor, captures ToolResults
-9.  orchestrator runs test harness against test realm
-10. if tests fail:
+3.  orchestrator builds executable tool functions:
+    - write_file, read_file, search_realm (realm operations wrapped with auth + safety)
+    - update_ticket, create_knowledge (card writes to target realm)
+    - run_tests (triggers test execution, returns results)
+    - signal_done, request_clarification (control flow signals)
+    - plus all registered script/realm-api tools
+4.  orchestrator assembles AgentContext from realm state + skills
+5.  orchestrator calls agent.run(context, tools)
+6.  agent calls tools during its turn — each call goes through safety middleware:
+    a. validate inputs
+    b. enforce realm targeting (never the source realm)
+    c. execute the operation
+    d. return result to the agent inline
+7.  agent signals done or blocked, run() returns AgentRunResult
+8.  orchestrator triggers test execution (after agent finishes)
+9.  if tests fail:
     a. orchestrator reads test results
-    b. orchestrator updates AgentContext with testResults + toolResults
+    b. orchestrator updates AgentContext with testResults
     c. go to step 5
-11. if tests pass:
-    a. orchestrator saves test results in test realm
+10. if tests pass:
+    a. orchestrator saves test results
     b. orchestrator updates ticket status
     c. orchestrator moves to next ticket (skills + tools re-resolved)
 ```
 
-The agent never directly produces side effects. Every `AgentAction` — whether it creates a file, writes a test, searches a realm, or calls a management API — is a tool call that the orchestrator validates and executes on the agent's behalf. Tool calls are the mechanism by which the orchestrator owns all side effects while still letting the agent decide what operations to perform.
+The agent calls tools directly via the LLM's native tool-use protocol. The orchestrator mediates each call (validate, execute, return result), enforcing safety and logging every invocation. The key advantage: the agent can read realm state, react to what it sees, and make multi-step decisions within a single `run()` call — no need to wait for the next iteration.
 
 ### `FactoryAgent` Implementation
 
-The first implementation wraps OpenRouter's chat completions API:
+The first implementation wraps OpenRouter's chat completions API with native tool-use:
 
 ```typescript
 class OpenRouterFactoryAgent implements FactoryAgent {
   constructor(private config: FactoryAgentConfig) {}
 
-  async plan(context: AgentContext): Promise<AgentAction[]> {
-    const messages = this.buildMessages(context);
-    const response = await this.callOpenRouter(messages);
-    return this.parseActions(response);
-  }
+  async run(
+    context: AgentContext,
+    tools: FactoryTool[],
+  ): Promise<AgentRunResult> {
+    let messages = this.buildMessages(context);
+    let toolDefs = this.buildToolDefinitions(tools);
+    let toolCallLog: ToolCallEntry[] = [];
 
-  private async callOpenRouter(messages: Message[]): Promise<string> {
-    // POST to https://openrouter.ai/api/v1/chat/completions
-    // via realm server _request-forward proxy
-    // model: this.config.model
-    // Returns structured JSON response with actions
-  }
+    // Multi-turn tool-calling loop
+    while (true) {
+      let response = await this.callOpenRouter(messages, toolDefs);
 
-  private buildMessages(context: AgentContext): Message[] {
-    // Assembles the full prompt from templates + context.
-    // See "Prompt Architecture" section below for the full structure.
-  }
+      if (response.stopReason === 'end_turn') {
+        return this.parseRunResult(response, toolCallLog);
+      }
 
-  private parseActions(response: string): AgentAction[] {
-    // Parse and validate the structured JSON response
-    // Reject actions that violate constraints (e.g., writing outside allowed realms)
+      // Execute each tool call the LLM requested
+      for (let toolCall of response.toolCalls) {
+        let tool = tools.find((t) => t.name === toolCall.name);
+        let start = Date.now();
+        let result = await tool.execute(toolCall.args);
+        toolCallLog.push({
+          tool: toolCall.name,
+          args: toolCall.args,
+          result,
+          durationMs: Date.now() - start,
+        });
+        // Append tool result to messages for next LLM turn
+        messages.push({
+          role: 'tool',
+          toolCallId: toolCall.id,
+          content: result,
+        });
+      }
+    }
   }
 }
 ```
@@ -685,42 +826,47 @@ Prompts are assembled from Markdown template files stored in `packages/software-
 
 ```
 packages/software-factory/prompts/
-├── system.md              # role, rules, and output schema
+├── system.md              # role, rules, and realm context
 ├── ticket-implement.md    # instructions for implementing a ticket
 ├── ticket-test.md         # instructions for generating tests
 ├── ticket-iterate.md      # instructions for fixing after test failure
-├── action-schema.md       # AgentAction[] JSON schema reference
 └── examples/
     ├── create-card.md     # example: creating a card definition + instance
     ├── create-test.md     # example: generating a test spec
     └── iterate-fix.md     # example: fixing code after test failure
 ```
 
+Note: `action-schema.md` is no longer needed — tool definitions are provided natively via the LLM's tool-use API, not embedded in the prompt.
+
 Keeping prompts as standalone Markdown files (not embedded in TypeScript) means they can be iterated on without code changes, reviewed in PRs as prose, and tested with different models by swapping only the template text.
 
 #### Message Structure
 
-Each `plan()` call is a **one-shot LLM request**: one system message and one user message. The orchestrator assembles everything the agent needs into a single prompt. There is no multi-turn conversation — the agent is not having a dialogue with anyone. It receives a complete description of the current state and responds with actions.
+Each `agent.run()` call starts with a system message and user message, then enters a multi-turn tool-calling loop. The orchestrator assembles the initial context, and the agent drives the session by calling tools and seeing results inline.
 
 ```typescript
+// Initial messages sent to the LLM
 [
   { role: 'system', content: systemPrompt },
   { role: 'user', content: ticketPrompt },
 ];
+// + tool definitions provided via the API's tools parameter
+// The LLM responds with tool_use blocks, orchestrator executes and returns
+// tool_result blocks, and the loop continues until the agent stops.
 ```
 
-The **system prompt** is the same for every call within a ticket: role definition, output schema, skills, and tools.
+The **system prompt** is the same for every call within a ticket: role definition, skills, and realm context.
 
 The **user prompt** changes depending on where the orchestrator is in the execution loop:
 
 - **First pass** — uses `ticket-implement.md`: project context, knowledge articles, ticket description, and instructions to implement + write tests.
-- **Iteration pass** — uses `ticket-iterate.md`: everything from the first pass, plus the actions the agent already took, the test results from the last run, and instructions to fix what failed.
+- **Iteration pass** — uses `ticket-iterate.md`: everything from the first pass, plus a summary of previous tool calls and the test results from the last run.
 
-Each call is self-contained. The orchestrator packs whatever history is relevant (previous actions, test output) into the single user message rather than replaying a growing conversation.
+Tool definitions are provided separately via the LLM API's native tool parameter — they are not embedded in the prompt text.
 
 #### System Prompt
 
-The system prompt is assembled once per ticket and stays constant across iterations. It defines who the agent is, what it can do, and how it must respond.
+The system prompt is assembled once per ticket and stays constant across iterations. It defines who the agent is, what it can do, and the realm context.
 
 Template: `prompts/system.md`
 
@@ -730,25 +876,17 @@ Template: `prompts/system.md`
 You are a software factory agent. You implement Boxel cards and tests in
 target realms based on ticket descriptions and project context.
 
-# Output Format
-
-You must respond with a JSON array of actions. Each action matches this schema:
-
-{{action-schema}}
-
-Respond with ONLY the JSON array. No prose, no explanation, no markdown fences
-around the JSON. The orchestrator parses your response as JSON directly.
+You have access to tools for reading and writing files to realms, searching
+realm state, running tests, and signaling completion. Use these tools to
+inspect existing state before making changes — do not guess.
 
 # Rules
 
-- Every ticket must include at least one `create_test` or `update_test` action.
-- Test specs go in the test realm. Implementation goes in the target realm.
-- Use `invoke_tool` to search for existing cards, check realm state, or run
-  commands before creating files. Do not guess at existing state.
-- If you cannot proceed, return a single `request_clarification` action
-  explaining what is blocked.
-- When all work for the ticket is complete and tests are passing, return a
-  single `done` action.
+- Every ticket must include at least one test file (via write_file to Tests/).
+- Use search_realm and read_file to inspect existing cards before creating files.
+- If you cannot proceed, call request_clarification with a description of what
+  is blocked.
+- When all work for the ticket is complete, call signal_done.
 
 # Realms
 
@@ -770,29 +908,9 @@ around the JSON. The orchestrator parses your response as JSON directly.
 {{referenceContent}}
 {{/each}}
 {{/each}}
-
-# Tools
-
-You may invoke any of the following tools by returning an `invoke_tool` action.
-
-{{#each tools}}
-
-## Tool: {{name}}
-
-{{description}}
-
-Category: {{category}}
-Output format: {{outputFormat}}
-
-Arguments:
-{{#each args}}
-
-- {{name}} ({{type}}, {{#if required}}required{{else}}optional{{/if}}): {{description}}{{#if default}} (default: {{default}}){{/if}}
-  {{/each}}
-  {{/each}}
 ```
 
-The `{{action-schema}}` variable is replaced with the contents of `prompts/action-schema.md`, which contains the full JSON schema for `AgentAction[]`. This is the canonical reference the LLM uses to produce valid output.
+Tools are NOT embedded in the system prompt — they are provided via the LLM API's native tool definitions parameter. This ensures structured input/output validation and avoids the need for a custom action schema.
 
 #### Ticket Implementation Prompt
 
@@ -842,9 +960,10 @@ Checklist:
 
 Implement this ticket. Return actions that:
 
-1. Create or update card definitions (.gts) and/or card instances (.json) in the target realm
-2. Create test specs (.spec.ts) in the test realm that verify your implementation
-3. Use `invoke_tool` actions to inspect existing realm state before creating files
+1. Use search_realm and read_file to inspect existing realm state
+2. Use write_file to create or update card definitions (.gts) and/or card instances (.json) in the target realm
+3. Use write_file to create test specs (.spec.ts) that verify your implementation
+4. Call signal_done when complete
 
 Start with the smallest working implementation, then add the test.
 ```
@@ -879,12 +998,12 @@ Tests must:
 - Verify card-specific behavior, field values, and relationships
 - Be runnable by the `run-realm-tests` tool
 
-Return only `create_test` actions.
+Return only test file writes (via write_file).
 ```
 
 #### Test Iteration Prompt
 
-Sent as the user message after a test failure. This is a **self-contained one-shot prompt** — it includes everything the agent needs: the original ticket context, what was already tried, and the test results. The agent does not need to "remember" a prior conversation because all relevant history is in this single message.
+Sent as the user message after a test failure. This is a **self-contained prompt** — it includes everything the agent needs: the original ticket context, a summary of what tools were called and what happened, and the test results. The agent does not need to "remember" a prior conversation because all relevant history is in this single message.
 
 Template: `prompts/ticket-iterate.md`
 
@@ -902,21 +1021,18 @@ Description:
 
 # Previous Attempt (iteration {{iteration}})
 
-You previously produced the following actions for this ticket:
+In the previous iteration, you made the following tool calls:
 
-{{#each previousActions}}
+{{#each previousToolCalls}}
 
-## {{type}}: {{path}} ({{realm}} realm)
-```
+## {{tool}}({{argsJson}})
 
-{{content}}
-
-```
+Result: {{resultSummary}}
 {{/each}}
 
 # Test Results
 
-The orchestrator applied your actions and ran tests. They failed.
+The orchestrator ran tests after your previous attempt. They failed.
 
 Status: {{testResults.status}}
 Passed: {{testResults.passed}}
@@ -924,8 +1040,8 @@ Failed: {{testResults.failed}}
 Duration: {{testResults.durationMs}}ms
 
 {{#each testResults.failures}}
-## Failure: {{testName}}
 
+## Failure: {{testName}}
 ```
 
 {{error}}
@@ -938,94 +1054,70 @@ Stack trace:
 
 {{stackTrace}}
 
-````
+```
 {{/if}}
 {{/each}}
-
-{{#if toolResults}}
-# Tool Results From Previous Iteration
-
-{{#each toolResults}}
-## {{tool}} (exit code: {{exitCode}})
-
-```json
-{{output}}
-````
-
-{{/each}}
-{{/if}}
 
 # Instructions
 
-Fix the failing tests. You may:
+Fix the failing tests. You have the same tools available. You can:
 
-- Update implementation files (use `update_file` actions)
-- Update test specs (use `update_test` actions)
-- Invoke tools to inspect current realm state
+- Use read_file to inspect the current state of your implementation
+- Use write_file to update implementation or test files
+- Use search_realm to check what cards exist
 - If the test expectation is wrong, fix the test
 - If the implementation is wrong, fix the implementation
 
-Return the actions needed to make all tests pass.
+When done, call signal_done.
 
 ```
 
-#### One-Shot Iteration Flow
+#### Iteration Flow
 
-A single ticket may require multiple iterations. Each iteration is an independent one-shot call — the orchestrator packs everything into a single `[system, user]` message pair:
+A single ticket may require multiple iterations. Each iteration is an independent `agent.run()` call — the orchestrator provides updated context:
 
 ```
-
 Pass 1 (initial implementation):
-system: [system prompt with skills, tools, schema]
-user: [ticket-implement — project context, ticket description]
-→ LLM responds: AgentAction[] — creates files + tests
-→ orchestrator applies actions, runs tests, tests fail
+  system: [system prompt with skills]
+  user: [ticket-implement — project context, ticket description]
+  tools: [write_file, read_file, search_realm, signal_done, ...]
+  → Agent calls tools: search_realm → write_file × N → signal_done
+  → Orchestrator runs tests → tests fail
 
 Pass 2 (first fix):
-system: [same system prompt]
-user: [ticket-iterate — ticket context + pass 1 actions + test failure output]
-→ LLM responds: AgentAction[] — updates to fix failures
-→ orchestrator applies actions, runs tests, tests fail again
+  system: [same system prompt]
+  user: [ticket-iterate — ticket context + pass 1 tool call summary + test failures]
+  tools: [same tools]
+  → Agent calls tools: read_file (inspect current state) → write_file (fixes) → signal_done
+  → Orchestrator runs tests → tests fail again
 
 Pass 3 (second fix):
-system: [same system prompt]
-user: [ticket-iterate — ticket context + pass 2 actions + new test failure output]
-→ LLM responds: AgentAction[] — further fixes
-→ orchestrator applies actions, runs tests, tests pass → ticket done
+  system: [same system prompt]
+  user: [ticket-iterate — ticket context + pass 2 tool call summary + new test failures]
+  tools: [same tools]
+  → Agent calls tools: read_file → write_file (further fixes) → signal_done
+  → Orchestrator runs tests → tests pass → ticket done
+```
 
-````
+Each call is self-contained. The agent sees a summary of what it did on the **previous** iteration (the tool calls and test results are in the user message), but it does not see the full history of all iterations. This keeps the prompt size bounded and each call independent.
 
-Each call is self-contained. The agent sees what it tried on the **previous** iteration (the actions and test results are in the user message), but it does not see the full history of all iterations. This keeps the prompt size bounded and each call independent.
-
-If the orchestrator needs to give the agent more history (e.g., "you've tried this three times and keep making the same mistake"), it can include a summary of prior attempts in the `ticket-iterate` prompt. But the default is: show only the most recent attempt and its results.
+Within each iteration, the agent can make multiple tool calls in sequence — reading realm state, reacting to what it finds, and writing fixes — all within a single `run()` call. This is the key advantage over the declarative model: the agent can self-correct within an iteration rather than waiting for the next round-trip.
 
 #### Iteration Limits
 
 - `maxIterations` (default: 5) — maximum fix attempts before the orchestrator marks the ticket as blocked
 - since each call is one-shot, there is no growing conversation to truncate — the prompt size is naturally bounded by the ticket context + one iteration's worth of actions and test results
 
-#### Output Parsing and Validation
+#### Tool Call Validation
 
-The agent must respond with a raw JSON array of `AgentAction` objects. The orchestrator parses the response with these rules:
+Since the agent uses native tool-use protocol, input/output validation is handled by the LLM API framework:
 
-1. strip any markdown fences (` ```json ... ``` `) if present — some models add them despite instructions
-2. parse the response as JSON
-3. validate each action against the `AgentAction` schema:
-   - `type` must be a known action type
-   - file actions (`create_file`, `update_file`, `create_test`, `update_test`) must have `path`, `content`, and `realm`
-   - `invoke_tool` actions must have `tool` matching a registered manifest and valid `toolArgs`
-   - `realm` must be `'target'` or `'test'` — never anything else
-4. reject the entire response if validation fails, log the raw response, and retry once with an error correction message:
+1. Tool calls have structured inputs validated against JSON Schema
+2. Invalid tool names are rejected by the framework before reaching the executor
+3. Each tool implementation validates its own arguments and returns structured results
+4. Safety constraints (realm targeting, auth) are enforced inside each tool's `execute` function
 
-```markdown
-Your previous response was not valid JSON or contained invalid actions.
-
-Parse error: {{parseError}}
-
-Please respond with ONLY a valid JSON array of AgentAction objects.
-````
-
-If the retry also fails, the orchestrator marks the ticket as blocked.
+If the LLM produces malformed tool calls repeatedly (e.g., a model that doesn't support tool-use well), the orchestrator marks the ticket as blocked after `maxIterations` failures.
 
 #### Prompt File Location and Versioning
 
@@ -1086,7 +1178,7 @@ Persisting execution logs as DarkFactory cards (not raw JSON files) means:
 
 #### What Gets Persisted
 
-Each `AgentExecutionLog` card captures every one-shot call made for a ticket's implementation attempt. The `iterations` field is a structured Markdown document:
+Each `AgentExecutionLog` card captures every `agent.run()` call made for a ticket's implementation attempt. The `iterations` field is a structured Markdown document:
 
 ```markdown
 ## Iteration 1
@@ -1095,14 +1187,12 @@ Each `AgentExecutionLog` card captures every one-shot call made for a ticket's i
 
 <the assembled user prompt sent to the LLM — ticket-implement>
 
-### Response
+### Tool Calls
 
-<raw JSON AgentAction[] returned by the LLM>
-
-### Actions Applied
-
-- create_file: sticky-note.gts (target realm)
-- create_test: TestSpec/define-sticky-note-core.spec.ts (test realm)
+1. search_realm({ realm: "...", type_name: "StickyNote" }) → { data: [] } (12ms)
+2. write_file({ path: "sticky-note.gts", content: "...", realm: "target" }) → { ok: true } (45ms)
+3. write_file({ path: "Tests/sticky-note.spec.ts", content: "...", realm: "target" }) → { ok: true } (38ms)
+4. signal_done() → { ok: true }
 
 ### Test Results
 
@@ -1116,15 +1206,13 @@ Error: "Cannot find module './sticky-note'"
 
 ### Prompt
 
-<the assembled user prompt — ticket-iterate with previous actions + test failure>
+<the assembled user prompt — ticket-iterate with previous tool calls + test failure>
 
-### Response
+### Tool Calls
 
-<raw JSON AgentAction[] returned by the LLM>
-
-### Actions Applied
-
-- update_file: sticky-note.gts (target realm)
+1. read_file({ path: "sticky-note.gts", realm: "target" }) → { ok: true, content: "..." } (15ms)
+2. write_file({ path: "sticky-note.gts", content: "...", realm: "target" }) → { ok: true } (42ms)
+3. signal_done() → { ok: true }
 
 ### Test Results
 
@@ -1132,7 +1220,7 @@ Status: passed
 Passed: 1, Failed: 0
 ```
 
-Each iteration records: what prompt was sent, what the LLM returned, what actions were applied, and what test results came back. This is a complete, self-contained log — since each call is one-shot, no "conversation" context is needed to make sense of individual entries.
+Each iteration records: what prompt was sent, what tool calls the agent made (with arguments and results), and what test results came back. This is a complete, self-contained log — since each `run()` call is independent, no conversation context is needed to make sense of individual entries.
 
 #### When the Log Is Written
 
@@ -1184,20 +1272,20 @@ The `AgentExecutionLog` card fills the gap between the Ticket (what needs to be 
 Because the agent interface is model-agnostic:
 
 - switching from Claude to GPT requires only changing the `--model` flag
-- the system prompt and action schema stay the same
+- the system prompt and tool definitions stay the same
 - the orchestrator behavior is identical regardless of model
-- model-specific quirks (response format, token limits) are handled inside `OpenRouterFactoryAgent`, not in the orchestration loop
-- prompt templates are designed to work across models — they use explicit JSON schema references rather than relying on model-specific features like tool-use APIs
+- model-specific quirks (tool-use format, token limits) are handled inside `OpenRouterFactoryAgent`, not in the orchestration loop
+- the LLM must support native tool-use/function-calling — models that only support text completion would need a compatibility adapter that parses tool calls from text output
 
 ### Future: Multiple Agent Backends
 
 The `FactoryAgent` interface also supports non-OpenRouter backends:
 
 - a `ClaudeCodeFactoryAgent` that delegates to Claude Code's tool-use loop
-- a `LocalModelFactoryAgent` for self-hosted models via Ollama or vLLM
-- a `MockFactoryAgent` for deterministic testing (the fake executor from the testing strategy)
+- a `LocalModelFactoryAgent` for self-hosted models via Ollama or vLLM (requires tool-use support)
+- a `MockFactoryAgent` for deterministic testing — accepts a pre-scripted sequence of tool calls to make
 
-The orchestrator does not care which backend is used. It only depends on the `FactoryAgent` interface. Each backend is responsible for translating the `AgentContext` into whatever prompt format its model expects — the prompt templates provide the canonical content, but a backend may restructure them (e.g., `ClaudeCodeFactoryAgent` might use native tool-use blocks instead of embedding tool manifests in the system prompt).
+The orchestrator does not care which backend is used. It only depends on the `FactoryAgent` interface. Each backend is responsible for managing the tool-calling loop internally and returning an `AgentRunResult` with the tool call log.
 
 ### Skills Integration
 
@@ -1298,7 +1386,7 @@ The `OpenRouterFactoryAgent.buildMessages()` method assembles the LLM prompt fro
 
 ```
 System prompt structure:
-1. Role definition and output format (AgentAction[] schema)
+1. Role definition and rules
 2. Active skills (one section per resolved skill)
 3. Project context (project card, knowledge articles)
 4. Current ticket (description, acceptance criteria, checklist)
@@ -1354,9 +1442,16 @@ No registration API, no manifest file — the skill directory structure is the r
 
 ### Tools Integration
 
-Skills give the agent knowledge. Tools give the agent capabilities. The factory has two categories of tools that the agent can invoke through the orchestrator: **scripts** (standalone CLI tools in `packages/software-factory/scripts/`) and **boxel-cli commands** (the `boxel` CLI installed as a dependency).
+Skills give the agent knowledge. Tools give the agent capabilities. The agent is given executable tool functions that it calls directly via the LLM's native tool-use protocol. Each tool wraps an underlying implementation (realm HTTP API, CLI script, or control signal) with safety middleware.
 
-The agent does not execute tools directly. Instead, it returns `invoke_tool` actions that the orchestrator validates and executes on the agent's behalf, returning the tool output as context for the next `plan()` call.
+Tool categories:
+
+- **Factory tools** — high-level operations like `write_file`, `read_file`, `search_realm`, `update_ticket`, `create_knowledge`, `run_tests`, `signal_done`, `request_clarification`
+- **Script tools** — standalone CLI tools in `packages/software-factory/scripts/` (e.g., `search-realm`, `pick-ticket`)
+- **Realm API tools** — direct realm server HTTP operations (e.g., `realm-read`, `realm-write`, `realm-delete`)
+- **Boxel CLI tools** — `boxel` CLI commands (excluded until CS-10520 lands)
+
+The agent calls these tools during its turn and sees results inline. Each tool implementation validates inputs, enforces safety (realm protection, auth), executes the operation, and returns the result.
 
 #### Tool Manifest
 
@@ -1495,9 +1590,9 @@ View or create checkpoints.
 
 #### Available Realm Server APIs
 
-The realm server exposes HTTP endpoints that the agent can invoke directly through `invoke_tool` actions with `category: 'realm-api'`. Rather than hardcoding specific API calls in the orchestrator, the plan is to expose the full range of realm server capabilities as tools the agent can use. This means operations like realm creation, card CRUD, search, and batch mutations are all available to the agent — the orchestrator validates and executes them, but the agent decides when and how to use them.
+The realm server exposes HTTP endpoints that are wrapped as `FactoryTool` functions the agent can call directly. Rather than hardcoding specific API calls in the orchestrator, the full range of realm server capabilities are exposed as tools. This means operations like realm creation, card CRUD, search, and batch mutations are all available to the agent — each tool's `execute` function enforces safety constraints, but the agent decides when and how to use them.
 
-This is an important design principle: **any Boxel API call that the orchestrator might make on behalf of the agent should also be expressible as a tool the agent can invoke directly**. The orchestrator still owns safety constraints and execution, but the agent has the vocabulary to request any realm operation it needs.
+This is an important design principle: **any Boxel API call that the orchestrator might make should also be available as a tool the agent can call directly**. Safety constraints are enforced inside each tool's `execute` function, not at a central validation gate.
 
 ##### Card and File Operations
 
@@ -1578,79 +1673,79 @@ The boundary between "what the orchestrator does directly" and "what the agent i
 
 The rule is: **if the orchestrator hardcodes an API call today, it should also be registered as a tool so the agent can invoke the same operation when the situation calls for it**. Over time, more of the deterministic orchestrator steps may migrate to being agent-driven, with the orchestrator only handling safety validation and execution.
 
-#### How the Orchestrator Exposes Tools to the Agent
+#### How the Orchestrator Builds Tool Functions
 
-The orchestrator builds the `ToolManifest[]` list at startup and includes it in every `AgentContext`. The manifests are injected into the LLM prompt alongside skills:
+The orchestrator builds `FactoryTool[]` at startup. Each tool has a JSON Schema definition (for the LLM) and an `execute` function (for the orchestrator to run). The tools are passed to `agent.run(context, tools)`.
+
+```typescript
+// Example: building the write_file tool
+let writeFileTool: FactoryTool = {
+  name: 'write_file',
+  description:
+    'Write a file to a realm. Routes .gts/.ts to writeModuleSource, .json to writeCardSource.',
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', description: 'Realm-relative file path' },
+      content: { type: 'string', description: 'File content' },
+      realm: {
+        type: 'string',
+        enum: ['target', 'test'],
+        description: 'Which realm to write to (default: target)',
+      },
+    },
+    required: ['path', 'content'],
+  },
+  execute: async (args) => {
+    let realmUrl = args.realm === 'test' ? testRealmUrl : targetRealmUrl;
+    let auth = realmTokens[realmUrl];
+    if (isModuleFile(args.path)) {
+      return writeModuleSource(realmUrl, args.path, args.content, {
+        authorization: auth,
+      });
+    } else {
+      return writeCardSource(realmUrl, args.path, JSON.parse(args.content), {
+        authorization: auth,
+      });
+    }
+  },
+};
+```
+
+The tool definitions are sent to the LLM via the API's native tool parameter (not embedded in the prompt). The LLM calls tools using its native tool-use protocol, and the orchestrator executes each call through the tool's `execute` function.
 
 ```
 System prompt structure:
-1. Role definition and output format (AgentAction[] schema)
+1. Role definition and rules
 2. Active skills (domain knowledge)
-3. Available tools (capability manifests with argument schemas)
-4. Project context (project card, knowledge articles)
-5. Current ticket (description, acceptance criteria, checklist)
-6. Previous tool results / test results (if iterating)
+3. Realm URLs
+(tools provided separately via API parameter)
 ```
 
-Each tool manifest becomes a structured section:
+#### How Tool Calls Are Executed
 
-```
-## Tool: search-realm
+When the LLM makes a tool call during `agent.run()`:
 
-Search for cards in a realm by type, field values, and sort criteria.
+1. the agent implementation looks up the `FactoryTool` by name
+2. validates the arguments against the tool's JSON Schema
+3. calls the tool's `execute` function (which enforces safety constraints internally)
+4. returns the result to the LLM as a `tool_result` message
+5. the LLM sees the result and can make more tool calls or finish
 
-Category: script
-Output: json
-
-Arguments:
-- realm (string, required): target realm URL
-- type-name (string, optional): filter by card type name
-- eq (string, optional, repeatable): equality filter as "field=value"
-- sort (string, optional, repeatable): sort as "field:direction"
-
-## Tool: boxel-sync
-
-Bidirectional sync between local workspace and realm server.
-
-Category: boxel-cli
-Output: text
-
-Arguments:
-- path (string, required): local workspace path
-- prefer (string, optional): conflict strategy — "local", "remote", or "newest"
-- dry-run (boolean, optional): preview only, no changes
-```
-
-#### How the Orchestrator Executes Tool Invocations
-
-When the agent returns an `invoke_tool` action, the orchestrator:
-
-1. validates the tool name against the registered manifest
-2. validates the arguments against the manifest's arg schema
-3. rejects tools or arguments that violate safety constraints (e.g., `--delete` on a non-scratch realm)
-4. executes the tool as a subprocess (for scripts and CLI commands) or HTTP request (for realm APIs)
-5. captures the output as a `ToolResult`
-6. includes the `ToolResult` in the next `AgentContext` so the agent can use the output
+For script and boxel-cli tools, the `execute` function spawns a subprocess. For realm API tools, it makes an authenticated HTTP request. For factory-level tools (write_file, read_file, etc.), it calls the appropriate realm operation function directly.
 
 ```typescript
-interface ToolExecutor {
-  // Execute a validated tool invocation and return the result.
-  execute(action: AgentAction): Promise<ToolResult>;
-}
+// The ToolExecutor class is still used internally for script/CLI/realm-api
+// tool execution, but is now wrapped inside FactoryTool.execute functions
+// rather than being called directly by a dispatcher.
 
-class ScriptToolExecutor implements ToolExecutor {
-  // Runs: ts-node --transpileOnly scripts/<script>.ts <args>
-  // Captures stdout as JSON
-}
-
-class BoxelCliToolExecutor implements ToolExecutor {
-  // Runs: npx boxel <command> <args>
-  // Captures stdout as text
-}
-
-class RealmApiToolExecutor implements ToolExecutor {
-  // Makes authenticated HTTP request to realm server
-  // Returns response body as JSON
+class ToolExecutor {
+  // Executes script, boxel-cli, or realm-api tools
+  // Safety enforcement (realm protection, allowed targets) happens here
+  async execute(
+    toolName: string,
+    toolArgs: Record<string, unknown>,
+  ): Promise<ToolResult>;
 }
 ```
 
@@ -1718,15 +1813,17 @@ Files to add:
 - `packages/software-factory/scripts/lib/factory-skill-loader.ts`
 - `packages/software-factory/scripts/lib/factory-tool-registry.ts`
 - `packages/software-factory/scripts/lib/factory-tool-executor.ts`
+- `packages/software-factory/scripts/lib/factory-tool-builder.ts` (builds FactoryTool[] from config)
 - `packages/software-factory/scripts/lib/factory-prompt-loader.ts`
 - `packages/software-factory/prompts/system.md`
 - `packages/software-factory/prompts/ticket-implement.md`
 - `packages/software-factory/prompts/ticket-test.md`
 - `packages/software-factory/prompts/ticket-iterate.md`
-- `packages/software-factory/prompts/action-schema.md`
 - `packages/software-factory/prompts/examples/create-card.md`
 - `packages/software-factory/prompts/examples/create-test.md`
 - `packages/software-factory/prompts/examples/iterate-fix.md`
+
+Note: `action-schema.md` is no longer needed — tool definitions are provided natively via the LLM's tool-use API. The `factory-action-dispatcher.ts` is replaced by `factory-tool-builder.ts` which constructs `FactoryTool[]` with embedded safety middleware.
 
 Files to update:
 

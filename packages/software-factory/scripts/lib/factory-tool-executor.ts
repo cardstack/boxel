@@ -1,15 +1,19 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import {
-  iconURLFor,
-  getRandomBackgroundURL,
-} from '@cardstack/runtime-common/realm-display-defaults';
-
-import type { AgentAction, ToolResult } from './factory-agent';
+import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
-import { ensureTrailingSlash } from './realm-operations';
+import {
+  ensureTrailingSlash,
+  readCardSource,
+  writeModuleSource,
+  deleteCard,
+  atomicOperation,
+  searchRealm,
+  createRealm,
+  getServerSession,
+  getRealmScopedAuth,
+} from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -121,7 +125,7 @@ export class ToolExecutor {
   }
 
   /**
-   * Execute a validated `invoke_tool` action and return the result.
+   * Execute a tool by name with the given arguments and return the result.
    *
    * The executor:
    * 1. Validates the tool name against the registry
@@ -130,8 +134,11 @@ export class ToolExecutor {
    * 4. Dispatches to the appropriate sub-executor
    * 5. Captures output as a ToolResult
    */
-  async execute(action: AgentAction): Promise<ToolResult> {
-    let toolName = action.tool;
+  async execute(
+    toolName: string,
+    toolArgs: Record<string, unknown> = {},
+    options?: { authorization?: string },
+  ): Promise<ToolResult> {
     if (!toolName) {
       throw new ToolNotFoundError('(empty)');
     }
@@ -140,8 +147,6 @@ export class ToolExecutor {
     if (!manifest) {
       throw new ToolNotFoundError(toolName);
     }
-
-    let toolArgs = action.toolArgs ?? {};
 
     // Validate required args
     let argErrors = this.registry.validateArgs(toolName, toolArgs);
@@ -153,6 +158,10 @@ export class ToolExecutor {
 
     // Safety: reject source realm targeting
     this.enforceRealmSafety(toolName, toolArgs);
+
+    // Per-call authorization override (used by ToolBuilder to inject
+    // the correct per-realm JWT). Falls back to config.authorization.
+    let authorization = options?.authorization ?? this.config.authorization;
 
     let start = Date.now();
     let result: ToolResult;
@@ -166,7 +175,11 @@ export class ToolExecutor {
           result = await this.executeBoxelCli(toolName, toolArgs);
           break;
         case 'realm-api':
-          result = await this.executeRealmApi(toolName, toolArgs);
+          result = await this.executeRealmApi(
+            toolName,
+            toolArgs,
+            authorization,
+          );
           break;
         default:
           throw new Error(`Unknown tool category: ${manifest.category}`);
@@ -403,71 +416,160 @@ export class ToolExecutor {
   private async executeRealmApi(
     toolName: string,
     toolArgs: Record<string, unknown>,
+    authorization?: string,
   ): Promise<ToolResult> {
-    let fetchImpl = this.config.fetch ?? globalThis.fetch;
+    let baseFetch = this.config.fetch ?? globalThis.fetch;
     let start = Date.now();
 
-    let { url, method, headers, body } = buildRealmApiRequest(
-      toolName,
-      toolArgs,
-      this.config.authorization,
-    );
-
+    // Wrap fetch with AbortController for timeout enforcement
     let controller = new AbortController();
     let timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    let fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+      return baseFetch(input, { ...init, signal: controller.signal });
+    }) as typeof globalThis.fetch;
+
+    let fetchOptions = { authorization, fetch: fetchImpl };
 
     try {
-      let response = await fetchImpl(url, {
-        method,
-        headers,
-        body,
-        signal: controller.signal,
-      });
+      let output: unknown;
+      let ok: boolean;
 
-      let durationMs = Date.now() - start;
-      let responseBody: unknown;
-
-      let contentType = response.headers.get('content-type') ?? '';
-      let rawText = await response.text();
-      if (contentType.includes('json') && rawText.length > 0) {
-        try {
-          responseBody = JSON.parse(rawText);
-        } catch {
-          responseBody = rawText;
+      switch (toolName) {
+        case 'realm-read': {
+          let result = await readCardSource(
+            String(toolArgs['realm-url']),
+            String(toolArgs['path']),
+            fetchOptions,
+          );
+          ok = result.ok;
+          output = ok ? result.document : { error: result.error };
+          break;
         }
-      } else {
-        responseBody = rawText;
+
+        case 'realm-write': {
+          let result = await writeModuleSource(
+            String(toolArgs['realm-url']),
+            String(toolArgs['path']),
+            String(toolArgs['content']),
+            fetchOptions,
+          );
+          ok = result.ok;
+          output = ok ? result : { error: result.error };
+          break;
+        }
+
+        case 'realm-delete': {
+          let result = await deleteCard(
+            String(toolArgs['realm-url']),
+            String(toolArgs['path']),
+            fetchOptions,
+          );
+          ok = result.ok;
+          output = ok ? result : { error: result.error };
+          break;
+        }
+
+        case 'realm-atomic': {
+          let result = await atomicOperation(
+            String(toolArgs['realm-url']),
+            String(toolArgs['operations']),
+            fetchOptions,
+          );
+          ok = result.ok;
+          output = ok ? result.response : { error: result.error };
+          break;
+        }
+
+        case 'realm-search': {
+          let query: Record<string, unknown>;
+          try {
+            query = JSON.parse(String(toolArgs['query']));
+          } catch {
+            query = {};
+          }
+          let result = await searchRealm(
+            String(toolArgs['realm-url']),
+            query,
+            fetchOptions,
+          );
+          ok = result !== undefined;
+          output = result ?? { error: 'Search failed' };
+          break;
+        }
+
+        case 'realm-create': {
+          let name = String(toolArgs['name']);
+          let endpoint = String(toolArgs['endpoint']);
+          let matrixAuth =
+            this.config.matrixUrl &&
+            this.config.matrixAccessToken &&
+            this.config.matrixUserId
+              ? {
+                  userId: this.config.matrixUserId,
+                  accessToken: this.config.matrixAccessToken,
+                  matrixUrl: this.config.matrixUrl,
+                }
+              : undefined;
+          let result = await createRealm(String(toolArgs['realm-server-url']), {
+            name,
+            endpoint,
+            iconURL: toolArgs['iconURL'] as string | undefined,
+            backgroundURL: toolArgs['backgroundURL'] as string | undefined,
+            authorization: authorization ?? '',
+            fetch: fetchImpl,
+            matrixAuth,
+          });
+          ok = result.created;
+          output = ok
+            ? { data: { id: result.realmUrl } }
+            : { error: result.error };
+          break;
+        }
+
+        case 'realm-server-session': {
+          let result = await getServerSession(
+            String(toolArgs['realm-server-url']),
+            String(toolArgs['openid-token']),
+            { fetch: fetchImpl, authorization },
+          );
+          ok = !!result.token;
+          output = ok ? { token: result.token } : { error: result.error };
+          break;
+        }
+
+        case 'realm-auth': {
+          let result = await getRealmScopedAuth(
+            String(toolArgs['realm-server-url']),
+            authorization ?? '',
+            { fetch: fetchImpl },
+          );
+          ok = !result.error;
+          output = ok ? result.tokens : { error: result.error };
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown realm-api tool: "${toolName}"`);
       }
 
-      // Some endpoints return important values in headers (e.g. _server-session
-      // returns the JWT in the Authorization header with an empty/null body).
-      let authorizationHeader = response.headers.get('authorization');
-      if (toolName === 'realm-server-session' && authorizationHeader) {
-        responseBody = { token: authorizationHeader };
-      }
-
-      // After successful realm-create, update Matrix account data to include
-      // the new realm in the user's realm list (matching host app behavior).
-      if (toolName === 'realm-create' && response.ok) {
-        let createdRealmUrl = extractCreatedRealmUrl(responseBody);
-        if (createdRealmUrl) {
-          await this.appendRealmToMatrixAccountData(fetchImpl, createdRealmUrl);
-        }
+      // If the controller aborted (timeout), the realm-operations function
+      // may have caught the AbortError and returned { ok: false }. Check for
+      // this and throw ToolTimeoutError instead of returning a silent failure.
+      if (controller.signal.aborted) {
+        throw new ToolTimeoutError(toolName, this.timeoutMs);
       }
 
       return {
         tool: toolName,
-        exitCode: response.ok ? 0 : 1,
-        output: response.ok
-          ? responseBody
-          : {
-              error: `HTTP ${response.status}`,
-              body: responseBody,
-            },
-        durationMs,
+        exitCode: ok ? 0 : 1,
+        output,
+        durationMs: Date.now() - start,
       };
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === 'AbortError')
+      ) {
         throw new ToolTimeoutError(toolName, this.timeoutMs);
       }
       throw error;
@@ -559,63 +661,6 @@ export class ToolExecutor {
 
   private logExecution(entry: ToolExecutionLogEntry): void {
     this.config.log?.(entry);
-  }
-
-  // -------------------------------------------------------------------------
-  // Matrix account data
-  // -------------------------------------------------------------------------
-
-  /**
-   * After realm creation, append the new realm URL to the user's Matrix
-   * account data so the realm appears in their realm list. Matches the host
-   * app's `appendRealmToAccountData` behavior (matrix-service.ts:639-653).
-   *
-   * Silently skips when Matrix config is not provided.
-   */
-  private async appendRealmToMatrixAccountData(
-    fetchImpl: typeof globalThis.fetch,
-    newRealmUrl: string,
-  ): Promise<void> {
-    let { matrixUrl, matrixAccessToken, matrixUserId } = this.config;
-    if (!matrixUrl || !matrixAccessToken || !matrixUserId) {
-      return;
-    }
-
-    let baseUrl = ensureTrailingSlash(matrixUrl);
-    let encodedUserId = encodeURIComponent(matrixUserId);
-    let accountDataUrl = `${baseUrl}_matrix/client/v3/user/${encodedUserId}/account_data/app.boxel.realms`;
-    let authHeaders = {
-      Authorization: `Bearer ${matrixAccessToken}`,
-      'Content-Type': SupportedMimeType.JSON,
-    };
-
-    // GET current realm list
-    let existingRealms: string[] = [];
-    try {
-      let getResponse = await fetchImpl(accountDataUrl, {
-        method: 'GET',
-        headers: authHeaders,
-      });
-      if (getResponse.ok) {
-        let data = (await getResponse.json()) as { realms?: string[] };
-        existingRealms = data.realms ?? [];
-      }
-      // 404 means no account data yet — start with empty list
-    } catch {
-      // Network error reading account data — proceed with empty list
-    }
-
-    // Append and PUT
-    let updatedRealms = [...existingRealms, newRealmUrl];
-    try {
-      await fetchImpl(accountDataUrl, {
-        method: 'PUT',
-        headers: authHeaders,
-        body: JSON.stringify({ realms: updatedRealms }),
-      });
-    } catch {
-      // Best-effort — don't fail the realm-create if account data update fails
-    }
   }
 }
 
@@ -746,179 +791,9 @@ function buildBoxelCliArgs(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers: Realm API request building
-// ---------------------------------------------------------------------------
-
-interface RealmApiRequestParams {
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  body?: string;
-}
-
-function buildRealmApiRequest(
-  toolName: string,
-  toolArgs: Record<string, unknown>,
-  authorization?: string,
-): RealmApiRequestParams {
-  let headers: Record<string, string> = {
-    Accept: SupportedMimeType.JSON,
-  };
-
-  if (authorization) {
-    headers['Authorization'] = authorization;
-  }
-
-  switch (toolName) {
-    case 'realm-read': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
-      let path = String(toolArgs['path']);
-      let accept =
-        typeof toolArgs['accept'] === 'string'
-          ? toolArgs['accept']
-          : SupportedMimeType.CardSource;
-      return {
-        url: `${realmUrl}${path}`,
-        method: 'GET',
-        headers: { ...headers, Accept: accept },
-      };
-    }
-
-    case 'realm-write': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
-      let path = String(toolArgs['path']);
-      let content = String(toolArgs['content']);
-      let contentType =
-        typeof toolArgs['content-type'] === 'string'
-          ? toolArgs['content-type']
-          : SupportedMimeType.CardSource;
-      return {
-        url: `${realmUrl}${path}`,
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': contentType },
-        body: content,
-      };
-    }
-
-    case 'realm-delete': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
-      let path = String(toolArgs['path']);
-      return {
-        url: `${realmUrl}${path}`,
-        method: 'DELETE',
-        headers,
-      };
-    }
-
-    case 'realm-atomic': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
-      let operations = String(toolArgs['operations']);
-      return {
-        url: `${realmUrl}_atomic`,
-        method: 'POST',
-        headers: {
-          ...headers,
-          'Content-Type': SupportedMimeType.JSONAPI,
-        },
-        body: JSON.stringify({ 'atomic:operations': JSON.parse(operations) }),
-      };
-    }
-
-    case 'realm-search': {
-      let realmUrl = ensureTrailingSlash(String(toolArgs['realm-url']));
-      let query = String(toolArgs['query']);
-      return {
-        url: `${realmUrl}_search`,
-        method: 'QUERY',
-        headers: {
-          ...headers,
-          Accept: SupportedMimeType.CardJson,
-          'Content-Type': SupportedMimeType.JSON,
-        },
-        body: query,
-      };
-    }
-
-    case 'realm-create': {
-      let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
-      let name = String(toolArgs['name']);
-      let endpoint = String(toolArgs['endpoint']);
-      let iconURL =
-        typeof toolArgs['iconURL'] === 'string'
-          ? toolArgs['iconURL']
-          : iconURLFor(name);
-      let backgroundURL =
-        typeof toolArgs['backgroundURL'] === 'string'
-          ? toolArgs['backgroundURL']
-          : getRandomBackgroundURL();
-      return {
-        url: `${serverUrl}_create-realm`,
-        method: 'POST',
-        headers: {
-          ...headers,
-          Accept: SupportedMimeType.JSONAPI,
-          'Content-Type': SupportedMimeType.JSONAPI,
-        },
-        body: JSON.stringify({
-          data: {
-            type: 'realm',
-            attributes: {
-              name,
-              endpoint,
-              ...(iconURL ? { iconURL } : {}),
-              ...(backgroundURL ? { backgroundURL } : {}),
-            },
-          },
-        }),
-      };
-    }
-
-    case 'realm-server-session': {
-      let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
-      let openidToken = String(toolArgs['openid-token']);
-      return {
-        url: `${serverUrl}_server-session`,
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': SupportedMimeType.JSON },
-        body: JSON.stringify({ access_token: openidToken }),
-      };
-    }
-
-    case 'realm-auth': {
-      let serverUrl = ensureTrailingSlash(String(toolArgs['realm-server-url']));
-      return {
-        url: `${serverUrl}_realm-auth`,
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': SupportedMimeType.JSON },
-      };
-    }
-
-    default:
-      throw new Error(`Unknown realm-api tool: "${toolName}"`);
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
 
 function looksLikeUrl(value: string): boolean {
   return value.startsWith('http://') || value.startsWith('https://');
-}
-
-function extractCreatedRealmUrl(responseBody: unknown): string | undefined {
-  if (
-    typeof responseBody === 'object' &&
-    responseBody !== null &&
-    'data' in responseBody
-  ) {
-    let data = (responseBody as { data: unknown }).data;
-    if (typeof data === 'object' && data !== null && 'id' in data) {
-      let id = (data as { id: unknown }).id;
-      if (typeof id === 'string') {
-        return id;
-      }
-    }
-  }
-  return undefined;
 }
