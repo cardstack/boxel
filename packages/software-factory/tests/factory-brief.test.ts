@@ -3,6 +3,8 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   FactoryBriefError,
   loadFactoryBrief,
@@ -94,9 +96,9 @@ module('factory-brief', function () {
 
     let server = createServer((request, response) => {
       assert.strictEqual(request.url, '/software-factory/Wiki/sticky-note');
-      assert.strictEqual(request.headers.accept, 'application/vnd.card+source');
+      assert.strictEqual(request.headers.accept, SupportedMimeType.CardSource);
       assert.strictEqual(request.headers.authorization, 'Bearer brief-token');
-      response.writeHead(200, { 'content-type': 'application/json' });
+      response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
       response.end(JSON.stringify(stickyNoteFixture));
     });
 

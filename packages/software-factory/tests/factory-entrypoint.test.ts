@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   FactoryEntrypointUsageError,
   buildFactoryEntrypointSummary,
@@ -214,7 +216,7 @@ module('factory-entrypoint', function (hooks) {
             {
               status: 200,
               headers: {
-                'content-type': 'application/json',
+                'content-type': SupportedMimeType.JSON,
               },
             },
           );
@@ -274,7 +276,7 @@ module('factory-entrypoint', function (hooks) {
             {
               status: 200,
               headers: {
-                'content-type': 'application/json',
+                'content-type': SupportedMimeType.JSON,
               },
             },
           ),

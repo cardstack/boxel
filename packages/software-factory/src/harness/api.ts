@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
@@ -531,7 +533,7 @@ export async function fetchRealmCardJson(
     try {
       let response = await fetch(runtime.cardURL(path), {
         headers: {
-          Accept: 'application/vnd.card+json',
+          Accept: SupportedMimeType.CardJson,
         },
       });
       return {

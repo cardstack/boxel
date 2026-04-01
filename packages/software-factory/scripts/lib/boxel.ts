@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { formatErrorResponse } from '../../src/error-format';
-import { ensureTrailingSlash } from './realm-operations';
+import { ensureTrailingSlash, SupportedMimeType } from './realm-operations';
 
 const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');
 
@@ -133,7 +133,7 @@ export async function matrixLogin(
     {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': SupportedMimeType.JSON,
       },
       body: JSON.stringify({
         identifier: {
@@ -173,7 +173,7 @@ export async function getOpenIdToken(
     {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': SupportedMimeType.JSON,
         Authorization: `Bearer ${matrixAuth.accessToken}`,
       },
       body: '{}',
@@ -197,8 +197,8 @@ export async function getRealmServerToken(
     {
       method: 'POST',
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: SupportedMimeType.JSON,
+        'Content-Type': SupportedMimeType.JSON,
       },
       body: JSON.stringify(openIdToken),
     },
@@ -229,8 +229,8 @@ export async function getAccessibleRealmTokens(
     {
       method: 'POST',
       headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
+        Accept: SupportedMimeType.JSON,
+        'Content-Type': SupportedMimeType.JSON,
         Authorization: serverToken,
       },
     },
@@ -281,8 +281,8 @@ export async function searchRealm(input: {
     {
       method: 'QUERY',
       headers: {
-        Accept: 'application/vnd.card+json',
-        'Content-Type': 'application/json',
+        Accept: SupportedMimeType.CardJson,
+        'Content-Type': SupportedMimeType.JSON,
         ...(input.jwt ? { Authorization: input.jwt } : {}),
       },
       body: JSON.stringify(input.query),

@@ -1,12 +1,12 @@
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 const markdownLinkPattern = /\[([^\]]+)\]\([^)]+\)/g;
 const wikiLinkPattern = /\[\[([^[\]]+)\]\]/g;
 const markdownHeadingReplacePattern = /^\s*#{1,6}\s+/gm;
 const markdownListReplacePattern = /^\s*[-*+]\s+/gm;
 const whitespacePattern = /\s+/g;
-// Matches SupportedMimeType.CardSource from @cardstack/runtime-common (see CS-10550).
-const cardSourceMimeType = 'application/vnd.card+source';
 
 export interface FactoryBrief {
   title: string;
@@ -58,7 +58,7 @@ export async function loadFactoryBrief(
   try {
     response = await fetchImpl(sourceUrl, {
       headers: {
-        accept: cardSourceMimeType,
+        accept: SupportedMimeType.CardSource,
         ...(options?.authorization
           ? { authorization: options.authorization }
           : {}),

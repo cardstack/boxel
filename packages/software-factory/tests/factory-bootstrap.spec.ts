@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import { bootstrapProjectArtifacts } from '../src/factory-bootstrap';
 import type { FactoryBrief } from '../src/factory-brief';
 import { expect, test } from './fixtures';
@@ -34,8 +36,6 @@ const stickyNoteBrief: FactoryBrief = {
     'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
   tags: ['documents-content', 'sticky', 'note'],
 };
-
-const cardSourceMimeType = 'application/vnd.card+source';
 
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
@@ -81,7 +81,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
 
   let projectResponse = await authenticatedFetch(
     realm.cardURL('Projects/sticky-note-mvp'),
-    { headers: { Accept: cardSourceMimeType } },
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(projectResponse.ok).toBe(true);
   let projectJson = (await projectResponse.json()) as {
@@ -97,7 +97,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
 
   let ticketResponse = await authenticatedFetch(
     realm.cardURL('Tickets/sticky-note-define-core'),
-    { headers: { Accept: cardSourceMimeType } },
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(ticketResponse.ok).toBe(true);
   let ticketJson = (await ticketResponse.json()) as {
@@ -113,7 +113,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
 
   let ticket2Response = await authenticatedFetch(
     realm.cardURL('Tickets/sticky-note-design-views'),
-    { headers: { Accept: cardSourceMimeType } },
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(ticket2Response.ok).toBe(true);
   let ticket2Json = (await ticket2Response.json()) as {
@@ -123,7 +123,7 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
 
   let contextResponse = await authenticatedFetch(
     realm.cardURL('Knowledge Articles/sticky-note-brief-context'),
-    { headers: { Accept: cardSourceMimeType } },
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(contextResponse.ok).toBe(true);
   let contextJson = (await contextResponse.json()) as {

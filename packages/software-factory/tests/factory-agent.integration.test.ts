@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   OpenRouterFactoryAgent,
   type AgentAction,
@@ -60,7 +62,7 @@ async function startServer(
   let server = createServer(async (req, res) => {
     let body = await readBody(req);
     let result = handler(req, body);
-    res.writeHead(result.status, { 'Content-Type': 'application/json' });
+    res.writeHead(result.status, { 'Content-Type': SupportedMimeType.JSON });
     res.end(result.body);
   });
 

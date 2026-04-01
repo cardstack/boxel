@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   AgentActionValidationError,
   AgentResponseParseError,
@@ -574,7 +576,7 @@ module(
               },
             ],
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }) as typeof globalThis.fetch;
 
@@ -746,7 +748,7 @@ module(
               { message: { content: JSON.stringify([{ type: 'done' }]) } },
             ],
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }) as typeof globalThis.fetch;
 
@@ -803,7 +805,7 @@ module(
               { message: { content: JSON.stringify([{ type: 'done' }]) } },
             ],
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }) as typeof globalThis.fetch;
 

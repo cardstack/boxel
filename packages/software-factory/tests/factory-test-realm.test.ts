@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import type { TestResult } from '../scripts/lib/factory-agent';
 import {
   buildTestRunCardDocument,
@@ -474,7 +476,7 @@ module('factory-test-realm > createTestRun', function () {
     assert.strictEqual(capturedInit?.method, 'POST');
 
     let headers = capturedInit?.headers as Record<string, string>;
-    assert.strictEqual(headers['Content-Type'], 'application/vnd.card+source');
+    assert.strictEqual(headers['Content-Type'], SupportedMimeType.CardSource);
     assert.strictEqual(headers['Authorization'], 'Bearer test-token');
 
     let body = JSON.parse(capturedInit?.body as string);
@@ -549,7 +551,7 @@ module('factory-test-realm > completeTestRun', function () {
       if (method === 'GET') {
         return new Response(JSON.stringify(existingCard), {
           status: 200,
-          headers: { 'Content-Type': 'application/vnd.card+source' },
+          headers: { 'Content-Type': SupportedMimeType.CardSource },
         });
       }
       return new Response('{}', { status: 200 });
@@ -632,7 +634,7 @@ module('factory-test-realm > resolveTestRun', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/vnd.card+json' },
+            headers: { 'Content-Type': SupportedMimeType.CardJson },
           },
         );
       }
@@ -771,7 +773,7 @@ module('factory-test-realm > pullRealmFiles', function () {
             [`${realmUrl}hello.gts`]: 1000,
             [`${realmUrl}HelloCard/sample.json`]: 2000,
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }
 
@@ -803,7 +805,7 @@ module('factory-test-realm > pullRealmFiles', function () {
       // Return empty mtimes so no file downloads happen
       return new Response(JSON.stringify({}), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': SupportedMimeType.JSON },
       });
     }) as typeof globalThis.fetch;
 
@@ -856,7 +858,7 @@ module('factory-test-realm > pullRealmFiles', function () {
             [`${realmUrl}hello.gts`]: 1000,
             ['https://other.test/evil.gts']: 2000, // outside realm
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }
       return new Response('content', { status: 200 });
