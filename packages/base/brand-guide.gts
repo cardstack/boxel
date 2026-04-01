@@ -219,6 +219,105 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
               {{else if (eq section.id 'card-container-css')}}
                 {{#if @model.cssVariables}}
                   <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                  <hr class='brand-guide-vars-divider' />
+                  <h3 class='brand-guide-vars-heading'>Brand Guide-Specific
+                    Variables</h3>
+                  <p class='brand-guide-vars-description'>These variables are
+                    only available for Brand Guides. They are not available as
+                    general Theme Card variables.</p>
+                  <div class='brand-guide-vars-box'>
+                    <h4 class='brand-guide-vars-title'>Functional Palette
+                      Variables</h4>
+                    <dl class='brand-guide-vars'>
+                      <dt><code>--brand-primary</code></dt>
+                      <dd>Primary brand color</dd>
+                      <dt><code>--brand-secondary</code></dt>
+                      <dd>Secondary brand color</dd>
+                      <dt><code>--brand-accent</code></dt>
+                      <dd>Accent brand color</dd>
+                      <dt><code>--brand-light</code></dt>
+                      <dd>Light brand color — used as
+                        <code>--background</code>
+                        in light mode and
+                        <code>--foreground</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-dark</code></dt>
+                      <dd>Dark brand color — used as
+                        <code>--foreground</code>
+                        in light mode and
+                        <code>--background</code>
+                        in dark mode</dd>
+                    </dl>
+                  </div>
+                  <div class='brand-guide-vars-box'>
+                    <h4 class='brand-guide-vars-title'>Brand Mark Variables</h4>
+                    <p class='brand-guide-vars-description'>These variables are
+                      automatically set from your brand mark fields. Use them in
+                      card CSS to reference the correct mark for the current
+                      color scheme without manual light/dark switching.</p>
+                    <dl class='brand-guide-vars'>
+                      <dt><code>--brand-primary-mark</code></dt>
+                      <dd>Primary mark URL —
+                        <code>--brand-primary-mark-1</code>
+                        in light mode,
+                        <code>--brand-primary-mark-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-secondary-mark</code></dt>
+                      <dd>Secondary mark URL —
+                        <code>--brand-secondary-mark-1</code>
+                        in light mode,
+                        <code>--brand-secondary-mark-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-primary-mark-greyscale</code></dt>
+                      <dd>Primary mark greyscale URL —
+                        <code>--brand-primary-mark-greyscale-1</code>
+                        in light mode,
+                        <code>--brand-primary-mark-greyscale-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-secondary-mark-greyscale</code></dt>
+                      <dd>Secondary mark greyscale URL —
+                        <code>--brand-secondary-mark-greyscale-1</code>
+                        in light mode,
+                        <code>--brand-secondary-mark-greyscale-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-social-media-profile-icon</code></dt>
+                      <dd>Social media profile icon URL</dd>
+                      <dt><code>--brand-primary-mark-min-height</code></dt>
+                      <dd>Minimum display height for the primary mark</dd>
+                      <dt><code>--brand-primary-mark-clearance-ratio</code></dt>
+                      <dd>Clear-space ratio around the primary mark (multiplied
+                        by
+                        <code>--brand-primary-mark-min-height</code>)</dd>
+                      <dt><code>--brand-secondary-mark-min-height</code></dt>
+                      <dd>Minimum display height for the secondary mark</dd>
+                      <dt><code
+                        >--brand-secondary-mark-clearance-ratio</code></dt>
+                      <dd>Clear-space ratio around the secondary mark
+                        (multiplied by
+                        <code>--brand-secondary-mark-min-height</code>)</dd>
+                    </dl>
+                  </div>
+                  {{#if @model.brandColorPalette.length}}
+                    <h3 class='brand-guide-vars-heading'>Brand-Specific
+                      Variables</h3>
+                    <p class='brand-guide-vars-description'>These variables are
+                      custom css properties for usage by the specific brand.</p>
+                    <div class='brand-guide-vars-box'>
+                      <h4 class='brand-guide-vars-title'>Custom Brand Variables</h4>
+                      <p class='brand-guide-vars-description'>Additional brand
+                        colors as defined in the Brand Color Palette.</p>
+                      <dl class='brand-guide-vars'>
+                        {{#each @model.brandColorPalette as |color|}}
+                          {{#if color.name}}
+                            <dt><code>{{buildCssVariableName
+                                  color.name
+                                }}</code></dt>
+                            <dd>Custom brand color</dd>
+                          {{/if}}
+                        {{/each}}
+                      </dl>
+                    </div>
+                  {{/if}}
                 {{/if}}
               {{else if (eq section.id 'import-css')}}
                 <CssFieldEditor @setCss={{@model.setCss}} />
@@ -400,6 +499,60 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .dsr-inspiration-tag:hover {
         border-color: var(--dsr-fg);
+      }
+
+      /* Brand Guide Variables */
+      .brand-guide-vars-divider {
+        border: none;
+        border-top: 1px solid var(--dsr-border);
+        margin-block: var(--boxel-sp-xl) 0;
+      }
+      .brand-guide-vars-heading {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .brand-guide-vars-box + .brand-guide-vars-box {
+        margin-top: var(--boxel-sp);
+      }
+      .brand-guide-vars-box {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+        border: 1px solid var(--dsr-border);
+        margin-top: var(--boxel-sp-lg);
+      }
+      .brand-guide-vars-title {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-block: 0 var(--boxel-sp-sm);
+      }
+      .brand-guide-vars-description {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--dsr-muted-fg);
+        margin-block: 0 var(--boxel-sp);
+      }
+      .brand-guide-vars {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        font-size: var(--boxel-font-size-sm);
+        align-items: baseline;
+      }
+      .brand-guide-vars dt {
+        font-weight: 600;
+      }
+      .brand-guide-vars dd {
+        margin: 0;
+        color: var(--dsr-muted-fg);
+      }
+      .brand-guide-vars code {
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: 0.9em;
       }
 
       /* Import Custom CSS */
@@ -660,6 +813,26 @@ export default class BrandGuide extends DetailedStyleRef {
       let darkRules = mergeRuleMaps(
         this.calculatedRules({ darkMode: true }),
         brandRules,
+      );
+      rootRules?.set('--brand-primary-mark', 'var(--brand-primary-mark-1)');
+      rootRules?.set('--brand-secondary-mark', 'var(--brand-secondary-mark-1)');
+      rootRules?.set(
+        '--brand-primary-mark-greyscale',
+        'var(--brand-primary-mark-greyscale-1)',
+      );
+      rootRules?.set(
+        '--brand-secondary-mark-greyscale',
+        'var(--brand-secondary-mark-greyscale-1)',
+      );
+      darkRules?.set('--brand-primary-mark', 'var(--brand-primary-mark-2)');
+      darkRules?.set('--brand-secondary-mark', 'var(--brand-secondary-mark-2)');
+      darkRules?.set(
+        '--brand-primary-mark-greyscale',
+        'var(--brand-primary-mark-greyscale-2)',
+      );
+      darkRules?.set(
+        '--brand-secondary-mark-greyscale',
+        'var(--brand-secondary-mark-greyscale-2)',
       );
       return generateCssVariables(
         buildCssGroups([
