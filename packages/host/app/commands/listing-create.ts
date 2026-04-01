@@ -155,6 +155,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         targetRealm,
         firstOpenCardId ?? codeRef?.module,
         codeRef.module,
+        codeRef,
       ),
     ]).catch((error) => {
       console.warn('Background autopatch failed:', error);
@@ -216,6 +217,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     targetRealm: string,
     resourceUrl: string, // can be module or card instance id
     moduleUrl: string, // the module URL of the card type being listed
+    codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
     const resourceRealm =
       this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
@@ -259,14 +261,18 @@ export default class ListingCreateCommand extends HostBaseCommand<
     if (sanitizedModules.length > 0) {
       const createSpecCommand = new CreateSpecCommand(this.commandContext);
       const specResults = await Promise.all(
-        sanitizedModules.map((module) =>
-          createSpecCommand
-            .execute({ module, targetRealm, autoGenerateReadme: true })
-            .catch((e) => {
-              console.warn('Failed to create spec(s) for', module, e);
-              return undefined;
-            }),
-        ),
+        sanitizedModules.map((module) => {
+          // For the main module, use the specific codeRef (with export name) so
+          // only the listed export gets a spec, not every export in the file.
+          const input =
+            module === moduleUrl
+              ? { codeRef, targetRealm, autoGenerateReadme: true }
+              : { module, targetRealm, autoGenerateReadme: true };
+          return createSpecCommand.execute(input).catch((e: unknown) => {
+            console.warn('Failed to create spec(s) for', module, e);
+            return undefined;
+          });
+        }),
       );
 
       specResults.forEach((result) => {
