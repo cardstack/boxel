@@ -79,20 +79,18 @@ export class DirectoryResource extends Resource<Args> {
             if (event.eventName !== 'update') {
               return;
             }
-            let filePath: string | undefined;
-            if ('added' in event) {
-              filePath = event.added;
-            } else if ('removed' in event) {
-              filePath = event.removed;
-            }
-            if (!filePath) {
-              return;
-            }
-            let fileURL = new URL(filePath, event.realmURL).href;
-            let segments = fileURL.split('/');
-            segments.pop();
-            let fileDir = segments.join('/') + '/';
-            if (fileDir.startsWith(this.directoryURL)) {
+            let filePaths = [
+              ...('added' in event ? event.added! : []),
+              ...('removed' in event ? event.removed! : []),
+            ];
+            let shouldRefresh = filePaths.some((fp) => {
+              let fileURL = new URL(fp, event.realmURL).href;
+              let segments = fileURL.split('/');
+              segments.pop();
+              let fileDir = segments.join('/') + '/';
+              return fileDir.startsWith(this.directoryURL!);
+            });
+            if (shouldRefresh) {
               this.readdir.perform();
             }
           },

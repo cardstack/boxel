@@ -1241,8 +1241,9 @@ module(basename(__filename), function () {
       assert.strictEqual(content.eventName, 'update');
       assert.true('added' in content, 'event has added field');
       if ('added' in content) {
+        assert.strictEqual(content.added!.length, 1, 'one file was added');
         assert.ok(
-          content.added.endsWith('.json'),
+          content.added![0].endsWith('.json'),
           'added field contains the new file path',
         );
       }
@@ -1298,9 +1299,9 @@ module(basename(__filename), function () {
       assert.strictEqual(content.eventName, 'update');
       assert.true('updated' in content, 'event has updated field');
       if ('updated' in content) {
-        assert.strictEqual(
+        assert.deepEqual(
           content.updated,
-          'person-1.json',
+          ['person-1.json'],
           'updated field contains the changed file path',
         );
       }
@@ -1340,9 +1341,9 @@ module(basename(__filename), function () {
       assert.strictEqual(content.eventName, 'update');
       assert.true('removed' in content, 'event has removed field');
       if ('removed' in content) {
-        assert.strictEqual(
+        assert.deepEqual(
           content.removed,
-          'person-1.json',
+          ['person-1.json'],
           'removed field contains the deleted file path',
         );
       }
