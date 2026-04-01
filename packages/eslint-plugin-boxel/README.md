@@ -36,7 +36,7 @@ Then configure the rules you want to use under the rules section:
 | Name                                                                   | Description                                                                                                        | 💼 | 🔧 |
 | :--------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------- | :- | :- |
 | [missing-card-api-import](docs/rules/missing-card-api-import.md)       | disallow usage of card-api with missing imports with auto-fix                                                      | ✅  | 🔧 |
-| [no-css-position-fixed](docs/rules/no-css-position-fixed.md)           | disallow `position: fixed` in card CSS because cards should not break out of their bounding box                    | ✅  |    |
+| [no-css-position-fixed](docs/rules/no-css-position-fixed.md)           | disallow `position: fixed` in card CSS because cards should not break out of their bounding box                    |    |    |
 | [no-duplicate-imports](docs/rules/no-duplicate-imports.md)             | Prevent duplicate imports from the same module                                                                     | ✅  | 🔧 |
 | [no-forbidden-head-tags](docs/rules/no-forbidden-head-tags.md)         | disallow forbidden HTML elements in `static head` templates — only `<title>`, `<meta>`, and `<link>` are permitted | ✅  |    |
 | [no-literal-realm-urls](docs/rules/no-literal-realm-urls.md)           | Disallow environment-specific realm URLs in code; use portable prefixes like @cardstack/catalog/ instead           |    | 🔧 |
