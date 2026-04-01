@@ -189,6 +189,11 @@ jobs:
       - name: ESLint Plugin Boxel test suite
         run: pnpm test
         working-directory: packages/eslint-plugin-boxel
+      - name: Check generated files are up to date
+        working-directory: packages/eslint-plugin-boxel
+        run: |
+          pnpm run update
+          git diff --exit-code || (echo "::error::Generated files are out of date. Run 'pnpm run update' in packages/eslint-plugin-boxel and commit the result." && exit 1)
 
   postgres-migration-test:
     name: Postgres Migration Test
