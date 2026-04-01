@@ -1703,6 +1703,12 @@ importers:
       eslint-doc-generator:
         specifier: 'catalog:'
         version: 1.7.1(eslint@8.57.1)(typescript@5.9.3)
+      vite:
+        specifier: 'catalog:'
+        version: 6.4.1(@types/node@25.0.8)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+      vitest:
+        specifier: 'catalog:'
+        version: 2.1.9(@types/node@25.0.8)(jsdom@25.0.1)(terser@5.44.1)
 
   packages/experiments-realm:
     dependencies:
