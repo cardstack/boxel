@@ -310,6 +310,25 @@ export default class Directory extends Component<Args> {
     e.preventDefault();
     e.stopPropagation();
     this.menuEntryPath = entryPath;
+
+    // Reposition hidden anchor to the clicked element so the dropdown appears nearby
+    const anchor = document.querySelector(
+      `[data-ebd-id="${this.dropdownApi?.uniqueId}-trigger"]`,
+    ) as HTMLElement | null;
+
+    if (anchor) {
+      if (e.type === 'contextmenu') {
+        anchor.style.top = `${e.clientY}px`;
+        anchor.style.left = `${e.clientX}px`;
+      } else {
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        anchor.style.top = `${rect.top}px`;
+        anchor.style.left = `${rect.left}px`;
+        anchor.style.width = `${rect.width}px`;
+        anchor.style.height = `${rect.height}px`;
+      }
+    }
+
     this.dropdownApi?.actions.open(e);
   }
 
