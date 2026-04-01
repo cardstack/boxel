@@ -1,7 +1,8 @@
 import type { ResolvedCodeRef } from './code-ref';
+import type { CardOrModuleRef } from './card-reference-resolver';
 import type { RealmPermissions } from './index';
 
-export const baseRealm = {
+export const baseRealm: { url: CardOrModuleRef } = {
   url: '@cardstack/base/',
 };
 

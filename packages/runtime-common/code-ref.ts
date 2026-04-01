@@ -18,14 +18,14 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
-import { cardIdToURL } from './card-reference-resolver';
+import { cardIdToURL, type CardOrModuleRef } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
-  module: string;
+  module: CardOrModuleRef;
   name: string;
 };
 

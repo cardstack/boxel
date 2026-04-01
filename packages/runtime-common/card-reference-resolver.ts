@@ -1,3 +1,11 @@
+/**
+ * A card instance ID or module reference that may be either a full URL
+ * (e.g. "http://localhost:4201/base/card-api") or a registered prefix form
+ * (e.g. "@cardstack/base/card-api"). Use `cardIdToURL()` to safely convert
+ * to a URL — do NOT pass directly to `new URL()`.
+ */
+export type CardOrModuleRef = string;
+
 const prefixMappings = new Map<string, string>();
 
 export function registerCardReferencePrefix(
@@ -82,6 +90,6 @@ export function unresolveCardReference(resolvedURL: string): string {
 // Converts a card instance ID (which may be a registered prefix like
 // @cardstack/catalog/foo or a regular URL) to a URL object by resolving
 // the prefix to a real URL when needed.
-export function cardIdToURL(id: string): URL {
+export function cardIdToURL(id: CardOrModuleRef): URL {
   return new URL(resolveCardReference(id, undefined));
 }

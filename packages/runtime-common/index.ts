@@ -188,6 +188,7 @@ export {
   unresolveCardReference,
   isRegisteredPrefix,
   cardIdToURL,
+  type CardOrModuleRef,
 } from './card-reference-resolver';
 
 export interface ResourceObject {
