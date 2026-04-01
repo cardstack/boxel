@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -16,6 +16,7 @@ import {
   findAvailablePort,
   findHostDistPackageDir,
   findRootRepoCheckoutDir,
+  hostDir,
   logTimed,
   maybeRequire,
   prepareTestPgScript,
@@ -35,51 +36,108 @@ function hostStartupLooksLikePortContention(logs: string): boolean {
   return /EADDRINUSE|address already in use/i.test(logs);
 }
 
-function assertUsableBoxelUIDist(hostPackageDir: string): void {
-  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
-  let boxelUIDistDir = join(boxelUIAddonDir, 'dist');
-  let requiredPaths = [
+function boxelUIDistIsUsable(hostPackageDir: string): boolean {
+  let boxelUIDistDir = join(hostPackageDir, '..', 'boxel-ui', 'addon', 'dist');
+  return [
     join(boxelUIDistDir, 'components.js'),
     join(boxelUIDistDir, 'helpers.js'),
     join(boxelUIDistDir, 'icons.js'),
     join(boxelUIDistDir, 'styles', 'global.css'),
-  ];
+  ].every((path) => existsSync(path));
+}
 
-  if (requiredPaths.every((path) => existsSync(path))) {
+/**
+ * Ensure boxel-ui dist artifacts exist for the host package. Tries in order:
+ *   1. The current worktree's boxel-ui/addon/dist
+ *   2. Symlink from the root repo's built boxel-ui dist (fast, avoids rebuild)
+ *   3. Build boxel-ui in the current worktree (slow but always works)
+ */
+function ensureBoxelUIDist(hostPackageDir: string): void {
+  if (boxelUIDistIsUsable(hostPackageDir)) {
     return;
   }
 
+  let boxelUIAddonDir = join(hostPackageDir, '..', 'boxel-ui', 'addon');
+  let boxelUIDistDir = join(boxelUIAddonDir, 'dist');
+
+  // Try to symlink from root repo first (fast path for worktrees).
   let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  let rootRepoBoxelUIAddonDir =
-    rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot
-      ? join(rootRepoCheckoutDir, 'packages', 'boxel-ui', 'addon')
-      : undefined;
-  let rootRepoBoxelUIDistDir = rootRepoBoxelUIAddonDir
-    ? join(rootRepoBoxelUIAddonDir, 'dist')
-    : undefined;
-  let hasRootRepoBoxelUIDist =
-    rootRepoBoxelUIDistDir != null &&
-    requiredPaths
-      .map((path) =>
-        join(rootRepoBoxelUIDistDir, path.slice(boxelUIDistDir.length + 1)),
-      )
-      .every((path) => existsSync(path));
-
-  let fixInstructions = [
-    `Run \`cd ${boxelUIAddonDir} && mise exec -- pnpm build\` to build boxel-ui in this checkout.`,
-  ];
-
-  if (hasRootRepoBoxelUIDist && rootRepoBoxelUIDistDir) {
-    fixInstructions.push(
-      `If you are in a worktree and want to reuse the main checkout build, run \`ln -sfn ${rootRepoBoxelUIDistDir} ${boxelUIDistDir}\`.`,
+  if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
+    let rootRepoBoxelUIDistDir = join(
+      rootRepoCheckoutDir,
+      'packages',
+      'boxel-ui',
+      'addon',
+      'dist',
     );
+    if (
+      existsSync(join(rootRepoBoxelUIDistDir, 'components.js')) &&
+      existsSync(join(rootRepoBoxelUIDistDir, 'helpers.js'))
+    ) {
+      supportLog.info(
+        `symlinking boxel-ui dist from root repo: ${rootRepoBoxelUIDistDir} -> ${boxelUIDistDir}`,
+      );
+      let result = spawnSync(
+        'ln',
+        ['-sfn', rootRepoBoxelUIDistDir, boxelUIDistDir],
+        {
+          stdio: 'inherit',
+        },
+      );
+      if (result.status === 0 && boxelUIDistIsUsable(hostPackageDir)) {
+        return;
+      }
+    }
   }
 
-  throw new Error(
-    `Boxel UI dist is missing or incomplete at ${boxelUIDistDir}. The software-factory harness needs built @cardstack/boxel-ui artifacts before the host app can boot. ${fixInstructions.join(
-      ' ',
-    )}`,
+  // Fall back to building boxel-ui.
+  supportLog.info(`building boxel-ui dist at ${boxelUIAddonDir}...`);
+  let result = spawnSync('pnpm', ['build'], {
+    cwd: boxelUIAddonDir,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to build boxel-ui at ${boxelUIAddonDir} (exit code ${result.status}). ` +
+        `Run \`cd ${boxelUIAddonDir} && pnpm build\` manually to diagnose.`,
+    );
+  }
+  if (!boxelUIDistIsUsable(hostPackageDir)) {
+    throw new Error(
+      `boxel-ui build succeeded but dist is still incomplete at ${boxelUIDistDir}`,
+    );
+  }
+}
+
+/**
+ * Build the host app dist when no pre-built dist is available anywhere.
+ * Returns the host package directory where the dist was built.
+ */
+function buildHostDist(): string {
+  // Prefer building in the current worktree so the output is local.
+  let buildDir = hostDir;
+  supportLog.info(
+    `no pre-built host dist found — building host app at ${buildDir}...`,
   );
+  let result = spawnSync('pnpm', ['build'], {
+    cwd: buildDir,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to build host app at ${buildDir} (exit code ${result.status}). ` +
+        `Run \`cd ${buildDir} && pnpm build\` manually to diagnose.`,
+    );
+  }
+  let indexPath = join(buildDir, 'dist', 'index.html');
+  if (!existsSync(indexPath)) {
+    throw new Error(
+      `Host build succeeded but dist/index.html is missing at ${buildDir}`,
+    );
+  }
+  return buildDir;
 }
 
 function assertUsableHostDist(hostPackageDir: string): void {
@@ -178,11 +236,11 @@ async function ensureHostReady(): Promise<{
 
       let hostPackageDir = findHostDistPackageDir();
       if (!hostPackageDir) {
-        throw new Error(
-          'No built host dist is available in the current worktree or root repo checkout',
-        );
+        // No pre-built host dist found anywhere. Build it automatically so
+        // cache:prepare works in a fresh worktree without manual setup.
+        hostPackageDir = buildHostDist();
       }
-      assertUsableBoxelUIDist(hostPackageDir);
+      ensureBoxelUIDist(hostPackageDir);
       assertUsableHostDist(hostPackageDir);
       let port = await findAvailablePort();
       let hostURL = `http://localhost:${port}/`;
@@ -383,6 +441,91 @@ export async function startHarnessPrerenderServer(options: {
   };
 }
 
+/**
+ * Ensure boxel-icons dist exists. In a worktree, symlink from the root repo
+ * if available, otherwise build.
+ */
+function ensureBoxelIconsDist(): void {
+  let distDir = join(boxelIconsDir, 'dist');
+  if (
+    existsSync(join(distDir, '@cardstack')) ||
+    existsSync(join(distDir, 'index.html'))
+  ) {
+    return;
+  }
+
+  // Try to symlink from root repo (fast path for worktrees).
+  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
+  if (rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot) {
+    let rootRepoIconsDistDir = join(
+      rootRepoCheckoutDir,
+      'packages',
+      'boxel-icons',
+      'dist',
+    );
+    if (existsSync(join(rootRepoIconsDistDir, '@cardstack'))) {
+      supportLog.info(
+        `symlinking boxel-icons dist from root repo: ${rootRepoIconsDistDir} -> ${distDir}`,
+      );
+      let result = spawnSync('ln', ['-sfn', rootRepoIconsDistDir, distDir], {
+        stdio: 'inherit',
+      });
+      if (result.status === 0 && existsSync(join(distDir, '@cardstack'))) {
+        return;
+      }
+    }
+  }
+
+  // Fall back to building boxel-icons.
+  supportLog.info(`building boxel-icons dist at ${boxelIconsDir}...`);
+  let result = spawnSync('pnpm', ['build'], {
+    cwd: boxelIconsDir,
+    stdio: 'inherit',
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to build boxel-icons at ${boxelIconsDir} (exit code ${result.status}). ` +
+        `Run \`cd ${boxelIconsDir} && pnpm build\` manually to diagnose.`,
+    );
+  }
+}
+
+function startIconServerProcess(): {
+  child: ReturnType<typeof spawn>;
+  logs: () => string;
+  stop: () => Promise<void>;
+} {
+  let child = spawn('pnpm', ['serve'], {
+    cwd: boxelIconsDir,
+    detached: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: process.env,
+  });
+
+  let captured = '';
+  child.stdout?.on('data', (chunk) => {
+    captured = `${captured}${String(chunk)}`.slice(-20_000);
+  });
+  child.stderr?.on('data', (chunk) => {
+    captured = `${captured}${String(chunk)}`.slice(-20_000);
+  });
+
+  return {
+    child,
+    logs: () => captured,
+    async stop() {
+      if (child.exitCode === null) {
+        try {
+          process.kill(-child.pid!, 'SIGTERM');
+        } catch {
+          // best effort cleanup
+        }
+      }
+    },
+  };
+}
+
 async function ensureIconsReady(): Promise<{
   stop?: () => Promise<void>;
 }> {
@@ -390,64 +533,63 @@ async function ensureIconsReady(): Promise<{
     supportLog,
     `ensureIconsReady ${DEFAULT_ICONS_PROBE_URL}`,
     async () => {
+      // Ensure boxel-icons dist exists before trying to serve it.
+      ensureBoxelIconsDist();
+
+      // Always start our own managed icon server so we control its lifecycle.
+      // An externally-running server could die mid-indexing causing silent
+      // render timeouts. If port 4206 is already taken by a healthy dev
+      // server, our spawn will fail and we fall back to the existing one.
+      let server = startIconServerProcess();
+
       try {
-        let response = await fetch(DEFAULT_ICONS_PROBE_URL);
-        if (response.ok) {
-          supportLog.debug('icons server already available');
-          return {};
-        }
-      } catch {
-        // fall through and start the local icon server
+        await waitUntil(
+          async () => {
+            // If our process exited, either the port is already in use (dev
+            // server running) or the start genuinely failed. Check if the
+            // external server is healthy.
+            if (server.child.exitCode !== null) {
+              try {
+                let response = await fetch(DEFAULT_ICONS_PROBE_URL);
+                if (response.ok) {
+                  supportLog.debug(
+                    'icons server already available (external process)',
+                  );
+                  return true;
+                }
+              } catch {
+                // fall through
+              }
+              throw new Error(
+                `icons server exited early with code ${server.child.exitCode}\n${server.logs()}`,
+              );
+            }
+            try {
+              let response = await fetch(DEFAULT_ICONS_PROBE_URL);
+              return response.ok;
+            } catch {
+              return false;
+            }
+          },
+          {
+            timeout: 30_000,
+            interval: 250,
+            timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_PROBE_URL}\n${server.logs()}`,
+          },
+        );
+      } catch (error) {
+        await server.stop();
+        throw error;
       }
 
-      let child = spawn('pnpm', ['serve'], {
-        cwd: boxelIconsDir,
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env,
-      });
+      if (server.child.exitCode !== null) {
+        // Our process couldn't start (port already taken by dev server).
+        // Return without a stop function since we don't own the server.
+        return {};
+      }
 
-      let logs = '';
-      child.stdout?.on('data', (chunk) => {
-        logs = `${logs}${String(chunk)}`.slice(-20_000);
-      });
-      child.stderr?.on('data', (chunk) => {
-        logs = `${logs}${String(chunk)}`.slice(-20_000);
-      });
-
-      await waitUntil(
-        async () => {
-          if (child.exitCode !== null) {
-            throw new Error(
-              `icons server exited early with code ${child.exitCode}\n${logs}`,
-            );
-          }
-          try {
-            let response = await fetch(DEFAULT_ICONS_PROBE_URL);
-            return response.ok;
-          } catch {
-            return false;
-          }
-        },
-        {
-          timeout: 30_000,
-          interval: 250,
-          timeoutMessage: `Timed out waiting for icons server at ${DEFAULT_ICONS_PROBE_URL}\n${logs}`,
-        },
-      );
-
-      supportLog.debug('started local icons server');
-      return {
-        async stop() {
-          if (child.exitCode === null) {
-            try {
-              process.kill(-child.pid!, 'SIGTERM');
-            } catch {
-              // best effort cleanup
-            }
-          }
-        },
-      };
+      supportLog.debug('started managed icons server');
+      return { stop: server.stop };
     },
   );
 }

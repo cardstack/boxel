@@ -1,6 +1,9 @@
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Client as PgClient } from 'pg';
 
 import {
+  baseRealmDir,
   baseRealmURLFor,
   builderDatabaseNameForCacheKey,
   DEFAULT_BASE_REALM_PERMISSIONS,
@@ -9,6 +12,8 @@ import {
   logTimed,
   pgAdminConnectionConfig,
   quotePgIdentifier,
+  shouldIgnoreFixturePath,
+  sourceRealmDir,
   sourceRealmURLFor,
   templateLog,
   waitUntil,
@@ -41,7 +46,10 @@ export async function canConnectToPg(): Promise<boolean> {
 }
 
 export async function databaseExists(databaseName: string): Promise<boolean> {
-  let client = new PgClient(pgAdminConnectionConfig());
+  let client = new PgClient({
+    ...pgAdminConnectionConfig(),
+    connectionTimeoutMillis: 3000,
+  });
   try {
     await client.connect();
     let result = await client.query<{ exists: boolean }>(
@@ -49,8 +57,16 @@ export async function databaseExists(databaseName: string): Promise<boolean> {
       [databaseName],
     );
     return Boolean(result.rows[0]?.exists);
+  } catch {
+    // Postgres may not be running yet (e.g. fresh worktree with no services).
+    // Treat as "database does not exist" so the caller proceeds to start services.
+    return false;
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      // best effort cleanup
+    }
   }
 }
 
@@ -533,6 +549,120 @@ export async function warnIfSnapshotLooksCold(
   );
 }
 
+function countFixtureFiles(dir: string): number {
+  let count = 0;
+  function visit(currentDir: string, relativePath: string) {
+    for (let entry of readdirSync(currentDir, { withFileTypes: true })) {
+      let entryRelativePath = relativePath
+        ? `${relativePath}/${entry.name}`
+        : entry.name;
+      if (shouldIgnoreFixturePath(entryRelativePath)) {
+        continue;
+      }
+      let fullPath = join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        visit(fullPath, entryRelativePath);
+      } else if (entry.isFile()) {
+        count++;
+      }
+    }
+  }
+  try {
+    visit(dir, '');
+  } catch {
+    // If we can't count files, just return 0 and skip progress reporting
+  }
+  return count;
+}
+
+async function queryIndexedCount(databaseName: string): Promise<{
+  indexed: number;
+  errors: number;
+}> {
+  let client = new PgClient({
+    ...pgAdminConnectionConfig(databaseName),
+    connectionTimeoutMillis: 2000,
+  });
+  try {
+    await client.connect();
+    let { rows } = await client.query<{ total: number; errors: number }>(
+      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE has_error)::int AS errors FROM boxel_index`,
+    );
+    return { indexed: rows[0]?.total ?? 0, errors: rows[0]?.errors ?? 0 };
+  } catch {
+    return { indexed: 0, errors: 0 };
+  } finally {
+    try {
+      await client.end();
+    } catch {
+      // best effort cleanup
+    }
+  }
+}
+
+/**
+ * Start a progress reporter that polls the database for indexing status and
+ * writes updates to stderr. Returns a stop function.
+ */
+function startIndexingProgressReporter(
+  databaseName: string,
+  estimatedTotal: number,
+): { stop: () => void } {
+  let stopped = false;
+  let lastReported = -1;
+  let startedAt = Date.now();
+
+  let report = async () => {
+    if (stopped) {
+      return;
+    }
+    let { indexed, errors } = await queryIndexedCount(databaseName);
+    if (stopped) {
+      return;
+    }
+    // Only report when the count changes or on the first poll.
+    if (indexed === lastReported) {
+      return;
+    }
+    lastReported = indexed;
+
+    let elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
+    let errorSuffix = errors > 0 ? ` (${errors} errors)` : '';
+    if (estimatedTotal > 0) {
+      let pct = Math.min(100, Math.round((indexed / estimatedTotal) * 100));
+      let barWidth = 30;
+      let filled = Math.round((pct / 100) * barWidth);
+      let bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
+      process.stderr.write(
+        `\r  indexing [${bar}] ${indexed}/${estimatedTotal} files (${pct}%) ${elapsed}s${errorSuffix}`,
+      );
+    } else {
+      process.stderr.write(
+        `\r  indexing ${indexed} files indexed ${elapsed}s${errorSuffix}`,
+      );
+    }
+  };
+
+  let interval = setInterval(() => void report(), 2000);
+  // Do an immediate first check after a brief delay to let the DB initialize.
+  let initialTimeout = setTimeout(() => void report(), 3000);
+
+  return {
+    stop() {
+      stopped = true;
+      clearInterval(interval);
+      clearTimeout(initialTimeout);
+      // Clear the progress line and print final status.
+      if (lastReported >= 0) {
+        let elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        process.stderr.write(
+          `\r  indexing complete: ${lastReported} files indexed in ${elapsed}s\n`,
+        );
+      }
+    },
+  };
+}
+
 export async function waitForQueueIdle(databaseName: string): Promise<void> {
   await logTimed(templateLog, `waitForQueueIdle ${databaseName}`, async () => {
     await waitUntil(
@@ -646,20 +776,40 @@ export async function buildCombinedTemplateDatabase({
         username: `additional_realm_${i}`,
       }));
 
-      let stack = await startIsolatedRealmStack({
-        realmDir: primary.realmDir,
-        realmURL: primary.realmURL,
-        realmServerURL,
-        databaseName: builderDatabaseName,
-        context,
-        migrateDB: !hasMigratedTemplate,
-        fullIndexOnStartup: true,
-        additionalRealms,
-      });
+      // Estimate total files for progress reporting.
+      let estimatedTotal =
+        realmFixtures.reduce(
+          (sum, f) => sum + countFixtureFiles(f.realmDir),
+          0,
+        ) +
+        countFixtureFiles(sourceRealmDir) +
+        countFixtureFiles(baseRealmDir);
+      let progress = startIndexingProgressReporter(
+        builderDatabaseName,
+        estimatedTotal,
+      );
+
+      let stack;
+      try {
+        stack = await startIsolatedRealmStack({
+          realmDir: primary.realmDir,
+          realmURL: primary.realmURL,
+          realmServerURL,
+          databaseName: builderDatabaseName,
+          context,
+          migrateDB: !hasMigratedTemplate,
+          fullIndexOnStartup: true,
+          additionalRealms,
+        });
+      } catch (error) {
+        progress.stop();
+        throw error;
+      }
 
       try {
         await waitForQueueIdle(builderDatabaseName);
       } finally {
+        progress.stop();
         await stopIsolatedRealmStack(stack);
       }
 
@@ -728,19 +878,36 @@ export async function buildTemplateDatabase({
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
 
-      let stack = await startIsolatedRealmStack({
-        realmDir,
-        realmURL,
-        realmServerURL,
-        databaseName: builderDatabaseName,
-        context,
-        migrateDB: !hasMigratedTemplate,
-        fullIndexOnStartup: true,
-      });
+      // Estimate total files for progress reporting: fixture + source realm + base realm.
+      let estimatedTotal =
+        countFixtureFiles(realmDir) +
+        countFixtureFiles(sourceRealmDir) +
+        countFixtureFiles(baseRealmDir);
+      let progress = startIndexingProgressReporter(
+        builderDatabaseName,
+        estimatedTotal,
+      );
+
+      let stack;
+      try {
+        stack = await startIsolatedRealmStack({
+          realmDir,
+          realmURL,
+          realmServerURL,
+          databaseName: builderDatabaseName,
+          context,
+          migrateDB: !hasMigratedTemplate,
+          fullIndexOnStartup: true,
+        });
+      } catch (error) {
+        progress.stop();
+        throw error;
+      }
 
       try {
         await waitForQueueIdle(builderDatabaseName);
       } finally {
+        progress.stop();
         await stopIsolatedRealmStack(stack);
       }
 
