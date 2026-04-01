@@ -1866,6 +1866,10 @@ module('Integration | Store', function (hooks) {
     });
 
     this.onSave((url, doc) => {
+      // hassan may also save around this time - only assert on newInstance's save
+      if (url.href !== newInstance.id) {
+        return;
+      }
       assert.strictEqual(url.href, newInstance.id, 'the save url is correct');
       assert.strictEqual(
         (doc as SingleCardDocument).data.attributes?.name,
