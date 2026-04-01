@@ -101,7 +101,7 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   private cardTypeFilters: FilterOption[] = new TrackedArray();
-  private highlightsCards: BoxComponent[] = new TrackedArray();
+  private highlightsCards: BaseDef[] = new TrackedArray();
   private filterOptions: FilterOption[] = [];
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
   private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
@@ -368,21 +368,15 @@ class Isolated extends Component<typeof CardsGrid> {
       this.highlightsCards.splice(0, this.highlightsCards.length);
 
       if (welcomeCard) {
-        this.highlightsCards.push(
-          welcomeCard.constructor.getComponent(welcomeCard),
-        );
+        this.highlightsCards.push(welcomeCard);
       }
 
       if (aiAppGeneratorCard) {
-        this.highlightsCards.push(
-          aiAppGeneratorCard.constructor.getComponent(aiAppGeneratorCard),
-        );
+        this.highlightsCards.push(aiAppGeneratorCard);
       }
 
       if (communityCards) {
-        this.highlightsCards.push(
-          communityCards.constructor.getComponent(communityCards),
-        );
+        this.highlightsCards.push(communityCards);
       }
     } catch (error) {
       console.warn('Failed to load highlights cards:', error);

@@ -20,7 +20,7 @@ import {
   type Sort,
 } from '@cardstack/runtime-common';
 
-import type { CardContext, BoxComponent } from '../card-api';
+import type { BaseDef, CardContext, BoxComponent } from '../card-api';
 
 import CardList from './card-list';
 import { htmlSafe } from '@ember/template';
@@ -39,7 +39,7 @@ export interface FilterOption {
   displayName: string;
   icon?: Icon | string;
   query?: Query;
-  cards?: BoxComponent[];
+  cards?: BaseDef[];
   filters?: FilterOption[];
   isExpanded?: boolean;
 }
@@ -150,7 +150,7 @@ export default class CardsGridLayout extends Component<Signature> {
         </header>
         {{#if (eq @activeFilter.displayName 'Highlights')}}
           <div class='highlights-layout' data-test-highlights-layout>
-            {{#if this.getAiAppGeneratorCard}}
+            {{#if this.aiAppGeneratorCard}}
               <div
                 class='highlights-section'
                 data-test-highlights-section='new-feature'
@@ -163,13 +163,13 @@ export default class CardsGridLayout extends Component<Signature> {
                   class='highlights-card-container'
                   data-test-highlights-card-container='ai-app-generator'
                 >
-                  <this.getAiAppGeneratorCard @format='embedded' />
+                  <this.aiAppGeneratorCard @format='embedded' />
                 </div>
 
               </div>
             {{/if}}
 
-            {{#if this.getWelcomeToBoxelCard}}
+            {{#if this.welcomeToBoxelCard}}
               <div
                 class='highlights-section'
                 data-test-highlights-section='getting-started'
@@ -183,13 +183,13 @@ export default class CardsGridLayout extends Component<Signature> {
                   data-test-highlights-card-container='welcome-to-boxel'
                 >
                   <div class='highlights-card-container'>
-                    <this.getWelcomeToBoxelCard @format='embedded' />
+                    <this.welcomeToBoxelCard @format='embedded' />
                   </div>
                 </div>
               </div>
             {{/if}}
 
-            {{#if this.getCommunityCards}}
+            {{#if this.communityCards}}
               <div
                 class='highlights-section'
                 data-test-highlights-section='join-community'
@@ -198,7 +198,7 @@ export default class CardsGridLayout extends Component<Signature> {
                   class='section-header'
                   data-test-section-header='join-the-community'
                 >JOIN THE COMMUNITY</h3>
-                <this.getCommunityCards @format='embedded' />
+                <this.communityCards @format='embedded' />
               </div>
             {{/if}}
           </div>
@@ -347,16 +347,20 @@ export default class CardsGridLayout extends Component<Signature> {
     return this.args.activeFilter.displayName !== 'Highlights';
   }
 
-  private get getWelcomeToBoxelCard() {
-    return this.args.activeFilter.cards?.[0];
+  private get welcomeToBoxelCard() {
+    return this.componentFor(this.args.activeFilter.cards?.[0]);
   }
 
-  private get getAiAppGeneratorCard() {
-    return this.args.activeFilter.cards?.[1];
+  private get aiAppGeneratorCard() {
+    return this.componentFor(this.args.activeFilter.cards?.[1]);
   }
 
-  private get getCommunityCards() {
-    return this.args.activeFilter.cards?.[2];
+  private get communityCards() {
+    return this.componentFor(this.args.activeFilter.cards?.[2]);
+  }
+
+  private componentFor(card: BaseDef | undefined): BoxComponent | undefined {
+    return card?.constructor.getComponent(card);
   }
 
   private isIconString(icon: Icon | string | undefined): icon is string {
