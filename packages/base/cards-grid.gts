@@ -42,7 +42,6 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
-  type BoxComponent,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
@@ -152,7 +151,7 @@ class Isolated extends Component<typeof CardsGrid> {
     return {
       displayName: 'Highlights',
       icon: HighlightIcon,
-      cards: this.highlightsCards,
+      highlightCards: this.highlightsCards,
     };
   }
 

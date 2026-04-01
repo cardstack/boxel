@@ -39,7 +39,8 @@ export interface FilterOption {
   displayName: string;
   icon?: Icon | string;
   query?: Query;
-  cards?: BaseDef[];
+  cards?: BoxComponent[];
+  highlightCards?: BaseDef[];
   filters?: FilterOption[];
   isExpanded?: boolean;
 }
@@ -348,15 +349,15 @@ export default class CardsGridLayout extends Component<Signature> {
   }
 
   private get welcomeToBoxelCard() {
-    return this.componentFor(this.args.activeFilter.cards?.[0]);
+    return this.componentFor(this.args.activeFilter.highlightCards?.[0]);
   }
 
   private get aiAppGeneratorCard() {
-    return this.componentFor(this.args.activeFilter.cards?.[1]);
+    return this.componentFor(this.args.activeFilter.highlightCards?.[1]);
   }
 
   private get communityCards() {
-    return this.componentFor(this.args.activeFilter.cards?.[2]);
+    return this.componentFor(this.args.activeFilter.highlightCards?.[2]);
   }
 
   private componentFor(card: BaseDef | undefined): BoxComponent | undefined {
