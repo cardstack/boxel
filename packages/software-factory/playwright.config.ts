@@ -14,7 +14,7 @@ export default defineConfig({
   testMatch: ['**/*.spec.ts'],
   fullyParallel: false,
   reporter: process.env.CI ? [['list']] : undefined,
-  workers: 2,
+  workers: process.env.CI ? 2 : 3,
   timeout: 300_000,
   expect: {
     timeout: 15_000,

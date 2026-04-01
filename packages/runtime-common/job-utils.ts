@@ -96,3 +96,31 @@ export async function cancelRunningJobsInConcurrencyGroup(
   }
   return runningJobIds;
 }
+
+/**
+ * Cancel ALL jobs in a concurrency group — both running (active reservations)
+ * and pending (unfulfilled, no active reservation).
+ */
+export async function cancelAllJobsInConcurrencyGroup(
+  dbAdapter: DBAdapter,
+  concurrencyGroup: string,
+): Promise<{ cancelledRunning: string[]; cancelledPending: string[] }> {
+  let cancelledRunning = await cancelRunningJobsInConcurrencyGroup(
+    dbAdapter,
+    concurrencyGroup,
+  );
+
+  let pendingRows = (await query(dbAdapter, [
+    `SELECT id FROM jobs WHERE concurrency_group =`,
+    param(concurrencyGroup),
+    `AND status = 'unfulfilled'`,
+  ] as Expression)) as { id: string }[];
+
+  let cancelledPending: string[] = [];
+  for (let row of pendingRows) {
+    await forceCancelJobById(dbAdapter, row.id);
+    cancelledPending.push(row.id);
+  }
+
+  return { cancelledRunning, cancelledPending };
+}

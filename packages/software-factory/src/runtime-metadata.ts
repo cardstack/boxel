@@ -25,6 +25,8 @@ export interface PreparedTemplateMetadata {
   templateRealmServerURL: string;
   cacheHit?: boolean;
   cacheMissReason?: string;
+  /** When set, this template covers multiple realm fixtures. */
+  coveredRealmDirs?: string[];
 }
 
 export function getSupportMetadataFile() {

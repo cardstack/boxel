@@ -11,7 +11,7 @@
     "relationships": {
       "lastUpdatedBy": {
         "links": {
-          "self": "../AgentProfile/demo-agent"
+          "self": "../Agent Profiles/demo-agent"
         }
       }
     },

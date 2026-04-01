@@ -8,6 +8,8 @@
  *   pnpm factory:tools-smoke
  */
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import type { AgentAction } from './lib/factory-agent';
 import {
   ToolExecutor,
@@ -188,7 +190,7 @@ async function main(): Promise<void> {
         JSON.stringify({
           data: [{ id: 'CardDef/hello', type: 'card' }],
         }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
+        { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
       );
     }) as typeof globalThis.fetch,
   });

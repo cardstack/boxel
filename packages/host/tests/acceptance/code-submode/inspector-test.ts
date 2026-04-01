@@ -2730,17 +2730,19 @@ export class ExportedCard extends ExportedCardParent {
       .dom('[data-test-create-listing-modal]')
       .exists('confirmation modal appears after clicking Create Listing');
 
-    await waitFor('[data-test-create-listing-examples]');
+    await waitFor(
+      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
+    );
+
     assert
-      .dom(
-        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
-      )
-      .exists({ count: 1 }, 'the opened instance is pre-selected');
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .exists('the opened instance is pre-selected');
     assert
-      .dom(
-        '[data-test-create-listing-examples] [data-test-boxel-picker-selected-item]',
-      )
-      .containsText('Mango', 'mango instance is pre-selected');
+      .dom('[data-test-selected-examples] [data-test-card-format="atom"]')
+      .exists({ count: 1 }, 'mango instance is shown as atom');
+    assert
+      .dom('[data-test-choose-examples-button]')
+      .hasText('Add Examples', 'button remains the default label');
   });
 
   test('cancel button in Create Listing modal closes the modal', async function (assert) {

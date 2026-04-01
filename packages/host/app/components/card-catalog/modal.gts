@@ -76,6 +76,7 @@ type State = {
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
+  preselectConsumingRealm?: boolean;
 };
 
 function isNewCardArgs(item: string | NewCardArgs): item is NewCardArgs {
@@ -111,6 +112,8 @@ export default class CardCatalogModal extends Component<Signature> {
             @searchKey={{state.searchKey}}
             @baseFilter={{state.baseFilter}}
             @availableRealmUrls={{state.availableRealmUrls}}
+            @consumingRealm={{state.consumingRealm}}
+            @preselectConsumingRealm={{state.preselectConsumingRealm}}
             as |Bar Content|
           >
             <ModalContainer
@@ -259,6 +262,8 @@ export default class CardCatalogModal extends Component<Signature> {
       createNewCard?: CreateNewCard;
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
+      preselectConsumingRealm?: boolean;
+      preselectedCardUrls?: string[];
     },
   ): Promise<undefined | string | string[]> {
     let result = await this._chooseCard.perform(
@@ -297,6 +302,8 @@ export default class CardCatalogModal extends Component<Signature> {
         multiSelect?: boolean;
         preselectedCardTypeQuery?: Query;
         consumingRealm?: URL;
+        preselectConsumingRealm?: boolean;
+        preselectedCardUrls?: string[];
       } = {},
     ) => {
       await this.realmServer.ready;
@@ -342,6 +349,14 @@ export default class CardCatalogModal extends Component<Signature> {
           preselectedCardUrl = `${instances[0].id}.json`;
         }
       }
+      let preselectedCardUrls = (
+        opts?.preselectedCardUrls?.length
+          ? opts.preselectedCardUrls
+          : preselectedCardUrl
+            ? [preselectedCardUrl]
+            : []
+      ).map((url) => (url.endsWith('.json') ? url : `${url}.json`));
+
       let cardCatalogState = new TrackedObject<State>({
         id: this.stateId,
         request,
@@ -350,10 +365,11 @@ export default class CardCatalogModal extends Component<Signature> {
         dismissModal: false,
         baseFilter: query.filter,
         availableRealmUrls: this.realmServer.availableRealmURLs,
-        selectedCards: preselectedCardUrl ? [preselectedCardUrl] : [],
+        selectedCards: preselectedCardUrls,
         multiSelect: opts?.multiSelect ?? false,
-        hasPreselectedCard: Boolean(preselectedCardUrl),
+        hasPreselectedCard: preselectedCardUrls.length > 0,
         consumingRealm: opts.consumingRealm,
+        preselectConsumingRealm: opts.preselectConsumingRealm,
       });
       this.stateStack.push(cardCatalogState);
       return await request.deferred.promise;

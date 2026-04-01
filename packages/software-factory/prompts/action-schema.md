@@ -15,8 +15,8 @@
 
 - **create_file** — Create a new card definition (.gts) or card instance (.json) in a realm. Requires `path`, `content`, and `realm`.
 - **update_file** — Replace the content of an existing file. Requires `path`, `content`, and `realm`.
-- **create_test** — Create a new test spec in the test realm. Requires `path`, `content`, and `realm` (must be `"test"`).
-- **update_test** — Update an existing test spec. Requires `path`, `content`, and `realm` (must be `"test"`).
+- **create_test** — Create a new test spec in the target realm's `Tests/` folder. Requires `path`, `content`, and `realm` (must be `"target"`).
+- **update_test** — Update an existing test spec. Requires `path`, `content`, and `realm` (must be `"target"`).
 - **update_ticket** — Update the current ticket with notes or status changes. Optional `content` for notes.
 - **create_knowledge** — Create a knowledge article for the project. Requires `path` and `content`.
 - **invoke_tool** — Run a registered tool. Requires `tool` (tool name). Optional `toolArgs` (object of key-value arguments).

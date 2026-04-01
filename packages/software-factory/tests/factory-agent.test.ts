@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   AgentActionValidationError,
   AgentResponseParseError,
@@ -19,8 +21,8 @@ import {
 
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
-    project: { id: 'Project/test-project' },
-    ticket: { id: 'Ticket/test-ticket' },
+    project: { id: 'Projects/test-project' },
+    ticket: { id: 'Tickets/test-ticket' },
     knowledge: [],
     skills: [],
     tools: [],
@@ -314,14 +316,14 @@ module('factory-agent > MockFactoryAgent', function () {
 
   test('records received contexts', async function (assert) {
     let agent = new MockFactoryAgent([[{ type: 'done' }]]);
-    let ctx = makeMinimalContext({ project: { id: 'Project/recorded' } });
+    let ctx = makeMinimalContext({ project: { id: 'Projects/recorded' } });
 
     await agent.plan(ctx);
 
     assert.strictEqual(agent.receivedContexts.length, 1);
     assert.strictEqual(
       agent.receivedContexts[0].project.id,
-      'Project/recorded',
+      'Projects/recorded',
     );
   });
 
@@ -389,9 +391,9 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     });
 
     let ctx = makeMinimalContext({
-      project: { id: 'Project/sticky-note', objective: 'Build sticky notes' },
+      project: { id: 'Projects/sticky-note', objective: 'Build sticky notes' },
       ticket: {
-        id: 'Ticket/define-core',
+        id: 'Tickets/define-core',
         summary: 'Define core card',
         description: 'Create the StickyNote card.',
       },
@@ -399,7 +401,7 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     let messages = agent.buildMessages(ctx);
 
     assert.ok(
-      messages[1].content.includes('Ticket/define-core'),
+      messages[1].content.includes('Tickets/define-core'),
       'user message includes ticket ID',
     );
     assert.ok(
@@ -574,7 +576,7 @@ module(
               },
             ],
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }) as typeof globalThis.fetch;
 
@@ -746,7 +748,7 @@ module(
               { message: { content: JSON.stringify([{ type: 'done' }]) } },
             ],
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }) as typeof globalThis.fetch;
 
@@ -803,7 +805,7 @@ module(
               { message: { content: JSON.stringify([{ type: 'done' }]) } },
             ],
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
         );
       }) as typeof globalThis.fetch;
 

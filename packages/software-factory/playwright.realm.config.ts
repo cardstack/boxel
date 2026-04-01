@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: '.',
+  testDir: process.env.PLAYWRIGHT_TEST_DIR || '.',
   testMatch: ['**/*.spec.ts'],
   testIgnore: ['**/.boxel-history/**', '**/node_modules/**'],
   fullyParallel: false,

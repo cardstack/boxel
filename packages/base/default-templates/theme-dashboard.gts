@@ -17,6 +17,43 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { bool, cn } from '@cardstack/boxel-ui/helpers';
 
+function scrollToSection(sectionId: string, event: Event) {
+  event.preventDefault();
+  let navEl = event.currentTarget as HTMLElement;
+  let card = navEl.closest('.detailed-style-reference');
+  let section = card?.querySelector(
+    `[id="${sectionId}"]`,
+  ) as HTMLElement | null;
+  if (!section) {
+    return;
+  }
+  let scrollContainer = findScrollableParent(navEl);
+  if (!scrollContainer) {
+    return;
+  }
+  let stickyNavHeight = navEl.closest('nav')?.clientHeight ?? 0;
+  let delta =
+    section.getBoundingClientRect().top -
+    scrollContainer.getBoundingClientRect().top -
+    stickyNavHeight;
+  scrollContainer.scrollBy({ top: delta, behavior: 'smooth' });
+  history.pushState(null, '', `#${sectionId}`);
+}
+
+function findScrollableParent(el: HTMLElement): HTMLElement | null {
+  let parent = el.parentElement;
+  while (parent && parent !== document.documentElement) {
+    if (parent.scrollHeight > parent.clientHeight) {
+      let { overflowY } = window.getComputedStyle(parent);
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        return parent;
+      }
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
 export interface SectionSignature {
   id: string;
   navTitle: string;
@@ -199,9 +236,10 @@ export class NavSection extends GlimmerComponent<{
   @action
   private scrollToTop(event: Event) {
     event.preventDefault();
-    document
-      .querySelector('#top')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    let scrollContainer = findScrollableParent(
+      event.currentTarget as HTMLElement,
+    );
+    scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 }
 
@@ -222,6 +260,7 @@ export class SimpleNavBar extends GlimmerComponent<{
               @kind='secondary'
               @size='small'
               class='boxel-ellipsize'
+              {{on 'click' (fn scrollToSection navItem.id)}}
             >
               {{navItem.navTitle}}
             </Button>
@@ -269,7 +308,11 @@ export class NavBar extends GlimmerComponent<{
       <div class='nav-container'>
         <div class='nav-grid'>
           {{#each @sections as |section|}}
-            <a href='#{{section.id}}' class='nav-item'>{{section.navTitle}}</a>
+            <a
+              href='#{{section.id}}'
+              class='nav-item'
+              {{on 'click' (fn scrollToSection section.id)}}
+            >{{section.navTitle}}</a>
           {{/each}}
         </div>
       </div>

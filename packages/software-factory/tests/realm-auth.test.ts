@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   createBoxelRealmFetch,
   type ActiveBoxelProfile,
@@ -48,7 +50,7 @@ module('realm-auth', function () {
         return new Response('{}', {
           status: 200,
           headers: {
-            'content-type': 'application/json',
+            'content-type': SupportedMimeType.JSON,
           },
         });
       },
@@ -82,7 +84,7 @@ module('realm-auth', function () {
         return new Response('{}', {
           status: 200,
           headers: {
-            'content-type': 'application/json',
+            'content-type': SupportedMimeType.JSON,
           },
         });
       }
@@ -180,7 +182,7 @@ module('realm-auth', function () {
           return new Response('{}', {
             status: 200,
             headers: {
-              'content-type': 'application/json',
+              'content-type': SupportedMimeType.JSON,
             },
           });
         },

@@ -1,17 +1,20 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 
-import { ensureFactoryRealmTemplate } from '../harness';
+import {
+  ensureCombinedFactoryRealmTemplate,
+  ensureFactoryRealmTemplate,
+} from '../harness';
 import { isFactorySupportContext } from '../harness/shared';
 import { readSupportContext } from '../runtime-metadata';
 
 async function main(): Promise<void> {
+  let args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
   let realmDirs = [
     ...new Set(
-      (process.argv.slice(2).length > 0
-        ? process.argv.slice(2)
-        : ['test-fixtures/darkfactory-adopter']
-      ).map((realmDir) => resolve(process.cwd(), realmDir)),
+      (args.length > 0 ? args : ['test-fixtures/darkfactory-adopter']).map(
+        (realmDir) => resolve(process.cwd(), realmDir),
+      ),
     ),
   ];
   let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
@@ -26,14 +29,71 @@ async function main(): Promise<void> {
       ? parsedMetadataContext
       : undefined;
 
-  let preparedTemplates = [];
-  for (let realmDir of realmDirs) {
-    let template = await ensureFactoryRealmTemplate({
+  // Validate that the context's hostURL is still reachable. A stale
+  // support.json from a previous run can have a dead hostURL which
+  // causes the realm server to crash during template builds.
+  if (supportContext && 'hostURL' in supportContext && supportContext.hostURL) {
+    let hostURL = supportContext.hostURL;
+    try {
+      let response = await fetch(hostURL);
+      if (!response.ok) {
+        console.warn(
+          `Stale support context: hostURL ${hostURL} returned ${response.status}, ignoring cached context`,
+        );
+        supportContext = undefined;
+      }
+    } catch {
+      console.warn(
+        `Stale support context: hostURL ${hostURL} is not reachable, ignoring cached context`,
+      );
+      supportContext = undefined;
+    }
+  }
+
+  let payload;
+
+  if (realmDirs.length > 1) {
+    // Combined template: one DB covering all realm fixtures.
+    let fixtures = realmDirs.map((realmDir, i) => ({
       realmDir,
+      // Primary realm gets 'test/', additional get unique paths based on dirname.
+      realmPath: i === 0 ? 'test/' : `${basename(realmDir)}/`,
+    }));
+
+    let result = await ensureCombinedFactoryRealmTemplate(fixtures, {
       context: supportContext,
     });
-    preparedTemplates.push({
-      realmDir,
+
+    payload = {
+      realmDir: realmDirs[0],
+      cacheKey: result.cacheKey,
+      templateDatabaseName: result.templateDatabaseName,
+      fixtureHash: result.combinedFixtureHash,
+      cacheHit: result.cacheHit,
+      cacheMissReason: result.cacheMissReason,
+      realmURL: result.realmServerURL.href + 'test/',
+      realmServerURL: result.realmServerURL.href,
+      preparedTemplates: realmDirs.map((realmDir) => ({
+        realmDir,
+        templateDatabaseName: result.templateDatabaseName,
+        templateRealmURL:
+          result.realmServerURL.href +
+          (realmDir === realmDirs[0] ? 'test/' : `${basename(realmDir)}/`),
+        templateRealmServerURL: result.realmServerURL.href,
+        cacheHit: result.cacheHit,
+        cacheMissReason: result.cacheMissReason,
+        coveredRealmDirs: result.coveredRealmDirs,
+      })),
+    };
+  } else {
+    // Single realm: backward-compatible path.
+    let template = await ensureFactoryRealmTemplate({
+      realmDir: realmDirs[0],
+      context: supportContext,
+    });
+
+    payload = {
+      realmDir: realmDirs[0],
       cacheKey: template.cacheKey,
       templateDatabaseName: template.templateDatabaseName,
       fixtureHash: template.fixtureHash,
@@ -41,27 +101,19 @@ async function main(): Promise<void> {
       cacheMissReason: template.cacheMissReason,
       realmURL: template.realmURL.href,
       realmServerURL: template.realmServerURL.href,
-    });
+      preparedTemplates: [
+        {
+          realmDir: realmDirs[0],
+          templateDatabaseName: template.templateDatabaseName,
+          templateRealmURL: template.realmURL.href,
+          templateRealmServerURL: template.realmServerURL.href,
+          cacheHit: template.cacheHit,
+          cacheMissReason: template.cacheMissReason,
+        },
+      ],
+    };
   }
-  let primaryTemplate = preparedTemplates[0];
-  let payload = {
-    realmDir: primaryTemplate.realmDir,
-    cacheKey: primaryTemplate.cacheKey,
-    templateDatabaseName: primaryTemplate.templateDatabaseName,
-    fixtureHash: primaryTemplate.fixtureHash,
-    cacheHit: primaryTemplate.cacheHit,
-    cacheMissReason: primaryTemplate.cacheMissReason,
-    realmURL: primaryTemplate.realmURL,
-    realmServerURL: primaryTemplate.realmServerURL,
-    preparedTemplates: preparedTemplates.map((template) => ({
-      realmDir: template.realmDir,
-      templateDatabaseName: template.templateDatabaseName,
-      templateRealmURL: template.realmURL,
-      templateRealmServerURL: template.realmServerURL,
-      cacheHit: template.cacheHit,
-      cacheMissReason: template.cacheMissReason,
-    })),
-  };
+
   if (process.env.SOFTWARE_FACTORY_METADATA_FILE) {
     mkdirSync(dirname(process.env.SOFTWARE_FACTORY_METADATA_FILE), {
       recursive: true,
