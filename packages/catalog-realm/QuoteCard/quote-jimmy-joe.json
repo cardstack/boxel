@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vendorName": "DJ Jimmy Joe",
+      "service": "DJ Services",
+      "hours": "5",
+      "rate": "$220/hr",
+      "discount": "7%",
+      "total": "$1,023.00",
+      "validUntil": "Friday"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "QuoteCard"
+      },
+      "_touched": 1773156321439
+    }
+  }
+}

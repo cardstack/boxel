@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "clientName": "Willa Karciana",
+      "packageName": "Golden Wedding Planning Package",
+      "services": [
+        {
+          "description": "Full-Service Planning",
+          "amount": "$4,000"
+        },
+        {
+          "description": "Venue Coordination",
+          "amount": "Included"
+        },
+        {
+          "description": "Vendor Management",
+          "amount": "Included"
+        },
+        {
+          "description": "Day-of Coordination",
+          "amount": "Included"
+        }
+      ],
+      "totalPrice": "$4,000",
+      "depositRequired": "$1,500",
+      "validUntil": "January 31, 2020"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "ProposalCard"
+      },
+      "_touched": 1773156274671
+    }
+  }
+}

@@ -1,0 +1,297 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "steps": [
+        {
+          "label": "Request quote",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "quote",
+                "author": null,
+                "tone": null,
+                "textContains": null,
+                "fieldName": null,
+                "comparator": null,
+                "value": null
+              }
+            ]
+          }
+        },
+        {
+          "label": "Compare quotes",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "attachmentType": null,
+                "author": null,
+                "tone": "advisor",
+                "textContains": "made her decision",
+                "fieldName": null,
+                "comparator": null,
+                "value": null
+              }
+            ]
+          }
+        },
+        {
+          "label": "Client decision",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "attachmentType": null,
+                "author": null,
+                "tone": null,
+                "textContains": "made her decision",
+                "fieldName": null,
+                "comparator": null,
+                "value": null
+              }
+            ]
+          }
+        },
+        {
+          "label": "Book DJ",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "attachmentType": null,
+                "author": null,
+                "tone": null,
+                "textContains": "book you",
+                "fieldName": null,
+                "comparator": null,
+                "value": null
+              }
+            ]
+          }
+        },
+        {
+          "label": "Pay deposit",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "attachmentType": null,
+                "author": null,
+                "tone": null,
+                "textContains": "All done, here's the receipt",
+                "fieldName": null,
+                "comparator": null,
+                "value": null
+              }
+            ]
+          }
+        },
+        {
+          "label": "Confirm details",
+          "status": "current",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "attachmentType": null,
+                "author": null,
+                "tone": null,
+                "textContains": "details confirmed",
+                "fieldName": null,
+                "comparator": null,
+                "value": null
+              }
+            ]
+          }
+        }
+      ],
+      "title": "DJ Booking — Jimmy Joe",
+      "preview": "That was fast, thanks Daisy! Here's your 2%...",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "category": "Entertainment",
+      "messages": [
+        {
+          "initials": "JJ",
+          "author": "@DJJimmyJoe",
+          "sentAt": "Jul 17, 2:15 PM",
+          "text": "Hey Daisy, here's my quote for the Karciana wedding.",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 17, 2:34 PM",
+          "text": "Thanks Jimmy! I'll forward it to my bride. How much time do we have?",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "JJ",
+          "author": "@DJJimmyJoe",
+          "sentAt": "Jul 18, 4:20 PM",
+          "text": "I'll need you to confirm by Friday.",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 18, 4:44 PM",
+          "text": "Okay, I'll keep you posted.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "JJ",
+          "author": "@DJJimmyJoe",
+          "sentAt": "Jul 18, 4:57 PM",
+          "text": "Thanks, talk to you soon!",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 21, 10:00 AM",
+          "text": "Jimmy, my bride has made her decision. I would like to book you for her wedding! Let's handle the payment the same way as usual?",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "JJ",
+          "author": "@DJJimmyJoe",
+          "sentAt": "Jul 21, 12:10 PM",
+          "text": "That's great to hear! Yes, same as usual. It would be great if you could send me the deposit by the end of next week.",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 21, 12:12 PM",
+          "text": "All done, here's the receipt.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "JJ",
+          "author": "@DJJimmyJoe",
+          "sentAt": "Jul 21, 1:20 PM",
+          "text": "That was fast, thanks Daisy! Here's your 2%.",
+          "tone": "captain",
+          "isBot": ""
+        }
+      ],
+      "timeLabel": "1:20 PM",
+      "attachments": [
+        {
+          "attachmentType": "quote",
+          "typeLabel": "QUOTE",
+          "status": "5 hrs @ $220/hr · 7% discount",
+          "ctaLabel": "Open",
+          "messageRef": "0"
+        },
+        {
+          "attachmentType": "invoice",
+          "typeLabel": "INVOICE",
+          "status": "Invoice #118 · $1,023.00",
+          "ctaLabel": "Open",
+          "messageRef": "5"
+        },
+        {
+          "attachmentType": "payment",
+          "typeLabel": "PAYMENT",
+          "status": "$1,023.00 · Bitcoin",
+          "ctaLabel": "View Receipt",
+          "messageRef": "6"
+        },
+        {
+          "attachmentType": "payment",
+          "typeLabel": "PAYMENT",
+          "status": "$20.46",
+          "ctaLabel": "Open",
+          "messageRef": "7"
+        }
+      ],
+      "unreadCount": null,
+      "categoryTone": "listing",
+      "contextTitle": "Vendor Booking",
+      "participants": [
+        {
+          "initials": "DC",
+          "name": "Daisy Chain",
+          "role": "Event Planner (Golden Events)",
+          "tone": "advisor"
+        },
+        {
+          "initials": "JJ",
+          "name": "Jimmy Joe",
+          "role": "Freelance DJ",
+          "tone": "captain"
+        }
+      ],
+      "progressTone": "listing",
+      "workspaceLabel": "Golden Events",
+      "progressPercent": 83,
+      "composerPlaceholder": "Type a message..."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "attachments.0.linkedCard": {
+        "links": {
+          "self": "../QuoteCard/quote-jimmy-joe"
+        }
+      },
+      "attachments.1.linkedCard": {
+        "links": {
+          "self": "../InvoiceDetailCard/invoice-jimmy-joe"
+        }
+      },
+      "attachments.2.linkedCard": {
+        "links": {
+          "self": "../PaymentReceiptCard/payment-daisy-dj"
+        }
+      },
+      "attachments.3.linkedCard": {
+        "links": {
+          "self": "../PaymentReceiptCard/payment-commission-daisy"
+        }
+      }
+    }
+  }
+}

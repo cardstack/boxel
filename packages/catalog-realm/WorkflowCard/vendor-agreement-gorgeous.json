@@ -1,0 +1,221 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156842338
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "12:08 PM",
+      "category": "Vendor Partnership",
+      "categoryTone": "listing",
+      "title": "Preferred Vendor Agreement with The Gorgeous Hotel",
+      "preview": "I've added you to our website. Check it out...",
+      "contextTitle": "Agreement",
+      "progressPercent": 100,
+      "progressTone": "listing",
+      "workspaceLabel": "Golden Events",
+      "composerPlaceholder": "Type a message...",
+      "participants": [
+        {
+          "initials": "DC",
+          "name": "Daisy Chain",
+          "role": "Event Planner (Golden Events)",
+          "tone": "advisor"
+        },
+        {
+          "initials": "CP",
+          "name": "Chester Pocres",
+          "role": "Manager (The Gorgeous Hotel)",
+          "tone": "captain"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "CP",
+          "author": "@ChesterP",
+          "sentAt": "Jan 6, 9:08 AM",
+          "text": "Hi Daisy, I hope you had a relaxing weekend after Friday's extravaganza. You did a lovely job with the Aceters' anniversary party! As discussed, we would like to offer you a preferred vendor agreement. Have you had a chance to look over the terms?",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 6, 9:21 AM",
+          "text": "Hi Chester, I did, thanks! I really enjoyed working with your team, and the location is amazing. The terms look good, I'm ready to sign when you are.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "CP",
+          "author": "@ChesterP",
+          "sentAt": "Jan 6, 9:45 AM",
+          "text": "That's great to hear. Here's the finalized contract for you to sign. We look forward to working with you on a regular basis.",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 6, 10:35 AM",
+          "text": "I look forward to working with you too! Here's the signed contract.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "CP",
+          "author": "@ChesterP",
+          "sentAt": "Jan 6, 10:52 AM",
+          "text": "Thanks for signing! The next step is your profile that we will add to our website. Here's a template I would ask you to fill out. Please include a high-quality photo in addition to your logo.",
+          "tone": "captain",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 6, 11:24 AM",
+          "text": "Here's my profile card for your website. Please let me know if you need anything else. Can't wait to start planning the next event at this beautiful venue!",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "CP",
+          "author": "@ChesterP",
+          "sentAt": "Jan 6, 12:08 PM",
+          "text": "Thanks for sending your profile so quickly. I've added you to our website. Check it out: gorgeoushotel.com/eventplanning",
+          "tone": "captain",
+          "isBot": ""
+        }
+      ],
+      "steps": [
+        {
+          "label": "Review terms",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "tone": "advisor",
+                "textContains": "terms look good"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Sign contract",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "linked-card",
+                "attachmentType": "contract",
+                "fieldName": "signedBy",
+                "comparator": "present",
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "label": "Submit vendor profile",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "all",
+            "conditions": [
+              {
+                "subject": "linked-card",
+                "attachmentType": "profile",
+                "fieldName": "vendorName",
+                "comparator": "present",
+                "value": ""
+              },
+              {
+                "subject": "linked-card",
+                "attachmentType": "profile",
+                "fieldName": "bio",
+                "comparator": "present",
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "label": "Listed on website",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "tone": "captain",
+                "textContains": "added you to our website"
+              }
+            ]
+          }
+        }
+      ],
+      "attachments": [
+        {
+          "attachmentType": "contract",
+          "typeLabel": "CONTRACT",
+          "status": "8 key terms",
+          "ctaLabel": "Approve",
+          "messageRef": "2"
+        },
+        {
+          "attachmentType": "contract",
+          "typeLabel": "CONTRACT",
+          "status": "Signed by Daisy Chain on Jan 6, 2020",
+          "ctaLabel": "View",
+          "messageRef": "3"
+        },
+        {
+          "attachmentType": "profile",
+          "typeLabel": "PROFILE",
+          "status": "5 fields to complete",
+          "ctaLabel": "Open",
+          "messageRef": "4"
+        },
+        {
+          "attachmentType": "profile",
+          "typeLabel": "PROFILE",
+          "status": "Completed · Golden Events",
+          "ctaLabel": "Preview",
+          "messageRef": "5"
+        }
+      ]
+    },
+    "relationships": {
+      "attachments.0.linkedCard": {
+        "links": {
+          "self": "../ContractCard/contract-hotel-daisy-unsigned"
+        }
+      },
+      "attachments.1.linkedCard": {
+        "links": {
+          "self": "../ContractCard/contract-hotel-daisy-signed"
+        }
+      },
+      "attachments.2.linkedCard": {
+        "links": {
+          "self": "../VendorProfileCard/profile-template"
+        }
+      },
+      "attachments.3.linkedCard": {
+        "links": {
+          "self": "../VendorProfileCard/profile-daisy"
+        }
+      }
+    }
+  }
+}

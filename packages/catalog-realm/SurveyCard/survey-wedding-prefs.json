@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "topic": "Wedding Preferences Brief",
+      "questionCount": "8"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "SurveyCard"
+      },
+      "_touched": 1773156514192
+    }
+  }
+}

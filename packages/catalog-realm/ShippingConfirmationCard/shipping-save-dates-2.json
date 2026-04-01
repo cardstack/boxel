@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "orderNumber": "202395",
+      "carrier": "Fredex",
+      "trackingNumber": "32895178214188",
+      "items": "Save-the-Date Cards (×100)",
+      "estimatedDelivery": "5 business days"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "ShippingConfirmationCard"
+      },
+      "_touched": 1773156405801
+    }
+  }
+}
