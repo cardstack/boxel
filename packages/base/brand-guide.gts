@@ -729,8 +729,16 @@ export default class BrandGuide extends DetailedStyleRef {
     // add brand typography variables
     this.appendRules(this.typography?.cssRuleMap, brandRules);
 
-    // add brand mark variables
-    this.appendRules(this.markUsage?.cssRuleMap, brandRules);
+    // add brand mark variables (exclude -1/-2 light/dark variants — these are
+    // exposed only as mode-aware aliases, e.g. --brand-primary-mark)
+    if (this.markUsage?.cssRuleMap?.size) {
+      for (let [name, value] of this.markUsage.cssRuleMap.entries()) {
+        if (!name || !value || brandRules.has(name) || /-(1|2)$/.test(name)) {
+          continue;
+        }
+        brandRules.set(name, value);
+      }
+    }
 
     if (!brandRules.size) {
       return;
@@ -809,30 +817,24 @@ export default class BrandGuide extends DetailedStyleRef {
         return;
       }
       let brandRules = this.calculateBrandRuleMap();
-      let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules);
+      let markMap = this.markUsage?.cssRuleMap;
+      let rootMarkAliases = new Map([
+        ['--brand-primary-mark', markMap?.get('--brand-primary-mark-1')],
+        ['--brand-secondary-mark', markMap?.get('--brand-secondary-mark-1')],
+        ['--brand-primary-mark-greyscale', markMap?.get('--brand-primary-mark-greyscale-1')],
+        ['--brand-secondary-mark-greyscale', markMap?.get('--brand-secondary-mark-greyscale-1')],
+      ].filter(([, v]) => v) as [string, string][]);
+      let darkMarkAliases = new Map([
+        ['--brand-primary-mark', markMap?.get('--brand-primary-mark-2')],
+        ['--brand-secondary-mark', markMap?.get('--brand-secondary-mark-2')],
+        ['--brand-primary-mark-greyscale', markMap?.get('--brand-primary-mark-greyscale-2')],
+        ['--brand-secondary-mark-greyscale', markMap?.get('--brand-secondary-mark-greyscale-2')],
+      ].filter(([, v]) => v) as [string, string][]);
+      let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules, rootMarkAliases);
       let darkRules = mergeRuleMaps(
         this.calculatedRules({ darkMode: true }),
         brandRules,
-      );
-      rootRules?.set('--brand-primary-mark', 'var(--brand-primary-mark-1)');
-      rootRules?.set('--brand-secondary-mark', 'var(--brand-secondary-mark-1)');
-      rootRules?.set(
-        '--brand-primary-mark-greyscale',
-        'var(--brand-primary-mark-greyscale-1)',
-      );
-      rootRules?.set(
-        '--brand-secondary-mark-greyscale',
-        'var(--brand-secondary-mark-greyscale-1)',
-      );
-      darkRules?.set('--brand-primary-mark', 'var(--brand-primary-mark-2)');
-      darkRules?.set('--brand-secondary-mark', 'var(--brand-secondary-mark-2)');
-      darkRules?.set(
-        '--brand-primary-mark-greyscale',
-        'var(--brand-primary-mark-greyscale-2)',
-      );
-      darkRules?.set(
-        '--brand-secondary-mark-greyscale',
-        'var(--brand-secondary-mark-greyscale-2)',
+        darkMarkAliases,
       );
       return generateCssVariables(
         buildCssGroups([
