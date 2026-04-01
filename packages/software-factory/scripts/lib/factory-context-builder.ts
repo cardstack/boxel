@@ -1,12 +1,9 @@
 import type {
-  AgentAction,
   AgentContext,
   KnowledgeArticle,
   ProjectCard,
   TestResult,
   TicketCard,
-  ToolManifest,
-  ToolResult,
 } from './factory-agent';
 
 import type { ResolvedSkill } from './factory-agent';
@@ -17,8 +14,6 @@ import {
   type SkillResolver,
 } from './factory-skill-loader';
 
-import type { ToolRegistry } from './factory-tool-registry';
-
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -26,20 +21,8 @@ import type { ToolRegistry } from './factory-tool-registry';
 export interface ContextBuilderConfig {
   skillResolver: SkillResolver;
   skillLoader: SkillLoaderInterface;
-  toolRegistry: ToolRegistry;
   /** Maximum token budget for skills. When set, enforceSkillBudget() trims. */
   maxSkillTokens?: number;
-}
-
-// ---------------------------------------------------------------------------
-// Iteration state (fed back between loop iterations)
-// ---------------------------------------------------------------------------
-
-export interface IterationState {
-  testResults?: TestResult;
-  toolResults?: ToolResult[];
-  previousActions?: AgentAction[];
-  iteration?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,13 +32,11 @@ export interface IterationState {
 export class ContextBuilder {
   private skillResolver: SkillResolver;
   private skillLoader: SkillLoaderInterface;
-  private toolRegistry: ToolRegistry;
   private maxSkillTokens: number | undefined;
 
   constructor(config: ContextBuilderConfig) {
     this.skillResolver = config.skillResolver;
     this.skillLoader = config.skillLoader;
-    this.toolRegistry = config.toolRegistry;
     this.maxSkillTokens = config.maxSkillTokens;
   }
 
@@ -66,8 +47,7 @@ export class ContextBuilder {
    * 1. Resolve skill names from ticket + project context
    * 2. Load all resolved skills from disk
    * 3. Apply skill budget if configured
-   * 4. Get tool manifests from the registry
-   * 5. Merge with iteration state and return AgentContext
+   * 4. Return AgentContext (tools are provided separately as FactoryTool[])
    */
   async build(params: {
     project: ProjectCard;
@@ -75,10 +55,10 @@ export class ContextBuilder {
     knowledge: KnowledgeArticle[];
     targetRealmUrl: string;
     testRealmUrl: string;
-    iterationState?: IterationState;
+    /** Test results from the previous iteration, if any. */
+    testResults?: TestResult;
   }): Promise<AgentContext> {
     let { project, ticket, knowledge, targetRealmUrl, testRealmUrl } = params;
-    let iterationState = params.iterationState ?? {};
 
     // Step 1: Resolve which skills are needed for this ticket
     let skillNames = this.skillResolver.resolve(ticket, project);
@@ -92,32 +72,19 @@ export class ContextBuilder {
     // Step 3: Enforce token budget if configured
     skills = enforceSkillBudget(skills, this.maxSkillTokens);
 
-    // Step 4: Get tool manifests
-    let tools: ToolManifest[] = this.toolRegistry.getManifests();
-
-    // Step 5: Assemble the context
+    // Step 4: Assemble the context
     let context: AgentContext = {
       project,
       ticket,
       knowledge,
       skills,
-      tools,
       targetRealmUrl,
       testRealmUrl,
     };
 
-    // Merge iteration state when present
-    if (iterationState.testResults) {
-      context.testResults = iterationState.testResults;
-    }
-    if (iterationState.toolResults) {
-      context.toolResults = iterationState.toolResults;
-    }
-    if (iterationState.previousActions) {
-      context.previousActions = iterationState.previousActions;
-    }
-    if (iterationState.iteration !== undefined) {
-      context.iteration = iterationState.iteration;
+    // Include test results when iterating after a failed test run
+    if (params.testResults) {
+      context.testResults = params.testResults;
     }
 
     return context;

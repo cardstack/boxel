@@ -1,13 +1,11 @@
 import { module, test } from 'qunit';
 
 import type {
-  AgentAction,
   KnowledgeArticle,
   ProjectCard,
   ResolvedSkill,
   TestResult,
   TicketCard,
-  ToolResult,
 } from '../scripts/lib/factory-agent';
 
 import {
@@ -19,12 +17,6 @@ import type {
   SkillLoaderInterface,
   SkillResolver,
 } from '../scripts/lib/factory-skill-loader';
-
-import {
-  REALM_API_TOOLS,
-  SCRIPT_TOOLS,
-  ToolRegistry,
-} from '../scripts/lib/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -117,13 +109,11 @@ function makeConfig(overrides?: Partial<ContextBuilderConfig>) {
     makeSkill('boxel-file-structure'),
     makeSkill('ember-best-practices'),
   ]);
-  let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
 
   return {
     config: {
       skillResolver: resolver,
       skillLoader: loader,
-      toolRegistry,
       ...overrides,
     } as ContextBuilderConfig,
     resolver,
@@ -254,7 +244,7 @@ module('factory-context-builder > skill resolution', function () {
 
 module('factory-context-builder > skill budget', function () {
   test('enforces skill budget when maxSkillTokens is set', async function (assert) {
-    // Each skill content is short (~30 chars ÷ 4 ≈ 8 tokens).
+    // Each skill content is short (~36 chars ÷ 4 ≈ 9 tokens).
     // A budget of 10 tokens should allow only one skill.
     let resolver = new StubSkillResolver([
       'boxel-development',
@@ -315,11 +305,11 @@ module('factory-context-builder > skill budget', function () {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Tool manifest inclusion
+// Tests: Tools are not included in context
 // ---------------------------------------------------------------------------
 
-module('factory-context-builder > tool manifests', function () {
-  test('includes script and realm-api tools', async function (assert) {
+module('factory-context-builder > tools excluded', function () {
+  test('context does not include tools (provided separately as FactoryTool[])', async function (assert) {
     let { config } = makeConfig();
     let builder = new ContextBuilder(config);
 
@@ -331,82 +321,20 @@ module('factory-context-builder > tool manifests', function () {
       testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
-    let expectedCount = SCRIPT_TOOLS.length + REALM_API_TOOLS.length;
     assert.strictEqual(
-      ctx.tools.length,
-      expectedCount,
-      `context has ${expectedCount} tools (script + realm-api)`,
+      ctx.tools,
+      undefined,
+      'tools not set — provided separately as FactoryTool[] to agent.run()',
     );
-  });
-
-  test('does not include boxel-cli tools', async function (assert) {
-    let { config } = makeConfig();
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.build({
-      project: makeProject(),
-      ticket: makeTicket(),
-      knowledge: [],
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-    });
-
-    let boxelCliTools = ctx.tools.filter((t) => t.category === 'boxel-cli');
-    assert.strictEqual(
-      boxelCliTools.length,
-      0,
-      'no boxel-cli tools in context',
-    );
-  });
-
-  test('all tools have script or realm-api category', async function (assert) {
-    let { config } = makeConfig();
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.build({
-      project: makeProject(),
-      ticket: makeTicket(),
-      knowledge: [],
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-    });
-
-    for (let tool of ctx.tools) {
-      let isAllowed =
-        tool.category === 'script' || tool.category === 'realm-api';
-      assert.true(
-        isAllowed,
-        `tool "${tool.name}" has allowed category "${tool.category}"`,
-      );
-    }
-  });
-
-  test('includes expected script tools by name', async function (assert) {
-    let { config } = makeConfig();
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.build({
-      project: makeProject(),
-      ticket: makeTicket(),
-      knowledge: [],
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-    });
-
-    let toolNames = ctx.tools.map((t) => t.name);
-    assert.true(toolNames.includes('search-realm'), 'has search-realm');
-    assert.true(toolNames.includes('pick-ticket'), 'has pick-ticket');
-    assert.true(toolNames.includes('realm-read'), 'has realm-read');
-    assert.true(toolNames.includes('realm-write'), 'has realm-write');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Iteration state threading
+// Tests: Test results threading
 // ---------------------------------------------------------------------------
 
-module('factory-context-builder > iteration state', function () {
-  test('context has no iteration fields on first pass', async function (assert) {
+module('factory-context-builder > test results', function () {
+  test('context has no testResults on first pass', async function (assert) {
     let { config } = makeConfig();
     let builder = new ContextBuilder(config);
 
@@ -419,12 +347,9 @@ module('factory-context-builder > iteration state', function () {
     });
 
     assert.strictEqual(ctx.testResults, undefined, 'no testResults');
-    assert.strictEqual(ctx.toolResults, undefined, 'no toolResults');
-    assert.strictEqual(ctx.previousActions, undefined, 'no previousActions');
-    assert.strictEqual(ctx.iteration, undefined, 'no iteration');
   });
 
-  test('threads testResults from iteration state', async function (assert) {
+  test('includes testResults when provided', async function (assert) {
     let { config } = makeConfig();
     let builder = new ContextBuilder(config);
     let testResults: TestResult = {
@@ -446,108 +371,22 @@ module('factory-context-builder > iteration state', function () {
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
-      iterationState: { testResults },
+      testResults,
     });
 
-    assert.deepEqual(ctx.testResults, testResults, 'testResults threaded');
+    assert.deepEqual(ctx.testResults, testResults, 'testResults included');
   });
 
-  test('threads toolResults from iteration state', async function (assert) {
+  test('passing testResults does not include deprecated fields', async function (assert) {
     let { config } = makeConfig();
     let builder = new ContextBuilder(config);
-    let toolResults: ToolResult[] = [
-      {
-        tool: 'search-realm',
-        exitCode: 0,
-        output: { cards: [] },
-        durationMs: 200,
-      },
-    ];
-
-    let ctx = await builder.build({
-      project: makeProject(),
-      ticket: makeTicket(),
-      knowledge: [],
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-      iterationState: { toolResults },
-    });
-
-    assert.deepEqual(ctx.toolResults, toolResults, 'toolResults threaded');
-  });
-
-  test('threads previousActions from iteration state', async function (assert) {
-    let { config } = makeConfig();
-    let builder = new ContextBuilder(config);
-    let previousActions: AgentAction[] = [
-      {
-        type: 'create_file',
-        path: 'sticky-note.gts',
-        content: 'export class...',
-        realm: 'target',
-      },
-    ];
-
-    let ctx = await builder.build({
-      project: makeProject(),
-      ticket: makeTicket(),
-      knowledge: [],
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-      iterationState: { previousActions },
-    });
-
-    assert.deepEqual(
-      ctx.previousActions,
-      previousActions,
-      'previousActions threaded',
-    );
-  });
-
-  test('threads iteration number from iteration state', async function (assert) {
-    let { config } = makeConfig();
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.build({
-      project: makeProject(),
-      ticket: makeTicket(),
-      knowledge: [],
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-      iterationState: { iteration: 3 },
-    });
-
-    assert.strictEqual(ctx.iteration, 3, 'iteration number threaded');
-  });
-
-  test('threads all iteration fields together', async function (assert) {
-    let { config } = makeConfig();
-    let builder = new ContextBuilder(config);
-
     let testResults: TestResult = {
-      status: 'failed',
-      passedCount: 1,
-      failedCount: 1,
-      failures: [{ testName: 'test-1', error: 'fail' }],
-      durationMs: 3000,
+      status: 'passed',
+      passedCount: 3,
+      failedCount: 0,
+      failures: [],
+      durationMs: 2000,
     };
-    let toolResults: ToolResult[] = [
-      { tool: 'realm-read', exitCode: 0, output: {}, durationMs: 100 },
-    ];
-    let previousActions: AgentAction[] = [
-      {
-        type: 'create_file',
-        path: 'card.gts',
-        content: '...',
-        realm: 'target',
-      },
-      {
-        type: 'create_test',
-        path: 'Tests/card.spec.ts',
-        content: '...',
-        realm: 'target',
-      },
-    ];
 
     let ctx = await builder.build({
       project: makeProject(),
@@ -555,18 +394,14 @@ module('factory-context-builder > iteration state', function () {
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
-      iterationState: {
-        testResults,
-        toolResults,
-        previousActions,
-        iteration: 2,
-      },
+      testResults,
     });
 
-    assert.deepEqual(ctx.testResults, testResults);
-    assert.deepEqual(ctx.toolResults, toolResults);
-    assert.deepEqual(ctx.previousActions, previousActions);
-    assert.strictEqual(ctx.iteration, 2);
+    assert.deepEqual(ctx.testResults, testResults, 'testResults included');
+    assert.strictEqual(ctx.tools, undefined, 'no tools');
+    assert.strictEqual(ctx.toolResults, undefined, 'no toolResults');
+    assert.strictEqual(ctx.previousActions, undefined, 'no previousActions');
+    assert.strictEqual(ctx.iteration, undefined, 'no iteration');
   });
 });
 
