@@ -198,10 +198,10 @@ The agent produces code, cards, Catalog Spec cards, and Playwright test files as
    [
      { type: "create_file", path: "sticky-note.gts", realm: "target",
        content: "import { CardDef, ... } from '...'; export class StickyNote ..." },
-     { type: "create_file", path: "StickyNote/welcome.json", realm: "target",
-       content: "{ \"data\": { ... card instance ... } }" },
+     { type: "create_file", path: "StickyNote/welcome-note.json", realm: "target",
+       content: "{ \"data\": { ... sample card instance with realistic data ... } }" },
      { type: "create_file", path: "Spec/sticky-note.json", realm: "target",
-       content: "{ \"data\": { ... Catalog Spec card ... adoptsFrom: base/spec } }" },
+       content: "{ \"data\": { ... Catalog Spec card with linkedExamples → sample instance ... } }" },
      { type: "create_test", path: "Tests/sticky-note.spec.ts", realm: "target",
        content: "import { test, expect } from '@playwright/test'; ..." }
    ]
@@ -244,7 +244,15 @@ The Catalog Spec card shape (from `packages/base/spec.gts`):
       "specType": "card",
       "readMe": "# StickyNote\n\nA simple sticky note card with title and body fields.",
       "cardTitle": "Sticky Note",
-      "cardDescription": "A sticky note card for quick notes"
+      "cardDescription": "A sticky note card for quick notes",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": "../StickyNote/welcome-note"
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {
@@ -263,8 +271,18 @@ Key fields:
 - `specType`: `'card'` for CardDef, `'field'` for FieldDef, `'component'` for standalone components
 - `readMe`: markdown documentation for the card
 - `cardTitle` / `cardDescription`: human-readable title and short description
+- `linkedExamples`: a `linksToMany` relationship pointing to sample card instances that demonstrate the card in use. The agent must create at least one sample instance (e.g., `StickyNote/welcome-note.json`) and link it here.
 
-Reference: `src/cli/smoke-test-realm.ts` creates a Catalog Spec card as part of its smoke test. Real-world examples live in `packages/catalog-realm/Spec/`.
+#### Sample Card Instances
+
+The agent must create at least one sample card instance for the top-level card. Sample instances serve as:
+
+- **Catalog examples** — linked from the Catalog Spec card via `linkedExamples`, they appear in the catalog as usage demonstrations
+- **Test fixtures** — Playwright test files can navigate to these instances to verify rendering
+
+Sample instances live in the target realm alongside other card instances (e.g., `StickyNote/welcome-note.json`). They should have realistic, meaningful attribute values — not empty or placeholder data.
+
+Reference: `src/cli/smoke-test-realm.ts` creates a Catalog Spec card as part of its smoke test. Real-world Catalog Spec cards live in `packages/catalog-realm/Spec/`.
 
 #### Auth Model
 

@@ -266,7 +266,7 @@ Then test the loop as a state machine.
 
 ### Required test cases for `tests/factory-loop.test.ts`
 
-1. **Happy path** — agent returns file actions + `create_test` + Catalog Spec card on iteration 1; tests pass; loop returns `tests_passed` with `iterations: 1`
+1. **Happy path** — agent returns file actions (card definition + sample instance + Catalog Spec card with linkedExamples) + `create_test` on iteration 1; tests pass; loop returns `tests_passed` with `iterations: 1`
 2. **Iteration path** — agent returns file actions on iteration 1; tests fail; agent returns fix actions on iteration 2; tests pass; loop returns `tests_passed` with `iterations: 2`
 3. **Max iterations** — agent keeps producing actions, tests keep failing for 5 iterations; loop returns `max_iterations`
 4. **Done signal** — agent returns `[{ type: 'done' }]` on first call; loop returns `done` with `iterations: 1`
@@ -274,7 +274,7 @@ Then test the loop as a state machine.
 6. **Tool-only round** — agent returns only `invoke_tool` actions (no files); loop feeds tool results back and calls `plan()` again; agent returns file actions on second call; tests pass
 7. **Context threading** — verify that `MockFactoryAgent.receivedContexts` shows correct `testResults`, `toolResults`, `previousActions`, and `iteration` values across iterations
 8. **Orchestrator-owned sequencing** — verify that all file writes complete before test execution begins
-9. **Catalog Spec card creation** — verify that the agent's `create_file` for `Spec/*.json` is written to the target realm alongside the card definition and Playwright test file
+9. **Catalog Spec card + sample instances** — verify that the agent creates sample card instances with realistic data and a Catalog Spec card (`Spec/*.json`) with `linkedExamples` pointing to those instances
 
 Assertions should be about workflow behavior:
 
@@ -284,7 +284,8 @@ Assertions should be about workflow behavior:
 - successful verification advances the loop
 - clarification paths stop correctly
 - retries and resumes are handled correctly
-- Catalog Spec cards are written to the target realm
+- Catalog Spec cards with linkedExamples are written to the target realm
+- sample card instances are created with realistic data
 
 Do not assert exact natural-language output from the model.
 
