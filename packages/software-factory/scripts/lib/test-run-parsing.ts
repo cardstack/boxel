@@ -290,18 +290,27 @@ export function formatTestResultSummary(result: TestResult): string {
 }
 
 /**
+ * Strip ANSI escape codes (terminal color sequences) from a string.
+ */
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/**
  * Split a combined error string into message and optional stack trace.
  */
 function splitErrorAndStack(error: string): {
   message: string;
   stackTrace?: string;
 } {
-  let atIndex = error.search(/\n\s+at /);
+  let clean = stripAnsi(error);
+  let atIndex = clean.search(/\n\s+at /);
   if (atIndex === -1) {
-    return { message: error.trim() };
+    return { message: clean.trim() };
   }
   return {
-    message: error.slice(0, atIndex).trim(),
-    stackTrace: error.slice(atIndex + 1).trim(),
+    message: clean.slice(0, atIndex).trim(),
+    stackTrace: clean.slice(atIndex + 1).trim(),
   };
 }
