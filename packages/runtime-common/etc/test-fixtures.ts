@@ -62,7 +62,7 @@ export class Person extends CardDef {
       */
       {
         "id": ${id},
-        "block": "[[[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13]],[\\"@fields\\"],false,[]]",
+        "block": "[[[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13]],[\\"@fields\\"],[]]",
         "moduleName": "${moduleName}",
         "isStrictMode": true
       }), this);

@@ -75,12 +75,17 @@
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 - the host tests report this error:
   ```
-  Missing symlinked npm packages: 
+  Missing symlinked npm packages:
   Package: @cardstack/local-types
     * Specified: workspace:*
     * Symlinked: (not available)
   ```
   This is a red herring. Just ignore this error.
+
+#### CSS Guidance
+
+- Use scalable units such as rem
+- Use CSS variables from packages/boxel-ui/addon/src/styles/variables.css
 
 #### Iterating on host tests with the Chrome MCP server
 
@@ -127,10 +132,10 @@
 - run `pnpm lint:fix` directly in this directory to apply fixes for lint failures made to this package that can be automatically fixed.
 
 ### packages/postgres
+
 - If you need to make a database migration use `pnpm create migration_name` to create a migration file so that the correct date timestamp prefix will be added to the file name. Then implement the migration inside the newly created file.
 - **After creating or modifying a migration, you MUST regenerate the SQLite schema file.** Run `pnpm make-schema` from this directory. This creates a new SQLite schema in `packages/host/config/schema/` with a timestamp matching the latest migration file. The old schema file is automatically removed. If you skip this step, the host app will fail to start with an "SQLite schema is out of date" error.
   - This script requires Docker (it uses the `boxel-pg` container to dump the Postgres schema). Ensure Docker is running before executing.
-
 
 ### packages/runtime-common
 
@@ -152,6 +157,7 @@
 The `content-tag` preprocessor (used by glint and ember-eslint-parser to parse `.gts` files) has bugs in its JavaScript lexer that cause it to misparse certain regex literals. When this happens, it fails to recognize `<template>` tags later in the file, producing cascading parse errors. Two known triggers:
 
 **1. Backticks inside regex literals** — content-tag mistakes them for template literal delimiters:
+
 ```ts
 // BROKEN — backticks in regex confuse content-tag
 .replace(/`([^`]+)`/g, '$1')
@@ -162,6 +168,7 @@ const INLINE_CODE_RE = new RegExp('`([^`]+)`', 'g');
 ```
 
 **2. `!/regex/` (negation before regex literal)** — content-tag misreads the `/` after `!`:
+
 ```ts
 // BROKEN
 lines.some((line) => !/^\s*#{1,6}\s+/.test(line));

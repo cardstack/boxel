@@ -426,34 +426,19 @@ export interface IncrementalIndexInitiationContent {
   realmURL: string;
 }
 
-export type UpdateRealmEventContent =
-  | FileAddedEventContent
-  | FileUpdatedEventContent
-  | FileRemovedEventContent;
-
-export interface FileAddedEventContent {
+export interface UpdateRealmEventContent {
   eventName: 'update';
-  added: string;
+  added?: string[];
+  updated?: string[];
+  removed?: string[];
   realmURL: string;
 }
 
-export interface FileUpdatedEventContent {
-  eventName: 'update';
-  updated: string;
-  realmURL: string;
-}
-
-export interface FileRemovedEventContent {
-  eventName: 'update';
-  removed: string;
-  realmURL: string;
-}
-
-// File watcher events don't include realmURL - it gets added by the Realm
+// File watcher events are single-file and don't include realmURL
 export type FileWatcherEventContent =
-  | Omit<FileAddedEventContent, 'realmURL'>
-  | Omit<FileUpdatedEventContent, 'realmURL'>
-  | Omit<FileRemovedEventContent, 'realmURL'>;
+  | { eventName: 'update'; added: string }
+  | { eventName: 'update'; updated: string }
+  | { eventName: 'update'; removed: string };
 
 export interface StopGeneratingEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_STOP_GENERATING_EVENT_TYPE;

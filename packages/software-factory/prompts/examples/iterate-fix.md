@@ -29,8 +29,8 @@ The agent identifies that the selector is wrong (the component uses a different 
   },
   {
     "type": "update_test",
-    "path": "TestSpec/sticky-note.spec.ts",
-    "realm": "test",
+    "path": "Tests/sticky-note.spec.ts",
+    "realm": "target",
     "content": "import { test, expect } from '@playwright/test';\n\ntest.describe('StickyNote', () => {\n  test('renders fitted view with title and body', async ({ page }) => {\n    await page.goto('/StickyNote/welcome-note');\n    await expect(page.locator('[data-test-title]')).toHaveText('Welcome');\n    await expect(page.locator('[data-test-body]')).toContainText('sample sticky note');\n  });\n});\n"
   }
 ]

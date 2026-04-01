@@ -156,6 +156,7 @@ interface Signature {
     searchResource: PrerenderedSearchResource;
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
+    initialFocusedSection?: string | null;
   };
   Blocks: {};
 }
@@ -168,7 +169,8 @@ export default class SearchContent extends Component<Signature> {
 
   @tracked activeViewId = 'grid';
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
-  @tracked focusedSection: string | null = null;
+  @tracked focusedSection: string | null =
+    this.args.initialFocusedSection ?? null;
   @tracked displayedCountBySection: Record<string, number> = {};
 
   @consume(GetCardContextName) declare private getCard: getCard;

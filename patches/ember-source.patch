@@ -1,15 +1,70 @@
+diff --git a/dist/ember.debug.js b/dist/ember.debug.js
+--- a/dist/ember.debug.js
++++ b/dist/ember.debug.js
+@@ -6203,7 +6203,14 @@
+             return positional.length;
+           }
+           function meta$1(layout) {
+-            let [, locals, upvars, lexicalSymbols] = layout.block;
++            let block = layout.block;
++            let locals, upvars, lexicalSymbols;
++            if (block.length === 4 && typeof block[2] === 'boolean') {
++              [, locals, , upvars] = block;
++              lexicalSymbols = undefined;
++            } else {
++              [, locals, upvars, lexicalSymbols] = block;
++            }
+             return {
+               symbols: {
+                 locals: locals,
+diff --git a/dist/ember.prod.js b/dist/ember.prod.js
+--- a/dist/ember.prod.js
++++ b/dist/ember.prod.js
+@@ -5126,7 +5126,14 @@
+             return positional.length;
+           }
+           function meta$1(layout) {
+-            let [, locals, upvars, lexicalSymbols] = layout.block;
++            let block = layout.block;
++            let locals, upvars, lexicalSymbols;
++            if (block.length === 4 && typeof block[2] === 'boolean') {
++              [, locals, , upvars] = block;
++              lexicalSymbols = undefined;
++            } else {
++              [, locals, upvars, lexicalSymbols] = block;
++            }
+             return {
+               symbols: {
+                 locals: locals,
 diff --git a/dist/ember-template-compiler.js b/dist/ember-template-compiler.js
-index 01999af0c4c125af3c713318db7eb85fa492f72d..becb917a5b5fd7fd4883001210776ea34439c474 100644
 --- a/dist/ember-template-compiler.js
 +++ b/dist/ember-template-compiler.js
-@@ -8288,9 +8288,7 @@ var define, require;
-             */
-             toSlice(expected) {
-               const chars = this.data.asString();
--              return void 0 !== expected && chars !== expected &&
--              // eslint-disable-next-line no-console
--              console.warn(`unexpectedly found ${JSON.stringify(chars)} when slicing source, but expected ${JSON.stringify(expected)}`), new SourceSlice({
-+              return new SourceSlice({
-                 loc: this,
-                 chars: expected || chars
-               });
+@@ -16479,7 +16479,6 @@
+           if (typeof module === 'object' && module.exports) {
+             module.exports = emberTemplateCompilerIndex;
+           }
+-          console.log('\n\n--------\n+ Your app is using the legacy ember-template-compiler.js AMD bundle. This will be removed in ember-source 7.0. See https://deprecations.emberjs.com/id/using-amd-bundles for more details.\n--------');
+
+ })((() => {
+       try {
+diff --git a/dist/packages/@glimmer/opcode-compiler/index.js b/dist/packages/@glimmer/opcode-compiler/index.js
+--- a/dist/packages/@glimmer/opcode-compiler/index.js
++++ b/dist/packages/@glimmer/opcode-compiler/index.js
+@@ -615,7 +615,16 @@ function CompilePositional(op, positional) {
+   return positional.length;
+ }
+ function meta(layout) {
+-  let [, locals, upvars, lexicalSymbols] = layout.block;
++  let block = layout.block;
++  let locals, upvars, lexicalSymbols;
++  if (block.length === 4 && typeof block[2] === 'boolean') {
++    // Ember 5 wire format: [statements, symbols, hasEval, upvars]
++    [, locals, , upvars] = block;
++    lexicalSymbols = undefined;
++  } else {
++    // Ember 6 wire format: [statements, locals, upvars, lexicalSymbols]
++    [, locals, upvars, lexicalSymbols] = block;
++  }
+   return {
+     symbols: {
+       locals: locals,

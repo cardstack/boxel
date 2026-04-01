@@ -25,6 +25,15 @@
     </div>
 
     <div id="ember-basic-dropdown-wormhole"></div>
+    <script>
+      globalThis.process = {
+        env: {},
+        version: '',
+        cwd() {
+          return '/';
+        },
+      };
+    </script>
 
     <script type="module">
       import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';

@@ -929,6 +929,10 @@ module('Acceptance | interact submode tests', function (hooks) {
       messageService.listenerCallbacks
         .get(testRealmURL)!
         .push((ev: RealmEventContent) => {
+          if (ev.eventName === 'update') {
+            // eslint-disable-next-line qunit/no-early-return
+            return; // ignore file update events
+          }
           if (
             ev.eventName === 'index' &&
             ev.indexType === 'incremental-index-initiation'

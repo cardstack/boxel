@@ -564,6 +564,111 @@ export async function waitForQueueIdle(databaseName: string): Promise<void> {
   });
 }
 
+/**
+ * Build a combined template database containing multiple realm fixtures.
+ * The primary realm is indexed first, then additional realms are registered
+ * and indexed in the same realm server process.
+ */
+export async function buildCombinedTemplateDatabase({
+  realmFixtures,
+  realmServerURL,
+  permissions,
+  context,
+  cacheKey,
+  templateDatabaseName,
+}: {
+  realmFixtures: { realmDir: string; realmURL: URL }[];
+  realmServerURL: URL;
+  permissions: RealmPermissions;
+  context: FactorySupportContext;
+  cacheKey: string;
+  templateDatabaseName: string;
+}): Promise<void> {
+  if (realmFixtures.length === 0) {
+    throw new Error(
+      'buildCombinedTemplateDatabase requires at least one realm fixture',
+    );
+  }
+
+  await logTimed(
+    templateLog,
+    `buildCombinedTemplateDatabase ${templateDatabaseName} (${realmFixtures.length} realms)`,
+    async () => {
+      let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+      let hasMigratedTemplate = await databaseExists(
+        DEFAULT_MIGRATED_TEMPLATE_DB,
+      );
+
+      await dropDatabase(templateDatabaseName);
+      await dropDatabase(builderDatabaseName);
+
+      if (hasMigratedTemplate) {
+        await cloneDatabaseFromTemplate(
+          DEFAULT_MIGRATED_TEMPLATE_DB,
+          builderDatabaseName,
+        );
+      }
+
+      let baseRealmURL = baseRealmURLFor(realmServerURL);
+      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
+
+      let allRealmURLs = [
+        ...realmFixtures.map((f) => f.realmURL),
+        baseRealmURL,
+        sourceRealmURL,
+      ];
+      await resetMountedRealmState(builderDatabaseName, allRealmURLs);
+      await resetQueueState(builderDatabaseName);
+
+      for (let fixture of realmFixtures) {
+        await seedRealmPermissions(
+          builderDatabaseName,
+          fixture.realmURL,
+          permissions,
+        );
+      }
+      await seedRealmPermissions(
+        builderDatabaseName,
+        baseRealmURL,
+        DEFAULT_BASE_REALM_PERMISSIONS,
+      );
+      await seedRealmPermissions(
+        builderDatabaseName,
+        sourceRealmURL,
+        DEFAULT_SOURCE_REALM_PERMISSIONS,
+      );
+
+      // Use the first fixture as the primary realm, rest as additional.
+      let [primary, ...rest] = realmFixtures;
+      let additionalRealms = rest.map((f, i) => ({
+        realmDir: f.realmDir,
+        realmURL: f.realmURL,
+        username: `additional_realm_${i}`,
+      }));
+
+      let stack = await startIsolatedRealmStack({
+        realmDir: primary.realmDir,
+        realmURL: primary.realmURL,
+        realmServerURL,
+        databaseName: builderDatabaseName,
+        context,
+        migrateDB: !hasMigratedTemplate,
+        fullIndexOnStartup: true,
+        additionalRealms,
+      });
+
+      try {
+        await waitForQueueIdle(builderDatabaseName);
+      } finally {
+        await stopIsolatedRealmStack(stack);
+      }
+
+      await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+      await dropDatabase(builderDatabaseName);
+    },
+  );
+}
+
 export async function buildTemplateDatabase({
   realmDir,
   realmURL,

@@ -475,7 +475,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test('visiting operator mode', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
 
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
@@ -570,7 +570,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       test('index card shows last known good state for instances that have an error', async function (assert) {
         await visit('/');
-        await click('[data-test-workspace="Test Workspace B"]');
+        await click('[data-test-workspace-button="Test Workspace B"]');
         await click('[data-test-boxel-filter-list-button="All Cards"]');
 
         assert
@@ -598,7 +598,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       test('can delete a card', async function (assert) {
         await visit('/');
-        await click('[data-test-workspace="Test Workspace B"]');
+        await click('[data-test-workspace-button="Test Workspace B"]');
         await click('[data-test-boxel-filter-list-button="All Cards"]');
 
         await triggerEvent(
@@ -627,7 +627,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test('index card shows default error tile for instances that have an error and no last known good state', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     await click('[data-test-boxel-filter-list-button="All Cards"]');
 
     await waitFor(
@@ -809,7 +809,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-workspace-chooser-toggle]');
 
-    await click('[data-test-workspace="Boxel Skills"]');
+    await click('[data-test-workspace-button="Boxel Skills"]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom(`[data-test-realm-name]`).includesText('In Boxel Skills');
@@ -829,7 +829,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .exists();
 
     await click('[data-test-workspace-chooser-toggle]');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom(`[data-test-realm-name]`).hasText('In Test Workspace B');
@@ -864,7 +864,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       ],
     });
     await click('[data-test-workspace-chooser-toggle]');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     assert.dom('[data-test-submode-switcher] button').hasText('Interact');
     assert.dom('[data-test-code-mode]').doesNotExist();

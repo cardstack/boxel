@@ -31,7 +31,7 @@ import {
 
 const SAMPLE_CONTEXT: AgentContext = {
   project: {
-    id: 'Project/sticky-note-app',
+    id: 'Projects/sticky-note-app',
     objective: 'Build a sticky note card application for Boxel',
     successCriteria: [
       'StickyNote card renders with title and body',
@@ -40,7 +40,7 @@ const SAMPLE_CONTEXT: AgentContext = {
     ],
   },
   ticket: {
-    id: 'Ticket/define-sticky-note-core',
+    id: 'Tickets/define-sticky-note-core',
     summary: 'Define the core StickyNote CardDef',
     status: 'in-progress',
     priority: 'high',

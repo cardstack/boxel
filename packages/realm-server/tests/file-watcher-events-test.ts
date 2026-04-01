@@ -121,11 +121,17 @@ module(basename(__filename), function () {
 
       switch (changeType) {
         case 'added':
-          return 'added' in content && content.added === fileName;
+          return (
+            'added' in content && content.added?.includes(fileName) === true
+          );
         case 'updated':
-          return 'updated' in content && content.updated === fileName;
+          return (
+            'updated' in content && content.updated?.includes(fileName) === true
+          );
         case 'removed':
-          return 'removed' in content && content.removed === fileName;
+          return (
+            'removed' in content && content.removed?.includes(fileName) === true
+          );
       }
     }
 
@@ -187,7 +193,7 @@ module(basename(__filename), function () {
 
       assert.deepEqual(updateEvent.content, {
         eventName: 'update',
-        added: basename(newFilePath),
+        added: [basename(newFilePath)],
         realmURL: realmURL.href,
       });
     });
@@ -223,7 +229,7 @@ module(basename(__filename), function () {
 
       assert.deepEqual(updateEvent.content, {
         eventName: 'update',
-        updated: basename(updatedFilePath),
+        updated: [basename(updatedFilePath)],
         realmURL: realmURL.href,
       });
     });
@@ -247,7 +253,7 @@ module(basename(__filename), function () {
 
       assert.deepEqual(updateEvent.content, {
         eventName: 'update',
-        removed: basename(deletedFilePath),
+        removed: [basename(deletedFilePath)],
         realmURL: realmURL.href,
       });
     });

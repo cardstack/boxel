@@ -23,7 +23,7 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   {
     label: 'Generic card work (base case)',
     ticket: {
-      id: 'Ticket/generic',
+      id: 'Tickets/generic',
       title: 'Create a contact card',
       description: 'Build a contact card with name, email, and phone fields.',
     },
@@ -31,7 +31,7 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   {
     label: '.gts component work (triggers ember-best-practices)',
     ticket: {
-      id: 'Ticket/gts-component',
+      id: 'Tickets/gts-component',
       title: 'Build a dashboard component',
       description:
         'Create a .gts component for the dashboard with template and styling.',
@@ -40,7 +40,7 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   {
     label: 'Factory workflow (triggers software-factory-operations)',
     ticket: {
-      id: 'Ticket/factory-workflow',
+      id: 'Tickets/factory-workflow',
       title: 'Improve factory delivery pipeline',
       description:
         'Update the factory orchestrator to handle multi-ticket workflows.',
@@ -49,7 +49,7 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   {
     label: 'Realm sync work (triggers CLI skills)',
     ticket: {
-      id: 'Ticket/sync-work',
+      id: 'Tickets/sync-work',
       title: 'Sync and restore workspace',
       description:
         'Sync local workspace changes to staging, then restore a checkpoint.',
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
 
   let resolver = new DefaultSkillResolver();
   let loader = new SkillLoader();
-  let project: ProjectCard = { id: 'Project/smoke-test' };
+  let project: ProjectCard = { id: 'Projects/smoke-test' };
 
   console.log('=== Skill Loader & Resolver Smoke Test ===\n');
 
@@ -97,7 +97,7 @@ async function main(): Promise<void> {
         {
           label: `Custom: "${customTicketText}"`,
           ticket: {
-            id: 'Ticket/custom',
+            id: 'Tickets/custom',
             title: customTicketText,
             description: customTicketText,
           } as TicketCard,

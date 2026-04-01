@@ -71,6 +71,7 @@ export interface CreateListingModalPayload {
   codeRef: CodeRef;
   targetRealm: string;
   openCardIds?: string[];
+  declarationKind: 'card' | 'field';
 }
 
 export interface CreatePRModalPayload {

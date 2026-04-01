@@ -225,6 +225,7 @@ export default class MessageBuilder {
       ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
       : null;
     message.setUpdated(new Date());
+    message.status = this.event.status;
     message.errorMessage = this.errorMessage;
     message.reloadBillingData = shouldReloadBillingData(this.event.content);
 

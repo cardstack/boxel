@@ -315,7 +315,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     // Switch to interact mode so we can test the open in code mode action
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     await waitFor('[data-test-submode-switcher="interact"]');
     await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
@@ -1103,7 +1103,7 @@ ${REPLACE_MARKER}
     // Switch to interact mode so that we can test that "Open in Code Mode" works
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     await waitFor('[data-test-submode-switcher="interact"]');
     await click('[data-test-attached-file-dropdown-button="file1.gts"]');
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');

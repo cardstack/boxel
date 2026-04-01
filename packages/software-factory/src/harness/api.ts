@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
@@ -23,9 +25,11 @@ import {
   stableStringify,
   templateDatabaseNameForCacheKey,
   hashString,
+  hashCombinedRealmFixtures,
   baseRealmURLFor,
   realmRelativePath,
   sourceRealmURLFor,
+  type CombinedRealmFixture,
   realmLog,
   type FactoryGlobalContextHandle,
   type FactoryRealmOptions,
@@ -36,6 +40,7 @@ import {
   type StartedFactoryRealm,
 } from './shared';
 import {
+  buildCombinedTemplateDatabase,
   buildTemplateDatabase,
   clearModuleCache,
   cloneDatabaseFromTemplate,
@@ -201,6 +206,138 @@ export async function ensureFactoryRealmTemplate(
   });
 }
 
+export interface CombinedRealmTemplateResult {
+  cacheKey: string;
+  templateDatabaseName: string;
+  combinedFixtureHash: string;
+  cacheHit: boolean;
+  cacheMissReason?: string;
+  coveredRealmDirs: string[];
+  realmServerURL: URL;
+}
+
+/**
+ * Ensure a combined template database exists for multiple realm fixtures.
+ * All fixture realms are pre-indexed in a single DB, so any test requesting
+ * any of the covered realms gets a cache hit from the same template.
+ */
+export async function ensureCombinedFactoryRealmTemplate(
+  fixtures: CombinedRealmFixture[],
+  options: {
+    context?: FactorySupportContext;
+    permissions?: Record<string, RealmAction[]>;
+    cacheSalt?: string;
+  } = {},
+): Promise<CombinedRealmTemplateResult> {
+  return await logTimed(
+    harnessLog,
+    `ensureCombinedFactoryRealmTemplate (${fixtures.length} realms)`,
+    async () => {
+      if (fixtures.length === 0) {
+        throw new Error('At least one realm fixture is required');
+      }
+
+      // Resolve realm server URL from context or default.
+      let contextRealmServerURL =
+        options.context && hasTemplateDatabaseName(options.context)
+          ? new URL(options.context.realmServerURL)
+          : undefined;
+      let { realmServerURL } = await resolveFactoryRealmLocation({
+        realmServerURL: contextRealmServerURL,
+      });
+
+      let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
+      let sourceRealmHash = hashRealmFixture(sourceRealmDir);
+      let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
+
+      let cacheKey = hashString(
+        stableStringify({
+          version: CACHE_VERSION,
+          combinedFixtureHash,
+          sourceRealmHash,
+          permissions,
+          cacheSalt:
+            options.cacheSalt ??
+            process.env.SOFTWARE_FACTORY_CACHE_SALT ??
+            null,
+        }),
+      );
+      let templateDatabaseName = templateDatabaseNameForCacheKey(cacheKey);
+      let hasTemplateDatabase = await databaseExists(templateDatabaseName);
+      let cachedTemplateMetadata =
+        readPreparedTemplateMetadata(templateDatabaseName);
+
+      if (hasTemplateDatabase && cachedTemplateMetadata) {
+        return {
+          cacheKey,
+          templateDatabaseName,
+          combinedFixtureHash,
+          cacheHit: true,
+          coveredRealmDirs: fixtures.map((f) => resolve(f.realmDir)),
+          realmServerURL: new URL(
+            cachedTemplateMetadata.templateRealmServerURL,
+          ),
+        };
+      }
+
+      let cacheMissReason = !cachedTemplateMetadata
+        ? hasTemplateDatabase
+          ? 'template metadata is missing'
+          : 'template database has not been prepared yet'
+        : 'template database is missing';
+
+      let ownedSupport:
+        | { context: FactorySupportContext; stop(): Promise<void> }
+        | undefined;
+      let context = options.context;
+      if (!context) {
+        ownedSupport = await startFactorySupportServices();
+        context = ownedSupport.context;
+      }
+
+      try {
+        // Resolve realm URLs for each fixture.
+        let realmFixtures = fixtures.map((f) => {
+          let realmURL = new URL(f.realmPath, realmServerURL);
+          return {
+            realmDir: resolve(f.realmDir),
+            realmURL,
+          };
+        });
+
+        await buildCombinedTemplateDatabase({
+          realmFixtures,
+          realmServerURL,
+          permissions,
+          context,
+          cacheKey,
+          templateDatabaseName,
+        });
+
+        // Write metadata for the primary realm (for backward compat).
+        writePreparedTemplateMetadata({
+          realmDir: realmFixtures[0].realmDir,
+          templateDatabaseName,
+          templateRealmURL: realmFixtures[0].realmURL.href,
+          templateRealmServerURL: realmServerURL.href,
+        });
+
+        return {
+          cacheKey,
+          templateDatabaseName,
+          combinedFixtureHash,
+          cacheHit: false,
+          cacheMissReason,
+          coveredRealmDirs: realmFixtures.map((f) => f.realmDir),
+          realmServerURL,
+        };
+      } finally {
+        await ownedSupport?.stop();
+      }
+    },
+  );
+}
+
 export async function startFactoryRealmServer(
   options: FactoryRealmOptions = {},
 ): Promise<StartedFactoryRealm> {
@@ -254,10 +391,23 @@ export async function startFactoryRealmServer(
       let sourceRealmURL = sourceRealmURLFor(realmServerURL);
       await dropDatabase(databaseName);
       await cloneDatabaseFromTemplate(templateDatabaseName, databaseName);
-      if (options.templateRealmServerURL) {
+
+      // Always rewrite URLs if the template was built with a different realm
+      // server URL. Without this, cloned permissions reference the template's
+      // port, causing 401 when the runtime uses a different port.
+      let templateServerURL =
+        options.templateRealmServerURL ??
+        (readPreparedTemplateMetadata(templateDatabaseName)
+          ?.templateRealmServerURL
+          ? new URL(
+              readPreparedTemplateMetadata(templateDatabaseName)!
+                .templateRealmServerURL,
+            )
+          : undefined);
+      if (templateServerURL && templateServerURL.href !== realmServerURL.href) {
         await rewriteClonedRealmServerUrls(
           databaseName,
-          options.templateRealmServerURL,
+          templateServerURL,
           realmServerURL,
         );
       }
@@ -383,7 +533,7 @@ export async function fetchRealmCardJson(
     try {
       let response = await fetch(runtime.cardURL(path), {
         headers: {
-          Accept: 'application/vnd.card+json',
+          Accept: SupportedMimeType.CardJson,
         },
       });
       return {

@@ -12,6 +12,17 @@ import jwt from 'jsonwebtoken';
 import '../setup-logger';
 import { logger } from '../logger';
 
+// Strip ambient env vars that could break the hermetic test seal.
+// The harness always sets HOST_URL explicitly via context.hostURL when
+// spawning child processes — an ambient HOST_URL (e.g. from a dev shell
+// that sets HOST_URL=http://localhost:4200) would be inherited by child
+// processes that don't explicitly override it, causing them to talk to
+// a different Matrix/realm server than the hermetic test infrastructure.
+// This module is only imported by harness code (test infrastructure),
+// so it's safe to strip unconditionally — NODE_ENV may be 'test' or
+// 'development' depending on how the harness is invoked.
+delete process.env.HOST_URL;
+
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
 export type RealmPermissions = Record<string, RealmAction[]>;
@@ -175,8 +186,8 @@ export const CONFIGURED_PRERENDER_URL = process.env
   .SOFTWARE_FACTORY_PRERENDER_URL
   ? new URL(process.env.SOFTWARE_FACTORY_PRERENDER_URL)
   : undefined;
-// The seeded test Postgres used by the harness runs with max_connections=20, so
-// isolated workers need a smaller per-process pool cap to keep workers=2 stable.
+// The seeded test Postgres used by the harness runs with max_connections=50, so
+// isolated workers need a smaller per-process pool cap to keep workers=3 stable.
 export const DEFAULT_PG_POOL_MAX = Number(
   process.env.SOFTWARE_FACTORY_PG_POOL_MAX ?? 2,
 );
@@ -433,6 +444,25 @@ export function hashRealmFixture(realmDir: string): string {
   return hashString(entries.join('|'));
 }
 
+export interface CombinedRealmFixture {
+  realmDir: string;
+  realmPath: string;
+}
+
+/**
+ * Compute a combined hash for multiple realm fixtures, suitable for a
+ * combined template database cache key.
+ */
+export function hashCombinedRealmFixtures(
+  fixtures: CombinedRealmFixture[],
+): string {
+  let entries = fixtures
+    .slice()
+    .sort((a, b) => a.realmPath.localeCompare(b.realmPath))
+    .map((f) => `${f.realmPath}:${hashRealmFixture(f.realmDir)}`);
+  return hashString(entries.join('||'));
+}
+
 export function templateDatabaseNameForCacheKey(cacheKey: string): string {
   return `sf_tpl_${cacheKey.slice(0, 24)}`;
 }
@@ -538,16 +568,12 @@ export function runCommand(command: string, args: string[], cwd: string) {
 }
 
 export function cleanupStaleSynapseContainers() {
+  // Only clean up test harness Synapse containers (sf-test-synapse-* prefix).
+  // Do NOT touch boxel-synapse* containers — those belong to the dev
+  // environment (mise run dev-all) and killing them breaks the dev server.
   let result = spawnSync(
     'docker',
-    [
-      'ps',
-      '-aq',
-      '--filter',
-      'name=synapsedocker-',
-      '--filter',
-      'name=boxel-synapse',
-    ],
+    ['ps', '-aq', '--filter', 'name=sf-test-synapse-'],
     {
       cwd: workspaceRoot,
       encoding: 'utf8',

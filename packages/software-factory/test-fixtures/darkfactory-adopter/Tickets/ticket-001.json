@@ -18,17 +18,17 @@
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/demo-project"
+          "self": "../Projects/demo-project"
         }
       },
       "assignedAgent": {
         "links": {
-          "self": "../AgentProfile/demo-agent"
+          "self": "../Agent Profiles/demo-agent"
         }
       },
       "relatedKnowledge.0": {
         "links": {
-          "self": "../KnowledgeArticle/agent-onboarding"
+          "self": "../Knowledge Articles/agent-onboarding"
         }
       }
     },

@@ -75,19 +75,21 @@ export class DirectoryResource extends Resource<Args> {
               return;
             }
 
-            if (event.eventName !== 'index') {
+            if (event.eventName !== 'update') {
               return;
             }
-
-            if (!('updatedFile' in event)) {
-              return;
-            }
-
-            let { updatedFile } = event as { updatedFile: string };
-            let segments = updatedFile.split('/');
-            segments.pop();
-            let updatedDir = segments.join('/').replace(/([^/])$/, '$1/'); // directories always end in '/'
-            if (updatedDir.startsWith(this.directoryURL)) {
+            let filePaths = [
+              ...('added' in event ? event.added! : []),
+              ...('removed' in event ? event.removed! : []),
+            ];
+            let shouldRefresh = filePaths.some((fp) => {
+              let fileURL = new URL(fp, event.realmURL).href;
+              let segments = fileURL.split('/');
+              segments.pop();
+              let fileDir = segments.join('/') + '/';
+              return fileDir.startsWith(this.directoryURL!);
+            });
+            if (shouldRefresh) {
               this.readdir.perform();
             }
           },

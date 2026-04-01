@@ -57,7 +57,7 @@ You previously invoked the following tools. Use these results to inform your imp
 Implement this ticket. Return actions that:
 
 1. Create or update card definitions (.gts) and/or card instances (.json) in the target realm
-2. Create test specs (.spec.ts) in the test realm that verify your implementation
+2. Create test specs (.spec.ts) in the target realm's `Tests/` folder that verify your implementation
 3. Use `invoke_tool` actions to inspect existing realm state before creating files
 
 Start with the smallest working implementation, then add the test.

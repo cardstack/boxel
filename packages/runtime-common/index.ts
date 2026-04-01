@@ -310,7 +310,7 @@ export const isNode =
   Object.prototype.toString.call((globalThis as any).process) ===
   '[object process]';
 
-export { SupportedMimeType } from './router';
+export { SupportedMimeType } from './supported-mime-type';
 export {
   isUrlLike,
   VirtualNetwork,
@@ -419,6 +419,8 @@ interface CardChooserOpts {
   };
   createNewCard?: CreateNewCard;
   consumingRealm?: URL;
+  preselectConsumingRealm?: boolean;
+  preselectedCardUrls?: string[];
 }
 
 export interface CardChooser {

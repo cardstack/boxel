@@ -3,6 +3,8 @@ import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   FactoryBriefError,
   loadFactoryBrief,
@@ -16,7 +18,7 @@ const darkfactoryTicketFixture = JSON.parse(
   readFileSync(
     resolve(
       __dirname,
-      '../test-fixtures/darkfactory-adopter/Ticket/ticket-001.json',
+      '../test-fixtures/darkfactory-adopter/Tickets/ticket-001.json',
     ),
     'utf8',
   ),
@@ -61,7 +63,7 @@ module('factory-brief', function () {
 
   test('normalizeFactoryBrief falls back to summary and description text when content is absent', function (assert) {
     let sourceUrl =
-      'https://briefs.example.test/darkfactory-adopter/Ticket/ticket-001';
+      'https://briefs.example.test/darkfactory-adopter/Tickets/ticket-001';
     let brief = normalizeFactoryBrief(darkfactoryTicketFixture, sourceUrl);
 
     assert.strictEqual(brief.title, 'Ticket 001');
@@ -94,9 +96,9 @@ module('factory-brief', function () {
 
     let server = createServer((request, response) => {
       assert.strictEqual(request.url, '/software-factory/Wiki/sticky-note');
-      assert.strictEqual(request.headers.accept, 'application/vnd.card+source');
+      assert.strictEqual(request.headers.accept, SupportedMimeType.CardSource);
       assert.strictEqual(request.headers.authorization, 'Bearer brief-token');
-      response.writeHead(200, { 'content-type': 'application/json' });
+      response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
       response.end(JSON.stringify(stickyNoteFixture));
     });
 

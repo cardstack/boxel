@@ -19,8 +19,8 @@ import type { AgentAction, AgentContext } from '../scripts/lib/factory-agent';
 
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
-    project: { id: 'Project/test-project' },
-    ticket: { id: 'Ticket/test-ticket' },
+    project: { id: 'Projects/test-project' },
+    ticket: { id: 'Tickets/test-ticket' },
     knowledge: [],
     skills: [],
     tools: [],
@@ -252,10 +252,6 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
       result.includes('https://realms.example.test/user/target/'),
       'includes target realm URL',
     );
-    assert.ok(
-      result.includes('https://realms.example.test/user/target-tests/'),
-      'includes test realm URL',
-    );
   });
 
   test('includes action schema', function (assert) {
@@ -408,12 +404,12 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       project: {
-        id: 'Project/sticky-note',
+        id: 'Projects/sticky-note',
         objective: 'Build a sticky note card app',
         successCriteria: ['Card renders', 'Tests pass'],
       },
       ticket: {
-        id: 'Ticket/define-core',
+        id: 'Tickets/define-core',
         summary: 'Define the core StickyNote card',
         status: 'in-progress',
         priority: 'high',
@@ -428,7 +424,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       'project objective',
     );
     assert.ok(result.includes('Card renders'), 'success criteria');
-    assert.ok(result.includes('Ticket/define-core'), 'ticket ID');
+    assert.ok(result.includes('Tickets/define-core'), 'ticket ID');
     assert.ok(
       result.includes('Define the core StickyNote card'),
       'ticket summary',
@@ -469,7 +465,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       ticket: {
-        id: 'Ticket/test',
+        id: 'Tickets/test',
         summary: 'Test',
         status: 'open',
         priority: 'medium',
@@ -538,11 +534,11 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       project: {
-        id: 'Project/test',
+        id: 'Projects/test',
         objective: 'Test objective',
       },
       ticket: {
-        id: 'Ticket/define-core',
+        id: 'Tickets/define-core',
         summary: 'Define core card',
         description: 'Create the card definition.',
       },
@@ -584,7 +580,7 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     });
 
     // Ticket context
-    assert.ok(result.includes('Ticket/define-core'), 'includes ticket ID');
+    assert.ok(result.includes('Tickets/define-core'), 'includes ticket ID');
     assert.ok(result.includes('Define core card'), 'includes ticket summary');
 
     // Previous actions
@@ -702,9 +698,9 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
   test('is self-contained: includes project, ticket, actions, test results', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
-      project: { id: 'Project/app', objective: 'Build the app' },
+      project: { id: 'Projects/app', objective: 'Build the app' },
       ticket: {
-        id: 'Ticket/t1',
+        id: 'Tickets/t1',
         summary: 'First ticket',
         description: 'Do the thing.',
       },
@@ -738,7 +734,7 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
 
     // All required sections are present
     assert.ok(result.includes('Build the app'), 'project context');
-    assert.ok(result.includes('Ticket/t1'), 'ticket ID');
+    assert.ok(result.includes('Tickets/t1'), 'ticket ID');
     assert.ok(result.includes('First ticket'), 'ticket summary');
     assert.ok(result.includes('Do the thing'), 'ticket description');
     assert.ok(result.includes('iteration 3'), 'iteration number');
@@ -757,7 +753,7 @@ module('factory-prompt-loader > assembleTestPrompt', function () {
   test('includes ticket and implemented files', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
-      ticket: { id: 'Ticket/t1', summary: 'Test ticket' },
+      ticket: { id: 'Tickets/t1', summary: 'Test ticket' },
     });
 
     let result = assembleTestPrompt({
@@ -772,7 +768,7 @@ module('factory-prompt-loader > assembleTestPrompt', function () {
       loader,
     });
 
-    assert.ok(result.includes('Ticket/t1'), 'includes ticket ID');
+    assert.ok(result.includes('Tickets/t1'), 'includes ticket ID');
     assert.ok(result.includes('sticky-note.gts'), 'includes file path');
     assert.ok(
       result.includes('export class StickyNote'),
@@ -811,9 +807,9 @@ module(
     test('first pass: [system, ticket-implement]', function (assert) {
       let loader = new FilePromptLoader();
       let ctx = makeMinimalContext({
-        project: { id: 'Project/app', objective: 'Build app' },
+        project: { id: 'Projects/app', objective: 'Build app' },
         ticket: {
-          id: 'Ticket/t1',
+          id: 'Tickets/t1',
           summary: 'First ticket',
           status: 'open',
           priority: 'high',
@@ -832,16 +828,16 @@ module(
       // System has agent role
       assert.ok(messages[0].content.includes('software factory agent'));
       // User has ticket
-      assert.ok(messages[1].content.includes('Ticket/t1'));
+      assert.ok(messages[1].content.includes('Tickets/t1'));
       assert.ok(messages[1].content.includes('Implement the feature'));
     });
 
     test('iteration pass: [system, ticket-iterate]', function (assert) {
       let loader = new FilePromptLoader();
       let ctx = makeMinimalContext({
-        project: { id: 'Project/app', objective: 'Build app' },
+        project: { id: 'Projects/app', objective: 'Build app' },
         ticket: {
-          id: 'Ticket/t1',
+          id: 'Tickets/t1',
           summary: 'First ticket',
           description: 'Implement the feature.',
         },
