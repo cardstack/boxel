@@ -19,6 +19,7 @@ interface Signature {
     centered?: boolean;
     cardContainerClass?: string;
     isOpen?: boolean;
+    isCloseDisabled?: boolean;
     layer?: 'urgent';
   };
   Blocks: {
@@ -43,6 +44,7 @@ export default class ModalContainer extends Component<Signature> {
       @isOpen={{this.isOpen}}
       @onClose={{@onClose}}
       @centered={{@centered}}
+      @isOverlayDismissalDisabled={{@isCloseDisabled}}
       @layer={{@layer}}
       ...attributes
     >
@@ -66,6 +68,7 @@ export default class ModalContainer extends Component<Signature> {
             {{on 'click' @onClose}}
             class='dialog-box__close'
             aria-label='close modal'
+            disabled={{@isCloseDisabled}}
             data-test-close-modal
           />
           {{yield to='header'}}
