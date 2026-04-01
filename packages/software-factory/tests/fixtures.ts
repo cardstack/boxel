@@ -165,14 +165,14 @@ async function isPortFree(port: number): Promise<boolean> {
 async function allocateTestWorkerPortSet(
   testWorkerIndex: number,
 ): Promise<TestWorkerPortSet> {
-  // Reserve one stable port block per Playwright testWorker. The isolated
-  // harness still restarts realm-server, worker-manager, compat proxy, and
-  // prerender between tests, but those services should come back on the same
-  // URLs for the lifetime of the testWorker. That keeps BOXEL_HOST_URL and the
-  // prerender standby target stable within a worker even when the realm stack
-  // itself is recreated per test. Include a per-process offset so concurrent
-  // Playwright runs with the same worker index do not all probe the same block
-  // first.
+  // Reserve one stable port block per Playwright testWorker for services whose
+  // URLs must remain constant across test restarts within the same worker:
+  // compat proxy and realm-server (for BOXEL_HOST_URL stability) and prerender
+  // (standby target). The worker-manager port is NOT pre-allocated here — it is
+  // dynamically assigned via findAvailablePort() each time a realm stack starts,
+  // since its URL does not need to be stable. Include a per-process offset so
+  // concurrent Playwright runs with the same worker index do not all probe the
+  // same block first.
   for (let attempt = 0; attempt < 100; attempt++) {
     let blockStart =
       testWorkerPortBase +
