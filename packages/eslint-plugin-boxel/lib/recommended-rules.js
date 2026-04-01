@@ -10,6 +10,5 @@ module.exports = {
   "@cardstack/boxel/no-duplicate-imports": "error",
   "@cardstack/boxel/no-forbidden-head-tags": "error",
   "@cardstack/boxel/no-percy-direct-import": "error",
-  "@cardstack/boxel/template-missing-invokable": "error",
-  "@cardstack/boxel/deliberately-stale": "error"
+  "@cardstack/boxel/template-missing-invokable": "error"
 }
