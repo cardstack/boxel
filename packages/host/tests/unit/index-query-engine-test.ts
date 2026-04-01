@@ -911,9 +911,18 @@ module('Unit | query', function (hooks) {
   test(`can filter using 'in' with the id field`, async function (assert) {
     let { mango, vangogh, ringo } = testCards;
     await setupIndex(dbAdapter, [
-      { card: mango, data: { search_doc: { name: 'Mango' } } },
-      { card: vangogh, data: { search_doc: { name: 'Van Gogh' } } },
-      { card: ringo, data: { search_doc: { name: 'Ringo' } } },
+      {
+        card: mango,
+        data: { search_doc: { id: mango.id, name: 'Mango' } },
+      },
+      {
+        card: vangogh,
+        data: { search_doc: { id: vangogh.id, name: 'Van Gogh' } },
+      },
+      {
+        card: ringo,
+        data: { search_doc: { id: ringo.id, name: 'Ringo' } },
+      },
     ]);
 
     let type = await personCardType(testCards);
