@@ -161,64 +161,167 @@ Rules:
 - derive stable identifiers from the brief intent where possible
 - record assumptions explicitly when the brief is underspecified
 
+### Terminology: "Spec" Disambiguation
+
+**IMPORTANT:** "Spec" has two completely different meanings in this system. All code, docs, and prompts must use the qualified form to avoid confusion:
+
+1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance that adopts from `https://cardstack.com/base/spec#Spec`. This is a **catalog entry** describing a card for inclusion in the Boxel catalog. It has fields like `ref` (CodeRef pointing to the card definition), `specType` (`'card'`|`'field'`|`'component'`), `readMe` (markdown description), `cardTitle`, and `cardDescription`. Example: `Spec/sticky-note.json` describes the StickyNote card.
+
+2. **Playwright test file** (`Tests/` folder, `.spec.ts` files) — A TypeScript Playwright test file that runs browser-level verification against the live realm. Example: `Tests/sticky-note.spec.ts` tests that StickyNote renders correctly.
+
+Never use bare "spec" without qualification. Use **"Catalog Spec card"** for #1 and **"Playwright test file"** or **"test file"** for #2.
+
 ### Phase 4: Execution Loop
 
 Required behavior:
 
 1. pick the active or next available ticket
-2. inspect related project and knowledge cards
-3. implement the ticket in the target realm
-4. generate tests for the implemented work in the test realm
-5. execute tests via the test harness against the target realm
-6. save test results as artifacts in the test realm
-7. if tests fail, feed test output back to the agent and return to step 3
-8. if tests pass, update `agentNotes`, `updatedAt`, and `status`
-9. create or update knowledge cards when meaningful decisions occur
-10. continue until:
-    - the MVP is done
-    - a blocker requires user input
-    - verification cannot proceed
+2. resolve skills for the current ticket via `SkillResolver`
+3. load skills from `.agents/skills/` via `SkillLoader`
+4. build tool manifest from `ToolRegistry` (script and realm-api tools only; boxel-cli tools are excluded until CS-10520 lands)
+5. assemble `AgentContext` (project, ticket, knowledge, skills, tools, test results)
+6. call `agent.plan(context)` to get `AgentAction[]`
+7. execute `invoke_tool` actions via `ToolExecutor`, capture `ToolResult`s
+8. apply file actions to the target realm via realm HTTP API
+9. orchestrator triggers test execution (after all file writes complete)
+10. if tests fail → update `AgentContext` with test results, go to step 6
+11. if tests pass → save results in target realm, update ticket status, advance
+12. `maxIterations` (default: 5) prevents infinite loops
+
+#### Concrete Data Flow Per Iteration
+
+The agent produces code, cards, Catalog Spec cards, and Playwright test files as `AgentAction[]` — each action contains the **full file content** inline. The orchestrator/dispatcher writes them to the realm via HTTP.
+
+```
+1. Orchestrator calls agent.plan(context) → AgentAction[]
+   Agent returns actions like:
+   [
+     { type: "create_file", path: "sticky-note.gts", realm: "target",
+       content: "import { CardDef, ... } from '...'; export class StickyNote ..." },
+     { type: "create_file", path: "StickyNote/welcome.json", realm: "target",
+       content: "{ \"data\": { ... card instance ... } }" },
+     { type: "create_file", path: "Spec/sticky-note.json", realm: "target",
+       content: "{ \"data\": { ... Catalog Spec card ... adoptsFrom: base/spec } }" },
+     { type: "create_test", path: "Tests/sticky-note.spec.ts", realm: "target",
+       content: "import { test, expect } from '@playwright/test'; ..." }
+   ]
+
+2. Dispatcher writes each action to the correct realm via HTTP:
+   - .gts/.ts files → writeModuleSource(realmUrl, path, content, { authorization })
+     POST to realm URL with raw source text body
+   - .json files → writeCardSource(realmUrl, path, JSON.parse(content), { authorization })
+     POST to realm URL with JSON-API card source body
+   - realm selection: action.realm === 'target' → targetRealmUrl
+   - auth: per-realm JWT from realmTokens[realmUrl]
+
+3. After ALL writes complete, orchestrator runs tests:
+   executeTestRunFromRealm({ targetRealmUrl, specPaths, ... })
+   - Pulls Playwright test files from realm to local temp dir
+   - Runs Playwright against the LIVE target realm (no local harness)
+   - Creates TestRun card in target realm's "Test Runs/" folder
+   - Returns TestRunHandle { status: 'passed' | 'failed', testRunId }
+
+4. If failed: orchestrator reads TestRun card for failure details,
+   builds TestResult with failures[].testName, failures[].error,
+   failures[].stackTrace, feeds into AgentContext.testResults.
+   Agent sees the failure in the iteration prompt and produces fix actions.
+```
+
+The agent does **not** execute anything directly. All side effects — realm writes, test execution, result parsing — are owned by the orchestrator/dispatcher.
+
+#### Catalog Spec Card Requirement
+
+For each top-level card defined in the brief, the agent must create a Catalog Spec card instance in the target realm's `Spec/` folder. This is the catalog entry that makes the card discoverable. Only the top-level card needs a Catalog Spec card — not every helper field or sub-component.
+
+The Catalog Spec card shape (from `packages/base/spec.gts`):
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": { "module": "../sticky-note", "name": "StickyNote" },
+      "specType": "card",
+      "readMe": "# StickyNote\n\nA simple sticky note card with title and body fields.",
+      "cardTitle": "Sticky Note",
+      "cardDescription": "A sticky note card for quick notes"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
+```
+
+Key fields:
+
+- `ref.module`: relative path from the Catalog Spec card instance to the `.gts` definition (e.g., `../sticky-note` from `Spec/sticky-note.json`)
+- `ref.name`: the exported class name
+- `specType`: `'card'` for CardDef, `'field'` for FieldDef, `'component'` for standalone components
+- `readMe`: markdown documentation for the card
+- `cardTitle` / `cardDescription`: human-readable title and short description
+
+Reference: `src/cli/smoke-test-realm.ts` creates a Catalog Spec card as part of its smoke test. Real-world examples live in `packages/catalog-realm/Spec/`.
+
+#### Auth Model
+
+The execution loop uses three distinct JWT levels:
+
+1. **Realm server JWT** (`serverToken`) — obtained via `matrixLogin()` + `getRealmServerToken()`. Used for server-level operations like `_create-realm` and `_realm-auth`.
+2. **Per-realm JWTs** (`realmTokens: Record<string, string>`) — obtained via `getRealmScopedAuth(realmServerUrl, serverToken)`. Each realm URL maps to its own JWT. Used for all realm reads/writes (`writeCardSource`, `writeModuleSource`, `readCardSource`, `searchRealm`).
+3. **Test artifacts realm JWT** — a per-realm JWT for the auto-created test artifacts realm, obtained separately after that realm is created. Handled internally by `executeTestRunFromRealm()`.
+
+The dispatcher looks up the correct per-realm JWT based on which realm each action targets.
+
+#### Tool Availability
+
+Boxel-cli tools (`boxel-sync`, `boxel-push`, `boxel-pull`, etc.) are excluded from the agent's tool registry until CS-10520 lands (boxel-cli auth integration). The `ToolRegistry` is constructed with only `SCRIPT_TOOLS` and `REALM_API_TOOLS`. All file operations use the realm HTTP API directly.
 
 Test generation rule:
 
-- the agent must produce at least one test per ticket before a ticket can be marked as done
-- tests live in the test realm, not the target realm, to keep implementation and verification separate
-- test artifacts include both the test source code and the structured test execution results
+- the agent must produce at least one Playwright test file per ticket before a ticket can be marked as done
+- Playwright test files live in the target realm's `Tests/` folder (e.g., `Tests/<ticket-slug>.spec.ts`)
+- test artifacts include both the Playwright test source code and the structured test execution results (TestRun cards)
 - failed test output is the primary feedback signal that drives the implement-verify loop
 
 ### Phase 5: Verification
 
-Verification is mandatory. Every ticket must have AI-generated tests before it can be marked done.
+Verification is mandatory. Every ticket must have AI-generated Playwright test files before it can be marked done.
 
 Test generation policy:
 
-- the agent creates test files in the test realm that exercise the cards and behavior implemented for the current ticket
+- the agent creates Playwright test files in the target realm's `Tests/` folder that exercise the cards and behavior implemented for the current ticket
 - for Boxel card work, tests should at minimum verify that card instances render correctly in fitted, isolated, and embedded views
 - additional tests should cover card-specific behavior, field values, relationships, and interactions
 - the agent should start with the smallest meaningful test and expand coverage if the first test passes trivially
 
 Test execution policy:
 
-- the test harness runs tests from the test realm against the target realm
-- test results (pass/fail, error messages, screenshots if applicable) are saved as structured artifacts in the test realm
+- the orchestrator owns test execution — the agent only produces `create_test`/`update_test` actions, and the orchestrator triggers test execution as a separate phase after all file writes complete
+- Playwright test files are pulled from the target realm to a local temp directory, then run via Playwright against the live target realm
+- test results (pass/fail, error messages, stack traces) are saved as `TestRun` card instances in the target realm's `Test Runs/` folder
 - on failure, the full test output is fed back to the agent as context for the next implementation attempt
-- on success, the test artifact serves as durable proof that the ticket was verified
+- on success, the TestRun card serves as durable proof that the ticket was verified
 
-Target realm artifact structure (test specs and results co-located with implementation):
+Target realm artifact structure (Playwright test files and results co-located with implementation):
 
-- `Tests/<ticket-slug>.spec.ts` — the generated test source (in target realm)
+- `Tests/<ticket-slug>.spec.ts` — the generated Playwright test source (in target realm)
 - `Test Runs/<ticket-slug>-<seq>.json` — TestRun card instance with status, results, timing (in target realm)
+- `Spec/<card-name>.json` — Catalog Spec card for the top-level card (in target realm)
 
 Test artifacts realm (auto-created from project name, e.g., `Sticky Notes Test Artifacts`):
 
 - `Run 1/` — card instances created during test run 1
 - `Run 2/` — card instances created during test run 2
 
-All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Tests/`.
+All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Tests/`, `Spec/`.
 
 Implementation note:
 
-- the Playwright harness in `packages/software-factory` is reused to execute AI-generated tests
+- the Playwright harness in `packages/software-factory` is reused to execute AI-generated Playwright test files
 - this gives the factory a real browser-level verification path for generated cards
 - the test harness output format should match what the agent needs to diagnose failures and iterate
 - the test artifacts realm is auto-created from the project name and its URL is persisted on the Project card (`testArtifactsRealmUrl` field)
