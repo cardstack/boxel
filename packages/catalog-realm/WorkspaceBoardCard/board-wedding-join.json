@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "workspaceName": "Wedding Planning Board",
+      "description": "Collaborate on the Karciana Wedding"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "WorkspaceBoardCard"
+      },
+      "_touched": 1773157001855
+    }
+  }
+}

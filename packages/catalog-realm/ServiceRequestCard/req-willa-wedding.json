@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "requesterName": "Willa Karciana",
+      "eventType": "Wedding",
+      "guestCount": "90",
+      "eventDate": "June 5, 2021",
+      "venue": "The Gorgeous Hotel",
+      "message": "Full-service wedding planning, theme: Wedding in Wonderland"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "ServiceRequestCard"
+      },
+      "_touched": 1773156334685
+    }
+  }
+}

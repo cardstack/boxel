@@ -1,0 +1,83 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156938787
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "Mon",
+      "category": "Customer Support",
+      "categoryTone": "support",
+      "title": "Warranty Claim for Solstice Espresso Pro",
+      "preview": "I found the order number and uploaded the photos...",
+      "contextTitle": "Claim Status",
+      "progressPercent": 50,
+      "progressTone": "support",
+      "workspaceLabel": "Threads",
+      "composerPlaceholder": "Type a message...",
+      "participants": [
+        {
+          "initials": "AL",
+          "name": "Avery Lin",
+          "role": "Support Specialist",
+          "tone": "advisor"
+        },
+        {
+          "initials": "MR",
+          "name": "Mina Reyes",
+          "role": "Customer",
+          "tone": "owner"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "MR",
+          "author": "@MinaReyes",
+          "sentAt": "11:06 AM",
+          "text": "My Solstice Espresso Pro is leaking from the steam wand after only three months. I found the order number and uploaded the photos you requested.",
+          "tone": "owner",
+          "isBot": null
+        },
+        {
+          "initials": "AL",
+          "author": "@AveryLin",
+          "sentAt": "11:14 AM",
+          "text": "Thanks, I reviewed the photos and this looks like it falls under the standard warranty. I am preparing the replacement approval now.",
+          "tone": "advisor",
+          "isBot": null
+        },
+        {
+          "initials": "AL",
+          "author": "@AveryLin",
+          "sentAt": "11:18 AM",
+          "text": "Once you confirm the shipping address below, we can dispatch the replacement unit and email the return label for the defective machine.",
+          "tone": "advisor",
+          "isBot": null
+        }
+      ],
+      "steps": [
+        {
+          "label": "Verify purchase",
+          "status": "completed"
+        },
+        {
+          "label": "Review evidence",
+          "status": "completed"
+        },
+        {
+          "label": "Confirm shipping address",
+          "status": "current"
+        },
+        {
+          "label": "Ship replacement",
+          "status": "upcoming"
+        }
+      ]
+    },
+    "relationships": {}
+  }
+}

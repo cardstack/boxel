@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vendorName": "",
+      "category": "Event Planning",
+      "specialties": ""
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "VendorProfileCard"
+      },
+      "_touched": 1773156609847
+    }
+  }
+}

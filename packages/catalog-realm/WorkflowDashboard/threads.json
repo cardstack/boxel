@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowDashboard",
+        "module": "../workflow-dashboard"
+      },
+      "_touched": 1773156995128
+    },
+    "type": "card",
+    "attributes": {
+      "dashboardTitle": "Threads"
+    },
+    "relationships": {
+      "workflows.0": {
+        "links": {
+          "self": "../WorkflowCard/boat-charter"
+        }
+      },
+      "workflows.1": {
+        "links": {
+          "self": "../WorkflowCard/property-inquiry"
+        }
+      },
+      "workflows.2": {
+        "links": {
+          "self": "../WorkflowCard/warranty-claim"
+        }
+      },
+      "workflows.3": {
+        "links": {
+          "self": "../WorkflowCard/vendor-onboarding"
+        }
+      }
+    }
+  }
+}

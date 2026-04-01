@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "payer": "Daisy Chain",
+      "amount": "$1,023.00",
+      "method": "Bitcoin",
+      "reference": "TX: 0x7a3f...b92e"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "PaymentReceiptCard"
+      },
+      "_touched": 1773156232965
+    }
+  }
+}
