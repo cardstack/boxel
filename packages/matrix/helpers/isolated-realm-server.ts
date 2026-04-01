@@ -283,10 +283,8 @@ export async function startServer({
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
-  // Use 'matrix' (not 'matrix-test') because the test Synapse overwrites the
-  // dev Synapse's Traefik route — see global.setup.ts for why.
   let matrixURL = envMode
-    ? `http://matrix.${envSlug}.localhost`
+    ? `http://matrix-test.${envSlug}.localhost`
     : `http://localhost:${synapse.port}`;
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
