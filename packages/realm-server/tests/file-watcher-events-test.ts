@@ -121,11 +121,17 @@ module(basename(__filename), function () {
 
       switch (changeType) {
         case 'added':
-          return 'added' in content && content.added?.includes(fileName) === true;
+          return (
+            'added' in content && content.added?.includes(fileName) === true
+          );
         case 'updated':
-          return 'updated' in content && content.updated?.includes(fileName) === true;
+          return (
+            'updated' in content && content.updated?.includes(fileName) === true
+          );
         case 'removed':
-          return 'removed' in content && content.removed?.includes(fileName) === true;
+          return (
+            'removed' in content && content.removed?.includes(fileName) === true
+          );
       }
     }
 
