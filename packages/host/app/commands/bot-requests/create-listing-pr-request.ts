@@ -58,6 +58,8 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
     }
 
+    let submittedBy = this.matrixService.userId ?? undefined;
+
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
       realm,
@@ -68,6 +70,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         listingId,
         ...(listingName ? { listingName } : {}),
         ...(listingSummary ? { listingSummary } : {}),
+        ...(submittedBy ? { submittedBy } : {}),
       },
     });
   }

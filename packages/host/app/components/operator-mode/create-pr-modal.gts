@@ -118,8 +118,9 @@ export default class CreatePRModal extends Component<Signature> {
           {{#if this.isSubmitted}}
             <div class='submitted-container' data-test-create-pr-success>
               <div class='submitted-message'>
-                Your listing has been submitted for review. A PR will be created
-                on GitHub and you will be notified once it is approved.
+                Your listing has been submitted. A Submission Workflow card is
+                being created to track the PR process. You can monitor the
+                progress in real-time.
               </div>
               <Button
                 @as='anchor'

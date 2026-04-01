@@ -1,17 +1,14 @@
-import { service } from '@ember/service';
-
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type OperatorModeStateService from '../services/operator-mode-state-service';
+import CreateSubmissionWorkflowCommand from './create-submission-workflow';
 
 export default class OpenCreatePRModalCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
-  @service declare private operatorModeStateService: OperatorModeStateService;
-
-  description = 'Open create PR confirmation modal';
+  description =
+    'Create a submission workflow card and open it in interact mode to track PR creation.';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -24,7 +21,7 @@ export default class OpenCreatePRModalCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CreateListingPRRequestInput,
   ): Promise<undefined> {
-    this.operatorModeStateService.showCreatePRModal({
+    await new CreateSubmissionWorkflowCommand(this.commandContext).execute({
       realm: input.realm,
       listingId: input.listingId,
       listingName: input.listingName,
