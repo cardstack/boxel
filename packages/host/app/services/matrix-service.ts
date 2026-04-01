@@ -54,6 +54,7 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -168,6 +169,7 @@ export default class MatrixService extends Service {
     new TrackedMap();
 
   @tracked private storage: Storage | undefined;
+  @tracked workspaceFavorites: string[] = [];
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -665,6 +667,43 @@ export default class MatrixService extends Service {
     await this.realmServer.setAvailableRealmURLs(newRealms);
   }
 
+  public async getWorkspaceFavorites(): Promise<string[]> {
+    let { favorites = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+      )) as { favorites: string[] }) ?? {};
+    return favorites;
+  }
+
+  public async addWorkspaceFavorite(realmURL: string): Promise<void> {
+    let { favorites = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+      )) as { favorites: string[] }) ?? {};
+
+    if (!favorites.includes(realmURL)) {
+      let newFavorites = [...favorites, realmURL];
+      await this.client.setAccountData(
+        APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+        { favorites: newFavorites },
+      );
+      this.workspaceFavorites = newFavorites;
+    }
+  }
+
+  public async removeWorkspaceFavorite(realmURL: string): Promise<void> {
+    let { favorites = [] } =
+      ((await this.client.getAccountDataFromServer(
+        APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+      )) as { favorites: string[] }) ?? {};
+
+    let newFavorites = favorites.filter((url) => url !== realmURL);
+    await this.client.setAccountData(APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE, {
+      favorites: newFavorites,
+    });
+    this.workspaceFavorites = newFavorites;
+  }
+
   async setDisplayName(displayName: string) {
     await this.client.setDisplayName(displayName);
   }
@@ -709,9 +748,15 @@ export default class MatrixService extends Service {
         if (this.startedAtTs === -1) {
           this.startedAtTs = 0;
         }
-        let accountDataContent = (await this.client.getAccountDataFromServer(
-          APP_BOXEL_REALMS_EVENT_TYPE,
-        )) as { realms: string[] } | null;
+        let [accountDataContent, favoritesData] = await Promise.all([
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_REALMS_EVENT_TYPE,
+          ) as Promise<{ realms: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+          ) as Promise<{ favorites: string[] } | null>,
+        ]);
+        this.workspaceFavorites = favoritesData?.favorites ?? [];
 
         let noRealmsLoggedIn = Array.from(this.realm.realms.entries()).every(
           ([_url, realmResource]) => !realmResource.isLoggedIn,

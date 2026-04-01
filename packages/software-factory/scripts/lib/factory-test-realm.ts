@@ -14,6 +14,7 @@ export type {
   ExecuteTestRunOptions,
   RunRealmTestsFailure,
   RunRealmTestsOutput,
+  SpecResultData,
   TestResultEntryData,
   TestRunAttributes,
   TestRunHandle,

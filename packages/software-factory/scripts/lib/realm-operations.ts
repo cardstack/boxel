@@ -469,11 +469,12 @@ export async function createRealm(
       }),
     });
 
+    let matrixAuth = options.matrixAuth;
+
     if (response.ok) {
       let result = (await response.json()) as { data?: { id?: string } };
       let realmUrl = result.data?.id ?? '';
 
-      let matrixAuth = options.matrixAuth;
       if (realmUrl && matrixAuth) {
         await addRealmToMatrixAccountData(
           matrixAuth,
@@ -494,6 +495,20 @@ export async function createRealm(
     if (body.includes('[object Object]')) {
       body = 'server returned a non-serialized object body';
     }
+
+    // When the realm already exists, ensure it's still registered in the
+    // user's Matrix account data so it appears in the Boxel dashboard.
+    if (body.includes('already exists') && matrixAuth) {
+      let urlMatch = body.match(/'(https?:\/\/[^']+)'/);
+      if (urlMatch) {
+        await addRealmToMatrixAccountData(
+          matrixAuth,
+          ensureTrailingSlash(urlMatch[1]),
+          fetchImpl,
+        );
+      }
+    }
+
     return {
       realmUrl: '',
       created: false,

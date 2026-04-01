@@ -248,7 +248,9 @@ async function findResumableTestRun(
         attributes?: {
           status?: string;
           sequenceNumber?: number;
-          results?: { testName?: string; status?: string }[];
+          specResults?: {
+            results?: { testName?: string; status?: string }[];
+          }[];
         };
       }
     | undefined;
@@ -257,7 +259,8 @@ async function findResumableTestRun(
     return undefined;
   }
 
-  let pendingTests = (latest.attributes.results ?? [])
+  let pendingTests = (latest.attributes.specResults ?? [])
+    .flatMap((sr) => sr.results ?? [])
     .filter((r) => r.status === 'pending')
     .map((r) => r.testName ?? '');
 
@@ -404,7 +407,7 @@ export async function executeTestRunFromRealm(
           passedCount: 0,
           failedCount: 0,
           errorMessage,
-          results: [],
+          specResults: [],
         },
         completeOptions,
       );
@@ -422,7 +425,7 @@ export async function executeTestRunFromRealm(
           passedCount: 0,
           failedCount: 0,
           errorMessage,
-          results: [],
+          specResults: [],
         },
         completeOptions,
       );
@@ -516,7 +519,7 @@ export async function executeTestRunFromRealm(
         durationMs,
         errorMessage:
           `Playwright exited with code ${testRunProcess.status ?? 'unknown'}. ${stderr}`.trim(),
-        results: [],
+        specResults: [],
       };
     }
 
@@ -542,7 +545,7 @@ export async function executeTestRunFromRealm(
           passedCount: 0,
           failedCount: 0,
           errorMessage,
-          results: [],
+          specResults: [],
         },
         completeOptions,
       );

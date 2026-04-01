@@ -10,13 +10,16 @@
  *   2. A Spec card instance pointing to the HelloCard definition
  *   3. A Playwright test spec in the Tests/ folder
  *
- * Phase 2 — Run the testing phase:
- *   Calls executeTestRunFromRealm which:
+ * Phase 2 — Run the testing phase (both specs in a single TestRun):
+ *   Calls executeTestRunFromRealm with both spec paths, which:
  *   - Creates a TestRun card (status: running) in the target realm's Test Runs/ folder
  *   - Pulls spec files from the target realm locally (Playwright needs local .spec.ts files)
- *   - Runs the Playwright spec against the live target realm (no local harness)
+ *   - Runs both Playwright specs against the live target realm (no local harness)
  *   - Any card instances created during spec execution land in the test artifacts realm
- *   - Completes the TestRun card with pass/fail results
+ *   - Completes the TestRun card with SpecResults grouped by spec file
+ *   - The passing spec produces a SpecResult with passedCount=1
+ *   - The failing spec produces a SpecResult with failedCount=1
+ *   - The overall TestRun status is 'failed' (mixed results)
  *
  * Prerequisites:
  *
@@ -260,9 +263,10 @@ async function main() {
 
   console.log('--- Phase 0: Ensuring target realm exists ---\n');
 
+  let realmDisplayName = realmEndpoint.replace(/-/g, ' ');
   console.log(`  Creating realm: ${realmEndpoint}...`);
   let createResult = await createRealm(realmServerUrl, {
-    name: 'Smoke Test Realm',
+    name: realmDisplayName,
     endpoint: realmEndpoint,
     authorization: authorization ?? '',
     matrixAuth: {
@@ -386,10 +390,10 @@ async function main() {
   );
 
   // -------------------------------------------------------------------------
-  // Phase 2a: Run a passing test
+  // Phase 2: Run both specs in a single TestRun
   // -------------------------------------------------------------------------
 
-  console.log('\n--- Phase 2a: Running passing spec ---\n');
+  console.log('\n--- Phase 2: Running both specs in a single TestRun ---\n');
 
   let matrixAuthForRealm = {
     userId: matrixAuth.userId,
@@ -397,48 +401,32 @@ async function main() {
     matrixUrl: matrixAuth.credentials.matrixUrl,
   };
 
-  let passHandle = await executeTestRunFromRealm({
+  let handle = await executeTestRunFromRealm({
     targetRealmUrl,
     testResultsModuleUrl,
     slug: 'hello-smoke',
-    specPaths: ['Tests/hello-smoke.spec.ts'],
-    testNames: ['hello card renders greeting'],
+    specPaths: ['Tests/hello-smoke.spec.ts', 'Tests/hello-failing.spec.ts'],
+    testNames: [
+      'hello card renders greeting',
+      'hello card has wrong greeting (deliberately fails)',
+    ],
     authorization,
     fetch: fetchImpl,
+    forceNew: true,
     projectCardUrl,
     matrixAuth: matrixAuthForRealm,
     serverToken,
   });
 
-  console.log(`  TestRun ID:  ${passHandle.testRunId}`);
-  console.log(`  Status:      ${passHandle.status}`);
-  if (passHandle.errorMessage) {
-    console.log(`  Error:       ${passHandle.errorMessage}`);
+  console.log(`  TestRun ID:  ${handle.testRunId}`);
+  console.log(`  Status:      ${handle.status}`);
+  if (handle.errorMessage) {
+    console.log(`  Error:       ${handle.errorMessage}`);
   }
-
-  // -------------------------------------------------------------------------
-  // Phase 2b: Run a deliberately failing test
-  // -------------------------------------------------------------------------
-
-  console.log('\n--- Phase 2b: Running failing spec (expected to fail) ---\n');
-
-  let failHandle = await executeTestRunFromRealm({
-    targetRealmUrl,
-    testResultsModuleUrl,
-    slug: 'hello-fail',
-    specPaths: ['Tests/hello-failing.spec.ts'],
-    testNames: ['hello card shows wrong greeting (deliberately fails)'],
-    authorization,
-    fetch: fetchImpl,
-    projectCardUrl,
-    matrixAuth: matrixAuthForRealm,
-    serverToken,
-  });
-
-  console.log(`  TestRun ID:  ${failHandle.testRunId}`);
-  console.log(`  Status:      ${failHandle.status}`);
-  if (failHandle.errorMessage) {
-    console.log(`  Error:       ${failHandle.errorMessage}`);
+  if ((handle as unknown as Record<string, unknown>).error) {
+    console.log(
+      `  Complete error: ${(handle as unknown as Record<string, unknown>).error}`,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -447,34 +435,25 @@ async function main() {
 
   console.log('\n--- Results ---\n');
 
-  let passOk = passHandle.status === 'passed';
-  let failOk = failHandle.status === 'failed';
+  // The TestRun should have status 'failed' because it contains both a
+  // passing and a deliberately failing spec. The SpecResults inside should
+  // show one spec passed and one spec failed.
+  let expectedStatus = handle.status === 'failed';
 
   console.log(
-    `  Passing spec: ${passOk ? '✓ passed' : `✗ ${passHandle.status}`}`,
+    `  TestRun status: ${expectedStatus ? '✓ failed (as expected — one spec passes, one fails)' : `✗ expected failed, got ${handle.status}`}`,
   );
-  console.log(
-    `  Failing spec: ${failOk ? '✓ correctly reported as failed' : `✗ expected failed, got ${failHandle.status}`}`,
-  );
-  console.log(`\n  View in Boxel: ${targetRealmUrl}${passHandle.testRunId}`);
-  console.log(`  View in Boxel: ${targetRealmUrl}${failHandle.testRunId}`);
+  console.log(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
 
-  if (passOk && failOk) {
+  if (expectedStatus) {
     console.log(
-      '\n✓ Smoke test passed! Both pass and fail paths work correctly.',
+      '\n✓ Smoke test passed! Single TestRun contains both pass and fail spec results.',
     );
   } else {
     console.log('\n✗ Smoke test had unexpected results.');
-    if (!passOk) {
-      console.log(
-        `  Passing spec should be "passed" but was "${passHandle.status}"`,
-      );
-    }
-    if (!failOk) {
-      console.log(
-        `  Failing spec should be "failed" but was "${failHandle.status}"`,
-      );
-    }
+    console.log(
+      `  Expected "failed" (mixed pass/fail specs) but got "${handle.status}"`,
+    );
     process.exit(1);
   }
 }

@@ -59,8 +59,8 @@ export interface TestRunHandle {
  * TestRun card definition in test-results.gts.
  *
  * Note: `passedCount` and `failedCount` are computed fields on the card
- * (derived from `results`), but are included here for convenience when
- * building card documents and in test assertions.
+ * (derived from `specResults[].results`), but are included here for
+ * convenience when building card documents and in test assertions.
  */
 export interface TestRunAttributes {
   sequenceNumber?: number;
@@ -71,7 +71,7 @@ export interface TestRunAttributes {
   failedCount: number;
   durationMs?: number;
   errorMessage?: string;
-  results: TestResultEntryData[];
+  specResults: SpecResultData[];
 }
 
 /** Shape of a single test result entry within a TestRun card. */
@@ -81,6 +81,12 @@ export interface TestResultEntryData {
   message?: string;
   stackTrace?: string;
   durationMs?: number;
+}
+
+/** Shape of a spec result group within a TestRun card. */
+export interface SpecResultData {
+  specRef?: ResolvedCodeRef;
+  results: TestResultEntryData[];
 }
 
 // ---------------------------------------------------------------------------

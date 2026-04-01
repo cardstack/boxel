@@ -277,6 +277,16 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       insert('claimed_domains_for_sites', nameExpressions, valueExpressions),
     );
 
+    let sourceRealm = context.testRealmServer.testingOnlyRealms.find(
+      (realm) => realm.url === realmURL,
+    )!;
+    let unsubscribeCalled = false;
+    let originalUnsubscribe = sourceRealm.unsubscribe.bind(sourceRealm);
+    sourceRealm.unsubscribe = function () {
+      unsubscribeCalled = true;
+      originalUnsubscribe();
+    };
+
     let deleteResponse = await context.request
       .delete('/_delete-realm')
       .set('Accept', 'application/vnd.api+json')
@@ -298,6 +308,10 @@ module(`server-endpoints/${basename(__filename)}`, function (hooks) {
       );
 
     assert.strictEqual(deleteResponse.status, 204, 'realm deleted');
+    assert.true(
+      unsubscribeCalled,
+      'file watcher was unsubscribed during realm destruction',
+    );
     assert.false(
       existsSync(
         join(context.dir.name, 'realm_server_1', realmPath[0]!, realmPath[1]!),

@@ -1068,6 +1068,8 @@ export class Realm {
       contentSize?: number;
     }[] = [];
     let lastWriteType: 'module' | 'instance' | undefined;
+    let addedFiles: LocalPath[] = [];
+    let updatedFiles: LocalPath[] = [];
     let invalidations: Set<string> = new Set();
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
@@ -1116,6 +1118,7 @@ export class Realm {
           ? 'card'
           : 'file';
       this.assertWriteSize(content, sizeType);
+      let isNewFile: boolean;
       if (typeof content === 'string') {
         let existingFile = await readFileAsText(path, (p) =>
           this.#adapter.openFile(p),
@@ -1125,6 +1128,9 @@ export class Realm {
           fileMetaRows.push({ path });
           continue;
         }
+        isNewFile = !existingFile;
+      } else {
+        isNewFile = !(await this.#adapter.exists(path));
       }
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
@@ -1142,6 +1148,7 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
+      (isNewFile ? addedFiles : updatedFiles).push(path);
       this.#sourceCache.invalidate(path);
       if (hasExecutableExtension(path)) {
         this.#moduleCache.invalidate(path);
@@ -1150,6 +1157,15 @@ export class Realm {
       fileMetaRows.push({ path, contentHash, contentSize });
       urls.push(url);
       lastWriteType = currentWriteType ?? lastWriteType;
+    }
+
+    if (addedFiles.length > 0 || updatedFiles.length > 0) {
+      this.broadcastRealmEvent({
+        eventName: 'update',
+        ...(addedFiles.length ? { added: addedFiles } : {}),
+        ...(updatedFiles.length ? { updated: updatedFiles } : {}),
+        realmURL: this.url,
+      } as UpdateRealmEventContent);
     }
 
     // persist file meta (created_at) to DB independent of index and retrieve created
@@ -1523,6 +1539,11 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
+    this.broadcastRealmEvent({
+      eventName: 'update',
+      removed: [path],
+      realmURL: this.url,
+    });
     this.#sourceCache.invalidate(path);
     if (hasExecutableExtension(path)) {
       this.#moduleCache.invalidate(path);
@@ -1554,6 +1575,11 @@ export class Realm {
 
     await Promise.all(trackPromises);
     await Promise.all(removePromises);
+    this.broadcastRealmEvent({
+      eventName: 'update',
+      removed: paths,
+      realmURL: this.url,
+    });
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
     let invalidations = await this.updateIndexAndCollectInvalidations(urls, {
@@ -4614,7 +4640,12 @@ export class Realm {
       }
 
       this.broadcastRealmEvent({
-        ...data,
+        eventName: 'update',
+        ...('added' in data
+          ? { added: [data.added] }
+          : 'updated' in data
+            ? { updated: [data.updated] }
+            : { removed: [data.removed] }),
         realmURL: this.url,
       } as UpdateRealmEventContent);
       this.#updateItems.push({

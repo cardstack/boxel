@@ -54,6 +54,8 @@ export async function removeMountedRealm(args: {
   let { realm, realmPath, realms, virtualNetwork } = args;
   let cleanupError: Error | undefined;
 
+  realm.unsubscribe();
+
   try {
     let allFilePaths = collectAllFilePaths(realmPath);
     if (allFilePaths.length > 0) {
@@ -100,6 +102,8 @@ export function destroyMountedRealm(args: {
 }) {
   let { realm, realmPath, realms, virtualNetwork } = args;
   let cleanupError: Error | undefined;
+
+  realm.unsubscribe();
 
   try {
     if (pathExistsSync(realmPath)) {

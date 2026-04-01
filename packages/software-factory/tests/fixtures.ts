@@ -105,7 +105,7 @@ function killProcessGroup(pid: number, signal: NodeJS.Signals) {
 
 async function waitForPortFree(
   port: number,
-  timeoutMs = 10_000,
+  timeoutMs = 30_000,
 ): Promise<void> {
   let startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
