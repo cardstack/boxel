@@ -1681,11 +1681,15 @@ The orchestrator builds `FactoryTool[]` at startup. Each tool has a JSON Schema 
 // Example: building the write_file tool
 let writeFileTool: FactoryTool = {
   name: 'write_file',
-  description: 'Write a file to a realm. The path must include the file extension.',
+  description:
+    'Write a file to a realm. The path must include the file extension.',
   parameters: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: 'Realm-relative file path with extension' },
+      path: {
+        type: 'string',
+        description: 'Realm-relative file path with extension',
+      },
       content: { type: 'string', description: 'File content' },
       realm: {
         type: 'string',
@@ -1700,7 +1704,9 @@ let writeFileTool: FactoryTool = {
     let auth = realmTokens[realmUrl];
     // All files written via writeModuleSource with card+source MIME type.
     // The realm server accepts raw content as-is regardless of extension.
-    return writeModuleSource(realmUrl, args.path, args.content, { authorization: auth });
+    return writeModuleSource(realmUrl, args.path, args.content, {
+      authorization: auth,
+    });
   },
 };
 ```
