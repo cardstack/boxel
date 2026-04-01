@@ -1,5 +1,7 @@
 import { resolve } from 'node:path';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import { bootstrapProjectArtifacts } from '../src/factory-bootstrap';
 import type { FactoryBrief } from '../src/factory-brief';
 import { expect, test } from './fixtures';
@@ -34,8 +36,6 @@ const stickyNoteBrief: FactoryBrief = {
     'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
   tags: ['documents-content', 'sticky', 'note'],
 };
-
-const cardSourceMimeType = 'application/vnd.card+source';
 
 test.use({ realmDir: bootstrapTargetDir });
 test.use({ realmServerMode: 'isolated' });
@@ -73,15 +73,15 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
     bootstrapOptions,
   );
 
-  expect(result1.project.id).toBe('Project/sticky-note-mvp');
+  expect(result1.project.id).toBe('Projects/sticky-note-mvp');
   expect(result1.project.status).toBe('created');
   expect(result1.knowledgeArticles).toHaveLength(2);
   expect(result1.tickets).toHaveLength(3);
-  expect(result1.activeTicket.id).toBe('Ticket/sticky-note-define-core');
+  expect(result1.activeTicket.id).toBe('Tickets/sticky-note-define-core');
 
   let projectResponse = await authenticatedFetch(
-    realm.cardURL('Project/sticky-note-mvp'),
-    { headers: { Accept: cardSourceMimeType } },
+    realm.cardURL('Projects/sticky-note-mvp'),
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(projectResponse.ok).toBe(true);
   let projectJson = (await projectResponse.json()) as {
@@ -96,8 +96,8 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(projectJson.data.meta.adoptsFrom.name).toBe('Project');
 
   let ticketResponse = await authenticatedFetch(
-    realm.cardURL('Ticket/sticky-note-define-core'),
-    { headers: { Accept: cardSourceMimeType } },
+    realm.cardURL('Tickets/sticky-note-define-core'),
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(ticketResponse.ok).toBe(true);
   let ticketJson = (await ticketResponse.json()) as {
@@ -112,8 +112,8 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(ticketJson.data.meta.adoptsFrom.name).toBe('Ticket');
 
   let ticket2Response = await authenticatedFetch(
-    realm.cardURL('Ticket/sticky-note-design-views'),
-    { headers: { Accept: cardSourceMimeType } },
+    realm.cardURL('Tickets/sticky-note-design-views'),
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(ticket2Response.ok).toBe(true);
   let ticket2Json = (await ticket2Response.json()) as {
@@ -122,8 +122,8 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(ticket2Json.data.attributes.status).toBe('backlog');
 
   let contextResponse = await authenticatedFetch(
-    realm.cardURL('KnowledgeArticle/sticky-note-brief-context'),
-    { headers: { Accept: cardSourceMimeType } },
+    realm.cardURL('Knowledge Articles/sticky-note-brief-context'),
+    { headers: { Accept: SupportedMimeType.CardSource } },
   );
   expect(contextResponse.ok).toBe(true);
   let contextJson = (await contextResponse.json()) as {
@@ -159,7 +159,7 @@ test('bootstrapped project card renders correctly in the browser', async ({
     bootstrapOptions,
   );
 
-  await authedPage.goto(realm.cardURL('Project/sticky-note-mvp'), {
+  await authedPage.goto(realm.cardURL('Projects/sticky-note-mvp'), {
     waitUntil: 'commit',
   });
 

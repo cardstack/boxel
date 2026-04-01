@@ -189,6 +189,142 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         );
       });
 
+      test('cancels both running and pending jobs when cancelPending is true', async function (assert) {
+        let concurrencyGroup = `indexing:${testRealm.url}`;
+
+        // Create a running job (with active reservation)
+        let [{ id: runningJobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm.url}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          '${concurrencyGroup}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        await dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${runningJobId}, NOW() + INTERVAL '3 minutes')`);
+
+        // Create a pending job (no reservation)
+        let [{ id: pendingJobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm.url}", "realmUsername":"node-test_realm"}',
+          'incremental-index',
+          '${concurrencyGroup}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+
+        let response = await request
+          .post('/_cancel-indexing-job')
+          .set('Accept', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'writer', ['read', 'write'])}`,
+          )
+          .send({ cancelPending: true });
+
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+
+        // Running job should be cancelled
+        let [runningJob] = await dbAdapter.execute(
+          `SELECT status, result, finished_at FROM jobs WHERE id = ${runningJobId}`,
+        );
+        assert.strictEqual(
+          runningJob.status,
+          'rejected',
+          'running job was canceled',
+        );
+        assert.deepEqual(
+          runningJob.result,
+          {
+            status: 418,
+            message: 'User initiated job cancellation',
+          },
+          'running job result is cancellation payload',
+        );
+        assert.ok(runningJob.finished_at, 'running job has finish time');
+
+        // Pending job should ALSO be cancelled
+        let [pendingJob] = await dbAdapter.execute(
+          `SELECT status, result, finished_at FROM jobs WHERE id = ${pendingJobId}`,
+        );
+        assert.strictEqual(
+          pendingJob.status,
+          'rejected',
+          'pending job was also canceled when cancelPending is true',
+        );
+        assert.deepEqual(
+          pendingJob.result,
+          {
+            status: 418,
+            message: 'User initiated job cancellation',
+          },
+          'pending job result is cancellation payload',
+        );
+        assert.ok(pendingJob.finished_at, 'pending job has finish time');
+      });
+
+      test('default behavior (no body) only cancels running jobs, not pending', async function (assert) {
+        let concurrencyGroup = `indexing:${testRealm.url}`;
+
+        let [{ id: runningJobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm.url}", "realmUsername":"node-test_realm"}',
+          'from-scratch-index',
+          '${concurrencyGroup}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+        await dbAdapter.execute(`INSERT INTO job_reservations
+        (job_id, locked_until ) VALUES (${runningJobId}, NOW() + INTERVAL '3 minutes')`);
+
+        let [{ id: pendingJobId }] = (await dbAdapter.execute(`INSERT INTO jobs
+        (args, job_type, concurrency_group, timeout, priority)
+        VALUES
+        (
+          '{"realmURL": "${testRealm.url}", "realmUsername":"node-test_realm"}',
+          'incremental-index',
+          '${concurrencyGroup}',
+          180,
+          0
+        ) RETURNING id`)) as { id: string }[];
+
+        // No body — default behavior
+        let response = await request
+          .post('/_cancel-indexing-job')
+          .set('Accept', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'writer', ['read', 'write'])}`,
+          );
+
+        assert.strictEqual(response.status, 204, 'HTTP 204 response');
+
+        let [runningJob] = await dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${runningJobId}`,
+        );
+        assert.strictEqual(
+          runningJob.status,
+          'rejected',
+          'running job canceled',
+        );
+
+        let [pendingJob] = await dbAdapter.execute(
+          `SELECT status FROM jobs WHERE id = ${pendingJobId}`,
+        );
+        assert.strictEqual(
+          pendingJob.status,
+          'unfulfilled',
+          'pending job NOT canceled when cancelPending is not set',
+        );
+      });
+
       test('does not treat expired reservations as running jobs', async function (assert) {
         let concurrencyGroup = `indexing:${testRealm.url}`;
         let [{ id: jobId }] = (await dbAdapter.execute(`INSERT INTO jobs

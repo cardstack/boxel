@@ -111,7 +111,12 @@ export default function handleWebhookReceiverRequest({
       // Delegate filter matching to the handler
       if (
         commandFilter &&
-        !filterHandler.matches(payload, ctxt.req.headers, commandFilter)
+        !(await filterHandler.matches(
+          payload,
+          ctxt.req.headers,
+          commandFilter,
+          dbAdapter,
+        ))
       ) {
         continue;
       }
@@ -121,11 +126,18 @@ export default function handleWebhookReceiverRequest({
       let realmURL: string;
       let commandInput: Record<string, any>;
       try {
-        realmURL = filterHandler.getRealmURL(commandFilter ?? {}, commandURL);
-        commandInput = filterHandler.buildCommandInput(
+        realmURL = await filterHandler.getRealmURL(
+          commandFilter ?? {},
+          commandURL,
+          payload,
+          ctxt.req.headers,
+          dbAdapter,
+        );
+        commandInput = await filterHandler.buildCommandInput(
           payload,
           ctxt.req.headers,
           commandFilter ?? {},
+          dbAdapter,
         );
       } catch (error) {
         console.error(

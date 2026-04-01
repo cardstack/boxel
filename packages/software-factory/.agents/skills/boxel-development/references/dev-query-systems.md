@@ -21,7 +21,7 @@
 
 **Filter types needing 'on':**
 
-- `eq`, `contains`, `range` (except after type filter)
+- `eq`, `in`, `contains`, `range` (except after type filter)
 - Sort on type-specific fields
 
 **Filter composition types:**

@@ -15,7 +15,7 @@ around the JSON. The orchestrator parses your response as JSON directly.
 # Rules
 
 - Every ticket must include at least one `create_test` or `update_test` action.
-- Test specs go in the test realm. Implementation goes in the target realm.
+- Test specs go in the target realm's `Tests/` folder. Implementation goes in the target realm.
 - Use `invoke_tool` to search for existing cards, check realm state, or run
   commands before creating files. Do not guess at existing state.
 - If you cannot proceed, return a single `request_clarification` action
@@ -26,7 +26,6 @@ around the JSON. The orchestrator parses your response as JSON directly.
 # Realms
 
 - Target realm: {{targetRealmUrl}}
-- Test realm: {{testRealmUrl}}
 
 {{#each skills}}
 

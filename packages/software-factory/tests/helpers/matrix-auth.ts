@@ -1,6 +1,8 @@
 import { createHmac } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import { defaultSupportMetadataFile } from '../../src/runtime-metadata';
 
 export interface SupportMetadata {
@@ -59,7 +61,7 @@ export async function registerMatrixUser(
 
   let registerResponse = await fetch(registerUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': SupportedMimeType.JSON },
     body: JSON.stringify({
       nonce,
       username,
@@ -87,7 +89,7 @@ export async function getRealmToken(
 
   let loginResponse = await fetch(`${baseUrl}_matrix/client/v3/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': SupportedMimeType.JSON },
     body: JSON.stringify({
       type: 'm.login.password',
       identifier: { type: 'm.id.user', user: username },
@@ -110,7 +112,7 @@ export async function getRealmToken(
     {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': SupportedMimeType.JSON,
         Authorization: `Bearer ${access_token}`,
       },
       body: '{}',
@@ -127,7 +129,7 @@ export async function getRealmToken(
   let sessionUrl = new URL('_session', realmUrl).href;
   let sessionResponse = await fetch(sessionUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': SupportedMimeType.JSON },
     body: JSON.stringify({ access_token: openId.access_token }),
   });
   if (!sessionResponse.ok) {

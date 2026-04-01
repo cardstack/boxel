@@ -173,6 +173,25 @@
     text-overflow: ellipsis;
   }
 
+  /* Thin translucent scrollbar for dark-background containers */
+  .boxel-dark-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255 255 255 / 20%) transparent;
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar {
+    width: 0.5rem;
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255 255 255 / 20%);
+    border-radius: var(--boxel-border-radius-xs);
+  }
+  .boxel-dark-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255 255 255 / 35%);
+  }
+
   /* can be used via `--boxel-infinite-spin-animation` css-variable. example:
     @media (prefers-reduced-motion: no-preference) {
       .loading-icon {

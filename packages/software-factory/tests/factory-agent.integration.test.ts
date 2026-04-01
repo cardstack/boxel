@@ -1,6 +1,8 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   OpenRouterFactoryAgent,
   type AgentAction,
@@ -13,8 +15,8 @@ import {
 
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
-    project: { id: 'Project/test-project' },
-    ticket: { id: 'Ticket/test-ticket' },
+    project: { id: 'Projects/test-project' },
+    ticket: { id: 'Tickets/test-ticket' },
     knowledge: [],
     skills: [],
     tools: [],
@@ -60,7 +62,7 @@ async function startServer(
   let server = createServer(async (req, res) => {
     let body = await readBody(req);
     let result = handler(req, body);
-    res.writeHead(result.status, { 'Content-Type': 'application/json' });
+    res.writeHead(result.status, { 'Content-Type': SupportedMimeType.JSON });
     res.end(result.body);
   });
 
@@ -185,7 +187,7 @@ module(
         assert.strictEqual(messages[0].role, 'system');
         assert.strictEqual(messages[1].role, 'user');
         assert.ok(
-          messages[1].content.includes('Ticket/test-ticket'),
+          messages[1].content.includes('Tickets/test-ticket'),
           'user message includes ticket ID',
         );
       } finally {

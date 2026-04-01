@@ -14,12 +14,12 @@
     "relationships": {
       "knowledgeBase.0": {
         "links": {
-          "self": "../KnowledgeArticle/agent-onboarding"
+          "self": "../Knowledge Articles/agent-onboarding"
         }
       },
       "teamAgents.0": {
         "links": {
-          "self": "../AgentProfile/demo-agent"
+          "self": "../Agent Profiles/demo-agent"
         }
       }
     },

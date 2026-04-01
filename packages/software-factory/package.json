@@ -24,6 +24,7 @@
     "serve:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/serve-realm.ts",
     "serve:support": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/serve-support.ts",
     "smoke:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/smoke-realm.ts",
+    "smoke:test-realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/smoke-test-realm.ts",
     "test": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts",
     "test:all": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts",
     "test:node": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/test.ts --node-only",

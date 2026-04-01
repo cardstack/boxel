@@ -3,6 +3,8 @@ import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 export interface StubServer {
   stop(): Promise<void>;
   url: string;
@@ -73,7 +75,7 @@ async function startMatrixStubServer(
           parsedBody.identifier?.user !== username ||
           parsedBody.password !== password
         ) {
-          response.writeHead(401, { 'content-type': 'application/json' });
+          response.writeHead(401, { 'content-type': SupportedMimeType.JSON });
           response.end(
             JSON.stringify({
               errcode: 'M_FORBIDDEN',
@@ -191,7 +193,7 @@ async function startPrivateRealmStubServer({
           },
         },
         {
-          'content-type': 'application/vnd.card+source',
+          'content-type': SupportedMimeType.CardSource,
         },
       );
       return;
@@ -227,7 +229,7 @@ export function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), {
     status: 200,
     headers: {
-      'content-type': 'application/json',
+      'content-type': SupportedMimeType.JSON,
     },
   });
 }
@@ -264,7 +266,7 @@ function respondJson(
   headers?: Record<string, string>,
 ): void {
   response.writeHead(200, {
-    'content-type': 'application/json',
+    'content-type': SupportedMimeType.JSON,
     ...headers,
   });
   response.end(JSON.stringify(value));

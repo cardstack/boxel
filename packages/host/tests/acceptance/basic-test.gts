@@ -110,7 +110,7 @@ module('Acceptance | basic tests', function (hooks) {
     await visit('/');
 
     assert.dom('[data-test-workspace-chooser]').exists();
-    await click('[data-test-workspace="Unnamed Workspace"]');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
 
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-index-card]')
@@ -119,7 +119,7 @@ module('Acceptance | basic tests', function (hooks) {
 
   test('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
-    await click('[data-test-workspace="Unnamed Workspace"]');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
 
     const cardContainerElement = find('[data-test-boxel-card-container]');
 

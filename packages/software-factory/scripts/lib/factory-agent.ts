@@ -1,3 +1,5 @@
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import { createBoxelRealmFetch } from '../../src/realm-auth';
 
 import {
@@ -486,8 +488,8 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
       response = await this.fetchImpl(OPENROUTER_CHAT_URL, {
         method: 'POST',
         headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
+          Accept: SupportedMimeType.JSON,
+          'Content-Type': SupportedMimeType.JSON,
         },
         body: JSON.stringify({
           model: this.config.model,
@@ -505,8 +507,8 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
       response = await this.fetchImpl(proxyUrl, {
         method: 'POST',
         headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
+          Accept: SupportedMimeType.JSON,
+          'Content-Type': SupportedMimeType.JSON,
         },
         body: JSON.stringify({
           url: OPENROUTER_CHAT_URL,

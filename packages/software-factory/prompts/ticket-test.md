@@ -16,7 +16,7 @@ Now generate Playwright test specs that verify this implementation.
 
 Tests must:
 
-- Live in the test realm as test spec files
+- Live in the target realm's `Tests/` folder as `Tests/{ticket-slug}.spec.ts`
 - Import from the test fixtures and use the factory test harness
 - Verify that card instances render correctly (fitted, isolated, embedded views)
 - Verify card-specific behavior, field values, and relationships
