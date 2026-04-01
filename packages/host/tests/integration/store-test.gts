@@ -1866,12 +1866,15 @@ module('Integration | Store', function (hooks) {
     });
 
     this.onSave((url, doc) => {
-      assert.strictEqual(url.href, newInstance.id, 'the save url is correct');
-      assert.strictEqual(
-        (doc as SingleCardDocument).data.attributes?.name,
-        'Air',
-        'card data is correct',
-      );
+      // hassan may also save around this time - only assert on newInstance's save
+      if (url.href === newInstance.id) {
+        assert.strictEqual(url.href, newInstance.id, 'the save url is correct');
+        assert.strictEqual(
+          (doc as SingleCardDocument).data.attributes?.name,
+          'Air',
+          'card data is correct',
+        );
+      }
     });
     (newInstance as any).name = 'Air';
   });
