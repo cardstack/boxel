@@ -63,7 +63,6 @@ type SharedRealmHandle = {
 type TestWorkerPortSet = {
   compatRealmServerPort: number;
   realmServerPort: number;
-  workerManagerPort: number;
   prerenderPort: number;
 };
 
@@ -183,8 +182,7 @@ async function allocateTestWorkerPortSet(
     let candidate: TestWorkerPortSet = {
       compatRealmServerPort: blockStart,
       realmServerPort: blockStart + 1,
-      workerManagerPort: blockStart + 2,
-      prerenderPort: blockStart + 3,
+      prerenderPort: blockStart + 2,
     };
     let ports = Object.values(candidate);
     if (
@@ -282,9 +280,6 @@ async function startRealmProcess(
           testWorkerPortSet.compatRealmServerPort,
         ),
         SOFTWARE_FACTORY_REALM_PORT: String(testWorkerPortSet.realmServerPort),
-        SOFTWARE_FACTORY_WORKER_MANAGER_PORT: String(
-          testWorkerPortSet.workerManagerPort,
-        ),
         SOFTWARE_FACTORY_PRERENDER_PORT: String(
           testWorkerPortSet.prerenderPort,
         ),

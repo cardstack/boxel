@@ -140,9 +140,6 @@ export const DEFAULT_REALM_SERVER_PORT = Number(
 export const DEFAULT_COMPAT_REALM_SERVER_PORT = Number(
   process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 0,
 );
-export const DEFAULT_WORKER_MANAGER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_WORKER_MANAGER_PORT ?? 0,
-);
 export const CONFIGURED_REALM_URL = process.env.SOFTWARE_FACTORY_REALM_URL
   ? new URL(process.env.SOFTWARE_FACTORY_REALM_URL)
   : undefined;
