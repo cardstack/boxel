@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyA": "The Gorgeous Hotel",
+      "partyB": "Golden Events (Daisy Chain)",
+      "agreementType": "Preferred Vendor Agreement"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "ContractCard"
+      },
+      "_touched": 1773155928885
+    }
+  }
+}

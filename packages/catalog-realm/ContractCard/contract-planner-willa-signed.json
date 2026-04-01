@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyA": "Daisy Chain (Golden Events)",
+      "partyB": "Willa Karciana",
+      "agreementType": "Event Planning Services",
+      "signedBy": "Willa Karciana",
+      "signedDate": "Jan 7, 2020"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "ContractCard"
+      },
+      "_touched": 1773156006336
+    }
+  }
+}

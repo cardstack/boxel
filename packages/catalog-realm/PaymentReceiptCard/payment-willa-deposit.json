@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "payer": "Willa Karciana",
+      "amount": "$1,500.00",
+      "method": "Visa ending 4411",
+      "reference": "Conf: 4C2WB389"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "PaymentReceiptCard"
+      },
+      "_touched": 1773156248090
+    }
+  }
+}

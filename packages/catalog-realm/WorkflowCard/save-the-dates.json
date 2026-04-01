@@ -1,0 +1,186 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156767133
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "8:27 AM",
+      "category": "Product Ordering",
+      "categoryTone": "support",
+      "title": "Save-the-Dates with Greeting Cards & More",
+      "preview": "The save-the-dates are in the mail...",
+      "contextTitle": "Order Tracking",
+      "progressPercent": 83,
+      "progressTone": "support",
+      "workspaceLabel": "Golden Events",
+      "composerPlaceholder": "Type a message...",
+      "participants": [
+        {
+          "initials": "DC",
+          "name": "Daisy Chain",
+          "role": "Event Planner (Golden Events)",
+          "tone": "advisor"
+        },
+        {
+          "initials": "MT",
+          "name": "Marilyn Tairisol",
+          "role": "Customer Service (Greeting Cards & More)",
+          "tone": "owner"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 14, 4:23 PM",
+          "text": "Thanks for those last-minute edits, we love the final design! I think we're good to go. Do you think you'll be able to send them out by the end of this week?",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "MT",
+          "author": "@MarilynT",
+          "sentAt": "Jul 14, 4:42 PM",
+          "text": "Glad you like it! We need a couple of days to print them, so I can't promise Friday. But Monday should be doable.",
+          "tone": "owner",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 14, 4:53 PM",
+          "text": "Great, please send me a confirmation when they're on their way.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "MT",
+          "author": "@MarilynT",
+          "sentAt": "Jul 14, 5:40 PM",
+          "text": "Will do!",
+          "tone": "owner",
+          "isBot": ""
+        },
+        {
+          "initials": "MT",
+          "author": "@MarilynT",
+          "sentAt": "Jul 21, 8:27 AM",
+          "text": "The save-the-dates are in the mail and should be arriving in the course of this week. Here's the confirmation if you need it.",
+          "tone": "owner",
+          "isBot": ""
+        }
+      ],
+      "steps": [
+        {
+          "label": "Choose vendor",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "tone": "owner",
+                "textContains": "Monday should be doable"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Write content",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "textContains": "last-minute edits"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Finalize design",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "textContains": "final design"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Place order",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "confirmation"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Track delivery",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "linked-card",
+                "attachmentType": "confirmation",
+                "fieldName": "trackingNumber",
+                "comparator": "present",
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "label": "Send payment",
+          "status": "current",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "payment"
+              }
+            ]
+          }
+        }
+      ],
+      "attachments": [
+        {
+          "attachmentType": "confirmation",
+          "typeLabel": "SHIPPING",
+          "status": "Tracking: 32895178214188 · Fredex",
+          "ctaLabel": "Open",
+          "messageRef": "4"
+        }
+      ]
+    },
+    "relationships": {
+      "attachments.0.linkedCard": {
+        "links": {
+          "self": "../ShippingConfirmationCard/shipping-save-dates-2"
+        }
+      }
+    }
+  }
+}

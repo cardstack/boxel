@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "billTo": "Willa Karciana",
+      "lineItems": [
+        {
+          "description": "Wedding Planning Deposit",
+          "amount": "$1,500"
+        }
+      ],
+      "total": "$1,500",
+      "dueDate": "Upon receipt"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "InvoiceDetailCard"
+      },
+      "_touched": 1773156137913
+    }
+  }
+}

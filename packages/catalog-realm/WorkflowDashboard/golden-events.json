@@ -1,0 +1,37 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowDashboard",
+        "module": "../workflow-dashboard"
+      },
+      "_touched": 1773156974347
+    },
+    "type": "card",
+    "attributes": {
+      "dashboardTitle": "Golden Events"
+    },
+    "relationships": {
+      "workflows.0": {
+        "links": {
+          "self": "../WorkflowCard/wedding-wonderland"
+        }
+      },
+      "workflows.1": {
+        "links": {
+          "self": "../WorkflowCard/vendor-agreement-gorgeous"
+        }
+      },
+      "workflows.2": {
+        "links": {
+          "self": "../WorkflowCard/save-the-dates"
+        }
+      },
+      "workflows.3": {
+        "links": {
+          "self": "../WorkflowCard/dj-booking-jimmy-joe"
+        }
+      }
+    }
+  }
+}

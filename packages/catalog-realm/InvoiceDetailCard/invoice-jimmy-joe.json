@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "118",
+      "billTo": "Daisy Chain (Golden Events)",
+      "lineItems": [
+        {
+          "description": "DJ Services (5 hrs @ $220/hr)",
+          "amount": "$1,100.00"
+        },
+        {
+          "description": "Discount (7%)",
+          "amount": "-$77.00"
+        }
+      ],
+      "total": "$1,023.00",
+      "dueDate": "End of next week"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "InvoiceDetailCard"
+      },
+      "_touched": 1773156056525
+    }
+  }
+}

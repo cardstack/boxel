@@ -1,0 +1,442 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156951097
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "9:02 AM",
+      "category": "Event Planning",
+      "categoryTone": "support",
+      "title": "Wedding in Wonderland for @WillaK",
+      "preview": "The save-the-dates are printed and on their way...",
+      "contextTitle": "Wedding Planning",
+      "progressPercent": 71,
+      "progressTone": "support",
+      "workspaceLabel": "Golden Events",
+      "composerPlaceholder": "Type a message...",
+      "participants": [
+        {
+          "initials": "DC",
+          "name": "Daisy Chain",
+          "role": "Wedding Planner (Golden Events)",
+          "tone": "advisor"
+        },
+        {
+          "initials": "WK",
+          "name": "Willa Karciana",
+          "role": "Client (Bride)",
+          "tone": "client"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "WK",
+          "author": "@WillaK",
+          "sentAt": "Jan 6, 3:09 PM",
+          "text": "Dear Miss Chain, I just got engaged to the love of my life, Rufus Jackson. I'm looking for an event planner with style to help me plan my wedding at The Gorgeous. I want my wedding to be one of a kind (the theme will be \"Wedding in Wonderland\"). Are you available in the coming months? I will need full-service.",
+          "tone": "client",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 6, 3:45 PM",
+          "text": "Hi Willa, thank you for your kind message and congrats on your engagement! I would love to help you plan your wedding. I really like the theme you've picked. Could you please fill out this short survey for me?",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 6, 6:35 PM",
+          "text": "Thanks, Willa! Now I have a better understanding of your thoughts and ideas. Here's a proposal that I put together for you.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "WK",
+          "author": "@WillaK",
+          "sentAt": "Jan 6, 9:49 PM",
+          "text": "This is exactly what I had in mind! I knew you would be the perfect choice. So, just send over the contract for me to sign, then I will send you the deposit, and we can get started with the fun part!",
+          "tone": "client",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 7, 9:40 AM",
+          "text": "Fantastic! Here's the finalized contract for you to sign.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "",
+          "author": "System",
+          "sentAt": "Jan 7, 10:57 AM",
+          "text": "Willa Karciana has signed the contract.",
+          "tone": "bot",
+          "isBot": "true"
+        },
+        {
+          "initials": "",
+          "author": "System",
+          "sentAt": "Jan 7, 11:10 AM",
+          "text": "Invoice sent to Willa Karciana. Waiting for payment…",
+          "tone": "bot",
+          "isBot": "true"
+        },
+        {
+          "initials": "",
+          "author": "System",
+          "sentAt": "Jan 7, 2:01 PM",
+          "text": "Willa Karciana has transferred $1,500 to your account. A Wedding Planning Board has been created for you.",
+          "tone": "bot",
+          "isBot": "true"
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 7, 2:27 PM",
+          "text": "Thanks for the deposit, Willa! To get started, I've created a Wedding Planning Board for us, where we can stay organized and keep track of our progress.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "",
+          "author": "System",
+          "sentAt": "Jan 7, 2:37 PM",
+          "text": "Willa Karciana has joined your Wedding Planning Board.",
+          "tone": "bot",
+          "isBot": "true"
+        },
+        {
+          "initials": "",
+          "author": "System",
+          "sentAt": "Jul 20, 5:02 PM",
+          "text": "Daisy has added a document to the Wedding Planning Board.",
+          "tone": "bot",
+          "isBot": "true"
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 20, 5:03 PM",
+          "text": "I just received a quote from our second DJ (Funky Bob). He charges about $100 less than Jimmy Joe and their music repertoires seem to be pretty much the same. Let me know if you have a preference.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "",
+          "author": "System",
+          "sentAt": "Jul 21, 8:58 AM",
+          "text": "Daisy has added a document to the Wedding Planning Board.",
+          "tone": "bot",
+          "isBot": "true"
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 21, 9:02 AM",
+          "text": "The save-the-dates are printed and on their way. You should receive them in the coming days.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "WK",
+          "author": "@WillaK",
+          "sentAt": "Jul 21, 9:52 AM",
+          "text": "Awesome, can't wait to see them! By the way, about the DJ: Rufus spoke to a friend who went to a wedding Jimmy Joe played at. She really loved the music. So, I think we should go with Jimmy, even if he's more expensive.",
+          "tone": "client",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 21, 9:58 AM",
+          "text": "Sounds good, I'll book Jimmy Joe right away.",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jul 20, 7:00 PM",
+          "text": "We'll need to choose a style for the remaining wedding stationery soon (for invitations, programs, menu cards, thank yous and favors). Let me know if you need any help!",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "WK",
+          "author": "@WillaK",
+          "sentAt": "Jul 20, 4:12 PM",
+          "text": "I'll browse a little bit and see what kind of design works for both Rufus and me. I'll let you know once we've found some styles we both like.",
+          "tone": "client",
+          "isBot": ""
+        },
+        {
+          "initials": "DC",
+          "author": "@DaisyChain",
+          "sentAt": "Jan 7, 11:11 AM",
+          "text": "Thank you for signing the contract. Here's the invoice for the deposit I will need in order to get started. I look forward to working with you to plan this beautiful wonderland wedding!",
+          "tone": "advisor",
+          "isBot": ""
+        },
+        {
+          "initials": "WK",
+          "author": "@WillaK",
+          "sentAt": "Jul 20, 7:00 PM",
+          "text": "Thanks for letting me know. I'll talk to Rufus and we'll make a decision tonight.",
+          "tone": "client",
+          "isBot": ""
+        }
+      ],
+      "steps": [
+        {
+          "label": "Receive request",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "form"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Send proposal",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "proposal"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Sign contract",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "linked-card",
+                "attachmentType": "contract",
+                "fieldName": "signedBy",
+                "comparator": "present",
+                "value": ""
+              }
+            ]
+          }
+        },
+        {
+          "label": "Receive deposit",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "payment"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Active planning",
+          "status": "completed",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "attachment",
+                "attachmentType": "workspace"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Wedding day (Jun 5, 2021)",
+          "status": "current",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "message",
+                "textContains": "the wedding day is here"
+              }
+            ]
+          }
+        },
+        {
+          "label": "Final payment ($2,500)",
+          "status": "upcoming",
+          "weight": 1,
+          "predicate": {
+            "group": "any",
+            "conditions": [
+              {
+                "subject": "linked-card",
+                "attachmentType": "payment",
+                "fieldName": "amount",
+                "comparator": "equals",
+                "value": "$2,500.00"
+              }
+            ]
+          }
+        }
+      ],
+      "attachments": [
+        {
+          "attachmentType": "form",
+          "typeLabel": "REQUEST",
+          "status": "90 guests · June 5, 2021 · 18 rooms",
+          "ctaLabel": "View Request",
+          "messageRef": "0"
+        },
+        {
+          "attachmentType": "survey",
+          "typeLabel": "SURVEY",
+          "status": "8 questions",
+          "ctaLabel": "Fill Out Survey",
+          "messageRef": "1"
+        },
+        {
+          "attachmentType": "proposal",
+          "typeLabel": "PROPOSAL",
+          "status": "Golden Wedding Planning Package",
+          "ctaLabel": "Open",
+          "messageRef": "2"
+        },
+        {
+          "attachmentType": "contract",
+          "typeLabel": "CONTRACT",
+          "status": "",
+          "ctaLabel": "Sign",
+          "messageRef": "4"
+        },
+        {
+          "attachmentType": "contract",
+          "typeLabel": "CONTRACT",
+          "status": "Signed",
+          "ctaLabel": "View",
+          "messageRef": "5"
+        },
+        {
+          "attachmentType": "invoice",
+          "typeLabel": "INVOICE",
+          "status": "Deposit: $1,500",
+          "ctaLabel": "View Invoice",
+          "messageRef": "6"
+        },
+        {
+          "attachmentType": "payment",
+          "typeLabel": "PAYMENT",
+          "status": "$1,500 USD · Visa · Conf: 4C2WB389",
+          "ctaLabel": "View Receipt",
+          "messageRef": "7"
+        },
+        {
+          "attachmentType": "workspace",
+          "typeLabel": "BOARD",
+          "status": "Ready",
+          "ctaLabel": "Open",
+          "messageRef": "7"
+        },
+        {
+          "attachmentType": "workspace",
+          "typeLabel": "BOARD",
+          "status": "",
+          "ctaLabel": "Join",
+          "messageRef": "8"
+        },
+        {
+          "attachmentType": "quote",
+          "typeLabel": "QUOTE",
+          "status": "",
+          "ctaLabel": "Open",
+          "messageRef": "10"
+        },
+        {
+          "attachmentType": "confirmation",
+          "typeLabel": "SHIPPING",
+          "status": "Tracking: 32895178214188",
+          "ctaLabel": "Open",
+          "messageRef": "12"
+        }
+      ]
+    },
+    "relationships": {
+      "attachments.0.linkedCard": {
+        "links": {
+          "self": "../ServiceRequestCard/req-willa-wedding"
+        }
+      },
+      "attachments.1.linkedCard": {
+        "links": {
+          "self": "../SurveyCard/survey-wedding-prefs"
+        }
+      },
+      "attachments.2.linkedCard": {
+        "links": {
+          "self": "../ProposalCard/proposal-willa-package"
+        }
+      },
+      "attachments.3.linkedCard": {
+        "links": {
+          "self": "../ContractCard/contract-planner-willa-unsigned"
+        }
+      },
+      "attachments.4.linkedCard": {
+        "links": {
+          "self": "../ContractCard/contract-planner-willa-signed"
+        }
+      },
+      "attachments.5.linkedCard": {
+        "links": {
+          "self": "../InvoiceDetailCard/invoice-willa-deposit"
+        }
+      },
+      "attachments.6.linkedCard": {
+        "links": {
+          "self": "../PaymentReceiptCard/payment-willa-deposit"
+        }
+      },
+      "attachments.7.linkedCard": {
+        "links": {
+          "self": "../WorkspaceBoardCard/board-wedding-planning"
+        }
+      },
+      "attachments.8.linkedCard": {
+        "links": {
+          "self": "../WorkspaceBoardCard/board-wedding-join"
+        }
+      },
+      "attachments.9.linkedCard": {
+        "links": {
+          "self": "../QuoteCard/quote-funky-bob"
+        }
+      },
+      "attachments.10.linkedCard": {
+        "links": {
+          "self": "../ShippingConfirmationCard/shipping-save-dates-1"
+        }
+      }
+    }
+  }
+}

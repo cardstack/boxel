@@ -1,0 +1,89 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156926229
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "Fri",
+      "category": "Listing",
+      "categoryTone": "listing",
+      "title": "Vendor Onboarding - Northstar Design Co.",
+      "preview": "Contract is signed. Waiting on banking details...",
+      "contextTitle": "Onboarding",
+      "progressPercent": 83,
+      "progressTone": "listing",
+      "workspaceLabel": "Threads",
+      "composerPlaceholder": "Type a message...",
+      "participants": [
+        {
+          "initials": "SK",
+          "name": "Sonia Kim",
+          "role": "Operations Lead",
+          "tone": "advisor"
+        },
+        {
+          "initials": "DT",
+          "name": "Drew Tan",
+          "role": "Vendor Admin",
+          "tone": "owner"
+        },
+        {
+          "initials": "NP",
+          "name": "Nina Patel",
+          "role": "Finance Reviewer",
+          "tone": "client"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "SK",
+          "author": "@SoniaKim",
+          "sentAt": "2:02 PM",
+          "text": "Welcome aboard. I linked the onboarding checklist and prefilled the service regions from your intake form so you only need to verify them.",
+          "tone": "advisor",
+          "isBot": null
+        },
+        {
+          "initials": "DT",
+          "author": "@DrewTan",
+          "sentAt": "2:09 PM",
+          "text": "Looks good. The contract is signed and the insurance certificate has been uploaded. We are just waiting on the final banking form from our controller.",
+          "tone": "owner",
+          "isBot": null
+        },
+        {
+          "initials": "NP",
+          "author": "@NinaPatel",
+          "sentAt": "2:16 PM",
+          "text": "Once the ACH form is attached, finance can clear this for payout setup the same day.",
+          "tone": "client",
+          "isBot": null
+        }
+      ],
+      "steps": [
+        {
+          "label": "Submit application",
+          "status": "completed"
+        },
+        {
+          "label": "Sign agreement",
+          "status": "completed"
+        },
+        {
+          "label": "Provide compliance docs",
+          "status": "completed"
+        },
+        {
+          "label": "Add banking details",
+          "status": "current"
+        }
+      ]
+    },
+    "relationships": {}
+  }
+}

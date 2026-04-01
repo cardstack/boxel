@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vendorName": "Daisy Chain",
+      "category": "Event Planning",
+      "specialties": "Weddings, Corporate Events, Galas",
+      "bio": "Boutique event planning with a personal touch. Specializing in creating unforgettable experiences at The Gorgeous Hotel and beyond."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "VendorProfileCard"
+      },
+      "_touched": 1773156531664
+    }
+  }
+}

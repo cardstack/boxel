@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "vendorName": "DJ Funky Bob",
+      "service": "DJ Services",
+      "hours": "5",
+      "rate": "$200/hr",
+      "total": "$923.00",
+      "validUntil": "5 days"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../workflow-cards",
+        "name": "QuoteCard"
+      },
+      "_touched": 1773156296413
+    }
+  }
+}

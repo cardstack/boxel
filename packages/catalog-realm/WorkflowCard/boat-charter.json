@@ -1,0 +1,92 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156659771
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "9:51 AM",
+      "category": "Customer Support",
+      "categoryTone": "support",
+      "title": "Boat Charter for @Charlie1981",
+      "preview": "Here's the invoice, Charlie...",
+      "contextTitle": "Transaction",
+      "progressPercent": 67,
+      "progressTone": "support",
+      "workspaceLabel": "Threads",
+      "composerPlaceholder": "Type a message...",
+      "unreadCount": 2,
+      "participants": [
+        {
+          "initials": "JO",
+          "name": "Jack O'Malley",
+          "role": "Host / Captain",
+          "tone": "captain"
+        },
+        {
+          "initials": "CB",
+          "name": "Charlie Bukowski",
+          "role": "Client",
+          "tone": "client"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "JO",
+          "author": "@CaptainJack",
+          "sentAt": "9:48 AM",
+          "text": "Good news. The Wind Whisperer is still available for June 29, and I penciled in the sunset slot while we sort out the final headcount.",
+          "tone": "captain",
+          "isBot": null
+        },
+        {
+          "initials": "CB",
+          "author": "@Charlie1981",
+          "sentAt": "9:50 AM",
+          "text": "Perfect. We are locked at 10 people now, and everyone voted to add the snorkeling package if it keeps us on the same boat.",
+          "tone": "client",
+          "isBot": null
+        },
+        {
+          "initials": "JO",
+          "author": "@CaptainJack",
+          "sentAt": "10:03 AM",
+          "text": "OK, sounds great. The last step to confirm this open water birthday bash is to put down a deposit. The deposit is 50% of the total and is refundable up to 30 days before the charter.",
+          "tone": "captain",
+          "isBot": null
+        },
+        {
+          "initials": "JO",
+          "author": "@CaptainJack",
+          "sentAt": "10:03 AM",
+          "text": "Here's the invoice, Charlie. As I mentioned, you can pay 50% now to lock in the boat.",
+          "tone": "captain",
+          "isBot": null
+        }
+      ],
+      "steps": [
+        {
+          "label": "Select a boat",
+          "status": "completed"
+        },
+        {
+          "label": "Choose options (2)",
+          "status": "completed"
+        },
+        {
+          "label": "Make a deposit",
+          "status": "current"
+        },
+        {
+          "label": "Confirm booking",
+          "status": "upcoming"
+        }
+      ]
+    },
+    "relationships": {}
+  }
+}

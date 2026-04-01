@@ -1,0 +1,91 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "WorkflowCard",
+        "module": "../workflow-card"
+      },
+      "_touched": 1773156757362
+    },
+    "type": "card",
+    "attributes": {
+      "timeLabel": "Yesterday",
+      "category": "Listing",
+      "categoryTone": "listing",
+      "title": "Property Inquiry - 42 Oak Lane",
+      "preview": "Thank you for your interest...",
+      "contextTitle": "Transaction",
+      "progressPercent": 25,
+      "progressTone": "listing",
+      "workspaceLabel": "Threads",
+      "composerPlaceholder": "Type a message...",
+      "participants": [
+        {
+          "initials": "RE",
+          "name": "Riley Emerson",
+          "role": "Listing Agent",
+          "tone": "advisor"
+        },
+        {
+          "initials": "JM",
+          "name": "Jordan Mills",
+          "role": "Buyer",
+          "tone": "owner"
+        }
+      ],
+      "messages": [
+        {
+          "initials": "RE",
+          "author": "@RileyEmerson",
+          "sentAt": "4:05 PM",
+          "text": "I uploaded the disclosure packet and the seller timeline. They are prioritizing buyers who can move quickly on inspection and financing.",
+          "tone": "advisor",
+          "isBot": null
+        },
+        {
+          "initials": "JM",
+          "author": "@JordanMills",
+          "sentAt": "4:11 PM",
+          "text": "Thanks. The layout looks right for us. Before we tour, can you confirm whether the roof work from 2022 has receipts attached in the packet?",
+          "tone": "owner",
+          "isBot": null
+        },
+        {
+          "initials": "RE",
+          "author": "@RileyEmerson",
+          "sentAt": "4:18 PM",
+          "text": "Thanks for reaching out about 42 Oak Lane. I attached the latest offer sheet and the showing availability for this week.",
+          "tone": "advisor",
+          "isBot": null
+        },
+        {
+          "initials": "JM",
+          "author": "@JordanMills",
+          "sentAt": "4:24 PM",
+          "text": "Perfect. I'd like to schedule a walkthrough for Thursday and confirm whether the seller is open to a repair credit.",
+          "tone": "owner",
+          "isBot": null
+        }
+      ],
+      "steps": [
+        {
+          "label": "Review listing packet",
+          "status": "completed"
+        },
+        {
+          "label": "Confirm tour date",
+          "status": "current"
+        },
+        {
+          "label": "Draft offer",
+          "status": "upcoming"
+        },
+        {
+          "label": "Negotiate terms",
+          "status": "upcoming"
+        }
+      ]
+    },
+    "relationships": {}
+  }
+}
