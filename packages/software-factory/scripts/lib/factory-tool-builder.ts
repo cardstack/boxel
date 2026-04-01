@@ -122,9 +122,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'write_file',
     description:
-      'Write a file to a realm. Uses card+source MIME type so the realm server accepts the raw content as-is. ' +
-      'The path must include the file extension (e.g., "my-card.gts", "Card/1.json"). ' +
-      'For card instances, the caller must include the .json extension.',
+      'Write a file to a realm. The path must include the file extension.',
     parameters: {
       type: 'object',
       properties: {
