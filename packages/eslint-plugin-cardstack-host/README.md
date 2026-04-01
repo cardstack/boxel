@@ -32,7 +32,7 @@ Then configure the rules you want to use under the rules section:
 
 | Name                                                                   | Description                                                                                          | 💼 | 🔧 |
 | :--------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------- | :- | :- |
-| [host-commands-registered](docs/rules/host-commands-registered.md)     | Ensure every host command module is imported, shimmed, and exported                                  |    |    |
+| [host-commands-registered](docs/rules/host-commands-registered.md)     | Ensure every host command module is imported, shimmed, and exported                                  | ✅  |    |
 | [mock-window-only](docs/rules/mock-window-only.md)                     | Enforce use of window mock localStorage                                                              | ✅  | 🔧 |
 | [no-percy-direct-import](docs/rules/no-percy-direct-import.md)         | Forbid importing percySnapshot directly from @percy/ember; use @cardstack/host/tests/helpers instead | ✅  | 🔧 |
 | [wrapped-setup-helpers-only](docs/rules/wrapped-setup-helpers-only.md) | Enforce use of wrapped setup helpers that use ember-window-mock                                      | ✅  |    |

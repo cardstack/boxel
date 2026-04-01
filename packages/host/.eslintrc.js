@@ -18,6 +18,7 @@ const sharedBrowserConfig = {
     'plugin:prettier/recommended',
     'plugin:qunit-dom/recommended',
     'plugin:@cardstack/boxel/recommended',
+    'plugin:cardstack-host/recommended',
   ],
   rules: {
     '@typescript-eslint/consistent-type-imports': [
@@ -41,10 +42,6 @@ const sharedBrowserConfig = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     'no-undef': 'off',
     'ember/no-runloop': 'off',
-    'cardstack-host/mock-window-only': 'error',
-    'cardstack-host/no-percy-direct-import': 'error',
-    'cardstack-host/wrapped-setup-helpers-only': 'error',
-    'cardstack-host/host-commands-registered': 'error',
     'ember/template-no-let-reference': 'off',
     'ember/no-tracked-properties-from-args': 'off',
     'node/no-deprecated-api': 'off',
