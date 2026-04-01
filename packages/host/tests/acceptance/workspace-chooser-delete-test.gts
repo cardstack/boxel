@@ -148,19 +148,19 @@ export class Person extends CardDef {}
 
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
     assert
-      .dom('[data-test-boxel-menu-item-text="Delete workspace"]')
+      .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
       .doesNotHaveAttribute('disabled');
 
     await click(`[data-test-workspace-menu-trigger="${sharedRealmURL}"]`);
     assert
-      .dom('[data-test-boxel-menu-item-text="Delete workspace"]')
+      .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
       .hasAttribute('disabled');
 
     await click(
       `[data-test-workspace-menu-trigger="${delegatedOwnerRealmURL}"]`,
     );
     assert
-      .dom('[data-test-boxel-menu-item-text="Delete workspace"]')
+      .dom('[data-test-boxel-menu-item-text="Delete Workspace"]')
       .doesNotHaveAttribute('disabled');
   });
 
@@ -240,7 +240,7 @@ export class Person extends CardDef {}
     ]);
 
     await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
-    await click('[data-test-boxel-menu-item-text="Delete workspace"]');
+    await click('[data-test-boxel-menu-item-text="Delete Workspace"]');
 
     assert.dom(`[data-test-delete-modal="${ownedRealmURL}"]`).exists();
 
