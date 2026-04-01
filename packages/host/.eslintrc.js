@@ -42,6 +42,7 @@ const sharedBrowserConfig = {
     'no-undef': 'off',
     'ember/no-runloop': 'off',
     'cardstack-host/mock-window-only': 'error',
+    'cardstack-host/no-percy-direct-import': 'error',
     'cardstack-host/wrapped-setup-helpers-only': 'error',
     'cardstack-host/host-commands-registered': 'error',
     'ember/template-no-let-reference': 'off',
