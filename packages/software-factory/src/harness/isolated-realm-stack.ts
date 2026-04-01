@@ -28,7 +28,6 @@ import {
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
   DEFAULT_REALM_SERVER_PORT,
-  DEFAULT_WORKER_MANAGER_PORT,
   findAvailablePort,
   FIXTURE_SOURCE_REALM_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
@@ -296,6 +295,8 @@ export async function startIsolatedRealmStack({
   let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
+  let actualWorkerManagerPort =
+    explicitWorkerManagerPort ?? (await findAvailablePort());
   let actualRealmServerPort =
     DEFAULT_REALM_SERVER_PORT === 0
       ? await findAvailablePort()
@@ -401,7 +402,7 @@ export async function startIsolatedRealmStack({
   let workerArgs = [
     '--transpileOnly',
     'worker-manager',
-    `--port=${explicitWorkerManagerPort ?? DEFAULT_WORKER_MANAGER_PORT}`,
+    `--port=${actualWorkerManagerPort}`,
     `--matrixURL=${context.matrixURL}`,
     `--prerendererUrl=${prerenderURL}`,
     `--fromUrl=${realmURL.href}`,
