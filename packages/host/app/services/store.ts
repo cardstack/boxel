@@ -2132,7 +2132,7 @@ async function withStubbedRenderTimers<T>(cb: () => Promise<T>): Promise<T> {
 // - a directory
 function resolveDocUrl(id?: string, realm?: string, local?: string) {
   if (id) {
-    return id;
+    return isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
   }
   if (!realm) {
     throw new Error('Cannot resolve target url without a realm');
