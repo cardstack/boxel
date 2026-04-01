@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -77,15 +77,18 @@ function ensureBoxelUIDist(hostPackageDir: string): void {
       supportLog.info(
         `symlinking boxel-ui dist from root repo: ${rootRepoBoxelUIDistDir} -> ${boxelUIDistDir}`,
       );
-      let result = spawnSync(
-        'ln',
-        ['-sfn', rootRepoBoxelUIDistDir, boxelUIDistDir],
-        {
-          stdio: 'inherit',
-        },
-      );
-      if (result.status === 0 && boxelUIDistIsUsable(hostPackageDir)) {
-        return;
+      try {
+        if (existsSync(boxelUIDistDir)) {
+          rmSync(boxelUIDistDir, { recursive: true, force: true });
+        }
+        symlinkSync(rootRepoBoxelUIDistDir, boxelUIDistDir);
+        if (boxelUIDistIsUsable(hostPackageDir)) {
+          return;
+        }
+      } catch (error) {
+        supportLog.debug(
+          `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }
@@ -467,11 +470,18 @@ function ensureBoxelIconsDist(): void {
       supportLog.info(
         `symlinking boxel-icons dist from root repo: ${rootRepoIconsDistDir} -> ${distDir}`,
       );
-      let result = spawnSync('ln', ['-sfn', rootRepoIconsDistDir, distDir], {
-        stdio: 'inherit',
-      });
-      if (result.status === 0 && existsSync(join(distDir, '@cardstack'))) {
-        return;
+      try {
+        if (existsSync(distDir)) {
+          rmSync(distDir, { recursive: true, force: true });
+        }
+        symlinkSync(rootRepoIconsDistDir, distDir);
+        if (existsSync(join(distDir, '@cardstack'))) {
+          return;
+        }
+      } catch (error) {
+        supportLog.debug(
+          `symlink failed, will try building instead: ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
   }
@@ -487,6 +497,14 @@ function ensureBoxelIconsDist(): void {
     throw new Error(
       `Failed to build boxel-icons at ${boxelIconsDir} (exit code ${result.status}). ` +
         `Run \`cd ${boxelIconsDir} && pnpm build\` manually to diagnose.`,
+    );
+  }
+  if (
+    !existsSync(join(distDir, '@cardstack')) &&
+    !existsSync(join(distDir, 'index.html'))
+  ) {
+    throw new Error(
+      `Built boxel-icons at ${boxelIconsDir} but dist output is missing at ${distDir}`,
     );
   }
 }
@@ -510,6 +528,11 @@ function startIconServerProcess(): {
   child.stderr?.on('data', (chunk) => {
     captured = `${captured}${String(chunk)}`.slice(-20_000);
   });
+  child.on('error', (err) => {
+    captured = `${captured}\n[icon server spawn error] ${err.message}\n`.slice(
+      -20_000,
+    );
+  });
 
   return {
     child,
@@ -519,7 +542,13 @@ function startIconServerProcess(): {
         try {
           process.kill(-child.pid!, 'SIGTERM');
         } catch {
-          // best effort cleanup
+          // best effort — process may have already exited or negative
+          // PID may not be supported on this platform.
+          try {
+            child.kill('SIGTERM');
+          } catch {
+            // truly best effort
+          }
         }
       }
     },
@@ -560,8 +589,15 @@ async function ensureIconsReady(): Promise<{
               } catch {
                 // fall through
               }
+              // If our process exited due to port contention, the external
+              // server may still be starting up. Keep polling instead of
+              // failing immediately.
+              let logs = server.logs();
+              if (/EADDRINUSE|address already in use/i.test(logs)) {
+                return false;
+              }
               throw new Error(
-                `icons server exited early with code ${server.child.exitCode}\n${server.logs()}`,
+                `icons server exited early with code ${server.child.exitCode}\n${logs}`,
               );
             }
             try {

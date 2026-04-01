@@ -609,37 +609,43 @@ function startIndexingProgressReporter(
   estimatedTotal: number,
 ): { stop: () => void } {
   let stopped = false;
+  let polling = false;
   let lastReported = -1;
   let startedAt = Date.now();
 
   let report = async () => {
-    if (stopped) {
+    if (stopped || polling) {
       return;
     }
-    let { indexed, errors } = await queryIndexedCount(databaseName);
-    if (stopped) {
-      return;
-    }
-    // Only report when the count changes or on the first poll.
-    if (indexed === lastReported) {
-      return;
-    }
-    lastReported = indexed;
+    polling = true;
+    try {
+      let { indexed, errors } = await queryIndexedCount(databaseName);
+      if (stopped) {
+        return;
+      }
+      // Only report when the count changes or on the first poll.
+      if (indexed === lastReported) {
+        return;
+      }
+      lastReported = indexed;
 
-    let elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
-    let errorSuffix = errors > 0 ? ` (${errors} errors)` : '';
-    if (estimatedTotal > 0) {
-      let pct = Math.min(100, Math.round((indexed / estimatedTotal) * 100));
-      let barWidth = 30;
-      let filled = Math.round((pct / 100) * barWidth);
-      let bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
-      process.stderr.write(
-        `\r  indexing [${bar}] ${indexed}/${estimatedTotal} files (${pct}%) ${elapsed}s${errorSuffix}`,
-      );
-    } else {
-      process.stderr.write(
-        `\r  indexing ${indexed} files indexed ${elapsed}s${errorSuffix}`,
-      );
+      let elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
+      let errorSuffix = errors > 0 ? ` (${errors} errors)` : '';
+      if (estimatedTotal > 0) {
+        let pct = Math.min(100, Math.round((indexed / estimatedTotal) * 100));
+        let barWidth = 30;
+        let filled = Math.round((pct / 100) * barWidth);
+        let bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
+        process.stderr.write(
+          `\r  indexing [${bar}] ${indexed}/${estimatedTotal} files (${pct}%) ${elapsed}s${errorSuffix}`,
+        );
+      } else {
+        process.stderr.write(
+          `\r  indexing ${indexed} files indexed ${elapsed}s${errorSuffix}`,
+        );
+      }
+    } finally {
+      polling = false;
     }
   };
 
