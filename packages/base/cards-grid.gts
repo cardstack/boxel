@@ -42,6 +42,7 @@ import {
   realmInfo,
   realmURL,
   type BaseDef,
+  type BoxComponent,
 } from './card-api';
 import type { RealmEventContent } from './matrix-event';
 import { Spec } from './spec';
@@ -100,7 +101,7 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   private cardTypeFilters: FilterOption[] = new TrackedArray();
-  private highlightsCards: BaseDef[] = new TrackedArray();
+  private highlightsCards: BoxComponent[] = new TrackedArray();
   private filterOptions: FilterOption[] = [];
   private viewOptions: ViewOption[] = new TrackedArray([StripView, GridView]);
   private sortOptions: SortOption[] = new TrackedArray(SORT_OPTIONS);
@@ -151,7 +152,7 @@ class Isolated extends Component<typeof CardsGrid> {
     return {
       displayName: 'Highlights',
       icon: HighlightIcon,
-      highlightCards: this.highlightsCards,
+      cards: this.highlightsCards,
     };
   }
 
@@ -367,15 +368,21 @@ class Isolated extends Component<typeof CardsGrid> {
       this.highlightsCards.splice(0, this.highlightsCards.length);
 
       if (welcomeCard) {
-        this.highlightsCards.push(welcomeCard);
+        this.highlightsCards.push(
+          welcomeCard.constructor.getComponent(welcomeCard),
+        );
       }
 
       if (aiAppGeneratorCard) {
-        this.highlightsCards.push(aiAppGeneratorCard);
+        this.highlightsCards.push(
+          aiAppGeneratorCard.constructor.getComponent(aiAppGeneratorCard),
+        );
       }
 
       if (communityCards) {
-        this.highlightsCards.push(communityCards);
+        this.highlightsCards.push(
+          communityCards.constructor.getComponent(communityCards),
+        );
       }
     } catch (error) {
       console.warn('Failed to load highlights cards:', error);

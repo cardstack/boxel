@@ -20,7 +20,7 @@ import {
   type Sort,
 } from '@cardstack/runtime-common';
 
-import type { BaseDef, CardContext, BoxComponent } from '../card-api';
+import type { BoxComponent, CardContext } from '../card-api';
 
 import CardList from './card-list';
 import { htmlSafe } from '@ember/template';
@@ -40,7 +40,6 @@ export interface FilterOption {
   icon?: Icon | string;
   query?: Query;
   cards?: BoxComponent[];
-  highlightCards?: BaseDef[];
   filters?: FilterOption[];
   isExpanded?: boolean;
 }
@@ -349,19 +348,15 @@ export default class CardsGridLayout extends Component<Signature> {
   }
 
   private get welcomeToBoxelCard() {
-    return this.componentFor(this.args.activeFilter.highlightCards?.[0]);
+    return this.args.activeFilter.cards?.[0];
   }
 
   private get aiAppGeneratorCard() {
-    return this.componentFor(this.args.activeFilter.highlightCards?.[1]);
+    return this.args.activeFilter.cards?.[1];
   }
 
   private get communityCards() {
-    return this.componentFor(this.args.activeFilter.highlightCards?.[2]);
-  }
-
-  private componentFor(card: BaseDef | undefined): BoxComponent | undefined {
-    return card?.constructor.getComponent(card);
+    return this.args.activeFilter.cards?.[2];
   }
 
   private isIconString(icon: Icon | string | undefined): icon is string {
