@@ -215,7 +215,7 @@ The agent is given tool functions and calls them directly during its LLM turn. T
    → Session ends
 
 3. Each tool call goes through safety middleware:
-   - write_file routes .gts/.ts → writeModuleSource(), .json → writeCardSource()
+   - write_file writes raw content to the realm via card+source MIME type (path must include extension)
    - realm selection: tool arg realm === 'test' → testRealmUrl, else → targetRealmUrl
    - auth: per-realm JWT from realmTokens[realmUrl]
 
@@ -1682,11 +1682,14 @@ The orchestrator builds `FactoryTool[]` at startup. Each tool has a JSON Schema 
 let writeFileTool: FactoryTool = {
   name: 'write_file',
   description:
-    'Write a file to a realm. Routes .gts/.ts to writeModuleSource, .json to writeCardSource.',
+    'Write a file to a realm. The path must include the file extension.',
   parameters: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: 'Realm-relative file path' },
+      path: {
+        type: 'string',
+        description: 'Realm-relative file path with extension',
+      },
       content: { type: 'string', description: 'File content' },
       realm: {
         type: 'string',
@@ -1699,15 +1702,11 @@ let writeFileTool: FactoryTool = {
   execute: async (args) => {
     let realmUrl = args.realm === 'test' ? testRealmUrl : targetRealmUrl;
     let auth = realmTokens[realmUrl];
-    if (isModuleFile(args.path)) {
-      return writeModuleSource(realmUrl, args.path, args.content, {
-        authorization: auth,
-      });
-    } else {
-      return writeCardSource(realmUrl, args.path, JSON.parse(args.content), {
-        authorization: auth,
-      });
-    }
+    // All files written via writeModuleSource with card+source MIME type.
+    // The realm server accepts raw content as-is regardless of extension.
+    return writeModuleSource(realmUrl, args.path, args.content, {
+      authorization: auth,
+    });
   },
 };
 ```
@@ -1745,6 +1744,7 @@ class ToolExecutor {
   async execute(
     toolName: string,
     toolArgs: Record<string, unknown>,
+    options?: { authorization?: string },
   ): Promise<ToolResult>;
 }
 ```

@@ -227,6 +227,170 @@ export async function writeModuleSource(
 }
 
 // ---------------------------------------------------------------------------
+// Card / File Delete
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete a card or file from a realm.
+ */
+export async function deleteCard(
+  realmUrl: string,
+  cardPath: string,
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let url = new URL(cardPath, ensureTrailingSlash(realmUrl)).href;
+
+  try {
+    let response = await fetchImpl(url, {
+      method: 'DELETE',
+      headers: buildAuthHeaders(options?.authorization),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Atomic Batch Operations
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a batch of operations atomically against a realm.
+ * Operations should be a JSON string of the `atomic:operations` array.
+ */
+export async function atomicOperation(
+  realmUrl: string,
+  operations: string,
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; response?: unknown; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmUrl);
+  let atomicUrl = `${normalizedUrl}_atomic`;
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSONAPI,
+    'Content-Type': SupportedMimeType.JSONAPI,
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  try {
+    let response = await fetchImpl(atomicUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 'atomic:operations': JSON.parse(operations) }),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    let result = await response.json();
+    return { ok: true, response: result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Realm Server Session
+// ---------------------------------------------------------------------------
+
+/**
+ * Obtain a realm server JWT by calling `_server-session`.
+ * Requires a Matrix OpenID token.
+ */
+export async function getServerSession(
+  realmServerUrl: string,
+  openidToken: string,
+  options?: { fetch?: typeof globalThis.fetch; authorization?: string },
+): Promise<{ token?: string; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSON,
+    'Content-Type': SupportedMimeType.JSON,
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  try {
+    let response = await fetchImpl(`${normalizedUrl}_server-session`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ access_token: openidToken }),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        error: `_server-session returned HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    // The server session JWT is returned in the Authorization header
+    let authorizationHeader = response.headers.get('authorization');
+    if (authorizationHeader) {
+      return { token: authorizationHeader };
+    }
+
+    // Fallback: check response body
+    let bodyText = await response.text();
+    if (!bodyText.trim()) {
+      return {
+        error: '_server-session succeeded but no token was returned',
+      };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bodyText);
+    } catch {
+      return {
+        error: '_server-session succeeded but response body was not valid JSON',
+      };
+    }
+
+    let data = parsed as { token?: string };
+    if (typeof data.token === 'string' && data.token.length > 0) {
+      return { token: data.token };
+    }
+
+    return {
+      error: '_server-session succeeded but no token was returned',
+    };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Indexing Job Management
 // ---------------------------------------------------------------------------
 
@@ -295,7 +459,7 @@ export async function createRealm(
     backgroundURL?: string;
     authorization: string;
     fetch?: typeof globalThis.fetch;
-    matrixAuth: {
+    matrixAuth?: {
       userId: string;
       accessToken: string;
       matrixUrl: string;
@@ -327,13 +491,15 @@ export async function createRealm(
       }),
     });
 
+    let matrixAuth = options.matrixAuth;
+
     if (response.ok) {
       let result = (await response.json()) as { data?: { id?: string } };
       let realmUrl = result.data?.id ?? '';
 
-      if (realmUrl) {
+      if (realmUrl && matrixAuth) {
         await addRealmToMatrixAccountData(
-          options.matrixAuth,
+          matrixAuth,
           ensureTrailingSlash(realmUrl),
           fetchImpl,
         );
@@ -354,11 +520,11 @@ export async function createRealm(
 
     // When the realm already exists, ensure it's still registered in the
     // user's Matrix account data so it appears in the Boxel dashboard.
-    if (body.includes('already exists')) {
+    if (body.includes('already exists') && matrixAuth) {
       let urlMatch = body.match(/'(https?:\/\/[^']+)'/);
       if (urlMatch) {
         await addRealmToMatrixAccountData(
-          options.matrixAuth,
+          matrixAuth,
           ensureTrailingSlash(urlMatch[1]),
           fetchImpl,
         );
