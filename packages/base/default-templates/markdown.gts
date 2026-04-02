@@ -56,7 +56,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 }> {
   @tracked monacoContextInternal: any = undefined;
   @tracked cardSlots: CardSlot[] = [];
-  private _modifierHasRun = false;
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
@@ -121,12 +120,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       let baseUrl = this.args.cardReferenceBaseUrl;
       let pendingUpdate = false;
 
-      // On the very first modifier setup, linkedCards is likely still loading
-      // (empty []). We skip showing fallback text on that run to avoid
-      // flashing raw URLs that will soon be replaced by card components.
-      let showFallback = this._modifierHasRun;
-      this._modifierHasRun = true;
-
       let collectSlots = () => {
         let cardsByUrl = new Map<string, CardDef>();
         if (linkedCards?.length) {
@@ -174,22 +167,19 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         // Inject fallback text for unresolvable card refs. Text content was
         // stripped from the HTML in renderedHtml to prevent flash, so the URL
-        // must be read from the data attribute.  We only do this after the
-        // modifier has run once (giving linkedCards time to load).
-        if (showFallback) {
-          let resolvedEls = new Set(slots.map((s) => s.element));
-          for (let el of Array.from(
-            element.querySelectorAll<HTMLElement>(
-              '[data-boxel-bfm-type="card"]',
-            ),
-          )) {
-            if (!resolvedEls.has(el) && el.childElementCount === 0) {
-              let url =
-                el.dataset.boxelBfmInlineRef ||
-                el.dataset.boxelBfmBlockRef ||
-                '';
-              el.textContent = url;
-            }
+        // must be read from the data attribute.
+        let resolvedEls = new Set(slots.map((s) => s.element));
+        for (let el of Array.from(
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-type="card"]',
+          ),
+        )) {
+          if (!resolvedEls.has(el) && el.childElementCount === 0) {
+            let url =
+              el.dataset.boxelBfmInlineRef ||
+              el.dataset.boxelBfmBlockRef ||
+              '';
+            el.textContent = url;
           }
         }
 
