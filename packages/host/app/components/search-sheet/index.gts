@@ -20,6 +20,8 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
+import { type Filter, baseRef } from '@cardstack/runtime-common';
+
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import SearchPanel from '../card-search/panel';
@@ -49,6 +51,7 @@ interface Signature {
     onSearch: (term: string) => void;
     onCardSelect: (cardId: string) => void;
     onInputInsertion?: (element: HTMLElement) => void;
+    onFilterChange?: () => void;
   };
   Blocks: {};
 }
@@ -160,6 +163,10 @@ export default class SearchSheet extends Component<Signature> {
     return this.sheetSize === 'prompt';
   }
 
+  private get baseFilter(): Filter {
+    return { type: baseRef };
+  }
+
   private get searchKeyAsURL() {
     if (!this.searchKeyIsURL) {
       return undefined;
@@ -234,6 +241,8 @@ export default class SearchSheet extends Component<Signature> {
       {{else}}
         <SearchPanel
           @searchKey={{this.searchKey}}
+          @baseFilter={{this.baseFilter}}
+          @onFilterChange={{@onFilterChange}}
           as |Bar Content joinedRealmURLs|
         >
           <Bar

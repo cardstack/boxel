@@ -305,6 +305,12 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchSheetMode = SearchSheetModes.SearchResults;
   }
 
+  @action private expandSearchOnFilterChange() {
+    if (this.searchSheetMode === SearchSheetModes.SearchPrompt) {
+      this.searchSheetMode = SearchSheetModes.SearchResults;
+    }
+  }
+
   @action private openSearchSheetToPrompt() {
     if (this.searchSheetMode === SearchSheetModes.Closed) {
       this.searchSheetMode = SearchSheetModes.SearchPrompt;
@@ -472,6 +478,7 @@ export default class SubmodeLayout extends Component<Signature> {
               @onSearch={{this.expandSearchToShowResults}}
               @onCardSelect={{this.handleCardSelectFromSearch}}
               @onInputInsertion={{this.storeSearchElement}}
+              @onFilterChange={{this.expandSearchOnFilterChange}}
             />
           {{/if}}
           <AiAssistantToast

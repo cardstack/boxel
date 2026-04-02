@@ -477,6 +477,108 @@ module('Integration | operator-mode | ui', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
+  test('search sheet expands to results when realm filter is changed', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    // Open search sheet — should be in prompt (compact) mode
+    await click(`[data-test-open-search-field]`);
+    assert
+      .dom(`[data-test-search-sheet="search-prompt"]`)
+      .exists('search sheet starts in prompt mode');
+
+    // Open realm picker and select a specific realm
+    const trigger =
+      document.querySelector(
+        '[data-test-realm-picker] .ember-power-select-trigger',
+      ) ?? document.querySelector('[data-test-realm-picker]');
+    await click(trigger as HTMLElement);
+    await waitFor('.ember-power-select-option', { timeout: 3000 });
+
+    const options = document.querySelectorAll('.ember-power-select-option');
+    const testRealmOption = Array.from(options).find((el) =>
+      el.textContent?.includes(ctx.realmName),
+    );
+    assert.ok(testRealmOption, `option for "${ctx.realmName}" should exist`);
+    await click(testRealmOption as HTMLElement);
+
+    // Sheet should expand to results mode after selecting a realm filter
+    await waitFor('[data-test-search-sheet="search-results"]', {
+      timeout: 5000,
+    });
+    assert
+      .dom(`[data-test-search-sheet="search-results"]`)
+      .exists('search sheet expands to results after realm filter change');
+
+    // Verify type picker shows all available types
+    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText('Any Type (', 'type picker shows total type count');
+    const typeOptionCount = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+    ).length;
+    assert.ok(
+      typeOptionCount > 2,
+      `type picker shows more than 2 types (got ${typeOptionCount})`,
+    );
+  });
+
+  test('search sheet expands to results when type filter is changed', async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    // Open search sheet — should be in prompt (compact) mode
+    await click(`[data-test-open-search-field]`);
+    assert
+      .dom(`[data-test-search-sheet="search-prompt"]`)
+      .exists('search sheet starts in prompt mode');
+
+    // Open type picker and select a specific type
+    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const typeOptions = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+    );
+    assert.ok(typeOptions.length > 0, 'at least one type option is available');
+    await click(typeOptions[0] as HTMLElement);
+
+    // Sheet should expand to results mode after selecting a type filter
+    await waitFor('[data-test-search-sheet="search-results"]');
+    assert
+      .dom(`[data-test-search-sheet="search-results"]`)
+      .exists('search sheet expands to results after type filter change');
+
+    // Verify type picker shows all available types (re-open picker after sheet expansion)
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .containsText('Any Type (', 'type picker shows total type count');
+    const allTypeOptions = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]',
+    ).length;
+    assert.strictEqual(
+      allTypeOptions,
+      14,
+      `type picker shows 14 types (got ${allTypeOptions})`,
+    );
+  });
+
   test('search sheet shows realm picker when expanded and filters by selected realm', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(

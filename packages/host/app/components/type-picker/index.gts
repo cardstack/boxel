@@ -21,6 +21,10 @@ interface Signature {
 }
 
 export default class TypePicker extends Component<Signature> {
+  // Provide a default selection so Picker's ensureDefaultSelection() never
+  // fires onChange to the parent. Without this, Picker sees an empty @selected
+  // on first render and calls onChange([select-all]), which the parent
+  // interprets as a user-initiated filter change (expanding the search sheet).
   @cached
   get selectAllOption() {
     let count =

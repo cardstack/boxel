@@ -61,6 +61,7 @@ interface Signature {
     availableRealmUrls?: string[];
     consumingRealm?: URL;
     preselectConsumingRealm?: boolean;
+    onFilterChange?: () => void;
   };
   Blocks: {
     default: [
@@ -433,12 +434,14 @@ export default class SearchPanel extends Component<Signature> {
   @action
   private onRealmChange(selected: PickerOption[]) {
     this.selectedRealms = selected;
+    this.args.onFilterChange?.();
   }
 
   @action
   private onTypeChange(selected: PickerOption[]) {
     this._previousSelectedTypes = selected;
     this.typeFilter.selected = selected;
+    this.args.onFilterChange?.();
   }
 
   @action
