@@ -472,7 +472,12 @@ export class MarkdownDef extends FileDef {
     getStream: () => Promise<ByteStream>,
     options: { contentHash?: string } = {},
   ): Promise<
-    SerializedFile<{ title: string; excerpt: string; content: string }>
+    SerializedFile<{
+      title: string;
+      excerpt: string;
+      content: string;
+      cardReferenceUrls: string[];
+    }>
   > {
     let extension = getExtension(url);
     if (!MARKDOWN_EXTENSIONS.has(extension)) {
@@ -497,6 +502,7 @@ export class MarkdownDef extends FileDef {
       title: extractTitle(markdown, fallbackTitle),
       excerpt: extractExcerpt(markdown),
       content: markdown,
+      cardReferenceUrls: extractCardReferenceUrls(markdown, url),
     };
   }
 }
