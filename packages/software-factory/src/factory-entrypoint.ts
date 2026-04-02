@@ -8,6 +8,11 @@ import {
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
+  runFactoryImplement,
+  type ImplementConfig,
+  type ImplementResult,
+} from '../scripts/lib/factory-implement';
+import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
   type FactoryTargetRealmBootstrapResult,
@@ -25,6 +30,7 @@ export interface FactoryEntrypointOptions {
   targetRealmUrl: string | null;
   realmServerUrl: string | null;
   mode: FactoryEntrypointMode;
+  model?: string;
 }
 
 export interface FactoryEntrypointAction {
@@ -47,6 +53,15 @@ export interface FactoryEntrypointBootstrapSummary {
   };
 }
 
+export interface FactoryEntrypointImplementSummary {
+  outcome: ImplementResult['outcome'];
+  iterations: number;
+  ticketId: string;
+  testRealmUrl: string;
+  message?: string;
+  toolCallCount: number;
+}
+
 export interface FactoryEntrypointSummary {
   command: 'factory:go';
   mode: FactoryEntrypointMode;
@@ -57,8 +72,9 @@ export interface FactoryEntrypointSummary {
   };
   bootstrap: FactoryEntrypointBootstrapSummary;
   actions: FactoryEntrypointAction[];
+  implement?: FactoryEntrypointImplementSummary;
   result: {
-    status: 'ready';
+    status: 'ready' | 'completed' | 'failed';
     nextStep: string;
   };
 }
@@ -76,6 +92,7 @@ export interface RunFactoryEntrypointDependencies {
     targetRealmUrl: string,
     options?: FactoryBootstrapOptions,
   ) => Promise<FactoryBootstrapResult>;
+  implement?: (config: ImplementConfig) => Promise<ImplementResult>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -91,6 +108,7 @@ export function getFactoryEntrypointUsage(): string {
     'Options:',
     '  --realm-server-url <url>   Explicit realm server URL for target realm bootstrap',
     '  --mode <mode>               One of: bootstrap, implement, resume',
+    '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
     '  --help                      Show this usage information',
     '',
     'Auth:',
@@ -130,6 +148,9 @@ export function parseFactoryEntrypointArgs(
         mode: {
           type: 'string',
         },
+        model: {
+          type: 'string',
+        },
       },
     });
   } catch (error) {
@@ -153,12 +174,17 @@ export function parseFactoryEntrypointArgs(
       ? normalizeUrl(parsed.values['realm-server-url'], '--realm-server-url')
       : null;
   let mode = parseMode(parsed.values.mode);
+  let model =
+    typeof parsed.values.model === 'string'
+      ? parsed.values.model.trim() || undefined
+      : undefined;
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
     realmServerUrl,
     mode,
+    model,
   };
 }
 
@@ -205,7 +231,48 @@ export async function runFactoryEntrypoint(
     ).href,
   });
 
-  return buildFactoryEntrypointSummary(options, brief, targetRealm, artifacts);
+  let summary = buildFactoryEntrypointSummary(
+    options,
+    brief,
+    targetRealm,
+    artifacts,
+  );
+
+  // Run implement mode if requested
+  if (options.mode === 'implement') {
+    let implementFn = dependencies?.implement ?? runFactoryImplement;
+    let implementResult = await implementFn({
+      briefUrl: options.briefUrl,
+      targetRealmUrl: targetRealm.url,
+      realmServerUrl: targetRealm.serverUrl,
+      ownerUsername: targetRealm.ownerUsername,
+      authorization: targetRealm.authorization,
+      bootstrapResult: artifacts,
+      model: options.model,
+      fetch: dependencies?.fetch,
+    });
+
+    summary.implement = {
+      outcome: implementResult.outcome,
+      iterations: implementResult.iterations,
+      ticketId: implementResult.ticketId,
+      testRealmUrl: implementResult.testRealmUrl,
+      message: implementResult.message,
+      toolCallCount: implementResult.toolCallLog.length,
+    };
+
+    let succeeded =
+      implementResult.outcome === 'tests_passed' ||
+      implementResult.outcome === 'done';
+    summary.result = {
+      status: succeeded ? 'completed' : 'failed',
+      nextStep: succeeded
+        ? 'advance-to-next-ticket'
+        : `implement-${implementResult.outcome}`,
+    };
+  }
+
+  return summary;
 }
 export function buildFactoryEntrypointSummary(
   options: FactoryEntrypointOptions,

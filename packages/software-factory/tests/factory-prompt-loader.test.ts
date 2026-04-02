@@ -458,7 +458,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       result.includes('Implement this ticket'),
       'has implementation instructions',
     );
-    assert.ok(result.includes('invoke_tool'), 'mentions invoke_tool');
+    assert.ok(result.includes('signal_done'), 'mentions signal_done');
   });
 
   test('includes checklist when present', function (assert) {

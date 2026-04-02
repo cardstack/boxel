@@ -2,6 +2,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 
 import { createBoxelRealmFetch } from '../../src/realm-auth';
 
+import type { LoopAgent, AgentRunResult } from './factory-loop';
 import {
   assembleImplementPrompt,
   assembleIteratePrompt,
@@ -10,6 +11,12 @@ import {
   FilePromptLoader,
   type PromptLoader,
 } from './factory-prompt-loader';
+import {
+  DONE_SIGNAL,
+  CLARIFICATION_SIGNAL,
+  type FactoryTool,
+  type ToolCallEntry,
+} from './factory-tool-builder';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -575,6 +582,478 @@ export class MockFactoryAgent implements FactoryAgent {
   }
 
   /** Number of times plan() has been called. */
+  get callCount(): number {
+    return this.callIndex;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tool-use message types (for OpenRouter/OpenAI tool-use protocol)
+// ---------------------------------------------------------------------------
+
+interface ToolUseMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content?: string | null;
+  tool_calls?: OpenRouterToolCall[];
+  tool_call_id?: string;
+}
+
+interface OpenRouterToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface OpenRouterToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
+interface OpenRouterChatResponse {
+  choices?: {
+    message?: {
+      role?: string;
+      content?: string | null;
+      tool_calls?: OpenRouterToolCall[];
+    };
+    finish_reason?: string;
+  }[];
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// ToolUseFactoryAgent — implements LoopAgent with native tool-use
+// ---------------------------------------------------------------------------
+
+/**
+ * Factory agent that uses the LLM's native tool-use protocol.
+ *
+ * Instead of the old declarative model (agent returns AgentAction[] as JSON),
+ * this agent sends tool definitions to the LLM via the API's tools parameter.
+ * The LLM calls tools during its turn, the agent executes them via
+ * FactoryTool.execute(), and returns results to the LLM. The conversation
+ * continues until the LLM calls signal_done/request_clarification or stops
+ * making tool calls.
+ */
+export class ToolUseFactoryAgent implements LoopAgent {
+  private config: FactoryAgentConfig;
+  private fetchImpl: typeof globalThis.fetch;
+  private promptLoader: PromptLoader;
+  readonly useDirectApi: boolean;
+
+  constructor(config: FactoryAgentConfig, promptLoader?: PromptLoader) {
+    this.config = config;
+    this.promptLoader = promptLoader ?? new FilePromptLoader();
+
+    let rawApiKey =
+      process.env.OPENROUTER_API_KEY ?? config.openRouterApiKey ?? undefined;
+    let apiKey =
+      typeof rawApiKey === 'string' ? rawApiKey.trim() || undefined : undefined;
+    this.useDirectApi = apiKey !== undefined;
+
+    if (this.useDirectApi) {
+      let directApiKey = apiKey!;
+      this.fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+        let headers = new Headers(init?.headers);
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', `Bearer ${directApiKey}`);
+        }
+        return globalThis.fetch(input, { ...init, headers });
+      }) as typeof globalThis.fetch;
+    } else {
+      this.fetchImpl = createBoxelRealmFetch(config.realmServerUrl, {
+        authorization: config.authorization?.trim() || undefined,
+      });
+    }
+  }
+
+  async run(
+    context: AgentContext,
+    tools: FactoryTool[],
+  ): Promise<AgentRunResult> {
+    let messages = this.buildMessages(context);
+    let toolDefs = this.buildToolDefinitions(tools);
+    let toolCallLog: ToolCallEntry[] = [];
+
+    // Multi-turn tool-calling loop
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      let response = await this.callOpenRouterWithTools(messages, toolDefs);
+      let choice = response.choices?.[0];
+
+      if (!choice?.message) {
+        throw new Error(
+          `Unexpected OpenRouter response: no choices[0].message in ${JSON.stringify(response).slice(0, 500)}`,
+        );
+      }
+
+      let assistantToolCalls = choice.message.tool_calls;
+
+      // No tool calls — model finished its turn
+      if (!assistantToolCalls || assistantToolCalls.length === 0) {
+        // Model stopped without calling signal_done. If it produced tool
+        // calls in a prior iteration, treat as done. Otherwise needs_iteration.
+        return {
+          status: toolCallLog.length > 0 ? 'done' : 'needs_iteration',
+          toolCalls: toolCallLog,
+          message: choice.message.content ?? undefined,
+        };
+      }
+
+      // Add assistant message (with tool_calls) to conversation history
+      messages.push({
+        role: 'assistant',
+        content: choice.message.content ?? null,
+        tool_calls: assistantToolCalls,
+      });
+
+      // Execute each tool call
+      for (let toolCall of assistantToolCalls) {
+        let toolName = toolCall.function.name;
+        let tool = tools.find((t) => t.name === toolName);
+
+        if (!tool) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({
+              error: `Unknown tool: ${toolName}`,
+            }),
+          });
+          continue;
+        }
+
+        let args: Record<string, unknown>;
+        try {
+          args = JSON.parse(toolCall.function.arguments);
+        } catch {
+          args = {};
+        }
+
+        let start = Date.now();
+        let result: unknown;
+        try {
+          result = await tool.execute(args);
+        } catch (error) {
+          result = {
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        let durationMs = Date.now() - start;
+
+        toolCallLog.push({ tool: toolName, args, result, durationMs });
+
+        // Check for control flow signals
+        if (result && typeof result === 'object' && 'signal' in result) {
+          let signal = (result as Record<string, unknown>).signal;
+          if (signal === DONE_SIGNAL) {
+            // Add tool result to messages so conversation is well-formed
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({ status: 'done' }),
+            });
+            return { status: 'done', toolCalls: toolCallLog };
+          }
+          if (signal === CLARIFICATION_SIGNAL) {
+            let clarificationMessage = (result as Record<string, unknown>)
+              .message as string;
+            messages.push({
+              role: 'tool',
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                status: 'blocked',
+                message: clarificationMessage,
+              }),
+            });
+            return {
+              status: 'blocked',
+              toolCalls: toolCallLog,
+              message: clarificationMessage,
+            };
+          }
+        }
+
+        // Normal tool result — add to conversation
+        messages.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify(result),
+        });
+      }
+    }
+  }
+
+  /**
+   * Build messages for the tool-use agent.
+   *
+   * The system prompt is constructed directly (not from the template) because
+   * the template-based system.md uses the old declarative action model. With
+   * native tool-use, tools are provided via the API parameter, and the agent
+   * calls tools directly rather than outputting a JSON action array.
+   *
+   * The user prompt reuses the ticket-implement / ticket-iterate templates
+   * which are compatible with both models.
+   */
+  private buildMessages(context: AgentContext): ToolUseMessage[] {
+    let systemPrompt = this.buildToolUseSystemPrompt(context);
+
+    let userPrompt: string;
+    if (context.testResults) {
+      userPrompt = this.buildToolUseIteratePrompt(context);
+    } else {
+      userPrompt = assembleImplementPrompt({
+        context,
+        loader: this.promptLoader,
+      });
+    }
+
+    return [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ];
+  }
+
+  /**
+   * Build a system prompt for the tool-use agent. Tools are provided via
+   * the API's native tool definitions, not embedded in the prompt text.
+   */
+  private buildToolUseSystemPrompt(context: AgentContext): string {
+    let parts: string[] = [
+      '# Role',
+      '',
+      'You are a software factory agent. You implement Boxel cards and tests in',
+      'target realms based on ticket descriptions and project context.',
+      '',
+      'You have access to tools for reading and writing files to realms, searching',
+      'realm state, running tests, and signaling completion. Use these tools to',
+      'inspect existing state before making changes — do not guess.',
+      '',
+      '# Rules',
+      '',
+      '- Every ticket must include at least one Playwright test file (via write_file to Tests/).',
+      '- For each top-level card defined in the brief, create a Catalog Spec card',
+      "  in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)",
+      '  and at least one sample card instance linked via linkedExamples.',
+      '- Use search_realm and read_file to inspect existing cards before creating files.',
+      '- If you cannot proceed, call request_clarification with a description of what',
+      '  is blocked.',
+      '- When all implementation and test files have been written, call signal_done.',
+      '- All file operations use the realm HTTP API. Write card definitions as .gts',
+      '  files and card instances as .json files.',
+      '',
+      '# Realms',
+      '',
+      `- Target realm: ${context.targetRealmUrl}`,
+      `- Test realm: ${context.testRealmUrl}`,
+    ];
+
+    // Add skills
+    for (let skill of context.skills) {
+      parts.push('', `# Skill: ${skill.name}`, '', skill.content);
+      if (skill.references) {
+        for (let ref of skill.references) {
+          parts.push('', '### Reference', '', ref);
+        }
+      }
+    }
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Build the iterate prompt for the tool-use agent. Includes the ticket
+   * context, a summary of previous tool calls, and the test failure details.
+   */
+  private buildToolUseIteratePrompt(context: AgentContext): string {
+    let parts: string[] = [];
+
+    // Project context
+    let project = context.project as Record<string, unknown>;
+    if (project.objective) {
+      parts.push('# Project', '', String(project.objective), '');
+    }
+
+    // Ticket context
+    let ticket = context.ticket as Record<string, unknown>;
+    parts.push(
+      '# Current Ticket',
+      '',
+      `ID: ${ticket.id}`,
+      `Summary: ${ticket.summary ?? ''}`,
+      '',
+      'Description:',
+      String(ticket.description ?? ''),
+    );
+
+    // Test results
+    if (context.testResults) {
+      parts.push(
+        '',
+        '# Test Results',
+        '',
+        'The orchestrator ran tests after your previous attempt. They failed.',
+        '',
+        `Status: ${context.testResults.status}`,
+        `Passed: ${context.testResults.passedCount}`,
+        `Failed: ${context.testResults.failedCount}`,
+        `Duration: ${context.testResults.durationMs}ms`,
+      );
+
+      for (let failure of context.testResults.failures) {
+        parts.push('', `## Failure: ${failure.testName}`, '', '```');
+        parts.push(failure.error);
+        parts.push('```');
+        if (failure.stackTrace) {
+          parts.push('', 'Stack trace:', '', '```');
+          parts.push(failure.stackTrace);
+          parts.push('```');
+        }
+      }
+    }
+
+    // Instructions
+    parts.push(
+      '',
+      '# Instructions',
+      '',
+      'Fix the failing tests. You have the same tools available. You can:',
+      '',
+      '- Use read_file to inspect the current state of your implementation',
+      '- Use write_file to update implementation or test files',
+      '- Use search_realm to check what cards exist',
+      '- If the test expectation is wrong, fix the test',
+      '- If the implementation is wrong, fix the implementation',
+      '',
+      'When done, call signal_done.',
+    );
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Convert FactoryTool[] to OpenRouter/OpenAI tool definitions.
+   */
+  private buildToolDefinitions(
+    tools: FactoryTool[],
+  ): OpenRouterToolDefinition[] {
+    return tools.map((tool) => ({
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+      },
+    }));
+  }
+
+  /**
+   * Call OpenRouter with tool definitions.
+   */
+  private async callOpenRouterWithTools(
+    messages: ToolUseMessage[],
+    tools: OpenRouterToolDefinition[],
+  ): Promise<OpenRouterChatResponse> {
+    let url: string;
+    let body: Record<string, unknown> = {
+      model: this.config.model,
+      messages,
+      stream: false,
+    };
+
+    if (tools.length > 0) {
+      body.tools = tools;
+    }
+
+    let response: Response;
+
+    if (this.useDirectApi) {
+      url = OPENROUTER_CHAT_URL;
+      response = await this.fetchImpl(url, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSON,
+          'Content-Type': SupportedMimeType.JSON,
+        },
+        body: JSON.stringify(body),
+      });
+    } else {
+      let proxyUrl = new URL(
+        '_request-forward',
+        this.config.realmServerUrl,
+      ).toString();
+
+      response = await this.fetchImpl(proxyUrl, {
+        method: 'POST',
+        headers: {
+          Accept: SupportedMimeType.JSON,
+          'Content-Type': SupportedMimeType.JSON,
+        },
+        body: JSON.stringify({
+          url: OPENROUTER_CHAT_URL,
+          method: 'POST',
+          requestBody: JSON.stringify(body),
+        }),
+      });
+    }
+
+    if (!response.ok) {
+      let errorText = await response.text();
+      throw new Error(
+        `OpenRouter tool-use request failed: HTTP ${response.status}: ${errorText.slice(0, 500)}`,
+      );
+    }
+
+    return (await response.json()) as OpenRouterChatResponse;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MockLoopAgent — deterministic LoopAgent for testing
+// ---------------------------------------------------------------------------
+
+export class MockLoopAgent implements LoopAgent {
+  private responses: AgentRunResult[];
+  private callIndex = 0;
+
+  /** All inputs received, in order. */
+  readonly receivedContexts: AgentContext[] = [];
+  readonly receivedTools: FactoryTool[][] = [];
+
+  constructor(responses: AgentRunResult[]) {
+    this.responses = responses;
+  }
+
+  async run(
+    context: AgentContext,
+    tools: FactoryTool[],
+  ): Promise<AgentRunResult> {
+    this.receivedContexts.push(context);
+    this.receivedTools.push(tools);
+
+    if (this.callIndex >= this.responses.length) {
+      throw new Error(
+        `MockLoopAgent exhausted: called ${this.callIndex + 1} times ` +
+          `but only ${this.responses.length} response(s) were configured`,
+      );
+    }
+
+    let response = this.responses[this.callIndex];
+    this.callIndex++;
+    return response;
+  }
+
   get callCount(): number {
     return this.callIndex;
   }

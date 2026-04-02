@@ -72,6 +72,7 @@ module('factory-entrypoint', function (hooks) {
       targetRealmUrl,
       realmServerUrl: 'https://realms.example.test/',
       mode: 'implement',
+      model: undefined,
     });
   });
 
@@ -192,6 +193,14 @@ module('factory-entrypoint', function (hooks) {
           createdRealm: false,
         }),
         bootstrapArtifacts: async () => mockBootstrapResult,
+        implement: async () => ({
+          outcome: 'done' as const,
+          iterations: 1,
+          toolCallLog: [],
+          ticketId: 'Tickets/sticky-note-define-core',
+          testRealmUrl:
+            'https://realms.example.test/hassan/personal-test-artifacts/',
+        }),
         fetch: async (_input, init) => {
           assert.strictEqual(
             new Headers(init?.headers).get('Authorization'),
@@ -258,6 +267,14 @@ module('factory-entrypoint', function (hooks) {
           capturedDarkfactoryModuleUrl = options?.darkfactoryModuleUrl;
           return mockBootstrapResult;
         },
+        implement: async () => ({
+          outcome: 'done' as const,
+          iterations: 1,
+          toolCallLog: [],
+          ticketId: 'Tickets/sticky-note-define-core',
+          testRealmUrl:
+            'https://realms.example.test/app/hassan/personal-test-artifacts/',
+        }),
         fetch: async () =>
           new Response(
             JSON.stringify({

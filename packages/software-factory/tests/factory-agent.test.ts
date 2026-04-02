@@ -7,13 +7,21 @@ import {
   AgentResponseParseError,
   FACTORY_DEFAULT_MODEL,
   MockFactoryAgent,
+  MockLoopAgent,
   OpenRouterFactoryAgent,
+  ToolUseFactoryAgent,
   parseActionsFromResponse,
   resolveFactoryModel,
   validateAgentActions,
   type AgentAction,
   type AgentContext,
 } from '../scripts/lib/factory-agent';
+
+import {
+  DONE_SIGNAL,
+  CLARIFICATION_SIGNAL,
+  type FactoryTool,
+} from '../scripts/lib/factory-tool-builder';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -849,3 +857,457 @@ module(
     });
   },
 );
+
+// ---------------------------------------------------------------------------
+// ToolUseFactoryAgent
+// ---------------------------------------------------------------------------
+
+function makeDoneToolCallResponse() {
+  return {
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: {
+                name: 'signal_done',
+                arguments: '{}',
+              },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+  };
+}
+
+function makeClarificationToolCallResponse(message: string) {
+  return {
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: {
+                name: 'request_clarification',
+                arguments: JSON.stringify({ message }),
+              },
+            },
+          ],
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+  };
+}
+
+function makeTextOnlyResponse(text: string) {
+  return {
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: text,
+        },
+        finish_reason: 'stop',
+      },
+    ],
+  };
+}
+
+function makeMultiToolCallResponse(
+  toolCalls: { id: string; name: string; args: string }[],
+) {
+  return {
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: { name: tc.name, arguments: tc.args },
+          })),
+        },
+        finish_reason: 'tool_calls',
+      },
+    ],
+  };
+}
+
+function makeSignalDoneTool(): FactoryTool {
+  return {
+    name: 'signal_done',
+    description: 'Signal done',
+    parameters: { type: 'object', properties: {} },
+    execute: async () => ({ signal: DONE_SIGNAL }),
+  };
+}
+
+function makeClarificationTool(): FactoryTool {
+  return {
+    name: 'request_clarification',
+    description: 'Request clarification',
+    parameters: {
+      type: 'object',
+      properties: { message: { type: 'string' } },
+      required: ['message'],
+    },
+    execute: async (args) => ({
+      signal: CLARIFICATION_SIGNAL,
+      message: args.message as string,
+    }),
+  };
+}
+
+module('factory-agent > ToolUseFactoryAgent', function (hooks) {
+  let originalEnv: string | undefined;
+
+  hooks.beforeEach(function () {
+    originalEnv = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+  });
+
+  hooks.afterEach(function () {
+    if (originalEnv !== undefined) {
+      process.env.OPENROUTER_API_KEY = originalEnv;
+    } else {
+      delete process.env.OPENROUTER_API_KEY;
+    }
+  });
+
+  test('constructor sets useDirectApi from config key', function (assert) {
+    let agent = new ToolUseFactoryAgent({
+      model: 'anthropic/claude-sonnet-4',
+      realmServerUrl: 'https://realms.example.test/',
+      openRouterApiKey: 'sk-or-test-key',
+    });
+    assert.true(agent.useDirectApi);
+  });
+
+  test('constructor uses proxy path when no API key', function (assert) {
+    let agent = new ToolUseFactoryAgent({
+      model: 'anthropic/claude-sonnet-4',
+      realmServerUrl: 'https://realms.example.test/',
+    });
+    assert.false(agent.useDirectApi);
+  });
+
+  test('returns done when agent calls signal_done', async function (assert) {
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(JSON.stringify(makeDoneToolCallResponse()), {
+        status: 200,
+        headers: { 'Content-Type': SupportedMimeType.JSON },
+      });
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let ctx = makeMinimalContext();
+      let tools = [makeSignalDoneTool(), makeClarificationTool()];
+      let result = await agent.run(ctx, tools);
+
+      assert.strictEqual(result.status, 'done');
+      assert.strictEqual(result.toolCalls.length, 1);
+      assert.strictEqual(result.toolCalls[0].tool, 'signal_done');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('returns blocked when agent calls request_clarification', async function (assert) {
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify(
+          makeClarificationToolCallResponse('What color should the notes be?'),
+        ),
+        { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let ctx = makeMinimalContext();
+      let tools = [makeSignalDoneTool(), makeClarificationTool()];
+      let result = await agent.run(ctx, tools);
+
+      assert.strictEqual(result.status, 'blocked');
+      assert.strictEqual(result.message, 'What color should the notes be?');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('returns needs_iteration when LLM stops without tool calls and no prior tool work', async function (assert) {
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify(makeTextOnlyResponse('I need to think about this.')),
+        { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
+      );
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let ctx = makeMinimalContext();
+      let tools = [makeSignalDoneTool()];
+      let result = await agent.run(ctx, tools);
+
+      assert.strictEqual(result.status, 'needs_iteration');
+      assert.strictEqual(result.toolCalls.length, 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('sends tool definitions in the request body', async function (assert) {
+    let capturedBody: string | undefined;
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      capturedBody = typeof init?.body === 'string' ? init.body : undefined;
+      return new Response(JSON.stringify(makeDoneToolCallResponse()), {
+        status: 200,
+        headers: { 'Content-Type': SupportedMimeType.JSON },
+      });
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let ctx = makeMinimalContext();
+      let tools = [makeSignalDoneTool()];
+      await agent.run(ctx, tools);
+
+      let body = JSON.parse(capturedBody!);
+      assert.ok(Array.isArray(body.tools), 'request body has tools array');
+      assert.strictEqual(body.tools.length, 1);
+      assert.strictEqual(body.tools[0].type, 'function');
+      assert.strictEqual(body.tools[0].function.name, 'signal_done');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('multi-turn: executes write_file then signal_done', async function (assert) {
+    let callCount = 0;
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      callCount++;
+      if (callCount === 1) {
+        // First call: LLM wants to write a file
+        return new Response(
+          JSON.stringify(
+            makeMultiToolCallResponse([
+              {
+                id: 'call_1',
+                name: 'write_file',
+                args: JSON.stringify({
+                  path: 'card.gts',
+                  content: 'export class Card {}',
+                }),
+              },
+            ]),
+          ),
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
+        );
+      }
+      // Second call: LLM signals done
+      return new Response(JSON.stringify(makeDoneToolCallResponse()), {
+        status: 200,
+        headers: { 'Content-Type': SupportedMimeType.JSON },
+      });
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let writeTool: FactoryTool = {
+        name: 'write_file',
+        description: 'Write a file',
+        parameters: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            content: { type: 'string' },
+          },
+        },
+        execute: async () => ({ ok: true }),
+      };
+
+      let ctx = makeMinimalContext();
+      let tools = [writeTool, makeSignalDoneTool(), makeClarificationTool()];
+      let result = await agent.run(ctx, tools);
+
+      assert.strictEqual(result.status, 'done');
+      assert.strictEqual(result.toolCalls.length, 2);
+      assert.strictEqual(result.toolCalls[0].tool, 'write_file');
+      assert.strictEqual(result.toolCalls[1].tool, 'signal_done');
+      assert.strictEqual(callCount, 2, 'made two API calls');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('handles unknown tool gracefully', async function (assert) {
+    let callCount = 0;
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      callCount++;
+      if (callCount === 1) {
+        // LLM calls a tool that doesn't exist
+        return new Response(
+          JSON.stringify(
+            makeMultiToolCallResponse([
+              {
+                id: 'call_1',
+                name: 'nonexistent_tool',
+                args: '{}',
+              },
+            ]),
+          ),
+          { status: 200, headers: { 'Content-Type': SupportedMimeType.JSON } },
+        );
+      }
+      return new Response(JSON.stringify(makeDoneToolCallResponse()), {
+        status: 200,
+        headers: { 'Content-Type': SupportedMimeType.JSON },
+      });
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let ctx = makeMinimalContext();
+      let tools = [makeSignalDoneTool()];
+      let result = await agent.run(ctx, tools);
+
+      // Should still complete (unknown tool is logged, agent retries with signal_done)
+      assert.strictEqual(result.status, 'done');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('throws on HTTP error from OpenRouter', async function (assert) {
+    let originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      return new Response('Internal Server Error', { status: 500 });
+    }) as typeof globalThis.fetch;
+
+    try {
+      let agent = new ToolUseFactoryAgent({
+        model: 'anthropic/claude-sonnet-4',
+        realmServerUrl: 'https://realms.example.test/',
+        openRouterApiKey: 'sk-or-test-key',
+      });
+
+      let ctx = makeMinimalContext();
+      let tools = [makeSignalDoneTool()];
+
+      try {
+        await agent.run(ctx, tools);
+        assert.ok(false, 'should have thrown');
+      } catch (error) {
+        assert.ok(
+          (error as Error).message.includes('HTTP 500'),
+          `Error includes HTTP status: ${(error as Error).message}`,
+        );
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MockLoopAgent
+// ---------------------------------------------------------------------------
+
+module('factory-agent > MockLoopAgent', function () {
+  test('returns responses in sequence', async function (assert) {
+    let agent = new MockLoopAgent([
+      { status: 'done', toolCalls: [] },
+      { status: 'blocked', toolCalls: [], message: 'Blocked' },
+    ]);
+
+    let ctx = makeMinimalContext();
+    let tools: FactoryTool[] = [];
+
+    let result1 = await agent.run(ctx, tools);
+    assert.strictEqual(result1.status, 'done');
+
+    let result2 = await agent.run(ctx, tools);
+    assert.strictEqual(result2.status, 'blocked');
+
+    assert.strictEqual(agent.callCount, 2);
+  });
+
+  test('records received contexts and tools', async function (assert) {
+    let agent = new MockLoopAgent([{ status: 'done', toolCalls: [] }]);
+    let ctx = makeMinimalContext({ project: { id: 'Projects/test' } });
+    let tools: FactoryTool[] = [makeSignalDoneTool()];
+
+    await agent.run(ctx, tools);
+
+    assert.strictEqual(agent.receivedContexts.length, 1);
+    assert.strictEqual(agent.receivedContexts[0].project.id, 'Projects/test');
+    assert.strictEqual(agent.receivedTools.length, 1);
+    assert.strictEqual(agent.receivedTools[0].length, 1);
+  });
+
+  test('throws on overrun', async function (assert) {
+    let agent = new MockLoopAgent([{ status: 'done', toolCalls: [] }]);
+    let ctx = makeMinimalContext();
+
+    await agent.run(ctx, []);
+
+    try {
+      await agent.run(ctx, []);
+      assert.ok(false, 'should have thrown');
+    } catch (err) {
+      assert.ok((err as Error).message.includes('exhausted'));
+    }
+  });
+});
