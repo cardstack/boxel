@@ -1,4 +1,4 @@
-import { visit, waitUntil } from '@ember/test-helpers';
+import { visit, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -19,6 +19,8 @@ import {
   setupLocalIndexing,
   setupOnSave,
   setupRealmCacheTeardown,
+  setupAuthEndpoints,
+  setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
@@ -26,6 +28,7 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import visitOperatorMode from '../helpers/visit-operator-mode';
 
 module('Acceptance | markdown file def', function (hooks) {
   setupApplicationTest(hooks);
@@ -210,5 +213,129 @@ Another paragraph follows.`,
       markdownDefCodeRef(),
       'file meta uses markdown def',
     );
+  });
+});
+
+module('Acceptance | markdown BFM card references', function (hooks) {
+  setupApplicationTest(hooks);
+  setupLocalIndexing(hooks);
+  setupOnSave(hooks);
+  setupRealmCacheTeardown(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
+  hooks.beforeEach(async function () {
+    let { createAndJoinRoom } = mockMatrixUtils;
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+    setupUserSubscription();
+    setupAuthEndpoints();
+
+    await withCachedRealmSetup(async () =>
+      setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        contents: {
+          ...SYSTEM_CARD_FIXTURE_CONTENTS,
+          'pet.gts': `
+            import { CardDef, Component, contains, field, StringField } from 'https://cardstack.com/base/card-api';
+            export class Pet extends CardDef {
+              static displayName = 'Pet';
+              @field name = contains(StringField);
+              @field cardTitle = contains(StringField, {
+                computeVia: function () {
+                  return this.name;
+                },
+              });
+              static embedded = class Embedded extends Component {
+                <template>
+                  <div data-test-pet-embedded>
+                    <@fields.name />
+                  </div>
+                </template>
+              };
+              static atom = class Atom extends Component {
+                <template>
+                  <span data-test-pet-atom>{{@model.name}}</span>
+                </template>
+              };
+            }
+          `,
+          'Pet/mango.json': {
+            data: {
+              attributes: { name: 'Mango', cardTitle: 'Mango' },
+              meta: {
+                adoptsFrom: { module: '../pet', name: 'Pet' },
+              },
+            },
+          },
+          'Pet/jackie.json': {
+            data: {
+              attributes: { name: 'Jackie', cardTitle: 'Jackie' },
+              meta: {
+                adoptsFrom: { module: '../pet', name: 'Pet' },
+              },
+            },
+          },
+          'bfm-test.md': [
+            '# BFM Test',
+            '',
+            `Inline reference: :card[${testRealmURL}Pet/mango]`,
+            '',
+            `::card[${testRealmURL}Pet/jackie]`,
+            '',
+            'End of document.',
+          ].join('\n'),
+          'bfm-fallback.md': [
+            '# Fallback Test',
+            '',
+            ':card[https://nonexistent.example/Card/missing]',
+          ].join('\n'),
+        },
+      }),
+    );
+  });
+
+  test('renders inline card reference in atom format and block card reference in embedded format', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [{ id: `${testRealmURL}bfm-test.md`, format: 'isolated' }],
+      ],
+    });
+
+    await waitFor('[data-test-pet-atom]', { timeout: 10000 });
+
+    assert
+      .dom('[data-test-pet-atom]')
+      .exists('inline card reference renders in atom format');
+    assert
+      .dom('[data-test-pet-atom]')
+      .hasText('Mango', 'inline atom shows correct card');
+
+    assert
+      .dom('[data-test-pet-embedded]')
+      .exists('block card reference renders in embedded format');
+    assert.dom('[data-test-pet-embedded]').hasText('Jackie');
+  });
+
+  test('shows fallback text for unresolvable card references', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [{ id: `${testRealmURL}bfm-fallback.md`, format: 'isolated' }],
+      ],
+    });
+
+    await waitFor('[data-test-markdown-isolated]', { timeout: 10000 });
+
+    assert
+      .dom('[data-boxel-bfm-inline-ref]')
+      .hasText(
+        'https://nonexistent.example/Card/missing',
+        'unresolvable reference shows URL as fallback text',
+      );
   });
 });
