@@ -127,14 +127,14 @@ Phase 1 uses HTTP API calls (`realm-operations.ts`) as the primary realm I/O pat
 
 Phase 2 solves both problems: integrate boxel-cli into the monorepo as a first-class package, extend its auth model to handle dynamically created realms, and use it as the primary realm I/O layer.
 
-### Why Boxel-CLI Changes Everything
+### Benefits of a Synced Local Workspace
 
-When boxel-cli is available as a local tool, the agent gains a **synced local workspace** — a directory on the filesystem that mirrors a realm. This is a fundamental shift:
+With boxel-cli, the agent gets a local directory that mirrors a realm:
 
-- **The LLM already knows filesystem tools.** Every coding LLM is fluent with `cat`, `grep`, `ls`, `rm`, file writes, etc. By syncing a realm to a local directory, the agent can inspect and manipulate realm contents using the filesystem tools it's most proficient with — no custom `read_file` / `write_file` / `search_realm` wrapper tools needed for basic operations.
-- **Batch writes become trivial.** Write 10 files locally, then `boxel sync . --prefer-local` to push them all at once. No need for `realm-atomic` batching or per-file HTTP POST calls.
-- **Existing CLI skills become usable.** The 6 CLI skills (`boxel-sync`, `boxel-track`, `boxel-watch`, `boxel-restore`, `boxel-repair`, `boxel-setup`) that were excluded in phase 1 become available to the factory agent.
-- **Test file authoring is natural.** The agent writes `.spec.ts` files to a local directory, and Playwright runs them directly — no need to pull test files from a remote realm to a temp directory first.
+- **LLMs are already fluent with filesystem tools** — `cat`, `grep`, `ls`, `rm`, file writes. No custom `read_file` / `write_file` / `search_realm` wrappers needed for basic operations.
+- **Batch writes are trivial** — write files locally, then `boxel sync . --prefer-local` to push them all at once.
+- **CLI skills become usable** — the 6 CLI skills excluded in phase 1 become available to the factory agent.
+- **Test files run directly** — the agent writes `.spec.ts` files to a local directory and Playwright runs them without pulling from a remote realm first.
 
 ### Monorepo Integration (CS-10520)
 
