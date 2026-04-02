@@ -123,7 +123,9 @@ The `FactoryTool[]` type from phase 1 carries forward unchanged. `AgentRunResult
 
 ## Boxel-CLI Integration
 
-Phase 1 communicates with realms exclusively through HTTP API calls (`realm-operations.ts`) because boxel-cli lacked JWT auth support. Phase 2 integrates boxel-cli as a first-class monorepo package and uses it as the primary realm I/O layer, replacing the HTTP stopgap.
+Phase 1 uses HTTP API calls (`realm-operations.ts`) as the primary realm I/O path. Boxel-cli exists and has profile-based auth, but its auth model isn't flexible enough for the factory's needs — specifically, obtaining auth tokens for newly created realms on the fly. Boxel-cli also lives in a separate repository (`cardstack/boxel-cli`), making it difficult to evolve in lockstep with factory requirements.
+
+Phase 2 solves both problems: integrate boxel-cli into the monorepo as a first-class package, extend its auth model to handle dynamically created realms, and use it as the primary realm I/O layer.
 
 ### Why Boxel-CLI Changes Everything
 
@@ -139,38 +141,37 @@ When boxel-cli is available as a local tool, the agent gains a **synced local wo
 Boxel-cli currently lives in a separate repository (`cardstack/boxel-cli`). Phase 2 moves it into the Boxel monorepo as `packages/boxel-cli`:
 
 1. **Import the package** into `packages/boxel-cli` with its existing source, tests, and build configuration
-2. **Wire it into the monorepo** — add it to the pnpm workspace, ensure it builds alongside other packages
+2. **Wire it into the monorepo** — add it to the pnpm workspace, ensure it builds alongside other packages, integrate with CI (linting, type-checking, test suite)
 3. **Make it a dependency** of `packages/software-factory` so factory scripts can import CLI utilities directly (e.g., sync logic, auth helpers) rather than shelling out to `npx boxel`
 4. **Preserve the standalone CLI** — `npx boxel` and `npm install -g boxel-cli` must continue to work for human users
 
 Being in the monorepo means:
 
 - Changes to boxel-cli and the factory can land in the same PR
-- The factory's CI runs against the exact boxel-cli version it depends on
+- The factory's CI runs against the exact boxel-cli version it depends on — no version drift
+- Boxel-cli gets the same CI rigor as other packages: linting, type-checking, thorough test coverage
 - Shared types and utilities can be extracted to `runtime-common` instead of being duplicated
 
 ### Flexible Auth Support (CS-10529)
 
-Phase 1's boxel-cli lacks the auth flexibility the factory needs. The factory creates new realms on the fly and immediately needs to read/write to them — but boxel-cli's profile-based auth only knows about realms the user has manually configured.
+Boxel-cli already has profile-based auth — users log in via `boxel profile add`, and the CLI uses stored credentials to authenticate with realm servers. But the factory creates new realms on the fly and immediately needs to read/write to them. Profile-based auth only knows about realms the user has manually configured; it has no way to obtain tokens for a realm that was just created seconds ago.
 
-CS-10529 extends boxel-cli auth to support:
+CS-10529 extends boxel-cli's auth model to handle this:
 
-1. **`--jwt <token>` flag** on `boxel pull`, `boxel push`, `boxel sync`, and `boxel status` — allows passing a per-realm JWT directly instead of relying on profile-based auth. This is essential for factory-created realms that don't exist in any profile.
-2. **`--realm-server-jwt <token>` flag** on `boxel create` — allows creating realms with a server-level JWT obtained via `matrixLogin()` + `getRealmServerToken()`.
-3. **Programmatic auth API** — export auth helpers from boxel-cli so the factory can call `createAuthenticatedSync(realmUrl, jwt)` directly, without spawning a subprocess.
-4. **Token refresh callback** — allow callers to provide a function that refreshes expired JWTs, so long-running sync operations don't fail mid-stream.
+1. **Dynamic realm token acquisition** — When boxel-cli authenticates with a realm server (via the existing profile-based flow), it already has a realm server token. After creating a new realm, boxel-cli should automatically obtain and store the per-realm JWT for that realm in its auth state. This means `boxel create` followed by `boxel sync` on the new realm should Just Work — no manual token passing needed.
+2. **Realm server token awareness** — Since boxel-cli authenticates with a realm server as part of its profile flow, the realm server URL and token are already known. Commands like `boxel create` should use this existing auth context rather than requiring the realm server URL or token as explicit CLI arguments.
+3. **Programmatic auth API** — Export auth helpers from boxel-cli so the factory can call sync/push/pull programmatically with the CLI's auth context, without spawning a subprocess.
+4. **Token refresh callback** — Allow callers to provide a function that refreshes expired JWTs, so long-running sync operations don't fail mid-stream.
+
+The key insight is that realm creation and subsequent realm I/O should be a seamless flow within boxel-cli's existing auth model. The factory shouldn't need to manually juggle JWTs — boxel-cli's auth state should absorb newly created realms automatically.
 
 ### Realm Creation via Boxel-CLI
 
-Phase 1 creates realms by calling `POST /_create-realm` directly. Phase 2 moves this to boxel-cli:
+Phase 1 creates realms by calling `POST /_create-realm` directly. Phase 2 moves this into boxel-cli as a first-class command. The exact CLI arguments are still being worked through, but the principle is:
 
-```bash
-boxel create realm --name "Sticky Notes" --endpoint "user/sticky-notes" \
-  --realm-server-url http://localhost:4201/ \
-  --realm-server-jwt "$SERVER_JWT"
-```
-
-This means the agent can create realms using the same tool interface as all other CLI operations. The factory's `factory-target-realm.ts` becomes a thin wrapper that calls boxel-cli rather than making raw HTTP requests.
+- Boxel-cli already knows which realm server it's authenticated with (from the active profile). It should not require the realm server URL as a CLI argument.
+- After creating a realm, boxel-cli incorporates the new realm's auth token into its auth state so subsequent commands (`boxel sync`, `boxel pull`, etc.) work immediately.
+- The factory's `factory-target-realm.ts` becomes a thin wrapper that calls boxel-cli rather than making raw HTTP requests.
 
 ### Refactoring: Sync-First I/O Model
 
@@ -204,8 +205,7 @@ This means:
 Some operations are inherently server-side and cannot be replaced by local file I/O:
 
 - **`realm-search`** — structured queries against the realm index (type filters, field queries, sorting)
-- **`realm-create`** — creating new realms (until boxel-cli absorbs this)
-- **`realm-server-session`** / **`realm-auth`** — JWT management
+- **`realm-server-session`** / **`realm-auth`** — JWT management (may be absorbed into boxel-cli's auth layer)
 - **`pick-ticket`** — ticket queries that filter by status, priority, agent
 
 #### Tool Registry Changes
@@ -228,11 +228,11 @@ The 6 CLI skills excluded in phase 1 (`boxel-sync`, `boxel-track`, `boxel-watch`
 
 The refactor happens in stages to avoid a big-bang rewrite:
 
-1. **Stage 1: Monorepo import** — Move boxel-cli into `packages/boxel-cli`. All existing factory code continues to use HTTP-based realm operations unchanged.
-2. **Stage 2: Auth extension (CS-10529)** — Add `--jwt` flag support and programmatic auth API to boxel-cli. Factory tests verify that `boxel pull --jwt` and `boxel sync --jwt` work with factory-created realm tokens.
+1. **Stage 1: Monorepo import** — Move boxel-cli into `packages/boxel-cli`. Set up CI (linting, type-checking, tests). All existing factory code continues to use HTTP-based realm operations unchanged.
+2. **Stage 2: Auth extension (CS-10529)** — Extend boxel-cli auth to automatically acquire and store tokens for newly created realms. Add programmatic auth API. Factory tests verify that `boxel create` followed by `boxel sync` works seamlessly for factory-created realms.
 3. **Stage 3: Sync-based workspace** — Factory entrypoint syncs the target realm to a local workspace before starting the agent loop. Agent writes files locally. A post-iteration sync pushes changes to the realm.
 4. **Stage 4: Retire HTTP wrappers** — Remove `realm-operations.ts` stopgap functions (`writeModuleSource`, `readCardSource`, `writeCardSource`, `pullRealmFiles`). Replace with boxel-cli calls. Keep `searchRealm` for structured queries.
-5. **Stage 5: Re-enable CLI skills** — Remove the `CLI_ONLY_SKILLS` filter from the skill resolver. Update CLI skill content to reference the `--jwt` flag for factory-context auth.
+5. **Stage 5: Re-enable CLI skills** — Remove the `CLI_ONLY_SKILLS` filter from the skill resolver. Update CLI skill content for the factory agent context.
 
 ### Impact on `factory-tool-builder.ts`
 
