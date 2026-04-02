@@ -11,6 +11,7 @@ import {
   getAncestor,
   SupportedMimeType,
   isResolvedCodeRef,
+  cardIdToURL,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -119,9 +120,10 @@ export default class CardTypeService extends Service {
       return cached;
     }
     let moduleIdentifier = moduleFrom(ref);
+    let moduleURL = cardIdToURL(moduleIdentifier);
     let moduleInfo =
-      this.moduleInfoCache.get(moduleIdentifier) ??
-      (await this.fetchModuleInfo(new URL(moduleIdentifier)));
+      this.moduleInfoCache.get(moduleURL.href) ??
+      (await this.fetchModuleInfo(moduleURL));
 
     let api = await loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
     let { id: _remove, ...fields } = api.getFields(card, {
