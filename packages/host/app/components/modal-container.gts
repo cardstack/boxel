@@ -146,8 +146,13 @@ export default class ModalContainer extends Component<Signature> {
         border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
       }
 
-      .dialog-box__close:hover {
+      .dialog-box__close:hover:not(:disabled) {
         --icon-color: var(--boxel-highlight);
+      }
+
+      .dialog-box__close:disabled {
+        --icon-color: var(--boxel-300);
+        cursor: default;
       }
 
       .dialog-box__footer {
