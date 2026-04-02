@@ -7,9 +7,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { TrackedArray } from 'tracked-built-ins';
-
 import { velcro } from 'ember-velcro';
+import { TrackedArray } from 'tracked-built-ins';
 
 import { ContextButton, Menu } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
