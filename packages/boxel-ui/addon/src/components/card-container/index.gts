@@ -144,6 +144,14 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-caption-font-weight: var(--theme-caption-font-weight, 500);
 
       /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
+      /* font-sizes */
+      --boxel-font-size-2xl: calc(var(--boxel-font-size) * 2.25);
+      --boxel-font-size-xl: calc(var(--boxel-font-size) * 2);
+      --boxel-font-size-lg: calc(var(--boxel-font-size) * 1.375);
+      --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25);
+      --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875);
+      --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75);
+      --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875);
       /* spacing */
       --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--_sp-scale));
       --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--_sp-scale));

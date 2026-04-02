@@ -271,6 +271,13 @@ export class CardContainerCss extends GlimmerComponent<{
     });
   }
 
+  get fontSizeVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars(['--boxel-font-size'], {
+      resolveValues: true,
+    });
+  }
+
   <template>
     <div {{this.captureElement}} ...attributes>
       <p class='card-container-description'>
@@ -344,6 +351,19 @@ export class CardContainerCss extends GlimmerComponent<{
             multiply by the ratio; steps below divide.</p>
           {{#if this.spacingVarsString}}
             <pre class='computed-vars-pre'>{{this.spacingVarsString}}</pre>
+          {{/if}}
+        </div>
+        <div class='computed-vars-group'>
+          <h4>Font Size</h4>
+          <p class='computed-vars-description'><strong><code
+              >--boxel-font-size</code></strong>
+            is set by
+            <strong><code>--theme-body-font-size</code></strong>
+            (default 16px). All steps are scaled from it using fixed multipliers
+            — xs (0.75×), sm (0.875×), md (1.25×), lg (1.375×), xl (2×), 2xl
+            (2.25×).</p>
+          {{#if this.fontSizeVarsString}}
+            <pre class='computed-vars-pre'>{{this.fontSizeVarsString}}</pre>
           {{/if}}
         </div>
         <div class='computed-vars-group'>
