@@ -126,12 +126,14 @@ export interface AgentContext {
   ticket: TicketCard;
   knowledge: KnowledgeArticle[];
   skills: ResolvedSkill[];
-  tools: ToolManifest[];
+  /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
+  tools?: ToolManifest[];
   testResults?: TestResult;
+  /** @deprecated Tool results are now returned inline during the agent's turn. */
   toolResults?: ToolResult[];
-  /** Actions from the previous plan() call, fed back for iteration prompts. */
+  /** @deprecated Replaced by tool call summary in the iteration prompt. */
   previousActions?: AgentAction[];
-  /** Current iteration number (1-based), set by the orchestrator. */
+  /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
   testRealmUrl: string;
