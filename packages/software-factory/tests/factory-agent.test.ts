@@ -373,7 +373,7 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     assert.strictEqual(messages[1].role, 'user');
   });
 
-  test('system message includes action types', function (assert) {
+  test('system message includes tool-use rules', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
@@ -383,12 +383,12 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     let messages = agent.buildMessages(ctx);
 
     assert.ok(
-      messages[0].content.includes('create_file'),
-      'system message mentions create_file',
+      messages[0].content.includes('signal_done'),
+      'system message mentions signal_done',
     );
     assert.ok(
-      messages[0].content.includes('done'),
-      'system message mentions done',
+      messages[0].content.includes('write_file'),
+      'system message mentions write_file',
     );
   });
 
@@ -432,27 +432,19 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     assert.ok(messages[0].content.includes('boxel-development'));
   });
 
-  test('includes tools when present', function (assert) {
+  test('system message includes realm URLs', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
     });
 
-    let ctx = makeMinimalContext({
-      tools: [
-        {
-          name: 'search-realm',
-          description: 'Search cards',
-          category: 'script',
-          args: [],
-          outputFormat: 'json',
-        },
-      ],
-    });
+    let ctx = makeMinimalContext();
     let messages = agent.buildMessages(ctx);
 
-    assert.ok(messages[0].content.includes('search-realm'));
-    assert.ok(messages[0].content.includes('Search cards'));
+    assert.ok(
+      messages[0].content.includes('https://realms.example.test/user/target/'),
+      'system message includes target realm URL',
+    );
   });
 
   test('includes test results in iterate mode', function (assert) {

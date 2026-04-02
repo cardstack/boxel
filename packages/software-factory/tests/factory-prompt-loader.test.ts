@@ -190,18 +190,30 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
 module('factory-prompt-loader > FilePromptLoader', function () {
   test('loads and interpolates a template', function (assert) {
     let loader = new FilePromptLoader();
-    let result = loader.load('action-schema', {});
+    let result = loader.load('system', {
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/test/',
+      skills: [],
+    });
     assert.ok(
-      result.includes('create_file'),
-      'action schema contains create_file',
+      result.includes('signal_done'),
+      'system prompt contains signal_done',
     );
-    assert.ok(result.includes('done'), 'action schema contains done');
+    assert.ok(
+      result.includes('write_file'),
+      'system prompt contains write_file',
+    );
   });
 
   test('caches templates on subsequent loads', function (assert) {
     let loader = new FilePromptLoader();
-    let first = loader.load('action-schema', {});
-    let second = loader.load('action-schema', {});
+    let vars = {
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/test/',
+      skills: [],
+    };
+    let first = loader.load('system', vars);
+    let second = loader.load('system', vars);
     assert.strictEqual(first, second, 'returns identical string from cache');
   });
 
@@ -216,9 +228,14 @@ module('factory-prompt-loader > FilePromptLoader', function () {
 
   test('clearCache allows reloading', function (assert) {
     let loader = new FilePromptLoader();
-    let first = loader.load('action-schema', {});
+    let vars = {
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/test/',
+      skills: [],
+    };
+    let first = loader.load('system', vars);
     loader.clearCache();
-    let second = loader.load('action-schema', {});
+    let second = loader.load('system', vars);
     assert.strictEqual(first, second, 'content is the same after cache clear');
   });
 });
@@ -228,7 +245,7 @@ module('factory-prompt-loader > FilePromptLoader', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-prompt-loader > assembleSystemPrompt', function () {
-  test('includes role and output format', function (assert) {
+  test('includes role and tool-use rules', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext();
     let result = assembleSystemPrompt({ context: ctx, loader });
@@ -238,9 +255,10 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
       'includes role description',
     );
     assert.ok(
-      result.includes('JSON array'),
-      'includes output format instruction',
+      result.includes('signal_done'),
+      'includes signal_done instruction',
     );
+    assert.ok(result.includes('write_file'), 'includes write_file instruction');
   });
 
   test('includes realm URLs', function (assert) {
@@ -254,16 +272,19 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     );
   });
 
-  test('includes action schema', function (assert) {
+  test('includes Catalog Spec instructions', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext();
     let result = assembleSystemPrompt({ context: ctx, loader });
 
     assert.ok(
-      result.includes('create_file'),
-      'action schema is interpolated into system prompt',
+      result.includes('Catalog Spec'),
+      'includes Catalog Spec instructions',
     );
-    assert.ok(result.includes('invoke_tool'), 'includes invoke_tool action');
+    assert.ok(
+      result.includes('linkedExamples'),
+      'includes linkedExamples instruction',
+    );
   });
 
   test('includes skills when present', function (assert) {
@@ -284,34 +305,6 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     assert.ok(result.includes('ref-guide.md'), 'includes skill references');
   });
 
-  test('includes tools when present', function (assert) {
-    let loader = new FilePromptLoader();
-    let ctx = makeMinimalContext({
-      tools: [
-        {
-          name: 'search-realm',
-          description: 'Search for cards in a realm',
-          category: 'script',
-          args: [
-            {
-              name: 'query',
-              type: 'string',
-              required: true,
-              description: 'Search query',
-            },
-          ],
-          outputFormat: 'json',
-        },
-      ],
-    });
-    let result = assembleSystemPrompt({ context: ctx, loader });
-
-    assert.ok(result.includes('search-realm'), 'includes tool name');
-    assert.ok(result.includes('Search for cards'), 'includes tool description');
-    assert.ok(result.includes('query'), 'includes tool arg name');
-    assert.ok(result.includes('required'), 'includes arg required status');
-  });
-
   test('omits skills section when no skills', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({ skills: [] });
@@ -320,15 +313,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     assert.notOk(result.includes('# Skill:'), 'no skill section when empty');
   });
 
-  test('omits tools section when no tools', function (assert) {
-    let loader = new FilePromptLoader();
-    let ctx = makeMinimalContext({ tools: [] });
-    let result = assembleSystemPrompt({ context: ctx, loader });
-
-    assert.notOk(result.includes('# Tool:'), 'no tool section when empty');
-  });
-
-  test('snapshot: system prompt with sample skills and tools', function (assert) {
+  test('snapshot: system prompt with sample skills', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       skills: [
@@ -342,50 +327,21 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
           references: ['test-patterns.md'],
         },
       ],
-      tools: [
-        {
-          name: 'search-realm',
-          description: 'Search cards',
-          category: 'script',
-          args: [
-            {
-              name: 'query',
-              type: 'string',
-              required: true,
-              description: 'Search query',
-            },
-          ],
-          outputFormat: 'json',
-        },
-        {
-          name: 'run-tests',
-          description: 'Run Playwright tests',
-          category: 'script',
-          args: [],
-          outputFormat: 'text',
-        },
-      ],
     });
     let result = assembleSystemPrompt({ context: ctx, loader });
 
     // Verify structural elements are present and correctly ordered
     let roleIdx = result.indexOf('# Role');
-    let outputIdx = result.indexOf('# Output Format');
     let rulesIdx = result.indexOf('# Rules');
     let realmsIdx = result.indexOf('# Realms');
     let skill1Idx = result.indexOf('# Skill: boxel-development');
     let skill2Idx = result.indexOf('# Skill: testing-guide');
-    let tool1Idx = result.indexOf('# Tool: search-realm');
-    let tool2Idx = result.indexOf('# Tool: run-tests');
 
     assert.ok(roleIdx >= 0, 'has Role section');
-    assert.ok(outputIdx > roleIdx, 'Output Format after Role');
-    assert.ok(rulesIdx > outputIdx, 'Rules after Output Format');
+    assert.ok(rulesIdx > roleIdx, 'Rules after Role');
     assert.ok(realmsIdx > rulesIdx, 'Realms after Rules');
     assert.ok(skill1Idx > realmsIdx, 'first skill after Realms');
     assert.ok(skill2Idx > skill1Idx, 'second skill after first');
-    assert.ok(tool1Idx > skill2Idx, 'first tool after skills');
-    assert.ok(tool2Idx > tool1Idx, 'second tool after first');
 
     // Verify content of skill references
     assert.ok(
@@ -775,10 +731,7 @@ module('factory-prompt-loader > assembleTestPrompt', function () {
       'includes file content',
     );
     assert.ok(result.includes('target realm'), 'includes realm');
-    assert.ok(
-      result.includes('create_test'),
-      'instructs to return create_test',
-    );
+    assert.ok(result.includes('signal_done'), 'instructs to call signal_done');
   });
 });
 

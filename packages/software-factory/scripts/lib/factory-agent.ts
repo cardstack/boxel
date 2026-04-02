@@ -38,7 +38,8 @@ import {
 // ---------------------------------------------------------------------------
 
 export * from './factory-agent-types';
-export { ToolUseFactoryAgent, MockLoopAgent } from './factory-agent-tool-use';
+export { ToolUseFactoryAgent } from './factory-agent-tool-use';
+export { MockFactoryAgent, MockLoopAgent } from './factory-agent-mocks';
 
 // ---------------------------------------------------------------------------
 // Validation helpers
@@ -376,41 +377,5 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
     }
 
     return content;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// MockFactoryAgent (declarative plan() model)
-// ---------------------------------------------------------------------------
-
-export class MockFactoryAgent implements FactoryAgent {
-  private responses: AgentAction[][];
-  private callIndex = 0;
-
-  /** All AgentContext inputs received, in order. */
-  readonly receivedContexts: AgentContext[] = [];
-
-  constructor(responses: AgentAction[][]) {
-    this.responses = responses;
-  }
-
-  async plan(context: AgentContext): Promise<AgentAction[]> {
-    this.receivedContexts.push(context);
-
-    if (this.callIndex >= this.responses.length) {
-      throw new Error(
-        `MockFactoryAgent exhausted: called ${this.callIndex + 1} times ` +
-          `but only ${this.responses.length} response(s) were configured`,
-      );
-    }
-
-    let response = this.responses[this.callIndex];
-    this.callIndex++;
-    return response;
-  }
-
-  /** Number of times plan() has been called. */
-  get callCount(): number {
-    return this.callIndex;
   }
 }

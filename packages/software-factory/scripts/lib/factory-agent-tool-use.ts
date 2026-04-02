@@ -22,6 +22,7 @@ import { OPENROUTER_CHAT_URL } from './factory-agent-types';
 import type { LoopAgent, AgentRunResult } from './factory-loop';
 import {
   assembleImplementPrompt,
+  assembleIteratePrompt,
   FilePromptLoader,
   type PromptLoader,
 } from './factory-prompt-loader';
@@ -246,7 +247,12 @@ export class ToolUseFactoryAgent implements LoopAgent {
 
     let userPrompt: string;
     if (context.testResults) {
-      userPrompt = this.buildToolUseIteratePrompt(context);
+      userPrompt = assembleIteratePrompt({
+        context,
+        previousActions: context.previousActions ?? [],
+        iteration: context.iteration ?? 1,
+        loader: this.promptLoader,
+      });
     } else {
       userPrompt = assembleImplementPrompt({
         context,
@@ -262,7 +268,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
 
   /**
    * Build a system prompt for the tool-use agent using the
-   * prompts/system-tool-use.md template. Tools are provided via the API's
+   * prompts/system.md template. Tools are provided via the API's
    * native tool definitions, not embedded in the prompt text.
    */
   private buildToolUseSystemPrompt(context: AgentContext): string {
@@ -272,81 +278,11 @@ export class ToolUseFactoryAgent implements LoopAgent {
       references: s.references ?? [],
     }));
 
-    return this.promptLoader.load('system-tool-use', {
+    return this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
       testRealmUrl: context.testRealmUrl,
       skills,
     });
-  }
-
-  /**
-   * Build the iterate prompt for the tool-use agent. Includes the ticket
-   * context, a summary of previous tool calls, and the test failure details.
-   */
-  private buildToolUseIteratePrompt(context: AgentContext): string {
-    let parts: string[] = [];
-
-    // Project context
-    let project = context.project as Record<string, unknown>;
-    if (project.objective) {
-      parts.push('# Project', '', String(project.objective), '');
-    }
-
-    // Ticket context
-    let ticket = context.ticket as Record<string, unknown>;
-    parts.push(
-      '# Current Ticket',
-      '',
-      `ID: ${ticket.id}`,
-      `Summary: ${ticket.summary ?? ''}`,
-      '',
-      'Description:',
-      String(ticket.description ?? ''),
-    );
-
-    // Test results
-    if (context.testResults) {
-      parts.push(
-        '',
-        '# Test Results',
-        '',
-        'The orchestrator ran tests after your previous attempt. They failed.',
-        '',
-        `Status: ${context.testResults.status}`,
-        `Passed: ${context.testResults.passedCount}`,
-        `Failed: ${context.testResults.failedCount}`,
-        `Duration: ${context.testResults.durationMs}ms`,
-      );
-
-      for (let failure of context.testResults.failures) {
-        parts.push('', `## Failure: ${failure.testName}`, '', '```');
-        parts.push(failure.error);
-        parts.push('```');
-        if (failure.stackTrace) {
-          parts.push('', 'Stack trace:', '', '```');
-          parts.push(failure.stackTrace);
-          parts.push('```');
-        }
-      }
-    }
-
-    // Instructions
-    parts.push(
-      '',
-      '# Instructions',
-      '',
-      'Fix the failing tests. You have the same tools available. You can:',
-      '',
-      '- Use read_file to inspect the current state of your implementation',
-      '- Use write_file to update implementation or test files',
-      '- Use search_realm to check what cards exist',
-      '- If the test expectation is wrong, fix the test',
-      '- If the implementation is wrong, fix the implementation',
-      '',
-      'When done, call signal_done.',
-    );
-
-    return parts.join('\n');
   }
 
   /**
@@ -421,45 +357,5 @@ export class ToolUseFactoryAgent implements LoopAgent {
     }
 
     return (await response.json()) as OpenRouterChatResponse;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// MockLoopAgent — deterministic LoopAgent for testing
-// ---------------------------------------------------------------------------
-
-export class MockLoopAgent implements LoopAgent {
-  private responses: AgentRunResult[];
-  private callIndex = 0;
-
-  /** All inputs received, in order. */
-  readonly receivedContexts: AgentContext[] = [];
-  readonly receivedTools: FactoryTool[][] = [];
-
-  constructor(responses: AgentRunResult[]) {
-    this.responses = responses;
-  }
-
-  async run(
-    context: AgentContext,
-    tools: FactoryTool[],
-  ): Promise<AgentRunResult> {
-    this.receivedContexts.push(context);
-    this.receivedTools.push(tools);
-
-    if (this.callIndex >= this.responses.length) {
-      throw new Error(
-        `MockLoopAgent exhausted: called ${this.callIndex + 1} times ` +
-          `but only ${this.responses.length} response(s) were configured`,
-      );
-    }
-
-    let response = this.responses[this.callIndex];
-    this.callIndex++;
-    return response;
-  }
-
-  get callCount(): number {
-    return this.callIndex;
   }
 }
