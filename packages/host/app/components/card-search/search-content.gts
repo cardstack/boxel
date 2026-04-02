@@ -644,7 +644,6 @@ export default class SearchContent extends Component<Signature> {
         display: flex;
         flex-direction: column;
         flex: 1;
-        overflow-x: hidden;
         overflow-y: auto;
         overscroll-behavior: none;
         height: 100%;
