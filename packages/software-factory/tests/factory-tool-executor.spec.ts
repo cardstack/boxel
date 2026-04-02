@@ -168,7 +168,7 @@ test('realm-delete removes a card from the test realm', async ({ realm }) => {
           name: 'CardDef',
         },
         eq: {
-          'id': `${realm.realmURL.href}ToolExecutorTest/delete-test`,
+          id: `${realm.realmURL.href}ToolExecutorTest/delete-test`,
         },
       },
     }),
@@ -367,10 +367,13 @@ test.describe('realm-search on a private realm', () => {
       authorization: `Bearer ${unauthorizedToken}`,
     });
 
-    let unauthorizedResult = await unauthorizedExecutor.execute('realm-search', {
-      'realm-url': realm.realmURL.href,
-      query: searchQuery,
-    });
+    let unauthorizedResult = await unauthorizedExecutor.execute(
+      'realm-search',
+      {
+        'realm-url': realm.realmURL.href,
+        query: searchQuery,
+      },
+    );
 
     expect(
       unauthorizedResult.exitCode,
