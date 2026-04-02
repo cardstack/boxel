@@ -3,6 +3,8 @@ name: boxel-repair
 description: Use when a Boxel workspace has broken realm metadata, missing icons or backgrounds, bad `index.json` or `cards-grid.json` links, or stale Matrix realm metadata that needs `boxel repair-realm` or `boxel repair-realms`.
 ---
 
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.
+
 # Boxel Repair
 
 Use this workflow when a workspace has any of these symptoms:
