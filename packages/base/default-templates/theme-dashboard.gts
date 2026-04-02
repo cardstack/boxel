@@ -143,13 +143,22 @@ export class CardContainerCss extends GlimmerComponent<{
     };
   });
 
-  private get currentSpacingRatio(): string {
+  private get currentScale(): string {
     void this.args.cssVariables;
     let el = this.cardElement;
     if (!el) return '1.333';
     return (
-      getComputedStyle(el).getPropertyValue('--theme-spacing-ratio').trim() ||
-      '1.333'
+      getComputedStyle(el).getPropertyValue('--theme-scale').trim() || '1.333'
+    );
+  }
+
+  private get currentFontSize(): string {
+    void this.args.cssVariables;
+    let el = this.cardElement;
+    if (!el) return '16px';
+    return (
+      getComputedStyle(el).getPropertyValue('--boxel-font-size').trim() ||
+      '16px'
     );
   }
 
@@ -157,9 +166,7 @@ export class CardContainerCss extends GlimmerComponent<{
     void this.args.cssVariables;
     let el = this.cardElement;
     if (!el) return '0.25rem';
-    return (
-      getComputedStyle(el).getPropertyValue('--spacing').trim() || '0.25rem'
-    );
+    return getComputedStyle(el).getPropertyValue('--boxel-sp').trim() || '1rem';
   }
 
   private collectBoxelVars(
@@ -278,12 +285,18 @@ export class CardContainerCss extends GlimmerComponent<{
     });
   }
 
+  get fontScaleVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars(['--boxel-fs'], { resolveValues: true });
+  }
+
   <template>
     <div {{this.captureElement}} ...attributes>
       <p class='card-container-description'>
         When a theme is set, the card container applies your theme variables to
-        set its background, text color, border radius, typography, and spacing
-        scale. Theme variables are mapped to
+        set its background, font color, border-radius, typography and spacing
+        scale. Typography settings are optional — Boxel defaults are used when
+        not overridden. All theme variables are mapped to
         <code>--boxel-*</code>
         internals with Boxel defaults as fallbacks.
       </p>
@@ -295,10 +308,16 @@ export class CardContainerCss extends GlimmerComponent<{
             <dt><code>--foreground</code></dt><dd>color</dd>
             <dt><code>--border</code></dt><dd>border color (when boundaries
               shown)</dd>
-            <dt><code>--radius</code></dt><dd>base border-radius (all steps)</dd>
-            <dt><code>--spacing * 4</code></dt><dd>base spacing (all steps)</dd>
-            <dt><code>--theme-spacing-ratio</code></dt><dd>step scale ratio
+            <dt><code>--radius</code></dt><dd>base border-radius (all steps,
+              base default: 0.625rem [10px])</dd>
+            <dt><code>--spacing * 4</code></dt><dd>base spacing (all steps, base
+              default: 0.25rem * 4 = 1rem [16px])</dd>
+            <dt><code>--theme-font-size</code></dt><dd>base font-size (all
+              steps, default 1rem [16px])</dd>
+            <dt><code>--theme-scale</code></dt><dd>type and spacing scale ratio
               (default 1.333)</dd>
+            <dt><code>--font-sans</code></dt><dd>font-family (default: IBM Plex
+              Sans, sans-serif)</dd>
           </dl>
         </div>
         <div class='card-container-mapping-group'>
@@ -315,37 +334,27 @@ export class CardContainerCss extends GlimmerComponent<{
           </dl>
         </div>
         <div class='card-container-mapping-group'>
-          <h4>Typography</h4>
+          <h4>Typography <em>(optional overrides)</em></h4>
           <dl>
-            <dt><code>--font-sans</code></dt><dd>font-family (all levels)</dd>
             <dt><code>--boxel-heading-*</code></dt><dd>h1</dd>
             <dt><code>--boxel-section-heading-*</code></dt><dd>h2</dd>
             <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
-            <dt><code>--boxel-body-*</code></dt><dd>p, base</dd>
+            <dt><code>--boxel-body-*</code></dt><dd>p</dd>
             <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
           </dl>
         </div>
       </div>
       <h3 class='computed-vars-heading'>Computed CSS Variables</h3>
       <div class='computed-vars-section'>
-        <div class='computed-vars-group computed-vars-group--full'>
-          <h4>Typography</h4>
-          <p class='computed-vars-description'>Font family defaults to
-            <code>--font-sans</code>
-            across all levels, falling back to the Boxel default font.</p>
-          {{#if this.typographyVarsString}}
-            <pre class='computed-vars-pre'>{{this.typographyVarsString}}</pre>
-          {{/if}}
-        </div>
         <div class='computed-vars-group'>
           <h4>Spacing</h4>
           <p class='computed-vars-description'>Each step is scaled by
-            <strong><code>--theme-spacing-ratio</code></strong>
+            <strong><code>--theme-scale</code></strong>
             (currently
-            <strong>{{this.currentSpacingRatio}}</strong>) from the base
-            <strong><code>--boxel-sp</code>
-              = 4 ×
-              <code>--spacing</code></strong>
+            <strong>{{this.currentScale}}</strong>) from the base
+            <strong><code>--spacing</code></strong>
+            * 4 =
+            <strong><code>--boxel-sp</code></strong>
             (currently
             <strong>{{this.currentSpacing}}</strong>). Steps above the base
             multiply by the ratio; steps below divide.</p>
@@ -358,12 +367,27 @@ export class CardContainerCss extends GlimmerComponent<{
           <p class='computed-vars-description'><strong><code
               >--boxel-font-size</code></strong>
             is set by
-            <strong><code>--theme-body-font-size</code></strong>
-            (default 16px). All steps are scaled from it using fixed multipliers
-            — xs (0.75×), sm (0.875×), md (1.25×), lg (1.375×), xl (2×), 2xl
-            (2.25×).</p>
+            <strong><code>--theme-font-size</code></strong>
+            (currently
+            <strong>{{this.currentFontSize}}</strong>).</p>
+
+          <p class='computed-vars-description'><strong><code
+              >--boxel-font-size-*</code></strong>
+            use fixed multipliers from that base (2xs 0.6875×, xs 0.75×, sm
+            0.875×, md 1.25×, lg 1.375×, xl 2×, 2xl 2.25×).</p>
           {{#if this.fontSizeVarsString}}
             <pre class='computed-vars-pre'>{{this.fontSizeVarsString}}</pre>
+          {{/if}}
+          <p class='computed-vars-description'><strong><code
+              >--boxel-fs</code></strong>
+            aliases the base, and
+            <strong><code>--boxel-fs-*</code></strong>
+            use a ratio scale driven by
+            <strong><code>--theme-scale</code></strong>
+            (currently
+            <strong>{{this.currentScale}}</strong>).</p>
+          {{#if this.fontScaleVarsString}}
+            <pre class='computed-vars-pre'>{{this.fontScaleVarsString}}</pre>
           {{/if}}
         </div>
         <div class='computed-vars-group'>

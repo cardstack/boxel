@@ -818,17 +818,18 @@ export default class BrandGuide extends DetailedStyleRef {
       }
       let brandRules = this.calculateBrandRuleMap();
       let markMap = this.markUsage?.cssRuleMap;
+      const toUrlValue = (url?: string) => (url ? `url(${url})` : undefined);
       let rootMarkAliases = new Map([
-        ['--brand-primary-mark', markMap?.get('--brand-primary-mark-1')],
-        ['--brand-secondary-mark', markMap?.get('--brand-secondary-mark-1')],
-        ['--brand-primary-mark-greyscale', markMap?.get('--brand-primary-mark-greyscale-1')],
-        ['--brand-secondary-mark-greyscale', markMap?.get('--brand-secondary-mark-greyscale-1')],
+        ['--brand-primary-mark', toUrlValue(markMap?.get('--brand-primary-mark-1'))],
+        ['--brand-secondary-mark', toUrlValue(markMap?.get('--brand-secondary-mark-1'))],
+        ['--brand-primary-mark-greyscale', toUrlValue(markMap?.get('--brand-primary-mark-greyscale-1'))],
+        ['--brand-secondary-mark-greyscale', toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-1'))],
       ].filter(([, v]) => v) as [string, string][]);
       let darkMarkAliases = new Map([
-        ['--brand-primary-mark', markMap?.get('--brand-primary-mark-2')],
-        ['--brand-secondary-mark', markMap?.get('--brand-secondary-mark-2')],
-        ['--brand-primary-mark-greyscale', markMap?.get('--brand-primary-mark-greyscale-2')],
-        ['--brand-secondary-mark-greyscale', markMap?.get('--brand-secondary-mark-greyscale-2')],
+        ['--brand-primary-mark', toUrlValue(markMap?.get('--brand-primary-mark-2'))],
+        ['--brand-secondary-mark', toUrlValue(markMap?.get('--brand-secondary-mark-2'))],
+        ['--brand-primary-mark-greyscale', toUrlValue(markMap?.get('--brand-primary-mark-greyscale-2'))],
+        ['--brand-secondary-mark-greyscale', toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-2'))],
       ].filter(([, v]) => v) as [string, string][]);
       let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules, rootMarkAliases);
       let darkRules = mergeRuleMaps(

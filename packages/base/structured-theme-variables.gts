@@ -35,6 +35,17 @@ export type CssVariableField = Record<string, any>;
 const COLOR_VALUE_INPUT_HELP =
   'Use CSS color values such as hex (#ff00ff), rgb(...), hsl(...), or okhcl(...).';
 
+const TYPESCALE_OPTIONS = [
+  { value: '1.067', label: 'Minor Second (1.067)' },
+  { value: '1.125', label: 'Major Second (1.125)' },
+  { value: '1.200', label: 'Minor Third (1.200)' },
+  { value: '1.250', label: 'Major Third (1.250)' },
+  { value: '1.333', label: 'Perfect Fourth (1.333)' },
+  { value: '1.414', label: 'Augmented Fourth (1.414)' },
+  { value: '1.500', label: 'Perfect Fifth (1.500)' },
+  { value: '1.618', label: 'Golden Ratio (1.618)' },
+];
+
 function describeColor(base: string) {
   return `${base} ${COLOR_VALUE_INPUT_HELP}`;
 }
@@ -120,10 +131,8 @@ export class ThemeTypographyField extends FieldDef {
   @field caption = contains(TypographyField, {
     description: 'Caption/annotation and small text typography settings.',
   });
-
   get cssVariableFields(): CssVariableFieldEntry[] | undefined {
-    let cssVariableFields = calculateTypographyVariables(this, 'theme');
-    return cssVariableFields;
+    return calculateTypographyVariables(this, 'theme');
   }
 
   get cssRuleMap(): CssRuleMap | undefined {
@@ -177,6 +186,7 @@ export class ThemeTypographyField extends FieldDef {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp);
+          word-break: break-word;
         }
         h1,
         h2,
@@ -186,6 +196,7 @@ export class ThemeTypographyField extends FieldDef {
         h6,
         p {
           margin: 0;
+          word-break: break-word;
         }
       </style>
     </template>
@@ -449,22 +460,15 @@ export default class ThemeVarField extends FieldDef {
     description:
       'Specifies a quarter of the base value for spacing properties such as padding, margin, gap. For example, if a gap of 1rem is desired, enter 0.25rem.',
   });
-  @field themeSpacingRatio = contains(
-    enumField(StringField, {
-      options: [
-        { value: '1.067', label: 'Minor Second (1.067)' },
-        { value: '1.125', label: 'Major Second (1.125)' },
-        { value: '1.200', label: 'Minor Third (1.200)' },
-        { value: '1.250', label: 'Major Third (1.250)' },
-        { value: '1.333', label: 'Perfect Fourth (1.333)' },
-        { value: '1.414', label: 'Augmented Fourth (1.414)' },
-        { value: '1.500', label: 'Perfect Fifth (1.500)' },
-        { value: '1.618', label: 'Golden Ratio (1.618)' },
-      ],
-    }),
+  @field themeFontSize = contains(CSSValueField, {
+    description:
+      'Base font size used to derive all --boxel-font-size-* and --boxel-fs-* steps. Defaults to 1rem (16px).',
+  });
+  @field themeScale = contains(
+    enumField(StringField, { options: TYPESCALE_OPTIONS }),
     {
       description:
-        'Scale ratio used to derive spacing steps from the base --boxel-sp value. Defaults to Perfect Fourth (1.333).',
+        'Typescale ratio used to derive --boxel-fs-* (font-size) steps and --boxel-sp-* (spacing) steps from the base --boxel-font-size and --boxel-sp values, respectively (both default to 1rem - 16px). Scale defaults to Perfect Fourth (1.333).',
     },
   );
   @field trackingNormal = contains(CSSValueField, {
