@@ -186,6 +186,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         return slots;
       };
 
+      // Deferred via scheduleOnce to avoid Glimmer backtracking assertion.
+      // The didChange guard prevents an infinite loop: MutationObserver fires
+      // when #in-element renders cards → collectSlots → set cardSlots →
+      // re-render → observer fires again.
       let updateSlots = () => {
         pendingUpdate = false;
         let nextSlots = collectSlots();
@@ -217,6 +221,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
       scheduleUpdate();
 
+      // MutationObserver re-collects slots when the DOM is reconstructed
+      // (e.g. after browser back-navigation rebuilds the element's children).
       if (typeof MutationObserver === 'undefined') {
         return;
       }
