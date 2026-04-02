@@ -8,7 +8,7 @@ module.exports = {
       description:
         'Ensure every host command module is imported, shimmed, and exported',
       category: 'Best Practices',
-      recommended: false,
+      recommended: true,
     },
     schema: [],
   },
