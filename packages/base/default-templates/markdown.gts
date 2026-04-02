@@ -10,7 +10,7 @@ import {
   preloadMarkdownLanguages,
   resolveCardReference,
 } from '@cardstack/runtime-common';
-import { type BaseDef, getComponent } from '../card-api';
+import { type BaseDef, type CardDef, getComponent } from '../card-api';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -45,7 +45,7 @@ function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
 export default class MarkDownTemplate extends GlimmerComponent<{
   Args: {
     content: string | null;
-    linkedCards?: BaseDef[] | null;
+    linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
   };
 }> {
@@ -100,17 +100,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       let linkedCards = this.args.linkedCards;
       let baseUrl = this.args.cardReferenceBaseUrl;
 
-      if (!linkedCards?.length) {
-        if (this.cardSlots.length > 0) {
-          this.cardSlots = [];
-        }
-        return;
-      }
-
-      let cardsByUrl = new Map<string, BaseDef>();
-      for (let card of linkedCards) {
-        if (card?.id) {
-          cardsByUrl.set(card.id, card);
+      let cardsByUrl = new Map<string, CardDef>();
+      if (linkedCards?.length) {
+        for (let card of linkedCards) {
+          if (card?.id) {
+            cardsByUrl.set(card.id, card);
+          }
         }
       }
 
