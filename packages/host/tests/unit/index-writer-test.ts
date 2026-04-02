@@ -13,7 +13,6 @@ import {
   type IndexedInstance,
   type BoxelIndexTable,
   type CardResource,
-  type RealmInfo,
 } from '@cardstack/runtime-common';
 import { CachingDefinitionLookup } from '@cardstack/runtime-common/definition-lookup';
 import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
@@ -32,17 +31,6 @@ import {
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealmURL2 = `http://test-realm/test2/`;
-const testRealmInfo: RealmInfo = {
-  name: 'Test Realm',
-  backgroundURL: null,
-  iconURL: null,
-  showAsCatalog: null,
-  interactHome: null,
-  hostHome: null,
-  visibility: 'public',
-  publishable: null,
-  lastPublishedAt: null,
-};
 const testRealmURLObject = new URL(testRealmURL);
 
 type RealmMetaValue = {
@@ -570,7 +558,7 @@ module('Unit | index-writer', function (hooks) {
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL2));
-    await batch.copyFrom(new URL(testRealmURL), testRealmInfo);
+    await batch.copyFrom(new URL(testRealmURL));
     await batch.done();
 
     let results = (await adapter.execute(
@@ -603,7 +591,6 @@ module('Unit | index-writer', function (hooks) {
           meta: {
             ...resource.meta,
             realmURL: testRealmURL2,
-            realmInfo: testRealmInfo,
           },
         },
         error_doc: null,
@@ -657,7 +644,7 @@ module('Unit | index-writer', function (hooks) {
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL2));
     try {
-      await batch.copyFrom(new URL(testRealmURL), testRealmInfo);
+      await batch.copyFrom(new URL(testRealmURL));
       throw new Error('Expected error to be thrown');
     } catch (e: any) {
       assert.strictEqual(

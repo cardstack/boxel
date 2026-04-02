@@ -512,7 +512,6 @@ export class IndexRunner {
         jobInfo: this.#jobInfo,
         prerenderer: this.#prerenderer,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
-        ensureRealmInfo: () => this.ensureRealmInfo(),
         dependencyResolver: this.#dependencyResolver,
         updateEntry: async (entryURL, entry) =>
           await this.updateEntry(entryURL, entry),

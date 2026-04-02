@@ -1,5 +1,10 @@
 # Instructions for AI Agents
 
+## Type checking
+
+- Use `glint` (not `glint --declaration`) for type checking. The `--declaration` flag emits hundreds of `.d.ts` files that pollute the working tree.
+- Never use `tsc` directly — this project uses glint for type checking.
+
 ## Tooling prerequisites
 
 - We pin the toolchain with [mise](https://mise.jdx.dev/) (`.mise.toml`), which manages Node.js and pnpm versions. Run `mise install` from the repo root to get the correct versions—avoid global installs outside mise.
