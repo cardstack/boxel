@@ -213,14 +213,11 @@ export default class Directory extends Component<Args> {
   @tracked private menuTriggerEl?: HTMLElement;
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
   private menuEntryPath?: LocalPath;
-  private closeMenuTimer?: ReturnType<typeof setTimeout>;
-
   constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     registerDestructor(this, () => {
       this.menuEntryPath = undefined;
       this.menuTriggerEl = undefined;
-      clearTimeout(this.closeMenuTimer);
       document.removeEventListener('pointerdown', this.handleOutsideClick);
     });
   }
@@ -278,7 +275,6 @@ export default class Directory extends Component<Args> {
   private closeMenu() {
     this.menuEntryPath = undefined;
     this.menuTriggerEl = undefined;
-    clearTimeout(this.closeMenuTimer);
     document.removeEventListener('pointerdown', this.handleOutsideClick);
   }
 
@@ -289,26 +285,25 @@ export default class Directory extends Component<Args> {
     }
     e.preventDefault();
     e.stopPropagation();
+    if (this.menuTriggerEl === e.currentTarget) {
+      this.closeMenu();
+      return;
+    }
     this.menuEntryPath = entryPath;
     this.menuTriggerEl = e.currentTarget as HTMLElement;
-    this.startCloseMenuTimer();
     document.addEventListener('pointerdown', this.handleOutsideClick);
   }
 
   @action
   private handleOutsideClick(e: PointerEvent) {
     const menu = document.querySelector('.file-tree-context-menu');
-    if (menu && !menu.contains(e.target as Node)) {
+    if (
+      menu &&
+      !menu.contains(e.target as Node) &&
+      !this.menuTriggerEl?.contains(e.target as Node)
+    ) {
       this.closeMenu();
     }
-  }
-
-  @action
-  private startCloseMenuTimer() {
-    clearTimeout(this.closeMenuTimer);
-    this.closeMenuTimer = setTimeout(() => {
-      this.closeMenu();
-    }, 800);
   }
 
   @action
