@@ -7,10 +7,7 @@ import type { TokenizerAndRendererExtension } from 'marked';
 const FENCED_CODE_RE = /```[\s\S]*?```/g;
 const INLINE_CODE_RE = /`([^`]+)`/g;
 
-function resolveUrl(
-  ref: string,
-  baseUrl: string | undefined,
-): string | null {
+function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
   try {
     return resolveCardReference(ref, baseUrl || undefined);
   } catch {
@@ -119,7 +116,7 @@ export function bfmExtensionsForKeyword(
       },
       renderer(token) {
         let url = escapeHtml((token as any).url);
-        return `<div data-boxel-bfm-block-ref="${url}" data-boxel-bfm-type="${keyword}"></div>\n`;
+        return `<div data-boxel-bfm-block-ref="${url}" data-boxel-bfm-type="${keyword}">${url}</div>\n`;
       },
     },
     {
@@ -153,7 +150,7 @@ export function bfmExtensionsForKeyword(
       },
       renderer(token) {
         let url = escapeHtml((token as any).url);
-        return `<span data-boxel-bfm-inline-ref="${url}" data-boxel-bfm-type="${keyword}"></span>`;
+        return `<span data-boxel-bfm-inline-ref="${url}" data-boxel-bfm-type="${keyword}">${url}</span>`;
       },
     },
   ];
