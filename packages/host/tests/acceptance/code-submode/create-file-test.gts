@@ -906,15 +906,21 @@ export class TestCard extends Person {
       let createClickPromise = click('[data-test-create-definition]');
 
       // Wait for the POST to be intercepted (task is now mid-creation)
-      await waitUntil(() => postIntercepted);
+      await waitUntil(() => postIntercepted, {
+        timeout: 10000,
+        timeoutMessage: 'Timed out waiting for save POST to be intercepted',
+      });
 
       // Attempt to dismiss the modal while creation is in-flight using raw
       // DOM click (we can't use ember's click helper here because it awaits
       // settled, which won't resolve while the creation task is blocked)
-      let cancelBtn = document.querySelector(
-        '[data-test-cancel-create-file]',
-      ) as HTMLElement;
-      cancelBtn.click();
+      let cancelBtn = document.querySelector('[data-test-cancel-create-file]');
+      if (!cancelBtn) {
+        throw new Error(
+          'Could not find [data-test-cancel-create-file] button while creation is in progress',
+        );
+      }
+      (cancelBtn as HTMLElement).click();
 
       // Modal should still be open because creation is in progress
       assert
