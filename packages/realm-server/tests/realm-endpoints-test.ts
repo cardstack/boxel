@@ -262,6 +262,59 @@ module(basename(__filename), function () {
       });
     });
 
+    test('file meta for markdown with card references includes sideloaded linked cards', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await testRealm.write(
+        'card-refs.md',
+        `# Card References\n\nInline ref: :card[${testRealmHref}hassan]\n\n::card[${testRealmHref}jade]\n`,
+      );
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let response = await request
+        .get(`/card-refs.md`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let json = response.body;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}markdown-file-def`,
+        name: 'MarkdownDef',
+      });
+
+      // The linkedCards query relationship should be populated
+      let linkedCards = json.data.relationships?.linkedCards;
+      assert.ok(linkedCards, 'linkedCards relationship is present');
+      assert.ok(
+        linkedCards?.links?.search,
+        'linkedCards has a search link',
+      );
+
+      // Sideloaded included resources should contain the referenced cards
+      assert.ok(json.included, 'response has included resources');
+      let includedIds = (json.included ?? []).map(
+        (r: { id: string }) => r.id,
+      );
+      assert.true(
+        includedIds.some((id: string) => id.includes('hassan')),
+        'included resources contain hassan card',
+      );
+      assert.true(
+        includedIds.some((id: string) => id.includes('jade')),
+        'included resources contain jade card',
+      );
+    });
+
     test('sets canonical path header for nested module requests', async function (assert) {
       let response = await request
         .get(`/nested/example`)
