@@ -53,7 +53,7 @@ import {
   OpenRouterFactoryAgent,
   resolveFactoryModel,
   type AgentContext,
-} from './lib/factory-agent';
+} from '../lib/factory-agent';
 
 async function main(): Promise<void> {
   let argv = process.argv.slice(2);

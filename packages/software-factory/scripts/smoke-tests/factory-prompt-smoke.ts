@@ -14,7 +14,7 @@
 
 import { parseArgs } from 'node:util';
 
-import type { AgentAction, AgentContext } from './lib/factory-agent';
+import type { AgentAction, AgentContext } from '../lib/factory-agent';
 
 import {
   assembleImplementPrompt,
@@ -23,7 +23,7 @@ import {
   assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
-} from './lib/factory-prompt-loader';
+} from '../lib/factory-prompt-loader';
 
 // ---------------------------------------------------------------------------
 // Sample data

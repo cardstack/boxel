@@ -16,8 +16,8 @@ import {
   SkillLoader,
   enforceSkillBudget,
   estimateTokens,
-} from './lib/factory-skill-loader';
-import type { ProjectCard, TicketCard } from './lib/factory-agent';
+} from '../lib/factory-skill-loader';
+import type { ProjectCard, TicketCard } from '../lib/factory-agent';
 
 const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   {
