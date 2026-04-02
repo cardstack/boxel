@@ -17,7 +17,9 @@ import {
   StringField,
   contains,
   field,
+  getCardMeta,
   getDataBucket,
+  realmURL,
 } from './card-api';
 import NumberField from './number';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
@@ -78,6 +80,11 @@ export class FileDef extends BaseDef {
   static isFileDef = true;
   static icon = FileIcon;
   [isSavedInstance] = true;
+
+  get [realmURL](): URL | undefined {
+    let realmURLString = getCardMeta(this, 'realmURL');
+    return realmURLString ? new URL(realmURLString) : undefined;
+  }
 
   static assignInitialFieldValue(
     instance: BaseDef,
