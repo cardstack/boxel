@@ -7,9 +7,11 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-
 import type { ToolResult } from './factory-agent';
+import {
+  STATIC_FALLBACK_SCHEMAS,
+  buildCardDocument,
+} from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { executeTestRunFromRealm } from './test-run-execution';
@@ -19,6 +21,7 @@ import {
   writeCardSource,
   readCardSource,
   searchRealm,
+  runRealmCommand,
   ensureTrailingSlash,
   type RealmFetchOptions,
 } from './realm-operations';
@@ -57,6 +60,18 @@ export interface ToolBuilderConfig {
   };
   /** Override for executeTestRunFromRealm (injectable for testing). */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
+  /** Realm server URL for /run-command calls (e.g., "http://localhost:4201/"). */
+  realmServerUrl?: string;
+  /** Matrix user ID for prerenderer affinity routing. */
+  userId?: string;
+  /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
+  cardTypeSchemas?: Map<
+    string,
+    {
+      attributes: Record<string, unknown>;
+      relationships?: Record<string, unknown>;
+    }
+  >;
 }
 
 export interface ToolCallEntry {
@@ -99,9 +114,11 @@ export function buildFactoryTools(
     buildWriteFileTool(config),
     buildReadFileTool(config),
     buildSearchRealmTool(config),
+    buildUpdateProjectTool(config),
     buildUpdateTicketTool(config),
     buildCreateKnowledgeTool(config),
     buildRunTestsTool(config),
+    buildRunCommandTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
@@ -209,7 +226,64 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
+/**
+ * Resolve the schema for a card type from runtime cache or static fallback.
+ */
+function resolveCardSchema(
+  config: ToolBuilderConfig,
+  cardName: string,
+): {
+  attributes: Record<string, unknown>;
+  relationships: Record<string, unknown>;
+} {
+  let cached = config.cardTypeSchemas?.get(cardName);
+  let fallback = STATIC_FALLBACK_SCHEMAS[cardName];
+  return {
+    attributes: cached?.attributes ?? fallback?.attributes ?? {},
+    relationships: cached?.relationships ?? fallback?.relationships ?? {},
+  };
+}
+
+function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Project');
+  return {
+    name: 'update_project',
+    description:
+      'Update a project card in the target realm (e.g., update status or success criteria).',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
+        },
+        attributes: schema.attributes,
+        relationships: schema.relationships,
+      },
+      required: ['path', 'attributes'],
+    },
+    execute: async (args) => {
+      let path = args.path as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+      let document = buildCardDocument(
+        'Project',
+        realmUrl,
+        attributes,
+        relationships,
+      );
+      return writeCardSource(realmUrl, path, document, fetchOptions);
+    },
+  };
+}
+
 function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Ticket');
   return {
     name: 'update_ticket',
     description: 'Update a ticket card in the target realm.',
@@ -221,34 +295,32 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
           description:
             'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
         },
-        content: {
-          type: 'string',
-          description: 'Card source JSON content',
-        },
+        attributes: schema.attributes,
+        relationships: schema.relationships,
       },
-      required: ['path', 'content'],
+      required: ['path', 'attributes'],
     },
     execute: async (args) => {
       let path = args.path as string;
-      let content = args.content as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
-
-      let document: LooseSingleCardDocument;
-      try {
-        document = JSON.parse(content) as LooseSingleCardDocument;
-      } catch {
-        return {
-          ok: false,
-          error: `Failed to parse update_ticket content as JSON: ${path}`,
-        };
-      }
+      let document = buildCardDocument(
+        'Ticket',
+        realmUrl,
+        attributes,
+        relationships,
+      );
       return writeCardSource(realmUrl, path, document, fetchOptions);
     },
   };
 }
 
 function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'KnowledgeArticle');
   return {
     name: 'create_knowledge',
     description:
@@ -261,28 +333,25 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
           description:
             'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
         },
-        content: {
-          type: 'string',
-          description: 'Card source JSON content',
-        },
+        attributes: schema.attributes,
+        relationships: schema.relationships,
       },
-      required: ['path', 'content'],
+      required: ['path', 'attributes'],
     },
     execute: async (args) => {
       let path = args.path as string;
-      let content = args.content as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
-
-      let document: LooseSingleCardDocument;
-      try {
-        document = JSON.parse(content) as LooseSingleCardDocument;
-      } catch {
-        return {
-          ok: false,
-          error: `Failed to parse create_knowledge content as JSON: ${path}`,
-        };
-      }
+      let document = buildCardDocument(
+        'KnowledgeArticle',
+        realmUrl,
+        attributes,
+        relationships,
+      );
       return writeCardSource(realmUrl, path, document, fetchOptions);
     },
   };
@@ -382,6 +451,51 @@ function buildRequestClarificationTool(): FactoryTool {
         signal: CLARIFICATION_SIGNAL,
         message: args.message as string,
       } as ClarificationResult;
+    },
+  };
+}
+
+function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'run_command',
+    description:
+      'Execute a host command on the realm server via the prerenderer. ' +
+      'Commands run in browser context with full card runtime access. ' +
+      'Use "@cardstack/boxel-host/commands/<name>/default" as the command specifier.',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description:
+            'Command specifier (e.g., "@cardstack/boxel-host/commands/get-card-type-schema/default")',
+        },
+        commandInput: {
+          type: 'object',
+          description: 'Optional input for the command',
+        },
+      },
+      required: ['command'],
+    },
+    execute: async (args) => {
+      if (!config.realmServerUrl || !config.serverToken || !config.userId) {
+        return {
+          status: 'error',
+          error:
+            'run_command requires realmServerUrl, serverToken, and userId in config',
+        };
+      }
+      return runRealmCommand(
+        config.realmServerUrl,
+        config.targetRealmUrl,
+        args.command as string,
+        args.commandInput as Record<string, unknown> | undefined,
+        {
+          authorization: config.serverToken,
+          userId: config.userId,
+          fetch: config.fetch,
+        },
+      );
     },
   };
 }

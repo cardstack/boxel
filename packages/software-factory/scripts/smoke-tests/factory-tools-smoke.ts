@@ -266,10 +266,10 @@ async function main(): Promise<void> {
   let toolNames = factoryTools.map((t) => t.name);
   console.log(`  Built ${factoryTools.length} tools:`);
   console.log(
-    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'update_ticket', 'create_knowledge', 'signal_done', 'request_clarification'].includes(n)).join(', ')}`,
+    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'update_project', 'update_ticket', 'create_knowledge', 'run_command', 'signal_done', 'request_clarification'].includes(n)).join(', ')}`,
   );
   console.log(
-    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'update_ticket', 'create_knowledge', 'signal_done', 'request_clarification'].includes(n)).join(', ')}`,
+    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'update_project', 'update_ticket', 'create_knowledge', 'run_command', 'signal_done', 'request_clarification'].includes(n)).join(', ')}`,
   );
   console.log('');
 
