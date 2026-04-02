@@ -365,7 +365,14 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-fallback.md`,
     });
 
-    await waitFor('[data-test-markdown-isolated]', { timeout: 10000 });
+    // Fallback text is only injected after the modifier's second run
+    // (first run skips it while linkedCards is loading).
+    await waitUntil(
+      () =>
+        document.querySelector('[data-boxel-bfm-inline-ref]')?.textContent ===
+        'https://nonexistent.example/Card/missing',
+      { timeout: 10000 },
+    );
 
     assert
       .dom('[data-boxel-bfm-inline-ref]')

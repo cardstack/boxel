@@ -56,6 +56,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 }> {
   @tracked monacoContextInternal: any = undefined;
   @tracked cardSlots: CardSlot[] = [];
+  // Tracks whether the modifier has run at least once. On the first run,
+  // linkedCards is likely still loading (empty []) so we skip fallback text
+  // injection to avoid flashing raw URLs for cards that will soon resolve.
+  private _modifierHasRun = false;
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
@@ -119,6 +123,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       let linkedCards = this.args.linkedCards;
       let baseUrl = this.args.cardReferenceBaseUrl;
       let pendingUpdate = false;
+      let showFallback = this._modifierHasRun;
+      this._modifierHasRun = true;
 
       let collectSlots = () => {
         let cardsByUrl = new Map<string, CardDef>();
@@ -142,6 +148,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           let resolved = resolveUrl(rawUrl, baseUrl);
           let card = cardsByUrl.get(resolved);
           if (card) {
+            if (el.firstChild?.nodeType === Node.TEXT_NODE) {
+              el.firstChild.remove();
+            }
             slots.push({ element: el, card, format: 'atom', kind: 'inline' });
           }
         }
@@ -156,6 +165,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           let resolved = resolveUrl(rawUrl, baseUrl);
           let card = cardsByUrl.get(resolved);
           if (card) {
+            if (el.firstChild?.nodeType === Node.TEXT_NODE) {
+              el.firstChild.remove();
+            }
             slots.push({
               element: el,
               card,
@@ -167,19 +179,27 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         // Inject fallback text for unresolvable card refs. Text content was
         // stripped from the HTML in renderedHtml to prevent flash, so the URL
-        // must be read from the data attribute.
-        let resolvedEls = new Set(slots.map((s) => s.element));
-        for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-type="card"]',
-          ),
-        )) {
-          if (!resolvedEls.has(el) && el.childElementCount === 0) {
+        // must be read from the data attribute. Only runs after the first
+        // modifier setup (showFallback) so we don't flash URLs while
+        // linkedCards is still loading.
+        if (showFallback) {
+          let resolvedEls = new Set(slots.map((s) => s.element));
+          for (let el of Array.from(
+            element.querySelectorAll<HTMLElement>(
+              '[data-boxel-bfm-type="card"]',
+            ),
+          )) {
             let url =
               el.dataset.boxelBfmInlineRef ||
               el.dataset.boxelBfmBlockRef ||
               '';
-            el.textContent = url;
+            if (
+              !resolvedEls.has(el) &&
+              el.childElementCount === 0 &&
+              el.textContent !== url
+            ) {
+              el.textContent = url;
+            }
           }
         }
 
