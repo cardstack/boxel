@@ -541,22 +541,48 @@ Responsibilities:
 
 For version one, this helper can stay deterministic and data-oriented. Later AI stages should combine the structured brief fields with a stable prompt template rather than embedding a fully rendered prompt into `factory:go` output.
 
-### E. `scripts/lib/factory-loop.ts`
+### E. `scripts/lib/factory-loop.ts` *(implemented — CS-10568)*
 
-New helper module for the first execution loop.
+Central execution loop orchestrator. Exports `runFactoryLoop()` which drives the implement→test→iterate cycle for a single ticket.
 
-Responsibilities:
+#### Key Types
 
-- find the active ticket
-- if no active ticket, use the first eligible backlog ticket
-- gather related knowledge and project context
-- call the implementation backend
-- invoke test generation for the completed work
-- run tests via the test harness and capture results
-- feed test failures back to the agent for iteration
-- update ticket state and notes after tests pass
+- **`LoopAgent`** — interface with `run(context: AgentContext, tools: FactoryTool[]): Promise<AgentRunResult>`. The agent calls tools directly during its turn via the LLM's native tool-use protocol, rather than returning a declarative `AgentAction[]` array.
+- **`AgentRunResult`** — `{ status: 'done' | 'blocked' | 'needs_iteration', toolCalls: ToolCallEntry[], message?: string }`. Replaces the old `AgentAction[]` return type.
+- **`FactoryLoopResult`** — `{ outcome: 'tests_passed' | 'done' | 'max_iterations' | 'clarification_needed', iterations, toolCallLog, testResults?, message? }`.
+- **`ContextBuilderLike`** — interface matching `ContextBuilder.build()` signature, defined here to avoid circular dependency on the concrete class.
+- **`TestRunner`** — `() => Promise<TestResult>` callback injected by the caller, decoupling the loop from Playwright specifics.
 
-For the first version, this does not need to be a general autonomous system. It only needs to perform one ticket deeply and leave the realm in a coherent state. However, it must complete the full implement → generate tests → run tests → iterate cycle before marking a ticket done.
+#### Loop Flow
+
+1. Build `AgentContext` via `ContextBuilder` (includes test results from prior iteration if any)
+2. Call `agent.run(context, tools)` — agent calls tools during its turn
+3. Inspect `AgentRunResult`:
+   - `blocked` → return `clarification_needed`
+   - `needs_iteration` → loop back to step 1 (enables read-only exploration rounds)
+   - `done` with no tool calls → return `done` (unless prior tests failed, in which case return `max_iterations`)
+   - `done` with tool calls → run `TestRunner`
+4. If tests pass → return `tests_passed`
+5. If tests fail → update `testResults`, loop back to step 1
+6. `maxIterations` guard (default: 5, validated as positive integer) prevents infinite loops
+
+#### Implementation Notes from CS-10568
+
+- **Orchestrator-owned test execution**: the agent signals done, the orchestrator triggers tests as a separate phase. All tool calls (writes) complete before test execution begins.
+- **`needs_iteration` status**: enables multi-turn agent rounds where the agent does read-only exploration (search, read) before committing writes. The loop counts this as an iteration but does not run tests.
+- **Bare done guard**: if the agent signals done with no tool calls but prior tests failed, the loop returns `max_iterations` with the failing test results preserved — prevents silently dropping failures.
+- **Tool call log**: all `ToolCallEntry[]` from every iteration are accumulated in `toolCallLog` on the result, providing a complete audit trail.
+- **No conversation state**: each `run()` call is independent. Context threading happens via `AgentContext.testResults` — the orchestrator passes failing test results back so the agent can self-correct.
+
+#### What This Module Does NOT Own
+
+- Ticket selection (caller picks the ticket)
+- Skill resolution/loading (delegated to `ContextBuilder`)
+- Tool building (caller provides `FactoryTool[]`)
+- Test execution details (caller provides `TestRunner` callback)
+- Ticket status updates (caller inspects result and updates)
+
+For the first version, this does not need to be a general autonomous system. It only needs to perform one ticket deeply and leave the realm in a coherent state. However, it must complete the full implement → test → iterate cycle before marking a ticket done.
 
 ### F. `scripts/lib/factory-test-realm.ts`
 
