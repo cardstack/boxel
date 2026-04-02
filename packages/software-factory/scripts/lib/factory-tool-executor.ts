@@ -487,8 +487,10 @@ export class ToolExecutor {
             query,
             fetchOptions,
           );
-          ok = result !== undefined;
-          output = result ?? { error: 'Search failed' };
+          ok = result.ok;
+          output = result.ok
+            ? { data: result.data }
+            : { error: result.error, status: result.status };
           break;
         }
 

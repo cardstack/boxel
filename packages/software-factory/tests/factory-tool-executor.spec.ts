@@ -338,7 +338,7 @@ test.describe('realm-search on a private realm', () => {
       'authenticated search should return results',
     ).toBe(true);
 
-    // Unauthenticated search — should fail (401 → exitCode 1)
+    // Unauthenticated search — should fail with 401
     let noAuthExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
@@ -352,12 +352,11 @@ test.describe('realm-search on a private realm', () => {
       query: searchQuery,
     });
 
-    expect(
-      noAuthResult.exitCode,
-      'unauthenticated search on private realm should fail',
-    ).toBe(1);
+    expect(noAuthResult.exitCode).toBe(1);
+    let noAuthOutput = noAuthResult.output as { status?: number };
+    expect(noAuthOutput.status).toBe(401);
 
-    // Search with a token for a different user who has no permissions — should fail
+    // Search with a token for a different user who has no permissions — should fail with 403
     let unauthorizedToken = realm.createBearerToken('@stranger:localhost', []);
     let unauthorizedExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
@@ -375,10 +374,9 @@ test.describe('realm-search on a private realm', () => {
       },
     );
 
-    expect(
-      unauthorizedResult.exitCode,
-      'unauthorized user search on private realm should fail',
-    ).toBe(1);
+    expect(unauthorizedResult.exitCode).toBe(1);
+    let unauthorizedOutput = unauthorizedResult.output as { status?: number };
+    expect(unauthorizedOutput.status).toBe(403);
   });
 });
 

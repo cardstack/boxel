@@ -76,7 +76,10 @@ export async function searchRealm(
   realmUrl: string,
   query: Record<string, unknown>,
   options?: RealmFetchOptions,
-): Promise<{ data?: Record<string, unknown>[] } | undefined> {
+): Promise<
+  | { ok: true; data?: Record<string, unknown>[] }
+  | { ok: false; status: number; error: string }
+> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedUrl = ensureTrailingSlash(realmUrl);
   let searchUrl = `${normalizedUrl}_search`;
@@ -97,12 +100,24 @@ export async function searchRealm(
     });
 
     if (!response.ok) {
-      return undefined;
+      let body = await response.text();
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
     }
 
-    return (await response.json()) as { data?: Record<string, unknown>[] };
-  } catch {
-    return undefined;
+    let result = (await response.json()) as {
+      data?: Record<string, unknown>[];
+    };
+    return { ok: true, data: result.data };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 

@@ -2,6 +2,8 @@ import { readSupportContext } from '../runtime-metadata';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import type { RealmPermissions } from '@cardstack/runtime-common';
+
 import { startFactoryRealmServer } from '../harness';
 
 async function main(): Promise<void> {
@@ -17,9 +19,16 @@ async function main(): Promise<void> {
     }
   }
 
-  let permissions = process.env.SOFTWARE_FACTORY_PERMISSIONS
-    ? JSON.parse(process.env.SOFTWARE_FACTORY_PERMISSIONS)
-    : undefined;
+  let permissions: RealmPermissions | undefined;
+  if (process.env.SOFTWARE_FACTORY_PERMISSIONS) {
+    try {
+      permissions = JSON.parse(process.env.SOFTWARE_FACTORY_PERMISSIONS);
+    } catch (e) {
+      throw new Error(
+        `SOFTWARE_FACTORY_PERMISSIONS is not valid JSON: ${e instanceof Error ? e.message : e}`,
+      );
+    }
+  }
 
   let runtime = await startFactoryRealmServer({
     realmDir,

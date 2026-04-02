@@ -29,7 +29,7 @@ type StartedFactoryRealm = {
     workerManagerPort: number;
   };
   cardURL(path: string): string;
-  createBearerToken(user?: string, permissions?: RealmAction[]): string;
+  createBearerToken(user: string, permissions: RealmAction[]): string;
   authorizationHeaders(
     user?: string,
     permissions?: RealmAction[],
@@ -396,10 +396,7 @@ async function startRealmProcess(
     cardURL(path: string) {
       return new URL(path, metadata.realmURL).href;
     },
-    createBearerToken(user?: string, perms?: RealmAction[]) {
-      if (!user && !perms) {
-        return metadata.ownerBearerToken;
-      }
+    createBearerToken(user: string, perms: RealmAction[]) {
       return buildRealmToken(
         new URL(metadata.realmURL),
         new URL(metadata.realmServerURL),
@@ -408,17 +405,21 @@ async function startRealmProcess(
       );
     },
     authorizationHeaders(user?: string, perms?: RealmAction[]) {
-      let token =
-        !user && !perms
-          ? metadata.ownerBearerToken
-          : buildRealmToken(
-              new URL(metadata.realmURL),
-              new URL(metadata.realmServerURL),
-              user,
-              perms,
-            );
+      if (!user && !perms) {
+        return { Authorization: `Bearer ${metadata.ownerBearerToken}` };
+      }
+      if (!perms) {
+        throw new Error(
+          'authorizationHeaders: permissions must be provided when a user is specified',
+        );
+      }
       return {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${buildRealmToken(
+          new URL(metadata.realmURL),
+          new URL(metadata.realmServerURL),
+          user,
+          perms,
+        )}`,
       };
     },
     stop,
