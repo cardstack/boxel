@@ -17,8 +17,13 @@ async function main(): Promise<void> {
     }
   }
 
+  let permissions = process.env.SOFTWARE_FACTORY_PERMISSIONS
+    ? JSON.parse(process.env.SOFTWARE_FACTORY_PERMISSIONS)
+    : undefined;
+
   let runtime = await startFactoryRealmServer({
     realmDir,
+    permissions,
     templateDatabaseName: process.env.SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME,
     templateRealmServerURL: process.env
       .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL

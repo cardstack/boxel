@@ -16,6 +16,7 @@ import {
   ToolNotFoundError,
 } from '../scripts/lib/factory-tool-executor';
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import { DEFAULT_REALM_OWNER } from '../src/harness/shared';
 import {
   readSupportMetadata,
   registerMatrixUser,
@@ -191,6 +192,191 @@ test('unregistered tool is rejected without reaching the server', async ({
   await expect(
     executor.execute('shell-exec-arbitrary', { command: 'rm -rf /' }),
   ).rejects.toThrow(ToolNotFoundError);
+});
+
+// ---------------------------------------------------------------------------
+// realm-search with pre-seeded fixture data
+// The darkfactory-adopter fixture has Project and Ticket cards with
+// distinct types — we search for each and verify the filter works.
+// ---------------------------------------------------------------------------
+
+test.describe('realm-search with seeded fixture data', () => {
+  // Uses default darkfactory-adopter fixture (shared mode for speed)
+
+  test('search by type returns matching cards and excludes non-matching types', async ({
+    realm,
+  }) => {
+    // The darkfactory-adopter fixture type module uses a placeholder URL
+    // that gets remapped at runtime. Discover the live module URL by
+    // reading a known card and extracting its adoptsFrom module.
+    let registry = new ToolRegistry();
+    let executor = new ToolExecutor(registry, {
+      packageRoot: process.cwd(),
+      targetRealmUrl: realm.realmURL.href,
+      testRealmUrl: realm.realmURL.href,
+      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+      authorization: `Bearer ${realm.ownerBearerToken}`,
+    });
+
+    let projectRead = await executor.execute('realm-read', {
+      'realm-url': realm.realmURL.href,
+      path: 'project-demo.json',
+    });
+    expect(projectRead.exitCode).toBe(0);
+    let projectDoc = projectRead.output as {
+      data: { meta: { adoptsFrom: { module: string; name: string } } };
+    };
+    let darkfactoryModule = projectDoc.data.meta.adoptsFrom.module;
+
+    // Search for Project cards — should find at least project-demo
+    let projectResult = await executor.execute('realm-search', {
+      'realm-url': realm.realmURL.href,
+      query: JSON.stringify({
+        filter: {
+          type: { module: darkfactoryModule, name: 'Project' },
+        },
+      }),
+    });
+
+    expect(
+      projectResult.exitCode,
+      `project search failed: ${JSON.stringify(projectResult.output)}`,
+    ).toBe(0);
+    let projectOutput = projectResult.output as {
+      data?: { id: string }[];
+    };
+    expect(
+      (projectOutput.data?.length ?? 0) > 0,
+      'should find at least one Project card',
+    ).toBe(true);
+    let projectIds = (projectOutput.data ?? []).map((d) => d.id);
+
+    // Verify no Ticket cards leak into the Project results
+    let ticketResult = await executor.execute('realm-search', {
+      'realm-url': realm.realmURL.href,
+      query: JSON.stringify({
+        filter: {
+          type: { module: darkfactoryModule, name: 'Ticket' },
+        },
+      }),
+    });
+    expect(ticketResult.exitCode).toBe(0);
+    let ticketOutput = ticketResult.output as {
+      data?: { id: string }[];
+    };
+    let ticketIds = (ticketOutput.data ?? []).map((d) => d.id);
+
+    // Project and Ticket result sets must be disjoint
+    for (let ticketId of ticketIds) {
+      expect(
+        projectIds.includes(ticketId),
+        `Ticket ${ticketId} should not appear in Project results`,
+      ).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// realm-search on a private realm: verifies auth is enforced
+// ---------------------------------------------------------------------------
+
+test.describe('realm-search on a private realm', () => {
+  test.use({ realmServerMode: 'isolated' });
+  test.use({
+    permissions: {
+      [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
+      // No '*' key — unauthenticated reads are denied
+    },
+  });
+
+  test('search with owner token succeeds, search without token fails', async ({
+    realm,
+  }) => {
+    let registry = new ToolRegistry();
+
+    // Discover the live module URL from the fixture data
+    let ownerExecutor = new ToolExecutor(registry, {
+      packageRoot: process.cwd(),
+      targetRealmUrl: realm.realmURL.href,
+      testRealmUrl: realm.realmURL.href,
+      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+      authorization: `Bearer ${realm.ownerBearerToken}`,
+    });
+
+    let projectRead = await ownerExecutor.execute('realm-read', {
+      'realm-url': realm.realmURL.href,
+      path: 'project-demo.json',
+    });
+    expect(
+      projectRead.exitCode,
+      `Failed to read project-demo: ${JSON.stringify(projectRead.output)}`,
+    ).toBe(0);
+    let projectDoc = projectRead.output as {
+      data: { meta: { adoptsFrom: { module: string; name: string } } };
+    };
+    let darkfactoryModule = projectDoc.data.meta.adoptsFrom.module;
+
+    let searchQuery = JSON.stringify({
+      filter: {
+        type: { module: darkfactoryModule, name: 'Project' },
+      },
+    });
+
+    // Authenticated search with owner token — should succeed
+    let authedResult = await ownerExecutor.execute('realm-search', {
+      'realm-url': realm.realmURL.href,
+      query: searchQuery,
+    });
+
+    expect(
+      authedResult.exitCode,
+      `authenticated search failed: ${JSON.stringify(authedResult.output)}`,
+    ).toBe(0);
+    let authedOutput = authedResult.output as { data?: unknown[] };
+    expect(
+      (authedOutput.data?.length ?? 0) > 0,
+      'authenticated search should return results',
+    ).toBe(true);
+
+    // Unauthenticated search — should fail (401 → exitCode 1)
+    let noAuthExecutor = new ToolExecutor(registry, {
+      packageRoot: process.cwd(),
+      targetRealmUrl: realm.realmURL.href,
+      testRealmUrl: realm.realmURL.href,
+      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+      // No authorization — simulates unauthenticated access
+    });
+
+    let noAuthResult = await noAuthExecutor.execute('realm-search', {
+      'realm-url': realm.realmURL.href,
+      query: searchQuery,
+    });
+
+    expect(
+      noAuthResult.exitCode,
+      'unauthenticated search on private realm should fail',
+    ).toBe(1);
+
+    // Search with a token for a different user who has no permissions — should fail
+    let unauthorizedToken = realm.createBearerToken('@stranger:localhost', []);
+    let unauthorizedExecutor = new ToolExecutor(registry, {
+      packageRoot: process.cwd(),
+      targetRealmUrl: realm.realmURL.href,
+      testRealmUrl: realm.realmURL.href,
+      allowedRealmPrefixes: [realm.realmURL.origin + '/'],
+      authorization: `Bearer ${unauthorizedToken}`,
+    });
+
+    let unauthorizedResult = await unauthorizedExecutor.execute('realm-search', {
+      'realm-url': realm.realmURL.href,
+      query: searchQuery,
+    });
+
+    expect(
+      unauthorizedResult.exitCode,
+      'unauthorized user search on private realm should fail',
+    ).toBe(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
