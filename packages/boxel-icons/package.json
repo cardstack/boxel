@@ -46,6 +46,7 @@
     "@babel/plugin-transform-typescript": "catalog:",
     "@babel/runtime": "catalog:",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@lucide/lab": "^0.1.2",
     "@tabler/icons": "^3.19.0",
     "@embroider/addon-dev": "^5.0.0",

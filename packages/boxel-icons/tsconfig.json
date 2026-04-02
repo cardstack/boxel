@@ -36,8 +36,8 @@
         "./src/*"
       ]
     },
-    "typeRoots": [
-      "./src/types"
+    "types": [
+      "@cardstack/local-types"
     ]
   },
   "include": [
