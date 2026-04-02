@@ -61,7 +61,7 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/skills' \
   --username='skills_realm' \
-  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
   --path='/persistent/boxel-homepage' \

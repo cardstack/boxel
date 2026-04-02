@@ -72,7 +72,7 @@ function writeSkill(
 
 function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
   return {
-    id: 'Ticket/test-ticket',
+    id: 'Tickets/test-ticket',
     title: 'Test ticket',
     description: 'A test ticket for unit testing',
     ...overrides,
@@ -81,7 +81,7 @@ function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
 
 function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
   return {
-    id: 'Project/test-project',
+    id: 'Projects/test-project',
     ...overrides,
   };
 }
@@ -168,7 +168,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('includes boxel-sync when ticket involves sync', function (assert) {
+  test('excludes CLI-only skills even when ticket mentions sync', function (assert) {
     let resolver = new DefaultSkillResolver();
     let ticket = makeTicket({
       description: 'Sync the workspace after local edits',
@@ -177,43 +177,13 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     let skills = resolver.resolve(ticket, project);
 
-    assert.true(
-      skills.includes('boxel-sync'),
-      'includes boxel-sync for sync work',
-    );
-  });
-
-  test('does not trigger boxel-sync for "async" (word boundary)', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
-      description: 'Fix async rendering in the card component',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(ticket, project);
-
     assert.false(
       skills.includes('boxel-sync'),
-      'does not include boxel-sync for "async"',
+      'boxel-sync excluded (CLI-only skill)',
     );
   });
 
-  test('does not trigger boxel-track for "stacktrace" (word boundary)', function (assert) {
-    let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
-      description: 'Improve error stacktrace formatting',
-    });
-    let project = makeProject();
-
-    let skills = resolver.resolve(ticket, project);
-
-    assert.false(
-      skills.includes('boxel-track'),
-      'does not include boxel-track for "stacktrace"',
-    );
-  });
-
-  test('includes boxel-restore when ticket involves restore', function (assert) {
+  test('excludes CLI-only skills even when ticket mentions restore', function (assert) {
     let resolver = new DefaultSkillResolver();
     let ticket = makeTicket({
       description: 'Restore workspace to a previous checkpoint',
@@ -222,13 +192,13 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     let skills = resolver.resolve(ticket, project);
 
-    assert.true(
+    assert.false(
       skills.includes('boxel-restore'),
-      'includes boxel-restore for restore work',
+      'boxel-restore excluded (CLI-only skill)',
     );
   });
 
-  test('includes multiple CLI skills when ticket mentions several operations', function (assert) {
+  test('excludes all CLI-only skills even when ticket mentions multiple CLI operations', function (assert) {
     let resolver = new DefaultSkillResolver();
     let ticket = makeTicket({
       description: 'Sync the workspace, track changes, and watch for updates',
@@ -237,9 +207,33 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
     let skills = resolver.resolve(ticket, project);
 
-    assert.true(skills.includes('boxel-sync'), 'includes boxel-sync');
-    assert.true(skills.includes('boxel-track'), 'includes boxel-track');
-    assert.true(skills.includes('boxel-watch'), 'includes boxel-watch');
+    assert.false(skills.includes('boxel-sync'), 'boxel-sync excluded');
+    assert.false(skills.includes('boxel-track'), 'boxel-track excluded');
+    assert.false(skills.includes('boxel-watch'), 'boxel-watch excluded');
+  });
+
+  test('excludes CLI-only skills even when added via knowledge article tags', function (assert) {
+    let resolver = new DefaultSkillResolver();
+    let ticket = makeTicket();
+    let project = makeProject({
+      knowledge: [
+        {
+          id: 'Knowledge Articles/cli-ref',
+          tags: ['skill:boxel-sync', 'skill:boxel-repair'],
+        },
+      ],
+    });
+
+    let skills = resolver.resolve(ticket, project);
+
+    assert.false(
+      skills.includes('boxel-sync'),
+      'boxel-sync excluded even from knowledge tags',
+    );
+    assert.false(
+      skills.includes('boxel-repair'),
+      'boxel-repair excluded even from knowledge tags',
+    );
   });
 
   test('extracts additional skills from knowledge article tags', function (assert) {
@@ -248,7 +242,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledge: [
         {
-          id: 'KnowledgeArticle/custom',
+          id: 'Knowledge Articles/custom',
           tags: ['skill:custom-skill', 'not-a-skill'],
         },
       ],
@@ -268,7 +262,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledge: [
         {
-          id: 'KnowledgeArticle/custom',
+          id: 'Knowledge Articles/custom',
           skills: ['extra-skill-a', 'extra-skill-b'],
         },
       ],
@@ -286,7 +280,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledgeBase: [
         {
-          id: 'KnowledgeArticle/from-schema',
+          id: 'Knowledge Articles/from-schema',
           skills: ['schema-skill'],
         },
       ],
@@ -305,7 +299,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let ticket = makeTicket({
       relatedKnowledge: [
         {
-          id: 'KnowledgeArticle/ticket-knowledge',
+          id: 'Knowledge Articles/ticket-knowledge',
           tags: ['skill:ticket-skill'],
         },
       ],
@@ -328,7 +322,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     let project = makeProject({
       knowledge: [
         {
-          id: 'KnowledgeArticle/dup',
+          id: 'Knowledge Articles/dup',
           skills: ['boxel-development'],
         },
       ],
@@ -955,7 +949,7 @@ module('factory-skill-loader > re-resolution on new ticket', function () {
       description: 'Create a .gts component for the landing page',
     });
     let ticket2 = makeTicket({
-      description: 'Sync the workspace to staging',
+      description: 'Improve the factory delivery pipeline',
     });
 
     let skills1 = resolver.resolve(ticket1, project);
@@ -966,11 +960,14 @@ module('factory-skill-loader > re-resolution on new ticket', function () {
       'ticket1 gets ember-best-practices',
     );
     assert.false(
-      skills1.includes('boxel-sync'),
-      'ticket1 does not get boxel-sync',
+      skills1.includes('software-factory-operations'),
+      'ticket1 does not get software-factory-operations',
     );
 
-    assert.true(skills2.includes('boxel-sync'), 'ticket2 gets boxel-sync');
+    assert.true(
+      skills2.includes('software-factory-operations'),
+      'ticket2 gets software-factory-operations',
+    );
     assert.false(
       skills2.includes('ember-best-practices'),
       'ticket2 does not get ember-best-practices',

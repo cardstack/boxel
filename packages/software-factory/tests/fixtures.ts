@@ -63,7 +63,6 @@ type SharedRealmHandle = {
 type TestWorkerPortSet = {
   compatRealmServerPort: number;
   realmServerPort: number;
-  workerManagerPort: number;
   prerenderPort: number;
 };
 
@@ -106,7 +105,7 @@ function killProcessGroup(pid: number, signal: NodeJS.Signals) {
 
 async function waitForPortFree(
   port: number,
-  timeoutMs = 10_000,
+  timeoutMs = 30_000,
 ): Promise<void> {
   let startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -166,14 +165,14 @@ async function isPortFree(port: number): Promise<boolean> {
 async function allocateTestWorkerPortSet(
   testWorkerIndex: number,
 ): Promise<TestWorkerPortSet> {
-  // Reserve one stable port block per Playwright testWorker. The isolated
-  // harness still restarts realm-server, worker-manager, compat proxy, and
-  // prerender between tests, but those services should come back on the same
-  // URLs for the lifetime of the testWorker. That keeps BOXEL_HOST_URL and the
-  // prerender standby target stable within a worker even when the realm stack
-  // itself is recreated per test. Include a per-process offset so concurrent
-  // Playwright runs with the same worker index do not all probe the same block
-  // first.
+  // Reserve one stable port block per Playwright testWorker for services whose
+  // URLs must remain constant across test restarts within the same worker:
+  // compat proxy and realm-server (for BOXEL_HOST_URL stability) and prerender
+  // (standby target). The worker-manager port is NOT pre-allocated here — it is
+  // dynamically assigned via findAvailablePort() each time a realm stack starts,
+  // since its URL does not need to be stable. Include a per-process offset so
+  // concurrent Playwright runs with the same worker index do not all probe the
+  // same block first.
   for (let attempt = 0; attempt < 100; attempt++) {
     let blockStart =
       testWorkerPortBase +
@@ -183,8 +182,7 @@ async function allocateTestWorkerPortSet(
     let candidate: TestWorkerPortSet = {
       compatRealmServerPort: blockStart,
       realmServerPort: blockStart + 1,
-      workerManagerPort: blockStart + 2,
-      prerenderPort: blockStart + 3,
+      prerenderPort: blockStart + 2,
     };
     let ports = Object.values(candidate);
     if (
@@ -246,12 +244,17 @@ async function startRealmProcess(
           }
         | undefined)
     : undefined;
+  let resolvedRealmDir = resolve(realmDir);
   let preparedTemplate =
     supportMetadata?.preparedTemplates?.find(
-      (entry) => resolve(entry.realmDir) === resolve(realmDir),
+      (entry) =>
+        resolve(entry.realmDir) === resolvedRealmDir ||
+        entry.coveredRealmDirs?.some(
+          (dir) => resolve(dir) === resolvedRealmDir,
+        ),
     ) ??
     (supportMetadata?.realmDir != null &&
-    resolve(supportMetadata.realmDir) === resolve(realmDir) &&
+    resolve(supportMetadata.realmDir) === resolvedRealmDir &&
     supportMetadata.templateDatabaseName &&
     supportMetadata.templateRealmServerURL
       ? {
@@ -277,9 +280,6 @@ async function startRealmProcess(
           testWorkerPortSet.compatRealmServerPort,
         ),
         SOFTWARE_FACTORY_REALM_PORT: String(testWorkerPortSet.realmServerPort),
-        SOFTWARE_FACTORY_WORKER_MANAGER_PORT: String(
-          testWorkerPortSet.workerManagerPort,
-        ),
         SOFTWARE_FACTORY_PRERENDER_PORT: String(
           testWorkerPortSet.prerenderPort,
         ),

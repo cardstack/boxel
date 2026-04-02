@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import {
   FactoryEntrypointUsageError,
   buildFactoryEntrypointSummary,
@@ -32,17 +34,20 @@ const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   authorization: 'Bearer token',
 };
 const mockBootstrapResult: FactoryBootstrapResult = {
-  project: { id: 'Project/sticky-note-mvp', status: 'created' },
+  project: { id: 'Projects/sticky-note-mvp', status: 'created' },
   knowledgeArticles: [
-    { id: 'KnowledgeArticle/sticky-note-brief-context', status: 'created' },
-    { id: 'KnowledgeArticle/sticky-note-agent-onboarding', status: 'created' },
+    { id: 'Knowledge Articles/sticky-note-brief-context', status: 'created' },
+    {
+      id: 'Knowledge Articles/sticky-note-agent-onboarding',
+      status: 'created',
+    },
   ],
   tickets: [
-    { id: 'Ticket/sticky-note-define-core', status: 'created' },
-    { id: 'Ticket/sticky-note-design-views', status: 'created' },
-    { id: 'Ticket/sticky-note-add-integration', status: 'created' },
+    { id: 'Tickets/sticky-note-define-core', status: 'created' },
+    { id: 'Tickets/sticky-note-design-views', status: 'created' },
+    { id: 'Tickets/sticky-note-add-integration', status: 'created' },
   ],
-  activeTicket: { id: 'Ticket/sticky-note-define-core', status: 'created' },
+  activeTicket: { id: 'Tickets/sticky-note-define-core', status: 'created' },
 };
 
 module('factory-entrypoint', function (hooks) {
@@ -132,11 +137,11 @@ module('factory-entrypoint', function (hooks) {
         'bootstrapped-project-artifacts',
       ],
     );
-    assert.strictEqual(summary.bootstrap.projectId, 'Project/sticky-note-mvp');
+    assert.strictEqual(summary.bootstrap.projectId, 'Projects/sticky-note-mvp');
     assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
     assert.strictEqual(
       summary.bootstrap.activeTicket.id,
-      'Ticket/sticky-note-define-core',
+      'Tickets/sticky-note-define-core',
     );
     assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
     assert.deepEqual(summary.result, {
@@ -211,7 +216,7 @@ module('factory-entrypoint', function (hooks) {
             {
               status: 200,
               headers: {
-                'content-type': 'application/json',
+                'content-type': SupportedMimeType.JSON,
               },
             },
           );
@@ -271,7 +276,7 @@ module('factory-entrypoint', function (hooks) {
             {
               status: 200,
               headers: {
-                'content-type': 'application/json',
+                'content-type': SupportedMimeType.JSON,
               },
             },
           ),

@@ -6,6 +6,7 @@ import {
   DEFAULT_BASE_REALM_PERMISSIONS,
   DEFAULT_MIGRATED_TEMPLATE_DB,
   DEFAULT_SOURCE_REALM_PERMISSIONS,
+  findAvailablePort,
   logTimed,
   pgAdminConnectionConfig,
   quotePgIdentifier,
@@ -41,7 +42,10 @@ export async function canConnectToPg(): Promise<boolean> {
 }
 
 export async function databaseExists(databaseName: string): Promise<boolean> {
-  let client = new PgClient(pgAdminConnectionConfig());
+  let client = new PgClient({
+    ...pgAdminConnectionConfig(),
+    connectionTimeoutMillis: 3000,
+  });
   try {
     await client.connect();
     let result = await client.query<{ exists: boolean }>(
@@ -49,8 +53,16 @@ export async function databaseExists(databaseName: string): Promise<boolean> {
       [databaseName],
     );
     return Boolean(result.rows[0]?.exists);
+  } catch {
+    // Postgres may not be running yet (e.g. fresh worktree with no services).
+    // Treat as "database does not exist" so the caller proceeds to start services.
+    return false;
   } finally {
-    await client.end();
+    try {
+      await client.end();
+    } catch {
+      // best effort cleanup
+    }
   }
 }
 
@@ -533,6 +545,133 @@ export async function warnIfSnapshotLooksCold(
   );
 }
 
+interface IndexingStatus {
+  active: {
+    realmURL: string;
+    totalFiles: number;
+    filesCompleted: number;
+  }[];
+  pending: { realmURL: string }[];
+}
+
+async function queryIndexingStatus(
+  workerManagerPort: number,
+): Promise<IndexingStatus | undefined> {
+  try {
+    let response = await fetch(
+      `http://localhost:${workerManagerPort}/_indexing-status`,
+    );
+    if (!response.ok) {
+      return undefined;
+    }
+    return (await response.json()) as IndexingStatus;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Start a progress reporter that polls the worker-manager's
+ * /_indexing-status JSON endpoint for precise indexing progress.
+ * The port must be pre-allocated by the caller via findAvailablePort()
+ * and passed to startIsolatedRealmStack as workerManagerPort.
+ */
+function startIndexingProgressReporter(
+  workerManagerPort: number,
+  totalRealms: number,
+): {
+  stop: () => void;
+} {
+  let stopped = false;
+  let polling = false;
+  let lastCompleted = -1;
+  let lastTotal = -1;
+  let startedAt = Date.now();
+  let seenRealms = new Set<string>();
+
+  let report = async () => {
+    if (stopped || polling) {
+      return;
+    }
+    polling = true;
+    try {
+      let elapsed = ((Date.now() - startedAt) / 1000).toFixed(0);
+      let status = await queryIndexingStatus(workerManagerPort);
+      if (stopped) {
+        return;
+      }
+      if (!status) {
+        process.stderr.write(`\r  indexing: waiting for status ${elapsed}s`);
+        return;
+      }
+
+      let current = status.active[0];
+      let filesCompleted = current?.filesCompleted ?? 0;
+      let totalFiles = current?.totalFiles ?? 0;
+      lastCompleted = filesCompleted;
+      lastTotal = totalFiles;
+
+      // Track which realms we've seen to compute remaining count.
+      if (current) {
+        seenRealms.add(current.realmURL);
+      }
+      let remaining = Math.max(0, totalRealms - seenRealms.size);
+
+      let realmName = current
+        ? new URL(current.realmURL).pathname.replace(/\/$/, '').split('/').pop()
+        : undefined;
+      let realmLabel = realmName ? ` ${realmName}` : '';
+      let remainingLabel =
+        remaining > 0
+          ? ` (${remaining} realm${remaining > 1 ? 's' : ''} remaining)`
+          : '';
+
+      if (totalFiles > 0) {
+        let pct = Math.min(
+          100,
+          Math.round((filesCompleted / totalFiles) * 100),
+        );
+        let barWidth = 30;
+        let filled = Math.round((pct / 100) * barWidth);
+        let bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
+        process.stderr.write(
+          `\r  indexing${realmLabel} [${bar}] ${filesCompleted}/${totalFiles} files (${pct}%) ${elapsed}s${remainingLabel}`,
+        );
+      } else if (status.active.length > 0) {
+        process.stderr.write(
+          `\r  indexing${realmLabel}: discovering files... ${elapsed}s${remainingLabel}`,
+        );
+      } else {
+        process.stderr.write(
+          `\r  indexing: waiting for realm server ${elapsed}s`,
+        );
+      }
+    } catch {
+      // Progress reporting is best-effort; swallow errors so we don't
+      // crash the process with an unhandled rejection from setInterval.
+    } finally {
+      polling = false;
+    }
+  };
+
+  let interval = setInterval(() => void report(), 2000);
+  let initialTimeout = setTimeout(() => void report(), 3000);
+
+  return {
+    stop() {
+      stopped = true;
+      clearInterval(interval);
+      clearTimeout(initialTimeout);
+      if (lastCompleted >= 0) {
+        let elapsed = ((Date.now() - startedAt) / 1000).toFixed(1);
+        process.stderr.write(
+          `\r  indexing complete: ${lastCompleted}/${lastTotal} files in ${elapsed}s\n`,
+        );
+      }
+    },
+  };
+}
+
 export async function waitForQueueIdle(databaseName: string): Promise<void> {
   await logTimed(templateLog, `waitForQueueIdle ${databaseName}`, async () => {
     await waitUntil(
@@ -562,6 +701,126 @@ export async function waitForQueueIdle(databaseName: string): Promise<void> {
       },
     );
   });
+}
+
+/**
+ * Build a combined template database containing multiple realm fixtures.
+ * The primary realm is indexed first, then additional realms are registered
+ * and indexed in the same realm server process.
+ */
+export async function buildCombinedTemplateDatabase({
+  realmFixtures,
+  realmServerURL,
+  permissions,
+  context,
+  cacheKey,
+  templateDatabaseName,
+}: {
+  realmFixtures: { realmDir: string; realmURL: URL }[];
+  realmServerURL: URL;
+  permissions: RealmPermissions;
+  context: FactorySupportContext;
+  cacheKey: string;
+  templateDatabaseName: string;
+}): Promise<void> {
+  if (realmFixtures.length === 0) {
+    throw new Error(
+      'buildCombinedTemplateDatabase requires at least one realm fixture',
+    );
+  }
+
+  await logTimed(
+    templateLog,
+    `buildCombinedTemplateDatabase ${templateDatabaseName} (${realmFixtures.length} realms)`,
+    async () => {
+      let builderDatabaseName = builderDatabaseNameForCacheKey(cacheKey);
+      let hasMigratedTemplate = await databaseExists(
+        DEFAULT_MIGRATED_TEMPLATE_DB,
+      );
+
+      await dropDatabase(templateDatabaseName);
+      await dropDatabase(builderDatabaseName);
+
+      if (hasMigratedTemplate) {
+        await cloneDatabaseFromTemplate(
+          DEFAULT_MIGRATED_TEMPLATE_DB,
+          builderDatabaseName,
+        );
+      }
+
+      let baseRealmURL = baseRealmURLFor(realmServerURL);
+      let sourceRealmURL = sourceRealmURLFor(realmServerURL);
+
+      let allRealmURLs = [
+        ...realmFixtures.map((f) => f.realmURL),
+        baseRealmURL,
+        sourceRealmURL,
+      ];
+      await resetMountedRealmState(builderDatabaseName, allRealmURLs);
+      await resetQueueState(builderDatabaseName);
+
+      for (let fixture of realmFixtures) {
+        await seedRealmPermissions(
+          builderDatabaseName,
+          fixture.realmURL,
+          permissions,
+        );
+      }
+      await seedRealmPermissions(
+        builderDatabaseName,
+        baseRealmURL,
+        DEFAULT_BASE_REALM_PERMISSIONS,
+      );
+      await seedRealmPermissions(
+        builderDatabaseName,
+        sourceRealmURL,
+        DEFAULT_SOURCE_REALM_PERMISSIONS,
+      );
+
+      // Use the first fixture as the primary realm, rest as additional.
+      let [primary, ...rest] = realmFixtures;
+      let additionalRealms = rest.map((f, i) => ({
+        realmDir: f.realmDir,
+        realmURL: f.realmURL,
+        username: `additional_realm_${i}`,
+      }));
+
+      let wmPort = await findAvailablePort();
+      // base + source + each fixture realm
+      let progress = startIndexingProgressReporter(
+        wmPort,
+        2 + realmFixtures.length,
+      );
+
+      let stack;
+      try {
+        stack = await startIsolatedRealmStack({
+          realmDir: primary.realmDir,
+          realmURL: primary.realmURL,
+          realmServerURL,
+          databaseName: builderDatabaseName,
+          context,
+          migrateDB: !hasMigratedTemplate,
+          fullIndexOnStartup: true,
+          additionalRealms,
+          workerManagerPort: wmPort,
+        });
+      } catch (error) {
+        progress.stop();
+        throw error;
+      }
+
+      try {
+        await waitForQueueIdle(builderDatabaseName);
+      } finally {
+        progress.stop();
+        await stopIsolatedRealmStack(stack);
+      }
+
+      await createTemplateSnapshot(builderDatabaseName, templateDatabaseName);
+      await dropDatabase(builderDatabaseName);
+    },
+  );
 }
 
 export async function buildTemplateDatabase({
@@ -623,19 +882,31 @@ export async function buildTemplateDatabase({
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
 
-      let stack = await startIsolatedRealmStack({
-        realmDir,
-        realmURL,
-        realmServerURL,
-        databaseName: builderDatabaseName,
-        context,
-        migrateDB: !hasMigratedTemplate,
-        fullIndexOnStartup: true,
-      });
+      let wmPort = await findAvailablePort();
+      // base + source + test realm
+      let progress = startIndexingProgressReporter(wmPort, 3);
+
+      let stack;
+      try {
+        stack = await startIsolatedRealmStack({
+          realmDir,
+          realmURL,
+          realmServerURL,
+          databaseName: builderDatabaseName,
+          context,
+          migrateDB: !hasMigratedTemplate,
+          fullIndexOnStartup: true,
+          workerManagerPort: wmPort,
+        });
+      } catch (error) {
+        progress.stop();
+        throw error;
+      }
 
       try {
         await waitForQueueIdle(builderDatabaseName);
       } finally {
+        progress.stop();
         await stopIsolatedRealmStack(stack);
       }
 

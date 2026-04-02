@@ -11,6 +11,7 @@ import difference from 'lodash/difference';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  cardIdToURL,
   isCardInstance,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -317,7 +318,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
-        realmURL: this.realm.realmOfURL(new URL(skillCard.sourceUrl))?.href,
+        realmURL: this.realm.realmOfURL(cardIdToURL(skillCard.sourceUrl))?.href,
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
@@ -636,7 +637,15 @@ export class RoomResource extends Resource<Args> {
     let effectiveEventId = this.getEffectiveEventId(event);
     event = this.getAggregatedReplacement(event);
 
-    let message = this._messageCache.get(effectiveEventId);
+    let clientGeneratedId =
+      'clientGeneratedId' in event.content
+        ? event.content.clientGeneratedId
+        : undefined;
+    let message =
+      this._messageCache.get(effectiveEventId) ??
+      (clientGeneratedId
+        ? this._messageCache.get(clientGeneratedId)
+        : undefined);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
         roomId,

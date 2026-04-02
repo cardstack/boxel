@@ -145,6 +145,7 @@ interface Signature {
     onSelectAll?: (cards: string[]) => void;
     onDeselectAll?: () => void;
     baseFilter?: Filter;
+    skipTypeFiltering?: boolean;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
@@ -156,6 +157,7 @@ interface Signature {
     searchResource: PrerenderedSearchResource;
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
+    initialFocusedSection?: string | null;
   };
   Blocks: {};
 }
@@ -168,7 +170,8 @@ export default class SearchContent extends Component<Signature> {
 
   @tracked activeViewId = 'grid';
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
-  @tracked focusedSection: string | null = null;
+  @tracked focusedSection: string | null =
+    this.args.initialFocusedSection ?? null;
   @tracked displayedCountBySection: Record<string, number> = {};
 
   @consume(GetCardContextName) declare private getCard: getCard;
@@ -272,16 +275,21 @@ export default class SearchContent extends Component<Signature> {
   private get sortedRecentCards(): CardDef[] {
     let cards = [...(this.args.filteredRecentCards ?? [])];
 
-    // Apply type picker filter (from TypePicker selection)
-    const pickerSelectedTypeNames = new Set(
-      (this.args.selectedCardTypes ?? [])
-        .filter((opt) => opt.type !== 'select-all')
-        .map((opt) => opt.id),
-    );
-    if (pickerSelectedTypeNames.size > 0) {
-      cards = cards.filter((card) =>
-        pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
+    // Apply type picker filter (from TypePicker selection).
+    // Skip when baseFilter has a non-root type — the server already
+    // constrains results via the adoption chain, and recent cards are
+    // pre-filtered by filterCardsByTypeRefs which handles subtypes.
+    if (!this.args.skipTypeFiltering) {
+      const pickerSelectedTypeNames = new Set(
+        (this.args.selectedCardTypes ?? [])
+          .filter((opt) => opt.type !== 'select-all')
+          .map((opt) => opt.label),
       );
+      if (pickerSelectedTypeNames.size > 0) {
+        cards = cards.filter((card) =>
+          pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
+        );
+      }
     }
 
     if (this.args.isCompact) {
@@ -414,21 +422,6 @@ export default class SearchContent extends Component<Signature> {
     } as UrlSection;
   }
 
-  private get filteredSearchResults(): PrerenderedCard[] {
-    const selectedTypeNames = new Set(
-      (this.args.selectedCardTypes ?? [])
-        .filter((opt) => opt.type !== 'select-all')
-        .map((opt) => opt.id),
-    );
-
-    const allCards = this.args.searchResource.instances;
-    return selectedTypeNames.size > 0
-      ? allCards.filter(
-          (card) => card.cardType && selectedTypeNames.has(card.cardType),
-        )
-      : allCards;
-  }
-
   private get cardsByQuerySection(): SearchSheetSection[] | null {
     if (this.searchKeyIsURL) {
       return null;
@@ -439,7 +432,7 @@ export default class SearchContent extends Component<Signature> {
       return null;
     }
 
-    const cards = this.filteredSearchResults;
+    const cards = this.args.searchResource.instances;
     const byRealm = new Map<string, PrerenderedCard[]>();
 
     for (const card of cards) {
@@ -543,7 +536,7 @@ export default class SearchContent extends Component<Signature> {
   private get allCards(): string[] {
     const urls: string[] = [];
     // Cards from search results (realm sections) - respects type filter
-    for (const card of this.filteredSearchResults) {
+    for (const card of this.args.searchResource.instances) {
       if (card.url) {
         urls.push(card.url.replace(/\.json$/, ''));
       }

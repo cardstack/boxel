@@ -1,3 +1,5 @@
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
 import { createBoxelRealmFetch } from '../../src/realm-auth';
 
 import {
@@ -124,12 +126,14 @@ export interface AgentContext {
   ticket: TicketCard;
   knowledge: KnowledgeArticle[];
   skills: ResolvedSkill[];
-  tools: ToolManifest[];
+  /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
+  tools?: ToolManifest[];
   testResults?: TestResult;
+  /** @deprecated Tool results are now returned inline during the agent's turn. */
   toolResults?: ToolResult[];
-  /** Actions from the previous plan() call, fed back for iteration prompts. */
+  /** @deprecated Replaced by tool call summary in the iteration prompt. */
   previousActions?: AgentAction[];
-  /** Current iteration number (1-based), set by the orchestrator. */
+  /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
   testRealmUrl: string;
@@ -486,8 +490,8 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
       response = await this.fetchImpl(OPENROUTER_CHAT_URL, {
         method: 'POST',
         headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
+          Accept: SupportedMimeType.JSON,
+          'Content-Type': SupportedMimeType.JSON,
         },
         body: JSON.stringify({
           model: this.config.model,
@@ -505,8 +509,8 @@ export class OpenRouterFactoryAgent implements FactoryAgent {
       response = await this.fetchImpl(proxyUrl, {
         method: 'POST',
         headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
+          Accept: SupportedMimeType.JSON,
+          'Content-Type': SupportedMimeType.JSON,
         },
         body: JSON.stringify({
           url: OPENROUTER_CHAT_URL,

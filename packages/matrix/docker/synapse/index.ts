@@ -102,7 +102,7 @@ export async function cfgDirFromTemplate(
   }
   const configDir = dataDir
     ? dataDir
-    : await fse.mkdtemp(path.join(os.tmpdir(), 'synapsedocker-'));
+    : await fse.mkdtemp(path.join(os.tmpdir(), 'sf-test-synapse-'));
 
   // copy the contents of the template dir, omitting homeserver.yaml as we'll template that
   console.log(`Copy ${templateDir} -> ${configDir}`);

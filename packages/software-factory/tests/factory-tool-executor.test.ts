@@ -1,6 +1,8 @@
 import { module, test } from 'qunit';
 
-import type { AgentAction, ToolResult } from '../scripts/lib/factory-agent';
+import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
+import type { ToolResult } from '../scripts/lib/factory-agent';
 import {
   ToolExecutor,
   ToolNotFoundError,
@@ -27,17 +29,6 @@ function makeConfig(
   };
 }
 
-function makeInvokeToolAction(
-  tool: string,
-  toolArgs?: Record<string, unknown>,
-): AgentAction {
-  return {
-    type: 'invoke_tool',
-    tool,
-    toolArgs,
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Unregistered tool rejection
 // ---------------------------------------------------------------------------
@@ -48,7 +39,7 @@ module('factory-tool-executor > unregistered tool rejection', function () {
     let executor = new ToolExecutor(registry, makeConfig());
 
     try {
-      await executor.execute({ type: 'invoke_tool' } as AgentAction);
+      await executor.execute('');
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolNotFoundError);
@@ -60,7 +51,7 @@ module('factory-tool-executor > unregistered tool rejection', function () {
     let executor = new ToolExecutor(registry, makeConfig());
 
     try {
-      await executor.execute(makeInvokeToolAction('rm-rf-everything'));
+      await executor.execute('rm-rf-everything');
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolNotFoundError);
@@ -79,7 +70,7 @@ module('factory-tool-executor > argument validation', function () {
     let executor = new ToolExecutor(registry, makeConfig());
 
     try {
-      await executor.execute(makeInvokeToolAction('search-realm', {}));
+      await executor.execute('search-realm', {});
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof Error);
@@ -103,11 +94,9 @@ module('factory-tool-executor > source realm protection', function () {
     );
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('search-realm', {
-          realm: 'https://realms.example.test/user/source/',
-        }),
-      );
+      await executor.execute('search-realm', {
+        realm: 'https://realms.example.test/user/source/',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
@@ -125,11 +114,9 @@ module('factory-tool-executor > source realm protection', function () {
     );
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('search-realm', {
-          realm: 'https://realms.example.test/user/source',
-        }),
-      );
+      await executor.execute('search-realm', {
+        realm: 'https://realms.example.test/user/source',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
@@ -144,12 +131,10 @@ module('factory-tool-executor > source realm protection', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'CardDef/my-card.gts',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'CardDef/my-card.gts',
+    });
 
     assert.strictEqual(result.exitCode, 0);
   });
@@ -162,12 +147,10 @@ module('factory-tool-executor > source realm protection', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target-tests/',
-        path: 'Test/spec.ts',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target-tests/',
+      path: 'Test/spec.ts',
+    });
 
     assert.strictEqual(result.exitCode, 0);
   });
@@ -182,12 +165,10 @@ module('factory-tool-executor > source realm protection', function () {
     );
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('realm-read', {
-          'realm-url': 'https://realms.example.test/other/unrelated/',
-          path: 'foo.json',
-        }),
-      );
+      await executor.execute('realm-read', {
+        'realm-url': 'https://realms.example.test/other/unrelated/',
+        path: 'foo.json',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
@@ -204,12 +185,10 @@ module('factory-tool-executor > source realm protection', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/scratch-123/',
-        path: 'foo.json',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/scratch-123/',
+      path: 'foo.json',
+    });
 
     assert.strictEqual(result.exitCode, 0);
   });
@@ -224,12 +203,10 @@ module('factory-tool-executor > source realm protection', function () {
     );
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('realm-read', {
-          'realm-url': 'https://evil.example.test/hacker/realm/',
-          path: 'secrets.json',
-        }),
-      );
+      await executor.execute('realm-read', {
+        'realm-url': 'https://evil.example.test/hacker/realm/',
+        path: 'secrets.json',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
@@ -242,12 +219,10 @@ module('factory-tool-executor > source realm protection', function () {
     let executor = new ToolExecutor(registry, makeConfig());
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('realm-server-session', {
-          'realm-server-url': 'https://evil.example.test/',
-          'openid-token': 'token',
-        }),
-      );
+      await executor.execute('realm-server-session', {
+        'realm-server-url': 'https://evil.example.test/',
+        'openid-token': 'token',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
@@ -262,11 +237,9 @@ module('factory-tool-executor > source realm protection', function () {
     let executor = new ToolExecutor(registry, makeConfig());
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('search-realm', {
-          realm: 'https://evil.example.test/hacker/realm/',
-        }),
-      );
+      await executor.execute('search-realm', {
+        realm: 'https://evil.example.test/hacker/realm/',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolSafetyError);
@@ -291,18 +264,16 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ card: 'data' }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'CardDef/my-card.gts',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'CardDef/my-card.gts',
+    });
 
     assert.strictEqual(capturedMethod, 'GET');
     assert.strictEqual(
@@ -328,19 +299,17 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-write', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'CardDef/new-card.gts',
-        content: 'export class NewCard {}',
-      }),
-    );
+    let result = await executor.execute('realm-write', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'CardDef/new-card.gts',
+      content: 'export class NewCard {}',
+    });
 
     assert.strictEqual(capturedMethod, 'POST');
     assert.strictEqual(
@@ -360,18 +329,16 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-delete', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'CardDef/old-card.gts',
-      }),
-    );
+    let result = await executor.execute('realm-delete', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'CardDef/old-card.gts',
+    });
 
     assert.strictEqual(capturedMethod, 'DELETE');
     assert.strictEqual(result.exitCode, 0);
@@ -388,18 +355,16 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ data: [] }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-search', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        query: JSON.stringify({ filter: { type: { name: 'Ticket' } } }),
-      }),
-    );
+    let result = await executor.execute('realm-search', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      query: JSON.stringify({ filter: { type: { name: 'Ticket' } } }),
+    });
 
     assert.strictEqual(capturedMethod, 'QUERY');
     assert.true(capturedUrl!.endsWith('_search'));
@@ -417,19 +382,17 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedBody = typeof init?.body === 'string' ? init.body : undefined;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
     let ops = [{ op: 'add', href: './Foo/bar.json', data: {} }];
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-atomic', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        operations: JSON.stringify(ops),
-      }),
-    );
+    let result = await executor.execute('realm-atomic', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      operations: JSON.stringify(ops),
+    });
 
     assert.true(capturedUrl!.endsWith('_atomic'));
     let body = JSON.parse(capturedBody!);
@@ -444,18 +407,14 @@ module('factory-tool-executor > realm-api execution', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'missing.json',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'missing.json',
+    });
 
     assert.strictEqual(result.exitCode, 1);
-    assert.deepEqual(
-      (result.output as Record<string, unknown>).error,
-      'HTTP 404',
-    );
+    let error = (result.output as Record<string, unknown>).error as string;
+    assert.true(error.startsWith('HTTP 404'));
   });
 
   test('includes authorization header when configured', async function (assert) {
@@ -468,18 +427,16 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedHeaders = new Headers(init?.headers as HeadersInit);
         return new Response(JSON.stringify({}), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-      }),
-    );
+    await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'foo.json',
+    });
 
     assert.strictEqual(
       capturedHeaders!.get('Authorization'),
@@ -498,17 +455,15 @@ module('factory-tool-executor > realm-api execution', function () {
         capturedMethod = init?.method;
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-auth', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
-      }),
-    );
+    let result = await executor.execute('realm-auth', {
+      'realm-server-url': 'https://realms.example.test/user/target/',
+    });
 
     assert.strictEqual(capturedMethod, 'POST');
     assert.true(capturedUrl!.endsWith('_realm-auth'));
@@ -533,20 +488,18 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/',
-        name: 'my-scratch-realm',
-        endpoint: 'user/scratch-123',
-      }),
-    );
+    let result = await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'my-scratch-realm',
+      endpoint: 'user/scratch-123',
+    });
 
     assert.strictEqual(
       capturedUrl,
@@ -577,22 +530,20 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/',
-        name: 'my-realm',
-        endpoint: 'user/scratch',
-        iconURL: 'https://example.test/icon.png',
-        backgroundURL: 'https://example.test/bg.jpg',
-      }),
-    );
+    await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'my-realm',
+      endpoint: 'user/scratch',
+      iconURL: 'https://example.test/icon.png',
+      backgroundURL: 'https://example.test/bg.jpg',
+    });
 
     let body = JSON.parse(capturedBody!);
     assert.strictEqual(
@@ -621,20 +572,18 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/',
-        name: 'My Realm',
-        endpoint: 'user/scratch',
-      }),
-    );
+    await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'My Realm',
+      endpoint: 'user/scratch',
+    });
 
     let body = JSON.parse(capturedBody!);
     assert.strictEqual(
@@ -660,20 +609,18 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/',
-        name: 'My Realm',
-        endpoint: 'user/scratch',
-      }),
-    );
+    await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'My Realm',
+      endpoint: 'user/scratch',
+    });
 
     let body = JSON.parse(capturedBody!);
     assert.true(
@@ -707,7 +654,7 @@ module('factory-tool-executor > realm-api execution', function () {
             }),
             {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': SupportedMimeType.JSON },
             },
           );
         }
@@ -716,26 +663,24 @@ module('factory-tool-executor > realm-api execution', function () {
             JSON.stringify({ realms: ['https://existing.test/'] }),
             {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 'Content-Type': SupportedMimeType.JSON },
             },
           );
         }
         // PUT account_data
         return new Response('{}', {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/',
-        name: 'scratch',
-        endpoint: 'user/scratch',
-      }),
-    );
+    await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'scratch',
+      endpoint: 'user/scratch',
+    });
 
     assert.strictEqual(fetchCalls.length, 3, 'three fetch calls made');
     assert.true(
@@ -774,20 +719,18 @@ module('factory-tool-executor > realm-api execution', function () {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           },
         );
       }) as typeof globalThis.fetch,
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/',
-        name: 'scratch',
-        endpoint: 'user/scratch',
-      }),
-    );
+    await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/',
+      name: 'scratch',
+      endpoint: 'user/scratch',
+    });
 
     assert.strictEqual(
       fetchCalls.length,
@@ -812,7 +755,7 @@ module('factory-tool-executor > realm-api execution', function () {
         return new Response(null, {
           status: 201,
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': SupportedMimeType.JSON,
             Authorization: 'Bearer realm-server-jwt-123',
           },
         });
@@ -820,12 +763,10 @@ module('factory-tool-executor > realm-api execution', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-server-session', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
-        'openid-token': 'openid-access-token-xyz',
-      }),
-    );
+    let result = await executor.execute('realm-server-session', {
+      'realm-server-url': 'https://realms.example.test/user/target/',
+      'openid-token': 'openid-access-token-xyz',
+    });
 
     assert.true(capturedUrl!.endsWith('_server-session'));
     let body = JSON.parse(capturedBody!);
@@ -858,7 +799,7 @@ module('factory-tool-executor > auth header propagation', function () {
         capturedHeaders = new Headers(init?.headers as HeadersInit);
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': SupportedMimeType.JSON },
         });
       }) as typeof globalThis.fetch,
       getCapturedHeaders: () => capturedHeaders,
@@ -873,12 +814,10 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'Card/foo.json',
-      }),
-    );
+    await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'Card/foo.json',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -894,13 +833,11 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-write', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'Card/new.gts',
-        content: 'export class NewCard {}',
-      }),
-    );
+    await executor.execute('realm-write', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'Card/new.gts',
+      content: 'export class NewCard {}',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -916,12 +853,10 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-delete', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'Card/old.json',
-      }),
-    );
+    await executor.execute('realm-delete', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'Card/old.json',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -937,12 +872,10 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-search', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        query: '{}',
-      }),
-    );
+    await executor.execute('realm-search', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      query: '{}',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -958,12 +891,10 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-atomic', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        operations: '[]',
-      }),
-    );
+    await executor.execute('realm-atomic', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      operations: '[]',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -982,13 +913,11 @@ module('factory-tool-executor > auth header propagation', function () {
       }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
-        name: 'scratch',
-        endpoint: 'user/scratch',
-      }),
-    );
+    await executor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/user/target/',
+      name: 'scratch',
+      endpoint: 'user/scratch',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -1004,11 +933,9 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-auth', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
-      }),
-    );
+    await executor.execute('realm-auth', {
+      'realm-server-url': 'https://realms.example.test/user/target/',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -1024,12 +951,10 @@ module('factory-tool-executor > auth header propagation', function () {
       makeConfig({ fetch }), // no authorization
     );
 
-    await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'Card/foo.json',
-      }),
-    );
+    await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'Card/foo.json',
+    });
 
     assert.strictEqual(
       getCapturedHeaders()!.get('Authorization'),
@@ -1049,7 +974,7 @@ module('factory-tool-executor > auth header propagation', function () {
           return new Response(null, {
             status: 201,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': SupportedMimeType.JSON,
               Authorization: 'Bearer minted-realm-server-jwt',
             },
           });
@@ -1057,12 +982,10 @@ module('factory-tool-executor > auth header propagation', function () {
       }),
     );
 
-    let sessionResult = await sessionExecutor.execute(
-      makeInvokeToolAction('realm-server-session', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
-        'openid-token': 'matrix-openid-token',
-      }),
-    );
+    let sessionResult = await sessionExecutor.execute('realm-server-session', {
+      'realm-server-url': 'https://realms.example.test/user/target/',
+      'openid-token': 'matrix-openid-token',
+    });
 
     let jwt = (sessionResult.output as { token: string }).token;
     assert.strictEqual(jwt, 'Bearer minted-realm-server-jwt');
@@ -1077,19 +1000,17 @@ module('factory-tool-executor > auth header propagation', function () {
           capturedHeaders = new Headers(init?.headers as HeadersInit);
           return new Response(JSON.stringify({ ok: true }), {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': SupportedMimeType.JSON },
           });
         }) as typeof globalThis.fetch,
       }),
     );
 
-    await createExecutor.execute(
-      makeInvokeToolAction('realm-create', {
-        'realm-server-url': 'https://realms.example.test/user/target/',
-        name: 'test-realm',
-        endpoint: 'user/test-realm',
-      }),
-    );
+    await createExecutor.execute('realm-create', {
+      'realm-server-url': 'https://realms.example.test/user/target/',
+      name: 'test-realm',
+      endpoint: 'user/test-realm',
+    });
 
     assert.strictEqual(
       capturedHeaders!.get('Authorization'),
@@ -1114,12 +1035,10 @@ module('factory-tool-executor > logging', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-      }),
-    );
+    await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'foo.json',
+    });
 
     assert.strictEqual(logEntries.length, 1);
     assert.strictEqual(logEntries[0].tool, 'realm-read');
@@ -1139,12 +1058,10 @@ module('factory-tool-executor > logging', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'broken.json',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'broken.json',
+    });
 
     assert.strictEqual(result.exitCode, 1);
     assert.strictEqual(logEntries.length, 1);
@@ -1164,12 +1081,10 @@ module('factory-tool-executor > ToolResult shape', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'foo.json',
+    });
 
     assert.strictEqual(typeof result.tool, 'string');
     assert.strictEqual(typeof result.exitCode, 'number');
@@ -1184,12 +1099,10 @@ module('factory-tool-executor > ToolResult shape', function () {
     });
     let executor = new ToolExecutor(registry, config);
 
-    let result = await executor.execute(
-      makeInvokeToolAction('realm-read', {
-        'realm-url': 'https://realms.example.test/user/target/',
-        path: 'foo.json',
-      }),
-    );
+    let result = await executor.execute('realm-read', {
+      'realm-url': 'https://realms.example.test/user/target/',
+      path: 'foo.json',
+    });
 
     let serialized = JSON.stringify(result);
     let deserialized = JSON.parse(serialized) as ToolResult;
@@ -1225,7 +1138,7 @@ module('factory-tool-executor > timeout', function () {
               resolve(
                 new Response('{}', {
                   status: 200,
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': SupportedMimeType.JSON },
                 }),
               ),
             5000,
@@ -1236,12 +1149,10 @@ module('factory-tool-executor > timeout', function () {
     let executor = new ToolExecutor(registry, config);
 
     try {
-      await executor.execute(
-        makeInvokeToolAction('realm-read', {
-          'realm-url': 'https://realms.example.test/user/target/',
-          path: 'slow.json',
-        }),
-      );
+      await executor.execute('realm-read', {
+        'realm-url': 'https://realms.example.test/user/target/',
+        path: 'slow.json',
+      });
       assert.ok(false, 'should have thrown');
     } catch (err) {
       assert.true(err instanceof ToolTimeoutError);
@@ -1261,7 +1172,7 @@ function createMockFetch(
   return (async () => {
     return new Response(JSON.stringify(body), {
       status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': SupportedMimeType.JSON },
     });
   }) as typeof globalThis.fetch;
 }

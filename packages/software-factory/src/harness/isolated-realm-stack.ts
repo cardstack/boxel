@@ -28,7 +28,6 @@ import {
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
   DEFAULT_REALM_SERVER_PORT,
-  DEFAULT_WORKER_MANAGER_PORT,
   findAvailablePort,
   FIXTURE_SOURCE_REALM_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
@@ -262,6 +261,12 @@ function copyRealmFixture(
   rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
 }
 
+export interface AdditionalRealm {
+  realmDir: string;
+  realmURL: URL;
+  username?: string;
+}
+
 export async function startIsolatedRealmStack({
   realmDir,
   realmURL,
@@ -270,6 +275,8 @@ export async function startIsolatedRealmStack({
   context,
   migrateDB,
   fullIndexOnStartup,
+  additionalRealms,
+  workerManagerPort: explicitWorkerManagerPort,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -278,11 +285,18 @@ export async function startIsolatedRealmStack({
   context: FactorySupportContext;
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
+  additionalRealms?: AdditionalRealm[];
+  /** When provided, the worker-manager will listen on this port instead of
+   *  picking one dynamically. This lets callers know the port upfront (e.g.
+   *  for progress monitoring via /_indexing-status). */
+  workerManagerPort?: number;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
+  let actualWorkerManagerPort =
+    explicitWorkerManagerPort ?? (await findAvailablePort());
   let actualRealmServerPort =
     DEFAULT_REALM_SERVER_PORT === 0
       ? await findAvailablePort()
@@ -308,6 +322,37 @@ export async function startIsolatedRealmStack({
   realmLog.debug(
     `startIsolatedRealmStack: copied fixture ${realmDir} -> ${testRealmDir}`,
   );
+
+  // Copy and resolve additional realm fixtures.
+  let resolvedAdditionalRealms: {
+    realmDir: string;
+    localDir: string;
+    realmURL: URL;
+    actualRealmURL: URL;
+    username: string;
+  }[] = [];
+  for (let i = 0; i < (additionalRealms ?? []).length; i++) {
+    let additional = additionalRealms![i];
+    let additionalLocalDir = join(rootDir, `additional-${i}`);
+    let additionalPath = realmRelativePath(additional.realmURL, realmServerURL);
+    let additionalActualURL = realmURLWithinServer(
+      actualRealmServerURL,
+      additionalPath,
+    );
+    let username = additional.username ?? `additional_realm_${i}`;
+    ensureDirSync(additionalLocalDir);
+    copyRealmFixture(additional.realmDir, additionalLocalDir, sourceRealmURL);
+    realmLog.debug(
+      `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}`,
+    );
+    resolvedAdditionalRealms.push({
+      realmDir: additional.realmDir,
+      localDir: additionalLocalDir,
+      realmURL: additional.realmURL,
+      actualRealmURL: additionalActualURL,
+      username,
+    });
+  }
   let compatProxy = await startCompatRealmProxy({
     listenPort: Number(realmServerURL.port),
   });
@@ -357,7 +402,7 @@ export async function startIsolatedRealmStack({
   let workerArgs = [
     '--transpileOnly',
     'worker-manager',
-    `--port=${DEFAULT_WORKER_MANAGER_PORT}`,
+    `--port=${actualWorkerManagerPort}`,
     `--matrixURL=${context.matrixURL}`,
     `--prerendererUrl=${prerenderURL}`,
     `--fromUrl=${realmURL.href}`,
@@ -385,6 +430,12 @@ export async function startIsolatedRealmStack({
     workerArgs.push(
       `--fromUrl=${legacySkillsRealmURL.href}`,
       `--toUrl=${actualSkillsRealmURL.href}`,
+    );
+  }
+  for (let additional of resolvedAdditionalRealms) {
+    workerArgs.push(
+      `--fromUrl=${additional.realmURL.href}`,
+      `--toUrl=${additional.actualRealmURL.href}`,
     );
   }
   if (migrateDB) {
@@ -436,6 +487,14 @@ export async function startIsolatedRealmStack({
     `--fromUrl=${realmURL.href}`,
     `--toUrl=${actualRealmURL.href}`,
   ];
+  for (let additional of resolvedAdditionalRealms) {
+    serverArgs.push(
+      `--username=${additional.username}`,
+      `--path=${additional.localDir}`,
+      `--fromUrl=${additional.realmURL.href}`,
+      `--toUrl=${additional.actualRealmURL.href}`,
+    );
+  }
   if (INCLUDE_SKILLS) {
     serverArgs.splice(
       16,

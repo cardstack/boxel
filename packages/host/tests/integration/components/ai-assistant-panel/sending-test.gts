@@ -385,4 +385,86 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
       )
       .doesNotExist();
   });
+
+  test('attach card from AI assistant shows all types in type picker', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await openAiAssistant();
+
+    // Click "Attach a Card" which opens card catalog with baseFilter: { type: CardDef }
+    await click('[data-test-attach-button]');
+    await click('[data-test-attach-card-btn]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await settled();
+
+    // Type picker should be present and show types (not empty due to CardDef filter)
+    assert
+      .dom('[data-test-type-picker]')
+      .exists('type picker is present in attach card modal');
+
+    // Open type picker
+    await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    // "Any Type" should be present and enabled (root type baseFilter)
+    assert
+      .dom('[data-test-boxel-picker-option-row="select-all"]')
+      .exists('"Any Type" option is present');
+    assert
+      .dom(
+        '[data-test-boxel-picker-option-row="select-all"][data-test-boxel-picker-option-disabled="false"]',
+      )
+      .exists('"Any Type" is enabled for root type baseFilter (CardDef)');
+
+    // At least one non-select-all type should be available
+    // (This would fail before the fix because CardDef exact-match filtered out all types)
+    const typeOptions = document.querySelectorAll(
+      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+    );
+    assert.ok(
+      typeOptions.length > 0,
+      'type options are loaded when attach card uses CardDef baseFilter',
+    );
+
+    // Select "Person" type to filter results
+    await click('[data-test-boxel-picker-option-label="Person"]');
+
+    // Verify "Person" is now selected in the trigger
+    assert
+      .dom(
+        '[data-test-type-picker] [data-test-boxel-picker-selected-item="Person"]',
+      )
+      .exists('Person type is selected in the picker');
+
+    // Search for a card that matches the Person type
+    await fillIn('[data-test-search-field]', 'Fadhlan');
+    await waitFor('[data-test-search-label]');
+
+    // Person/fadhlan should appear in search results
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .exists(
+        'Person/fadhlan appears in search results when Person type is selected',
+      );
+
+    // Now deselect Person (click remove button) to revert to "Any Type"
+    await click(
+      '[data-test-type-picker] [data-test-boxel-picker-remove-button]',
+    );
+    assert
+      .dom(
+        '[data-test-type-picker] [data-test-boxel-picker-selected-item="Person"]',
+      )
+      .doesNotExist('Person type is deselected after clicking remove');
+
+    // Search results should still show Person/fadhlan under "Any Type"
+    assert
+      .dom(`[data-test-card-catalog-item="${testRealmURL}Person/fadhlan"]`)
+      .exists('Person/fadhlan still appears in search results under Any Type');
+  });
 });

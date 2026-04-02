@@ -2,8 +2,6 @@
 
 DEFAULT_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog/'
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
-DEFAULT_NEW_CATALOG_REALM_URL='https://realms-staging.stack.cards/catalog-new/'
-NEW_CATALOG_REALM_URL="${RESOLVED_NEW_CATALOG_REALM_URL:-$DEFAULT_NEW_CATALOG_REALM_URL}"
 DEFAULT_EXTERNAL_CATALOG_REALM_URL='https://realms-staging.stack.cards/external-catalog/'
 EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
 DEFAULT_SOFTWARE_FACTORY_REALM_URL='https://realms-staging.stack.cards/software-factory/'
@@ -33,7 +31,7 @@ NODE_NO_WARNINGS=1 \
    --fromUrl="${EXTERNAL_CATALOG_REALM_URL}" \
    --toUrl="${EXTERNAL_CATALOG_REALM_URL}" \
   \
-  --fromUrl='https://realms-staging.stack.cards/skills/' \
+  --fromUrl='@cardstack/skills/' \
   --toUrl='https://realms-staging.stack.cards/skills/' \
   \
   --fromUrl='@cardstack/openrouter/' \

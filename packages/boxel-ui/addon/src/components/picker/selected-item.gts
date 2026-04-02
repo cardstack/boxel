@@ -82,7 +82,7 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
     <Pill
       class='picker-selected-item'
       @size='small'
-      data-test-boxel-picker-selected-item
+      data-test-boxel-picker-selected-item={{this.text}}
     >
       <:iconLeft>
         {{#if this.icon}}

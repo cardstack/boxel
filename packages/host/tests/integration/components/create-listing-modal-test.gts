@@ -1,4 +1,4 @@
-import { waitFor } from '@ember/test-helpers';
+import { click, waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
@@ -25,6 +25,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
+      declarationKind: 'card',
     });
 
     await waitFor('[data-test-create-listing-modal]');
@@ -45,6 +46,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
+      declarationKind: 'card',
     });
 
     await waitFor('[data-test-create-listing-modal]');
@@ -64,6 +66,7 @@ module('Integration | components | create-listing-modal', function (hooks) {
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
+      declarationKind: 'card',
     });
 
     await waitFor('[data-test-create-listing-modal]');
@@ -81,18 +84,17 @@ module('Integration | components | create-listing-modal', function (hooks) {
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
+      declarationKind: 'card',
     });
 
     await waitFor('[data-test-create-listing-modal]');
-    await waitFor('[data-test-examples-container]');
+    await waitFor('[data-test-create-listing-examples]');
 
-    assert.dom('[data-test-examples-container]').exists();
-    assert
-      .dom('[data-test-card-instance-picker]')
-      .exists('shows the card instance picker for examples');
+    assert.dom('[data-test-create-listing-examples]').exists();
+    assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
 
-  test('auto-selects the instance when opened from an instance', async function (assert) {
+  test('shows selected example atom when opened from an instance', async function (assert) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
@@ -103,20 +105,29 @@ module('Integration | components | create-listing-modal', function (hooks) {
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
       openCardIds: [`${testRealmURL}Pet/mango`],
+      declarationKind: 'card',
     });
 
     await waitFor('[data-test-create-listing-modal]');
-    await waitFor('[data-test-card-instance-picker]');
+    await waitFor(
+      `[data-test-selected-example="${testRealmURL}Pet/mango.json"]`,
+    );
 
     assert
-      .dom('[data-test-boxel-picker-selected-item]')
-      .exists('picker has a selected item');
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .exists();
     assert
-      .dom('[data-test-boxel-picker-selected-item] .picker-selected-item__text')
-      .hasText('Mango', 'the opened instance is auto-selected');
+      .dom('[data-test-selected-examples] [data-test-card-format="atom"]')
+      .exists({ count: 1 });
+    assert
+      .dom(
+        `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+      )
+      .exists();
+    assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
   });
 
-  test('auto-selects the first instance when opened from a module', async function (assert) {
+  test('clicking a selected example remove icon removes it', async function (assert) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template><OperatorMode @onClose={{noop}} /></template>
@@ -126,16 +137,41 @@ module('Integration | components | create-listing-modal', function (hooks) {
     ctx.operatorModeStateService.showCreateListingModal({
       codeRef: { module: `${testRealmURL}pet`, name: 'Pet' },
       targetRealm: testRealmURL,
+      openCardIds: [`${testRealmURL}Pet/mango`],
+      declarationKind: 'card',
     });
 
     await waitFor('[data-test-create-listing-modal]');
-    await waitFor('[data-test-card-instance-picker]');
+    await waitFor(
+      `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+    );
+
+    await click(
+      `[data-test-selected-example-remove="${testRealmURL}Pet/mango.json"]`,
+    );
 
     assert
-      .dom('[data-test-boxel-picker-selected-item]')
-      .exists({ count: 1 }, 'picker has exactly one selected item');
-    assert
-      .dom('[data-test-boxel-picker-selected-item] .picker-selected-item__text')
-      .exists('first instance is auto-selected');
+      .dom(`[data-test-selected-example="${testRealmURL}Pet/mango.json"]`)
+      .doesNotExist();
+    assert.dom('[data-test-choose-examples-button]').hasText('Add Examples');
+  });
+
+  test('hides examples for field listings', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    ctx.operatorModeStateService.showCreateListingModal({
+      codeRef: { module: `${testRealmURL}pet`, name: 'PetName' },
+      targetRealm: testRealmURL,
+      declarationKind: 'field',
+    });
+
+    await waitFor('[data-test-create-listing-modal]');
+
+    assert.dom('[data-test-create-listing-examples]').doesNotExist();
+    assert.dom('[data-test-choose-examples-button]').doesNotExist();
   });
 });

@@ -4,18 +4,18 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
-import {
-  Button,
-  FieldContainer,
-  RealmIcon,
-} from '@cardstack/boxel-ui/components';
+import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
+
+import { chooseCard } from '@cardstack/runtime-common';
 
 import CreateListingPRRequestCommand from '@cardstack/host/commands/bot-requests/create-listing-pr-request';
+import CardPill from '@cardstack/host/components/card-pill';
 import ModalContainer from '@cardstack/host/components/modal-container';
+import { catalogRealm } from '@cardstack/host/lib/utils';
 
 import type CommandService from '@cardstack/host/services/command-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -31,6 +31,7 @@ export default class CreatePRModal extends Component<Signature> {
   @service declare private realm: RealmService;
 
   @tracked private isSubmitted = false;
+  @tracked private selectedListingId?: string;
 
   private get payload() {
     return this.operatorModeStateService.createPRModalPayload;
@@ -40,16 +41,19 @@ export default class CreatePRModal extends Component<Signature> {
     return Boolean(this.payload);
   }
 
-  private get realmInfo() {
-    let payload = this.payload;
-    if (!payload) {
-      return undefined;
-    }
-    return this.realm.info(payload.realm);
+  private get listingId() {
+    return this.selectedListingId ?? this.payload?.listingId;
   }
 
-  private get listingName(): string {
-    return this.payload?.listingName ?? 'Listing';
+  private get listingTitle(): string | undefined {
+    if (this.selectedListingId) {
+      return undefined;
+    }
+    return this.payload?.listingName;
+  }
+
+  private get canChangeListing() {
+    return Boolean(catalogRealm);
   }
 
   private createPR = task(async () => {
@@ -58,18 +62,44 @@ export default class CreatePRModal extends Component<Signature> {
       throw new Error('Cannot create PR without a modal payload');
     }
 
+    let currentListingId = this.listingId;
+    if (!currentListingId) {
+      throw new Error('Cannot create PR without a listing');
+    }
+
+    let realm =
+      this.realm.realmOfURL(new URL(currentListingId))?.href ?? payload.realm;
+
     await new CreateListingPRRequestCommand(
       this.commandService.commandContext,
     ).execute({
-      listingId: payload.listingId,
-      realm: payload.realm,
+      listingId: currentListingId,
+      realm,
     });
 
     this.isSubmitted = true;
   });
 
+  private changeListing = restartableTask(async () => {
+    if (!catalogRealm) {
+      throw new Error('Cannot find catalog realm');
+    }
+    let listingId = await chooseCard({
+      filter: {
+        type: {
+          module: `${catalogRealm.url}catalog-app/listing/listing`,
+          name: 'Listing',
+        },
+      },
+    });
+    if (listingId) {
+      this.selectedListingId = listingId;
+    }
+  });
+
   @action private onClose() {
     this.isSubmitted = false;
+    this.selectedListingId = undefined;
     this.operatorModeStateService.dismissCreatePRModal();
   }
 
@@ -78,7 +108,7 @@ export default class CreatePRModal extends Component<Signature> {
       <ModalContainer
         class='create-pr-modal'
         @cardContainerClass='create-pr'
-        @title={{if this.isSubmitted 'Listing Submitted 🎉 ! ' 'Make a PR'}}
+        @title={{if this.isSubmitted 'Listing Submitted 🎉!' 'Make a PR'}}
         @size='small'
         @isOpen={{this.isModalOpen}}
         @onClose={{this.onClose}}
@@ -86,12 +116,22 @@ export default class CreatePRModal extends Component<Signature> {
       >
         <:content>
           {{#if this.isSubmitted}}
-            <p class='submitted-message' data-test-create-pr-success>
-              Your listing
-              <strong>{{this.listingName}}</strong>
-              has been submitted for review. A PR will be created on GitHub and
-              you will be notified once it is approved.
-            </p>
+            <div class='submitted-container' data-test-create-pr-success>
+              <div class='submitted-message'>
+                Your listing has been submitted for review. A PR will be created
+                on GitHub and you will be notified once it is approved.
+              </div>
+              <Button
+                @as='anchor'
+                @kind='secondary'
+                @size='small'
+                @href='https://github.com/cardstack/boxel-catalog/pulls'
+                target='_blank'
+                rel='noopener noreferrer'
+              >
+                Check for updates on GitHub
+              </Button>
+            </div>
           {{else}}
             <p class='description'>
               You're about to submit your listing for review. A PR will be
@@ -99,15 +139,24 @@ export default class CreatePRModal extends Component<Signature> {
             </p>
             <FieldContainer @label='Listing' class='field'>
               <div class='field-contents' data-test-create-pr-listing-name>
-                <span>{{this.listingName}}</span>
-              </div>
-            </FieldContainer>
-
-            <FieldContainer @label='Realm' @tag='label' class='field'>
-              <div class='field-contents' data-test-create-pr-realm>
-                {{#if this.realmInfo}}
-                  <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
-                  <span>{{this.realmInfo.name}}</span>
+                {{#if this.listingId}}
+                  <CardPill
+                    @cardId={{this.listingId}}
+                    @urlForRealmLookup={{this.listingId}}
+                    @displayTitle={{this.listingTitle}}
+                    class='listing-pill'
+                  />
+                {{/if}}
+                {{#if this.canChangeListing}}
+                  <Button
+                    @kind='text-only'
+                    @size='small'
+                    @disabled={{this.createPR.isRunning}}
+                    {{on 'click' (perform this.changeListing)}}
+                    data-test-create-pr-change-listing-button
+                  >
+                    Change
+                  </Button>
                 {{/if}}
               </div>
             </FieldContainer>
@@ -127,8 +176,7 @@ export default class CreatePRModal extends Component<Signature> {
               </Button>
             {{else if this.createPR.isRunning}}
               <p class='footer-loading-message' data-test-create-pr-loading>
-                Submitting
-                <strong>{{this.listingName}}</strong>. This may take a moment...
+                Submitting your listing. This may take a moment...
               </p>
               <Button
                 @kind='primary'
@@ -194,6 +242,12 @@ export default class CreatePRModal extends Component<Signature> {
           opacity: 1;
         }
       }
+      .submitted-container {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--boxel-sp);
+      }
       .submitted-message {
         font: var(--boxel-font-sm);
         color: var(--boxel-500);
@@ -225,10 +279,11 @@ export default class CreatePRModal extends Component<Signature> {
       .field-contents {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: var(--horizontal-gap);
       }
-      .realm-icon {
-        --boxel-realm-icon-size: 1rem;
+      .listing-pill :deep(figure.icon:last-child) {
+        display: none;
       }
       .footer-buttons {
         display: flex;

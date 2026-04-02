@@ -308,6 +308,10 @@ export async function startServer({
     `--toUrl='${serverIndexUrl}/test/'`,
   ];
   workerArgs = workerArgs.concat([
+    `--fromUrl='@cardstack/skills/'`,
+    `--toUrl='http://localhost:4205/skills/'`,
+  ]);
+  workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='${serverIndexUrl}/base/'`,
   ]);
@@ -347,7 +351,7 @@ export async function startServer({
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
-    `--fromUrl='${serverIndexUrl}/skills/'`,
+    `--fromUrl='@cardstack/skills/'`,
     `--toUrl='${serverIndexUrl}/skills/'`,
   ]);
   serverArgs = serverArgs.concat([

@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import { getActiveProfile, parseArgs } from './lib/boxel';
+import { ensureTrailingSlash } from './lib/realm-operations';
 
 type CommandOptions = {
   cwd?: string;
@@ -59,10 +60,6 @@ type FailureSummary = {
   outcome: string;
   error: string;
 };
-
-function ensureTrailingSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
 
 function timestampSlug(date: Date = new Date()): string {
   return date

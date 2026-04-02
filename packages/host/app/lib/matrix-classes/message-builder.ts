@@ -2,7 +2,7 @@ import type Owner from '@ember/owner';
 
 import { getOwner, setOwner } from '@ember/owner';
 
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -224,6 +224,7 @@ export default class MessageBuilder {
       ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
       : null;
     message.setUpdated(new Date());
+    message.status = this.event.status;
     message.errorMessage = this.errorMessage;
     message.reloadBillingData = shouldReloadBillingData(this.event.content);
 
