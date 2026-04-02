@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
+import { modifier } from 'ember-modifier';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import {
@@ -25,17 +26,18 @@ import {
   generateCssVariables,
   getContrastColor,
   buildCssVariableName,
+  sanitizeHtmlSafe,
   eq,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import BrandTypography from './brand-typography';
 import BrandFunctionalPalette, {
   formatSwatchName,
 } from './brand-functional-palette';
 import BrandLogo from './brand-logo';
 import { mergeRuleMaps } from './structured-theme';
+import { ThemeTypographyField } from './structured-theme-variables';
 import DetailedStyleRef from './detailed-style-reference';
 import {
   ThemeDashboard,
@@ -94,13 +96,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         </ThemeDashboardHeader>
       </:header>
       <:default>
-        {{#if @model.hasDarkMode}}
-          <ModeToggle
-            class='brand-guide-mode-toggle'
-            @toggleDarkMode={{this.toggleDarkMode}}
-            @isDarkMode={{this.isDarkMode}}
-          />
-        {{/if}}
+        <ModeToggle
+          class='brand-guide-mode-toggle'
+          @toggleDarkMode={{this.toggleDarkMode}}
+          @isDarkMode={{this.isDarkMode}}
+        />
         <GridContainer class='brand-guide-grid'>
           {{#each this.sectionsWithContent as |section|}}
             <NavSection @id={{section.id}} @title={{section.title}}>
@@ -121,6 +121,72 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     {{/if}}
                   </div>
                 </GridContainer>
+              {{else if (eq section.id 'typography')}}
+                <GridContainer class='typography-grid'>
+                  {{#if @model.typography.heading}}
+                    <div class='typography-block'>
+                      <div class='typography-preview'>
+                        <h1
+                          style={{this.headingPreviewStyle}}
+                          {{this.captureHeadingEl}}
+                        >
+                          {{#if @model.typography.heading.sampleText}}
+                            {{@model.typography.heading.sampleText}}
+                          {{else}}
+                            The quick brown fox
+                          {{/if}}
+                        </h1>
+                      </div>
+                      <div class='typography-meta'>
+                        <span class='typography-label'>Headline</span>
+                        {{#if this.headingComputedStyles}}
+                          <dl class='style-details'>
+                            <dt>Family</dt>
+                            <dd>{{this.headingComputedStyles.fontFamily}}</dd>
+                            <dt>Size</dt>
+                            <dd>{{this.headingComputedStyles.fontSize}}</dd>
+                            <dt>Weight</dt>
+                            <dd>{{this.headingComputedStyles.fontWeight}}</dd>
+                            <dt>Line Height</dt>
+                            <dd>{{this.headingComputedStyles.lineHeight}}</dd>
+                          </dl>
+                        {{/if}}
+                      </div>
+                    </div>
+                  {{/if}}
+                  {{#if @model.typography.body}}
+                    <div class='typography-block'>
+                      <div class='typography-preview'>
+                        <p
+                          style={{this.bodyPreviewStyle}}
+                          {{this.captureBodyEl}}
+                        >
+                          {{#if @model.typography.body.sampleText}}
+                            {{@model.typography.body.sampleText}}
+                          {{else}}
+                            The quick brown fox
+                          {{/if}}
+                        </p>
+                      </div>
+                      <div class='typography-meta'>
+                        <span class='typography-label'>Body</span>
+                        {{#if this.bodyComputedStyles}}
+                          <dl class='style-details'>
+                            <dt>Family</dt>
+                            <dd>{{this.bodyComputedStyles.fontFamily}}</dd>
+                            <dt>Size</dt>
+                            <dd>{{this.bodyComputedStyles.fontSize}}</dd>
+                            <dt>Weight</dt>
+                            <dd>{{this.bodyComputedStyles.fontWeight}}</dd>
+                            <dt>Line Height</dt>
+                            <dd>{{this.bodyComputedStyles.lineHeight}}</dd>
+                          </dl>
+                        {{/if}}
+                      </div>
+                    </div>
+                  {{/if}}
+                </GridContainer>
+                <@fields.typography class='brand-typography-preview' />
               {{else if (eq section.id 'ui-components')}}
                 <GridContainer class='cta-grid'>
                   <FieldContainer @label='Primary CTA' @vertical={{true}}>
@@ -430,6 +496,65 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         background-size: cover;
       }
 
+      /* typography section */
+      .typography-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .typography-block {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .typography-preview {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 11.25rem;
+        background-color: var(--muted, var(--boxel-100));
+        color: var(--foreground, var(--boxel-dark));
+        border-radius: var(--boxel-border-radius);
+        text-align: center;
+        overflow: hidden;
+        padding: var(--boxel-sp);
+      }
+      .typography-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .typography-label {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-foreground, var(--boxel-400));
+      }
+      .typography-preview h1,
+      .typography-preview p {
+        margin: 0;
+      }
+      .style-details {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.125rem var(--boxel-sp-sm);
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+      }
+      .style-details dt {
+        color: var(--muted-foreground, var(--boxel-400));
+        font-weight: 500;
+      }
+      .style-details dd {
+        margin: 0;
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+      }
+      .brand-typography-preview {
+        margin-top: var(--boxel-sp-xl);
+      }
+
       /* dsr styles */
       .dsr-section {
         margin-bottom: calc(var(--boxel-sp) * 4);
@@ -569,6 +694,70 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   </template>
 
   @tracked private isDarkMode = false;
+  @tracked private headingEl: Element | null = null;
+  @tracked private bodyEl: Element | null = null;
+
+  private captureHeadingEl = modifier((el: Element) => {
+    this.headingEl = el;
+    return () => {
+      this.headingEl = null;
+    };
+  });
+
+  private captureBodyEl = modifier((el: Element) => {
+    this.bodyEl = el;
+    return () => {
+      this.bodyEl = null;
+    };
+  });
+
+  private get headingComputedStyles() {
+    void this.args.model.typography?.heading;
+    let el = this.headingEl;
+    if (!el) return null;
+    let style = getComputedStyle(el);
+    return {
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      lineHeight: style.lineHeight,
+    };
+  }
+
+  private get bodyComputedStyles() {
+    void this.args.model.typography?.body;
+    let el = this.bodyEl;
+    if (!el) return null;
+    let style = getComputedStyle(el);
+    return {
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      lineHeight: style.lineHeight,
+    };
+  }
+
+  private get headingPreviewStyle() {
+    let { fontFamily, fontSize, fontWeight, lineHeight } =
+      this.args.model.typography?.heading ?? {};
+    let styles: string[] = [];
+    if (fontFamily) styles.push(`font-family: ${fontFamily}`);
+    if (fontSize) styles.push(`font-size: ${fontSize}`);
+    if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
+    if (lineHeight) styles.push(`line-height: ${lineHeight}`);
+    return sanitizeHtmlSafe(styles.join('; '));
+  }
+
+  private get bodyPreviewStyle() {
+    let { fontFamily, fontSize, fontWeight, lineHeight } =
+      this.args.model.typography?.body ?? {};
+    let styles: string[] = [];
+    if (fontFamily) styles.push(`font-family: ${fontFamily}`);
+    if (fontSize) styles.push(`font-size: ${fontSize}`);
+    if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
+    if (lineHeight) styles.push(`line-height: ${lineHeight}`);
+    return sanitizeHtmlSafe(styles.join('; '));
+  }
 
   private toggleDarkMode = () => {
     this.isDarkMode = !this.isDarkMode;
@@ -807,7 +996,7 @@ export default class BrandGuide extends DetailedStyleRef {
 
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(BrandFunctionalPalette);
-  @field typography = contains(BrandTypography);
+  @field typography = contains(ThemeTypographyField);
   @field markUsage = contains(BrandLogo);
 
   // CSS Variables computed from field entries
@@ -819,19 +1008,51 @@ export default class BrandGuide extends DetailedStyleRef {
       let brandRules = this.calculateBrandRuleMap();
       let markMap = this.markUsage?.cssRuleMap;
       const toUrlValue = (url?: string) => (url ? `url(${url})` : undefined);
-      let rootMarkAliases = new Map([
-        ['--brand-primary-mark', toUrlValue(markMap?.get('--brand-primary-mark-1'))],
-        ['--brand-secondary-mark', toUrlValue(markMap?.get('--brand-secondary-mark-1'))],
-        ['--brand-primary-mark-greyscale', toUrlValue(markMap?.get('--brand-primary-mark-greyscale-1'))],
-        ['--brand-secondary-mark-greyscale', toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-1'))],
-      ].filter(([, v]) => v) as [string, string][]);
-      let darkMarkAliases = new Map([
-        ['--brand-primary-mark', toUrlValue(markMap?.get('--brand-primary-mark-2'))],
-        ['--brand-secondary-mark', toUrlValue(markMap?.get('--brand-secondary-mark-2'))],
-        ['--brand-primary-mark-greyscale', toUrlValue(markMap?.get('--brand-primary-mark-greyscale-2'))],
-        ['--brand-secondary-mark-greyscale', toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-2'))],
-      ].filter(([, v]) => v) as [string, string][]);
-      let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules, rootMarkAliases);
+      let rootMarkAliases = new Map(
+        [
+          [
+            '--brand-primary-mark',
+            toUrlValue(markMap?.get('--brand-primary-mark-1')),
+          ],
+          [
+            '--brand-secondary-mark',
+            toUrlValue(markMap?.get('--brand-secondary-mark-1')),
+          ],
+          [
+            '--brand-primary-mark-greyscale',
+            toUrlValue(markMap?.get('--brand-primary-mark-greyscale-1')),
+          ],
+          [
+            '--brand-secondary-mark-greyscale',
+            toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-1')),
+          ],
+        ].filter(([, v]) => v) as [string, string][],
+      );
+      let darkMarkAliases = new Map(
+        [
+          [
+            '--brand-primary-mark',
+            toUrlValue(markMap?.get('--brand-primary-mark-2')),
+          ],
+          [
+            '--brand-secondary-mark',
+            toUrlValue(markMap?.get('--brand-secondary-mark-2')),
+          ],
+          [
+            '--brand-primary-mark-greyscale',
+            toUrlValue(markMap?.get('--brand-primary-mark-greyscale-2')),
+          ],
+          [
+            '--brand-secondary-mark-greyscale',
+            toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-2')),
+          ],
+        ].filter(([, v]) => v) as [string, string][],
+      );
+      let rootRules = mergeRuleMaps(
+        this.calculatedRules(),
+        brandRules,
+        rootMarkAliases,
+      );
       let darkRules = mergeRuleMaps(
         this.calculatedRules({ darkMode: true }),
         brandRules,

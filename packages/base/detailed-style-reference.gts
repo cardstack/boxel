@@ -150,7 +150,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
     >
       <GridContainer class='dsr-grid'>
         <ThemeVisualizer
-          @toggleDarkMode={{if @model.hasDarkMode this.toggleDarkMode}}
+          @toggleDarkMode={{this.toggleDarkMode}}
           @isDarkMode={{this.isDarkMode}}
         >
           <:colorPalette>

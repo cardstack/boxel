@@ -65,8 +65,6 @@ const BasicFitted: TemplateOnlyComponent<Signature> = <template>
         display: flex;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
-        background-color: var(--card);
-        color: var(--card-foreground);
         overflow: hidden;
       }
       :global(.thumbnail-section) {

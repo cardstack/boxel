@@ -23,6 +23,7 @@ import {
   CSSField,
   Theme,
   StringField,
+  getFields,
   type BaseDefComponent,
 } from './card-api';
 import ThemeVarField, {
@@ -98,6 +99,21 @@ const resetCssVariables = (field: ThemeVarField | undefined) => {
   }
 };
 
+const resetTypographyVariables = (
+  typography: ThemeTypographyField | undefined,
+) => {
+  if (!typography) return;
+  let fields = getFields(typography);
+  if (!fields) return;
+  for (let fieldName of Object.keys(fields)) {
+    let subField = (typography as any)[fieldName];
+    if (!subField?.fieldEntries) continue;
+    for (let { name } of subField.fieldEntries) {
+      if (name) (subField as any)[name] = null;
+    }
+  }
+};
+
 // TODO: move to boxel-ui helpers
 export const mergeRuleMaps = (
   ...maps: (CssRuleMap | undefined)[]
@@ -151,7 +167,7 @@ class Isolated extends Component<typeof StructuredTheme> {
       <:default>
         <GridContainer class='structured-theme-grid'>
           <ThemeVisualizer
-            @toggleDarkMode={{if @model.hasDarkMode this.toggleDarkMode}}
+            @toggleDarkMode={{this.toggleDarkMode}}
             @isDarkMode={{this.isDarkMode}}
           >
             <:colorPalette>
@@ -274,10 +290,6 @@ export default class StructuredTheme extends Theme {
     return sanitizeHtmlSafe(extractCssVariables(this.cssVariables, '.dark'));
   }
 
-  get hasDarkMode() {
-    return this.darkModeVariables?.cssRuleMap?.size;
-  }
-
   setCss = (content: string) => {
     if (!content || !parseCssGroups) {
       return;
@@ -293,6 +305,7 @@ export default class StructuredTheme extends Theme {
   resetCss = () => {
     resetCssVariables(this.rootVariables);
     resetCssVariables(this.darkModeVariables);
+    resetTypographyVariables(this.typography);
   };
 
   static isolated: BaseDefComponent = Isolated;

@@ -48,7 +48,7 @@ class Isolated extends Component<typeof StyleReference> {
       <:default>
         <ThemeVisualizer
           class='style-ref-section'
-          @toggleDarkMode={{if @model.hasDarkMode this.toggleDarkMode}}
+          @toggleDarkMode={{this.toggleDarkMode}}
           @isDarkMode={{this.isDarkMode}}
         >
           <:colorPalette>
