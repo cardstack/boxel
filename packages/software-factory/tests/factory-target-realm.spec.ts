@@ -81,7 +81,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         '--realm-server-url',
         realmServerURL,
         '--mode',
-        'implement',
+        'bootstrap',
       ],
       {
         cwd: packageRoot,
