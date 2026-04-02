@@ -14,7 +14,6 @@ interface Signature {
     onChange: (selected: PickerOption[]) => void;
     label?: string;
     placeholder?: string;
-    renderInPlace?: boolean;
   };
   Blocks: {};
 }
@@ -71,7 +70,7 @@ export default class RealmPicker extends Component<Signature> {
           @placeholder={{@placeholder}}
           @searchPlaceholder='Search for a realm'
           @maxSelectedDisplay={{3}}
-          @renderInPlace={{if @renderInPlace true false}}
+          @renderInPlace={{false}}
           @matchTriggerWidth={{false}}
           data-test-realm-picker
         />

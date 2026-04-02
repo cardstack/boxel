@@ -123,6 +123,7 @@ export default class CardCatalogModal extends Component<Signature> {
               @layer='urgent'
               {{focusTrap
                 isActive=(not state.dismissModal)
+                additionalElements=this.focusTrapAdditionalElements
                 focusTrapOptions=(hash
                   initialFocus='[data-test-search-field]' allowOutsideClick=true
                 )
@@ -136,7 +137,6 @@ export default class CardCatalogModal extends Component<Signature> {
                   @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
-                  @renderInPlace={{true}}
                 />
               </:header>
               <:content>
@@ -226,6 +226,11 @@ export default class CardCatalogModal extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_CHOOSER;
     });
+  }
+
+  get focusTrapAdditionalElements() {
+    const el = document.getElementById('ember-basic-dropdown-wormhole');
+    return el ? [el] : [];
   }
 
   private get state(): State | undefined {
