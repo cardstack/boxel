@@ -204,7 +204,8 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
       let query = args.query as Record<string, unknown>;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return searchRealm(realmUrl, query, fetchOptions);
+      let result = await searchRealm(realmUrl, query, fetchOptions);
+      return result.ok ? { data: result.data } : { error: result.error };
     },
   };
 }

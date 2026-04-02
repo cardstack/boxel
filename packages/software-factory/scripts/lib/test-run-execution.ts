@@ -242,7 +242,11 @@ async function findResumableTestRun(
     { authorization: options.authorization, fetch: options.fetch },
   );
 
-  let latest = result?.data?.[0] as
+  if (!result?.ok) {
+    return undefined;
+  }
+
+  let latest = result.data?.[0] as
     | {
         id?: string;
         attributes?: {
@@ -291,9 +295,11 @@ async function getNextSequenceNumber(
     { authorization: options.authorization, fetch: options.fetch },
   );
 
-  let latest = result?.data?.[0] as
-    | { attributes?: { sequenceNumber?: number } }
-    | undefined;
+  let latest = result?.ok
+    ? (result.data?.[0] as
+        | { attributes?: { sequenceNumber?: number } }
+        | undefined)
+    : undefined;
   return (latest?.attributes?.sequenceNumber ?? 0) + 1;
 }
 
