@@ -29,13 +29,9 @@ test('realm-read fetches .realm.json from the test realm', async ({
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
-  let result = await executor.execute({
-    type: 'invoke_tool',
-    tool: 'realm-read',
-    toolArgs: {
-      'realm-url': realm.realmURL.href,
-      path: '.realm.json',
-    },
+  let result = await executor.execute('realm-read', {
+    'realm-url': realm.realmURL.href,
+    path: '.realm.json',
   });
 
   expect(result.exitCode).toBe(0);
@@ -52,21 +48,17 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
-  let result = await executor.execute({
-    type: 'invoke_tool',
-    tool: 'realm-search',
-    toolArgs: {
-      'realm-url': realm.realmURL.href,
-      query: JSON.stringify({
-        filter: {
-          type: {
-            module: '@cardstack/base/card-api',
-            name: 'CardDef',
-          },
+  let result = await executor.execute('realm-search', {
+    'realm-url': realm.realmURL.href,
+    query: JSON.stringify({
+      filter: {
+        type: {
+          module: '@cardstack/base/card-api',
+          name: 'CardDef',
         },
-        page: { size: 1 },
-      }),
-    },
+      },
+      page: { size: 1 },
+    }),
   });
 
   expect(result.exitCode).toBe(0);
@@ -86,10 +78,6 @@ test('unregistered tool is rejected without reaching the server', async ({
   });
 
   await expect(
-    executor.execute({
-      type: 'invoke_tool',
-      tool: 'shell-exec-arbitrary',
-      toolArgs: { command: 'rm -rf /' },
-    }),
+    executor.execute('shell-exec-arbitrary', { command: 'rm -rf /' }),
   ).rejects.toThrow(ToolNotFoundError);
 });

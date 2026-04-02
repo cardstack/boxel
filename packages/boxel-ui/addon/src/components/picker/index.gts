@@ -2,38 +2,46 @@ import type Owner from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { ComponentLike } from '@glint/template';
+import { modifier } from 'ember-modifier';
 import type { Select } from 'ember-power-select/components/power-select';
 import { includes } from 'lodash';
 
 import type { Icon } from '../../icons/types.ts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 import { BoxelMultiSelectBasic } from '../multi-select/index.gts';
 import PickerBeforeOptionsWithSearch from './before-options-with-search.gts';
 import PickerOptionRow from './option-row.gts';
 import PickerLabeledTrigger from './trigger-labeled.gts';
 
 export type PickerOption = {
+  disabled?: boolean;
   icon?: Icon | string;
   id: string;
   label: string;
   shortLabel?: string;
+  tooltip?: string;
   type?: 'select-all' | 'option';
 };
 
 export interface PickerSignature {
   Args: {
-    // State
+    afterOptionsComponent?: ComponentLike<any>;
+    destination?: string;
+    disableClientSideSearch?: boolean;
     disabled?: boolean;
-    // Display
+    extra?: Record<string, unknown>;
+    hasMore?: boolean;
+    isLoading?: boolean;
+    isLoadingMore?: boolean;
     label: string;
     matchTriggerWidth?: boolean;
     maxSelectedDisplay?: number;
-
     onChange: (selected: PickerOption[]) => void;
-    // Data
+    onLoadMore?: () => void;
+    onSearchTermChange?: (term: string) => void;
     options: PickerOption[];
-
     placeholder?: string;
-
     renderInPlace?: boolean;
     searchPlaceholder?: string;
     selected: PickerOption[];
@@ -42,6 +50,83 @@ export interface PickerSignature {
     default: [PickerOption, Select];
   };
   Element: HTMLElement;
+}
+
+let loadMoreSentinel = modifier(
+  (
+    element: Element,
+    [onLoadMore, isLoadingMore]: [
+      (() => void) | undefined,
+      boolean | undefined,
+    ],
+    { enabled }: { enabled?: boolean },
+  ) => {
+    if (!enabled || !onLoadMore) {
+      return;
+    }
+
+    let optionsList = element
+      .closest('.ember-basic-dropdown-content')
+      ?.querySelector('.ember-power-select-options') as HTMLElement | null;
+    if (!optionsList) {
+      return;
+    }
+
+    let alreadyRequested = false;
+    let handleScroll = () => {
+      if (isLoadingMore || alreadyRequested) {
+        return;
+      }
+      let { scrollTop, scrollHeight, clientHeight } = optionsList;
+      if (scrollTop + clientHeight >= scrollHeight - 50) {
+        alreadyRequested = true;
+        onLoadMore();
+      }
+    };
+
+    optionsList.addEventListener('scroll', handleScroll);
+
+    // Check immediately: if the list is short enough to fit without
+    // scrolling, we're already at the "bottom" and should load more.
+    requestAnimationFrame(() => handleScroll());
+
+    return () => optionsList!.removeEventListener('scroll', handleScroll);
+  },
+);
+
+interface PickerAfterOptionsSignature {
+  Args: {
+    extra?: Record<string, any>;
+    select: Record<string, any>;
+  };
+}
+
+class PickerLoadingOverlay extends Component<PickerAfterOptionsSignature> {
+  get isLoading(): boolean {
+    return !!this.args.extra?.['isLoading'];
+  }
+
+  <template>
+    {{#if this.isLoading}}
+      <div class='picker-full-loading-overlay' data-test-picker-loading>
+        <LoadingIndicator class='picker-full-loading-spinner' />
+      </div>
+    {{/if}}
+
+    {{! template-lint-disable require-scoped-style }}
+    <style>
+      .picker-full-loading-overlay {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--boxel-light);
+      }
+      .picker-full-loading-spinner {
+        width: 24px;
+        height: 24px;
+      }
+    </style>
+  </template>
 }
 
 export default class Picker extends Component<PickerSignature> {
@@ -86,7 +171,7 @@ export default class Picker extends Component<PickerSignature> {
   // - Then list already-selected options (so they stay visible even if they don't match the term)
   // - Then list unselected options that match the search term, in their original order
   get filteredOptions(): PickerOption[] {
-    if (!this.searchTerm) {
+    if (!this.searchTerm || this.args.disableClientSideSearch) {
       return this.args.options;
     }
 
@@ -134,6 +219,7 @@ export default class Picker extends Component<PickerSignature> {
     });
 
     const selectAll = options.filter((o) => o.type === 'select-all');
+
     return [...selectAll, ...selected, ...unselected];
   }
 
@@ -161,6 +247,11 @@ export default class Picker extends Component<PickerSignature> {
     return lastSelected === option;
   };
 
+  isLastOption = (option: PickerOption): boolean => {
+    const sorted = this.sortedOptions;
+    return sorted.length > 0 && sorted[sorted.length - 1] === option;
+  };
+
   get hasUnselected() {
     const unselected = this.sortedOptions.filter(
       (o) => o.type !== 'select-all' && !this.isVisuallyInSelectedSection(o),
@@ -174,6 +265,7 @@ export default class Picker extends Component<PickerSignature> {
 
   onSearchTermChange = (term: string) => {
     this.searchTerm = term;
+    this.args.onSearchTermChange?.(term);
   };
 
   onOptionHover = (option: PickerOption | null) => {
@@ -198,15 +290,41 @@ export default class Picker extends Component<PickerSignature> {
 
   get extra() {
     return {
+      ...this.args.extra,
       label: this.args.label,
       searchTerm: this.searchTerm,
       searchPlaceholder: this.args.searchPlaceholder,
       onSearchTermChange: this.onSearchTermChange,
       maxSelectedDisplay: this.args.maxSelectedDisplay,
+      isLoading: this.args.isLoading,
     };
   }
 
+  get dropdownClass(): string {
+    let cls = 'boxel-picker__dropdown';
+    if (this.args.isLoading) {
+      cls += ' boxel-picker__dropdown--loading';
+    }
+    return cls;
+  }
+
+  get afterOptionsComponent(): ComponentLike<any> | undefined {
+    if (this.args.afterOptionsComponent) {
+      return this.args.afterOptionsComponent;
+    }
+    if (this.args.isLoading) {
+      return PickerLoadingOverlay;
+    }
+    return undefined;
+  }
+
   onChange = (selected: PickerOption[]) => {
+    // Ignore clicks on disabled options
+    const lastAdded = selected.find((opt) => !this.args.selected.includes(opt));
+    if (lastAdded?.disabled) {
+      return;
+    }
+
     const selectAllOptions = selected.filter((option) => {
       return option.type === 'select-all';
     });
@@ -268,6 +386,7 @@ export default class Picker extends Component<PickerSignature> {
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{this.renderInPlace}}
+      @destination={{@destination}}
       @matchTriggerWidth={{@matchTriggerWidth}}
       @searchEnabled={{false}}
       @closeOnSelect={{false}}
@@ -276,7 +395,8 @@ export default class Picker extends Component<PickerSignature> {
       @extra={{this.extra}}
       @triggerComponent={{component this.triggerComponent}}
       @beforeOptionsComponent={{component PickerBeforeOptionsWithSearch}}
-      @dropdownClass='boxel-picker__dropdown'
+      @afterOptionsComponent={{this.afterOptionsComponent}}
+      @dropdownClass={{this.dropdownClass}}
       ...attributes
       as |option|
     >
@@ -290,6 +410,21 @@ export default class Picker extends Component<PickerSignature> {
       {{#if (this.displayDivider option)}}
         <div class='picker-divider' data-test-boxel-picker-divider></div>
       {{/if}}
+      {{#if (this.isLastOption option)}}
+        {{#if @hasMore}}
+          <div
+            class='picker-load-more-sentinel'
+            {{loadMoreSentinel @onLoadMore @isLoadingMore enabled=@hasMore}}
+            data-test-picker-infinite-scroll
+          >
+            {{#if @isLoadingMore}}
+              <div class='picker-bottom-loading' data-test-picker-loading-more>
+                <LoadingIndicator class='picker-loading-spinner' />
+              </div>
+            {{/if}}
+          </div>
+        {{/if}}
+      {{/if}}
     </BoxelMultiSelectBasic>
 
     {{! template-lint-disable require-scoped-style }}
@@ -299,6 +434,23 @@ export default class Picker extends Component<PickerSignature> {
         background-color: var(--boxel-200);
         margin: var(--boxel-sp-2xs) 0;
         width: 100%;
+      }
+
+      .boxel-picker__dropdown {
+        padding-bottom: var(--boxel-sp-3xs);
+      }
+
+      .boxel-picker__dropdown--loading .picker-before-options {
+        position: relative;
+        z-index: 2;
+      }
+
+      .boxel-picker__dropdown--loading
+        .ember-power-select-option:not(:first-child) {
+        display: none;
+      }
+      .boxel-picker__dropdown--loading .picker-divider:not(:last-child) {
+        display: none;
       }
 
       .boxel-picker__dropdown .ember-power-select-option {
@@ -315,6 +467,20 @@ export default class Picker extends Component<PickerSignature> {
 
       .fitted-template :deep(.ember-basic-dropdown-content-wormhole-origin) {
         position: absolute;
+      }
+
+      .picker-load-more-sentinel {
+        min-height: 1px;
+      }
+      .picker-bottom-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--boxel-sp-xxs) 0;
+      }
+      .picker-loading-spinner {
+        width: 20px;
+        height: 20px;
       }
     </style>
   </template>

@@ -28,7 +28,6 @@ import {
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
   DEFAULT_REALM_SERVER_PORT,
-  DEFAULT_WORKER_MANAGER_PORT,
   findAvailablePort,
   FIXTURE_SOURCE_REALM_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
@@ -277,6 +276,7 @@ export async function startIsolatedRealmStack({
   migrateDB,
   fullIndexOnStartup,
   additionalRealms,
+  workerManagerPort: explicitWorkerManagerPort,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -286,11 +286,17 @@ export async function startIsolatedRealmStack({
   migrateDB: boolean;
   fullIndexOnStartup: boolean;
   additionalRealms?: AdditionalRealm[];
+  /** When provided, the worker-manager will listen on this port instead of
+   *  picking one dynamically. This lets callers know the port upfront (e.g.
+   *  for progress monitoring via /_indexing-status). */
+  workerManagerPort?: number;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
+  let actualWorkerManagerPort =
+    explicitWorkerManagerPort ?? (await findAvailablePort());
   let actualRealmServerPort =
     DEFAULT_REALM_SERVER_PORT === 0
       ? await findAvailablePort()
@@ -396,7 +402,7 @@ export async function startIsolatedRealmStack({
   let workerArgs = [
     '--transpileOnly',
     'worker-manager',
-    `--port=${DEFAULT_WORKER_MANAGER_PORT}`,
+    `--port=${actualWorkerManagerPort}`,
     `--matrixURL=${context.matrixURL}`,
     `--prerendererUrl=${prerenderURL}`,
     `--fromUrl=${realmURL.href}`,

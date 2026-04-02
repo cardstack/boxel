@@ -29,24 +29,48 @@ async function main(): Promise<void> {
       ? parsedMetadataContext
       : undefined;
 
-  // Validate that the context's hostURL is still reachable. A stale
-  // support.json from a previous run can have a dead hostURL which
-  // causes the realm server to crash during template builds.
-  if (supportContext && 'hostURL' in supportContext && supportContext.hostURL) {
-    let hostURL = supportContext.hostURL;
-    try {
-      let response = await fetch(hostURL);
-      if (!response.ok) {
+  // Validate that the context's URLs are still reachable. A stale
+  // support.json from a previous run can have dead URLs which cause
+  // the realm server to crash during template builds.
+  if (supportContext) {
+    if ('hostURL' in supportContext && supportContext.hostURL) {
+      let hostURL = supportContext.hostURL;
+      try {
+        let response = await fetch(hostURL);
+        if (!response.ok) {
+          console.warn(
+            `Stale support context: hostURL ${hostURL} returned ${response.status}, ignoring cached context`,
+          );
+          supportContext = undefined;
+        }
+      } catch {
         console.warn(
-          `Stale support context: hostURL ${hostURL} returned ${response.status}, ignoring cached context`,
+          `Stale support context: hostURL ${hostURL} is not reachable, ignoring cached context`,
         );
         supportContext = undefined;
       }
-    } catch {
-      console.warn(
-        `Stale support context: hostURL ${hostURL} is not reachable, ignoring cached context`,
-      );
-      supportContext = undefined;
+    }
+
+    if (
+      supportContext &&
+      'matrixURL' in supportContext &&
+      supportContext.matrixURL
+    ) {
+      let matrixURL = supportContext.matrixURL;
+      try {
+        let response = await fetch(`${matrixURL}/_matrix/client/versions`);
+        if (!response.ok) {
+          console.warn(
+            `Stale support context: matrixURL ${matrixURL} returned ${response.status}, ignoring cached context`,
+          );
+          supportContext = undefined;
+        }
+      } catch {
+        console.warn(
+          `Stale support context: matrixURL ${matrixURL} is not reachable, ignoring cached context`,
+        );
+        supportContext = undefined;
+      }
     }
   }
 

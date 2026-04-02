@@ -13,7 +13,11 @@ import {
   isResolvedCodeRef,
   cardIdToURL,
 } from '@cardstack/runtime-common';
-import { loadCardDef } from '@cardstack/runtime-common/code-ref';
+import {
+  loadCardDef,
+  getAncestor,
+  identifyCard,
+} from '@cardstack/runtime-common/code-ref';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -22,9 +26,7 @@ import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SearchAndChooseCommand from './search-and-choose';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
 
-import type CardService from '../services/card-service';
 import type NetworkService from '../services/network';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
@@ -33,6 +35,10 @@ import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Spec } from '@cardstack/base/spec';
 
 type ListingType = 'card' | 'skill' | 'theme' | 'field';
+
+const BASE_CARD_API_MODULE = '@cardstack/base/card-api';
+const BASE_SKILL_MODULE = '@cardstack/base/skill';
+
 const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
   skill: 'SkillListing',
@@ -45,25 +51,12 @@ export default class ListingCreateCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateResult
 > {
   @service declare private store: StoreService;
-  @service declare private cardService: CardService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Create';
   description = 'Create a catalog listing for an example card';
-
-  #cardAPI?: typeof CardAPI;
-
-  async loadCardAPI() {
-    if (!this.#cardAPI) {
-      this.#cardAPI = await this.loaderService.loader.import<typeof CardAPI>(
-        '@cardstack/base/card-api',
-      );
-    }
-    return this.#cardAPI;
-  }
 
   get catalogRealm() {
     return this.realmServer.catalogRealmURLs.find((realm) =>
@@ -175,72 +168,46 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async guessListingType(
     codeRef: ResolvedCodeRef,
   ): Promise<ListingType> {
-    if (this.isTheme(codeRef)) {
-      return 'theme';
-    }
-    if (await this.isFieldCodeRef(codeRef)) {
-      return 'field';
-    }
+    let cardDef;
     try {
-      const oneShot = new OneShotLlmRequestCommand(this.commandContext);
-      const systemPrompt =
-        'Respond ONLY with one token: card, skill, or theme. No JSON, no punctuation.';
-      const userPrompt = 'What is the listingType?';
-      const result = await oneShot.execute({
-        codeRef,
-        systemPrompt,
-        userPrompt,
-        llmModel: 'openai/gpt-4.1-nano',
+      cardDef = await loadCardDef(codeRef, {
+        loader: this.loaderService.loader,
       });
-      const maybeType = parseResponseToSingleWord(result.output, true);
-      if (maybeType === 'skill' || maybeType === 'theme') {
-        return maybeType;
-      }
-      return 'card';
     } catch {
       return 'card';
     }
+
+    if (isFieldDef(cardDef)) {
+      return 'field';
+    }
+    if (this.isAncestor(cardDef, BASE_CARD_API_MODULE, 'Theme')) {
+      return 'theme';
+    }
+    if (this.isAncestor(cardDef, BASE_SKILL_MODULE, 'Skill')) {
+      return 'skill';
+    }
+    return 'card';
   }
 
-  private isTheme(codeRef: ResolvedCodeRef): boolean {
-    const codeRefModule = codeRef?.module?.toLowerCase();
-    const codeRefName = codeRef?.name?.toLowerCase();
-    const knownBaseModules = [
-      '@cardstack/base/structured-theme',
-      '@cardstack/base/style-reference',
-      '@cardstack/base/brand-guide',
-    ];
-    if (
-      codeRefModule &&
-      knownBaseModules.some((base) => codeRefModule.includes(base))
-    ) {
-      return true;
-    }
-    if (codeRefName) {
-      const normalizedName = codeRefName
-        .split('')
-        .filter((char) => char !== '-' && char !== '_' && char !== ' ')
-        .join('');
+  private isAncestor(
+    cardDef: CardAPI.BaseDefConstructor,
+    targetModule: string,
+    targetName: string,
+  ): boolean {
+    let current: CardAPI.BaseDefConstructor | undefined = cardDef;
+    while (current) {
+      const ref = identifyCard(current);
       if (
-        ['theme', 'structuredtheme', 'stylereference', 'brandguide'].includes(
-          normalizedName,
-        )
+        ref &&
+        !('type' in ref) &&
+        ref.module === targetModule &&
+        ref.name === targetName
       ) {
         return true;
       }
+      current = getAncestor(current) ?? undefined;
     }
     return false;
-  }
-
-  private async isFieldCodeRef(codeRef: ResolvedCodeRef): Promise<boolean> {
-    try {
-      const cardDef = await loadCardDef(codeRef, {
-        loader: this.loaderService.loader,
-      });
-      return isFieldDef(cardDef);
-    } catch {
-      return false;
-    }
   }
 
   private async linkSpecs(
@@ -574,16 +541,4 @@ function parseResponseToString(
   const firstLine = text.split(/\s*\n\s*/)[0];
   if (!firstLine) return undefined;
   return firstLine.slice(0, maxLength);
-}
-
-function parseResponseToSingleWord(
-  response?: string,
-  lowerCase: boolean = false,
-): string | undefined {
-  const str = parseResponseToString(response, 50)?.trim();
-  if (!str) return undefined;
-  let token = str.split(/\s+/)[0].replace(/[^A-Za-z0-9_-]/g, '');
-  if (!token) return undefined;
-  if (lowerCase) token = token.toLowerCase();
-  return token;
 }

@@ -341,14 +341,6 @@ const REALM_API_TOOLS: ToolManifest[] = [
         required: true,
         description: 'Card or file path within the realm',
       },
-      {
-        name: 'accept',
-        type: 'string',
-        required: false,
-        description:
-          'Accept header. Default: application/vnd.card+source (raw source — path MUST include file extension, e.g. CardDef/my-card.gts). ' +
-          'Use application/vnd.card+json for computed card instances with resolved fields (path must NOT include extension, e.g. Card/instance).',
-      },
     ],
   },
   {
@@ -374,13 +366,6 @@ const REALM_API_TOOLS: ToolManifest[] = [
         type: 'string',
         required: true,
         description: 'File content to write',
-      },
-      {
-        name: 'content-type',
-        type: 'string',
-        required: false,
-        description:
-          'Content-Type header (default: application/vnd.card+source)',
       },
     ],
   },

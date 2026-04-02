@@ -1689,7 +1689,24 @@ importers:
         specifier: 'catalog:'
         version: 2.1.9(@types/node@25.0.8)(jsdom@25.0.1)(terser@5.44.1)
 
-  packages/eslint-plugin-cardstack-host: {}
+  packages/eslint-plugin-cardstack-host:
+    dependencies:
+      requireindex:
+        specifier: 'catalog:'
+        version: 1.2.0
+    devDependencies:
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
+      eslint-doc-generator:
+        specifier: 'catalog:'
+        version: 1.7.1(eslint@8.57.1)(typescript@5.9.3)
+      vite:
+        specifier: 'catalog:'
+        version: 6.4.1(@types/node@25.0.8)(terser@5.44.1)(tsx@4.21.0)(yaml@2.8.2)
+      vitest:
+        specifier: 'catalog:'
+        version: 2.1.9(@types/node@25.0.8)(jsdom@25.0.1)(terser@5.44.1)
 
   packages/experiments-realm:
     dependencies:
@@ -1785,6 +1802,9 @@ importers:
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
+      '@cardstack/eslint-plugin-host':
+        specifier: workspace:*
+        version: link:../eslint-plugin-cardstack-host
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types
@@ -2091,9 +2111,6 @@ importers:
       eslint-config-prettier:
         specifier: 'catalog:'
         version: 9.1.2(eslint@8.57.1)
-      eslint-plugin-cardstack-host:
-        specifier: workspace:*
-        version: link:../eslint-plugin-cardstack-host
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.7.5(@babel/core@7.28.6)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.9.3))(eslint@8.57.1)
@@ -6569,6 +6586,7 @@ packages:
   '@xmldom/xmldom@0.8.11':
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -11445,10 +11463,6 @@ packages:
     resolution: {integrity: sha512-fNzuVyifolSLFL4NzpF+wEF4qrgqaaKX0haXPQEdQ7NKAN+WecoKMHV09YcuL/DHxrUsYQOK3MiuDf7Ip2OXfQ==}
     engines: {node: '>=8'}
 
-  minipass@7.1.2:
-    resolution: {integrity: sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw==}
-    engines: {node: '>=16 || 14 >=14.17'}
-
   minipass@7.1.3:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
@@ -12044,10 +12058,6 @@ packages:
   path-scurry@1.11.1:
     resolution: {integrity: sha512-Xa4Nw17FS9ApQFJ9umLiJS4orGjm7ZzwUrwamcGQuHSzDyth9boKDaycYdDcZDuqYATXw4HFXgaqWTctW/v1HA==}
     engines: {node: '>=16 || 14 >=14.18'}
-
-  path-scurry@2.0.1:
-    resolution: {integrity: sha512-oWyT4gICAu+kaA7QWk/jvCHWarMKNs6pXOGWKDTr7cw4IGcUbW+PeTfbaQiLGheFRpjo6O9J0PmyMfQPjH71oA==}
-    engines: {node: 20 || >=22}
 
   path-scurry@2.0.2:
     resolution: {integrity: sha512-3O/iVVsJAPsOnpwWIeD+d6z/7PmqApyQePUtCndjatj/9I5LylHvt5qluFaBT3I5h3r1ejfR056c+FCv+NnNXg==}
@@ -17955,7 +17965,7 @@ snapshots:
 
   '@types/glob@9.0.0':
     dependencies:
-      glob: 13.0.0
+      glob: 13.0.6
 
   '@types/htmlbars-inline-precompile@3.0.4': {}
 
@@ -18041,7 +18051,7 @@ snapshots:
 
   '@types/minimatch@6.0.0':
     dependencies:
-      minimatch: 10.1.1
+      minimatch: 10.2.4
 
   '@types/minimist@1.2.5': {}
 
@@ -23578,7 +23588,7 @@ snapshots:
       foreground-child: 3.3.1
       jackspeak: 3.4.3
       minimatch: 9.0.5
-      minipass: 7.1.2
+      minipass: 7.1.3
       package-json-from-dist: 1.0.1
       path-scurry: 1.11.1
 
@@ -23586,16 +23596,16 @@ snapshots:
     dependencies:
       foreground-child: 3.3.1
       jackspeak: 4.1.1
-      minimatch: 10.1.1
-      minipass: 7.1.2
+      minimatch: 10.2.4
+      minipass: 7.1.3
       package-json-from-dist: 1.0.1
-      path-scurry: 2.0.1
+      path-scurry: 2.0.2
 
   glob@13.0.0:
     dependencies:
-      minimatch: 10.1.1
-      minipass: 7.1.2
-      path-scurry: 2.0.1
+      minimatch: 10.2.4
+      minipass: 7.1.3
+      path-scurry: 2.0.2
 
   glob@13.0.6:
     dependencies:
@@ -25204,8 +25214,6 @@ snapshots:
 
   minipass@4.2.8: {}
 
-  minipass@7.1.2: {}
-
   minipass@7.1.3: {}
 
   mitt@3.0.1: {}
@@ -25832,12 +25840,7 @@ snapshots:
   path-scurry@1.11.1:
     dependencies:
       lru-cache: 10.4.3
-      minipass: 7.1.2
-
-  path-scurry@2.0.1:
-    dependencies:
-      lru-cache: 11.2.4
-      minipass: 7.1.2
+      minipass: 7.1.3
 
   path-scurry@2.0.2:
     dependencies:
@@ -28336,7 +28339,7 @@ snapshots:
       '@types/minimatch': 5.1.2
       ensure-posix-path: 1.1.1
       matcher-collection: 2.0.1
-      minimatch: 10.1.1
+      minimatch: 10.2.4
 
   walker@1.0.8:
     dependencies:

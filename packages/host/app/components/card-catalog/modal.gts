@@ -122,6 +122,7 @@ export default class CardCatalogModal extends Component<Signature> {
               @layer='urgent'
               {{focusTrap
                 isActive=(not state.dismissModal)
+                additionalElements=this.focusTrapAdditionalElements
                 focusTrapOptions=(hash
                   initialFocus='[data-test-search-field]' allowOutsideClick=true
                 )
@@ -135,6 +136,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
+                  @pickerDestination='card-catalog-picker-wormhole'
                 />
               </:header>
               <:content>
@@ -175,6 +177,10 @@ export default class CardCatalogModal extends Component<Signature> {
                 </div>
               </:footer>
             </ModalContainer>
+            <div
+              id='card-catalog-picker-wormhole'
+              data-test-card-catalog-picker-wormhole
+            ></div>
           </SearchPanel>
         {{/each}}
       {{/if}}
@@ -224,6 +230,11 @@ export default class CardCatalogModal extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_CHOOSER;
     });
+  }
+
+  get focusTrapAdditionalElements() {
+    const el = document.getElementById('card-catalog-picker-wormhole');
+    return el ? [el] : [];
   }
 
   private get state(): State | undefined {
