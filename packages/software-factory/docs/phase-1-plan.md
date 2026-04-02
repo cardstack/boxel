@@ -308,6 +308,8 @@ Test generation rule:
 
 ### Phase 5: Verification
 
+> **Note (CS-10451 cancelled):** The dedicated verification policy ticket (CS-10451) was cancelled because hard-coding a verification gate in the orchestrator conflicts with the phase-2 direction (`phase-2-plan.md`). In phase 2, test execution is modeled as an issue type — the agent creates test issues during task breakdown, and the orchestrator treats them like any other issue. A hard-coded "must have tests" gate would need to be removed when phase 2 lands. For phase 1, the orchestrator runs tests after the agent signals done (orchestrator-owned test execution in `factory-loop.ts`), but enforcement of "at least one test per ticket" is left to the agent's prompt and skills rather than orchestrator code.
+
 Verification is mandatory. Every ticket must have AI-generated Playwright test files before it can be marked done.
 
 Test generation policy:
@@ -379,9 +381,11 @@ The target realm currently needs explicit bootstrap through the realm-server API
 
 The system needs to resume from existing state instead of recreating everything on rerun.
 
-### 5. Default Verification Policy
+### 5. Default Verification Policy *(deferred — see CS-10451 cancellation note)*
 
-The first verification move should be encoded so the runner knows what to do when there are no tests yet.
+~~The first verification move should be encoded so the runner knows what to do when there are no tests yet.~~
+
+For phase 1, verification is handled by the orchestrator running tests after the agent signals done. Enforcement of "at least one test" is prompt-driven, not code-enforced. Phase 2 replaces this with test execution as an issue type.
 
 ### 6. Execution Policy
 
