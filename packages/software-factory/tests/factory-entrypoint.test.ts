@@ -167,11 +167,7 @@ module('factory-entrypoint', function (hooks) {
     assert.true(/--help/.test(usage));
     assert.true(/MATRIX_USERNAME is required/.test(usage));
     assert.true(/For public briefs, no auth setup is needed./.test(usage));
-    assert.true(
-      /MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD \+ REALM_SERVER_URL/.test(
-        usage,
-      ),
-    );
+    assert.true(/MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD/.test(usage));
     assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 

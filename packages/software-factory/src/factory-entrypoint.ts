@@ -106,7 +106,7 @@ export function getFactoryEntrypointUsage(): string {
     '  --target-realm-url <url>    Absolute URL for the target realm',
     '',
     'Options:',
-    '  --realm-server-url <url>   Explicit realm server URL for target realm bootstrap',
+    '  --realm-server-url <url>   Realm server URL (default: http://localhost:4201/)',
     '  --mode <mode>               One of: bootstrap, implement, resume',
     '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
     '  --help                      Show this usage information',
@@ -116,8 +116,9 @@ export function getFactoryEntrypointUsage(): string {
     '  For public briefs, no auth setup is needed.',
     '  For private briefs, factory:go can authenticate via:',
     '    1. the active Boxel profile, or',
-    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD + REALM_SERVER_URL',
-    '  Target realm creation uses separate realm-server auth and post-create realm auth.',
+    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD environment variables',
+    '  The realm server URL is always resolved from --realm-server-url or',
+    '  inferred from --target-realm-url (not from an environment variable).',
   ].join('\n');
 }
 

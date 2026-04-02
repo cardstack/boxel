@@ -27,9 +27,11 @@ import {
   type FactoryAgentConfig,
 } from './factory-agent';
 import {
+  getActiveProfile,
   matrixLogin,
   getRealmServerToken,
   getAccessibleRealmTokens,
+  type ActiveBoxelProfile,
   type MatrixAuth,
   type RealmTokens,
 } from './boxel';
@@ -266,15 +268,24 @@ async function resolveAuth(config: ImplementConfig): Promise<{
     };
   }
 
-  // Production path: login to Matrix and get tokens
+  // Production path: build a profile using the CLI-derived realmServerUrl
+  // instead of relying on getActiveProfile() which requires REALM_SERVER_URL
+  // env var. The realm server URL should always come from --realm-server-url
+  // (or inferred from --target-realm-url), never from an env var.
   let matrixAuth: MatrixAuth;
   try {
-    matrixAuth = config.matrixAuth ?? (await matrixLogin());
+    if (config.matrixAuth) {
+      matrixAuth = config.matrixAuth;
+    } else {
+      let profile = buildProfileWithCliRealmServer(config.realmServerUrl);
+      matrixAuth = await matrixLogin(profile);
+    }
   } catch (error) {
     throw new Error(
-      `Matrix login failed during implement mode. Ensure MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD are set.\n${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Matrix login failed during implement mode. Ensure MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD are set, ` +
+        `and pass --realm-server-url on the CLI.\n${
+          error instanceof Error ? error.message : String(error)
+        }`,
     );
   }
 
@@ -301,6 +312,44 @@ async function resolveAuth(config: ImplementConfig): Promise<{
   }
 
   return { matrixAuth, serverToken, realmTokens };
+}
+
+/**
+ * Build an ActiveBoxelProfile using the CLI-derived realmServerUrl.
+ * Tries the active Boxel profile first (from ~/.boxel-cli/profiles.json),
+ * then falls back to MATRIX_URL / MATRIX_USERNAME / MATRIX_PASSWORD env vars.
+ * Never reads REALM_SERVER_URL from the environment.
+ */
+function buildProfileWithCliRealmServer(
+  realmServerUrl: string,
+): ActiveBoxelProfile {
+  // Try active Boxel profile first
+  try {
+    let profile = getActiveProfile();
+    // Override the profile's realmServerUrl with the CLI-derived one
+    return { ...profile, realmServerUrl };
+  } catch {
+    // No active profile — fall back to env vars
+  }
+
+  let matrixUrl = process.env.MATRIX_URL?.trim();
+  let username = process.env.MATRIX_USERNAME?.trim();
+  let password = process.env.MATRIX_PASSWORD?.trim();
+
+  if (!matrixUrl || !username || !password) {
+    throw new Error(
+      'No active Boxel profile found and MATRIX_URL/MATRIX_USERNAME/MATRIX_PASSWORD are not fully set. ' +
+        'The realm server URL is taken from --realm-server-url (not from an env var).',
+    );
+  }
+
+  return {
+    profileId: null,
+    username,
+    matrixUrl,
+    realmServerUrl,
+    password,
+  };
 }
 
 // ---------------------------------------------------------------------------

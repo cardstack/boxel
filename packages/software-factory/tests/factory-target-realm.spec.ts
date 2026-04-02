@@ -90,7 +90,6 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
           MATRIX_USERNAME: targetUsername,
           MATRIX_PASSWORD: targetPassword,
           MATRIX_URL: matrixURL,
-          REALM_SERVER_URL: realmServerURL,
         },
         timeoutMs: 120_000,
       },
