@@ -479,13 +479,17 @@ function buildTestRunner(
     });
 
     if (specPaths.length === 0) {
-      // No test files found — the agent hasn't written tests yet.
-      // Return passed with 0 counts so the loop doesn't falsely iterate.
       return {
-        status: 'passed',
+        status: 'failed',
         passedCount: 0,
-        failedCount: 0,
-        failures: [],
+        failedCount: 1,
+        failures: [
+          {
+            testName: 'test-discovery',
+            error:
+              'No Playwright test specs found in Tests/ folder. Every ticket must include at least one .spec.ts file.',
+          },
+        ],
         durationMs: 0,
       };
     }
@@ -645,7 +649,17 @@ async function updateTicketStatus(
     status,
   };
 
-  await writeCardSource(realmUrl, ticketId, doc, fetchOptions);
+  let writeResult = await writeCardSource(
+    realmUrl,
+    ticketId,
+    doc,
+    fetchOptions,
+  );
+  if (!writeResult.ok) {
+    throw new Error(
+      `Failed to write ticket ${ticketId}: ${writeResult.error ?? 'unknown'}`,
+    );
+  }
 }
 
 // Re-export for convenience

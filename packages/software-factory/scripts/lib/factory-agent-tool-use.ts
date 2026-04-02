@@ -1,8 +1,7 @@
 /**
  * Tool-use factory agent — implements LoopAgent with native tool-use protocol.
  *
- * Instead of the old declarative model (agent returns AgentAction[] as JSON),
- * this agent sends tool definitions to the LLM via the API's tools parameter.
+ * This agent sends tool definitions to the LLM via the API's tools parameter.
  * The LLM calls tools during its turn, the agent executes them via
  * FactoryTool.execute(), and returns results to the LLM. The conversation
  * continues until the LLM calls signal_done/request_clarification or stops
@@ -10,6 +9,8 @@
  */
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+
+const MAX_TOOL_USE_TURNS = 50;
 
 import { createBoxelRealmFetch } from '../../src/realm-auth';
 
@@ -123,8 +124,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
     let toolCallLog: ToolCallEntry[] = [];
 
     // Multi-turn tool-calling loop
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
+    for (let turn = 0; turn < MAX_TOOL_USE_TURNS; turn++) {
       let response = await this.callOpenRouterWithTools(messages, toolDefs);
       let choice = response.choices?.[0];
 
@@ -229,18 +229,19 @@ export class ToolUseFactoryAgent implements LoopAgent {
         });
       }
     }
+
+    throw new Error(
+      `Tool-use loop exceeded ${MAX_TOOL_USE_TURNS} turns without completing. ` +
+        `The model may be stuck in a tool-calling loop.`,
+    );
   }
 
   /**
    * Build messages for the tool-use agent.
    *
-   * The system prompt is constructed directly (not from the template) because
-   * the template-based system.md uses the old declarative action model. With
-   * native tool-use, tools are provided via the API parameter, and the agent
-   * calls tools directly rather than outputting a JSON action array.
-   *
-   * The user prompt reuses the ticket-implement template which is compatible
-   * with both models.
+   * The system prompt is loaded from prompts/system.md via the prompt loader.
+   * Tools are provided natively via the LLM API's tool definitions parameter,
+   * not embedded in the prompt text.
    */
   private buildMessages(context: AgentContext): ToolUseMessage[] {
     let systemPrompt = this.buildToolUseSystemPrompt(context);
@@ -249,7 +250,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
     if (context.testResults) {
       userPrompt = assembleIteratePrompt({
         context,
-        previousActions: context.previousActions ?? [],
+        previousActions: [],
         iteration: context.iteration ?? 1,
         loader: this.promptLoader,
       });

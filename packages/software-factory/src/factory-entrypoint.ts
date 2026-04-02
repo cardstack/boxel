@@ -117,8 +117,8 @@ export function getFactoryEntrypointUsage(): string {
     '  For private briefs, factory:go can authenticate via:',
     '    1. the active Boxel profile, or',
     '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD environment variables',
-    '  The realm server URL is always resolved from --realm-server-url or',
-    '  inferred from --target-realm-url (not from an environment variable).',
+    '  The realm server URL comes from --realm-server-url (default: http://localhost:4201/).',
+    '  It is never inferred from --target-realm-url or read from an environment variable.',
   ].join('\n');
 }
 
