@@ -2,12 +2,15 @@ import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
 
 import {
   hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
+import { type CardDef, getComponent } from '../card-api';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -25,10 +28,29 @@ function wrapTablesHtml(html: string | null | undefined): string {
   return doc.body.innerHTML;
 }
 
+interface CardSlot {
+  element: HTMLElement;
+  card: CardDef;
+  format: 'atom' | 'embedded';
+}
+
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  try {
+    return resolveCardReference(raw, baseUrl || undefined);
+  } catch {
+    return raw;
+  }
+}
+
 export default class MarkDownTemplate extends GlimmerComponent<{
-  Args: { content: string | null };
+  Args: {
+    content: string | null;
+    linkedCards?: BaseDef[] | null;
+    cardReferenceBaseUrl?: string | null;
+  };
 }> {
   @tracked monacoContextInternal: any = undefined;
+  @tracked cardSlots: CardSlot[] = [];
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
@@ -73,8 +95,75 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     return htmlSafe(wrapTablesHtml(html));
   }
 
+  captureCardSlots = modifier(
+    (element: HTMLElement, _positional: unknown[]) => {
+      let linkedCards = this.args.linkedCards;
+      let baseUrl = this.args.cardReferenceBaseUrl;
+
+      if (!linkedCards?.length) {
+        if (this.cardSlots.length > 0) {
+          this.cardSlots = [];
+        }
+        return;
+      }
+
+      let cardsByUrl = new Map<string, BaseDef>();
+      for (let card of linkedCards) {
+        if (card?.id) {
+          cardsByUrl.set(card.id, card);
+        }
+      }
+
+      let slots: CardSlot[] = [];
+
+      for (let el of element.querySelectorAll<HTMLElement>(
+        '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
+      )) {
+        let rawUrl = el.dataset.boxelBfmInlineRef;
+        if (!rawUrl) continue;
+        let resolved = resolveUrl(rawUrl, baseUrl);
+        let card = cardsByUrl.get(resolved);
+        if (card) {
+          slots.push({ element: el, card, format: 'atom' });
+        } else {
+          el.textContent = rawUrl;
+        }
+      }
+
+      for (let el of element.querySelectorAll<HTMLElement>(
+        '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
+      )) {
+        let rawUrl = el.dataset.boxelBfmBlockRef;
+        if (!rawUrl) continue;
+        let resolved = resolveUrl(rawUrl, baseUrl);
+        let card = cardsByUrl.get(resolved);
+        if (card) {
+          slots.push({ element: el, card, format: 'embedded' });
+        } else {
+          el.textContent = rawUrl;
+        }
+      }
+
+      this.cardSlots = slots;
+    },
+  );
+
+  getCardComponent = (card: BaseDef) => getComponent(card);
+
   <template>
-    <div class='markdown-content'>{{this.renderedHtml}}</div>
+    <div
+      class='markdown-content'
+      {{this.captureCardSlots this.renderedHtml @linkedCards}}
+    >
+      {{this.renderedHtml}}
+    </div>
+    {{#each this.cardSlots as |slot|}}
+      {{#in-element slot.element insertBefore=null}}
+        {{#let (this.getCardComponent slot.card) as |CardComponent|}}
+          <CardComponent @format={{slot.format}} />
+        {{/let}}
+      {{/in-element}}
+    {{/each}}
     <style scoped>
       @layer baseComponent {
         .markdown-content {
@@ -320,6 +409,19 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
         .markdown-content :deep(tr:not(:last-child) td) {
           border-bottom: 1px solid var(--md-border);
+        }
+
+        /* BFM references (card, file, etc.) */
+        .markdown-content :deep([data-boxel-bfm-inline-ref]) {
+          display: inline;
+        }
+
+        .markdown-content :deep([data-boxel-bfm-block-ref]) {
+          display: block;
+          margin: var(--boxel-sp) 0;
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+          overflow: hidden;
         }
       }
     </style>
