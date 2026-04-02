@@ -99,6 +99,7 @@ export function buildFactoryTools(
     buildWriteFileTool(config),
     buildReadFileTool(config),
     buildSearchRealmTool(config),
+    buildUpdateProjectTool(config),
     buildUpdateTicketTool(config),
     buildCreateKnowledgeTool(config),
     buildRunTestsTool(config),
@@ -205,6 +206,46 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
       return searchRealm(realmUrl, query, fetchOptions);
+    },
+  };
+}
+
+function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'update_project',
+    description:
+      'Update a project card in the target realm (e.g., update status or success criteria).',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
+        },
+        content: {
+          type: 'string',
+          description: 'Card source JSON content',
+        },
+      },
+      required: ['path', 'content'],
+    },
+    execute: async (args) => {
+      let path = args.path as string;
+      let content = args.content as string;
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+
+      let document: LooseSingleCardDocument;
+      try {
+        document = JSON.parse(content) as LooseSingleCardDocument;
+      } catch {
+        return {
+          ok: false,
+          error: `Failed to parse update_project content as JSON: ${path}`,
+        };
+      }
+      return writeCardSource(realmUrl, path, document, fetchOptions);
     },
   };
 }
