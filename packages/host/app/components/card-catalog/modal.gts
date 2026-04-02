@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { array, fn, hash } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -8,8 +8,6 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
 import { restartableTask, task } from 'ember-concurrency';
-import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
-
 import pluralize from 'pluralize';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -121,12 +119,6 @@ export default class CardCatalogModal extends Component<Signature> {
               @title={{state.chooseCardTitle}}
               @onClose={{this.cancelPick}}
               @layer='urgent'
-              {{focusTrap
-                isActive=(not state.dismissModal)
-                focusTrapOptions=(hash
-                  initialFocus='[data-test-search-field]' allowOutsideClick=true
-                )
-              }}
               {{on 'keydown' this.handleKeydown}}
               data-test-card-catalog-modal
             >
@@ -136,7 +128,6 @@ export default class CardCatalogModal extends Component<Signature> {
                   @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
-                  @renderInPlace={{true}}
                 />
               </:header>
               <:content>
