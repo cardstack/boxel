@@ -302,9 +302,8 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
   test('renders inline card reference in atom format and block card reference in embedded format', async function (assert) {
     await visitOperatorMode({
-      stacks: [
-        [{ id: `${testRealmURL}bfm-test.md`, format: 'isolated' }],
-      ],
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-test.md`,
     });
 
     await waitFor('[data-test-pet-atom]', { timeout: 10000 });
@@ -324,9 +323,8 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
   test('shows fallback text for unresolvable card references', async function (assert) {
     await visitOperatorMode({
-      stacks: [
-        [{ id: `${testRealmURL}bfm-fallback.md`, format: 'isolated' }],
-      ],
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-fallback.md`,
     });
 
     await waitFor('[data-test-markdown-isolated]', { timeout: 10000 });

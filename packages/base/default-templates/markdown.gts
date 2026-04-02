@@ -10,7 +10,7 @@ import {
   preloadMarkdownLanguages,
   resolveCardReference,
 } from '@cardstack/runtime-common';
-import { type CardDef, getComponent } from '../card-api';
+import { type BaseDef, getComponent } from '../card-api';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -116,8 +116,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
       let slots: CardSlot[] = [];
 
-      for (let el of element.querySelectorAll<HTMLElement>(
-        '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
+      for (let el of Array.from(
+        element.querySelectorAll<HTMLElement>(
+          '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
+        ),
       )) {
         let rawUrl = el.dataset.boxelBfmInlineRef;
         if (!rawUrl) continue;
@@ -130,8 +132,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
       }
 
-      for (let el of element.querySelectorAll<HTMLElement>(
-        '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
+      for (let el of Array.from(
+        element.querySelectorAll<HTMLElement>(
+          '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
+        ),
       )) {
         let rawUrl = el.dataset.boxelBfmBlockRef;
         if (!rawUrl) continue;
