@@ -15,9 +15,9 @@ import {
   ensureTrailingSlash,
   getRealmScopedAuth,
   pullRealmFiles,
-  readCardSource,
+  readFile,
   searchRealm,
-  writeCardSource,
+  writeFile,
 } from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseRunRealmTestsOutput } from './test-run-parsing';
@@ -62,7 +62,7 @@ export async function ensureTestArtifactsRealm(
     fetch: options.fetch,
   };
 
-  let readResult = await readCardSource(
+  let readResult = await readFile(
     new URL(projectCardUrl).origin + '/',
     new URL(projectCardUrl).pathname.slice(1),
     fetchOptions,
@@ -145,10 +145,10 @@ export async function ensureTestArtifactsRealm(
 
   let realmUrl = new URL(projectCardUrl).origin + '/';
   let cardPath = new URL(projectCardUrl).pathname.slice(1);
-  let writeResult = await writeCardSource(
+  let writeResult = await writeFile(
     realmUrl,
     `${cardPath}.json`,
-    readResult.document,
+    JSON.stringify(readResult.document, null, 2),
     fetchOptions,
   );
   if (!writeResult.ok) {
@@ -242,7 +242,11 @@ async function findResumableTestRun(
     { authorization: options.authorization, fetch: options.fetch },
   );
 
-  let latest = result?.data?.[0] as
+  if (!result?.ok) {
+    return undefined;
+  }
+
+  let latest = result.data?.[0] as
     | {
         id?: string;
         attributes?: {
@@ -291,9 +295,11 @@ async function getNextSequenceNumber(
     { authorization: options.authorization, fetch: options.fetch },
   );
 
-  let latest = result?.data?.[0] as
-    | { attributes?: { sequenceNumber?: number } }
-    | undefined;
+  let latest = result?.ok
+    ? (result.data?.[0] as
+        | { attributes?: { sequenceNumber?: number } }
+        | undefined)
+    : undefined;
   return (latest?.attributes?.sequenceNumber ?? 0) + 1;
 }
 
