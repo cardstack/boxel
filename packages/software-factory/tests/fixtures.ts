@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
-import type { RealmPermissions } from '@cardstack/runtime-common/realm';
+import type { RealmAction, RealmPermissions } from '@cardstack/runtime-common';
 
 import {
   defaultSupportMetadataFile,
@@ -29,10 +29,10 @@ type StartedFactoryRealm = {
     workerManagerPort: number;
   };
   cardURL(path: string): string;
-  createBearerToken(user?: string, permissions?: string[]): string;
+  createBearerToken(user?: string, permissions?: RealmAction[]): string;
   authorizationHeaders(
     user?: string,
-    permissions?: string[],
+    permissions?: RealmAction[],
   ): Record<string, string>;
   stop(): Promise<void>;
 };
@@ -48,7 +48,7 @@ export type RealmServerMode = 'shared' | 'isolated';
 type FactoryRealmOptions = {
   realmDir: string;
   realmServerMode: RealmServerMode;
-  permissions: RealmPermissions | undefined;
+  realmPermissions: RealmPermissions | undefined;
 };
 
 type FactoryRealmWorkerFixtures = {
@@ -399,7 +399,7 @@ async function startRealmProcess(
     cardURL(path: string) {
       return new URL(path, metadata.realmURL).href;
     },
-    createBearerToken(user?: string, perms?: string[]) {
+    createBearerToken(user?: string, perms?: RealmAction[]) {
       if (!user && !perms) {
         return metadata.ownerBearerToken;
       }
@@ -410,7 +410,7 @@ async function startRealmProcess(
         perms,
       );
     },
-    authorizationHeaders(user?: string, perms?: string[]) {
+    authorizationHeaders(user?: string, perms?: RealmAction[]) {
       let token =
         !user && !perms
           ? metadata.ownerBearerToken
@@ -481,7 +481,10 @@ export const test = base.extend<
 >({
   realmDir: [defaultRealmDir, { option: true }],
   realmServerMode: ['shared', { option: true }],
-  permissions: [undefined as RealmPermissions | undefined, { option: true }],
+  realmPermissions: [
+    undefined as RealmPermissions | undefined,
+    { option: true },
+  ],
   testWorkerPortSet: [
     async ({ browserName: _browserName }, use, workerInfo) => {
       // These services are ephemeral per test, but we intentionally keep their
@@ -518,7 +521,7 @@ export const test = base.extend<
       browserName: _browserName,
       realmDir,
       realmServerMode,
-      permissions,
+      realmPermissions: permissions,
       testWorkerPortSet,
       testWorkerPrerender,
     },

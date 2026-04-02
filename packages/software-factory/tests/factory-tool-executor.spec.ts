@@ -283,7 +283,7 @@ test.describe('realm-search with seeded fixture data', () => {
 test.describe('realm-search on a private realm', () => {
   test.use({ realmServerMode: 'isolated' });
   test.use({
-    permissions: {
+    realmPermissions: {
       [DEFAULT_REALM_OWNER]: ['read', 'write', 'realm-owner'],
       // No '*' key — unauthenticated reads are denied
     },
