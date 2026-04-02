@@ -350,7 +350,7 @@ export default class AiAssistantMessage extends Component<Signature> {
       this.isReasoningExpandedByDefault
     );
   }
-  private updateReasoningExpanded = (ev: MouseEvent | KeyboardEvent) => {
+  private updateReasoningExpanded = (ev: Event) => {
     ev.preventDefault();
     this.matrixService.reasoningExpandedState.set(
       this.args.eventId,

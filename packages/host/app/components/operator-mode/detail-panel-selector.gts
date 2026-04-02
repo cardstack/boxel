@@ -150,7 +150,6 @@ export default class Selector extends Component<Signature> {
                 <div
                   class='boxel-selector__item__content'
                   role='menuitem'
-                  href='#'
                   data-boxel-selector-item-text={{selectorItem.declaration.localName}}
                   data-test-boxel-selector-item-text={{selectorItem.declaration.localName}}
                   {{on
@@ -161,7 +160,7 @@ export default class Selector extends Component<Signature> {
                     'keypress'
                     (fn this.invokeSelectorItemAction selectorItem.action)
                   }}
-                  disabled={{selectorItem.disabled}}
+                  aria-disabled={{if selectorItem.disabled "true"}}
                 >
                   <div class='selector-item'>
                     {{#if selectorItem.declaration.exportName}}

@@ -21,6 +21,7 @@ import { ComponentLike } from '@glint/template';
 import type { HelperLike, ModifierLike } from '@glint/template';
 import type { ConcatHelper as GlintConcatHelper } from '@glint/ember-tsc/-private/intrinsics/concat';
 import type { FnHelper as GlintFnHelper } from '@glint/ember-tsc/-private/intrinsics/fn';
+import type { GetHelper as GlintGetHelper } from '@glint/ember-tsc/-private/intrinsics/get';
 import type { LinkToComponent as GlintLinkToComponent } from '@glint/ember-tsc/-private/intrinsics/link-to';
 import type {
   EventForName,
@@ -74,6 +75,10 @@ declare module '@ember/helper' {
     Args: { Positional: unknown[] };
     Return: string;
   }> {}
+
+  interface GetHelper {
+    [InvokeDirect]: GlintGetHelper[typeof InvokeDirect];
+  }
 }
 
 declare module '@ember/modifier/on' {
