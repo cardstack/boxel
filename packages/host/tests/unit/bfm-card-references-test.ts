@@ -54,11 +54,9 @@ module('Unit | bfm-card-references', function () {
     });
 
     test('ignores references inside fenced code blocks', function (assert) {
-      let markdown = [
-        '```',
-        ':card[https://example.com/cards/1]',
-        '```',
-      ].join('\n');
+      let markdown = ['```', ':card[https://example.com/cards/1]', '```'].join(
+        '\n',
+      );
       let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
       assert.deepEqual(urls, []);
     });
@@ -159,9 +157,7 @@ module('Unit | bfm-card-references', function () {
       let markdown = '::card[https://example.com/cards/1]\n';
       let html = markdownToHtml(markdown);
       assert.true(
-        html.includes(
-          'data-boxel-bfm-block-ref="https://example.com/cards/1"',
-        ),
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/1"'),
         'block placeholder has ref data attribute',
       );
       assert.true(
@@ -175,11 +171,9 @@ module('Unit | bfm-card-references', function () {
     });
 
     test('card refs inside code blocks are not processed', function (assert) {
-      let markdown = [
-        '```',
-        ':card[https://example.com/cards/1]',
-        '```',
-      ].join('\n');
+      let markdown = ['```', ':card[https://example.com/cards/1]', '```'].join(
+        '\n',
+      );
       let html = markdownToHtml(markdown);
       assert.false(
         html.includes('data-boxel-bfm-inline-ref'),
@@ -207,9 +201,7 @@ module('Unit | bfm-card-references', function () {
         'inline ref survives sanitization',
       );
       assert.true(
-        html.includes(
-          'data-boxel-bfm-block-ref="https://example.com/cards/2"',
-        ),
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/2"'),
         'block ref survives sanitization',
       );
     });
