@@ -5,8 +5,8 @@
  * using real skill files from disk and the real SkillResolver/SkillLoader.
  *
  * Usage:
- *   pnpm factory:context-smoke
- *   pnpm factory:context-smoke --max-tokens 8000
+ *   pnpm smoke:context
+ *   pnpm smoke:context --max-tokens 8000
  */
 
 import { parseArgs } from 'node:util';
@@ -15,13 +15,13 @@ import type {
   KnowledgeArticle,
   ProjectCard,
   TicketCard,
-} from './lib/factory-agent';
-import { ContextBuilder } from './lib/factory-context-builder';
+} from '../lib/factory-agent';
+import { ContextBuilder } from '../lib/factory-context-builder';
 import {
   DefaultSkillResolver,
   estimateTokens,
   SkillLoader,
-} from './lib/factory-skill-loader';
+} from '../lib/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
 // Helpers

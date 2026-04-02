@@ -1,7 +1,7 @@
 import { action } from '@ember/object';
 import { getOwner } from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 import { isDevelopingApp } from '@embroider/macros';
 import Component from '@glimmer/component';
 

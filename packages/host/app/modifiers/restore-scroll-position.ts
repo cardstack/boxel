@@ -2,7 +2,7 @@ import { registerDestructor, isDestroying } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { cancel, debounce } from '@ember/runloop';
 import type { Timer } from '@ember/runloop';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import Modifier from 'ember-modifier';
 

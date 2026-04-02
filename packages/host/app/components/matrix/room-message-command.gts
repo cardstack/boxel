@@ -1,5 +1,5 @@
 import { array, hash } from '@ember/helper';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
