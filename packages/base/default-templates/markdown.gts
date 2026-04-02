@@ -121,6 +121,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         let resolved = resolveUrl(rawUrl, baseUrl);
         let card = cardsByUrl.get(resolved);
         if (card) {
+          el.textContent = '';
           slots.push({ element: el, card, format: 'atom' });
         }
       }
@@ -135,6 +136,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         let resolved = resolveUrl(rawUrl, baseUrl);
         let card = cardsByUrl.get(resolved);
         if (card) {
+          el.textContent = '';
           slots.push({ element: el, card, format: 'embedded' });
         }
       }
