@@ -24,7 +24,7 @@ export function formatNumber(val: number | undefined) {
 type StarType = 'full' | 'half' | 'empty';
 interface StarIconSignature {
   Args: { type: StarType };
-  Element: HTMLElement;
+  Element: SVGSVGElement;
 }
 const StarIcon: TemplateOnlyComponent<StarIconSignature> = <template>
   {{#if (eq @type 'full')}}
@@ -205,7 +205,7 @@ export class RatingsSummary extends FieldDef {
     <template>
       {{#if @model.average}}
         <span class='rating-summary'>
-          <StarIcon class='icon' @type='full' style='width: 10px; height: 10px;' />
+          <StarIcon class='icon' @type='full' width='10' height='10' />
           <span class='rating'><@fields.average /></span>
         </span>
       {{/if}}

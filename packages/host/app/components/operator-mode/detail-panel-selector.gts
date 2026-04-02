@@ -160,7 +160,7 @@ export default class Selector extends Component<Signature> {
                     'keypress'
                     (fn this.invokeSelectorItemAction selectorItem.action)
                   }}
-                  aria-disabled={{if selectorItem.disabled "true"}}
+                  aria-disabled={{if selectorItem.disabled 'true'}}
                 >
                   <div class='selector-item'>
                     {{#if selectorItem.declaration.exportName}}
