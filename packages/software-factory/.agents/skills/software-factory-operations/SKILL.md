@@ -22,27 +22,27 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 ### Reading and Searching
 
-- `read_file(path, realm?)` — Read a file from target or test realm. Use before modifying anything.
-- `search_realm(query, realm?)` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
+- `read_file({ path, realm? })` — Read a file from target or test realm. Use before modifying anything.
+- `search_realm({ query, realm? })` — Search for cards using a structured query object (filter, sort, page). Use to check for existing cards, find duplicates, inspect project state.
 
 ### Writing Files
 
-- `write_file(path, content, realm?)` — Write a file to the target or test realm. Path must include extension (`.gts`, `.json`, `.spec.ts`). The `realm` arg defaults to `"target"`; use `"test"` for the test realm.
+- `write_file({ path, content, realm? })` — Write a file to the target or test realm. Path must include extension (`.gts`, `.json`, `.spec.ts`). The `realm` arg defaults to `"target"`; use `"test"` for the test realm.
 
 ### Updating Project State
 
-- `update_project(path, content)` — Update a Project card in the target realm (e.g., status, success criteria). Content must be valid card source JSON.
-- `update_ticket(path, content)` — Update a Ticket card in the target realm (e.g., status, notes, acceptance criteria). Content must be valid card source JSON.
-- `create_knowledge(path, content)` — Create or update a KnowledgeArticle card in the target realm. Content must be valid card source JSON.
+- `update_project({ path, content })` — Update a Project card in the target realm (e.g., status, success criteria). Content must be valid card source JSON.
+- `update_ticket({ path, content })` — Update a Ticket card in the target realm (e.g., status, notes, acceptance criteria). Content must be valid card source JSON.
+- `create_knowledge({ path, content })` — Create or update a KnowledgeArticle card in the target realm. Content must be valid card source JSON.
 
 ### Testing
 
-- `run_tests(slug, specPaths, testNames?, projectCardUrl?)` — Execute Playwright tests against the target realm. Pulls test spec files from the realm, runs them via the Playwright harness, returns structured results (pass/fail counts, failure details with error messages and stack traces).
+- `run_tests({ slug, specPaths, testNames?, projectCardUrl? })` — Execute Playwright tests against the target realm. Pulls test spec files from the realm, runs them via the Playwright harness, returns structured results (pass/fail counts, failure details with error messages and stack traces).
 
 ### Control Flow
 
 - `signal_done()` — Signal that the current ticket is complete. Call this only after all implementation and test files have been written.
-- `request_clarification(message)` — Signal that you cannot proceed and need human input. Describe what is blocking.
+- `request_clarification({ message })` — Signal that you cannot proceed and need human input. Describe what is blocking.
 
 ## Required Flow
 
