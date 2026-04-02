@@ -381,7 +381,7 @@ The target realm currently needs explicit bootstrap through the realm-server API
 
 The system needs to resume from existing state instead of recreating everything on rerun.
 
-### 5. Default Verification Policy *(deferred — see CS-10451 cancellation note)*
+### 5. Default Verification Policy _(deferred — see CS-10451 cancellation note)_
 
 ~~The first verification move should be encoded so the runner knows what to do when there are no tests yet.~~
 
@@ -545,7 +545,7 @@ Responsibilities:
 
 For version one, this helper can stay deterministic and data-oriented. Later AI stages should combine the structured brief fields with a stable prompt template rather than embedding a fully rendered prompt into `factory:go` output.
 
-### E. `scripts/lib/factory-loop.ts` *(implemented — CS-10568)*
+### E. `scripts/lib/factory-loop.ts` _(implemented — CS-10568)_
 
 Central execution loop orchestrator. Exports `runFactoryLoop()` which drives the implement→test→iterate cycle for a single ticket.
 

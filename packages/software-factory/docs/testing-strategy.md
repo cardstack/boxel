@@ -428,11 +428,11 @@ The current mapping is:
   - target-realm bootstrap integration tests
 - `CS-10449`
   - artifact-bootstrap and idempotency integration tests
-- ~~`CS-10451`~~ *(cancelled — hard-coded verification policy conflicts with phase-2 issue-driven approach where test execution is an issue type, not an orchestrator-enforced gate)*
+- ~~`CS-10451`~~ _(cancelled — hard-coded verification policy conflicts with phase-2 issue-driven approach where test execution is an issue type, not an orchestrator-enforced gate)_
   - ~~verification-policy unit tests~~
 - `CS-10450`
   - execution loop implementation, broken into child tickets:
-    - ~~action dispatcher~~ *(replaced by agent-driven tool calls in CS-10568)*
+    - ~~action dispatcher~~ _(replaced by agent-driven tool calls in CS-10568)_
     - context builder (assemble `AgentContext` from skills, realm state) — CS-10567
     - core loop orchestrator (run → test → iterate cycle) — CS-10568
     - wire loop into `factory:go --mode implement`
