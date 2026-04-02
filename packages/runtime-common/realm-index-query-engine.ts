@@ -442,6 +442,20 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getFile(url, opts);
   }
 
+  async loadLinksForResource(
+    resource: LooseCardResource | FileMetaResource,
+    opts?: Options,
+  ): Promise<(CardResource<Saved> | FileMetaResource)[]> {
+    return await this.loadLinks(
+      {
+        realmURL: this.realmURL,
+        resource,
+        omit: [...(resource.id ? [resource.id] : [])],
+      },
+      opts,
+    );
+  }
+
   private async populateQueryFields(
     resource: LooseCardResource | FileMetaResource,
     realmURL: URL,
