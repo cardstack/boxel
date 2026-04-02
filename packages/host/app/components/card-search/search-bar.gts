@@ -46,6 +46,7 @@ interface Signature {
     isLoadingMoreTypes?: boolean;
     typesTotalCount?: number;
     disableSelectAll?: boolean;
+    renderInPlace?: boolean;
     bottomTreatment?: BoxelInputBottomTreatments;
     state?: 'none' | 'valid' | 'invalid' | 'loading' | 'initial';
     id?: string;
@@ -76,6 +77,7 @@ export default class SearchBar extends Component<Signature> {
         <RealmPicker
           @selected={{@selectedRealms}}
           @onChange={{@onRealmChange}}
+          @renderInPlace={{@renderInPlace}}
         />
       </div>
       <div class='search-sheet__search-bar-picker'>
@@ -90,6 +92,7 @@ export default class SearchBar extends Component<Signature> {
           @isLoadingMore={{@isLoadingMoreTypes}}
           @totalCount={{@typesTotalCount}}
           @disableSelectAll={{@disableSelectAll}}
+          @renderInPlace={{@renderInPlace}}
         />
       </div>
       <div class='search-sheet__search-bar-separator' aria-hidden='true'></div>

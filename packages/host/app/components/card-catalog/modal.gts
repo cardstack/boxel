@@ -136,6 +136,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
+                  @renderInPlace={{true}}
                 />
               </:header>
               <:content>
