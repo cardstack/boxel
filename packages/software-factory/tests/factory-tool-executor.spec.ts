@@ -151,31 +151,22 @@ test('realm-delete removes a card from the test realm', async ({ realm }) => {
   });
   expect(writeResult.exitCode).toBe(0);
 
-  // Delete it
+  // Delete via the tool executor
   let deleteResult = await executor.execute('realm-delete', {
     'realm-url': realm.realmURL.href,
     path: 'ToolExecutorTest/delete-test.json',
   });
   expect(deleteResult.exitCode).toBe(0);
 
-  // Verify the deletion took effect — search should no longer find the card
-  let searchResult = await executor.execute('realm-search', {
+  // Verify the deletion took effect — reading the deleted card should fail
+  let readResult = await executor.execute('realm-read', {
     'realm-url': realm.realmURL.href,
-    query: JSON.stringify({
-      filter: {
-        type: {
-          module: 'https://cardstack.com/base/card-api',
-          name: 'CardDef',
-        },
-        eq: {
-          id: `${realm.realmURL.href}ToolExecutorTest/delete-test`,
-        },
-      },
-    }),
+    path: 'ToolExecutorTest/delete-test.json',
   });
-  expect(searchResult.exitCode).toBe(0);
-  let searchOutput = searchResult.output as { data?: unknown[] };
-  expect(searchOutput.data?.length ?? 0).toBe(0);
+  expect(
+    readResult.exitCode,
+    `Expected realm-read to fail after delete, but got: ${JSON.stringify(readResult.output)}`,
+  ).toBe(1);
 });
 
 test('unregistered tool is rejected without reaching the server', async ({

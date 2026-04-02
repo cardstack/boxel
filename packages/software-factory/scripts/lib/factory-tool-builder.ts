@@ -15,9 +15,8 @@ import type { ToolRegistry } from './factory-tool-registry';
 import { executeTestRunFromRealm } from './test-run-execution';
 import type { ExecuteTestRunOptions, TestRunHandle } from './test-run-types';
 import {
-  writeModuleSource,
-  writeCardSource,
-  readCardSource,
+  writeFile,
+  readFile,
   searchRealm,
   ensureTrailingSlash,
   type RealmFetchOptions,
@@ -148,7 +147,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
       let content = args.content as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return writeModuleSource(realmUrl, path, content, fetchOptions);
+      return writeFile(realmUrl, path, content, fetchOptions);
     },
   };
 }
@@ -176,7 +175,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
       let path = args.path as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return readCardSource(realmUrl, path, fetchOptions);
+      return readFile(realmUrl, path, fetchOptions);
     },
   };
 }
@@ -244,7 +243,12 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
           error: `Failed to parse update_ticket content as JSON: ${path}`,
         };
       }
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }
@@ -284,7 +288,12 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
           error: `Failed to parse create_knowledge content as JSON: ${path}`,
         };
       }
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }

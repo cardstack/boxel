@@ -5,9 +5,9 @@ import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
 import {
   ensureTrailingSlash,
-  readCardSource,
-  writeModuleSource,
-  deleteCard,
+  readFile,
+  writeFile,
+  deleteFile,
   searchRealm,
   createRealm,
   getServerSession,
@@ -428,7 +428,7 @@ export class ToolExecutor {
 
       switch (toolName) {
         case 'realm-read': {
-          let result = await readCardSource(
+          let result = await readFile(
             String(toolArgs['realm-url']),
             String(toolArgs['path']),
             fetchOptions,
@@ -439,7 +439,7 @@ export class ToolExecutor {
         }
 
         case 'realm-write': {
-          let result = await writeModuleSource(
+          let result = await writeFile(
             String(toolArgs['realm-url']),
             String(toolArgs['path']),
             String(toolArgs['content']),
@@ -451,7 +451,7 @@ export class ToolExecutor {
         }
 
         case 'realm-delete': {
-          let result = await deleteCard(
+          let result = await deleteFile(
             String(toolArgs['realm-url']),
             String(toolArgs['path']),
             fetchOptions,

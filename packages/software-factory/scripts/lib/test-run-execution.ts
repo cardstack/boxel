@@ -15,9 +15,9 @@ import {
   ensureTrailingSlash,
   getRealmScopedAuth,
   pullRealmFiles,
-  readCardSource,
+  readFile,
   searchRealm,
-  writeCardSource,
+  writeFile,
 } from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseRunRealmTestsOutput } from './test-run-parsing';
@@ -62,7 +62,7 @@ export async function ensureTestArtifactsRealm(
     fetch: options.fetch,
   };
 
-  let readResult = await readCardSource(
+  let readResult = await readFile(
     new URL(projectCardUrl).origin + '/',
     new URL(projectCardUrl).pathname.slice(1),
     fetchOptions,
@@ -145,10 +145,10 @@ export async function ensureTestArtifactsRealm(
 
   let realmUrl = new URL(projectCardUrl).origin + '/';
   let cardPath = new URL(projectCardUrl).pathname.slice(1);
-  let writeResult = await writeCardSource(
+  let writeResult = await writeFile(
     realmUrl,
     `${cardPath}.json`,
-    readResult.document,
+    JSON.stringify(readResult.document, null, 2),
     fetchOptions,
   );
   if (!writeResult.ok) {
