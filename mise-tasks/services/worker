@@ -1,0 +1,54 @@
+#!/bin/sh
+#MISE description="Start development worker manager"
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg", "infra:wait-for-prerender"]
+#MISE dir="packages/realm-server"
+
+DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
+CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
+DEFAULT_EXTERNAL_CATALOG_REALM_URL="${REALM_BASE_URL}/external-catalog/"
+EXTERNAL_CATALOG_REALM_URL="${RESOLVED_EXTERNAL_CATALOG_REALM_URL:-$DEFAULT_EXTERNAL_CATALOG_REALM_URL}"
+DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
+SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
+
+START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
+START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
+
+NODE_ENV=development \
+  NODE_NO_WARNINGS=1 \
+  NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=4096}" \
+  PGPORT="${PGPORT}" \
+  PGDATABASE="${PGDATABASE}" \
+  LOG_LEVELS='*=info' \
+  REALM_SECRET_SEED="shhh! it's a secret" \
+  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  LOW_CREDIT_THRESHOLD=2000 \
+  OPENROUTER_REALM_URL="${REALM_BASE_URL}/openrouter/" \
+  ts-node \
+  --transpileOnly worker-manager \
+  --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
+  --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  --port="${WORKER_PORT}" \
+  --matrixURL="${MATRIX_URL_VAL}" \
+  --prerendererUrl="${PRERENDER_MGR_URL}" \
+  \
+  --fromUrl='https://cardstack.com/base/' \
+  --toUrl="${REALM_BASE_URL}/base/" \
+  \
+  ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
+  ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
+  \
+  ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
+  ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
+  \
+  --fromUrl='@cardstack/skills/' \
+  --toUrl="${REALM_BASE_URL}/skills/" \
+  \
+  ${START_CATALOG:+--fromUrl="${EXTERNAL_CATALOG_REALM_URL}"} \
+  ${START_CATALOG:+--toUrl="${EXTERNAL_CATALOG_REALM_URL}"}
+  \
+  --fromUrl='@cardstack/openrouter/' \
+  --toUrl="${REALM_BASE_URL}/openrouter/" \
+  \
+  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  --toUrl="${SOFTWARE_FACTORY_REALM_URL}"
+ 

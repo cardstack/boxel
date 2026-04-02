@@ -1,7 +1,9 @@
 import { getOwner, setOwner } from '@ember/owner';
+import type Owner from '@ember/owner';
 
-import { debounce } from '@ember/runloop';
+import { debounce, schedule } from '@ember/runloop';
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
 import Ajv from 'ajv';
@@ -32,12 +34,13 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import { waitForRealmState } from '../commands/utils';
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
+import type MessageService from './message-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmServerService from './realm-server';
+import type ResetService from './reset';
 import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
@@ -52,12 +55,18 @@ type GenericCommand = Command<
   typeof CardDef | undefined
 >;
 
+const commandProcessingWaiter = buildWaiter(
+  'command-service:command-processing',
+);
+
 export default class CommandService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private matrixService: MatrixService;
+  @service declare private messageService: MessageService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
+  @service declare private reset: ResetService;
   @service declare private store: StoreService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   executedCommandRequestIds = new TrackedSet<string>();
@@ -75,10 +84,37 @@ export default class CommandService extends Service {
       deferred: Deferred<void>;
     }
   >();
+  private aiAssistantInvalidationWaiters = new Map<
+    string,
+    { unsubscribe: () => void; timeoutId: ReturnType<typeof setTimeout> }
+  >();
   private commandProcessingEventQueue: string[] = [];
   private codePatchProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
   private flushCodePatchProcessingQueue: Promise<void> | undefined;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+  }
+
+  resetState() {
+    this.currentlyExecutingCommandRequestIds.clear();
+    this.executedCommandRequestIds.clear();
+    this.acceptingAllRoomIds.clear();
+    this.aiAssistantClientRequestIdsByRoom.clear();
+    for (let invalidation of this.aiAssistantInvalidations.values()) {
+      invalidation.deferred.fulfill();
+    }
+    this.aiAssistantInvalidations.clear();
+    for (let key of this.aiAssistantInvalidationWaiters.keys()) {
+      this.cleanupInvalidationWaiter(key);
+    }
+    this.commandProcessingEventQueue = [];
+    this.codePatchProcessingEventQueue = [];
+    this.flushCommandProcessingQueue = undefined;
+    this.flushCodePatchProcessingQueue = undefined;
+  }
 
   registerAiAssistantClientRequestId(action: string, roomId: string): string {
     let encodedRoom = encodeURIComponent(roomId);
@@ -130,6 +166,8 @@ export default class CommandService extends Service {
     }
 
     let deferred = new Deferred<void>();
+    this.aiAssistantInvalidations.get(key)?.deferred.fulfill();
+    this.cleanupInvalidationWaiter(key);
     this.aiAssistantInvalidations.set(key, {
       clientRequestId,
       roomId,
@@ -137,27 +175,45 @@ export default class CommandService extends Service {
       deferred,
     });
 
-    waitForRealmState(
-      this.commandContext,
-      realmURL.href,
-      (event) => {
-        return Boolean(
+    let unsubscribe = this.messageService.subscribe(realmURL.href, (event) => {
+      if (
+        !(
           event &&
           event.eventName === 'index' &&
           event.indexType === 'incremental' &&
-          event.clientRequestId === clientRequestId,
-        );
-      },
-      { timeoutMs: 5 * 60 * 1000, keepRealmSubscription: true }, // we don't wanna close the realm subscription since other places could be subscribed, like the store service
-    )
-      .then(() => {
+          event.clientRequestId === clientRequestId
+        )
+      ) {
+        return;
+      }
+      this.cleanupInvalidationWaiter(key);
+      let current = this.aiAssistantInvalidations.get(key);
+      current?.deferred.fulfill();
+    });
+    let timeoutId = setTimeout(
+      () => {
+        this.cleanupInvalidationWaiter(key);
         let current = this.aiAssistantInvalidations.get(key);
         current?.deferred.fulfill();
-      })
-      .catch(() => {
         this.aiAssistantInvalidations.delete(key);
-      });
+      },
+      5 * 60 * 1000,
+    );
+    this.aiAssistantInvalidationWaiters.set(key, {
+      unsubscribe,
+      timeoutId,
+    });
     return clientRequestId;
+  }
+
+  private cleanupInvalidationWaiter(key: string) {
+    let waiter = this.aiAssistantInvalidationWaiters.get(key);
+    if (!waiter) {
+      return;
+    }
+    waiter.unsubscribe();
+    clearTimeout(waiter.timeoutId);
+    this.aiAssistantInvalidationWaiters.delete(key);
   }
 
   async waitForInvalidationAfterAIAssistantRequest(
@@ -241,77 +297,180 @@ export default class CommandService extends Service {
   }
 
   private async drainCommandProcessingQueue() {
-    await this.flushCommandProcessingQueue;
+    let waiterToken = commandProcessingWaiter.beginAsync();
+    try {
+      await this.flushCommandProcessingQueue;
 
-    let finishedProcessingCommands: () => void;
-    this.flushCommandProcessingQueue = new Promise(
-      (res) => (finishedProcessingCommands = res),
-    );
+      let finishedProcessingCommands: () => void;
+      this.flushCommandProcessingQueue = new Promise(
+        (res) => (finishedProcessingCommands = res),
+      );
 
-    let commandSpecs = [...this.commandProcessingEventQueue];
-    this.commandProcessingEventQueue = [];
+      let commandSpecs = [...this.commandProcessingEventQueue];
+      this.commandProcessingEventQueue = [];
 
-    while (commandSpecs.length > 0) {
-      let [roomId, eventId] = commandSpecs.shift()!.split('|');
+      while (commandSpecs.length > 0) {
+        let [roomId, eventId] = commandSpecs.shift()!.split('|');
 
-      let roomResource = this.matrixService.roomResources.get(roomId!);
-      if (!roomResource) {
-        throw new Error(
-          `Room resource not found for room id ${roomId}, this should not happen`,
-        );
-      }
-      let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
-      let currentRoomProcessingTimestamp = roomResource.processingLastStartedAt;
-      while (
-        roomResource.isProcessing &&
-        currentRoomProcessingTimestamp ===
-          roomResource.processingLastStartedAt &&
-        Date.now() < timeout
-      ) {
-        // wait for the room resource to finish processing
-        await delay(100);
-      }
-      if (
-        roomResource.isProcessing &&
-        currentRoomProcessingTimestamp === roomResource.processingLastStartedAt
-      ) {
-        // room seems to be stuck processing, so we will log and skip this event
-        console.error(
-          `Room resource for room ${roomId} seems to be stuck processing, skipping event ${eventId}`,
-        );
-        continue;
-      }
-
-      let message = roomResource.messages.find((m) => m.eventId === eventId);
-      if (!message) {
-        continue;
-      }
-      if (message.agentId !== this.matrixService.agentId) {
-        // This command was sent by another agent, so we will not auto-execute it
-        continue;
-      }
-
-      // Collect all ready commands for this message
-      let readyCommands: any[] = [];
-      for (let messageCommand of message.commands) {
-        if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
-          continue;
+        let roomResource = this.matrixService.roomResources.get(roomId!);
+        if (!roomResource) {
+          throw new Error(
+            `Room resource not found for room id ${roomId}, this should not happen`,
+          );
         }
-        if (this.executedCommandRequestIds.has(messageCommand.id!)) {
-          continue;
+        let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+        let currentRoomProcessingTimestamp =
+          roomResource.processingLastStartedAt;
+        while (
+          roomResource.isProcessing &&
+          currentRoomProcessingTimestamp ===
+            roomResource.processingLastStartedAt &&
+          Date.now() < timeout
+        ) {
+          // wait for the room resource to finish processing
+          await delay(100);
         }
         if (
-          messageCommand.status === 'applied' ||
-          messageCommand.status === 'invalid'
+          roomResource.isProcessing &&
+          currentRoomProcessingTimestamp ===
+            roomResource.processingLastStartedAt
         ) {
-          continue;
-        }
-        if (!messageCommand.name) {
+          // room seems to be stuck processing, so we will log and skip this event
+          console.error(
+            `Room resource for room ${roomId} seems to be stuck processing, skipping event ${eventId}`,
+          );
           continue;
         }
 
-        let isValid = await this.validate(messageCommand);
-        if (!isValid) {
+        let message = roomResource.messages.find((m) => m.eventId === eventId);
+        if (!message) {
+          continue;
+        }
+        if (message.agentId !== this.matrixService.agentId) {
+          // This command was sent by another agent, so we will not auto-execute it
+          continue;
+        }
+
+        // Collect all ready commands for this message
+        let readyCommands: any[] = [];
+        for (let messageCommand of message.commands) {
+          if (
+            this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)
+          ) {
+            continue;
+          }
+          if (this.executedCommandRequestIds.has(messageCommand.id!)) {
+            continue;
+          }
+          if (
+            messageCommand.status === 'applied' ||
+            messageCommand.status === 'invalid'
+          ) {
+            continue;
+          }
+          if (!messageCommand.name) {
+            continue;
+          }
+
+          let isValid = await this.validate(messageCommand);
+          if (!isValid) {
+            continue;
+          }
+
+          // Get the LLM mode that was active when this message was created
+          let messageTimestamp = message.created.getTime();
+          let activeModeAtMessageTime =
+            roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
+
+          // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
+          // or if requiresApproval is false
+          let shouldAutoExecute = false;
+          let isCheckCorrectnessCommand =
+            messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
+
+          if (
+            isCheckCorrectnessCommand ||
+            messageCommand.requiresApproval === false ||
+            activeModeAtMessageTime === 'act'
+          ) {
+            shouldAutoExecute = true;
+          }
+
+          if (shouldAutoExecute) {
+            readyCommands.push(messageCommand);
+          }
+        }
+
+        // Execute ready commands, tracking accept-all state if multiple commands
+        if (readyCommands.length > 0) {
+          // This is an "accept all" operation - multiple commands ready for execution
+          this.acceptingAllRoomIds.add(roomId!);
+          try {
+            for (let command of readyCommands) {
+              this.run.perform(command);
+            }
+          } finally {
+            this.acceptingAllRoomIds.delete(roomId!);
+          }
+        }
+      }
+      finishedProcessingCommands!();
+    } finally {
+      commandProcessingWaiter.endAsync(waiterToken);
+    }
+  }
+
+  private async drainCodePatchProcessingQueue() {
+    let waiterToken = commandProcessingWaiter.beginAsync();
+    try {
+      await this.flushCodePatchProcessingQueue;
+
+      let finishedProcessingCodePatches: () => void;
+      this.flushCodePatchProcessingQueue = new Promise(
+        (res) => (finishedProcessingCodePatches = res),
+      );
+
+      let codePatchSpecs = [...this.codePatchProcessingEventQueue];
+      this.codePatchProcessingEventQueue = [];
+
+      while (codePatchSpecs.length > 0) {
+        let [roomId, eventId] = codePatchSpecs.shift()!.split('|');
+
+        let roomResource = this.matrixService.roomResources.get(roomId!);
+        if (!roomResource) {
+          throw new Error(
+            `Room resource not found for room id ${roomId}, this should not happen`,
+          );
+        }
+        let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+        let currentRoomProcessingTimestamp =
+          roomResource.processingLastStartedAt;
+        while (
+          roomResource.isProcessing &&
+          currentRoomProcessingTimestamp ===
+            roomResource.processingLastStartedAt &&
+          Date.now() < timeout
+        ) {
+          // wait for the room resource to finish processing
+          await delay(100);
+        }
+        if (
+          roomResource.isProcessing &&
+          currentRoomProcessingTimestamp ===
+            roomResource.processingLastStartedAt
+        ) {
+          // room seems to be stuck processing, so we will log and skip this event
+          console.error(
+            `Room resource for room ${roomId} seems to be stuck processing, skipping code patch event ${eventId}`,
+          );
+          continue;
+        }
+        let message = roomResource.messages.find((m) => m.eventId === eventId);
+        if (!message) {
+          continue;
+        }
+        if (message.agentId !== this.matrixService.agentId) {
+          // This code patch was sent by another agent, so we will not auto-execute it
           continue;
         }
 
@@ -319,120 +478,33 @@ export default class CommandService extends Service {
         let messageTimestamp = message.created.getTime();
         let activeModeAtMessageTime =
           roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
-
-        // Auto-execute if LLM mode is 'act' AND the command came after the LLM mode was set to 'act',
-        // or if requiresApproval is false
-        let shouldAutoExecute = false;
-        let isCheckCorrectnessCommand =
-          messageCommand.name === CHECK_CORRECTNESS_COMMAND_NAME;
-
-        if (
-          isCheckCorrectnessCommand ||
-          messageCommand.requiresApproval === false ||
-          activeModeAtMessageTime === 'act'
-        ) {
-          shouldAutoExecute = true;
+        // Only auto-apply if in 'act' mode
+        if (activeModeAtMessageTime !== 'act') {
+          continue;
         }
 
-        if (shouldAutoExecute) {
-          readyCommands.push(messageCommand);
-        }
-      }
+        // Auto-apply all ready code patches from this message
+        if (message.htmlParts) {
+          let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
+          let uniqueFiles = new Set(
+            readyCodePatches.map((patch) => patch.fileUrl),
+          );
 
-      // Execute ready commands, tracking accept-all state if multiple commands
-      if (readyCommands.length > 0) {
-        // This is an "accept all" operation - multiple commands ready for execution
-        this.acceptingAllRoomIds.add(roomId!);
-        try {
-          for (let command of readyCommands) {
-            this.run.perform(command);
-          }
-        } finally {
-          this.acceptingAllRoomIds.delete(roomId!);
-        }
-      }
-    }
-    finishedProcessingCommands!();
-  }
-
-  private async drainCodePatchProcessingQueue() {
-    await this.flushCodePatchProcessingQueue;
-
-    let finishedProcessingCodePatches: () => void;
-    this.flushCodePatchProcessingQueue = new Promise(
-      (res) => (finishedProcessingCodePatches = res),
-    );
-
-    let codePatchSpecs = [...this.codePatchProcessingEventQueue];
-    this.codePatchProcessingEventQueue = [];
-
-    while (codePatchSpecs.length > 0) {
-      let [roomId, eventId] = codePatchSpecs.shift()!.split('|');
-
-      let roomResource = this.matrixService.roomResources.get(roomId!);
-      if (!roomResource) {
-        throw new Error(
-          `Room resource not found for room id ${roomId}, this should not happen`,
-        );
-      }
-      let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
-      let currentRoomProcessingTimestamp = roomResource.processingLastStartedAt;
-      while (
-        roomResource.isProcessing &&
-        currentRoomProcessingTimestamp ===
-          roomResource.processingLastStartedAt &&
-        Date.now() < timeout
-      ) {
-        // wait for the room resource to finish processing
-        await delay(100);
-      }
-      if (
-        roomResource.isProcessing &&
-        currentRoomProcessingTimestamp === roomResource.processingLastStartedAt
-      ) {
-        // room seems to be stuck processing, so we will log and skip this event
-        console.error(
-          `Room resource for room ${roomId} seems to be stuck processing, skipping code patch event ${eventId}`,
-        );
-        continue;
-      }
-      let message = roomResource.messages.find((m) => m.eventId === eventId);
-      if (!message) {
-        continue;
-      }
-      if (message.agentId !== this.matrixService.agentId) {
-        // This code patch was sent by another agent, so we will not auto-execute it
-        continue;
-      }
-
-      // Get the LLM mode that was active when this message was created
-      let messageTimestamp = message.created.getTime();
-      let activeModeAtMessageTime =
-        roomResource.getActiveLLMModeAtTimestamp(messageTimestamp);
-      // Only auto-apply if in 'act' mode
-      if (activeModeAtMessageTime !== 'act') {
-        continue;
-      }
-
-      // Auto-apply all ready code patches from this message
-      if (message.htmlParts) {
-        let readyCodePatches = this.getReadyCodePatches(message.htmlParts);
-        let uniqueFiles = new Set(
-          readyCodePatches.map((patch) => patch.fileUrl),
-        );
-
-        if (readyCodePatches.length > 0 || uniqueFiles.size > 0) {
-          // This is an "accept all" operation - multiple patches OR patches across multiple files
-          this.acceptingAllRoomIds.add(roomId!);
-          try {
-            await this.executeReadyCodePatches(roomId!, message.htmlParts);
-          } finally {
-            this.acceptingAllRoomIds.delete(roomId!);
+          if (readyCodePatches.length > 0 || uniqueFiles.size > 0) {
+            // This is an "accept all" operation - multiple patches OR patches across multiple files
+            this.acceptingAllRoomIds.add(roomId!);
+            try {
+              await this.executeReadyCodePatches(roomId!, message.htmlParts);
+            } finally {
+              this.acceptingAllRoomIds.delete(roomId!);
+            }
           }
         }
       }
+      finishedProcessingCodePatches!();
+    } finally {
+      commandProcessingWaiter.endAsync(waiterToken);
     }
-    finishedProcessingCodePatches!();
   }
 
   get commandContext(): CommandContext {
@@ -672,6 +744,9 @@ export default class CommandService extends Service {
         `${codeData.eventId}:${codeData.codeBlockIndex}`,
       );
     }
+    // Give Glimmer one render turn to reflect the "applying" state before we
+    // start mutating files and emitting result events.
+    await new Promise<void>((resolve) => schedule('afterRender', resolve));
     let finalFileUrl: string | undefined;
 
     try {

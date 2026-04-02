@@ -8,26 +8,28 @@ import type { CreateRoutesArgs } from '../routes';
 
 export default function handleFullReindex({
   queue,
+  definitionLookup,
   realms,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let realmUrls = realms.map((r) => r.url);
+
+    await definitionLookup.clearAllModules();
+
     await queue.publish<void>({
       jobType: `full-reindex`,
       concurrencyGroup: `full-reindex-group`,
       timeout: 6 * 60,
       priority: systemInitiatedPriority,
       args: {
-        realmUrls: realms.map((r) => r.url),
+        realmUrls,
       },
     });
     await setContextResponse(
       ctxt,
-      new Response(
-        JSON.stringify({ realms: realms.map((r) => r.url) }, null, 2),
-        {
-          headers: { 'content-type': SupportedMimeType.JSON },
-        },
-      ),
+      new Response(JSON.stringify({ realms: realmUrls }, null, 2), {
+        headers: { 'content-type': SupportedMimeType.JSON },
+      }),
     );
   };
 }

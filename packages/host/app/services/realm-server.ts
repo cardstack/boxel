@@ -103,13 +103,23 @@ export default class RealmServerService extends Service {
   }
 
   resetState() {
+    let catalogRealms = this.availableRealms.filter(
+      (realm) => realm.type === 'catalog',
+    );
     this.logout();
+    this.availableRealms = new TrackedArray([
+      { type: 'base', url: baseRealm.url },
+      ...catalogRealms,
+    ]);
+    this.eventSubscribers = new Map();
+    this._ready = new Deferred<void>();
+    this._ready.fulfill();
   }
 
   setClient(client: ExtendedClient) {
     this.client = client;
     this.token =
-      getStorageValueWithFallback(sessionLocalStorageKey) ?? undefined;
+      window.localStorage.getItem(sessionLocalStorageKey) ?? undefined;
   }
 
   async createStripeSession(email: string) {
@@ -132,34 +142,6 @@ export default class RealmServerService extends Service {
     }
 
     return response;
-  }
-
-  async createUser(matrixUserId: string, registrationToken?: string) {
-    await this.login();
-    let response = await this.network.fetch(`${this.url.href}_user`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSONAPI,
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.token}`,
-      },
-      body: JSON.stringify({
-        data: {
-          type: 'user',
-          attributes: {
-            matrixUserId,
-            registrationToken: registrationToken ?? null,
-          },
-        },
-      }),
-    });
-    if (!response.ok) {
-      let err = `Could not create user with parameters '${matrixUserId}' and '${registrationToken}': ${
-        response.status
-      } - ${await response.text()}`;
-      console.error(err);
-      throw new Error(err);
-    }
   }
 
   async createRealm(args: {
@@ -194,6 +176,33 @@ export default class RealmServerService extends Service {
     return new URL(realmURL);
   }
 
+  async deleteRealm(realmURL: string) {
+    await this.login();
+
+    let response = await this.network.fetch(`${this.url.href}_delete-realm`, {
+      method: 'DELETE',
+      headers: {
+        Accept: SupportedMimeType.JSONAPI,
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'realm',
+          id: realmURL,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      let err = `Could not delete realm '${realmURL}': ${
+        response.status
+      } - ${await response.text()}`;
+      console.error(err);
+      throw new Error(err);
+    }
+  }
+
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
@@ -206,7 +215,6 @@ export default class RealmServerService extends Service {
       url: baseRealm.url,
     });
     window.localStorage.removeItem(sessionLocalStorageKey);
-    window.sessionStorage.removeItem(sessionLocalStorageKey);
   }
 
   async fetchTokensForAccessibleRealms() {
@@ -271,8 +279,15 @@ export default class RealmServerService extends Service {
     let testRealmOrigin = isTesting()
       ? new URL(testRealmURL).origin
       : undefined;
-    let sessionTokens =
-      getSessionTokenMapWithFallback(SessionLocalStorageKey) ?? {};
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
+      sessionTokens = {};
+    }
 
     let realmServerURLs = new Set<string>();
 
@@ -403,7 +418,18 @@ export default class RealmServerService extends Service {
     }
 
     let { data } = await response.json();
+    let externalCatalogURL = ENV.resolvedExternalCatalogRealmURL;
+    let showExternalCatalog =
+      window.localStorage.getItem('boxel:externalCatalog') === 'true';
+
     data.forEach((publicRealm: { id: string }) => {
+      if (
+        externalCatalogURL &&
+        publicRealm.id === externalCatalogURL &&
+        !showExternalCatalog
+      ) {
+        return;
+      }
       if (!this.availableRealms.find((r) => r.url === publicRealm.id)) {
         this.availableRealms.push({
           type: 'catalog',
@@ -411,6 +437,16 @@ export default class RealmServerService extends Service {
         });
       }
     });
+
+    if (showExternalCatalog && externalCatalogURL) {
+      if (!this.availableRealms.find((r) => r.url === externalCatalogURL)) {
+        this.availableRealms.push({
+          type: 'catalog',
+          url: externalCatalogURL,
+        });
+      }
+    }
+
     this._ready.fulfill();
   }
 
@@ -465,6 +501,75 @@ export default class RealmServerService extends Service {
       data: { id: string; type: 'realm-info'; attributes: RealmInfo }[];
     };
     return { data: json.data ?? [], publicReadableRealms };
+  }
+
+  async fetchCardTypeSummaries(
+    realmUrls: string[],
+    options?: {
+      searchKey?: string;
+      page?: { number: number; size: number };
+    },
+  ): Promise<{
+    data: {
+      id: string;
+      type: 'card-type-summary';
+      attributes: { displayName: string; total: number; iconHTML: string };
+      meta?: { realmURL: string };
+    }[];
+    meta: { page: { total: number } };
+  }> {
+    if (realmUrls.length === 0) {
+      return { data: [], meta: { page: { total: 0 } } };
+    }
+
+    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let typesURL = new URL('_federated-types', realmServerURL);
+
+    let body: Record<string, unknown> = { realms: uniqueRealmUrls };
+    if (options?.searchKey) {
+      body.searchKey = options.searchKey;
+    }
+    if (options?.page) {
+      body.page = options.page;
+    }
+
+    let response = await this.authedFetch(typesURL.href, {
+      method: 'QUERY',
+      headers: {
+        Accept: SupportedMimeType.CardTypeSummary,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch federated card type summaries: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let json = (await response.json()) as {
+      data: {
+        id: string;
+        type: 'card-type-summary';
+        attributes: {
+          displayName: string;
+          total: number;
+          iconHTML: string;
+        };
+        meta?: { realmURL: string };
+      }[];
+      meta: { page: { total: number } };
+    };
+    return { data: json.data ?? [], meta: json.meta ?? { page: { total: 0 } } };
   }
 
   async handleEvent(event: Partial<IEvent>) {
@@ -539,8 +644,6 @@ export default class RealmServerService extends Service {
     } else {
       this.auth = { type: 'anonymous' };
     }
-    // Keep localStorage as the canonical persistence for host realm-server auth.
-    // Read paths use local->session fallback to interoperate with prerender flows.
     window.localStorage.setItem(sessionLocalStorageKey, value ?? '');
     this.tokenRefresher.perform();
   }
@@ -566,8 +669,12 @@ export default class RealmServerService extends Service {
   });
 
   private loggingIn: Promise<void> | undefined;
+  private pendingRegistrationToken: string | undefined;
 
-  async login(): Promise<void> {
+  async login(registrationToken?: string): Promise<void> {
+    if (registrationToken) {
+      this.pendingRegistrationToken = registrationToken;
+    }
     if (this.auth.type === 'logged-in') {
       return;
     }
@@ -588,8 +695,10 @@ export default class RealmServerService extends Service {
         this.network.authedFetch.bind(this.network),
         {
           authWithRealmServer: true,
+          registrationToken: this.pendingRegistrationToken,
         },
       );
+      this.pendingRegistrationToken = undefined;
       let token = await realmAuthClient.getJWT();
       this.token = token;
     } catch (e: any) {
@@ -927,7 +1036,7 @@ export default class RealmServerService extends Service {
         type: 'claimed-domain',
         attributes: {
           source_realm_url: sourceRealmURL,
-          hostname: hostname,
+          hostname,
         },
       },
     };
@@ -1053,8 +1162,14 @@ export default class RealmServerService extends Service {
   }
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
-    let sessionTokens = getSessionTokenMapWithFallback(SessionLocalStorageKey);
-    if (!sessionTokens) {
+    let sessionTokens: Record<string, string> = {};
+    let sessionStr = window.localStorage.getItem(SessionLocalStorageKey);
+    if (!sessionStr) {
+      return undefined;
+    }
+    try {
+      sessionTokens = JSON.parse(sessionStr) as Record<string, string>;
+    } catch {
       return undefined;
     }
     for (let realmURL of realms) {
@@ -1070,44 +1185,6 @@ export default class RealmServerService extends Service {
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 const sessionLocalStorageKey = 'boxel-realm-server-session';
-
-function getStorageValueWithFallback(key: string): string | null {
-  // Host writes are localStorage-first, but prerender/isolated contexts may use
-  // sessionStorage, so reads intentionally fall back. We treat empty string as
-  // missing because this file stores `''` when clearing auth.
-  let localValue = window.localStorage.getItem(key);
-  if (localValue) {
-    return localValue;
-  }
-  return window.sessionStorage.getItem(key);
-}
-
-function getSessionTokenMapWithFallback(
-  key: string,
-): Record<string, string> | undefined {
-  let localTokens = parseSessionTokenMap(window.localStorage.getItem(key));
-  if (localTokens && hasTokenEntries(localTokens)) {
-    return localTokens;
-  }
-  return parseSessionTokenMap(window.sessionStorage.getItem(key));
-}
-
-function parseSessionTokenMap(
-  value: string | null,
-): Record<string, string> | undefined {
-  if (!value) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(value) as Record<string, string>;
-  } catch {
-    return undefined;
-  }
-}
-
-function hasTokenEntries(tokens: Record<string, string>): boolean {
-  return Object.keys(tokens).length > 0;
-}
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');

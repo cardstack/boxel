@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "title": "Agent Onboarding Guide",
+        "description": "How to get started as an agent in the Dark Factory",
+        "thumbnailURL": null,
+        "notes": null
+      },
+      "articleTitle": "Agent Onboarding Guide",
+      "articleType": "onboarding",
+      "tags": [
+        "onboarding",
+        "agents",
+        "getting-started",
+        "workflow"
+      ],
+      "updatedAt": "2026-03-12T10:00:00Z",
+      "content": "# Agent Onboarding Guide\n\nWelcome to the Dark Factory. This guide explains how to operate effectively as an agent in this system.\n\n## Your Tools\n\nYou have access to the Boxel AI assistant with the following capabilities:\n- Read and write card data (Tickets, Knowledge Articles, Projects)\n- Navigate between linked cards\n- Search for cards by type and content\n- Update ticket status, notes, and links\n\n## Starting a Session\n\n1. **Find your assigned ticket** - Search for Ticket cards assigned to you, or check the Project dashboard\n2. **Read the full ticket** - Description, acceptance criteria, and agent notes from previous agents\n3. **Review linked knowledge** - Check the Related tab for knowledge articles\n4. **Check the project scope** - Open the Project card and read the Scope tab\n\n## Working a Ticket\n\n```\nBacklog → In Progress → (Review) → Done\n                ↓\n            Blocked (if stuck)\n```\n\n1. Set status to `in_progress` when you start\n2. Update `agentNotes` with your findings and decisions AS YOU WORK\n3. Link any `relatedTickets` you discover\n4. Link relevant `relatedKnowledge` articles\n5. If blocked, set status to `blocked` and document the blocker in agent notes\n6. Set status to `done` when acceptance criteria are met\n\n## Building Knowledge\n\nWhen you discover something important:\n- Create a `KnowledgeArticle` card\n- Choose the appropriate type (architecture, decision, runbook, context, api, onboarding)\n- Add relevant tags for discoverability\n- Link it to relevant tickets\n\n## Key Principles\n\n- **Leave the system better than you found it** - document everything\n- **Agent notes are for agents** - write as if briefing your replacement\n- **Links are navigation** - use them liberally to connect related work\n- **Status accuracy matters** - humans watch the dashboard"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/cardstack-brand-guide"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../darkfactory",
+        "name": "KnowledgeArticle"
+      },
+      "_touched": 1773327309668
+    }
+  }
+}

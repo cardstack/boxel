@@ -3,7 +3,11 @@ import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import { baseRealm, type Realm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { setupPermissionedRealm, createJWT } from '../helpers';
+import {
+  setupPermissionedRealmCached,
+  createJWT,
+  testRealmURLFor,
+} from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
@@ -54,11 +58,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -517,11 +521,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('fields-based link loading', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           fileSystem: {
             'friend.gts': `
               import {
@@ -745,11 +749,11 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       let query = () => buildPersonQuery('Mango');
 
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -821,12 +825,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             john: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -878,12 +882,12 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       });
 
       module('search query validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
           },
-          realmURL: new URL('http://127.0.0.1:4444/test/'),
+          realmURL: testRealmURLFor('test/'),
           onRealmSetup,
         });
 
@@ -913,6 +917,261 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             });
 
           assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        });
+      });
+    });
+
+    module("'in' filter (postgres)", function () {
+      let testRealm: Realm;
+      let request: SuperTest<Test>;
+      let realmHref: string;
+      let searchPath: string;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        request: SuperTest<Test>;
+      }) {
+        testRealm = args.testRealm;
+        request = args.request;
+        let realmURL = new URL(testRealm.url);
+        realmHref = realmURL.href;
+        searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search`;
+      }
+
+      function personType() {
+        return {
+          module: `${realmHref}person`,
+          name: 'Person',
+        };
+      }
+
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          realmURL: testRealmURLFor('in-test/'),
+          fileSystem: {
+            'person.gts': `
+              import { contains, field, CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import StringField from 'https://cardstack.com/base/string';
+              export class Person extends CardDef {
+                static displayName = 'Person';
+                @field firstName = contains(StringField);
+                @field city = contains(StringField);
+                @field cardTitle = contains(StringField, {
+                  computeVia: function (this: Person) {
+                    return this.firstName;
+                  },
+                });
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template><h1><@fields.firstName /></h1></template>
+                };
+              }
+            `,
+            'mango.json': {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango', city: 'Barksville' },
+                meta: {
+                  adoptsFrom: { module: './person', name: 'Person' },
+                },
+              },
+            },
+            'vangogh.json': {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Van Gogh', city: 'Barksville' },
+                meta: {
+                  adoptsFrom: { module: './person', name: 'Person' },
+                },
+              },
+            },
+            'ringo.json': {
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Ringo', city: 'Waggington' },
+                meta: {
+                  adoptsFrom: { module: './person', name: 'Person' },
+                },
+              },
+            },
+          },
+          onRealmSetup,
+        });
+
+        test(`can filter using 'in' with multiple values`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: { firstName: ['Mango', 'Ringo'] },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            2,
+            'total count is correct',
+          );
+          let ids = response.body.data.map((d: any) => d.id).sort();
+          assert.deepEqual(
+            ids,
+            [`${realmHref}mango`, `${realmHref}ringo`],
+            'correct cards returned',
+          );
+        });
+
+        test(`can filter using 'in' with a single value`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: { firstName: ['Mango'] },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            1,
+            'total count is correct',
+          );
+          assert.strictEqual(
+            response.body.data[0].id,
+            `${realmHref}mango`,
+            'correct card returned',
+          );
+        });
+
+        test(`can filter using 'in' with an empty array`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: { firstName: [] },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            0,
+            'returns no results for empty array',
+          );
+        });
+
+        test(`can filter using 'in' with null values`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: { firstName: ['Mango', null] },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          // Mango matches 'Mango', no cards have null firstName
+          assert.ok(
+            response.body.meta.page.total >= 1,
+            'returns at least the matching card',
+          );
+          let ids = response.body.data.map((d: any) => d.id);
+          assert.ok(
+            ids.includes(`${realmHref}mango`),
+            'Mango is in the results',
+          );
+        });
+
+        test(`can filter using 'in' on a different field`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: { city: ['Waggington'] },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            1,
+            'total count is correct',
+          );
+          assert.strictEqual(
+            response.body.data[0].id,
+            `${realmHref}ringo`,
+            'correct card returned',
+          );
+        });
+
+        test(`can filter using 'in' with the id field`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                in: {
+                  id: [`${realmHref}mango`, `${realmHref}ringo`],
+                },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            2,
+            'total count is correct',
+          );
+          let ids = response.body.data.map((d: any) => d.id).sort();
+          assert.deepEqual(
+            ids,
+            [`${realmHref}mango`, `${realmHref}ringo`],
+            'correct cards returned by id',
+          );
+        });
+
+        test(`can negate an 'in' filter with 'not'`, async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                on: personType(),
+                not: { in: { firstName: ['Mango', 'Ringo'] } },
+              },
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.body.meta.page.total,
+            1,
+            'total count is correct',
+          );
+          assert.strictEqual(
+            response.body.data[0].id,
+            `${realmHref}vangogh`,
+            'correct card returned',
+          );
         });
       });
     });

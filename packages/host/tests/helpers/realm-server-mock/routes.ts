@@ -14,9 +14,10 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import type {
-  LinkableCollectionDocument,
-  PrerenderedCardCollectionDocument,
+import {
+  makeCardTypeSummaryDoc,
+  type LinkableCollectionDocument,
+  type PrerenderedCardCollectionDocument,
 } from '@cardstack/runtime-common/document-types';
 
 import ENV from '@cardstack/host/config/environment';
@@ -64,6 +65,7 @@ export function getRealmServerRoute(
 export function registerDefaultRoutes() {
   registerSearchRoutes();
   registerInfoRoutes();
+  registerTypesRoutes();
   registerCatalogRoutes();
   registerAuthRoutes();
 }
@@ -204,6 +206,99 @@ function registerInfoRoutes() {
   });
 }
 
+function registerTypesRoutes() {
+  registerRealmServerRoute({
+    path: '/_federated-types',
+    handler: async (req) => {
+      let payload;
+      try {
+        payload = await parseSearchRequestPayload(req.clone());
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let realmList: string[];
+      try {
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+
+      let searchKey = (payload as Record<string, unknown>).searchKey as
+        | string
+        | undefined;
+      let page = (payload as Record<string, unknown>).page as
+        | { number: number; size: number }
+        | undefined;
+
+      let registry = getTestRealmRegistry();
+      let allEntries: {
+        id: string;
+        type: 'card-type-summary';
+        attributes: { displayName: string; total: number; iconHTML: string };
+        meta: { realmURL: string };
+      }[] = [];
+
+      for (let realmURL of realmList) {
+        let normalizedURL = ensureTrailingSlash(realmURL);
+        let registryEntry = registry.get(normalizedURL);
+        if (registryEntry?.realm) {
+          let summaries =
+            await registryEntry.realm.realmIndexQueryEngine.fetchCardTypeSummary();
+          let doc = makeCardTypeSummaryDoc(summaries);
+          for (let entry of doc.data) {
+            allEntries.push({
+              ...entry,
+              type: 'card-type-summary' as const,
+              meta: { realmURL: normalizedURL },
+            });
+          }
+        }
+      }
+
+      // Apply searchKey filter
+      if (searchKey) {
+        let term = searchKey.toLowerCase();
+        allEntries = allEntries.filter((entry) =>
+          entry.attributes.displayName.toLowerCase().includes(term),
+        );
+      }
+
+      // Sort alphabetically by displayName so pagination returns a stable order
+      allEntries.sort((a, b) =>
+        (a.attributes.displayName ?? '').localeCompare(
+          b.attributes.displayName ?? '',
+        ),
+      );
+
+      let total = allEntries.length;
+
+      // Apply pagination
+      if (page) {
+        let start = page.number * page.size;
+        allEntries = allEntries.slice(start, start + page.size);
+      }
+
+      return new Response(
+        JSON.stringify({
+          data: allEntries,
+          meta: { page: { total } },
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': SupportedMimeType.CardTypeSummary },
+        },
+      );
+    },
+  });
+}
+
 function registerCatalogRoutes() {
   registerRealmServerRoute({
     path: '/_catalog-realms',
@@ -276,6 +371,58 @@ function registerAuthRoutes() {
             testRealmSecretSeed,
           ),
         },
+      });
+    },
+  });
+
+  registerRealmServerRoute({
+    path: '/_delete-realm',
+    handler: async (req, _url, state: RealmServerMockState) => {
+      let body = (await req.json()) as {
+        data?: { id?: string; type?: string };
+      };
+      let realmURL = body.data?.id;
+      if (!realmURL || body.data?.type !== 'realm') {
+        return new Response(
+          JSON.stringify({ errors: ['Request body must include a realm id'] }),
+          {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+        );
+      }
+
+      let normalizedRealmURL = ensureTrailingSlash(realmURL);
+      let permissions = state.realmPermissions.get(normalizedRealmURL);
+      if (!permissions?.includes('realm-owner')) {
+        return new Response(JSON.stringify({ errors: ['Forbidden'] }), {
+          status: 403,
+          headers: { 'content-type': SupportedMimeType.JSONAPI },
+        });
+      }
+
+      let namespace = new URL(normalizedRealmURL).pathname
+        .split('/')
+        .filter(Boolean)
+        .at(-2);
+      if (namespace !== 'testuser') {
+        return new Response(
+          JSON.stringify({
+            errors: ['You can only delete realms that you created'],
+          }),
+          {
+            status: 403,
+            headers: { 'content-type': SupportedMimeType.JSONAPI },
+          },
+        );
+      }
+
+      state.realmPermissions.delete(normalizedRealmURL);
+      getTestRealmRegistry().delete(normalizedRealmURL);
+
+      return new Response(null, {
+        status: 204,
+        headers: { 'content-type': SupportedMimeType.JSONAPI },
       });
     },
   });

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["identity-security", "api", "key"],
+      "content": "## Overview\n\nThe API Key card gives the workspace a structured home for aPI key management for OpenAI, Gemini, etc. Service name, masked key, usage stats, rate limits.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nAPI Key anchors identity, permissions, or relationship context. It becomes most useful when other cards can link to it consistently, query against it safely, and inherit its context without duplicating sensitive or fast-changing information.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Credential]]** -- API Key may depend on managed access or secure configuration stored separately.\n- **[[Integration]]** -- API Key can sync with or depend on external systems through the shared integration layer.\n- **[[Tool Definition]]** -- Tool calls can read from or write to API Key when automation needs structured side effects.\n- **[[Trigger]]** -- Changes to API Key can fire automation, and automation can also create or update API Key.\n- **[[Invitation]]** -- Invitation can provide adjacent context, downstream output, or grouped navigation around API Key.\n- **[[Pass / Wallet Item]]** -- Pass / Wallet Item can provide adjacent context, downstream output, or grouped navigation around API Key.\n\n## Example Use Cases\n\n- **System of record:** Teams create API Key as the structured home for aPI key management for OpenAI, Gemini, etc. Service name, masked key, usage stats, rate limits and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates API Key when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** API Key stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "API Key",
+        "notes": null,
+        "summary": "API key management for OpenAI, Gemini, etc. Service name, masked key, usage stats, rate limits.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

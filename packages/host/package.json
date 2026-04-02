@@ -23,11 +23,13 @@
     "lint:glint": "glint",
     "ensure-boxel-ui": "../boxel-ui/addon/bin/conditional-build.sh",
     "start": "vite",
-    "serve:dist": "vite preview --port 4200",
+    "serve:dist": "node scripts/serve-dist.js",
+    "serve:dist:legacy": "serve --config ../tests/serve.json --single --cors --no-request-logging --no-etag --listen 4200 dist",
     "start:build": "NODE_OPTIONS='--max-old-space-size=8192' ember build --watch",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "percy exec --parallel -- pnpm test:wait-for-servers",
     "test:wait-for-servers": "./scripts/test-wait-for-servers.sh",
+    "test:live": "./scripts/live-test-wait-for-servers.sh",
     "ember-test-pre-built": "sleep 15 && ember exam --path ./dist --split $HOST_TEST_PARTITION_COUNT --partition $HOST_TEST_PARTITION --preserve-test-name",
     "wait": "sleep 10000000",
     "test:ember": "vite build --mode development && ember test --path dist"
@@ -128,7 +130,7 @@
     "ember-modifier": "^4.1.0",
     "ember-page-title": "^9.0.3",
     "ember-provide-consume-context": "^0.8.0",
-    "ember-qunit": "^9.0.0",
+    "ember-qunit": "catalog:",
     "ember-resolver": "^13.0.0",
     "ember-resources": "catalog:",
     "ember-route-template": "^1.0.3",
@@ -190,9 +192,6 @@
   },
   "engines": {
     "node": ">= 20"
-  },
-  "volta": {
-    "extends": "../../package.json"
   },
   "ember": {
     "edition": "octane"

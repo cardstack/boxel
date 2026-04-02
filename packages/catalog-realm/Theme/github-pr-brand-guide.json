@@ -1,0 +1,254 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "default",
+        "module": "https://cardstack.com/base/brand-guide"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "spacing": "0.25rem",
+      "cardInfo": {
+        "notes": "GitHub PR brand guide — colors, typography and voice derived from GitHub's design system (Primer)",
+        "name": "GitHub PR Brand Guide",
+        "summary": "Visual design system for GitHub Pull Request cards. Based on GitHub's Primer design system with accurate PR state colors, typography, and component patterns.",
+        "cardThumbnailURL": "https://github.githubassets.com/favicons/favicon.svg"
+      },
+      "markUsage": {
+        "primaryMark1": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+        "primaryMark2": "https://github.githubassets.com/images/modules/logos_page/GitHub-Logo.png",
+        "secondaryMark1": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+        "secondaryMark2": "https://github.githubassets.com/images/modules/logos_page/GitHub-Logo.png",
+        "primaryMarkMinHeight": "20px",
+        "primaryMarkGreyscale1": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+        "primaryMarkGreyscale2": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark-Light.png",
+        "secondaryMarkMinHeight": "32px",
+        "socialMediaProfileIcon": "https://github.githubassets.com/favicons/favicon.svg",
+        "secondaryMarkGreyscale1": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+        "secondaryMarkGreyscale2": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark-Light.png",
+        "primaryMarkClearanceRatio": "1.5",
+        "secondaryMarkClearanceRatio": "1.25"
+      },
+      "styleName": "GitHub Primer",
+      "visualDNA": "# GitHub Primer: Clarity Through Convention\n\n**Every element communicates state. Nothing is decorative without purpose.**\n\nGitHub's design language is built around one core promise: **developers should be able to scan an interface and understand system state in milliseconds**. Pull request cards are the canonical expression of this philosophy.\n\n## The PR as a State Machine\n\nA Pull Request is not a document — it's a *living state machine* with exactly four visible states:\n\n- **Open (green):** Work in progress, awaiting review\n- **Draft (grey):** Not ready for review, still being shaped\n- **Closed (red):** Declined or abandoned, work not merged\n- **Merged (purple):** Completed, permanently woven into the codebase\n\nEach state has a dedicated icon from the `@primer/octicons` family and a precise color value. These are not interchangeable. The color *is* the information.\n\n## The Code Review Surface\n\nBeyond PR state, the card surface renders the **review ecosystem**: who approved, who requested changes, which CI checks passed or failed. This secondary layer uses a restrained grey palette, reserving the PR state colors exclusively for the state badge itself.\n\n**Design truth:** In GitHub's interface, the most important information is always accessible without interaction. You never click to discover state — state is always visible.",
+      "cssImports": [],
+      "typography": {
+        "body": {
+          "fontSize": "0.875rem",
+          "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": "Fix: resolve null pointer exception in auth middleware"
+        },
+        "caption": {
+          "fontSize": "0.75rem",
+          "fontFamily": "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
+          "fontWeight": "400",
+          "lineHeight": "1.45",
+          "sampleText": "opened 2 hours ago by octocat"
+        },
+        "heading": {
+          "fontSize": "1rem",
+          "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+          "fontWeight": "600",
+          "lineHeight": "1.25",
+          "sampleText": "Pull Request #1234"
+        },
+        "subheading": {
+          "fontSize": "0.875rem",
+          "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+          "fontWeight": "600",
+          "lineHeight": "1.5",
+          "sampleText": "3 files changed · 42 additions · 7 deletions"
+        },
+        "sectionHeading": {
+          "fontSize": "0.75rem",
+          "fontFamily": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+          "fontWeight": "600",
+          "lineHeight": "1.5",
+          "sampleText": "REVIEWERS"
+        }
+      },
+      "colorPalette": "# GitHub Primer Color System\n\n**Color encodes PR state. Never use state colors decoratively.**\n\n## PR State Colors (Sacred)\n\nThese four colors are reserved exclusively for PR state badges and icons. Using them for any other purpose breaks the mental model that every GitHub user has internalized.\n\n- **Open Green** `#238636` — An active PR waiting for review. The icon is `GitPullRequestIcon`. Background badge: `rgba(35, 134, 54, 0.15)`.\n- **Draft Grey** `#6e7681` — Work in progress, not ready. The icon is `GitPullRequestDraftIcon`. No badge background — grey on grey creates intentional visual receding.\n- **Closed Red** `#cf222e` — PR declined or abandoned. The icon is `GitPullRequestClosedIcon`. Background badge: `rgba(207, 34, 46, 0.15)`.\n- **Merged Purple** `#8957e5` — Permanently merged. The icon is `GitMergeIcon`. Background badge: `rgba(137, 87, 229, 0.15)`.\n\n## Canvas Colors\n\n**Light Mode:**\n- Background: `#ffffff` — Pure white card surface\n- Canvas: `#f6f8fa` — GitHub's page background (Primer `canvas.subtle`)\n- Border: `#d0d7de` — Primer `border.default`\n- Border muted: `#e1e4e8` — Primer `border.muted`\n\n**Dark Mode:**\n- Background: `#0d1117` — GitHub dark mode page background\n- Canvas: `#161b22` — Card surface in dark mode\n- Border: `#30363d` — Primer dark border\n\n## Text Hierarchy\n\n- **Primary text:** `#24292f` (light) / `#e6edf3` (dark)\n- **Secondary text:** `#57606a` (light) / `#8b949e` (dark) — timestamps, meta info\n- **Link text:** `#0969da` (light) / `#58a6ff` (dark) — PR titles, author names\n\n## CI/Check Colors\n\n- **Success:** `#1a7f37` (darker green for check marks)\n- **Failure:** `#cf222e` (same as closed red — CI fail = urgent)\n- **Pending:** `#9a6700` (amber — waiting, not broken)",
+      "contentVoice": "# Writing for PR Cards\n\n**Precision. Present tense. Action-oriented.**\n\nGitHub's content voice is the voice of a developer's internal monologue when scanning a PR list. No marketing. No warmth theater. Just precise information delivery.\n\n## Vocabulary Choices\n\n✓ **Opened** (not \"created\" or \"submitted\")\n✓ **Merged into** (not \"combined with\" or \"integrated\")\n✓ **Requested changes** (not \"left feedback\")\n✓ **Approved** (not \"confirmed\" or \"accepted\")\n✓ **CI checks** (not \"automated tests\" or \"pipeline\")\n✓ **Draft** (not \"work in progress\" or \"preview\")\n\n## Tone by Context\n\n**State labels:** Single word. No punctuation. Never sentence case.\n```\nOpen  /  Draft  /  Closed  /  Merged\n```\n\n**Timestamps:** Always relative when recent, absolute when old.\n```\n2 hours ago   →   when fresh\nJan 15, 2025  →   when stale\n```\n\n**Review status:** Subject + verb. No elaboration.\n```\noctocat approved these changes\nmonalisa requested changes\n```\n\n**CI summary:** Count-based, scannable.\n```\n3 checks passed\n1 check failed · 2 pending\n```\n\n**Voice truth:** GitHub's interface is used by developers under deadline. Every unnecessary word is cognitive overhead. Write like you're writing a git commit message — terse, accurate, actionable.",
+      "cornerRadius": "0.375rem",
+      "inspirations": [
+        "GitHub Primer design system — component library and design tokens",
+        "Linear — clean issue tracking with strong state color language",
+        "Terminal interfaces — monospace metadata, high information density",
+        "Code diff views — red/green as universal change language",
+        "GitHub's own PR list UI — the definitive reference"
+      ],
+      "designMindset": "# The PR Card Philosophy\n\n**Four principles that define GitHub's PR interface.**\n\n## 1. State Is Never Hidden\n\nThe PR state badge (Open/Draft/Closed/Merged) is always the first thing rendered and the most visually prominent element. No interaction required to discover it. Color + icon + label = triple redundancy to ensure the message lands.\n\n## 2. Density Without Clutter\n\nA PR card carries: state, title, number, author, branch, timestamp, label count, comment count, review status, and CI status — all at once. GitHub achieves this through strict typographic hierarchy and relegating secondary data to `#57606a` grey.\n\nThe rule: **primary data is black, metadata is grey, state is colored.**\n\n## 3. Review State Is Additive\n\nCI checks and review badges don't replace the PR state — they add to it. An open PR can simultaneously be: approved, failing CI, and have requested changes. Each dimension renders in its own layer without visual conflict.\n\n## 4. Merge Readiness Is the Goal\n\nEvery element of the PR card exists to help the viewer answer one question: *is this ready to merge?* The design serves this question. State badge → reviews → CI → labels → comments. That's the reading order, top to bottom.\n\n**Design truth:** GitHub's PR interface has been trained into the muscle memory of millions of developers. Deviate from its patterns and users will feel friction. Follow them and the card becomes an extension of their existing mental model.",
+      "rootVariables": {
+        "card": "#ffffff",
+        "ring": "#0969da",
+        "input": "#ffffff",
+        "muted": "#f6f8fa",
+        "accent": "#ddf4ff",
+        "border": "#d0d7de",
+        "chart1": "#238636",
+        "chart2": "#cf222e",
+        "chart3": "#8957e5",
+        "chart4": "#9a6700",
+        "chart5": "#0969da",
+        "radius": "0.375rem",
+        "shadow": "0 1px 0 rgba(27, 31, 36, 0.04)",
+        "popover": "#ffffff",
+        "primary": "#0969da",
+        "sidebar": "#f6f8fa",
+        "spacing": "0.25rem",
+        "fontMono": "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
+        "fontSans": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+        "shadowLg": "0 8px 24px rgba(140, 149, 159, 0.2)",
+        "shadowMd": "0 3px 6px rgba(140, 149, 159, 0.15)",
+        "shadowSm": "0 1px 0 rgba(27, 31, 36, 0.04)",
+        "shadowXl": "0 12px 28px rgba(140, 149, 159, 0.3)",
+        "shadowXs": "0 1px 0 rgba(27, 31, 36, 0.04)",
+        "fontSerif": "Georgia, 'Times New Roman', Times, serif",
+        "secondary": "#f6f8fa",
+        "shadow2xl": "0 24px 48px rgba(140, 149, 159, 0.4)",
+        "shadow2xs": "0 1px 0 rgba(27, 31, 36, 0.04)",
+        "background": "#f6f8fa",
+        "foreground": "#24292f",
+        "destructive": "#cf222e",
+        "sidebarRing": "#0969da",
+        "sidebarAccent": "#ddf4ff",
+        "sidebarBorder": "#d0d7de",
+        "cardForeground": "#24292f",
+        "sidebarPrimary": "#0969da",
+        "trackingNormal": "0em",
+        "mutedForeground": "#57606a",
+        "accentForeground": "#0969da",
+        "popoverForeground": "#24292f",
+        "primaryForeground": "#ffffff",
+        "sidebarForeground": "#24292f",
+        "secondaryForeground": "#57606a",
+        "destructiveForeground": "#ffffff",
+        "sidebarAccentForeground": "#0969da",
+        "sidebarPrimaryForeground": "#ffffff"
+      },
+      "motionLanguage": "# Animation: Instant Feedback, No Drama\n\n**GitHub moves fast. Animations should never slow users down.**\n\n## Motion Principles\n\n**1. Micro-interactions Only**\nAnimations in GitHub's interface are micro-scale: hover state transitions (80ms), badge color transitions (120ms), dropdown reveals (150ms). Nothing dramatic. Nothing that makes a developer wait.\n\n**2. State Changes Are Immediate**\nWhen a PR merges or closes, the state badge updates without transition — the new color simply replaces the old. State is fact, not animation.\n\n**3. Loading States Use Skeleton Screens**\nWhile PR data loads, render grey placeholder bars at the same dimensions as the final content. This prevents layout shift and communicates that content is coming.\n\n**4. Hover Reveals Are Subtle**\nBackground shifts from transparent to `rgba(0, 0, 0, 0.03)` on row hover. No movement. No scale. Just a whisper of acknowledgment that the cursor is there.\n\n**Motion truth:** GitHub users are in flow state. Any animation longer than 200ms breaks that flow. Design for the person who has 47 PRs to review before standup.",
+      "technicalSpecs": "# Implementation Standards for PR Cards\n\n**Precise values from GitHub's Primer design system.**\n\n## PR State Badge Pattern\n\n```css\n.pr-state-badge {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  padding: 2px 8px;\n  border-radius: 2em;  /* pill shape */\n  font-size: 0.75rem;\n  font-weight: 500;\n  line-height: 18px;\n}\n\n/* Open */\n.pr-state-badge.open {\n  color: #ffffff;\n  background-color: #238636;\n}\n\n/* Draft */\n.pr-state-badge.draft {\n  color: #ffffff;\n  background-color: #6e7681;\n}\n\n/* Closed */\n.pr-state-badge.closed {\n  color: #ffffff;\n  background-color: #cf222e;\n}\n\n/* Merged */\n.pr-state-badge.merged {\n  color: #ffffff;\n  background-color: #8957e5;\n}\n```\n\n## Typography Scale\n\n- **PR title:** `font-size: 1rem; font-weight: 600; color: #24292f`\n- **PR number + meta:** `font-size: 0.75rem; color: #57606a`\n- **Branch names:** `font-family: monospace; font-size: 0.75rem; background: rgba(175, 184, 193, 0.2); padding: 0.1em 0.3em; border-radius: 3px`\n\n## Card Border System\n\n- Border: `1px solid #d0d7de`\n- Border radius: `0.375rem` (6px)\n- Row separator: `1px solid #e1e4e8`\n- No shadow on default state — shadow only on `.card:hover`: `0 1px 3px rgba(0,0,0,0.12)`\n\n## Icon Sizes\n\n- PR state icon: `16x16px` inside badge\n- Review avatar: `20x20px` circle\n- CI check icon: `16x16px`\n- Label dot: `8x8px` circle using label color",
+      "wallpaperImages": [],
+      "compositionRules": "# PR Card Layout Composition\n\n**Scannable rows. Clear hierarchy. No wasted space.**\n\n## The PR Row Layout (List View)\n\n```\n[State Icon]  [PR Title]                    [Labels]  [Comments]\n              #1234 opened 2h ago by octocat          [CI badge]\n```\n\n- **Column 1 (40px):** State icon + badge — fixed width, always visible\n- **Column 2 (flex):** Title row + metadata row — takes remaining space\n- **Column 3 (auto):** Labels, assignees, CI — right-aligned, icon-only at small sizes\n\n## The PR Detail Card (Isolated View)\n\n**Header zone:**\n- PR title (large, semibold)\n- State badge + PR number + branch info\n- Author avatar + name + timestamp\n\n**Status zone:**\n- Review status row (avatars + approval icons)\n- CI checks row (check names + pass/fail icons)\n\n**Meta zone:**\n- Labels, milestone, linked issues\n\n## Visual Rhythm Rules\n\n- Vertical spacing between zones: `16px`\n- Internal padding within zones: `8px`\n- Avatar sizes: `20px` inline, `32px` in detail view\n- Always left-align state badge with PR title — they form one visual unit\n\n**Layout truth:** GitHub's PR list is the most-scanned interface in software development. Every alignment decision is load-bearing.",
+      "qualityStandards": "# PR Card Quality Checklist\n\n**How to know if your PR card implementation is correct.**\n\n## State Rendering Audit\n\n✓ Open PR renders green badge with `GitPullRequestIcon`\n✓ Draft PR renders grey badge with `GitPullRequestDraftIcon`\n✓ Closed PR renders red badge with `GitPullRequestClosedIcon`\n✓ Merged PR renders purple badge with `GitMergeIcon`\n✓ State is derived from latest event payload, not stored field\n✓ State updates reactively when new webhook event arrives\n\n## Data Display Audit\n\n✓ PR number always prefixed with `#`\n✓ Branch names rendered in monospace\n✓ Timestamps show relative time when < 30 days old\n✓ Author name links to GitHub profile\n✓ Review avatars show on detail view\n✓ CI check count summarized (\"3 checks passed\")\n\n## Accessibility Audit\n\n✓ State communicated via color + icon + text (not color alone)\n✓ Icon alt text matches state label\n✓ Contrast ratio ≥ 4.5:1 for all text\n✓ Interactive elements have 44px minimum touch target\n\n## Loading State Audit\n\n✓ Skeleton placeholders match final content dimensions\n✓ No layout shift when data loads\n✓ `isLoading` gates all event-derived data\n✓ Graceful empty state when no events found\n\n**Quality truth:** A PR card that shows the wrong state is worse than no card at all. Accuracy is the only non-negotiable.",
+      "typographySystem": "# GitHub's Two-Voice Type System\n\n**Sans for humans, mono for machines.**\n\n## Voice 1: The Human (System Sans)\n**-apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial**\n\nEverything a human writes or reads: PR titles, descriptions, review comments, author names. Uses the platform's native sans-serif to feel native and fast-loading. Weight does the hierarchy work:\n- `font-weight: 600` for titles and labels\n- `font-weight: 400` for body and metadata\n\nNever use a custom web font for primary content. GitHub's interface loads instantly because it uses system fonts.\n\n## Voice 2: The Machine (System Mono)\n**\"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo**\n\nEverything the system generates: branch names, commit SHAs, file paths, timestamps in absolute format. Monospace communicates *this is technical data, not prose*. The even character width makes branch names and SHAs visually scannable.\n\nKey pattern:\n```\nmain ← feat/auth-refactor\n```\nBoth branch names in mono. The arrow separates them. No extra words needed.\n\n## Size Hierarchy\n\n- `1rem / 16px` — PR title (the anchor)\n- `0.875rem / 14px` — Body text, descriptions\n- `0.75rem / 12px` — Metadata, timestamps, labels, branch names\n- `0.625rem / 10px` — Reserved for status dots and icon labels at small sizes\n\n**Typography truth:** GitHub's type system works because it's invisible. Users read content, not fonts. System fonts guarantee that the typography never draws attention to itself.",
+      "brandColorPalette": [
+        {
+          "name": "PR Open Green",
+          "value": "#238636"
+        },
+        {
+          "name": "PR Open Green (bg)",
+          "value": "#2da44e"
+        },
+        {
+          "name": "PR Draft Grey",
+          "value": "#6e7681"
+        },
+        {
+          "name": "PR Closed Red",
+          "value": "#cf222e"
+        },
+        {
+          "name": "PR Merged Purple",
+          "value": "#8957e5"
+        },
+        {
+          "name": "GitHub Blue (link)",
+          "value": "#0969da"
+        },
+        {
+          "name": "GitHub Canvas",
+          "value": "#f6f8fa"
+        },
+        {
+          "name": "GitHub Border",
+          "value": "#d0d7de"
+        },
+        {
+          "name": "GitHub Text Primary",
+          "value": "#24292f"
+        },
+        {
+          "name": "GitHub Text Muted",
+          "value": "#57606a"
+        },
+        {
+          "name": "CI Success",
+          "value": "#1a7f37"
+        },
+        {
+          "name": "CI Failure",
+          "value": "#cf222e"
+        },
+        {
+          "name": "CI Pending",
+          "value": "#9a6700"
+        }
+      ],
+      "darkModeVariables": {
+        "card": "#161b22",
+        "ring": "#58a6ff",
+        "input": "#0d1117",
+        "muted": "#21262d",
+        "accent": "#033d8b",
+        "border": "#30363d",
+        "chart1": "#3fb950",
+        "chart2": "#f85149",
+        "chart3": "#a371f7",
+        "chart4": "#e3b341",
+        "chart5": "#58a6ff",
+        "radius": "0.375rem",
+        "shadow": "0 0 transparent",
+        "popover": "#161b22",
+        "primary": "#58a6ff",
+        "sidebar": "#161b22",
+        "spacing": "0.25rem",
+        "fontMono": "'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace",
+        "fontSans": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif",
+        "shadowLg": "0 8px 24px rgba(1, 4, 9, 0.4)",
+        "shadowMd": "0 3px 6px rgba(1, 4, 9, 0.4)",
+        "shadowSm": "0 0 transparent",
+        "shadowXl": "0 12px 28px rgba(1, 4, 9, 0.5)",
+        "shadowXs": "0 0 transparent",
+        "fontSerif": "Georgia, 'Times New Roman', Times, serif",
+        "secondary": "#21262d",
+        "shadow2xl": "0 24px 48px rgba(1, 4, 9, 0.6)",
+        "shadow2xs": "0 0 transparent",
+        "background": "#0d1117",
+        "foreground": "#e6edf3",
+        "destructive": "#f85149",
+        "sidebarRing": "#58a6ff",
+        "sidebarAccent": "#033d8b",
+        "sidebarBorder": "#30363d",
+        "cardForeground": "#e6edf3",
+        "sidebarPrimary": "#58a6ff",
+        "trackingNormal": "0em",
+        "mutedForeground": "#8b949e",
+        "accentForeground": "#58a6ff",
+        "popoverForeground": "#e6edf3",
+        "primaryForeground": "#0d1117",
+        "sidebarForeground": "#e6edf3",
+        "secondaryForeground": "#8b949e",
+        "destructiveForeground": "#ffffff",
+        "sidebarAccentForeground": "#58a6ff",
+        "sidebarPrimaryForeground": "#0d1117"
+      },
+      "functionalPalette": {
+        "dark": "#24292f",
+        "light": "#f6f8fa",
+        "accent": "#ddf4ff",
+        "primary": "#0969da",
+        "secondary": "#6e7681"
+      },
+      "geometricLanguage": "# Primer Geometry: Functional Radius, No Drama\n\n**Corners are rounded just enough to feel modern, never so much they feel playful.**\n\n## The 6px Standard\n\nGitHub uses `border-radius: 6px` (`0.375rem`) as the standard for cards, buttons, and containers. This is half of Boxel's 10px radius — deliberately more conservative.\n\nWhy 6px?\n- **Cards at 6px** feel like UI components, not bubbles\n- **Buttons at 6px** feel clickable, not squishy\n- **Badges as pills** use `border-radius: 2em` — full pill — because they represent tags/labels that float within content\n\n## Spacing Rhythm\n\nPrimer's spacing uses an 8px base:\n- `4px` — gap between inline elements (icon + label)\n- `8px` — internal padding for compact components\n- `16px` — standard padding inside cards\n- `24px` — separation between major sections\n\n**No 5px. No 7px. No 10px.** Stick to the 4px grid.\n\n## Border Width\n\n- **Always 1px.** GitHub's entire UI uses only 1px borders.\n- Light mode: `#d0d7de`\n- Dark mode: `#30363d`\n- Never use `box-shadow` for borders — use actual `border` property for crisp rendering on HiDPI screens.\n\n**Geometry truth:** The 6px radius is load-bearing. It sits at the precise midpoint between 'feels corporate' (0px) and 'feels consumer app' (12px+). GitHub lives in the professional-but-approachable zone.",
+      "historicalContext": "GitHub's Primer design system was formalized around 2016 and has been refined through hundreds of millions of developer interactions. The PR state colors (green/grey/red/purple) were chosen for maximum distinctiveness and accessibility — they pass WCAG contrast requirements against both white and dark backgrounds when used as the full-color badge.",
+      "materialVocabulary": "# GitHub's Material Language: Flat Clarity\n\n**No depth tricks. Hierarchy through color and spacing alone.**\n\n## Light Mode: Clean Paper\n\nGitHub's light mode is almost clinically white. The page canvas is `#f6f8fa` — just barely off-white — while cards are pure `#ffffff`. This 1-step luminance difference creates card separation without any shadow.\n\nBorders do the heavy lifting: `1px solid #d0d7de` defines every container. On hover, a subtle shadow (`0 1px 3px rgba(0,0,0,0.12)`) lifts the card 1px visually without moving it.\n\n## Dark Mode: True Dark\n\nGitHub's dark mode uses `#0d1117` — a near-black with a very subtle blue tint derived from GitHub's logo. Cards surface to `#161b22`. Borders shift to `#30363d`.\n\nNotably, GitHub's dark mode does not use the deep charcoals common in other dark themes. The blue-tinted blacks create a cooler, more technical atmosphere appropriate for a developer tool.\n\n## The Non-Color State (Draft)\n\nDraft PRs use `#6e7681` — a mid-grey that reads as 'not yet real.' This is intentional visual de-emphasis: draft content should feel visually quieter than active content. Against both light and dark backgrounds, this grey recedes without disappearing.\n\n**Material truth:** GitHub's flatness is not a compromise — it's a performance choice. Zero gradients, minimal shadows, and solid fills mean the interface renders identically at 60fps whether the user has a 2015 MacBook or a 2025 desktop.",
+      "componentVocabulary": "# Standard PR Card Component Patterns\n\n**Reusable primitives specific to pull request interfaces.**\n\n## The State Badge\n\nThe most important component. Always: icon (16px) + state label, white text on colored background, pill shape (`border-radius: 2em`), `padding: 2px 8px`.\n\nFour states, four colors, four icons. Never deviate.\n\n## The Review Cluster\n\nA row of reviewer avatars (20px circles) with overlapping offset (`margin-left: -6px` per avatar). Each avatar carries a micro-badge (8px) in the corner showing their review state: green check (approved), red x (changes requested).\n\nDisplayed only when at least one review exists.\n\n## The CI Summary Badge\n\nShows aggregate CI state: `✓ 3 passed` or `✗ 1 failed`. Uses the CI colors (green/red/amber). Clicking expands to show individual check names.\n\nRules:\n- Green only when ALL checks pass\n- Red if ANY check fails\n- Amber if checks are in progress\n\n## The Branch Display\n\n```\nbase-branch ← head-branch\n```\n\nBoth in monospace, separated by a left-arrow. Always shows the merge direction visually.\n\n## The Label Pill\n\nColored pill with the label's custom hex color as background. Text color auto-calculated for contrast (black or white based on luminance). Max 3 labels visible, `+N more` truncation.\n\n**Component truth:** These five components cover 95% of PR state communication. Master them and the card reads like GitHub.",
+      "applicationScenarios": "# PR Card in Context\n\n**The same card, different densities by use case.**\n\n## List View (Embedded/Atom)\n\nOne-line or two-line format. State icon only (no badge text). PR title truncated to one line. Author avatar, comment count, and CI dot only.\n\n**Goal:** Scan 20 PRs in 5 seconds.\n\n## Detail View (Isolated)\n\nFull card with all sections rendered: state badge with text, full title, branch display, all reviewer avatars with states, all CI checks listed individually.\n\n**Goal:** Understand one PR completely without opening GitHub.\n\n## Dashboard Widget (Fitted)\n\nFitted template showing state color as dominant visual element. PR number and truncated title only. Used when monitoring many PRs across multiple repos.\n\n**Goal:** Know immediately if anything needs attention.\n\n## Notification Context\n\nCard triggered by a specific event: new review, CI failure, merge. Show only the delta — what changed — not the full PR state.\n\n**Goal:** Surface the event that triggered the notification without re-explaining the whole PR.\n\n**Scenario truth:** The same data means different things in different contexts. Design for the question the user is asking in each context — not for completeness."
+    }
+  }
+}

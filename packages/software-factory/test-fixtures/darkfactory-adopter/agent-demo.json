@@ -1,0 +1,18 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "agentId": "codex-darkfactory",
+      "capabilities": ["ticket triage", "ui verification"],
+      "specialization": "Boxel tracker workflows",
+      "notes": "Primary test agent for DarkFactory rendering coverage."
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://sf.boxel.test/darkfactory",
+        "name": "AgentProfile"
+      }
+    }
+  }
+}

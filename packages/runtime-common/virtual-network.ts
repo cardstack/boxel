@@ -52,6 +52,17 @@ export class VirtualNetwork {
     this.urlMappings.push([from.href, to.href]);
   }
 
+  mapURL(
+    url: string | URL,
+    direction: 'virtual-to-real' | 'real-to-virtual',
+  ): URL | undefined {
+    let resolved = this.resolveURLMapping(
+      typeof url === 'string' ? url : url.href,
+      direction,
+    );
+    return resolved ? new URL(resolved) : undefined;
+  }
+
   addImportMap(prefix: string, handler: (rest: string) => string): void {
     this.importMap.set(prefix, handler);
   }

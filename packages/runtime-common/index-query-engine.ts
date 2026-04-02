@@ -43,6 +43,7 @@ import {
   type Query,
   type Filter,
   type EqFilter,
+  type InFilter,
   type NotFilter,
   type ContainsFilter,
   type Sort,
@@ -144,6 +145,8 @@ export interface WIPOptions {
 export interface PrerenderedCard {
   url: string;
   html: string | null;
+  cardType?: string;
+  iconHtml?: string;
   usedRenderType?: ResolvedCodeRef;
   isError?: true;
 }
@@ -637,7 +640,9 @@ export class IndexQueryEngine {
         ' as html,',
         ...usedRenderTypeColumnExpression,
         ' as used_render_type,',
-        'ANY_VALUE(deps) as deps',
+        'ANY_VALUE(deps) as deps,',
+        'ANY_VALUE(display_names) as display_names,',
+        'ANY_VALUE(icon_html) as icon_html',
       ],
       'instance',
     )) as {
@@ -676,9 +681,12 @@ export class IndexQueryEngine {
         }
       }
 
+      let displayNames = card.display_names as string[] | null;
       return {
         url: card.url!,
         html: card.html,
+        cardType: displayNames?.[0] ?? undefined,
+        iconHtml: (card.icon_html as string | null) ?? undefined,
         ...(usedRenderType ? { usedRenderType } : {}),
         ...(card.has_error ? { isError: true as const } : {}),
       };
@@ -805,6 +813,8 @@ export class IndexQueryEngine {
 
     if ('eq' in filter) {
       return this.eqCondition(filter, on, typeConditionRef);
+    } else if ('in' in filter) {
+      return this.inCondition(filter, on, typeConditionRef);
     } else if ('contains' in filter) {
       return this.containsCondition(filter, on, typeConditionRef);
     } else if ('not' in filter) {
@@ -849,6 +859,20 @@ export class IndexQueryEngine {
       ...(typeRef ? [this.typeCondition(typeRef)] : []),
       ...Object.entries(filter.eq).map(([key, value]) => {
         return this.fieldEqFilter(key, value, on);
+      }),
+    ]);
+  }
+
+  private inCondition(
+    filter: InFilter,
+    on: CodeRef,
+    typeConditionRef?: CodeRef,
+  ): CardExpression {
+    let typeRef = typeConditionRef;
+    return every([
+      ...(typeRef ? [this.typeCondition(typeRef)] : []),
+      ...Object.entries(filter.in).map(([key, values]) => {
+        return this.fieldInFilter(key, values as JSONTypes.Value[], on);
       }),
     ]);
   }
@@ -921,6 +945,59 @@ export class IndexQueryEngine {
         errorHint: 'filter',
       }),
     ];
+  }
+
+  private fieldInFilter(
+    key: string,
+    values: JSONTypes.Value[],
+    onRef: CodeRef,
+  ): CardExpression {
+    if (values.length === 0) {
+      // Empty set matches nothing
+      return ['false'];
+    }
+    let nonNullValues = values.filter((v) => v !== null);
+    let hasNull = values.some((v) => v === null);
+
+    let conditions: CardExpression[] = [];
+
+    if (nonNullValues.length > 0) {
+      let query = fieldQuery(key, onRef, false, 'filter');
+      let inList: CardExpression = [];
+      nonNullValues.forEach((v, i) => {
+        if (i > 0) {
+          inList.push(',');
+        }
+        inList.push(fieldValue(key, [param(v)], onRef, 'filter'));
+      });
+      conditions.push([
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, 'IN', '(', ...inList, ')'],
+          errorHint: 'filter',
+        }),
+      ]);
+    }
+
+    if (hasNull) {
+      let query = fieldQuery(key, onRef, true, 'filter');
+      conditions.push([
+        fieldArity({
+          type: onRef,
+          path: key,
+          value: [query, 'IS NULL'],
+          pluralValue: [query, "= 'null'::jsonb"],
+          usePluralContainer: true,
+          errorHint: 'filter',
+        }),
+      ]);
+    }
+
+    if (conditions.length === 1) {
+      return conditions[0];
+    }
+    return any(conditions);
   }
 
   private fieldLikeFilter(

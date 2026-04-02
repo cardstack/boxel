@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -8,7 +8,7 @@ import {
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
+import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -28,8 +28,12 @@ interface Signature {
     chooseCard: (cardId: string) => void;
     removeCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
+    chooseLocalFile: () => void | Promise<void>;
     removeFile: (file: FileDef) => void;
     autoAttachedCardTooltipMessage?: string;
+    fileUploadStates?: ReadonlyMap<string, FileUploadState>;
+    retryFileUpload?: (file: FileDef) => void;
+    inputModalities?: string[];
   };
   Blocks: {
     default: [
@@ -44,15 +48,20 @@ interface Signature {
         | 'chooseFile'
         | 'autoAttachedCardTooltipMessage'
         | 'isLoaded'
+        | 'fileUploadStates'
+        | 'retryFileUpload'
+        | 'inputModalities'
       >,
-      WithBoundArgs<typeof AttachButton, 'chooseCard' | 'chooseFile'>,
+      WithBoundArgs<
+        typeof AttachButton,
+        'chooseCard' | 'chooseFile' | 'chooseLocalFile'
+      >,
     ];
   };
 }
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
-    {{consumeContext this.makeCardResources}}
     {{yield
       (component
         AttachedItems
@@ -65,19 +74,26 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         chooseCard=@chooseCard
         chooseFile=@chooseFile
         autoAttachedCardTooltipMessage=@autoAttachedCardTooltipMessage
+        fileUploadStates=@fileUploadStates
+        retryFileUpload=@retryFileUpload
+        inputModalities=@inputModalities
       )
-      (component AttachButton chooseCard=@chooseCard chooseFile=@chooseFile)
+      (component
+        AttachButton
+        chooseCard=@chooseCard
+        chooseFile=@chooseFile
+        chooseLocalFile=@chooseLocalFile
+      )
     }}
   </template>
 
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
 
-  @tracked private cardCollection: ReturnType<getCardCollection> | undefined;
-
-  private makeCardResources = () => {
-    this.cardCollection = this.getCardCollection(this, () => this.cardIds);
-  };
+  @cached
+  private get cardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(this, () => this.cardIds);
+  }
 
   private get items() {
     return [...this.cards, ...this.cardErrors, ...this.files];

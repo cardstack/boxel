@@ -21,6 +21,7 @@
     "baseUrl": ".",
     "strict": true,
     "experimentalDecorators": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "paths": {
       "@cardstack/host/tests/*": ["tests/*"],
@@ -29,6 +30,7 @@
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
       "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
+      "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "*": ["types/*"]
     },
     "types": ["@cardstack/local-types", "@embroider/core/types/virtual"]
@@ -40,6 +42,7 @@
     "../base/**/*",
     "../experiments-realm/**/*",
     "../catalog-realm/**/*",
+    "../openrouter-realm/**/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

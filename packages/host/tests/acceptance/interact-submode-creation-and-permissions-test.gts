@@ -285,7 +285,6 @@ module(
         await click(
           `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
         );
-        await click(`[data-test-card-catalog-go-button]`);
       });
 
       test<TestContextWithSave>('new card can enter edit mode', async function (assert) {
@@ -384,7 +383,6 @@ module(
         await click(
           `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
         );
-        await click(`[data-test-card-catalog-go-button]`);
         await consumerSaved.promise;
       });
 
@@ -937,7 +935,7 @@ module(
             'Build a personal portfolio page with your background, skills, and contact information',
           );
         await click('[data-test-create-this-for-me]');
-        await waitFor('[data-test-room-settled]');
+        await waitFor('[data-test-message-idx="0"] [data-test-attached-card]');
         assertMessages(assert, [
           {
             from: 'testuser',
@@ -1035,7 +1033,7 @@ module(
           .hasValue(typedPrompt);
 
         await click('[data-test-create-this-for-me]');
-        await waitFor('[data-test-room-settled]');
+        await waitFor('[data-test-message-idx="0"] [data-test-attached-card]');
         assertMessages(assert, [
           {
             from: 'testuser',

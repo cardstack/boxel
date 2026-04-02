@@ -22,8 +22,23 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer';
 import { buildCreatePrerenderAuth } from './prerender/auth';
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+  serviceURL,
+  registerService,
+  deregisterEnvironment,
+} from './lib/dev-service-registry';
+import { writeRuntimeMetadataFile } from './lib/runtime-metadata-file';
 
 let log = logger('main');
+const runtimeMetadataFile =
+  process.env.SOFTWARE_FACTORY_REALM_SERVER_METADATA_FILE;
+
+function writeRuntimeMetadata(payload: unknown): void {
+  writeRuntimeMetadataFile(runtimeMetadataFile, 'realm-server', payload);
+}
+
 if (process.env.NODE_ENV === 'test') {
   (globalThis as any).__environment = 'test';
 }
@@ -78,13 +93,20 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 }
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
+const FULL_INDEX_ON_STARTUP =
+  process.env.REALM_SERVER_FULL_INDEX_ON_STARTUP !== 'false';
 
 let {
   port,
   matrixURL,
   realmsRootPath,
-  serverURL = `http://localhost:${port}`,
-  distURL = process.env.HOST_URL ?? 'http://localhost:4200',
+  serviceName = 'realm-server',
+  serverURL = isEnvironmentMode()
+    ? serviceURL(serviceName)
+    : `http://localhost:${port}`,
+  distURL = isEnvironmentMode()
+    ? serviceURL('host')
+    : (process.env.HOST_URL ?? 'http://localhost:4200'),
   path: paths,
   fromUrl: fromUrls,
   toUrl: toUrls,
@@ -92,6 +114,7 @@ let {
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
+  workerManagerUrl,
   prerendererUrl,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
@@ -155,9 +178,19 @@ let {
         'The port the worker manager is running on. used to wait for the workers to be ready',
       type: 'number',
     },
+    workerManagerUrl: {
+      description:
+        'The full URL of the worker manager. Used in branch mode instead of workerManagerPort.',
+      type: 'string',
+    },
     prerendererUrl: {
       demandOption: true,
       description: 'URL of the prerender server to invoke',
+      type: 'string',
+    },
+    serviceName: {
+      description:
+        'Traefik service name for registration in branch mode (default: realm-server)',
       type: 'string',
     },
   })
@@ -213,7 +246,7 @@ let autoMigrate = migrateDB || undefined;
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER}`,
+  )} workerManagerPort=${workerManagerPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartup=${FULL_INDEX_ON_STARTUP}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
 
@@ -239,8 +272,10 @@ const getIndexHTML = async () => {
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
 
-  if (workerManagerPort != null) {
-    await waitForWorkerManager(workerManagerPort);
+  if (workerManagerUrl) {
+    await waitForWorkerManager(workerManagerUrl);
+  } else if (workerManagerPort != null) {
+    await waitForWorkerManager(`http://localhost:${workerManagerPort}`);
   }
 
   let matrixClient = new MatrixClient({
@@ -260,6 +295,9 @@ const getIndexHTML = async () => {
     virtualNetwork,
     createPrerenderAuth,
   );
+
+  log.info('Clearing modules cache...');
+  await definitionLookup.clearAllModules();
 
   for (let [i, path] of paths.entries()) {
     let url = hrefs[i][0];
@@ -294,7 +332,7 @@ const getIndexHTML = async () => {
         ),
       },
       {
-        fullIndexOnStartup: true,
+        ...(FULL_INDEX_ON_STARTUP ? { fullIndexOnStartup: true as const } : {}),
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
           ? { disableModuleCaching: true }
           : {}),
@@ -318,11 +356,14 @@ const getIndexHTML = async () => {
   // Domains to use for when users publish their realms.
   // PUBLISHED_REALM_BOXEL_SPACE_DOMAIN is used to form urls like "mike.boxel.space/game-mechanics"
   // PUBLISHED_REALM_BOXEL_SITE_DOMAIN is used to form urls like "mike.boxel.site"
+  let defaultPublishedDomain = isEnvironmentMode()
+    ? `realm-server.${getEnvironmentSlug()}.localhost`
+    : 'localhost:4201';
   let domainsForPublishedRealms = {
     boxelSpace:
-      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SPACE_DOMAIN || defaultPublishedDomain,
     boxelSite:
-      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || 'localhost:4201',
+      process.env.PUBLISHED_REALM_BOXEL_SITE_DOMAIN || defaultPublishedDomain,
   };
 
   let server = new RealmServer({
@@ -351,20 +392,40 @@ const getIndexHTML = async () => {
   });
 
   let httpServer = server.listen(port);
+  httpServer.on('listening', () => {
+    let actualPort =
+      (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+    writeRuntimeMetadata({
+      pid: process.pid,
+      port: actualPort,
+    });
+    if (isEnvironmentMode()) {
+      registerService(httpServer, serviceName, { wildcardSubdomains: true });
+    }
+  });
+  let stopRealmServer = (notifyParent = false) => {
+    let stopPort =
+      (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+    console.log(`stopping realm server on port ${stopPort}...`);
+    if (isEnvironmentMode()) {
+      deregisterEnvironment();
+    }
+    httpServer.closeAllConnections();
+    httpServer.close(() => {
+      queue.destroy(); // warning this is async
+      dbAdapter.close(); // warning this is async
+      console.log(`realm server on port ${stopPort} has stopped`);
+      if (notifyParent && process.send) {
+        process.send('stopped');
+      }
+      process.exit(0);
+    });
+  };
   process.on('message', (message) => {
     if (message === 'stop') {
-      console.log(`stopping realm server on port ${port}...`);
-      httpServer.closeAllConnections();
-      httpServer.close(() => {
-        queue.destroy(); // warning this is async
-        dbAdapter.close(); // warning this is async
-        console.log(`realm server on port ${port} has stopped`);
-        if (process.send) {
-          process.send('stopped');
-        }
-      });
+      stopRealmServer(true);
     } else if (message === 'kill') {
-      console.log(`Ending server process for ${port}...`);
+      console.log(`Ending server process...`);
       process.exit(0);
     } else if (
       typeof message === 'string' &&
@@ -394,10 +455,16 @@ const getIndexHTML = async () => {
         });
     }
   });
+  process.on('disconnect', () => {
+    console.log(`realm server IPC disconnected, shutting down...`);
+    stopRealmServer(false);
+  });
 
   await server.start();
 
-  log.info(`Realm server listening on port ${port} is serving realms:`);
+  let actualPort =
+    (httpServer.address() as import('net').AddressInfo | null)?.port ?? port;
+  log.info(`Realm server listening on port ${actualPort} is serving realms:`);
   let additionalMappings = hrefs.slice(paths.length);
   for (let [index, { url }] of realms.entries()) {
     log.info(`    ${url} => ${hrefs[index][1]}, serving path ${paths[index]}`);
@@ -422,12 +489,14 @@ const getIndexHTML = async () => {
   process.exit(-3);
 });
 
-async function waitForWorkerManager(port: number) {
+async function waitForWorkerManager(url: string) {
   let isReady = false;
-  let timeout = Date.now() + 30_000;
+  let timeoutMs = isEnvironmentMode() ? 120_000 : 30_000;
+  let timeout = Date.now() + timeoutMs;
+  let normalizedUrl = url.replace(/\/$/, '') + '/';
   do {
     try {
-      let response = await fetch(`http://localhost:${port}/`);
+      let response = await fetch(normalizedUrl);
       if (response.ok) {
         let json = await response.json();
         isReady = json.ready;
@@ -442,7 +511,7 @@ async function waitForWorkerManager(port: number) {
   } while (!isReady && Date.now() < timeout);
   if (!isReady) {
     throw new Error(
-      `timed out waiting for worker manager to be ready on port ${port}`,
+      `timed out waiting for worker manager to be ready at ${url}`,
     );
   }
   log.info('workers are ready');

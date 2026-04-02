@@ -6,7 +6,7 @@ module.exports = {
       description:
         'disallow `position: fixed` in card CSS because cards should not break out of their bounding box',
       category: 'Ember Octane',
-      recommended: true,
+      recommended: false,
     },
     schema: [],
     messages: {

@@ -27,6 +27,21 @@
 import QUnit from 'qunit';
 
 QUnit.config.testTimeout = 60000;
+const testModules = process.env.TEST_MODULES?.trim();
+
+if (testModules) {
+  const modules = parseModules(testModules);
+  if (modules.length > 0) {
+    QUnit.config.filter = buildModuleFilter(modules);
+    console.log(
+      `Filtering tests to modules from TEST_MODULES: ${modules.join(', ')}`,
+    );
+  } else {
+    console.warn(
+      'TEST_MODULES was provided but no module names were parsed. Running full suite.',
+    );
+  }
+}
 
 // Cleanup here ensures lingering servers/prerenderers/queues don't keep the
 // Node event loop alive after tests finish.
@@ -133,23 +148,29 @@ import './realm-endpoints-test';
 import './realm-endpoints/dependencies-test';
 import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
+import './realm-endpoints/invalidate-urls-test';
 import './realm-endpoints/lint-test';
 import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
+import './realm-endpoints/cancel-indexing-job-test';
 import './realm-endpoints/publishability-test';
+import './realm-endpoints/reindex-test';
 import './realm-endpoints/search-test';
 import './realm-endpoints/user-test';
 import './search-prerendered-test';
 import './server-endpoints/authentication-test';
 import './server-endpoints/bot-commands-test';
 import './server-endpoints/bot-registration-test';
+import './server-endpoints/delete-realm-test';
 import './server-endpoints/download-realm-test';
+import './server-endpoints/federated-types-test';
 import './server-endpoints/index-responses-test';
 import './server-endpoints/maintenance-endpoints-test';
 import './server-endpoints/queue-status-test';
 import './server-endpoints/realm-lifecycle-test';
 import './server-endpoints/search-test';
 import './server-endpoints/search-prerendered-test';
+import './server-config-test';
 import './server-endpoints/info-test';
 import './server-endpoints/stripe-session-test';
 import './server-endpoints/stripe-webhook-test';
@@ -165,6 +186,7 @@ import './publish-unpublish-realm-test';
 import './boxel-domain-availability-test';
 import './get-boxel-claimed-domain-test';
 import './claim-boxel-domain-test';
+import './card-reference-resolver-test';
 import './command-parsing-utils-test';
 import './delete-boxel-claimed-domain-test';
 import './realm-auth-test';
@@ -172,4 +194,24 @@ import './queries-test';
 import './remote-prerenderer-test';
 import './runtime-dependency-tracker-test';
 import './sanitize-head-html-test';
+import './node-realm-test';
 import './session-room-queries-test';
+import './indexing-event-sink-test';
+
+function parseModules(value: string): string[] {
+  return value
+    .split(/[|,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/^['"]+|['"]+$/g, ''));
+}
+
+function buildModuleFilter(modulesToMatch: string[]): string {
+  const escaped = modulesToMatch.map((moduleName) => escapeRegex(moduleName));
+  const pattern = `^(?:${escaped.join('|')})(?:\\s>\\s|:)`;
+  return `/${pattern}/`;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '\\/');
+}

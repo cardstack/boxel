@@ -30,6 +30,7 @@ export interface RealmAuthMatrixClientInterface {
 
 interface Options {
   authWithRealmServer?: true;
+  registrationToken?: string;
 }
 
 const realmSessionRequests = new WeakMap<
@@ -69,17 +70,10 @@ function realmSessionCacheKey(realmURL: URL, sessionEndpoint: string) {
   return `${realmURL.href}|${sessionEndpoint}`;
 }
 
-function getBoxelSessionWithFallback(): string | null {
-  let sessionStorageValue = globalThis.sessionStorage?.getItem('boxel-session');
-  if (sessionStorageValue !== null && sessionStorageValue !== undefined) {
-    return sessionStorageValue;
-  }
-  return globalThis.localStorage?.getItem('boxel-session') ?? null;
-}
-
 export class RealmAuthClient {
   private _jwt: string | undefined;
   private isRealmServerAuth: boolean;
+  private registrationToken: string | undefined;
 
   constructor(
     private realmURL: URL,
@@ -88,6 +82,7 @@ export class RealmAuthClient {
     options?: Options,
   ) {
     this.isRealmServerAuth = Boolean(options?.authWithRealmServer);
+    this.registrationToken = options?.registrationToken;
   }
 
   get jwt(): string | undefined {
@@ -98,10 +93,9 @@ export class RealmAuthClient {
     let tokenRefreshLeadTimeSeconds = 60;
     let jwt: string;
 
-    // Prerender contexts prefer sessionStorage (tab-isolated), then fall back
-    // to localStorage for compatibility with older contexts.
+    // the prerenderer relies solely on the JWT's in local storage
     if ((globalThis as any).__boxelRenderContext) {
-      let sessionStr = getBoxelSessionWithFallback() ?? '{}';
+      let sessionStr = globalThis.localStorage.getItem('boxel-session') ?? '{}';
       let session: { [realmURL: string]: string } = JSON.parse(sessionStr);
       let jwt = session[this.realmURL.href];
       if (!jwt) {
@@ -185,13 +179,17 @@ export class RealmAuthClient {
     if (!openAccessToken) {
       throw new Error('failed to fetch OpenID token from matrix');
     }
+    let body: Record<string, unknown> = { ...openAccessToken };
+    if (this.registrationToken) {
+      body.registration_token = this.registrationToken;
+    }
     return this.withRetries(() =>
       this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
         },
-        body: JSON.stringify(openAccessToken),
+        body: JSON.stringify(body),
       }),
     );
   }

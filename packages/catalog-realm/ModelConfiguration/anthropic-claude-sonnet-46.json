@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Anthropic: Claude Sonnet 4.6",
+        "summary": "Claude Sonnet 4.6 is Anthropic's latest and most capable Sonnet model, building on the strengths of Sonnet 4.5 with further improvements to coding, agentic workflows, and reasoning. It delivers state-of-the-art performance across a wide range of tasks, including software engineering, tool use, and complex multi-step problem solving. Sonnet 4.6 features enhanced instruction following, improved context management, and more reliable tool orchestration, making it well-suited for sustained autonomous operation and real-world agent deployments.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "openRouterModel": {
+        "links": {
+          "self": "@cardstack/openrouter/OpenRouterModel/anthropic-claude-sonnet-4-6"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../system-card/model-configuration",
+        "name": "ModelConfiguration"
+      }
+    }
+  }
+}

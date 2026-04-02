@@ -27,7 +27,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
   }
 
   get searchPlaceholder() {
-    return this.args.extra?.searchPlaceholder || 'search for a realm';
+    return this.args.extra?.searchPlaceholder || 'Search...';
   }
 
   @action
@@ -81,7 +81,8 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
         border: none;
       }
 
-      .picker-before-options__search-input:focus-visible {
+      .picker-before-options__search-input:focus-visible,
+      .search {
         outline: none;
       }
     </style>

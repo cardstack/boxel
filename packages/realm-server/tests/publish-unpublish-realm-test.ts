@@ -9,6 +9,7 @@ import {
   pathExistsSync,
   readJsonSync,
   writeJsonSync,
+  removeSync,
 } from 'fs-extra';
 import { basename, join } from 'path';
 import type { Server } from 'http';
@@ -22,7 +23,7 @@ import {
 import type { PgAdapter } from '@cardstack/postgres';
 import {
   setupDB,
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   closeServer,
   createVirtualNetwork,
@@ -48,7 +49,7 @@ module(basename(__filename), function () {
 
     let dir: DirResult;
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
       },
@@ -639,6 +640,101 @@ module(basename(__filename), function () {
         assert.notOk(
           publishedRealmConfig.publishable,
           'published realm config should have publishable: false',
+        );
+      });
+
+      test('republishing removes files that were deleted from the source realm', async function (assert) {
+        let sourceRealmURL = new URL(sourceRealmUrlString);
+        let sourceRealmFsPath = join(
+          dir.name,
+          'realm_server_3',
+          ...sourceRealmURL.pathname.split('/').filter(Boolean),
+        );
+
+        // Write a file directly to the source realm filesystem
+        writeJsonSync(join(sourceRealmFsPath, 'ephemeral-card.json'), {
+          data: {
+            type: 'card',
+            id: `${sourceRealmUrlString}ephemeral-card`,
+            attributes: {
+              title: 'Ephemeral Card',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        });
+
+        // First publish
+        let firstPublishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+
+        assert.strictEqual(
+          firstPublishResponse.status,
+          201,
+          'First publish succeeds',
+        );
+
+        let publishedRealmId = firstPublishResponse.body.data.id;
+        let publishedDir = join(dir.name, 'realm_server_3', '_published');
+        let publishedRealmPath = join(publishedDir, publishedRealmId);
+
+        // Verify the file exists in the published realm on disk
+        assert.ok(
+          existsSync(join(publishedRealmPath, 'ephemeral-card.json')),
+          'ephemeral-card.json exists in published realm after first publish',
+        );
+
+        // Delete the file from the source realm filesystem
+        removeSync(join(sourceRealmFsPath, 'ephemeral-card.json'));
+        assert.notOk(
+          existsSync(join(sourceRealmFsPath, 'ephemeral-card.json')),
+          'ephemeral-card.json is removed from source realm',
+        );
+
+        // Republish
+        let republishResponse = await request
+          .post('/_publish-realm')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: ownerUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send(
+            JSON.stringify({
+              sourceRealmURL: sourceRealmUrlString,
+              publishedRealmURL: 'http://testuser.localhost:4445/test-realm/',
+            }),
+          );
+
+        assert.strictEqual(republishResponse.status, 201, 'Republish succeeds');
+
+        // Verify the file no longer exists on disk in the published realm
+        assert.notOk(
+          existsSync(join(publishedRealmPath, 'ephemeral-card.json')),
+          'ephemeral-card.json should not exist in published realm after republish',
         );
       });
 

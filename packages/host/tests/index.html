@@ -25,6 +25,15 @@
     </div>
 
     <div id="ember-basic-dropdown-wormhole"></div>
+    <script>
+      globalThis.process = {
+        env: {},
+        version: '',
+        cwd() {
+          return '/';
+        },
+      };
+    </script>
 
     <script>
       globalThis.process = {

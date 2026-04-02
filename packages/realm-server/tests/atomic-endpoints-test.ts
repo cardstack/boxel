@@ -9,7 +9,7 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   createJWT,
   type RealmRequest,
   withRealmPath,
@@ -39,7 +39,7 @@ module(basename(__filename), function () {
       }
 
       module('writes', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -728,7 +728,7 @@ module(basename(__filename), function () {
         });
       });
       module('error handling', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },
@@ -810,9 +810,10 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 500);
           assert.strictEqual(response.body.errors.length, 1);
           assert.strictEqual(response.body.errors[0].title, 'Write Error');
-          assert.strictEqual(
-            response.body.errors[0].detail,
-            `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}missing-place/does-not-exist"`,
+          assert.ok(
+            response.body.errors[0].detail.includes(
+              `Your filter refers to a nonexistent type: import { Place } from "${testRealmHref}missing-place/does-not-exist"`,
+            ),
             'error message is correct',
           );
         });
@@ -890,7 +891,7 @@ module(basename(__filename), function () {
         });
       });
       module('validation', function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             '*': ['read', 'write'],
           },

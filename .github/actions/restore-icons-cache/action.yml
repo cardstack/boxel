@@ -1,0 +1,18 @@
+name: Restore boxel-icons build cache
+description: Restores cached boxel-icons build output (dist + declarations) keyed on source inputs
+
+outputs:
+  cache-hit:
+    description: Whether the cache was hit
+    value: ${{ steps.cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+      id: cache
+      with:
+        path: |
+          packages/boxel-icons/dist
+          packages/boxel-icons/declarations
+        key: boxel-icons-${{ hashFiles('packages/boxel-icons/src/**', 'packages/boxel-icons/unpublished-development-types/**', 'packages/boxel-icons/package.json', 'packages/boxel-icons/rollup.config.mjs', 'packages/boxel-icons/tsconfig.json', 'packages/boxel-icons/babel.config.json') }}

@@ -18,6 +18,7 @@ import {
   type PrerenderedCardLike,
   type PrerenderedCardData,
   type PrerenderedCardComponentSignature,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
@@ -35,6 +36,10 @@ const OWNER_DESTROYED_ERROR =
 // Used by the overlay system to correctly identify FileDef cards when they
 // haven't been loaded into the store yet (prerendered results are HTML-only).
 export const knownFileMetaUrls = new Set<string>();
+
+export function clearKnownFileMetaUrls() {
+  knownFileMetaUrls.clear();
+}
 
 export class PrerenderedCard implements PrerenderedCardLike {
   component: HTMLComponent;
@@ -71,6 +76,15 @@ export class PrerenderedCard implements PrerenderedCardLike {
   }
   get realmUrl(): string {
     return this.data.realmUrl;
+  }
+  get cardType(): string | undefined {
+    return this.data.cardType;
+  }
+  get iconHtml(): string | undefined {
+    return this.data.iconHtml;
+  }
+  get usedRenderType(): ResolvedCodeRef | undefined {
+    return this.data.usedRenderType;
   }
 }
 function getErrorComponent(realmURL: string, url: string) {

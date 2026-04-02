@@ -38,4 +38,18 @@ module('Unit | queue | browser implementation', function (hooks) {
       runner: queue,
     });
   });
+
+  test('coalesce can join pending jobs and map waiter-specific results', async function (assert) {
+    await runSharedTest(queueTests, assert, {
+      publisher: queue,
+      runner: queue,
+    });
+  });
+
+  test('coalesce can join pending jobs and map waiter-specific rejected results', async function (assert) {
+    await runSharedTest(queueTests, assert, {
+      publisher: queue,
+      runner: queue,
+    });
+  });
 });

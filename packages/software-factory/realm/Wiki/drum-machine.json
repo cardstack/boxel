@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["media-production", "drum", "machine"],
+      "content": "## Overview\n\nThe Drum Machine card gives the workspace a structured home for step sequencer drum machine: patterns, samples, tempo, and playback.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nDrum Machine coordinates creative production state across assets, collaborators, and downstream publishing steps. The card should remain easy to preview while still carrying the metadata needed for workflow, reuse, and automation.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Project]]** -- Drum Machine can be grouped under a larger initiative so its work stays visible in context.\n- **[[Task]]** -- Drum Machine often creates follow-up work or is itself tracked through task execution.\n- **[[Playlist]]** -- Playlist can provide adjacent context, downstream output, or grouped navigation around Drum Machine.\n- **[[Stream]]** -- Stream can provide adjacent context, downstream output, or grouped navigation around Drum Machine.\n- **[[AI Image]]** -- Drum Machine can incorporate generated visuals or treat image output as a linked asset.\n- **[[Layout Board]]** -- Layout Board can provide adjacent context, downstream output, or grouped navigation around Drum Machine.\n\n## Example Use Cases\n\n- **System of record:** Teams create Drum Machine as the structured home for step sequencer drum machine: patterns, samples, tempo, and playback and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Drum Machine when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Drum Machine stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Drum Machine",
+        "notes": null,
+        "summary": "Step sequencer drum machine: patterns, samples, tempo, and playback.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

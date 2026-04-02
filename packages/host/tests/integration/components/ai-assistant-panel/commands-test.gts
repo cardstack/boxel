@@ -210,6 +210,20 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
               commands: [
                 {
                   codeRef: {
+                    name: 'SearchCardsByTypeAndTitleCommand',
+                    module: '@cardstack/boxel-host/commands/search-cards',
+                  },
+                  requiresApproval: false,
+                },
+                {
+                  codeRef: {
+                    name: 'SearchCardsByQueryCommand',
+                    module: '@cardstack/boxel-host/commands/search-cards',
+                  },
+                  requiresApproval: false,
+                },
+                {
+                  codeRef: {
                     name: 'default',
                     module:
                       '@cardstack/boxel-host/commands/read-file-for-ai-assistant',
@@ -780,7 +794,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]', { timeout: 10_000 });
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -825,7 +839,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]', { timeout: 10_000 });
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -869,7 +883,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]');
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
@@ -926,7 +940,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]');
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
@@ -998,7 +1012,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]');
 
     await click(
       '[data-test-command-result-container] [data-test-more-options-button]',
@@ -1037,7 +1051,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]');
 
     assert
       .dom(
@@ -1080,7 +1094,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
       },
     });
-    await settled();
+    await waitFor('[data-test-command-result-header]');
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();

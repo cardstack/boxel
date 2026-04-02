@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["project-management", "visualization", "workflow"],
+      "content": "## Overview\n\nA Kanban Board is a visual management tool that organizes work items into columns representing stages of a process. Each column holds cards that move left to right as work progresses, providing an immediate visual snapshot of capacity, bottlenecks, and flow. Kanban Boards are configurable for any workflow, from software development sprints to sales pipelines to support ticket queues.\n\nThe board enforces work-in-progress (WIP) limits per column, preventing overload and encouraging teams to finish existing work before starting new items. This constraint is the key mechanism that transforms a simple board into a flow optimization system.\n\n## How It Works\n\nEach Kanban Board defines a set of columns with names, order positions, WIP limits, and optional automation rules. Cards enter the board in the leftmost column and progress rightward through manual drag-and-drop or automated transitions. When a card moves to the final column, it is considered complete.\n\nColumns can be configured with **entry criteria** that validate whether a card is ready to advance. For example, a \"Review\" column might require that a [[Task]] has an assigned reviewer and all subtasks are complete before the card can enter. This prevents premature advancement and maintains quality gates.\n\n### Swimlanes and Grouping\n\nBoards support horizontal swimlanes that segment cards by category, priority, or owner. A [[Project]] board might have swimlanes for each team member, while a [[Deal]] pipeline board might group by deal size tier. Swimlanes provide a second dimension of organization without requiring separate boards.\n\nFiltering and sorting options let users focus on specific subsets: cards assigned to them, cards blocked, cards due this week, or cards matching a particular tag. These views are saved as presets that team members can switch between.\n\n## Integration Points\n\nKanban Boards serve as the visual layer for multiple card types. A [[Task]] board tracks engineering work with columns like Backlog, In Progress, Review, and Done. A [[Deal]] board mirrors the sales pipeline with stages like Qualified, Proposal, Negotiation, and Closed Won. A [[Case]] board manages support tickets through Triage, Investigation, Resolution, and Closed.\n\nBoard automation connects to [[Workflow Playbook]] steps. When a card enters a specific column, the playbook can trigger actions: assign a reviewer, send a notification via [[Email Template]], update a status field, or start a timer for SLA tracking. These automations reduce manual overhead and ensure process consistency.\n\n[[Project]] cards aggregate multiple boards, providing a portfolio view across all active workstreams. Project managers can see which boards have bottlenecks, which are flowing smoothly, and where resources need rebalancing.\n\n[[OKR Goal]] tracking can be overlaid on boards, showing how current work items contribute to quarterly objectives. Cards linked to a key result display progress indicators, connecting daily execution to strategic outcomes.\n\n## Example Use Cases\n\n- **Sprint board**: [[Task]] cards flow through To Do, In Progress, Code Review, QA, and Done columns with WIP limits enforcing focus\n- **Sales pipeline**: [[Deal]] cards progress through qualification stages, with [[Workflow Playbook]] automations sending follow-up [[Email Template]] messages at each transition\n- **Support queue**: [[Case]] cards sorted by severity swimlanes, with SLA timers triggering escalation when cards linger too long in a column\n- **Content calendar**: Blog post and marketing [[Task]] cards organized by publication week, with review gates ensuring editorial approval before publishing\n- **Hiring pipeline**: Candidate cards tracked from Application through Interview, Offer, and Onboarding, with [[Task]] checklists at each stage",
+      "cardInfo": {
+        "name": "Kanban Board",
+        "notes": null,
+        "summary": "Visual board with configurable columns, WIP limits, and flow-based work management",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

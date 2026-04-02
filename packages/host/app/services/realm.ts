@@ -11,7 +11,13 @@ import { isTesting } from '@embroider/macros';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask, task, restartableTask, rawTimeout } from 'ember-concurrency';
+import {
+  didCancel,
+  dropTask,
+  task,
+  restartableTask,
+  rawTimeout,
+} from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import { TrackedSet, TrackedObject, TrackedArray } from 'tracked-built-ins';
@@ -24,6 +30,8 @@ import type {
 import {
   Deferred,
   ensureTrailingSlash,
+  isRegisteredPrefix,
+  cardIdToURL,
   logger,
   SupportedMimeType,
   type RealmInfo,
@@ -189,6 +197,10 @@ class RealmResource {
     return !!this.claims?.permissions?.includes('write');
   }
 
+  get isRealmOwner() {
+    return !!this.claims?.permissions?.includes('realm-owner');
+  }
+
   private loggingIn: Promise<void> | undefined;
 
   async login(): Promise<void> {
@@ -229,13 +241,11 @@ class RealmResource {
             return;
           }
           let data = event as IndexRealmEventContent;
-          if (data.indexType === 'full') {
-            return;
-          }
           switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;
+            case 'full':
             case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
@@ -265,16 +275,21 @@ class RealmResource {
   });
 
   logout(): void {
-    this.token = undefined;
+    this.clearRealmSession();
+    window.localStorage.removeItem(SessionLocalStorageKey);
+    syncTokenToServiceWorker(this.realmURL, undefined);
+  }
+
+  clearRealmSession(): void {
+    this.auth = { type: 'anonymous' };
+    SessionStorage.remove(this.realmURL);
+    syncTokenToServiceWorker(this.realmURL, undefined);
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
     this.loggingIn = undefined;
     this.fetchInfoTask.cancelAll();
     this.fetchingInfo = undefined;
     this.fetchRealmPermissionsTask.cancelAll();
-    window.localStorage.removeItem(SessionLocalStorageKey);
-    window.sessionStorage.removeItem(SessionLocalStorageKey);
-    syncTokenToServiceWorker(this.realmURL, undefined);
   }
 
   private fetchingInfo: Promise<void> | undefined;
@@ -284,7 +299,17 @@ class RealmResource {
       // share the work if there are multiple requests to get the info for a realm
       this.fetchingInfo = this.fetchInfoTask.perform();
     }
-    await this.fetchingInfo;
+    try {
+      await this.fetchingInfo;
+    } catch (error) {
+      // Realm info loading is best-effort during teardown. When the app/test is
+      // already being destroyed, callers cannot do anything useful with a
+      // cancellation, and surfacing it as a global failure makes normal
+      // component unmounts look like test regressions.
+      if (!didCancel(error)) {
+        throw error;
+      }
+    }
   }
 
   private fetchInfoTask = dropTask(async () => {
@@ -675,6 +700,11 @@ export default class RealmService extends Service {
 
   resetState() {
     this.logout();
+    this._realms = new Map();
+    this.currentKnownRealms = new TrackedSet();
+    this.reauthentications.clear();
+    this.bulkInfoPromise = undefined;
+    this.identifyRealmTracker++;
   }
 
   async waitForBulkInfoIfNeeded(): Promise<void> {
@@ -767,6 +797,9 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): EnhancedRealmInfo => {
+    if (isRegisteredPrefix(url)) {
+      url = cardIdToURL(url).href;
+    }
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
       this.identifyRealm.perform(url);
@@ -809,6 +842,9 @@ export default class RealmService extends Service {
   };
 
   async allUsersPermissions(url: string) {
+    if (isRegisteredPrefix(url)) {
+      url = cardIdToURL(url).href;
+    }
     let resource = this.knownRealm(url);
     if (!resource) {
       await this.identifyRealm.perform(url);
@@ -828,6 +864,18 @@ export default class RealmService extends Service {
     await this.knownRealm(url)?.setHostHome(hostHome);
   }
 
+  removeRealm(url: string) {
+    let resource = this._realms.get(url);
+    if (resource) {
+      resource.clearRealmSession();
+    } else {
+      SessionStorage.remove(url);
+      syncTokenToServiceWorker(url, undefined);
+    }
+    this._realms.delete(url);
+    this.currentKnownRealms.delete(url);
+  }
+
   isPublic = (url: string): boolean => {
     return this.knownRealm(url)?.isPublic ?? false;
   };
@@ -838,6 +886,10 @@ export default class RealmService extends Service {
 
   canWrite = (url: string): boolean => {
     return this.knownRealm(url)?.canWrite ?? false;
+  };
+
+  isRealmOwner = (url: string): boolean => {
+    return this.knownRealm(url)?.isRealmOwner ?? false;
   };
 
   url = (url: string): string | undefined => {
@@ -950,7 +1002,7 @@ export default class RealmService extends Service {
   token = (url: string): string | undefined => {
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource && (globalThis as any).__boxelRenderContext && !isTesting()) {
-      // prerender contexts should always reflect persisted session state
+      // prerender contexts should always reflect localStorage session state
       this.restoreSessionsFromStorage();
       resource = this.knownRealm(url, { tracked: false });
     }
@@ -980,6 +1032,164 @@ export default class RealmService extends Service {
   async unpublish(realmURL: string, publishedRealmURL: string) {
     let resource = this.getOrCreateRealmResource(realmURL);
     return await resource.unpublish(publishedRealmURL);
+  }
+
+  async cancelIndexingJob(realmURL: string): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+
+    let headers = new Headers({
+      Accept: SupportedMimeType.JSON,
+    });
+    if (resource.token) {
+      headers.set('Authorization', `Bearer ${resource.token}`);
+    }
+
+    let response = await this.network.fetch(
+      `${normalizedRealmURL}_cancel-indexing-job`,
+      {
+        method: 'POST',
+        headers,
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(
+      `Cancel indexing job failed: ${response.status} - ${errorText}`,
+    );
+  }
+
+  private beginIndexingAnimation(resource: RealmResource): boolean {
+    let wasIndexing = resource.info?.isIndexing ?? false;
+    if (resource.info) {
+      resource.info.isIndexing = true;
+    }
+    return wasIndexing;
+  }
+
+  private restoreIndexingAnimation(
+    resource: RealmResource,
+    wasIndexing: boolean,
+  ) {
+    if (resource.info) {
+      resource.info.isIndexing = wasIndexing;
+    }
+  }
+
+  async reindex(realmURL: string): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+    await resource.fetchInfo();
+    let wasIndexing = this.beginIndexingAnimation(resource);
+
+    try {
+      let headers = new Headers({
+        Accept: SupportedMimeType.JSON,
+      });
+      if (resource.token) {
+        headers.set('Authorization', `Bearer ${resource.token}`);
+      }
+
+      let response = await this.network.fetch(`${normalizedRealmURL}_reindex`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (response.status === 204) {
+        return;
+      }
+
+      let errorText = await response.text();
+      throw new Error(
+        `Reindex realm failed: ${response.status} - ${errorText}`,
+      );
+    } catch (error) {
+      this.restoreIndexingAnimation(resource, wasIndexing);
+      throw error;
+    }
+  }
+
+  async fullReindex(realmURL: string): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+    await resource.fetchInfo();
+    let wasIndexing = this.beginIndexingAnimation(resource);
+
+    try {
+      let headers = new Headers({
+        Accept: SupportedMimeType.JSON,
+      });
+      if (resource.token) {
+        headers.set('Authorization', `Bearer ${resource.token}`);
+      }
+
+      let response = await this.network.fetch(
+        `${normalizedRealmURL}_full-reindex`,
+        {
+          method: 'POST',
+          headers,
+        },
+      );
+
+      if (response.status === 204) {
+        return;
+      }
+
+      let errorText = await response.text();
+      throw new Error(
+        `Full reindex realm failed: ${response.status} - ${errorText}`,
+      );
+    } catch (error) {
+      this.restoreIndexingAnimation(resource, wasIndexing);
+      throw error;
+    }
+  }
+
+  async invalidateUrls(realmURL: string, urls: string[]): Promise<void> {
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let resource = this.getOrCreateRealmResource(normalizedRealmURL);
+    await resource.login();
+
+    let headers = new Headers({
+      Accept: SupportedMimeType.JSONAPI,
+      'Content-Type': SupportedMimeType.JSONAPI,
+    });
+    if (resource.token) {
+      headers.set('Authorization', `Bearer ${resource.token}`);
+    }
+
+    let dedupedUrls = [...new Set(urls)];
+    let response = await this.network.fetch(
+      `${normalizedRealmURL}_invalidate`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          data: {
+            type: 'invalidation-request',
+            attributes: {
+              urls: dedupedUrls,
+            },
+          },
+        }),
+      },
+    );
+
+    if (response.status === 204) {
+      return;
+    }
+
+    let errorText = await response.text();
+    throw new Error(
+      `Invalidate urls failed: ${response.status} - ${errorText}`,
+    );
   }
 
   isUnpublishingAnyRealms = (realmURL: string): boolean => {
@@ -1123,69 +1333,38 @@ export function claimsFromRawToken(rawToken: string): JWTPayload {
 
 let SessionStorage = {
   getAll(): Record<string, string> | undefined {
-    return getSessionTokensFromStorage();
+    let sessionsString = window.localStorage.getItem(SessionLocalStorageKey);
+    if (sessionsString) {
+      return JSON.parse(sessionsString);
+    }
+    return undefined;
   },
   persist(realmURL: string, token: string | undefined) {
-    let inRenderContext = Boolean((globalThis as any).__boxelRenderContext);
-    // Keep prerender auth tab-scoped: never copy sessionStorage tokens into
-    // origin-wide localStorage from render contexts.
-    let session = inRenderContext
-      ? (getSessionTokensFromStorage() ?? {})
-      : (getLocalSessionTokens() ?? {});
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    let session = JSON.parse(sessionStr);
     if (session[realmURL] !== token) {
-      if (token === undefined) {
-        delete session[realmURL];
-      } else {
-        session[realmURL] = token;
-      }
-      if (inRenderContext) {
-        window.sessionStorage.setItem(
-          SessionLocalStorageKey,
-          JSON.stringify(session),
-        );
-      } else {
-        window.localStorage.setItem(
-          SessionLocalStorageKey,
-          JSON.stringify(session),
-        );
-      }
+      session[realmURL] = token;
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify(session),
+      );
     }
     syncTokenToServiceWorker(realmURL, token);
   },
+  remove(realmURL: string) {
+    let sessionStr =
+      window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
+    let session = JSON.parse(sessionStr);
+    if (realmURL in session) {
+      delete session[realmURL];
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify(session),
+      );
+    }
+  },
 };
-
-function getSessionTokensFromStorage(): Record<string, string> | undefined {
-  let localTokens = getLocalSessionTokens();
-  if (localTokens && hasTokenEntries(localTokens)) {
-    return localTokens;
-  }
-  return parseSessionTokens(
-    window.sessionStorage.getItem(SessionLocalStorageKey),
-  );
-}
-
-function getLocalSessionTokens(): Record<string, string> | undefined {
-  return parseSessionTokens(
-    window.localStorage.getItem(SessionLocalStorageKey),
-  );
-}
-
-function parseSessionTokens(
-  tokens: string | null,
-): Record<string, string> | undefined {
-  if (!tokens) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(tokens) as Record<string, string>;
-  } catch {
-    return undefined;
-  }
-}
-
-function hasTokenEntries(tokens: Record<string, string>): boolean {
-  return Object.keys(tokens).length > 0;
-}
 
 declare module '@ember/service' {
   interface Registry {

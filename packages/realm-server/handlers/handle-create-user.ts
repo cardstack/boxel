@@ -1,4 +1,4 @@
-import { insertUser } from '@cardstack/runtime-common';
+import { getOrCreateUser } from '@cardstack/runtime-common';
 import type Koa from 'koa';
 import {
   fetchRequestFromContext,
@@ -49,36 +49,20 @@ export default function handleCreateUserRequest({
       return;
     }
 
-    let user;
+    let { user, created } = await getOrCreateUser(
+      dbAdapter,
+      matrixUserId,
+      registrationToken,
+    );
 
-    try {
-      user = await insertUser(dbAdapter, matrixUserId, registrationToken);
-    } catch (e) {
-      let errorMessage: string;
-      if (
-        (e as Error).message.includes(
-          'duplicate key value violates unique constraint',
-        )
-      ) {
-        errorMessage = 'User already exists';
-      } else {
-        errorMessage = 'Unknown error creating user';
-      }
-
-      await setContextResponse(
-        ctxt,
-        new Response(errorMessage, { status: 422 }),
-      );
-      return;
+    if (created) {
+      await addToCreditsLedger(dbAdapter, {
+        userId: user.id,
+        creditAmount: lowCreditThreshold,
+        creditType: 'daily_credit',
+        subscriptionCycleId: null,
+      });
     }
-
-    // Grant daily credits up to the low-credit threshold for new users.
-    await addToCreditsLedger(dbAdapter, {
-      userId: user!.id,
-      creditAmount: lowCreditThreshold,
-      creditType: 'daily_credit',
-      subscriptionCycleId: null,
-    });
 
     await setContextResponse(ctxt, new Response('ok'));
   };

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Career & HR Card Catalog\n\nCondensed stubs for Career & HR card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Interview Feedback\n**Priority:** P2\n\n- **Core idea:** Structured interview evaluation with criteria scores, notes, recommendation, and decision.\n\n---\n\n### Job Offer\n**Priority:** P2\n\n- **Core idea:** Employment offer with position, compensation, benefits, start date, and acceptance status.\n\n---\n\n### Time Entry\n**Priority:** P2\n\n- **Core idea:** Clock in/out record with timestamp pair, calculated duration, and project/task link.\n\n---\n\n### Payslip\n**Priority:** P2\n\n- **Core idea:** Pay statement with gross, deductions, net, period, and breakdown.\n\n---\n\n### Timesheet\n**Priority:** P2\n\n- **Core idea:** Weekly/monthly time entries aggregated by project with totals and approval status.\n\n---\n\n### PTO Request\n**Priority:** P2\n\n- **Core idea:** Time-off request with dates, type (vacation/sick/personal), approval workflow.\n\n---\n\n### Resume\n**Priority:** P1\n\n- **Core idea:** Structured resume with sections (experience, education, skills) and export formatting.\n\n---\n\n### Job Application\n**Priority:** P2\n\n- **Core idea:** Application tracker: company, role, status, dates, linked resume, cover letter, and notes.\n\n---\n\n### Performance Review\n**Priority:** P2\n\n- **Core idea:** Periodic review with goals, ratings, feedback, development plan.\n\n---\n\n### OKR / Goal\n**Priority:** P1\n\n- **Core idea:** Objective with measurable key results, progress tracking, and time period.\n\n---\n\n### Job Description\n**Priority:** P2\n\n- **Core idea:** Role specification with title, department, responsibilities, requirements, and compensation range.\n\n---\n\n### Cover Letter\n**Priority:** P2\n\n- **Core idea:** Templated cover letter with variable slots for company, role, and personalization.\n\n---\n\n### Benefits Package\n**Priority:** P3\n\n- **Core idea:** Employee benefits summary: health, dental, vision, 401k, PTO policy, perks.\n\n---\n\n### Onboarding Checklist\n**Priority:** P1\n\n- **Core idea:** New hire onboarding steps: accounts, equipment, training, introductions. Playbook subclass candidate.\n\n---\n\n### Employee Profile\n**Priority:** P1\n\n- **Core idea:** Internal employee record: role, department, manager, start date, skills, contact info.\n",
+      "cardInfo": {
+        "name": "Career & HR Card Catalog",
+        "notes": null,
+        "title": "Career & HR Card Catalog",
+        "summary": "Condensed stubs for Career & HR card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

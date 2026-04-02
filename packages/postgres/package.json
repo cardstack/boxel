@@ -29,8 +29,5 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:migrations": "node ./scripts/lint-migrations.js",
     "lint:glint": "glint"
-  },
-  "volta": {
-    "extends": "../../package.json"
   }
 }

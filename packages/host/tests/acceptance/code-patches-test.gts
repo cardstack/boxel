@@ -1,4 +1,11 @@
-import { click, waitFor, find, findAll, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  find,
+  findAll,
+  waitUntil,
+  settled,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, skip, test } from 'qunit';
@@ -308,7 +315,7 @@ ${REPLACE_MARKER}\n\`\`\``;
     // Switch to interact mode so we can test the open in code mode action
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     await waitFor('[data-test-submode-switcher="interact"]');
     await click('[data-test-attached-file-dropdown-button="hello.txt"]');
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
@@ -418,6 +425,14 @@ ${REPLACE_MARKER}
         timeout: 4000,
       },
     );
+    await waitUntil(
+      () => findAll('[data-test-code-diff-editor]').length === 3,
+      {
+        timeout: 5000,
+        timeoutMessage: 'timed out waiting for all code diff editors to render',
+      },
+    );
+    await settled();
     // Intentionally not using await here to test the loading state of the button
     click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
     await waitFor(
@@ -1088,7 +1103,7 @@ ${REPLACE_MARKER}
     // Switch to interact mode so that we can test that "Open in Code Mode" works
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    await click('[data-test-workspace="Test Workspace B"]');
+    await click('[data-test-workspace-button="Test Workspace B"]');
     await waitFor('[data-test-submode-switcher="interact"]');
     await click('[data-test-attached-file-dropdown-button="file1.gts"]');
     await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');

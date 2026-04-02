@@ -1,5 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn, hash } from '@ember/helper';
+import { array, fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -10,10 +10,11 @@ import Component from '@glimmer/component';
 import { restartableTask, task } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 
+import pluralize from 'pluralize';
+
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import type { PickerOption } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import type { Loader, CardCatalogQuery } from '@cardstack/runtime-common';
@@ -23,7 +24,6 @@ import {
   type Filter,
   baseRealm,
   Deferred,
-  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
@@ -35,8 +35,7 @@ import {
   getSuggestionWithLowestDepth,
 } from '../../utils/text-suggestion';
 
-import SearchBar from '../card-search/search-bar';
-import SearchContent from '../card-search/search-content';
+import SearchPanel from '../card-search/panel';
 
 import ModalContainer from '../modal-container';
 
@@ -54,7 +53,7 @@ interface Signature {
 }
 
 type Request = {
-  deferred: Deferred<string | undefined>;
+  deferred: Deferred<string[] | undefined>;
   opts?: {
     offerToCreate?: {
       ref: CodeRef;
@@ -67,17 +66,39 @@ type Request = {
 type State = {
   id: number;
   request: Request;
-  selectedCard?: string | NewCardArgs;
+  selectedCards: (string | NewCardArgs)[];
+  multiSelect: boolean;
   searchKey: string;
   chooseCardTitle: string;
   dismissModal: boolean;
   errorMessage?: string;
   baseFilter?: Filter;
-  selectedRealms: PickerOption[];
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
+  preselectConsumingRealm?: boolean;
 };
+
+function isNewCardArgs(item: string | NewCardArgs): item is NewCardArgs {
+  return typeof item !== 'string' && 'realmURL' in item;
+}
+
+function normalizeCardUrl(url: string): string {
+  return url.replace(/\.json$/, '');
+}
+
+function selectionEquals(
+  a: string | NewCardArgs,
+  b: string | NewCardArgs,
+): boolean {
+  if (typeof a === 'string' && typeof b === 'string') {
+    return normalizeCardUrl(a) === normalizeCardUrl(b);
+  }
+  if (isNewCardArgs(a) && isNewCardArgs(b)) {
+    return a.realmURL === b.realmURL;
+  }
+  return false;
+}
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
@@ -86,71 +107,83 @@ export default class CardCatalogModal extends Component<Signature> {
     {{#if this.state}}
       {{! when we "and" these two conditions, the type checks don't seem to work as you'd expect }}
       {{#if (not this.state.dismissModal)}}
-        <ModalContainer
-          class='card-catalog-modal'
-          @title={{this.state.chooseCardTitle}}
-          @onClose={{this.cancelPick}}
-          @layer='urgent'
-          {{focusTrap
-            isActive=(not this.state.dismissModal)
-            focusTrapOptions=(hash
-              initialFocus='[data-test-search-field]' allowOutsideClick=true
-            )
-          }}
-          {{on 'keydown' this.handleKeydown}}
-          data-test-card-catalog-modal
-        >
-          <:header>
-            <SearchBar
-              class='card-catalog-search'
-              @value={{this.state.searchKey}}
-              @onInput={{this.setSearchKey}}
-              @placeholder='Search for a card or enter card URL'
-              @selectedRealms={{this.state.selectedRealms}}
-              @onRealmChange={{this.onRealmPickerChange}}
-            />
-          </:header>
-          <:content>
-            <SearchContent
-              @searchKey={{this.state.searchKey}}
-              @selectedRealmURLs={{this.selectedRealmURLs}}
-              @isCompact={{false}}
-              @handleSelect={{this.selectFromSearch}}
-              @onSubmit={{this.submitFromSearch}}
-              @selectedCard={{this.state.selectedCard}}
-              @baseFilter={{this.state.baseFilter}}
-              @offerToCreate={{this.offerToCreateArg}}
-            />
-          </:content>
-          <:footer>
-            <div class='footer'>
-              <div>
-                <Button
-                  @kind='secondary-light'
-                  @size='tall'
-                  class='footer-button'
-                  {{on 'click' this.cancelPick}}
-                  data-test-card-catalog-cancel-button
-                >
-                  Cancel
-                </Button>
-                <Button
-                  @kind='primary'
-                  @size='tall'
-                  @disabled={{eq this.state.selectedCard undefined}}
-                  class='footer-button'
-                  {{on
-                    'click'
-                    (fn this.pick this.state.selectedCard undefined)
-                  }}
-                  data-test-card-catalog-go-button
-                >
-                  Go
-                </Button>
-              </div>
-            </div>
-          </:footer>
-        </ModalContainer>
+        {{#each (array this.state) key='id' as |state|}}
+          <SearchPanel
+            @searchKey={{state.searchKey}}
+            @baseFilter={{state.baseFilter}}
+            @availableRealmUrls={{state.availableRealmUrls}}
+            @consumingRealm={{state.consumingRealm}}
+            @preselectConsumingRealm={{state.preselectConsumingRealm}}
+            as |Bar Content|
+          >
+            <ModalContainer
+              class='card-catalog-modal'
+              @title={{state.chooseCardTitle}}
+              @onClose={{this.cancelPick}}
+              @layer='urgent'
+              {{focusTrap
+                isActive=(not state.dismissModal)
+                additionalElements=this.focusTrapAdditionalElements
+                focusTrapOptions=(hash
+                  initialFocus='[data-test-search-field]' allowOutsideClick=true
+                )
+              }}
+              {{on 'keydown' this.handleKeydown}}
+              data-test-card-catalog-modal
+            >
+              <:header>
+                <Bar
+                  class='card-catalog-search'
+                  @value={{state.searchKey}}
+                  @onInput={{this.setSearchKey}}
+                  @placeholder='Search for a card or enter card URL'
+                  @pickerDestination='card-catalog-picker-wormhole'
+                />
+              </:header>
+              <:content>
+                <Content
+                  @isCompact={{false}}
+                  @handleSelect={{this.selectFromSearch}}
+                  @onSubmit={{this.submitFromSearch}}
+                  @selectedCards={{state.selectedCards}}
+                  @multiSelect={{state.multiSelect}}
+                  @onSelectAll={{this.selectAll}}
+                  @onDeselectAll={{this.deselectAll}}
+                  @offerToCreate={{this.offerToCreateArg}}
+                />
+              </:content>
+              <:footer>
+                <div class='footer'>
+                  <div>
+                    <Button
+                      @kind='secondary-light'
+                      @size='tall'
+                      class='footer-button'
+                      {{on 'click' this.cancelPick}}
+                      data-test-card-catalog-cancel-button
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      @kind='primary'
+                      @size='tall'
+                      @disabled={{eq state.selectedCards.length 0}}
+                      class='footer-button'
+                      {{on 'click' (fn this.pickCards state)}}
+                      data-test-card-catalog-go-button
+                    >
+                      {{this.goButtonText}}
+                    </Button>
+                  </div>
+                </div>
+              </:footer>
+            </ModalContainer>
+            <div
+              id='card-catalog-picker-wormhole'
+              data-test-card-catalog-picker-wormhole
+            ></div>
+          </SearchPanel>
+        {{/each}}
       {{/if}}
     {{/if}}
     <style scoped>
@@ -200,20 +233,13 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  private get state(): State | undefined {
-    return this.stateStack[this.stateStack.length - 1];
+  get focusTrapAdditionalElements() {
+    const el = document.getElementById('card-catalog-picker-wormhole');
+    return el ? [el] : [];
   }
 
-  private get selectedRealmURLs(): string[] {
-    if (!this.state) {
-      return [];
-    }
-    const selected = this.state.selectedRealms;
-    const hasSelectAll = selected.some((opt) => opt.type === 'select-all');
-    if (hasSelectAll || selected.length === 0) {
-      return this.state.availableRealmUrls;
-    }
-    return selected.map((opt) => opt.id).filter(Boolean);
+  private get state(): State | undefined {
+    return this.stateStack[this.stateStack.length - 1];
   }
 
   private get offerToCreateArg() {
@@ -226,11 +252,12 @@ export default class CardCatalogModal extends Component<Signature> {
     return this.state.request.opts?.offerToCreate;
   }
 
-  @action private onRealmPickerChange(selected: PickerOption[]) {
-    if (!this.state) {
-      return;
+  private get goButtonText(): string {
+    if (!this.state?.multiSelect) {
+      return 'Go';
     }
-    this.state.selectedRealms = selected;
+    const count = this.state.selectedCards.length;
+    return `Choose ${count} ${pluralize('Card', count)}`;
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
@@ -246,9 +273,11 @@ export default class CardCatalogModal extends Component<Signature> {
       createNewCard?: CreateNewCard;
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
+      preselectConsumingRealm?: boolean;
+      preselectedCardUrls?: string[];
     },
-  ): Promise<undefined | string> {
-    return await this._chooseCard.perform(
+  ): Promise<undefined | string | string[]> {
+    let result = await this._chooseCard.perform(
       {
         // default to cardTitle sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
@@ -266,6 +295,10 @@ export default class CardCatalogModal extends Component<Signature> {
       },
       opts,
     );
+    if (opts?.multiSelect) {
+      return result;
+    }
+    return result?.[0];
   }
 
   private _chooseCard = task(
@@ -280,6 +313,8 @@ export default class CardCatalogModal extends Component<Signature> {
         multiSelect?: boolean;
         preselectedCardTypeQuery?: Query;
         consumingRealm?: URL;
+        preselectConsumingRealm?: boolean;
+        preselectedCardUrls?: string[];
       } = {},
     ) => {
       await this.realmServer.ready;
@@ -325,6 +360,14 @@ export default class CardCatalogModal extends Component<Signature> {
           preselectedCardUrl = `${instances[0].id}.json`;
         }
       }
+      let preselectedCardUrls = (
+        opts?.preselectedCardUrls?.length
+          ? opts.preselectedCardUrls
+          : preselectedCardUrl
+            ? [preselectedCardUrl]
+            : []
+      ).map((url) => (url.endsWith('.json') ? url : `${url}.json`));
+
       let cardCatalogState = new TrackedObject<State>({
         id: this.stateId,
         request,
@@ -332,11 +375,12 @@ export default class CardCatalogModal extends Component<Signature> {
         searchKey: '',
         dismissModal: false,
         baseFilter: query.filter,
-        selectedRealms: [],
         availableRealmUrls: this.realmServer.availableRealmURLs,
-        selectedCard: preselectedCardUrl,
-        hasPreselectedCard: Boolean(preselectedCardUrl),
+        selectedCards: preselectedCardUrls,
+        multiSelect: opts?.multiSelect ?? false,
+        hasPreselectedCard: preselectedCardUrls.length > 0,
         consumingRealm: opts.consumingRealm,
+        preselectConsumingRealm: opts.preselectConsumingRealm,
       });
       this.stateStack.push(cardCatalogState);
       return await request.deferred.promise;
@@ -350,7 +394,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     this.state.searchKey = searchKey;
     if (!this.state.searchKey) {
-      this.state.selectedCard = undefined;
+      this.state.selectedCards = [];
       this.state.hasPreselectedCard = false;
     }
   }
@@ -359,7 +403,22 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state || !selection) {
       return;
     }
-    this.state.selectedCard = selection;
+    if (this.state.multiSelect) {
+      // Toggle: add if absent, remove if present
+      const idx = this.state.selectedCards.findIndex((s) =>
+        selectionEquals(s, selection),
+      );
+      if (idx >= 0) {
+        this.state.selectedCards = this.state.selectedCards.filter(
+          (_, i) => i !== idx,
+        );
+      } else {
+        this.state.selectedCards = [...this.state.selectedCards, selection];
+      }
+    } else {
+      // Single-select: replace
+      this.state.selectedCards = [selection];
+    }
     this.state.hasPreselectedCard = false;
   }
 
@@ -367,65 +426,87 @@ export default class CardCatalogModal extends Component<Signature> {
     if (!this.state) {
       return;
     }
-    this.state.selectedCard = selection;
-    this.pickCard.perform(selection);
+    if (this.state.multiSelect && typeof selection === 'string') {
+      // In multi-select, double-click on existing cards just toggles (don't submit)
+      this.selectFromSearch(selection);
+      return;
+    }
+    this.state.selectedCards = [selection];
+    this.pickCards(this.state);
   }
 
-  pickCard = restartableTask(
-    async (selectedItem?: string | CardDef | NewCardArgs, state?: State) => {
-      if (!this.state) {
-        return;
-      }
-      let cardId: string | undefined;
-      if (selectedItem) {
-        let newCard: NewCardArgs | undefined;
-        if (isCardInstance(selectedItem)) {
-          cardId = selectedItem.id;
-        } else if (typeof selectedItem === 'string') {
-          cardId = selectedItem;
-        } else {
-          newCard = selectedItem;
-        }
+  @action private selectAll(cards: string[]): void {
+    if (!this.state) {
+      return;
+    }
+    this.state.selectedCards = [...cards];
+  }
 
-        if (newCard) {
-          cardId = await this.createNewTask.perform(
-            newCard.ref,
-            newCard.relativeTo ? new URL(newCard.relativeTo) : undefined,
-            new URL(newCard.realmURL),
-          );
-        }
-      }
+  @action private deselectAll(): void {
+    if (!this.state) {
+      return;
+    }
+    this.state.selectedCards = [];
+  }
 
-      let request = state ? state.request : this.state.request;
-      if (request) {
-        request.deferred.fulfill(cardId?.replace(/\.json$/, ''));
-      }
+  @action private pickCards(state?: State) {
+    this.pickCard.perform(state);
+  }
 
-      // TODO is this still necessary:
-      // In the 'createNewCard' case, auto-save doesn't follow any specific order,
-      // so we cannot guarantee that the outer 'createNewCard' process (the top item in the stack) will be saved before the inner one.
-      // That's why we use state ID to remove state from the stack.
-      if (state) {
-        let stateIndex = this.stateStack.findIndex((s) => s.id === state.id);
-        this.stateStack.splice(stateIndex, 1);
+  pickCard = restartableTask(async (state?: State) => {
+    let currentState = state ?? this.state;
+    if (!currentState) {
+      return;
+    }
+
+    let cardIds: string[] = [];
+    for (let selectedItem of currentState.selectedCards) {
+      if (typeof selectedItem === 'string') {
+        cardIds.push(selectedItem.replace(/\.json$/, ''));
       } else {
-        this.stateStack.pop();
+        // NewCardArgs — create the card
+        let newCardId = await this.createNewTask.perform(
+          selectedItem.ref,
+          selectedItem.relativeTo
+            ? new URL(selectedItem.relativeTo)
+            : undefined,
+          new URL(selectedItem.realmURL),
+        );
+        if (newCardId) {
+          cardIds.push(newCardId.replace(/\.json$/, ''));
+        }
       }
-    },
-  );
+    }
+
+    let request = currentState.request;
+    if (request) {
+      request.deferred.fulfill(cardIds.length > 0 ? cardIds : undefined);
+    }
+
+    // Remove state from stack
+    let stateIndex = this.stateStack.findIndex(
+      (s) => s.id === currentState!.id,
+    );
+    if (stateIndex >= 0) {
+      this.stateStack.splice(stateIndex, 1);
+    }
+  });
 
   @action private handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
-      this.pick(undefined);
+      this.cancelPick();
     }
   }
 
-  @action private pick(item?: string | CardDef | NewCardArgs, state?: State) {
-    this.pickCard.perform(item, state);
-  }
-
   @action private cancelPick() {
-    this.pick(undefined, undefined);
+    if (!this.state) {
+      return;
+    }
+    let request = this.state.request;
+    if (request) {
+      request.deferred.fulfill(undefined);
+    }
+    this.stateStack.pop();
   }
 
   private createNewTask = task(

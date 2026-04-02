@@ -17,7 +17,7 @@ Router.map(function () {
   });
   this.route('module', { path: '/module/:id/:nonce/:options' });
   this.route('connect', { path: '/connect/:origin' });
-  this.route('standby');
+  this.route('standby', { path: '/_standby' });
   this.route('command-runner', {
     path: '/command-runner/:request_id/:nonce',
   });

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Wiki",
+        "module": "../wiki"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "tags": ["legal-compliance", "enrollment", "contract"],
+      "content": "## Overview\n\nThe Enrollment Contract card gives the workspace a structured home for enrollment agreement for courses, programs, or services with terms and obligations.\n\nAs a first-class Boxel card, it can be linked to adjacent records, surfaced in filtered views, and reused in automation without the information collapsing into disconnected notes or one-off documents.\n\n## Core Mechanics\n\nEnrollment Contract acts as a canonical operational record. It keeps important facts, state changes, timestamps, and linked parties in one place so downstream workflows, approvals, and reporting can all rely on the same source of truth.\n\nThe card can be created directly by a user, produced from a [[Workflow Playbook]], or updated in response to a [[Trigger]]. When AI is involved, a [[Prompt Template]] or [[Skill Card]] can shape how it is drafted, summarized, classified, or routed.\n\n## Integration Points\n\n- **[[Document]]** -- Enrollment Contract can link to longer-form supporting content when a lightweight card needs deeper context.\n- **[[Workflow Playbook]]** -- Enrollment Contract can be created, reviewed, or progressed as one step inside a repeatable workflow.\n- **[[Signature]]** -- Signature can provide adjacent context, downstream output, or grouped navigation around Enrollment Contract.\n- **[[Alert]]** -- Alert can provide adjacent context, downstream output, or grouped navigation around Enrollment Contract.\n- **[[Report]]** -- Enrollment Contract can feed rollups and summaries that surface trends, status, or outcomes.\n- **[[Legal Contract]]** -- Legal Contract can provide adjacent context, downstream output, or grouped navigation around Enrollment Contract.\n\n## Example Use Cases\n\n- **System of record:** Teams create Enrollment Contract as the structured home for enrollment agreement for courses, programs, or services with terms and obligations and keep related work linked instead of scattered across notes.\n- **Automation handoff:** A [[Workflow Playbook]] or [[Trigger]] creates or updates Enrollment Contract when upstream conditions are met, reducing repetitive setup work.\n- **Search and reporting:** Enrollment Contract stays queryable for dashboards, summaries, and downstream actions without re-entering the same information in multiple places.",
+      "cardInfo": {
+        "name": "Enrollment Contract",
+        "notes": null,
+        "summary": "Enrollment agreement for courses, programs, or services with terms and obligations.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "relatedPages": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

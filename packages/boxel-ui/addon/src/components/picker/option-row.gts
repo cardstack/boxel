@@ -1,19 +1,20 @@
 import { on } from '@ember/modifier';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
-import { cn } from '../../helpers.ts';
+import { cn, sanitizeHtmlSafe } from '../../helpers.ts';
 import CheckMark from '../../icons/check-mark.gts';
 import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
+import Tooltip from '../tooltip/index.gts';
 import type { PickerOption } from './index.gts';
 
 export interface OptionRowSignature {
   Args: {
     currentSelected?: PickerOption[];
     isSelected: boolean;
-    onHover?: (option: PickerOption | null) => void;
+    onFocus?: (option: PickerOption | null) => void;
+    onLeave?: (option: PickerOption | null) => void;
     option: PickerOption;
     select?: Select;
   };
@@ -22,11 +23,11 @@ export interface OptionRowSignature {
 
 export default class PickerOptionRow extends Component<OptionRowSignature> {
   handleMouseEnter = () => {
-    this.args.onHover?.(this.args.option);
+    this.args.onFocus?.(this.args.option);
   };
 
   handleMouseLeave = () => {
-    this.args.onHover?.(null);
+    this.args.onLeave?.(null);
   };
 
   get icon() {
@@ -34,11 +35,6 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       this.args.option.icon ??
       (this.args.option.type === 'select-all' ? SelectAll : undefined)
     );
-  }
-
-  get label() {
-    let { type, name } = this.args.option;
-    return type === 'select-all' ? 'Select All' : name;
   }
 
   get isIconString() {
@@ -63,9 +59,19 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
 
   <template>
     <div
-      class={{cn 'picker-option-row' picker-option-row--selected=@isSelected}}
+      class={{cn
+        'picker-option-row'
+        picker-option-row--selected=@isSelected
+        picker-option-row--disabled=@option.disabled
+      }}
       data-test-boxel-picker-option-selected={{if @isSelected 'true' 'false'}}
+      data-test-boxel-picker-option-disabled={{if
+        @option.disabled
+        'true'
+        'false'
+      }}
       data-test-boxel-picker-option-row={{@option.id}}
+      data-test-boxel-picker-option-label={{@option.label}}
       {{on 'mouseenter' this.handleMouseEnter}}
       {{on 'mouseleave' this.handleMouseLeave}}
     >
@@ -97,7 +103,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
           {{else if this.isIconSVG}}
             {{#let this.iconString as |iconSvg|}}
               {{#if iconSvg}}
-                {{htmlSafe
+                {{sanitizeHtmlSafe
                   (addClassToSVG iconSvg 'picker-option-row__icon-image')
                 }}
               {{/if}}
@@ -112,7 +118,18 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
           {{/if}}
         </div>
       {{/if}}
-      <div class='picker-option-row__label'>{{this.label}}</div>
+      {{#if @option.tooltip}}
+        <Tooltip @placement='right' class='picker-option-row__tooltip-trigger'>
+          <:trigger>
+            <div class='picker-option-row__label'>{{@option.label}}</div>
+          </:trigger>
+          <:content>
+            {{@option.tooltip}}
+          </:content>
+        </Tooltip>
+      {{else}}
+        <div class='picker-option-row__label'>{{@option.label}}</div>
+      {{/if}}
     </div>
 
     <style scoped>
@@ -130,6 +147,12 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         color: var(--boxel-dark);
         background-color: var(--boxel-100);
         border-radius: 4px;
+      }
+
+      .picker-option-row--disabled {
+        opacity: 0.4;
+        pointer-events: none;
+        cursor: default;
       }
 
       .picker-option-row__checkbox {
@@ -186,6 +209,15 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         width: 18px;
         height: 18px;
         flex-shrink: 0;
+      }
+
+      .picker-option-row__tooltip-trigger {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .picker-option-row__tooltip-trigger :deep(.trigger) {
+        width: 100%;
       }
 
       .picker-option-row__label {

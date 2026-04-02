@@ -34,12 +34,14 @@ import {
   isFileDef,
   isBaseDef,
   isCardErrorJSONAPI,
+  isListingDef,
+  isListingInstance,
   internalKeyFor,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import ListingCreateCommand from '@cardstack/host/commands/listing-create';
+import OpenCreateListingModalCommand from '@cardstack/host/commands/open-create-listing-modal';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
@@ -255,12 +257,13 @@ export default class DetailPanel extends Component<Signature> {
           ]
         : []),
       ...(this.realm.canWrite(this.args.readyFile.url) &&
-      this.args.selectedDeclaration?.exportName
+      this.args.selectedDeclaration?.exportName &&
+      !isListingDef(this.args.selectedDeclaration?.cardOrField)
         ? [
             {
               label: 'Create Listing',
               icon: Package,
-              handler: this.createListingWithAI,
+              handler: this.createListing,
             },
           ]
         : []),
@@ -298,6 +301,16 @@ export default class DetailPanel extends Component<Signature> {
         icon: Copy,
         handler: this.duplicateInstance,
       },
+      ...(this.realm.canWrite(this.args.readyFile.url) &&
+      !isListingInstance(this.args.cardInstance)
+        ? [
+            {
+              label: 'Create Listing',
+              icon: Package,
+              handler: this.createListing,
+            },
+          ]
+        : []),
       ...(this.realm.canWrite(this.args.readyFile.url)
         ? [
             {
@@ -415,22 +428,53 @@ export default class DetailPanel extends Component<Signature> {
     this.args.openSearch(`carddef:${refURL}`);
   }
 
-  @action private async createListingWithAI() {
-    const command = new ListingCreateCommand(
+  @action private async createListing() {
+    const command = new OpenCreateListingModalCommand(
       this.commandService.commandContext,
     );
-    let codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
-    if (!codeRef) {
-      throw new Error('codeRef is required to create listing');
-    }
     const targetRealm = this.operatorModeStateService.realmURL;
     if (!targetRealm) {
       throw new Error('targetRealm is required to create listing');
     }
-    await command.execute({
-      codeRef,
-      targetRealm,
-    });
+    if (this.isCardInstance) {
+      const openCardIds = this.args.cardInstance?.id
+        ? [this.args.cardInstance.id]
+        : [];
+      const codeRef = this.cardInstanceType?.type
+        ? getResolvedCodeRefFromType(this.cardInstanceType.type)
+        : undefined;
+      if (!codeRef) {
+        throw new Error('Cannot create listing: card type not yet loaded');
+      }
+      await command.execute({ openCardIds, codeRef, targetRealm });
+    } else {
+      const codeRef: ResolvedCodeRef = this.selectedDeclarationAsCodeRef;
+      let openCardIds: string[] = this.args.cardInstance?.id
+        ? [this.args.cardInstance.id]
+        : [];
+      if (!openCardIds.length) {
+        let targetRealms = [targetRealm];
+        let firstInstanceId: string | undefined;
+        try {
+          let instances = await this.store.search(
+            { filter: { type: codeRef } },
+            targetRealms,
+          );
+          firstInstanceId = instances.find((c) => c.id)?.id;
+        } catch (error) {
+          console.warn(
+            'Failed to prefetch instances for create listing modal',
+            error,
+          );
+        }
+        openCardIds = firstInstanceId ? [firstInstanceId] : [];
+      }
+      await command.execute({
+        codeRef,
+        openCardIds,
+        targetRealm,
+      });
+    }
   }
 
   private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {

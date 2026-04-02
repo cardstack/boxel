@@ -6,17 +6,18 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
 import type { Realm } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   closeServer,
   testRealmInfo,
   createJWT,
+  testRealmURLFor,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | QUERY _info', function (hooks) {
-    let realmURL = new URL('http://127.0.0.1:4444/test/');
+    let realmURL = testRealmURLFor('test/');
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
@@ -45,7 +46,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     module('public readable realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           '*': ['read'],
         },
@@ -89,7 +90,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     module('permissioned realm', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           '@node-test_realm:localhost': ['read', 'realm-owner'],
         },
@@ -161,7 +162,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     module(
       'shared realm because there is `users` permission',
       function (hooks) {
-        setupPermissionedRealm(hooks, {
+        setupPermissionedRealmCached(hooks, {
           permissions: {
             users: ['read'],
             '@node-test_realm:localhost': ['read', 'realm-owner'],
@@ -202,7 +203,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     );
 
     module('shared realm because there are multiple users', function (hooks) {
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
         permissions: {
           bob: ['read'],
           jane: ['read'],

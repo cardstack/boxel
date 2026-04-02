@@ -1,12 +1,14 @@
-import { isDestroying } from '@ember/destroyable';
-import { debounce } from '@ember/runloop';
+import { registerDestructor, isDestroying } from '@ember/destroyable';
+import type Owner from '@ember/owner';
+import { cancel, debounce } from '@ember/runloop';
+import type { Timer } from '@ember/runloop';
 import { inject as service } from '@ember/service';
 
 import Modifier from 'ember-modifier';
 
 import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
-import type { NamedArgs } from 'ember-modifier';
+import type { ArgsFor, NamedArgs } from 'ember-modifier';
 
 interface RestoreScrollPositionModifierArgs {
   Positional: [];
@@ -28,6 +30,15 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
 
   #previousContainer: string | undefined;
   #previousKey: string | undefined;
+  #debounceTimer: Timer | undefined;
+
+  constructor(
+    owner: Owner,
+    args: ArgsFor<RestoreScrollPositionModifierSignature>,
+  ) {
+    super(owner, args);
+    registerDestructor(this, () => this.cleanup());
+  }
 
   modify(
     element: Element,
@@ -58,16 +69,12 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
     this.#previousKey = key;
 
     return () => {
-      if (this.#scrollEndListener) {
-        element.removeEventListener('scrollend', this.#scrollEndListener);
-      }
-
-      this.#mutationObserver?.disconnect();
+      this.cleanup();
     };
   }
 
   private debouncedRestoreOrPersistScrollTop() {
-    debounce(this, this.restoreOrPersistScrollTop, 100);
+    this.#debounceTimer = debounce(this, this.restoreOrPersistScrollTop, 100);
   }
 
   private restoreOrPersistScrollTop() {
@@ -122,5 +129,20 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
         e.target.scrollTop,
       );
     }
+  }
+
+  private cleanup() {
+    if (this.#scrollEndListener) {
+      this.#element?.removeEventListener('scrollend', this.#scrollEndListener);
+    }
+    this.#mutationObserver?.disconnect();
+    if (this.#debounceTimer) {
+      cancel(this.#debounceTimer);
+      this.#debounceTimer = undefined;
+    }
+    this.#mutationObserver = undefined;
+    this.#scrollEndListener = undefined;
+    this.#previousContainer = undefined;
+    this.#previousKey = undefined;
   }
 }

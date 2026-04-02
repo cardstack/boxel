@@ -1,0 +1,6 @@
+#!/bin/sh
+#MISE description="Trigger a full reindex of all realms on running realm servers"
+#MISE depends=["infra:ensure-pg"]
+#MISE dir="packages/realm-server"
+
+exec ./scripts/full-reindex.sh

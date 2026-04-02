@@ -181,7 +181,10 @@ export class Responder {
     };
   }
 
-  async onError(error: OpenAIError | string) {
+  async onError(
+    error: OpenAIError | string,
+    opts?: { reloadBillingData?: boolean },
+  ) {
     Sentry.captureException(error, {
       extra: {
         roomId: this.matrixResponsePublisher.roomId,
@@ -191,7 +194,7 @@ export class Responder {
     if (this.responseState.isStreamingFinished) {
       return;
     }
-    return await this.matrixResponsePublisher.sendError(error);
+    return await this.matrixResponsePublisher.sendError(error, opts);
   }
 
   async flush() {

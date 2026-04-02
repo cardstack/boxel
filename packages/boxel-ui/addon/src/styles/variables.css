@@ -166,6 +166,7 @@
   --boxel-600: #413e4e;
   --boxel-650: #3b394b;
   --boxel-700: #272330;
+  --boxel-800: #1a1628;
 
   --boxel-cyan: #00ebe5;
   --boxel-teal: #00ffba;
@@ -198,6 +199,7 @@
     --boxel-red
   ); /* formerly boxel-error-100: the latest design docs (8/16/2023) use this color for danger instead */
   --boxel-danger-hover: #fa1521;
+  --boxel-danger-bg: #ffe9e9;
 
   /* Boxel purples */
   --boxel-purple-100: var(--boxel-100);

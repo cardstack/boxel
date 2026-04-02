@@ -1,0 +1,7 @@
+#!/bin/sh
+#MISE description="Ensure Traefik is running (env mode only)"
+
+[ -z "$BOXEL_ENVIRONMENT" ] && exit 0
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+sh "$REPO_ROOT/scripts/start-traefik.sh"

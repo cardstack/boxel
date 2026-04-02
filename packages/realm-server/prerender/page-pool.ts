@@ -37,7 +37,7 @@ class TabQueue {
 
 type PoolEntry = {
   type: 'pool';
-  realm: string | null;
+  affinityKey: string | null;
   context: BrowserContext;
   page: Page;
   pageId: string;
@@ -75,12 +75,39 @@ const STANDBY_BACKOFF_MS = 500;
 const STANDBY_BACKOFF_CAP_MS = 4000;
 const CONSOLE_ERROR_LIMIT = 50;
 
+export class StandbyTargetNotReadyError extends Error {}
+
+function isExpectedStandbyTargetNotReadyError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error instanceof StandbyTargetNotReadyError ||
+    /ERR_CONNECTION_REFUSED|returned HTTP 50[23]/.test(error.message)
+  );
+}
+
+function isExpectedStandbyConsoleError(args: {
+  affinityKey: string;
+  type: ReturnType<ConsoleMessage['type']>;
+  formatted: string;
+  locationURL?: string;
+}): boolean {
+  return (
+    args.affinityKey === 'standby' &&
+    args.type === 'error' &&
+    /status of 50[23]/.test(args.formatted) &&
+    args.locationURL?.includes('/_standby') === true
+  );
+}
+
 export class PagePool {
-  #realmPages = new Map<string, Set<PoolEntry>>();
+  #affinityPages = new Map<string, Set<PoolEntry>>();
   #standbys = new Set<StandbyEntry>();
   #lru = new Set<string>();
   #maxPages: number;
-  #realmTabMax: number;
+  #affinityTabMax: number;
   #serverURL: string;
   #browserManager: BrowserManager;
   #boxelHostURL: string;
@@ -101,11 +128,11 @@ export class PagePool {
     disableStandbyRefill?: boolean;
   }) {
     this.#maxPages = options.maxPages;
-    let envTabMax = Number(process.env.PRERENDER_REALM_TAB_MAX ?? 4);
+    let envTabMax = Number(process.env.PRERENDER_AFFINITY_TAB_MAX ?? 4);
     if (!Number.isFinite(envTabMax) || envTabMax <= 0) {
       envTabMax = 1;
     }
-    this.#realmTabMax = Math.min(Math.max(1, envTabMax), this.#maxPages);
+    this.#affinityTabMax = Math.min(Math.max(1, envTabMax), this.#maxPages);
     this.#serverURL = options.serverURL;
     this.#browserManager = options.browserManager;
     this.#boxelHostURL = options.boxelHostURL;
@@ -114,8 +141,8 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
   }
 
-  getWarmRealms(): string[] {
-    return [...this.#realmPages.keys()];
+  getWarmAffinities(): string[] {
+    return [...this.#affinityPages.keys()];
   }
 
   resetConsoleErrors(pageId: string): void {
@@ -132,26 +159,26 @@ export class PagePool {
     await this.#ensureStandbyPool();
   }
 
-  async evictIdleRealms(maxIdleMs: number): Promise<string[]> {
+  async evictIdleAffinities(maxIdleMs: number): Promise<string[]> {
     if (!Number.isFinite(maxIdleMs) || maxIdleMs <= 0) {
       return [];
     }
     let now = Date.now();
     let evicted: string[] = [];
-    for (let [realm, entries] of [...this.#realmPages.entries()]) {
+    for (let [affinityKey, entries] of [...this.#affinityPages.entries()]) {
       let lastUsedAt = Math.max(
         ...[...entries].map((entry) => entry.lastUsedAt),
       );
       if (now - lastUsedAt < maxIdleMs) {
         continue;
       }
-      await this.disposeRealm(realm);
-      evicted.push(realm);
+      await this.disposeAffinity(affinityKey);
+      evicted.push(affinityKey);
     }
     return evicted;
   }
 
-  async getPage(realm: string): Promise<{
+  async getPage(affinityKey: string): Promise<{
     page: Page;
     reused: boolean;
     launchMs: number;
@@ -160,9 +187,10 @@ export class PagePool {
   }> {
     let t0 = Date.now();
     await this.#ensureStandbyPool();
-    let { entry, reused, releaseTab } = await this.#selectEntryForRealm(realm);
-    if (entry.realm !== realm) {
-      entry = this.#reassignRealmTab(entry, realm);
+    let { entry, reused, releaseTab } =
+      await this.#selectEntryForAffinity(affinityKey);
+    if (entry.affinityKey !== affinityKey) {
+      entry = this.#reassignAffinityTab(entry, affinityKey);
       reused = false;
     }
     if (entry.transitioning) {
@@ -172,7 +200,7 @@ export class PagePool {
       ? await this.#renderSemaphore.acquire()
       : undefined;
     entry.lastUsedAt = Date.now();
-    this.#touchLRU(realm);
+    this.#touchLRU(affinityKey);
     void this.#ensureStandbyPool();
     let released = false;
     let release = () => {
@@ -195,33 +223,33 @@ export class PagePool {
     };
   }
 
-  async disposeRealm(
-    realm: string,
+  async disposeAffinity(
+    affinityKey: string,
     options?: { awaitIdle?: boolean; retainConsoleErrors?: boolean },
   ): Promise<void> {
-    let entries = this.#realmPages.get(realm);
+    let entries = this.#affinityPages.get(affinityKey);
     if (!entries || entries.size === 0) return;
-    this.#lru.delete(realm);
+    this.#lru.delete(affinityKey);
     let awaitIdle = options?.awaitIdle !== false;
     let retainConsoleErrors = options?.retainConsoleErrors ?? false;
     if (awaitIdle) {
-      this.#realmPages.delete(realm);
+      this.#affinityPages.delete(affinityKey);
       for (let entry of entries) {
         await this.#closeEntry(entry, retainConsoleErrors);
       }
-      await this.#notifyManagerRealmEvicted(realm);
+      await this.#notifyManagerAffinityEvicted(affinityKey);
     } else {
       for (let entry of entries) {
         void this.#closeEntry(entry, retainConsoleErrors).finally(() => {
-          let currentEntries = this.#realmPages.get(realm);
+          let currentEntries = this.#affinityPages.get(affinityKey);
           if (!currentEntries) return;
           currentEntries.delete(entry);
           if (currentEntries.size === 0) {
-            this.#realmPages.delete(realm);
+            this.#affinityPages.delete(affinityKey);
           }
         });
       }
-      void this.#notifyManagerRealmEvicted(realm);
+      void this.#notifyManagerAffinityEvicted(affinityKey);
     }
     void this.#browserManager.cleanupUserDataDirs();
     void this.#ensureStandbyPool();
@@ -237,7 +265,7 @@ export class PagePool {
         // best effort
       }
     }
-    for (let entries of this.#realmPages.values()) {
+    for (let entries of this.#affinityPages.values()) {
       for (let entry of entries) {
         await this.#closeEntry(entry);
       }
@@ -245,7 +273,7 @@ export class PagePool {
     for (let entry of this.#standbys.values()) {
       await this.#closeEntry(entry);
     }
-    this.#realmPages.clear();
+    this.#affinityPages.clear();
     this.#standbys.clear();
     this.#lru.clear();
     this.#ensuringStandbys = null;
@@ -306,18 +334,18 @@ export class PagePool {
       return true;
     }
     if (this.#poolEntryCount() > this.#maxPages) {
-      await this.#evictLRURealm();
+      await this.#evictLRUAffinity();
       return this.#totalContextCount() < this.#maxPages + 1;
     }
     return false;
   }
 
-  async #evictLRURealm(): Promise<void> {
-    let lruRealm = this.#lru.values().next().value as string | undefined;
-    if (!lruRealm) {
+  async #evictLRUAffinity(): Promise<void> {
+    let lruAffinity = this.#lru.values().next().value as string | undefined;
+    if (!lruAffinity) {
       return;
     }
-    await this.disposeRealm(lruRealm);
+    await this.disposeAffinity(lruAffinity);
   }
 
   async #createStandbyWithRetries(): Promise<StandbyEntry | undefined> {
@@ -328,10 +356,12 @@ export class PagePool {
       try {
         return await this.#createStandby();
       } catch (e) {
-        log.error(
-          `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`,
-          e,
-        );
+        let message = `Standby creation attempt ${attempt} failed (page pool capacity ${this.#totalContextCount()}/${this.#maxPages + 1}):`;
+        if (isExpectedStandbyTargetNotReadyError(e)) {
+          log.debug(message, e);
+        } else {
+          log.error(message, e);
+        }
         if (attempt >= STANDBY_CREATION_RETRIES) {
           return undefined;
         }
@@ -349,6 +379,11 @@ export class PagePool {
       let browser = await this.#browserManager.getBrowser();
       context = await browser.createBrowserContext();
       let page = await context.newPage();
+      if (page.browserContext() !== context) {
+        throw new Error(
+          'Expected each prerender page to use its own browser context for localStorage isolation',
+        );
+      }
       let pageId = uuidv4();
       this.#attachPageConsole(page, 'standby', pageId);
       await this.#loadStandbyPage(page, pageId);
@@ -363,7 +398,11 @@ export class PagePool {
       this.#standbys.add(entry);
       return entry;
     } catch (e) {
-      log.error('Error creating standby page:', e);
+      if (isExpectedStandbyTargetNotReadyError(e)) {
+        log.debug('Standby page target is not ready yet:', e);
+      } else {
+        log.error('Error creating standby page:', e);
+      }
       if (context) {
         try {
           await context.close();
@@ -378,10 +417,31 @@ export class PagePool {
   }
 
   async #loadStandbyPage(page: Page, pageId: string): Promise<void> {
-    await page.goto(`${this.#boxelHostURL}/standby`, {
-      waitUntil: 'domcontentloaded',
-      timeout: this.#standbyTimeoutMs,
-    });
+    let standbyURL = `${this.#boxelHostURL}/_standby`;
+    try {
+      let response = await page.goto(standbyURL, {
+        waitUntil: 'domcontentloaded',
+        timeout: this.#standbyTimeoutMs,
+      });
+      let status = response?.status();
+      if (status === 502 || status === 503) {
+        throw new StandbyTargetNotReadyError(
+          `Standby target ${standbyURL} returned HTTP ${status}`,
+        );
+      }
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/.test(
+          error.message,
+        )
+      ) {
+        throw new StandbyTargetNotReadyError(
+          `Standby target ${standbyURL} is not reachable yet: ${error.message}`,
+        );
+      }
+      throw error;
+    }
     await this.#withStandbyTimeout(
       () =>
         page.waitForFunction(() => {
@@ -410,23 +470,23 @@ export class PagePool {
     return result;
   }
 
-  #touchLRU(realm: string) {
-    if (this.#lru.has(realm)) this.#lru.delete(realm);
-    this.#lru.add(realm);
+  #touchLRU(affinityKey: string) {
+    if (this.#lru.has(affinityKey)) this.#lru.delete(affinityKey);
+    this.#lru.add(affinityKey);
   }
 
   #poolEntryCount(): number {
     let count = 0;
-    for (let entries of this.#realmPages.values()) {
+    for (let entries of this.#affinityPages.values()) {
       count += entries.size;
     }
     return count;
   }
 
-  async #selectEntryForRealm(
-    realm: string,
+  async #selectEntryForAffinity(
+    affinityKey: string,
   ): Promise<{ entry: PoolEntry; reused: boolean; releaseTab: () => void }> {
-    let entries = this.#realmPages.get(realm);
+    let entries = this.#affinityPages.get(affinityKey);
     let entryList = entries
       ? [...entries].filter((entry) => !entry.closing)
       : [];
@@ -436,8 +496,8 @@ export class PagePool {
       let releaseTab = await entry.queue.acquire();
       return { entry, reused: true, releaseTab };
     }
-    if (entryList.length < this.#realmTabMax) {
-      let commandeered = this.#commandeerDormantTab(realm);
+    if (entryList.length < this.#affinityTabMax) {
+      let commandeered = this.#commandeerDormantTab(affinityKey);
       if (commandeered) {
         let releaseTab = await commandeered.queue.acquire();
         return { entry: commandeered, reused: false, releaseTab };
@@ -448,23 +508,23 @@ export class PagePool {
       let releaseTab = await entry.queue.acquire();
       return { entry, reused: true, releaseTab };
     }
-    let fallback = this.#commandeerDormantTab(realm);
+    let fallback = this.#commandeerDormantTab(affinityKey);
     if (fallback) {
       let releaseTab = await fallback.queue.acquire();
       return { entry: fallback, reused: false, releaseTab };
     }
     if (entryList.length === 0) {
-      let crossRealmEntries: PoolEntry[] = [];
-      for (let [assignedRealm, entries] of this.#realmPages.entries()) {
-        if (assignedRealm === realm) continue;
+      let crossAffinityEntries: PoolEntry[] = [];
+      for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
+        if (assignedAffinity === affinityKey) continue;
         for (let entry of entries) {
           if (entry.closing || entry.transitioning) continue;
           if (entry.queue.pendingCount > 1) continue;
-          crossRealmEntries.push(entry);
+          crossAffinityEntries.push(entry);
         }
       }
-      if (crossRealmEntries.length > 0) {
-        let entry = this.#selectLeastPendingTab(crossRealmEntries);
+      if (crossAffinityEntries.length > 0) {
+        let entry = this.#selectLeastPendingTab(crossAffinityEntries);
         entry.transitioning = true;
         try {
           let releaseTab = await entry.queue.acquire();
@@ -498,16 +558,16 @@ export class PagePool {
     });
   }
 
-  #commandeerDormantTab(realm: string): PoolEntry | undefined {
+  #commandeerDormantTab(affinityKey: string): PoolEntry | undefined {
     if (this.#standbys.size > 0) {
       let standby = this.#selectLRUTab([...this.#standbys]);
       this.#standbys.delete(standby);
-      return this.#assignStandbyToRealm(standby, realm);
+      return this.#assignStandbyToAffinity(standby, affinityKey);
     }
 
     let idleCandidates: PoolEntry[] = [];
-    for (let [assignedRealm, entries] of this.#realmPages.entries()) {
-      if (assignedRealm === realm) continue;
+    for (let [assignedAffinity, entries] of this.#affinityPages.entries()) {
+      if (assignedAffinity === affinityKey) continue;
       for (let entry of entries) {
         if (entry.closing) continue;
         if (entry.queue.pendingCount === 0) {
@@ -519,13 +579,16 @@ export class PagePool {
       return undefined;
     }
     let chosen = this.#selectLRUTab(idleCandidates);
-    return this.#reassignRealmTab(chosen, realm);
+    return this.#reassignAffinityTab(chosen, affinityKey);
   }
 
-  #assignStandbyToRealm(standby: StandbyEntry, realm: string): PoolEntry {
+  #assignStandbyToAffinity(
+    standby: StandbyEntry,
+    affinityKey: string,
+  ): PoolEntry {
     let entry: PoolEntry = {
       type: 'pool',
-      realm,
+      affinityKey,
       context: standby.context,
       page: standby.page,
       pageId: standby.pageId,
@@ -533,53 +596,53 @@ export class PagePool {
       queue: standby.queue,
     };
     entry.page.removeAllListeners('console');
-    this.#attachPageConsole(entry.page, realm, entry.pageId);
-    this.#addRealmEntry(realm, entry);
+    this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
+    this.#addAffinityEntry(affinityKey, entry);
     return entry;
   }
 
-  #reassignRealmTab(entry: PoolEntry, realm: string): PoolEntry {
-    this.#detachRealmEntry(entry);
-    entry.realm = realm;
+  #reassignAffinityTab(entry: PoolEntry, affinityKey: string): PoolEntry {
+    this.#detachAffinityEntry(entry);
+    entry.affinityKey = affinityKey;
     entry.page.removeAllListeners('console');
-    this.#attachPageConsole(entry.page, realm, entry.pageId);
-    this.#addRealmEntry(realm, entry);
+    this.#attachPageConsole(entry.page, affinityKey, entry.pageId);
+    this.#addAffinityEntry(affinityKey, entry);
     entry.lastUsedAt = Date.now();
     return entry;
   }
 
-  #addRealmEntry(realm: string, entry: PoolEntry): void {
-    let entries = this.#realmPages.get(realm);
+  #addAffinityEntry(affinityKey: string, entry: PoolEntry): void {
+    let entries = this.#affinityPages.get(affinityKey);
     if (!entries) {
       entries = new Set();
-      this.#realmPages.set(realm, entries);
+      this.#affinityPages.set(affinityKey, entries);
     }
     entries.add(entry);
-    this.#touchLRU(realm);
+    this.#touchLRU(affinityKey);
   }
 
-  #detachRealmEntry(entry: PoolEntry): void {
-    let realm = entry.realm;
-    if (!realm) return;
-    let entries = this.#realmPages.get(realm);
+  #detachAffinityEntry(entry: PoolEntry): void {
+    let affinityKey = entry.affinityKey;
+    if (!affinityKey) return;
+    let entries = this.#affinityPages.get(affinityKey);
     if (!entries) return;
     entries.delete(entry);
     if (entries.size === 0) {
-      this.#realmPages.delete(realm);
-      this.#lru.delete(realm);
-      void this.#notifyManagerRealmEvicted(realm);
+      this.#affinityPages.delete(affinityKey);
+      this.#lru.delete(affinityKey);
+      void this.#notifyManagerAffinityEvicted(affinityKey);
     }
   }
 
-  async #notifyManagerRealmEvicted(realm: string): Promise<void> {
+  async #notifyManagerAffinityEvicted(affinityKey: string): Promise<void> {
     try {
       const managerURL = resolvePrerenderManagerURL();
       let target = new URL(
-        `${managerURL}/prerender-servers/realms/${encodeURIComponent(realm)}`,
+        `${managerURL}/prerender-servers/affinities/${encodeURIComponent(affinityKey)}`,
       );
       target.searchParams.set('url', this.#serverURL);
       await fetch(target.toString(), { method: 'DELETE' }).catch((e) => {
-        log.debug('Manager realm eviction notify failed:', e);
+        log.debug('Manager affinity eviction notify failed:', e);
       });
     } catch (_e) {
       // do best attempt
@@ -594,7 +657,9 @@ export class PagePool {
       await entry.context.close();
     } catch (e) {
       log.warn(
-        `Error closing context for ${entry.type === 'pool' ? entry.realm : 'standby'}:`,
+        `Error closing context for ${
+          entry.type === 'pool' ? entry.affinityKey : 'standby'
+        }:`,
         e,
       );
     } finally {
@@ -605,7 +670,7 @@ export class PagePool {
     }
   }
 
-  #attachPageConsole(page: Page, realm: string, pageId: string): void {
+  #attachPageConsole(page: Page, affinityKey: string, pageId: string): void {
     page.on('console', async (message: ConsoleMessage) => {
       try {
         let logFn = this.#logMethodForConsole(message.type());
@@ -630,15 +695,25 @@ export class PagePool {
           let suffix = segments.length ? `:${segments.join(':')}` : '';
           locationInfo = ` (${locationData.url}${suffix})`;
         }
+        let type = message.type();
+        if (
+          isExpectedStandbyConsoleError({
+            affinityKey,
+            type,
+            formatted,
+            locationURL: locationData?.url,
+          })
+        ) {
+          return;
+        }
         logFn(
-          'Console[%s] realm=%s pageId=%s%s %s',
-          message.type(),
-          realm,
+          'Console[%s] affinity=%s pageId=%s%s %s',
+          type,
+          affinityKey,
           pageId,
           locationInfo,
           formatted,
         );
-        let type = message.type();
         if (type === 'error' || type === 'assert') {
           this.#recordConsoleError(pageId, {
             type,
@@ -648,8 +723,8 @@ export class PagePool {
         }
       } catch (e) {
         log.debug(
-          'Failed to process console output for realm %s page %s:',
-          realm,
+          'Failed to process console output for affinity %s page %s:',
+          affinityKey,
           pageId,
           e,
         );

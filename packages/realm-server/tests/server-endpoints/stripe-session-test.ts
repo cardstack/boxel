@@ -9,7 +9,7 @@ import {
   createJWT,
   insertPlan,
   insertUser,
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import type { Realm } from '@cardstack/runtime-common';
@@ -37,7 +37,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         jwtToken = createJWT(args.testRealm, userId);
       }
 
-      setupPermissionedRealm(hooks, {
+      setupPermissionedRealmCached(hooks, {
+        fileSystem: {},
         permissions: {
           '*': ['read', 'write'],
         },

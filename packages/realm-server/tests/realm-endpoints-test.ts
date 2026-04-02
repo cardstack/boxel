@@ -23,7 +23,7 @@ import {
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
-  setupPermissionedRealm,
+  setupPermissionedRealmCached,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -40,7 +40,6 @@ import {
   testRealmInfo,
   waitUntil,
   testRealmHref,
-  testRealmURL,
   createJWT,
   cardInfo,
   getTestPrerenderer,
@@ -60,6 +59,7 @@ import type {
   MatrixEvent,
   RealmEvent,
   RealmEventContent,
+  UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
@@ -108,7 +108,7 @@ module(basename(__filename), function () {
       };
     }
 
-    setupPermissionedRealm(hooks, {
+    setupPermissionedRealmCached(hooks, {
       permissions: {
         '*': ['read', 'write'],
         user: ['read', 'write', 'realm-owner'],
@@ -1199,6 +1199,161 @@ module(basename(__filename), function () {
       }
     });
 
+    test('emits update event with added when creating a file via API', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await request
+        .post('/')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send({
+          data: {
+            attributes: {
+              firstName: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person.gts',
+                name: 'Person',
+              },
+            },
+          },
+        });
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          'added' in m.content,
+      ) as RealmEvent | undefined;
+
+      assert.ok(updateEvent, 'update event with added was emitted');
+      let content = updateEvent!.content as UpdateRealmEventContent;
+      assert.strictEqual(content.eventName, 'update');
+      assert.true('added' in content, 'event has added field');
+      if ('added' in content) {
+        assert.strictEqual(content.added!.length, 1, 'one file was added');
+        assert.ok(
+          content.added![0].endsWith('.json'),
+          'added field contains the new file path',
+        );
+      }
+      assert.strictEqual(
+        content.realmURL,
+        testRealmHref,
+        'realmURL is correct',
+      );
+    });
+
+    test('emits update event with updated when patching a file via API', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await request
+        .patch('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
+              },
+            },
+          }),
+        );
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          'updated' in m.content,
+      ) as RealmEvent | undefined;
+
+      assert.ok(updateEvent, 'update event with updated was emitted');
+      let content = updateEvent!.content as UpdateRealmEventContent;
+      assert.strictEqual(content.eventName, 'update');
+      assert.true('updated' in content, 'event has updated field');
+      if ('updated' in content) {
+        assert.deepEqual(
+          content.updated,
+          ['person-1.json'],
+          'updated field contains the changed file path',
+        );
+      }
+      assert.strictEqual(
+        content.realmURL,
+        testRealmHref,
+        'realmURL is correct',
+      );
+    });
+
+    test('emits update event with removed when deleting a file via API', async function (assert) {
+      let realmEventTimestampStart = Date.now();
+
+      await request
+        .delete('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      await waitForIncrementalIndexEvent(
+        getMessagesSince,
+        realmEventTimestampStart,
+      );
+
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = messages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'update' &&
+          'removed' in m.content,
+      ) as RealmEvent | undefined;
+
+      assert.ok(updateEvent, 'update event with removed was emitted');
+      let content = updateEvent!.content as UpdateRealmEventContent;
+      assert.strictEqual(content.eventName, 'update');
+      assert.true('removed' in content, 'event has removed field');
+      if ('removed' in content) {
+        assert.deepEqual(
+          content.removed,
+          ['person-1.json'],
+          'removed field contains the deleted file path',
+        );
+      }
+      assert.strictEqual(
+        content.realmURL,
+        testRealmHref,
+        'realmURL is correct',
+      );
+    });
+
     test('can make HEAD request to get realmURL and isPublicReadable status', async function (assert) {
       let response = await request
         .head('/person-1')
@@ -1214,37 +1369,12 @@ module(basename(__filename), function () {
   });
 
   module('Realm server with realm mounted at the origin', function (hooks) {
-    let testRealmServer: Server;
-
     let request: SuperTest<Test>;
 
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        let testRealmDir = join(dir.name, 'realm_server_3', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_3'),
-            realmURL: testRealmURL,
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      permissions: { '*': ['read'] },
+      onRealmSetup(args) {
+        request = args.request;
       },
     });
 
@@ -1611,11 +1741,17 @@ module(basename(__filename), function () {
 
     let virtualNetwork = createVirtualNetwork();
     const basePath = resolve(join(__dirname, '..', '..', 'base'));
+    const demoFileSystem: Record<string, string | LooseSingleCardDocument> = {
+      '.realm.json': readJSONSync(join(__dirname, 'cards', '.realm.json')),
+      'person.gts': readFileSync(
+        join(__dirname, 'cards', 'person.gts'),
+        'utf8',
+      ),
+      'person-1.json': readJSONSync(join(__dirname, 'cards', 'person-1.json')),
+    };
 
     hooks.beforeEach(async function () {
       dir = dirSync();
-      ensureDirSync(join(dir.name, 'demo'));
-      copySync(join(__dirname, 'cards'), join(dir.name, 'demo'));
     });
 
     setupDB(hooks, {
@@ -1633,6 +1769,7 @@ module(basename(__filename), function () {
         ({ realm: base } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: basePath,
           realmURL: baseRealm.url,
           virtualNetwork,
@@ -1646,7 +1783,9 @@ module(basename(__filename), function () {
         ({ realm: testRealm } = await createRealm({
           definitionLookup,
           withWorker: true,
+          prerenderer,
           dir: join(dir.name, 'demo'),
+          fileSystem: demoFileSystem,
           virtualNetwork,
           realmURL: 'http://127.0.0.1:4446/demo/',
           publisher,
@@ -1719,38 +1858,13 @@ module(basename(__filename), function () {
   });
 
   module('Realm Server serving from a subdirectory', function (hooks) {
-    let testRealmServer: Server;
-
     let request: SuperTest<Test>;
 
-    let dir: DirResult;
-
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-    });
-
-    setupDB(hooks, {
-      beforeEach: async (dbAdapter, publisher, runner) => {
-        dir = dirSync();
-        let testRealmDir = join(dir.name, 'realm_server_4', 'test');
-        ensureDirSync(testRealmDir);
-        copySync(join(__dirname, 'cards'), testRealmDir);
-        testRealmServer = (
-          await runTestRealmServer({
-            virtualNetwork: createVirtualNetwork(),
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_4'),
-            realmURL: new URL('http://127.0.0.1:4446/demo/'),
-            dbAdapter,
-            publisher,
-            runner,
-            matrixURL,
-          })
-        ).testRealmHttpServer;
-        request = supertest(testRealmServer);
-      },
-      afterEach: async () => {
-        await closeServer(testRealmServer);
+    setupPermissionedRealmCached(hooks, {
+      permissions: { '*': ['read'] },
+      realmURL: new URL('http://127.0.0.1:4446/demo/'),
+      onRealmSetup(args) {
+        request = args.request;
       },
     });
 

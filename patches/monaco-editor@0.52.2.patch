@@ -19,3 +19,25 @@ index 5a5588e64135d87ac643aa75dd339f96ec3613a8..350ab291a325a21b69de9ab6e0be267f
              this.completionPromise = null;
          }
      }
+diff --git a/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js b/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js
+index ed54a358226406a60a407324d501f9d8c327d9ca..22c70310ab9b3d15ef2f82aef7acc9565222db53 100644
+--- a/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js
++++ b/esm/vs/editor/browser/widget/diffEditor/diffProviderFactoryService.js
+@@ -107,6 +107,17 @@ let WorkerBasedDocumentDiffProvider = class WorkerBasedDocumentDiffProvider {
+             };
+         }
+         if (!result) {
++            // When models are disposed mid-computation the worker returns null.
++            // Only suppress the error in that case — a genuine worker failure with
++            // live models should still surface.
++            if (original.isDisposed() || modified.isDisposed()) {
++                return {
++                    changes: [],
++                    identical: true,
++                    quitEarly: false,
++                    moves: [],
++                };
++            }
+             throw new Error('no diff result available');
+         }
+         // max 10 items in cache

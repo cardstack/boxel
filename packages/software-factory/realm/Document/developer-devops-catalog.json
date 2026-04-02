@@ -1,0 +1,28 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Document",
+        "module": "../document"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "content": "# Developer & DevOps Card Catalog\n\nCondensed stubs for Developer & DevOps card types. These capture the domain memory and reusable behavior an agent should preserve, not exhaustive schema.\n\n### Pull Request\n**Priority:** P1\n\n- **Core idea:** GitHub PR reference with repo, branch, status, reviewers, checks, and diff stats.\n\n---\n\n### Issue\n**Priority:** P1\n\n- **Core idea:** Bug/feature tracker: title, description, labels, assignee, milestone, and status.\n\n---\n\n### Deployment\n**Priority:** P2\n\n- **Core idea:** Deployment record: environment, version, timestamp, status, rollback reference.\n\n---\n\n### Environment\n**Priority:** P2\n\n- **Core idea:** Infrastructure environment (dev/staging/prod) with URL, config, health status.\n\n---\n\n### Incident\n**Priority:** P1\n\n- **Core idea:** Production incident: severity, timeline, root cause, resolution, and postmortem.\n\n---\n\n### Feature Flag\n**Priority:** P2\n\n- **Core idea:** Feature toggle with name, state (on/off), rollout percentage, and targeting rules.\n\n---\n\n### Code Review\n**Priority:** P2\n\n- **Core idea:** Structured code review feedback: file, line, comment, severity, resolution.\n\n---\n\n### Webhook\n**Priority:** P2\n\n- **Core idea:** Webhook endpoint configuration: URL, events, secret, delivery log.\n\n---\n\n### Scheduled Job\n**Priority:** P2\n\n- **Core idea:** Cron-style job: schedule, command, last run, next run, status, and output log.\n\n---\n\n### Integration\n**Priority:** P1\n\n- **Core idea:** External service integration config: service name, auth, endpoint, sync status, and health.\n\n---\n\n### GitHub Repo Card\n**Priority:** P1\n\n- **Core idea:** GitHub repository reference with stats (stars, forks, issues), last commit, and quick actions.\n",
+      "cardInfo": {
+        "name": "Developer & DevOps Card Catalog",
+        "notes": null,
+        "title": "Developer & DevOps Card Catalog",
+        "summary": "Condensed stubs for Developer & DevOps card types.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+        }
+      }
+    }
+  }
+}

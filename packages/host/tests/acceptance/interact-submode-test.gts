@@ -630,7 +630,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
-      await click(`[data-test-card-catalog-go-button]`);
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );
@@ -930,6 +929,10 @@ module('Acceptance | interact submode tests', function (hooks) {
       messageService.listenerCallbacks
         .get(testRealmURL)!
         .push((ev: RealmEventContent) => {
+          if (ev.eventName === 'update') {
+            // eslint-disable-next-line qunit/no-early-return
+            return; // ignore file update events
+          }
           if (
             ev.eventName === 'index' &&
             ev.indexType === 'incremental-index-initiation'
@@ -991,13 +994,14 @@ module('Acceptance | interact submode tests', function (hooks) {
       const inputSelector =
         '[data-test-contains-many="names"] [data-test-item="0"] input';
 
-      messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+      const unsubscribe = messageService.subscribe(testRealmURL, (e) => {
         if (
           e.eventName === 'index' &&
           e.indexType === 'incremental-index-initiation'
         ) {
           return; // ignore the index initiation event
         }
+        unsubscribe();
         receivedEventDeferred.fulfill();
       });
 
@@ -1068,21 +1072,19 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       const waitForIndexEvent = () => {
         const receivedEventDeferred = new Deferred<void>();
-        const callbacks = messageService.listenerCallbacks.get(testRealmURL)!;
-        const callback = (e: RealmEventContent) => {
-          if (
-            e.eventName === 'index' &&
-            e.indexType === 'incremental-index-initiation'
-          ) {
-            return; // ignore the index initiation event
-          }
-          const index = callbacks.indexOf(callback);
-          if (index !== -1) {
-            callbacks.splice(index, 1);
-          }
-          receivedEventDeferred.fulfill();
-        };
-        callbacks.push(callback);
+        const unsubscribe = messageService.subscribe(
+          testRealmURL,
+          (e: RealmEventContent) => {
+            if (
+              e.eventName === 'index' &&
+              e.indexType === 'incremental-index-initiation'
+            ) {
+              return; // ignore the index initiation event
+            }
+            unsubscribe();
+            receivedEventDeferred.fulfill();
+          },
+        );
         return receivedEventDeferred;
       };
 

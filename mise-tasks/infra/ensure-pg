@@ -1,0 +1,29 @@
+#!/bin/sh
+#MISE description="Ensure PostgreSQL is running and ready"
+
+# Start the container if needed. Multiple tasks may call this concurrently,
+# so handle the race: docker run can fail if another process already created
+# the container — that's fine, we just ensure it's started.
+if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
+  echo "Starting new boxel-pg container on port ${PGPORT:-5435}..."
+  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 >/dev/null 2>&1 || true
+fi
+# Ensure the container is running (handles both the race case and stopped containers)
+docker start boxel-pg >/dev/null 2>&1 || true
+
+# Wait for readiness
+COUNT=0
+MAX_ATTEMPTS=10
+
+while ! docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do
+  if [ $COUNT -eq 0 ]; then
+    echo "Waiting for postgres"
+  fi
+  if [ $COUNT -eq $MAX_ATTEMPTS ]; then
+    echo "Failed to detect postgres after $MAX_ATTEMPTS attempts."
+    exit 1
+  fi
+  COUNT=$((COUNT + 1))
+  printf '.'
+  sleep 5
+done

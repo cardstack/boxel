@@ -24,6 +24,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   ariaLabel?: string;
   beforeOptionsComponent?: ComponentLike<any>;
   closeOnSelect?: boolean;
+  destination?: string;
   disabled?: boolean;
   dropdownClass?: string;
   extra?: any;
@@ -75,6 +76,7 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{@renderInPlace}}
+      @destination={{@destination}}
       @matchTriggerWidth={{@matchTriggerWidth}}
       @searchField={{@searchField}}
       @searchEnabled={{@searchEnabled}}
@@ -193,6 +195,7 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{@renderInPlace}}
+      @destination={{@destination}}
       @matchTriggerWidth={{@matchTriggerWidth}}
       @searchField={{@searchField}}
       @searchEnabled={{@searchEnabled}}

@@ -46,6 +46,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
@@ -337,23 +338,30 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service declare private specPanelService: SpecPanelService;
   @service declare private store: StoreService;
 
-  @use private selectedDeclarationSpecState = resource(() => {
+  @use private selectedDeclarationSpecState = resource(({ on }) => {
     let state = new TrackedObject<{ value: boolean }>({ value: false });
     let codeRef = this.args.selectedDeclarationAsCodeRef;
     if (!codeRef.module || !codeRef.name) {
       return state;
     }
-    (async () => {
+    let loader = this.loaderService.loader;
+    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {
-          loader: this.loaderService.loader,
-          relativeTo: new URL(this.operatorModeStateService.realmURL),
+          loader,
+          relativeTo,
         });
+        if (!isActive()) {
+          return;
+        }
         state.value = isSpecCard(cardDef);
       } catch {
-        state.value = false;
+        if (isActive()) {
+          state.value = false;
+        }
       }
-    })();
+    });
     return state;
   });
 

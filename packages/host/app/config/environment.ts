@@ -36,8 +36,10 @@ export default config as {
 
   realmServerURL: string;
   resolvedBaseRealmURL: string;
-  resolvedCatalogRealmURL: string;
+  resolvedCatalogRealmURL: string | undefined;
+  resolvedExternalCatalogRealmURL: string | undefined;
   resolvedSkillsRealmURL: string;
+  resolvedOpenRouterRealmURL: string | undefined;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
@@ -59,6 +61,8 @@ export default config as {
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;
   publishedRealmBoxelSiteDomain: string;
+  publishedRealmDomainOverrides: string;
+  defaultSystemCardId?: string;
   cardSizeLimitBytes: number;
   fileSizeLimitBytes: number;
   defaultSystemCardId: string;

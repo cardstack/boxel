@@ -135,7 +135,7 @@ test.describe('User Registration w/ Token', () => {
       'background-image: url("https://boxel-images.boxel.ai/icons/Letter-t.png");',
     );
     await expect(
-      page.locator(`[data-test-workspace="Test User's Workspace"] .icon`),
+      page.locator(`[data-test-workspace="Test User's Workspace"] .tile-icon`),
       'has background image',
     ).toHaveAttribute('style', /--workspace-background-image-url:/);
     await expect(

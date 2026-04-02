@@ -63,6 +63,7 @@ export type Filter =
   | EveryFilter
   | NotFilter
   | EqFilter
+  | InFilter
   | ContainsFilter
   | RangeFilter
   | CardTypeFilter;
@@ -142,6 +143,10 @@ export interface RangeFilter extends TypedFilter {
   };
 }
 
+export interface InFilter extends TypedFilter {
+  in: { [fieldName: string]: JSONValue[] | string };
+}
+
 export interface ContainsFilter extends TypedFilter {
   contains: { [fieldName: string]: JSONValue };
 }
@@ -163,6 +168,9 @@ export function isEveryFilter(filter: Filter): filter is EveryFilter {
 }
 export function isAnyFilter(filter: Filter): filter is AnyFilter {
   return (filter as AnyFilter).any !== undefined;
+}
+export function isInFilter(filter: Filter): filter is InFilter {
+  return (filter as InFilter).in !== undefined;
 }
 
 export function buildQueryParamValue(query: Query): string {
@@ -389,6 +397,8 @@ function assertFilter(
     assertNotFilter(filter, pointer);
   } else if ('eq' in filter) {
     assertEqFilter(filter, pointer);
+  } else if ('in' in filter) {
+    assertInFilter(filter, pointer);
   } else if ('contains' in filter) {
     assertContainsFilter(filter, pointer);
   } else if ('range' in filter) {
@@ -506,6 +516,39 @@ function assertEqFilter(
   Object.entries(filter.eq).forEach(([key, value]) => {
     assertKey(key, pointer);
     assertJSONValue(value, pointer.concat(key));
+  });
+}
+
+function assertInFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is InFilter {
+  if (typeof filter !== 'object' || filter == null) {
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
+  }
+  let inPointer = pointer.concat('in');
+  if (!('in' in filter)) {
+    throw new InvalidQueryError(
+      `${inPointer.join('/') || '/'}: InFilter must have in property`,
+    );
+  }
+  if (typeof filter.in !== 'object' || filter.in == null) {
+    throw new InvalidQueryError(
+      `${inPointer.join('/') || '/'}: in must be an object`,
+    );
+  }
+  Object.entries(filter.in).forEach(([key, value]) => {
+    assertKey(key, inPointer);
+    if (!Array.isArray(value)) {
+      throw new InvalidQueryError(
+        `${inPointer.concat(key).join('/') || '/'}: in values must be arrays`,
+      );
+    }
+    value.forEach((item, index) => {
+      assertJSONValue(item, inPointer.concat(key, `[${index}]`));
+    });
   });
 }
 

@@ -1,4 +1,5 @@
 import {
+  type AffinityType,
   type RenderRouteOptions,
   type RenderResponse,
   type ModuleRenderResponse,
@@ -9,12 +10,26 @@ import {
   type RunCommandResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager';
-import { PagePool } from './page-pool';
+import { PagePool, StandbyTargetNotReadyError } from './page-pool';
 import { RenderRunner } from './render-runner';
+import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
+import { toAffinityKey } from './affinity';
 
 const log = logger('prerenderer');
-const boxelHostURL = process.env.BOXEL_HOST_URL ?? 'http://localhost:4200';
-const DEFAULT_REALM_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
+const defaultHostURL = isEnvironmentMode()
+  ? serviceURL('host')
+  : 'http://localhost:4200';
+const boxelHostURL = process.env.BOXEL_HOST_URL ?? defaultHostURL;
+const DEFAULT_AFFINITY_IDLE_EVICT_MS = 12 * 60 * 60 * 1000;
+
+type PoolMeta = {
+  pageId: string;
+  affinityType: AffinityType;
+  affinityValue: string;
+  reused: boolean;
+  evicted: boolean;
+  timedOut: boolean;
+};
 
 class AsyncSemaphore {
   #available: number;
@@ -50,7 +65,7 @@ export class Prerenderer {
   #pagePool: PagePool;
   #renderRunner: RenderRunner;
   #cleanupInterval: NodeJS.Timeout | undefined;
-  #realmIdleEvictMs: number;
+  #affinityIdleEvictMs: number;
   #semaphore: AsyncSemaphore;
 
   constructor(options: { serverURL: string; maxPages?: number }) {
@@ -68,15 +83,22 @@ export class Prerenderer {
       pagePool: this.#pagePool,
       boxelHostURL,
     });
-    this.#realmIdleEvictMs = this.#resolveRealmIdleEvictMs();
+    this.#affinityIdleEvictMs = this.#resolveAffinityIdleEvictMs();
     this.#startCleanupLoop();
     void this.#pagePool.warmStandbys().catch((e) => {
-      log.error('Failed to warm standby pages during prerenderer startup:', e);
+      if (e instanceof StandbyTargetNotReadyError) {
+        log.debug(
+          'Prerenderer startup skipped standby warmup because the Boxel host target is not ready yet:',
+          e,
+        );
+        return;
+      }
+      log.warn('Failed to warm standby pages during prerenderer startup:', e);
     });
   }
 
-  getWarmRealms(): string[] {
-    return this.#pagePool.getWarmRealms();
+  getWarmAffinities(): string[] {
+    return this.#pagePool.getWarmAffinities();
   }
 
   async stop(): Promise<void> {
@@ -89,18 +111,29 @@ export class Prerenderer {
     this.#stopped = true;
   }
 
-  async disposeRealm(realm: string): Promise<void> {
-    this.#renderRunner.clearAuthCache(realm);
-    await this.#pagePool.disposeRealm(realm);
+  async disposeAffinity({
+    affinityType,
+    affinityValue,
+  }: {
+    affinityType: AffinityType;
+    affinityValue: string;
+  }): Promise<void> {
+    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    this.#renderRunner.clearAuthCache(affinityKey);
+    await this.#pagePool.disposeAffinity(affinityKey);
   }
 
   async prerenderCard({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -109,13 +142,7 @@ export class Prerenderer {
   }): Promise<{
     response: RenderResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      realm: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
@@ -125,29 +152,19 @@ export class Prerenderer {
       | {
           response: RenderResponse;
           timings: { launchMs: number; renderMs: number };
-          pool: {
-            pageId: string;
-            realm: string;
-            reused: boolean;
-            evicted: boolean;
-            timedOut: boolean;
-          };
+          pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
         response: RenderResponse;
         timings: { launchMs: number; renderMs: number };
-        pool: {
-          pageId: string;
-          realm: string;
-          reused: boolean;
-          evicted: boolean;
-          timedOut: boolean;
-        };
+        pool: PoolMeta;
       };
       try {
         result = await this.#renderRunner.prerenderCardAttempt({
+          affinityType,
+          affinityValue,
           realm,
           url,
           auth,
@@ -162,6 +179,8 @@ export class Prerenderer {
         await this.#restartBrowser();
         try {
           result = await this.#renderRunner.prerenderCardAttempt({
+            affinityType,
+            affinityValue,
             realm,
             url,
             auth,
@@ -218,12 +237,16 @@ export class Prerenderer {
   }
 
   async prerenderModule({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -232,13 +255,7 @@ export class Prerenderer {
   }): Promise<{
     response: ModuleRenderResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      realm: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
@@ -248,29 +265,19 @@ export class Prerenderer {
       | {
           response: ModuleRenderResponse;
           timings: { launchMs: number; renderMs: number };
-          pool: {
-            pageId: string;
-            realm: string;
-            reused: boolean;
-            evicted: boolean;
-            timedOut: boolean;
-          };
+          pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
         response: ModuleRenderResponse;
         timings: { launchMs: number; renderMs: number };
-        pool: {
-          pageId: string;
-          realm: string;
-          reused: boolean;
-          evicted: boolean;
-          timedOut: boolean;
-        };
+        pool: PoolMeta;
       };
       try {
         result = await this.#renderRunner.prerenderModuleAttempt({
+          affinityType,
+          affinityValue,
           realm,
           url,
           auth,
@@ -285,6 +292,8 @@ export class Prerenderer {
         await this.#restartBrowser();
         try {
           result = await this.#renderRunner.prerenderModuleAttempt({
+            affinityType,
+            affinityValue,
             realm,
             url,
             auth,
@@ -341,13 +350,13 @@ export class Prerenderer {
   }
 
   async runCommand({
-    realm,
+    userId,
     auth,
     command,
     commandInput,
     opts,
   }: {
-    realm: string;
+    userId: string;
     auth: string;
     command: string;
     commandInput?: Record<string, unknown> | null;
@@ -355,38 +364,37 @@ export class Prerenderer {
   }): Promise<{
     response: RunCommandResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      realm: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
     }
     try {
       return await this.#renderRunner.runCommandAttempt({
-        realm,
+        affinityType: 'user',
+        affinityValue: userId,
         auth,
         command,
         commandInput,
         opts,
       });
     } catch (e) {
-      log.error(`command run attempt failed (realm ${realm})`, e);
+      log.error(`command run attempt failed (user ${userId})`, e);
       throw e;
     }
   }
 
   async prerenderFileExtract({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -395,13 +403,7 @@ export class Prerenderer {
   }): Promise<{
     response: FileExtractResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      realm: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
@@ -411,29 +413,19 @@ export class Prerenderer {
       | {
           response: FileExtractResponse;
           timings: { launchMs: number; renderMs: number };
-          pool: {
-            pageId: string;
-            realm: string;
-            reused: boolean;
-            evicted: boolean;
-            timedOut: boolean;
-          };
+          pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
         response: FileExtractResponse;
         timings: { launchMs: number; renderMs: number };
-        pool: {
-          pageId: string;
-          realm: string;
-          reused: boolean;
-          evicted: boolean;
-          timedOut: boolean;
-        };
+        pool: PoolMeta;
       };
       try {
         result = await this.#renderRunner.prerenderFileExtractAttempt({
+          affinityType,
+          affinityValue,
           realm,
           url,
           auth,
@@ -448,6 +440,8 @@ export class Prerenderer {
         await this.#restartBrowser();
         try {
           result = await this.#renderRunner.prerenderFileExtractAttempt({
+            affinityType,
+            affinityValue,
             realm,
             url,
             auth,
@@ -504,6 +498,8 @@ export class Prerenderer {
   }
 
   async prerenderFileRender({
+    affinityType,
+    affinityValue,
     realm,
     url,
     auth,
@@ -512,6 +508,8 @@ export class Prerenderer {
     opts,
     renderOptions,
   }: {
+    affinityType: AffinityType;
+    affinityValue: string;
     realm: string;
     url: string;
     auth: string;
@@ -522,13 +520,7 @@ export class Prerenderer {
   }): Promise<{
     response: FileRenderResponse;
     timings: { launchMs: number; renderMs: number };
-    pool: {
-      pageId: string;
-      realm: string;
-      reused: boolean;
-      evicted: boolean;
-      timedOut: boolean;
-    };
+    pool: PoolMeta;
   }> {
     if (this.#stopped) {
       throw new Error('Prerenderer has been stopped and cannot be used');
@@ -538,29 +530,19 @@ export class Prerenderer {
       | {
           response: FileRenderResponse;
           timings: { launchMs: number; renderMs: number };
-          pool: {
-            pageId: string;
-            realm: string;
-            reused: boolean;
-            evicted: boolean;
-            timedOut: boolean;
-          };
+          pool: PoolMeta;
         }
       | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
       let result: {
         response: FileRenderResponse;
         timings: { launchMs: number; renderMs: number };
-        pool: {
-          pageId: string;
-          realm: string;
-          reused: boolean;
-          evicted: boolean;
-          timedOut: boolean;
-        };
+        pool: PoolMeta;
       };
       try {
         result = await this.#renderRunner.prerenderFileRenderAttempt({
+          affinityType,
+          affinityValue,
           realm,
           url,
           auth,
@@ -577,6 +559,8 @@ export class Prerenderer {
         await this.#restartBrowser();
         try {
           result = await this.#renderRunner.prerenderFileRenderAttempt({
+            affinityType,
+            affinityValue,
             realm,
             url,
             auth,
@@ -643,15 +627,15 @@ export class Prerenderer {
     });
   }
 
-  #resolveRealmIdleEvictMs(): number {
-    let envIdle = process.env.PRERENDER_REALM_IDLE_EVICT_MS;
+  #resolveAffinityIdleEvictMs(): number {
+    let envIdle = process.env.PRERENDER_AFFINITY_IDLE_EVICT_MS;
     let idleMs =
-      envIdle !== undefined ? Number(envIdle) : DEFAULT_REALM_IDLE_EVICT_MS;
+      envIdle !== undefined ? Number(envIdle) : DEFAULT_AFFINITY_IDLE_EVICT_MS;
     if (!Number.isFinite(idleMs) || idleMs <= 0) {
       log.warn(
-        'PRERENDER_REALM_IDLE_EVICT_MS is invalid; defaulting to 12 hours',
+        'PRERENDER_AFFINITY_IDLE_EVICT_MS is invalid; defaulting to 12 hours',
       );
-      idleMs = DEFAULT_REALM_IDLE_EVICT_MS;
+      idleMs = DEFAULT_AFFINITY_IDLE_EVICT_MS;
     }
     return idleMs;
   }
@@ -675,14 +659,14 @@ export class Prerenderer {
     this.#cleanupInterval = setInterval(() => {
       void this.#browserManager.cleanupUserDataDirs();
       void this.#pagePool
-        .evictIdleRealms(this.#realmIdleEvictMs)
-        .then((evictedRealms) => {
-          for (let realm of evictedRealms) {
-            this.#renderRunner.clearAuthCache(realm);
+        .evictIdleAffinities(this.#affinityIdleEvictMs)
+        .then((evictedAffinities) => {
+          for (let affinityKey of evictedAffinities) {
+            this.#renderRunner.clearAuthCache(affinityKey);
           }
         })
         .catch((e) => {
-          log.warn('Error evicting idle prerender realms:', e);
+          log.warn('Error evicting idle prerender affinities:', e);
         });
     }, intervalMs);
     this.#cleanupInterval.unref?.();

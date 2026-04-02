@@ -22,6 +22,8 @@ export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
+export const APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE =
+  'app.boxel.workspace-favorites';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
@@ -32,9 +34,10 @@ export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
 export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
   'app.boxel.continuation-of';
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
+export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
-export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.5';
-export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.5';
+export const DEFAULT_LLM = 'anthropic/claude-sonnet-4.6';
+export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-5-nano';
 
 export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
@@ -45,6 +48,7 @@ export const DEFAULT_LLM_ID_TO_NAME: Record<string, string> = {
   'anthropic/claude-haiku-4.5': 'Anthropic: Claude Haiku 4.5',
   'anthropic/claude-sonnet-4': 'Anthropic: Claude Sonnet 4',
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
+  'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
   'anthropic/claude-opus-4.1': 'Anthropic: Claude Opus 4.1',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
   'google/gemini-2.5-pro': 'Google: Gemini 2.5 Pro',

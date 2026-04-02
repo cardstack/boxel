@@ -38,9 +38,11 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
 
     let { realm, listingId } = input;
     let listingName: string | undefined;
+    let listingSummary: string | undefined;
     let listing = await this.store.get<Listing>(listingId);
     if (listing && isCardInstance(listing)) {
       listingName = listing.name ?? listing.id;
+      listingSummary = listing.summary ?? undefined;
     }
 
     let useAiAssistantCommand = new UseAiAssistantCommand(this.commandContext);
@@ -65,6 +67,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         realm,
         listingId,
         ...(listingName ? { listingName } : {}),
+        ...(listingSummary ? { listingSummary } : {}),
       },
     });
   }

@@ -102,12 +102,32 @@ let matrixRoomId: string;
 let mockedFileContent = 'Hello, world!';
 const TEST_MODEL_NAMES: Record<string, string> = {
   'openai/gpt-5': 'OpenAI: GPT-5',
+  'openai/gpt-5-extended': 'OpenAI: GPT-5 Extended Thinking',
   'openai/gpt-4o-mini': 'OpenAI: GPT-4o-mini',
+  'anthropic/claude-sonnet-4.6': 'Anthropic: Claude Sonnet 4.6',
   'anthropic/claude-sonnet-4.5': 'Anthropic: Claude Sonnet 4.5',
   'anthropic/claude-3.7-sonnet': 'Anthropic: Claude 3.7 Sonnet',
   'deepseek/deepseek-chat-v3-0324': 'DeepSeek: DeepSeek V3 0324',
   'google/gemini-2.5-flash': 'Google: Gemini 2.5 Flash',
 };
+
+// Maps model IDs to their ModelConfiguration card IDs in the test realm.
+// These correspond to the file paths used in the test setup (e.g.,
+// 'ModelConfiguration/gpt-5.json' → `${testRealmURL}ModelConfiguration/gpt-5`).
+const TEST_MODEL_CONFIG_IDS: Record<string, string> = {
+  'openai/gpt-5': `${testRealmURL}ModelConfiguration/gpt-5`,
+  'openai/gpt-5-extended': `${testRealmURL}ModelConfiguration/gpt-5-extended`,
+  'openai/gpt-4o-mini': `${testRealmURL}ModelConfiguration/gpt-4o-mini`,
+  'anthropic/claude-sonnet-4.6': `${testRealmURL}ModelConfiguration/claude-sonnet-4.6`,
+  'anthropic/claude-sonnet-4.5': `${testRealmURL}ModelConfiguration/claude-sonnet-4.5`,
+  'anthropic/claude-3.7-sonnet': `${testRealmURL}ModelConfiguration/claude-sonnet-3.7`,
+  'deepseek/deepseek-chat-v3-0324': `${testRealmURL}ModelConfiguration/deepseek-chat-v3-0324`,
+  'google/gemini-2.5-flash': `${testRealmURL}ModelConfiguration/gemini-2.5-flash`,
+};
+
+function configIdFor(modelId: string): string {
+  return TEST_MODEL_CONFIG_IDS[modelId] ?? modelId;
+}
 
 function modelNameFor(llmId: string): string {
   return TEST_MODEL_NAMES[llmId] ?? llmId;
@@ -305,11 +325,28 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       reasoningEffort: 'minimal',
     });
 
+    let openAiGpt5ExtendedModel = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        name: modelNameFor('openai/gpt-5-extended'),
+      }),
+      modelId: 'openai/gpt-5',
+      toolsSupported: true,
+      reasoningEffort: 'high',
+    });
+
     let openAiGpt4oMiniModel = new ModelConfiguration({
       cardInfo: new CardInfoField({
         name: modelNameFor('openai/gpt-4o-mini'),
       }),
       modelId: 'openai/gpt-4o-mini',
+      toolsSupported: true,
+    });
+
+    let anthropicClaudeSonnet46Model = new ModelConfiguration({
+      cardInfo: new CardInfoField({
+        name: modelNameFor('anthropic/claude-sonnet-4.6'),
+      }),
+      modelId: 'anthropic/claude-sonnet-4.6',
       toolsSupported: true,
     });
 
@@ -331,10 +368,12 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     // Create system card with model configurations
     let defaultSystemCard = new SystemCard({
-      defaultModelConfiguration: anthropicClaudeSonnet45Model,
+      defaultModelConfiguration: anthropicClaudeSonnet46Model,
       modelConfigurations: [
         openAiGpt5Model,
+        openAiGpt5ExtendedModel,
         openAiGpt4oMiniModel,
+        anthropicClaudeSonnet46Model,
         anthropicClaudeSonnet45Model,
         anthropicClaudeSonnet37Model,
       ],
@@ -485,6 +524,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         },
         'ModelConfiguration/gpt-4o-mini.json': openAiGpt4oMiniModel,
         'ModelConfiguration/gpt-5.json': openAiGpt5Model,
+        'ModelConfiguration/gpt-5-extended.json': openAiGpt5ExtendedModel,
+        'ModelConfiguration/claude-sonnet-4.6.json':
+          anthropicClaudeSonnet46Model,
         'ModelConfiguration/claude-sonnet-4.5.json':
           anthropicClaudeSonnet45Model,
         'ModelConfiguration/claude-sonnet-3.7.json':
@@ -632,10 +674,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     const mxcUrl = attachedCard.url;
 
     assert.ok(mxcUrl, 'Attached card has a URL (mxc)');
-    // The mock matrix server uses http://mock-server/ for its mxc content
+    // The mock matrix server uses http://mock-server/_matrix/media/ for its mxc content
     assert.ok(
-      mxcUrl.startsWith('http://mock-server/'),
-      `Card URL "${mxcUrl}" should start with http://mock-server/`,
+      mxcUrl.startsWith('http://mock-server/_matrix/media/'),
+      `Card URL "${mxcUrl}" should start with http://mock-server/_matrix/media/`,
     );
 
     // Download the card file def
@@ -666,24 +708,25 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
 
     // Default model should come from the system card's default configuration
-    let defaultModelId = 'anthropic/claude-sonnet-4.5';
+    let defaultModelId = 'anthropic/claude-sonnet-4.6';
     let defaultModelName = modelNameFor(defaultModelId);
 
     assert.dom('[data-test-llm-select-selected]').hasText(defaultModelName);
     await click('[data-test-llm-select-selected]');
 
-    // Should have 4 models from our system card
+    // Should have 6 models from our system card (including duplicate modelId with different config)
     assert.dom('[data-test-llm-select-item]').exists({
-      count: 4,
+      count: 6,
     });
 
     let llmIdToChangeTo = 'anthropic/claude-3.7-sonnet';
+    let llmConfigId = configIdFor(llmIdToChangeTo);
     let llmNameToChangeTo = modelNameFor('anthropic/claude-3.7-sonnet');
 
     assert
-      .dom(`[data-test-llm-select-item="${llmIdToChangeTo}"]`)
+      .dom(`[data-test-llm-select-item="${llmConfigId}"]`)
       .hasText(llmNameToChangeTo);
-    await click(`[data-test-llm-select-item="${llmIdToChangeTo}"] button`);
+    await click(`[data-test-llm-select-item="${llmConfigId}"] button`);
     await click('[data-test-llm-select-selected]');
     assert.dom('[data-test-llm-select-selected]').hasText(llmNameToChangeTo);
 
@@ -706,7 +749,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor('[data-room-settled]');
 
     await click('[data-test-llm-select-selected]');
-    await click(`[data-test-llm-select-item="openai/gpt-4o-mini"] button`);
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-4o-mini')}"] button`,
+    );
     await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
@@ -731,7 +776,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     );
 
     await click('[data-test-llm-select-selected]');
-    await click(`[data-test-llm-select-item="openai/gpt-5"] button`);
+    await click(
+      `[data-test-llm-select-item="${configIdFor('openai/gpt-5')}"] button`,
+    );
     await click('[data-test-llm-select-selected]');
 
     await waitUntil(() => {
@@ -753,6 +800,84 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       secondState.reasoningEffort,
       'minimal',
       'Active LLM event records configured reasoning effort for GPT-5',
+    );
+  });
+
+  test('duplicate model IDs render as distinct menu items with correct state', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-llm-select-selected]');
+
+    let gpt5ConfigId = configIdFor('openai/gpt-5');
+    let gpt5ExtendedConfigId = configIdFor('openai/gpt-5-extended');
+
+    // Both configs with the same modelId should appear as distinct menu items
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ConfigId}"]`)
+      .exists('GPT-5 (minimal) config appears in the menu');
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"]`)
+      .exists('GPT-5 Extended Thinking config appears in the menu');
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ConfigId}"]`)
+      .hasText(modelNameFor('openai/gpt-5'));
+    assert
+      .dom(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"]`)
+      .hasText(modelNameFor('openai/gpt-5-extended'));
+
+    // Select the extended thinking variant
+    await click(`[data-test-llm-select-item="${gpt5ExtendedConfigId}"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return state.model === 'openai/gpt-5' && state.reasoningEffort === 'high';
+    });
+
+    let extendedState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      extendedState.model,
+      'openai/gpt-5',
+      'Extended thinking variant sends the same modelId',
+    );
+    assert.strictEqual(
+      extendedState.reasoningEffort,
+      'high',
+      'Extended thinking variant sends its own reasoningEffort',
+    );
+
+    // Now select the minimal variant
+    await click('[data-test-llm-select-selected]');
+    await click(`[data-test-llm-select-item="${gpt5ConfigId}"] button`);
+    await click('[data-test-llm-select-selected]');
+
+    await waitUntil(() => {
+      let state = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+      return (
+        state.model === 'openai/gpt-5' && state.reasoningEffort === 'minimal'
+      );
+    });
+
+    let minimalState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
+    assert.strictEqual(
+      minimalState.model,
+      'openai/gpt-5',
+      'Minimal variant sends the same modelId',
+    );
+    assert.strictEqual(
+      minimalState.reasoningEffort,
+      'minimal',
+      'Minimal variant sends its own reasoningEffort',
     );
   });
 
@@ -804,7 +929,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-llm-select-selected]');
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .doesNotExist();
     await click('[data-test-llm-select-selected]');
     await click('[data-test-close-ai-assistant]');
@@ -826,14 +953,108 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     await click('[data-test-llm-select-selected]');
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .exists();
     assert
-      .dom('[data-test-llm-select-item="deepseek/deepseek-chat-v3-0324"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('deepseek/deepseek-chat-v3-0324')}"]`,
+      )
       .hasText(modelNameFor('deepseek/deepseek-chat-v3-0324'));
     assert
-      .dom('[data-test-llm-select-item="google/gemini-2.5-flash"]')
+      .dom(
+        `[data-test-llm-select-item="${configIdFor('google/gemini-2.5-flash')}"]`,
+      )
       .exists();
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer shows "Go to current system card" action', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-go-to-system-card]')
+      .exists('Go to system card action is visible');
+    assert
+      .dom('[data-test-go-to-system-card]')
+      .hasText('Go to current system card');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer shows "Restore default" when non-default system card is active', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}SystemCard/productivity`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    // Set the alternate system card as active
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Set as My System Card"]');
+
+    let matrixService = getService('matrix-service');
+    await waitUntil(
+      () =>
+        matrixService.systemCard?.modelConfigurations?.[0]?.modelId ===
+        'deepseek/deepseek-chat-v3-0324',
+    );
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-restore-default-system-card]')
+      .exists('Restore default action is visible for non-default system card');
+
+    await click('[data-test-pill-menu-button]');
+    await click('[data-test-close-ai-assistant]');
+  });
+
+  test('LLM select footer hides "Restore default" when default system card is active', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+    await click('[data-test-llm-select-selected]');
+
+    assert
+      .dom('[data-test-restore-default-system-card]')
+      .doesNotExist(
+        'Restore default action is hidden when default system card is active',
+      );
+
     await click('[data-test-pill-menu-button]');
     await click('[data-test-close-ai-assistant]');
   });
@@ -1069,7 +1290,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     await click('[data-test-choose-file-modal-add-button]');
     assert.dom('[data-test-attached-file]').exists({ count: 1 });
-    assert.dom('[data-test-attached-file]').hasText('person');
+    assert.dom('[data-test-attached-file]').hasText('person.gts');
     // Add attachment item
     await click('[data-test-attach-button]');
     await click('[data-test-attach-file-btn]');
@@ -1078,16 +1299,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-file]').exists({ count: 2 });
     assert
       .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
-      .hasText('person');
+      .hasText('person.gts');
     assert
       .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
-      .hasText('pet');
+      .hasText('pet.gts');
 
     // Add remove attachment item
     await click(
       `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
     );
-    assert.dom('[data-test-attached-file]').hasText('pet');
+    assert.dom('[data-test-attached-file]').hasText('pet.gts');
 
     await fillIn('[data-test-message-field]', `Message With File`);
     await click('[data-test-send-message-btn]');
@@ -2785,6 +3006,29 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert
       .dom(`[data-test-skill-menu] [data-test-attached-card="${envSkillId}"]`)
       .exists();
+  });
+
+  test('ask/act toggle defaults to ask on new session', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
+
+    assert
+      .dom('[data-test-llm-mode-option="ask"]')
+      .hasClass('selected', 'Ask is selected by default on new session');
+    assert
+      .dom('[data-test-llm-mode-option="act"]')
+      .doesNotHaveClass('selected', 'Act is not selected by default');
   });
 
   test('new session inherits llm mode from current room', async function (assert) {

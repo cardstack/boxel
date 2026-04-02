@@ -11,6 +11,7 @@ import difference from 'lodash/difference';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
+  cardIdToURL,
   isCardInstance,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -113,12 +114,28 @@ export class RoomResource extends Resource<Args> {
     this.processing = this.processRoomTask.perform(named.roomId);
     if (!this.#hasRegisteredDestructor) {
       this.#hasRegisteredDestructor = true;
-      registerDestructor(this, () => {
-        for (let id of this.#skillIds ?? []) {
-          this.store.dropReference(id);
-        }
-      });
+      registerDestructor(this, () => this.teardown());
     }
+  }
+
+  teardown() {
+    this.processRoomTask.cancelAll();
+    this.activateLLMTask.cancelAll();
+    this.activateLLMModeTask.cancelAll();
+    for (let id of this.#skillIds ?? []) {
+      this.store.dropReference(id);
+    }
+    this.#skillIds.clear();
+    this._messageCache.clear();
+    this._nameEventsCache.clear();
+    this._memberCache.clear();
+    this._isDisplayingViewCodeMap.clear();
+    this._createEvent = undefined;
+    this.matrixRoom = undefined;
+    this.processing = undefined;
+    this.roomId = undefined;
+    this.llmBeingActivated = undefined;
+    this.llmModeBeingActivated = undefined;
   }
 
   get isProcessing() {
@@ -301,7 +318,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
-        realmURL: this.realm.realmOfURL(new URL(skillCard.sourceUrl))?.href,
+        realmURL: this.realm.realmOfURL(cardIdToURL(skillCard.sourceUrl))?.href,
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
@@ -351,15 +368,46 @@ export class RoomResource extends Resource<Args> {
 
   get activeLLM(): string {
     return (
-      this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? this.defaultLLM
+      this.llmBeingActivated ?? this.resolveActiveLLMKey() ?? this.defaultLLM
     );
+  }
+
+  get activeInputModalities(): string[] | undefined {
+    return this.matrixRoom?.activeInputModalities;
+  }
+
+  private resolveActiveLLMKey(): string | undefined {
+    let eventContent = this.matrixRoom?.activeLLMEventContent;
+    if (!eventContent?.model) {
+      return undefined;
+    }
+    let systemCard = this.matrixService.systemCard;
+    if (systemCard?.modelConfigurations) {
+      let match = systemCard.modelConfigurations.find(
+        (config) =>
+          config.modelId === eventContent.model &&
+          (config.reasoningEffort ?? undefined) ===
+            (eventContent.reasoningEffort ?? undefined),
+      );
+      if (match?.id) {
+        return match.id;
+      }
+      // Fall back to first config with matching modelId
+      let fallbackMatch = systemCard.modelConfigurations.find(
+        (config) => config.modelId === eventContent.model,
+      );
+      if (fallbackMatch?.id) {
+        return fallbackMatch.id;
+      }
+    }
+    return eventContent.model;
   }
 
   private get defaultLLM(): string {
     let systemCard = this.matrixService.systemCard;
     return (
-      systemCard?.defaultModelConfiguration?.modelId ??
-      systemCard?.modelConfigurations?.[0]?.modelId ??
+      systemCard?.defaultModelConfiguration?.id ??
+      systemCard?.modelConfigurations?.[0]?.id ??
       DEFAULT_LLM
     );
   }
@@ -382,22 +430,49 @@ export class RoomResource extends Resource<Args> {
     return this.activateLLMTask.isRunning;
   }
 
-  activateLLMTask = restartableTask(async (model: string) => {
+  activateLLMTask = restartableTask(async (key: string) => {
     await this.processing;
-    if (this.activeLLM === model) {
+    if (this.activeLLM === key) {
       return;
     }
-    this.llmBeingActivated = model;
+    this.llmBeingActivated = key;
     try {
       if (!this.matrixRoom) {
         throw new Error('matrixRoom is required to activate LLM');
       }
+
+      // Resolve the key to a modelId and config properties
+      let modelId = key;
+      let config:
+        | {
+            toolsSupported?: boolean;
+            reasoningEffort?: string;
+            inputModalities?: string[];
+          }
+        | undefined;
+
+      let systemCard = this.matrixService.systemCard;
+      if (systemCard?.modelConfigurations) {
+        let modelConfig = systemCard.modelConfigurations.find(
+          (c) => c.id === key,
+        );
+        if (modelConfig?.modelId) {
+          modelId = modelConfig.modelId;
+          config = {
+            toolsSupported: modelConfig.toolsSupported,
+            reasoningEffort: modelConfig.reasoningEffort,
+            inputModalities: modelConfig.inputModalities,
+          };
+        }
+      }
+
       await this.matrixService.sendActiveLLMEvent(
         this.matrixRoom.roomId,
-        model,
+        modelId,
+        config,
       );
       let remainingRetries = 20;
-      while (this.matrixRoom.activeLLM !== model && remainingRetries > 0) {
+      while (this.matrixRoom.activeLLM !== modelId && remainingRetries > 0) {
         await timeout(50);
         remainingRetries--;
       }
@@ -562,7 +637,15 @@ export class RoomResource extends Resource<Args> {
     let effectiveEventId = this.getEffectiveEventId(event);
     event = this.getAggregatedReplacement(event);
 
-    let message = this._messageCache.get(effectiveEventId);
+    let clientGeneratedId =
+      'clientGeneratedId' in event.content
+        ? event.content.clientGeneratedId
+        : undefined;
+    let message =
+      this._messageCache.get(effectiveEventId) ??
+      (clientGeneratedId
+        ? this._messageCache.get(clientGeneratedId)
+        : undefined);
     if (!message?.isStreamingOfEventFinished) {
       let author = this.upsertRoomMember({
         roomId,

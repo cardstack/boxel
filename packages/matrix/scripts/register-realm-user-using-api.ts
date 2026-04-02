@@ -2,9 +2,6 @@ import { loginUser } from '../docker/synapse';
 
 const matrixURL = process.env.MATRIX_URL || 'http://localhost:8008';
 const realmServerURL = process.env.REALM_SERVER_URL || 'http://localhost:4201';
-const username = process.env.MATRIX_USERNAME;
-const password = process.env.MATRIX_PASSWORD;
-const registrationToken = process.env.REALM_REGISTRATION_TOKEN ?? 'dev-token';
 
 function toLocalpart(value: string): string {
   let trimmed = value.startsWith('@') ? value.slice(1) : value;
@@ -78,7 +75,8 @@ async function createRealmUser(jwt: string) {
       data: {
         type: 'user',
         attributes: {
-          registrationToken,
+          registrationToken:
+            process.env.REALM_REGISTRATION_TOKEN ?? 'dev-token',
         },
       },
     }),
@@ -101,6 +99,8 @@ export async function registerRealmUser(): Promise<{
   jwt: string;
   userId: string;
 }> {
+  const username = process.env.MATRIX_USERNAME;
+  const password = process.env.MATRIX_PASSWORD;
   if (!username || !password) {
     throw new Error(
       'MATRIX_USERNAME and MATRIX_PASSWORD must be set to register a realm user',
