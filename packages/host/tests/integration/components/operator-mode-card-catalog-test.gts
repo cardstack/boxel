@@ -413,6 +413,11 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
       await waitFor('[data-test-boxel-picker-option-row]');
 
+      // Clicking the search input should focus it (CS-10581)
+      await click('[data-test-boxel-picker-search] input');
+      assert
+        .dom('[data-test-boxel-picker-search] input')
+        .isFocused('type picker search input is focusable when clicked');
       assert
         .dom('[data-test-boxel-picker-search] input')
         .hasAttribute(
