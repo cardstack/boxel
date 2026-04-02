@@ -4,11 +4,13 @@ import {
   StringField,
   field,
   contains,
+  containsMany,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
+import { FileContentField } from '../fields/file-content';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import CopyIcon from '@cardstack/boxel-icons/copy';
@@ -52,7 +54,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   get pullRequestEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'pull_request',
     );
   }
@@ -60,7 +62,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   get checkRunEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'check_run',
     );
   }
@@ -68,7 +70,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   get checkSuiteEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'check_suite',
     );
   }
@@ -76,7 +78,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   get prReviewEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'pull_request_review',
     );
   }
@@ -152,7 +154,6 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return buildCiItems(
       this.checkRunEventData?.instances ?? [],
       this.checkSuiteEventData?.instances ?? [],
-      this.args.model.prNumber,
     );
   }
 
@@ -343,7 +344,7 @@ class FittedTemplate extends Component<typeof PrCard> {
   get pullRequestEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'pull_request',
     );
   }
@@ -351,7 +352,7 @@ class FittedTemplate extends Component<typeof PrCard> {
   get checkRunEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'check_run',
     );
   }
@@ -359,7 +360,7 @@ class FittedTemplate extends Component<typeof PrCard> {
   get checkSuiteEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'check_suite',
     );
   }
@@ -367,7 +368,7 @@ class FittedTemplate extends Component<typeof PrCard> {
   get prReviewEventQuery() {
     return searchEventQuery(
       this.githubEventCardRef,
-      this.args.model.prNumber,
+      this.args.model.branchName,
       'pull_request_review',
     );
   }
@@ -443,7 +444,6 @@ class FittedTemplate extends Component<typeof PrCard> {
     return buildCiItems(
       this.checkRunEventData?.instances ?? [],
       this.checkSuiteEventData?.instances ?? [],
-      this.args.model.prNumber,
     );
   }
 
@@ -1075,6 +1075,9 @@ export class PrCard extends CardDef {
   // === Provenance (set on the card instance) ===
   @field submittedBy = contains(StringField);
   @field submittedAt = contains(DatetimeField);
+
+  // === Submission file contents ===
+  @field allFileContents = containsMany(FileContentField);
 
   // === Computed ===
   @field cardTitle = contains(StringField, {

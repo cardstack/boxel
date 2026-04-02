@@ -4,6 +4,7 @@ import HostBaseCommand from '../lib/host-base-command';
 
 import CreateSubmissionWorkflowCommand from './create-submission-workflow';
 
+// TODO: rename the file [create-and-open-submission-workflow-card.ts]
 export default class OpenCreatePRModalCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
