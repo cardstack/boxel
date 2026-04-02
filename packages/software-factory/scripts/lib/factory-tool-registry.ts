@@ -390,27 +390,6 @@ const REALM_API_TOOLS: ToolManifest[] = [
     ],
   },
   {
-    name: 'realm-atomic',
-    description: 'Batch operations that succeed or fail atomically.',
-    category: 'realm-api',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm-url',
-        type: 'string',
-        required: true,
-        description: 'Realm base URL',
-      },
-      {
-        name: 'operations',
-        type: 'string',
-        required: true,
-        description:
-          'JSON array of operations: [{"op":"add|update|remove","href":"...","data":{...}}]',
-      },
-    ],
-  },
-  {
     name: 'realm-search',
     description: 'Search for cards using structured queries.',
     category: 'realm-api',

@@ -8,7 +8,6 @@ import {
   readCardSource,
   writeModuleSource,
   deleteCard,
-  atomicOperation,
   searchRealm,
   createRealm,
   getServerSession,
@@ -347,15 +346,8 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): void {
-    // realm-delete and realm-atomic with remove ops need extra care
+    // Extra validation for destructive realm operations
     if (toolName === 'realm-delete') {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string') {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
-    if (toolName === 'realm-atomic') {
       let realmUrl = toolArgs['realm-url'];
       if (typeof realmUrl === 'string') {
         this.validateRealmTarget(toolName, realmUrl);
@@ -466,17 +458,6 @@ export class ToolExecutor {
           );
           ok = result.ok;
           output = ok ? result : { error: result.error };
-          break;
-        }
-
-        case 'realm-atomic': {
-          let result = await atomicOperation(
-            String(toolArgs['realm-url']),
-            String(toolArgs['operations']),
-            fetchOptions,
-          );
-          ok = result.ok;
-          output = ok ? result.response : { error: result.error };
           break;
         }
 
