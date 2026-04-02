@@ -10,12 +10,12 @@ import {
   getCardMeta,
   realmInfo,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
 import { type Query, type Filter } from '@cardstack/runtime-common';
 
-import CardList from 'https://cardstack.com/base/components/card-list';
+import CardList from '@cardstack/base/components/card-list';
 
 class Isolated extends Component<typeof OpenRouterIndex> {
   @tracked filterText = '';

@@ -5,8 +5,8 @@ import {
   field,
   contains,
   containsMany,
-} from 'https://cardstack.com/base/card-api';
-import enumField, { enumConfig } from 'https://cardstack.com/base/enum';
+} from '@cardstack/base/card-api';
+import enumField, { enumConfig } from '@cardstack/base/enum';
 import CatIcon from '@cardstack/boxel-icons/cat';
 import DogIcon from '@cardstack/boxel-icons/dog';
 import BirdIcon from '@cardstack/boxel-icons/bird';

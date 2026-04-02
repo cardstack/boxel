@@ -6,13 +6,13 @@
       "cardDescription": "A skill card that can link to a markdown file for rich text display.",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/skill-plus",
+        "module": "@cardstack/base/skill-plus",
         "name": "SkillPlusMarkdown"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

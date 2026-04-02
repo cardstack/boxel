@@ -26,18 +26,17 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
+import { render, teardown } from '../lib/isolated-render';
+
+import type CardService from './card-service';
+import type LoaderService from './loader-service';
 import type {
   CardDef,
   Format,
   CardStore,
   BoxComponent,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import { render, teardown } from '../lib/isolated-render';
-
-import type CardService from './card-service';
-import type LoaderService from './loader-service';
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { ComponentLike } from '@glint/template';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import type { Tokenizer } from '@simple-dom/parser';

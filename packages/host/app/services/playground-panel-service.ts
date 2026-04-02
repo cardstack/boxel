@@ -12,18 +12,13 @@ import { isCardInstance, localId, isLocalId } from '@cardstack/runtime-common';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import type {
-  CardDef,
-  BaseDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import type CardService from './card-service';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
 import type StoreService from './store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef, Format } from '@cardstack/base/card-api';
 
 export interface PlaygroundSelection {
   cardId: string; // for fields, this is their corresponding spec card's id, since fields do not have a card id

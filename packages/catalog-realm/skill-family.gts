@@ -1,13 +1,13 @@
 import { fn } from '@ember/helper';
 import { gt, eq } from '@cardstack/boxel-ui/helpers';
-import { Skill } from 'https://cardstack.com/base/skill';
+import { Skill } from '@cardstack/base/skill';
 import {
   field,
   contains,
   linksToMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
 import { Statement } from './statement';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

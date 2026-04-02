@@ -4,7 +4,7 @@ import {
   type Query,
   type PrerenderedCardLike,
 } from '@cardstack/runtime-common';
-import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type CardContext } from '@cardstack/base/card-api';
 import { Paginator } from './paginator';
 
 interface Signature {

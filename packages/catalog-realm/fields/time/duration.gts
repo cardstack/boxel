@@ -3,8 +3,8 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import { tracked } from '@glimmer/tracking';
 import HourglassIcon from '@cardstack/boxel-icons/hourglass';
 import AlertCircleIcon from '@cardstack/boxel-icons/alert-circle';

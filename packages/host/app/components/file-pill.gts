@@ -14,11 +14,10 @@ import { IconX, Download } from '@cardstack/boxel-ui/icons';
 
 import type { FileUploadStatus } from '@cardstack/host/lib/file-upload-state';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type { FileDef } from '@cardstack/base/file-api';
 
 interface FilePillSignature {
   Element: HTMLDivElement | HTMLButtonElement;

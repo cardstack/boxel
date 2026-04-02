@@ -288,7 +288,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/abc123",
-          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "@cardstack/base/Skill/card-editing",
           "contentType": "text/plain"
         }
       ],
@@ -311,7 +311,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/abc123",
-          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "@cardstack/base/Skill/card-editing",
           "contentType": "text/plain"
         },
         {
@@ -330,7 +330,7 @@
         "enabledSkillCards": [
           {
             "url": "mxc://mock-server/abc123",
-            "sourceUrl": "https://cardstack.com/base/Skill/card-editing"
+            "sourceUrl": "@cardstack/base/Skill/card-editing"
           }
         ],
         "disabledSkillCards": []
@@ -346,7 +346,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/abc123",
-          "sourceUrl": "https://cardstack.com/base/Skill/card-editing"
+          "sourceUrl": "@cardstack/base/Skill/card-editing"
         }
       ],
       "disabledSkillCards": []

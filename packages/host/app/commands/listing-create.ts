@@ -11,17 +11,13 @@ import {
   SupportedMimeType,
   isFieldDef,
   isResolvedCodeRef,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   loadCardDef,
   getAncestor,
   identifyCard,
 } from '@cardstack/runtime-common/code-ref';
-
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
-import type { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -34,11 +30,14 @@ import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Spec } from '@cardstack/base/spec';
 
 type ListingType = 'card' | 'skill' | 'theme' | 'field';
 
-const BASE_CARD_API_MODULE = 'https://cardstack.com/base/card-api';
-const BASE_SKILL_MODULE = 'https://cardstack.com/base/skill';
+const BASE_CARD_API_MODULE = '@cardstack/base/card-api';
+const BASE_SKILL_MODULE = '@cardstack/base/skill';
 
 const listingSubClass: Record<ListingType, string> = {
   card: 'CardListing',
@@ -92,7 +91,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
 
       // Only allow modulesToCreate that belong to a realm we can read
-      const url = new URL(dep);
+      const url = cardIdToURL(dep);
       const realmURL = this.realm.realmOfURL(url);
       if (!realmURL) {
         return false;

@@ -1,7 +1,7 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
 
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
 
 import GamepadIcon from '@cardstack/boxel-icons/gamepad-2';
 

@@ -3,15 +3,15 @@ import {
   field,
   contains,
   type CreateCardFn,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import { AbsoluteCodeRefField } from 'https://cardstack.com/base/code-ref';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
+import { AbsoluteCodeRefField } from '@cardstack/base/code-ref';
 import { realmURL, type CodeRef } from '@cardstack/runtime-common';
 
 import { Table } from '../components/table';
 import { AppCard } from './app';
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { CardCrudFunctionsConsumer } from 'https://cardstack.com/base/field-component';
+import { CardCrudFunctionsConsumer } from '@cardstack/base/field-component';
 
 import type { Query } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';

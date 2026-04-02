@@ -2,8 +2,8 @@ import {
   CardDef,
   field,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { PolaroidImage } from './polaroid-image';

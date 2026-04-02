@@ -6,15 +6,14 @@ import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
 
 import { realmURL as realmURLSymbol } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import CreateSpecCommand from './create-specs';
 
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Spec } from '@cardstack/base/spec';
 
 export default class ListingUpdateSpecsCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingUpdateSpecsInput,
@@ -48,7 +47,7 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
         return false;
       }
       try {
-        const url = new URL(dep);
+        const url = cardIdToURL(dep);
         const realmURL = this.realm.realmOfURL(url);
         if (!realmURL) {
           return false;

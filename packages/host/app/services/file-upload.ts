@@ -11,11 +11,10 @@ import {
   type LocalPath,
 } from '@cardstack/runtime-common';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import type NetworkService from './network';
 import type ResetService from './reset';
 import type StoreService from './store';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export class FileUploadTask {
   @tracked state: 'picking' | 'uploading' | 'complete' | 'error' = 'picking';

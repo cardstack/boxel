@@ -9,17 +9,15 @@ import {
   RealmPaths,
 } from '@cardstack/runtime-common';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
-import type { Skill } from 'https://cardstack.com/base/skill';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
 
 import type RealmServerService from '../services/realm-server';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
+import type { Skill } from '@cardstack/base/skill';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<

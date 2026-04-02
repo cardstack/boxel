@@ -22,13 +22,12 @@ import type { Query, Format } from '@cardstack/runtime-common';
 import type { PrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 import { isPrerenderedCardCollectionDocument } from '@cardstack/runtime-common/document-types';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import { PrerenderedCard } from '../components/prerendered-card-search';
 import { normalizeRealms, resolveCardRealmUrl } from '../lib/realm-utils';
 
 import type LoaderService from '../services/loader-service';
 import type RealmServerService from '../services/realm-server';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('prerendered-search-resource:search-waiter');
 

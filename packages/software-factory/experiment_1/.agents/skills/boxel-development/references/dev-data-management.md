@@ -148,7 +148,7 @@ Note: Use `null`, not an empty array `[]`
 ### Path Conventions
 * **Module paths**: Relative to JSON location, no `.gts` extension
   * Local: `"../author"` or `"../../shared/address-field"`
-  * Base: `"https://cardstack.com/base/string"`
+  * Base: `"@cardstack/base/string"`
 * **Relationship paths**: Relative paths, no `.json` extension
   * `"../Author/jane-doe"` not `"../Author/jane-doe.json"`
 * **Date formats**: 

@@ -32,6 +32,7 @@ import {
   CardContextName,
   isSpecCard,
   loadCardDef,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
@@ -48,15 +49,14 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import { runWhileActive } from '@cardstack/host/utils/run-while-active';
 
-import type { CardContext } from 'https://cardstack.com/base/card-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../../resources/element-tracker';
 import Overlays from '../overlays';
 
 import type { CardDefOrId } from '../stack-item';
+import type { CardContext } from '@cardstack/base/card-api';
+import type { Spec } from '@cardstack/base/spec';
 import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {
@@ -173,7 +173,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       return;
     }
 
-    const selectedUrl = new URL(this.selectedId);
+    const selectedUrl = cardIdToURL(this.selectedId);
     await this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 

@@ -17,6 +17,7 @@ import {
   type Filter,
   type getCard,
   GetCardContextName,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
@@ -27,8 +28,6 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -45,6 +44,7 @@ import { getCodeRefFromSearchKey } from './utils';
 import type { PrerenderedCard } from '../prerendered-card-search';
 
 import type { NewCardArgs } from './utils';
+import type { CardDef } from '@cardstack/base/card-api';
 import type { NamedArgs } from 'ember-modifier';
 
 interface ScrollToFocusedSectionSignature {
@@ -521,7 +521,7 @@ export default class SearchContent extends Component<Signature> {
       }
     }
     try {
-      const url = new URL(cardIdOrUrl);
+      const url = cardIdToURL(cardIdOrUrl);
       return `${url.origin}${url.pathname.split('/').slice(0, -1)?.join('/') ?? ''}/`;
     } catch {
       return '';

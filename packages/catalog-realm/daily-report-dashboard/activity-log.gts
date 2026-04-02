@@ -4,10 +4,10 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
+import TextAreaField from '@cardstack/base/text-area';
 import ClockIcon from '@cardstack/boxel-icons/clock'; // ² Activity icon
 import { formatDateTime } from '@cardstack/boxel-ui/helpers'; // ³ Formatting helpers
 

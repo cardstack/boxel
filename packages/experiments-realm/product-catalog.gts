@@ -4,7 +4,7 @@ import {
   Component,
   field,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { IkeaProduct } from './ikea-product';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';

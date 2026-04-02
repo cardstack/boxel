@@ -1,8 +1,8 @@
 **Core imports:**
 ```gts
-import { CardDef, FieldDef, Component, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+import { CardDef, FieldDef, Component, field, contains, linksTo } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 ```
 
 **UI Components:**
@@ -25,44 +25,44 @@ import { formatDateTime, formatCurrency } from '@cardstack/boxel-ui/helpers';
 ```gts
 // ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
 // ¹ Core imports - ALWAYS needed for definitions
-import { CardDef, FieldDef, Component, field, contains, containsMany, linksTo, linksToMany } from 'https://cardstack.com/base/card-api';
+import { CardDef, FieldDef, Component, field, contains, containsMany, linksTo, linksToMany } from '@cardstack/base/card-api';
 
 // ² Base field imports (only what you use)
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import DateField from 'https://cardstack.com/base/date';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import BigIntegerField from 'https://cardstack.com/base/big-integer';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
-import Base64ImageField from 'https://cardstack.com/base/base64-image'; // 🚨 NEVER USE - embeds binary in JSON, crashes AI context; use FileDef types instead
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import DateField from '@cardstack/base/date';
+import DateTimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
+import TextAreaField from '@cardstack/base/text-area';
+import BigIntegerField from '@cardstack/base/big-integer';
+import CodeRefField from '@cardstack/base/code-ref';
+import Base64ImageField from '@cardstack/base/base64-image'; // 🚨 NEVER USE - embeds binary in JSON, crashes AI context; use FileDef types instead
 
 // ⁸ FileDef imports - for file fields (use linksTo, never contains)
-import FileDef from 'https://cardstack.com/base/file-api';
-import ImageDef from 'https://cardstack.com/base/image-file-def';     // any image
-import PngDef from 'https://cardstack.com/base/png-image-def';        // .png
-import JpgDef from 'https://cardstack.com/base/jpg-image-def';        // .jpg/.jpeg
-import SvgDef from 'https://cardstack.com/base/svg-image-def';        // .svg
-import GifDef from 'https://cardstack.com/base/gif-image-def';        // .gif
-import WebpDef from 'https://cardstack.com/base/webp-image-def';      // .webp
-import AvifDef from 'https://cardstack.com/base/avif-image-def';      // .avif
-import MarkdownDef from 'https://cardstack.com/base/markdown-file-def'; // .md (NOT same as MarkdownField)
-import TextFileDef from 'https://cardstack.com/base/text-file-def';   // .txt
-import TsFileDef from 'https://cardstack.com/base/ts-file-def';       // .ts
-import GtsFileDef from 'https://cardstack.com/base/gts-file-def';     // .gts
-import JsonFileDef from 'https://cardstack.com/base/json-file-def';   // .json
-import CsvFileDef from 'https://cardstack.com/base/csv-file-def';     // .csv
-import ColorField from 'https://cardstack.com/base/color';
-import EmailField from 'https://cardstack.com/base/email';
-import PercentageField from 'https://cardstack.com/base/percentage';
-import PhoneNumberField from 'https://cardstack.com/base/phone-number';
-import UrlField from 'https://cardstack.com/base/url';
-import AddressField from 'https://cardstack.com/base/address';
+import FileDef from '@cardstack/base/file-api';
+import ImageDef from '@cardstack/base/image-file-def';     // any image
+import PngDef from '@cardstack/base/png-image-def';        // .png
+import JpgDef from '@cardstack/base/jpg-image-def';        // .jpg/.jpeg
+import SvgDef from '@cardstack/base/svg-image-def';        // .svg
+import GifDef from '@cardstack/base/gif-image-def';        // .gif
+import WebpDef from '@cardstack/base/webp-image-def';      // .webp
+import AvifDef from '@cardstack/base/avif-image-def';      // .avif
+import MarkdownDef from '@cardstack/base/markdown-file-def'; // .md (NOT same as MarkdownField)
+import TextFileDef from '@cardstack/base/text-file-def';   // .txt
+import TsFileDef from '@cardstack/base/ts-file-def';       // .ts
+import GtsFileDef from '@cardstack/base/gts-file-def';     // .gts
+import JsonFileDef from '@cardstack/base/json-file-def';   // .json
+import CsvFileDef from '@cardstack/base/csv-file-def';     // .csv
+import ColorField from '@cardstack/base/color';
+import EmailField from '@cardstack/base/email';
+import PercentageField from '@cardstack/base/percentage';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import UrlField from '@cardstack/base/url';
+import AddressField from '@cardstack/base/address';
 
 // ⚠️ EXTENDING BASE FIELDS: To customize a base field, import it and extend:
-// import BaseAddressField from 'https://cardstack.com/base/address';
+// import BaseAddressField from '@cardstack/base/address';
 // export class FancyAddressField extends BaseAddressField { }
 // Never import and define the same field name - it causes conflicts!
 

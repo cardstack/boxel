@@ -22,7 +22,7 @@
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "https://cardstack.com/base/Theme/cardstack-brand-guide"
+          "self": "@cardstack/base/Theme/cardstack-brand-guide"
         }
       }
     },

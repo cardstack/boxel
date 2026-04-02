@@ -5,12 +5,12 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { dayjsFormat } from '@cardstack/boxel-ui/helpers';
-import StringField from 'https://cardstack.com/base/string';
-import DateField from 'https://cardstack.com/base/date';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import UrlField from 'https://cardstack.com/base/url';
+import StringField from '@cardstack/base/string';
+import DateField from '@cardstack/base/date';
+import TextAreaField from '@cardstack/base/text-area';
+import UrlField from '@cardstack/base/url';
 
 export class MinecraftInvite extends CardDef {
   static displayName = 'Minecraft Invite';

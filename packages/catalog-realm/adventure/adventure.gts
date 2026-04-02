@@ -9,13 +9,13 @@ import {
   realmURL,
   linksTo,
   FieldDef,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
 
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import DateTimeField from '@cardstack/base/datetime';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 import { Button } from '@cardstack/boxel-ui/components';
 import { eq, gt, or, not, and } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';

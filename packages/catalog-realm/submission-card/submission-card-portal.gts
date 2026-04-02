@@ -8,14 +8,14 @@ import {
   contains,
   field,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
-import CardList from 'https://cardstack.com/base/components/card-list';
+} from '@cardstack/base/card-api';
+import CardList from '@cardstack/base/components/card-list';
 import type {
   GetAllRealmMetasResult,
   RealmMetaField,
-} from 'https://cardstack.com/base/command';
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/command';
+import { commandData } from '@cardstack/base/resources/command-data';
+import StringField from '@cardstack/base/string';
 
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import BotIcon from '@cardstack/boxel-icons/bot';

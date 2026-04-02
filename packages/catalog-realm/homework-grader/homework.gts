@@ -8,12 +8,12 @@ import {
   CardDef,
   FieldDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
-import { Skill } from 'https://cardstack.com/base/skill';
+} from '@cardstack/base/card-api';
+import TextAreaField from '@cardstack/base/text-area';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import NumberField from '@cardstack/base/number';
+import { Skill } from '@cardstack/base/skill';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 

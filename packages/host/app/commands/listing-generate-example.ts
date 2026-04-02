@@ -3,14 +3,13 @@ import { service } from '@ember/service';
 import { resolveAdoptsFrom } from '@cardstack/runtime-common/code-ref';
 import { realmURL } from '@cardstack/runtime-common/constants';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import { GenerateExampleCardsOneShotCommand } from './generate-example-cards';
 
 import type RealmService from '../services/realm';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class ListingGenerateExampleCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateListingExampleInput,

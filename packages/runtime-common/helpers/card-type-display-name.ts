@@ -2,7 +2,7 @@ import type {
   BaseDef,
   BaseDefConstructor,
   Field,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import { getField } from '../code-ref';
 

@@ -165,7 +165,7 @@
     "content": {
       "enabledSkillCards": [
         {
-          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "@cardstack/base/Skill/card-editing",
           "url": "mxc://mock-server/skill_card_v1",
           "name": "Card Editing",
           "contentType": "text/plain",

@@ -68,12 +68,6 @@ import {
   resolveCardReference,
 } from '@cardstack/runtime-common';
 
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import CardStore, { getDeps, type ReferenceCount } from '../lib/gc-card-store';
 
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -103,6 +97,10 @@ import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
 import type { SearchResource } from '../resources/search';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
@@ -1608,7 +1606,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async extractFileMetaDirectly(
     url: string,
   ): Promise<SingleFileMetaDocument | CardError> {
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(url));
+    let fileDefCodeRef = resolveFileDefCodeRef(cardIdToURL(url));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

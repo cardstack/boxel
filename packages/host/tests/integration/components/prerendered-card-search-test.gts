@@ -112,7 +112,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     }
 
     const BookGtsImpl = `
-    import { Component, field, contains, linksTo, CardDef, StringField } from 'https://cardstack.com/base/card-api';
+    import { Component, field, contains, linksTo, CardDef, StringField } from '@cardstack/base/card-api';
     import { PersonField } from './person';
     import { Publisher } from './publisher';
     export class Book extends CardDef {
@@ -146,8 +146,8 @@ module(`Integration | prerendered-card-search`, function (hooks) {
 
     const FileDefMismatchGtsImpl = `
     import { byteStreamToUint8Array } from '@cardstack/runtime-common';
-    import { Component, BaseDefComponent, field, contains, StringField } from 'https://cardstack.com/base/card-api';
-    import { FileDef as BaseFileDef, type ByteStream } from 'https://cardstack.com/base/file-api';
+    import { Component, BaseDefComponent, field, contains, StringField } from '@cardstack/base/card-api';
+    import { FileDef as BaseFileDef, type ByteStream } from '@cardstack/base/file-api';
 
     class Isolated extends Component<typeof FileDef> {
       <template>

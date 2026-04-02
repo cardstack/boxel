@@ -6,13 +6,13 @@
       "specType": "card",
       "cardDescription": "Comprehensive reference card for documenting a product’s visual language and theme variables.",
       "ref": {
-        "module": "https://cardstack.com/base/detailed-style-reference",
+        "module": "@cardstack/base/detailed-style-reference",
         "name": "default"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

@@ -11,7 +11,7 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/base/*": ["../base/*"],
       "@cardstack/runtime-common/*": ["../runtime-common/*"],
       "babel-plugin-ember-template-compilation": [
         "node_modules/babel-plugin-ember-template-compilation/*"

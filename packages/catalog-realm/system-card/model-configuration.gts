@@ -1,16 +1,16 @@
 import { eq } from '@cardstack/boxel-ui/helpers';
-import { ModelConfiguration as BaseModelConfiguration } from 'https://cardstack.com/base/system-card';
+import { ModelConfiguration as BaseModelConfiguration } from '@cardstack/base/system-card';
 import {
   field,
   contains,
   containsMany,
   linksTo,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import enumField from 'https://cardstack.com/base/enum';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
+import enumField from '@cardstack/base/enum';
 import { OpenRouterModel } from '@cardstack/openrouter/openrouter-model';
 
 const PurposeField = enumField(StringField, {

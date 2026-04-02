@@ -285,8 +285,8 @@ module(basename(__filename), function () {
               [
                 'gallery.gts',
                 `
-                import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import { FileDef } from "https://cardstack.com/base/file-api";
+                import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import { FileDef } from "@cardstack/base/file-api";
 
                 export class Gallery extends CardDef {
                   @field hero = linksTo(FileDef);
@@ -401,8 +401,8 @@ module(basename(__filename), function () {
             [
               'tag.gts',
               `
-                import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
 
                 export class Tag extends CardDef {
                   @field label = contains(StringField);
@@ -417,8 +417,8 @@ module(basename(__filename), function () {
             [
               'article.gts',
               `
-                import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Tag } from "./tag";
 
                 export class Article extends CardDef {
@@ -543,9 +543,9 @@ module(basename(__filename), function () {
               [
                 'skill-card.gts',
                 `
-                  import { CardDef, field, contains, linksTo } from "https://cardstack.com/base/card-api";
-                  import StringField from "https://cardstack.com/base/string";
-                  import { MarkdownDef } from "https://cardstack.com/base/markdown-file-def";
+                  import { CardDef, field, contains, linksTo } from "@cardstack/base/card-api";
+                  import StringField from "@cardstack/base/string";
+                  import { MarkdownDef } from "@cardstack/base/markdown-file-def";
 
                   export class SkillCard extends CardDef {
                     @field cardTitle = contains(StringField);
@@ -642,8 +642,8 @@ module(basename(__filename), function () {
             [
               'query-person-finder.gts',
               `
-                import { CardDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Person } from "./person";
 
                 export class QueryPersonFinder extends CardDef {
@@ -734,8 +734,8 @@ module(basename(__filename), function () {
             [
               'query-person-finder-nested.gts',
               `
-                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
-                import StringField from "https://cardstack.com/base/string";
+                import { CardDef, FieldDef, field, contains, linksTo, linksToMany } from "@cardstack/base/card-api";
+                import StringField from "@cardstack/base/string";
                 import { Person } from "./person";
 
                 export class QueryLinksField extends FieldDef {
@@ -1148,7 +1148,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -1213,7 +1213,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -2147,7 +2147,7 @@ module(basename(__filename), function () {
                 attributes: {},
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/card-api',
+                    module: '@cardstack/base/card-api',
                     name: 'CardDef',
                   },
                 },
@@ -3878,7 +3878,7 @@ module(basename(__filename), function () {
               attributes: {},
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/card-api',
+                  module: '@cardstack/base/card-api',
                   name: 'CardDef',
                 },
               },
@@ -3921,8 +3921,8 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'person.gts': `
-              import { CardDef, field, contains } from "https://cardstack.com/base/card-api";
-              import StringField from "https://cardstack.com/base/string";
+              import { CardDef, field, contains } from "@cardstack/base/card-api";
+              import StringField from "@cardstack/base/string";
 
               export class Person extends CardDef {
                 @field name = contains(StringField);
@@ -3951,7 +3951,7 @@ module(basename(__filename), function () {
           },
           fileSystem: {
             'favorite-finder.gts': `
-              import { CardDef, field, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+              import { CardDef, field, linksTo, linksToMany } from "@cardstack/base/card-api";
               import { Person } from "${providerRealmURL}person";
 
               export class FavoriteLookup extends CardDef {
@@ -4233,11 +4233,11 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/embedded.gts',
-  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-  'https://cardstack.com/base/default-templates/field-edit.gts',
-  'https://cardstack.com/base/field-component.gts',
-  'https://cardstack.com/base/contains-many-component.gts',
-  'https://cardstack.com/base/links-to-editor.gts',
-  'https://cardstack.com/base/links-to-many-component.gts',
+  '@cardstack/base/default-templates/embedded.gts',
+  '@cardstack/base/default-templates/isolated-and-edit.gts',
+  '@cardstack/base/default-templates/field-edit.gts',
+  '@cardstack/base/field-component.gts',
+  '@cardstack/base/contains-many-component.gts',
+  '@cardstack/base/links-to-editor.gts',
+  '@cardstack/base/links-to-many-component.gts',
 ];

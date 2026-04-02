@@ -26,10 +26,9 @@ import {
 } from '@cardstack/runtime-common';
 import type { DataQuery } from '@cardstack/runtime-common/query';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const waiter = buildWaiter('search-data-resource:search-waiter');
 

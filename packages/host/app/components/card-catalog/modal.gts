@@ -28,8 +28,6 @@ import {
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
@@ -47,6 +45,7 @@ import type RealmService from '../../services/realm';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
 import type { NewCardArgs } from '../card-search/utils';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {};

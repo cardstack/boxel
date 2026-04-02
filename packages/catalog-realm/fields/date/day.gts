@@ -3,8 +3,8 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';

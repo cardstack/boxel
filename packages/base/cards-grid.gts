@@ -347,19 +347,19 @@ class Isolated extends Component<typeof CardsGrid> {
 
     try {
       // Load the welcome-to-boxel card
-      const welcomeCardUrl = `https://cardstack.com/base/welcome-to-boxel.json`;
+      const welcomeCardUrl = `@cardstack/base/welcome-to-boxel.json`;
       const welcomeCard = (await this.args.context.store.get(
         welcomeCardUrl,
       )) as BaseDef;
 
       // Load the ai-app-generator card
-      const aiAppGeneratorUrl = `https://cardstack.com/base/ai-app-generator.json`;
+      const aiAppGeneratorUrl = `@cardstack/base/ai-app-generator.json`;
       const aiAppGeneratorCard = (await this.args.context.store.get(
         aiAppGeneratorUrl,
       )) as BaseDef;
 
       // Load the community cards
-      const communityCardsUrl = `https://cardstack.com/base/join-the-community.json`;
+      const communityCardsUrl = `@cardstack/base/join-the-community.json`;
       const communityCards = (await this.args.context.store.get(
         communityCardsUrl,
       )) as BaseDef;

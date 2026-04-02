@@ -11,9 +11,9 @@ import { HostCommandClasses } from '@cardstack/host/commands';
 
 import type HostBaseCommand from '@cardstack/host/lib/host-base-command';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 module(
   'Integration | Command | host command schema generation test',

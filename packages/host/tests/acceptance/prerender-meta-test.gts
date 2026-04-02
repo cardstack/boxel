@@ -40,7 +40,7 @@ module('Acceptance | prerender | meta', function (hooks) {
 
   hooks.beforeEach(async function () {
     let loader = getService('loader-service').loader;
-    let cardApi: typeof import('https://cardstack.com/base/card-api');
+    let cardApi: typeof import('@cardstack/base/card-api');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
 
     let {

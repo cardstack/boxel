@@ -93,7 +93,7 @@ export async function startTestRealmServer(
     '--migrateDB',
     '--fromUrl=http://localhost:4205/test/',
     '--toUrl=http://localhost:4205/test/',
-    '--fromUrl=https://cardstack.com/base/',
+    '--fromUrl=@cardstack/base/',
     '--toUrl=http://localhost:4201/base/',
   ];
 
@@ -137,7 +137,7 @@ export async function startTestRealmServer(
     '--username=test_realm',
     '--fromUrl=http://localhost:4205/test/',
     '--toUrl=http://localhost:4205/test/',
-    '--fromUrl=https://cardstack.com/base/',
+    '--fromUrl=@cardstack/base/',
     '--toUrl=http://localhost:4201/base/',
   ];
 

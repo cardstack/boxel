@@ -31,9 +31,6 @@ import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
 import LimitedSet from '../lib/limited-set';
 
 import type LoaderService from './loader-service';
@@ -45,6 +42,8 @@ import type StoreService from './store';
 import type { CodeData } from '../lib/formatted-message/utils';
 import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
 import type MessageCommand from '../lib/matrix-classes/message-command';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 import type { IEvent } from 'matrix-js-sdk';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;

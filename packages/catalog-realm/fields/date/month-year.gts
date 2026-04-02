@@ -3,8 +3,8 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { action } from '@ember/object';
 import CalendarEventIcon from '@cardstack/boxel-icons/calendar-event';
 import { formatDateTime, not } from '@cardstack/boxel-ui/helpers';

@@ -3,14 +3,14 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import DateField from 'https://cardstack.com/base/date';
-import EmailField from 'https://cardstack.com/base/email';
-import PhoneNumberField from 'https://cardstack.com/base/phone-number';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import DateField from '@cardstack/base/date';
+import EmailField from '@cardstack/base/email';
+import PhoneNumberField from '@cardstack/base/phone-number';
+import UrlField from '@cardstack/base/url';
 import { concat } from '@ember/helper';
 import { Button } from '@cardstack/boxel-ui/components';
 import { currencyFormat, dayjsFormat } from '@cardstack/boxel-ui/helpers';

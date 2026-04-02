@@ -3,10 +3,10 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import { Currency } from './asset';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 import { MonetaryAmount } from './monetary-amount';
 import ExchangeIcon from '@cardstack/boxel-icons/exchange';
 

@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 import { devSkillId, skillCardURL } from '../lib/utils';
 
@@ -15,6 +13,7 @@ import SwitchSubmodeCommand from './switch-submode';
 import UpdateRoomSkillsCommand from './update-room-skills';
 
 import type StoreService from '../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 import type { Listing } from '@cardstack/catalog/listing/listing';
 

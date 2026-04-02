@@ -25,8 +25,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import {
   envSkillId,
   testRealmURL,
@@ -53,6 +51,8 @@ import {
 import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
+
+import type { FileDef } from '@cardstack/base/file-api';
 
 module('Integration | ai-assistant-panel | skills', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -182,7 +182,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             import { Command } from '@cardstack/runtime-common';
             import { SearchCardsByTypeAndTitleCommand } from '@cardstack/boxel-host/commands/search-cards';
             import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
-            import type { SearchCardsByTypeAndTitleInput } from 'https://cardstack.com/base/commands/search-card-result';
+            import type { SearchCardsByTypeAndTitleInput } from '@cardstack/base/commands/search-card-result';
 
             export default class SearchAndOpenCardCommand extends Command<
               typeof SearchCardsByTypeAndTitleInput,

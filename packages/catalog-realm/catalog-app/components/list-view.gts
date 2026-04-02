@@ -1,6 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import { CardContext } from '@cardstack/base/card-api';
 import { Query } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 

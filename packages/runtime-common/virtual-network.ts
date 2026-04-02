@@ -1,5 +1,5 @@
 import { RealmPaths } from './paths';
-import { baseRealm, isNode } from './index';
+import { baseRealm, isNode, unresolveCardReference } from './index';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,
@@ -313,7 +313,7 @@ function shouldRetryFetch(url: URL) {
     return false;
   }
 
-  if (baseRealm.inRealm(url)) {
+  if (unresolveCardReference(url.href).startsWith(baseRealm.url)) {
     return true;
   }
 

@@ -53,7 +53,7 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
     query: JSON.stringify({
       filter: {
         type: {
-          module: 'https://cardstack.com/base/card-api',
+          module: '@cardstack/base/card-api',
           name: 'CardDef',
         },
       },

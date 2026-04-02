@@ -55,8 +55,8 @@ const HELLO_CARD_GTS = `import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class HelloCard extends CardDef {
   static displayName = 'Hello Card';
@@ -85,7 +85,7 @@ const HELLO_SPEC_CARD = {
     },
     meta: {
       adoptsFrom: {
-        module: 'https://cardstack.com/base/spec',
+        module: '@cardstack/base/spec',
         name: 'Spec',
       },
     },

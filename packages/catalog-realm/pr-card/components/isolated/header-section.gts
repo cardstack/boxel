@@ -3,7 +3,7 @@ import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import CopyIcon from '@cardstack/boxel-icons/copy';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { on } from '@ember/modifier';
-import type { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
+import type { CardOrFieldTypeIcon } from '@cardstack/base/card-api';
 
 interface HeaderSectionSignature {
   Args: {

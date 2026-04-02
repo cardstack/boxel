@@ -7,7 +7,7 @@ import {
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import { NodeAdapter } from '../node-realm';
 import { insertUser, setupDB } from './helpers';
 

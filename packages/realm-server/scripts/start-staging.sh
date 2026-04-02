@@ -41,7 +41,7 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/base' \
   --username='base_realm' \
   --distURL='https://boxel-host-staging.stack.cards' \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='https://realms-staging.stack.cards/base/' \
   \
   --path='/persistent/catalog' \

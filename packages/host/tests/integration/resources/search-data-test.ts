@@ -50,8 +50,8 @@ module(`Integration | search data resource`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
   let realm: Realm;
-  let cardApi: typeof import('https://cardstack.com/base/card-api');
-  let string: typeof import('https://cardstack.com/base/string');
+  let cardApi: typeof import('@cardstack/base/card-api');
+  let string: typeof import('@cardstack/base/string');
 
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {

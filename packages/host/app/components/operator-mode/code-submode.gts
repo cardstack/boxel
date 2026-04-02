@@ -40,6 +40,7 @@ import {
   type getCard,
   type LocalPath,
   CardContextName,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -64,14 +65,6 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type {
-  BaseDef,
-  CardDef,
-  Format,
-  CardContext,
-} from 'https://cardstack.com/base/card-api';
-import type { SpecType } from 'https://cardstack.com/base/spec';
-
 import {
   CodeModePanelWidths,
   CodeModePanelHeights,
@@ -93,6 +86,13 @@ import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
 
 import type { NewFileOptions } from './new-file-button';
+import type {
+  BaseDef,
+  CardDef,
+  Format,
+  CardContext,
+} from '@cardstack/base/card-api';
+import type { SpecType } from '@cardstack/base/spec';
 
 interface Signature {
   Args: {
@@ -630,8 +630,8 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action private async openSearchResultInEditor(cardId: string) {
     let codePath = cardId.endsWith('.json')
-      ? new URL(cardId)
-      : new URL(cardId + '.json');
+      ? cardIdToURL(cardId)
+      : cardIdToURL(cardId + '.json');
     await this.operatorModeStateService.updateCodePath(codePath);
   }
 

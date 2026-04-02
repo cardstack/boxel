@@ -41,14 +41,13 @@ import type HostModeStateService from '@cardstack/host/services/host-mode-state-
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
+import type HostModeService from '../services/host-mode-service';
+import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type {
   CardContext,
   CardDef,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
-import type HostModeService from '../services/host-mode-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
+} from '@cardstack/base/card-api';
 
 export interface IndexComponentComponentSignature {
   Args: {

@@ -42,11 +42,6 @@ import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import type {
-  IndexRealmEventContent,
-  RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
-
 import {
   syncTokenToServiceWorker,
   syncAllTokensToServiceWorker,
@@ -59,6 +54,10 @@ import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type {
+  IndexRealmEventContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 
 const log = logger('service:realm');
 
@@ -155,6 +154,15 @@ class RealmResource {
 
   get url(): string {
     return this.realmURL;
+  }
+
+  // Resolved URL for HTTP operations (fetching _info, _config, etc.).
+  // Prefix-form URLs like @cardstack/base/ are resolved through the
+  // import map to their actual HTTP URL.
+  private get resolvedURL(): string {
+    return isRegisteredPrefix(this.realmURL)
+      ? cardIdToURL(this.realmURL).href
+      : this.realmURL;
   }
 
   get token(): string | undefined {
@@ -261,7 +269,7 @@ class RealmResource {
   private loginTask = task(async () => {
     try {
       let token = await this.matrixService.createRealmSession(
-        new URL(this.realmURL),
+        new URL(this.resolvedURL),
       );
       this.token = token;
     } catch (e: any) {
@@ -329,13 +337,13 @@ class RealmResource {
       };
       let response: Response;
       try {
-        response = await this.network.authedFetch(`${this.realmURL}_info`, {
+        response = await this.network.authedFetch(`${this.resolvedURL}_info`, {
           method: 'QUERY',
           headers: {
             ...headers,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ realms: [this.realmURL] }),
+          body: JSON.stringify({ realms: [this.resolvedURL] }),
         });
       } catch (error) {
         if (isTesting()) {
@@ -388,7 +396,7 @@ class RealmResource {
       Accept: SupportedMimeType.JSON,
       Authorization: `Bearer ${this.token}`,
     };
-    let response = await this.network.authedFetch(`${this.realmURL}_config`, {
+    let response = await this.network.authedFetch(`${this.resolvedURL}_config`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({
@@ -436,7 +444,7 @@ class RealmResource {
       Authorization: `Bearer ${this.token}`,
     };
     let response = await this.network.authedFetch(
-      `${this.realmURL}_permissions`,
+      `${this.resolvedURL}_permissions`,
       {
         headers,
       },
@@ -463,7 +471,7 @@ class RealmResource {
       Authorization: `Bearer ${this.token}`,
     };
     let response = await this.network.authedFetch(
-      `${this.realmURL}_publishability`,
+      `${this.resolvedURL}_publishability`,
       {
         headers,
       },
@@ -511,7 +519,7 @@ class RealmResource {
         Authorization: `Bearer ${this.token}`,
       };
       let response = await this.network.authedFetch(
-        `${this.realmURL}_permissions`,
+        `${this.resolvedURL}_permissions`,
         {
           method: 'PATCH',
           headers,

@@ -4,7 +4,7 @@ import {
   contains,
   StringField,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import AvatarField from '../fields/avatar';
 
 export class Player extends CardDef {

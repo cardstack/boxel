@@ -16,8 +16,8 @@ import {
   isRegisteredPrefix,
 } from './card-reference-resolver';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+import type { FileDef } from '@cardstack/base/file-api';
 
 export interface LooseSingleResourceDocument<T extends LinkableResource> {
   data: LooseLinkableResource<T>;
@@ -188,6 +188,7 @@ export {
   unresolveCardReference,
   isRegisteredPrefix,
   cardIdToURL,
+  type CardOrModuleRef,
 } from './card-reference-resolver';
 
 export interface ResourceObject {
@@ -380,8 +381,8 @@ import type {
   CardDef,
   FieldDef,
   BaseDef,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { RealmInfo } from './realm';
 import type { PrerenderedCard, QueryResultsMeta } from './index-query-engine';
 
@@ -743,7 +744,7 @@ export async function apiFor(
     Loader.getLoaderFor(cardOrFieldOrClass) ??
     loaderFor(cardOrFieldOrClass as CardDef | FieldDef | BaseDef);
   let api = await loader.import<typeof CardAPI>(
-    'https://cardstack.com/base/card-api',
+    '@cardstack/base/card-api',
   );
   if (!api) {
     throw new Error(`could not load card API`);

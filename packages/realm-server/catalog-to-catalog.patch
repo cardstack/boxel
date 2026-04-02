@@ -1,0 +1,1179 @@
+--- ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/HomeLayout/homepage.json
++++ ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/HomeLayout/homepage.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/index.json
++++ ./realms/localhost_4201/_published/a40a7808-69f7-4f97-a4e4-d00b6dea5b6b/index.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/Document/642b6134-dd2e-4248-be59-e3e4b1cb77e8.json
++++ ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/Document/642b6134-dd2e-4248-be59-e3e4b1cb77e8.json
+@@ -17,7 +17,7 @@
+       },
+       "adoptsFrom": {
+         "name": "Document",
+-        "module": "@cardstack/catalog/crm-app/document"
++        "module": "cardstack://catalog/crm-app/document"
+       },
+       "lastModified": 1770174644,
+       "resourceCreatedAt": 1770174644
+--- ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/index.json
++++ ./realms/localhost_4201/_published/c1adae14-9bd5-4518-a9b4-89571cc3a225/index.json
+@@ -30,7 +30,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "heroSection": {
+--- ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/index.json
++++ ./realms/localhost_4201/_published/fc960848-3621-4ac9-897a-174cdf6c1e1e/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/index.json
++++ ./realms/localhost_4201/_published/bf50ed1b-eedf-4d0f-bead-b8c753c729d4/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/index.json
++++ ./realms/localhost_4201/_published/d291c94e-dd7f-437d-bb76-42e2df6bc5bb/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/HomeLayout/homepage.json
++++ ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/HomeLayout/homepage.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/235909f1-2eda-4b86-b601-cdd4f10b0937/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/e48c3633-060d-4f4a-b11a-68bd8e863077/HomeLayoutCard/c722fbcd-3ffe-4535-ad8f-a25a6cd87265.json
++++ ./realms/localhost_4201/_published/e48c3633-060d-4f4a-b11a-68bd8e863077/HomeLayoutCard/c722fbcd-3ffe-4535-ad8f-a25a6cd87265.json
+@@ -116,7 +116,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     },
+--- ./realms/localhost_4201/_published/e48c3633-060d-4f4a-b11a-68bd8e863077/index.json
++++ ./realms/localhost_4201/_published/e48c3633-060d-4f4a-b11a-68bd8e863077/index.json
+@@ -116,7 +116,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     },
+--- ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/index.json
++++ ./realms/localhost_4201/_published/48f92bba-edb8-461f-a5a9-ba4e05ea500e/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/user/yhomepage/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/yhomepage/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/yhomepage/boxel-ai-website/HomeLayout/homepage.json
++++ ./realms/localhost_4201/user/yhomepage/boxel-ai-website/HomeLayout/homepage.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/yhomepage/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/yhomepage/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/yhomepage/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/yhomepage/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/yhomepage/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/yhomepage/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/yhomepage/index.json
++++ ./realms/localhost_4201/user/yhomepage/index.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/homepage20260219/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/homepage20260219/index.json
++++ ./realms/localhost_4201/user/homepage20260219/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/user/xhomepage/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/xhomepage/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/xhomepage/boxel-ai-website/HomeLayout/homepage.json
++++ ./realms/localhost_4201/user/xhomepage/boxel-ai-website/HomeLayout/homepage.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/xhomepage/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/xhomepage/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/xhomepage/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/xhomepage/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/xhomepage/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/xhomepage/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/xhomepage/index.json
++++ ./realms/localhost_4201/user/xhomepage/index.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/aallen90-hilarious-marmoset/placeholders/SimpleGrid/test-grid.json
++++ ./realms/localhost_4201/user/aallen90-hilarious-marmoset/placeholders/SimpleGrid/test-grid.json
+@@ -40,7 +40,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         },
+         "data": {
+           "type": "card",
+@@ -886,7 +886,7 @@
+         "applicationScenarios": "# Context-Specific Box Element Usage\n\n**Same primitives, different densities.**\n\n## Complex Dashboards\n\n**Goal:** Display hundreds of data points without overwhelming cognition.\n\n**Strategy:**  \n- Use Mini-Cards in masonry grids (irregular heights OK, but snap to 8px grid)\n- Mono font for all metadata—creates scannable rhythm\n- Compact spacing (`0.5rem` gaps between boxes)\n- Corner labels for quick entity identification\n- Color only for status (Teal = selected, Lime = success, Red = error)\n\n**Result:** Information density that feels organized, not chaotic. Think Bloomberg Terminal meets Apple Notes.\n\n## Code/Logic Editors\n\n**Goal:** Make complex logic visually parseable.\n\n**Strategy:**  \n- Dark mode default (reduces eye strain during long sessions)\n- Syntax highlighting using brand colors: Teal for functions, Lime for strings, Purple for keywords\n- Visible 1px borders between code blocks\n- Line numbers in Mono font along left gutter\n- Box Elements for each function/class definition\n\n**Result:** Code becomes modular and visual. New developers can understand structure at a glance.\n\n## Mobile Interfaces\n\n**Goal:** Maintain Box Element logic on small screens.\n\n**Strategy:**  \n- Collapse multi-column grids to single column\n- Maintain 1px borders and `0.625rem` radius (looks great even at phone scale)\n- Full-width Box Elements (edge-to-edge within safe area)\n- Increase tap target size to 44px minimum while keeping visual element compact inside\n- Stackable panels with Splitters for user-controlled density\n\n**Result:** Mobile doesn't feel like a compromised desktop. It feels like a *touch-optimized Box Element system*.\n\n**Scenario truth:** If your design system breaks when you change screen size or use case, it's not a system—it's a collection of one-off solutions. Box Elements scale because their rules scale."
+       },
+       "links": {
+-        "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++        "self": "cardstack://catalog/Theme/boxel-brand-guide"
+       }
+     },
+     {
+--- ./realms/localhost_4201/user/aallen90-hilarious-marmoset/SkillPlus/cde1da56-877f-4379-af85-78db07aaea80.json
++++ ./realms/localhost_4201/user/aallen90-hilarious-marmoset/SkillPlus/cde1da56-877f-4379-af85-78db07aaea80.json
+@@ -20,7 +20,7 @@
+       },
+       "adoptsFrom": {
+         "name": "SkillPlus",
+-        "module": "@cardstack/catalog/skill-plus"
++        "module": "cardstack://catalog/skill-plus"
+       },
+       "lastModified": 1770262809,
+       "resourceCreatedAt": 1770256012
+--- ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/homepage20260224/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/homepage20260224/index.json
++++ ./realms/localhost_4201/user/homepage20260224/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/homepage20260223/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/homepage20260223/index.json
++++ ./realms/localhost_4201/user/homepage20260223/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/homepage20260225/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/homepage20260225/index.json
++++ ./realms/localhost_4201/user/homepage20260225/index.json
+@@ -45,7 +45,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "catalogSection": {
+--- ./realms/localhost_4201/user/steady-loon/Document/642b6134-dd2e-4248-be59-e3e4b1cb77e8.json
++++ ./realms/localhost_4201/user/steady-loon/Document/642b6134-dd2e-4248-be59-e3e4b1cb77e8.json
+@@ -17,7 +17,7 @@
+       },
+       "adoptsFrom": {
+         "name": "Document",
+-        "module": "@cardstack/catalog/crm-app/document"
++        "module": "cardstack://catalog/crm-app/document"
+       },
+       "lastModified": 1770174644,
+       "resourceCreatedAt": 1770174644
+--- ./realms/localhost_4201/user/steady-loon/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/steady-loon/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/steady-loon/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/steady-loon/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/steady-loon/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/steady-loon/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/steady-loon/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/steady-loon/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/steady-loon/index.json
++++ ./realms/localhost_4201/user/steady-loon/index.json
+@@ -30,7 +30,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "heroSection": {
+--- ./realms/localhost_4201/user/ahomepage/boxel-ai-website/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/ahomepage/boxel-ai-website/sections/FooterSection/footer.json
+@@ -42,7 +42,7 @@
+             },
+             {
+               "linkText": "Catalog",
+-              "linkUrl": "@cardstack/catalog/index"
++              "linkUrl": "cardstack://catalog/index"
+             },
+             {
+               "linkText": "Skills",
+--- ./realms/localhost_4201/user/ahomepage/boxel-ai-website/HomeLayout/homepage.json
++++ ./realms/localhost_4201/user/ahomepage/boxel-ai-website/HomeLayout/homepage.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/ahomepage/boxel-ai-website/examples/brand-voice-skill.gts
++++ ./realms/localhost_4201/user/ahomepage/boxel-ai-website/examples/brand-voice-skill.gts
+@@ -1,6 +1,6 @@
+ import { field, containsMany } from '@cardstack/base/card-api';
+ import StringField from '@cardstack/base/string';
+-import { SkillPlus } from '@cardstack/catalog/skill-plus';
++import { SkillPlus } from 'cardstack://catalog/skill-plus';
+ 
+ export class BrandVoiceSkill extends SkillPlus {
+   static displayName = 'Brand Voice Skill';
+--- ./realms/localhost_4201/user/ahomepage/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/ahomepage/boxel-ai-website/DocsLayout/docs-page.json
+@@ -32,7 +32,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/ahomepage/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/ahomepage/boxel-ai-website/Site/boxel-site.json
+@@ -30,12 +30,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/sections/FooterSection/footer.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/sections/FooterSection/footer.json
+@@ -43,7 +43,7 @@
+               "cardTitle": "Pricing"
+             },
+             {
+-              "linkUrl": "@cardstack/catalog/index",
++              "linkUrl": "cardstack://catalog/index",
+               "linkText": "Catalog",
+               "cardTitle": "Catalog"
+             },
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/docs-page.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/docs-page.json
+@@ -24,7 +24,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/product-page.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/product-page.json
+@@ -24,7 +24,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/community-page.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/community-page.json
+@@ -24,7 +24,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/blog-page.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/blog-page.json
+@@ -24,7 +24,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/pricing-page.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Page/pricing-page.json
+@@ -24,7 +24,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/HomeLayout/homepage.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/HomeLayout/homepage.json
+@@ -77,7 +77,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "sections.0.content": {
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Project/web-redesign.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Project/web-redesign.json
+@@ -22,7 +22,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Task/design-review.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Task/design-review.json
+@@ -22,7 +22,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/BrandVoiceSkill/brand-voice.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/BrandVoiceSkill/brand-voice.json
+@@ -27,7 +27,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Report/quarterly-report.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Report/quarterly-report.json
+@@ -21,7 +21,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Invoice/consulting-invoice.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Invoice/consulting-invoice.json
+@@ -22,7 +22,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Invoice/product-invoice.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/examples/Invoice/product-invoice.json
+@@ -22,7 +22,7 @@
+     "relationships": {
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/DocsLayout/docs-page.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/DocsLayout/docs-page.json
+@@ -37,7 +37,7 @@
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }
+--- ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Site/boxel-site.json
++++ ./realms/localhost_4201/user/unacceptable-gopher-82/boxel-ai-website/Site/boxel-site.json
+@@ -28,12 +28,12 @@
+       },
+       "brandGuide": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       },
+       "cardInfo.theme": {
+         "links": {
+-          "self": "@cardstack/catalog/Theme/boxel-brand-guide"
++          "self": "cardstack://catalog/Theme/boxel-brand-guide"
+         }
+       }
+     }

@@ -12,19 +12,18 @@ import {
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
+import OperatorModeStackItem, {
+  type StackItemComponentAPI,
+} from './stack-item';
+
+import type { CardDefOrId } from './stack-item';
 import type {
   CreateCardFn,
   DeleteCardFn,
   EditCardFn,
   SaveCardFn,
   ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-
-import OperatorModeStackItem, {
-  type StackItemComponentAPI,
-} from './stack-item';
-
-import type { CardDefOrId } from './stack-item';
+} from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLElement;

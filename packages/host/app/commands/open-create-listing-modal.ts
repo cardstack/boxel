@@ -3,11 +3,10 @@ import { service } from '@ember/service';
 import { isFieldDef } from '@cardstack/runtime-common';
 import { loadCardDef } from '@cardstack/runtime-common/code-ref';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class OpenCreateListingModalCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateInput

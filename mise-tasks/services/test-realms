@@ -65,5 +65,5 @@ NODE_ENV=test \
   --username='test_realm' \
   --fromUrl="${REALM_TEST_URL}/test/" \
   --toUrl="${REALM_TEST_URL}/test/" \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl="${REALM_BASE_URL}/base/"

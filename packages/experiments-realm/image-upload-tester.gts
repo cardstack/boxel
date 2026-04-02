@@ -3,9 +3,9 @@ import {
   Component,
   contains,
   field,
-} from 'https://cardstack.com/base/card-api';
-import UrlField from 'https://cardstack.com/base/url';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import UrlField from '@cardstack/base/url';
+import StringField from '@cardstack/base/string';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
@@ -13,7 +13,7 @@ import { fn } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import UploadImageCommand from '@cardstack/catalog/commands/upload-image';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
-import RealmField from 'https://cardstack.com/base/realm';
+import RealmField from '@cardstack/base/realm';
 
 class ImageUploadTesterIsolated extends Component<typeof ImageUploadTester> {
   @tracked isUploading = false;

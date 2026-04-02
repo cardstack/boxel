@@ -5,7 +5,7 @@ import {
   isValidCommandDefinition,
 } from '@cardstack/host/lib/command-definitions';
 
-import type * as SkillModule from 'https://cardstack.com/base/skill';
+import type * as SkillModule from '@cardstack/base/skill';
 
 function asCommand(command: unknown): SkillModule.CommandField {
   return command as unknown as SkillModule.CommandField;

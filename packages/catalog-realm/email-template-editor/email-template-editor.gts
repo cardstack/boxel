@@ -4,9 +4,9 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
 import ColorField from '../fields/color'; // ² Color field for customization
 import { tracked } from '@glimmer/tracking';
 import { fn, concat } from '@ember/helper';

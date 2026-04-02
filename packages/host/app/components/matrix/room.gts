@@ -46,6 +46,7 @@ import {
   isCardInstance,
   resolveFileDefCodeRef,
   SupportedMimeType,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   DEFAULT_LLM_LIST,
@@ -75,9 +76,6 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-
 import { errorJsonApiToErrorEntry } from '../../lib/window-error-handler';
 import AiAssistantActionBar from '../ai-assistant/action-bar';
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
@@ -95,6 +93,8 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { RoomSkill } from '../../resources/room';
+import type { CardDef } from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
 import type { MatrixEvent } from 'matrix-js-sdk';
 
 const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
@@ -1486,7 +1486,7 @@ export default class Room extends Component<Signature> {
     bytes: Uint8Array,
   ): Promise<FileDef> {
     let sourceUrl = this.buildLocalSourceUrl(localFile.name);
-    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
+    let fileDefCodeRef = resolveFileDefCodeRef(cardIdToURL(sourceUrl));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

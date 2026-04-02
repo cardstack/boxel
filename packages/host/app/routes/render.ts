@@ -32,9 +32,6 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { serializableError } from '@cardstack/runtime-common/error';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import {
   windowErrorHandler,
   errorJsonApiToErrorEntry,
@@ -61,6 +58,8 @@ import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type RenderErrorStateService from '../services/render-error-state';
 import type RenderStoreService from '../services/render-store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 type RenderStatus = 'loading' | 'ready' | 'error' | 'unusable';
 

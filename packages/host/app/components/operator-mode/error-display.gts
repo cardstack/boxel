@@ -21,10 +21,10 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type ErrorDisplayService from '@cardstack/host/services/error-display';
 import type { DisplayedErrorProvider } from '@cardstack/host/services/error-display';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
-
 import SendErrorToAIAssistant from './send-error-to-ai-assistant';
+
+import type { FileDef } from '@cardstack/base/file-api';
+import type { BoxelErrorForContext } from '@cardstack/base/matrix-event';
 
 interface Signature {
   Element: HTMLElement;

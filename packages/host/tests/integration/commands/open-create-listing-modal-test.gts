@@ -39,8 +39,8 @@ module('Integration | commands | open-create-listing-modal', function (hooks) {
               FieldDef,
               contains,
               field,
-            } from "https://cardstack.com/base/card-api";
-            import StringField from "https://cardstack.com/base/string";
+            } from "@cardstack/base/card-api";
+            import StringField from "@cardstack/base/string";
 
             export class PetName extends FieldDef {
               static displayName = 'Pet Name';

@@ -1,4 +1,4 @@
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 
 import GitBranchIcon from '@cardstack/boxel-icons/git-branch';
 import MessageIcon from '@cardstack/boxel-icons/message';

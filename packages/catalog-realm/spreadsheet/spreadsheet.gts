@@ -4,9 +4,9 @@ import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import TextAreaField from 'https://cardstack.com/base/text-area';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import TextAreaField from '@cardstack/base/text-area';
 import { Button } from '@cardstack/boxel-ui/components';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

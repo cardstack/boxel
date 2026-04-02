@@ -147,7 +147,7 @@ import type {
   FileWatcherEventContent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -4844,7 +4844,7 @@ function isGloballyPublicDependency(resourceUrl: string): boolean {
   ) {
     return true;
   }
-  return baseRealm.inRealm(parsed);
+  return resourceUrl.startsWith(baseRealm.url);
 }
 
 function lastModifiedHeader(

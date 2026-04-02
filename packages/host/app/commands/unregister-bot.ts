@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type RealmServerService from '../services/realm-server';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class UnregisterBotCommand extends HostBaseCommand<
   typeof BaseCommandModule.UnregisterBotInput,

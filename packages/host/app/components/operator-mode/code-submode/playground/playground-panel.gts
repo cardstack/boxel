@@ -28,6 +28,7 @@ import {
   isSpecCard,
   type Permissions,
   PermissionsContextName,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 
 import {
@@ -72,16 +73,6 @@ import type RecentCardsService from '@cardstack/host/services/recent-cards-servi
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type {
-  CardContext,
-  CardDef,
-  FieldDef,
-  Format,
-  ViewCardFn,
-} from 'https://cardstack.com/base/card-api';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { Spec } from 'https://cardstack.com/base/spec';
-
 import PrerenderedCardSearch from '../../../prerendered-card-search';
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
@@ -91,6 +82,16 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
+
+import type {
+  CardContext,
+  CardDef,
+  FieldDef,
+  Format,
+  ViewCardFn,
+} from '@cardstack/base/card-api';
+import type { FileDef } from '@cardstack/base/file-api';
+import type { Spec } from '@cardstack/base/spec';
 
 export type SelectedInstance = {
   card: CardDef | FileDef;
@@ -425,7 +426,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       return undefined;
     }
     try {
-      let cardURL = new URL(selectedCardId);
+      let cardURL = cardIdToURL(selectedCardId);
       return this.realm.realmOfURL(cardURL)?.href;
     } catch {
       return undefined;

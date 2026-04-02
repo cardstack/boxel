@@ -47,8 +47,8 @@ module(
           mockMatrixUtils,
           contents: {
             'person.gts': `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -75,7 +75,7 @@ module(
         fieldName: 'lastName',
         fieldDefinitionType: 'field',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: '@cardstack/base/string',
           name: 'default',
         },
         fieldType: 'contains',
@@ -86,8 +86,8 @@ module(
       assert.strictEqual(
         response,
         `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
@@ -114,7 +114,7 @@ module(
         fieldDefinitionType: 'field',
         fieldType: 'contains',
         fieldRef: {
-          module: 'https://cardstack.com/base/string',
+          module: '@cardstack/base/string',
           name: 'default',
         },
         incomingRelativeTo: undefined,
@@ -134,8 +134,8 @@ module(
       assert.strictEqual(
         response,
         `
-          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringField from "https://cardstack.com/base/string";
+          import { contains, field, Component, CardDef } from "@cardstack/base/card-api";
+          import StringField from "@cardstack/base/string";
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);

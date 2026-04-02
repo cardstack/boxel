@@ -193,7 +193,7 @@ const coreVisitor = {
     let isCardApiFile =
       path.node.loc &&
       'filename' in path.node.loc &&
-      path.node.loc.filename === 'https://cardstack.com/base/card-api';
+      path.node.loc.filename === '@cardstack/base/card-api';
     let decoratorInfo = getNamedImportInfo(path.scope, expression.node.name);
     if (!decoratorInfo && !isCardApiFile) {
       return; // our @field decorator must originate from a named import

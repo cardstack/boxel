@@ -1,6 +1,6 @@
-import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
+import { contains, field, CardDef } from '@cardstack/base/card-api';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
 
 let CHAIN_IDS: Record<string, number> = {
   'Ethereum Mainnet': 1,

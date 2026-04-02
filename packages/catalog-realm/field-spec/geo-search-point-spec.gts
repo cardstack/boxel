@@ -4,12 +4,12 @@ import {
   SpecReadmeSection,
   ExamplesWithInteractive,
   SpecModuleSection,
-} from 'https://cardstack.com/base/spec';
+} from '@cardstack/base/spec';
 import {
   field,
   contains,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import GeoSearchPointField from '../fields/geo-search-point';
 import CodeSnippet from '../components/code-snippet';
 

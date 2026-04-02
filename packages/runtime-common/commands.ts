@@ -3,8 +3,8 @@ import {
   isCardDef,
   codeRefWithAbsoluteURL,
 } from './code-ref';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { CardDefConstructor } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDefConstructor } from '@cardstack/base/card-api';
 import type { AttributesSchema, CardSchema } from './helpers/ai';
 import { generateJsonSchemaForCardType } from './helpers/ai';
 import { simpleHash } from './utils';

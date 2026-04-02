@@ -4,12 +4,12 @@ import {
   Component,
   CardDef,
   StringField,
-} from 'https://cardstack.com/base/card-api';
-import { commandData } from 'https://cardstack.com/base/resources/command-data';
+} from '@cardstack/base/card-api';
+import { commandData } from '@cardstack/base/resources/command-data';
 import {
   SearchCardsResult,
   SearchCardsByTypeAndTitleInput,
-} from 'https://cardstack.com/base/commands/search-card-result';
+} from '@cardstack/base/commands/search-card-result';
 import { SearchCardsByTypeAndTitleCommand } from '@cardstack/boxel-host/commands/search-cards';
 
 export class SimpleSearchCard extends CardDef {

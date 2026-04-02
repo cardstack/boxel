@@ -4,12 +4,12 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { loadCardDef } from '@cardstack/runtime-common';
+import { loadCardDef, cardIdToURL } from '@cardstack/runtime-common';
 
 import type { Type } from '@cardstack/host/services/card-type-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 interface Args {
   named: {
@@ -64,7 +64,7 @@ export class InheritanceChainResource extends Resource<Args> {
 
         let superCard = await loadCardDef(cardType.codeRef, {
           loader: this.loaderService.loader,
-          relativeTo: new URL(url),
+          relativeTo: cardIdToURL(url),
         });
 
         cardInheritanceChain.push({

@@ -8,7 +8,7 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import { CardContext } from '@cardstack/base/card-api';
 import { task } from 'ember-concurrency';
 
 interface ChooseRealmActionSignature {

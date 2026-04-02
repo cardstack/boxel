@@ -5,16 +5,16 @@ import {
   identifyCard,
   internalKeyFor,
   isCardErrorJSONAPI,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
-
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type PlaygroundPanelService from '../services/playground-panel-service';
 import type StoreService from '../services/store';
+import type { CardDef, Format } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class ShowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.ShowCardInput,
@@ -71,7 +71,7 @@ export default class ShowCardCommand extends HostBaseCommand<
         operatorModeStateService.state.codeSelection !== cardDefRef.name
       ) {
         await operatorModeStateService.updateCodePath(
-          new URL(cardDefRef.module + '.gts'),
+          cardIdToURL(cardDefRef.module + '.gts'),
           'preview',
         );
       }

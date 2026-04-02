@@ -7,11 +7,11 @@ import {
   identifyCard,
   internalKeyFor,
   baseRealm,
+  cardIdToURL,
   moduleFrom,
   getAncestor,
   SupportedMimeType,
   isResolvedCodeRef,
-  cardIdToURL,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -19,16 +19,11 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type {
-  BaseDef,
-  Field,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type ResetService from '../services/reset';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { BaseDef, Field, FieldType } from '@cardstack/base/card-api';
 
 export type CodeRefType = CodeRef & {
   displayName: string;

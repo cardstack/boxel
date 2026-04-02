@@ -25,10 +25,10 @@ module('Integration | commands | apply-search-replace-block', function (hooks) {
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
+import NumberField from '@cardstack/base/number';
 
 export class Task extends CardDef {
   static displayName = 'Task';
@@ -38,10 +38,10 @@ export class Task extends CardDef {
   @field priority = contains(NumberField);
 }`;
     const codeBlock = `${SEARCH_MARKER}
-import NumberField from 'https://cardstack.com/base/number';
+import NumberField from '@cardstack/base/number';
 ${SEPARATOR_MARKER}
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
 ${REPLACE_MARKER}`;
 
     let result = await applyCommand.execute({
@@ -54,11 +54,11 @@ ${REPLACE_MARKER}`;
   field,
   CardDef,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import DateTimeField from 'https://cardstack.com/base/datetime';
-import NumberField from 'https://cardstack.com/base/number';
-import BooleanField from 'https://cardstack.com/base/boolean';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import DateTimeField from '@cardstack/base/datetime';
+import NumberField from '@cardstack/base/number';
+import BooleanField from '@cardstack/base/boolean';
 
 export class Task extends CardDef {
   static displayName = 'Task';

@@ -10,8 +10,6 @@ import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instan
 
 import type CommandService from '@cardstack/host/services/command-service';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   setupIntegrationTestRealm,
@@ -35,6 +33,8 @@ import {
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 module('Integration | commands | patch-instance', function (hooks) {
   setupRenderingTest(hooks);

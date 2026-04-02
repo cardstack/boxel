@@ -1,8 +1,10 @@
-import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
+import type { CardOrModuleRef } from './card-reference-resolver';
 import type { RealmPermissions } from './index';
 
-export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+export const baseRealm: { url: CardOrModuleRef } = {
+  url: '@cardstack/base/',
+};
 
 export const devSkillLocalPath = 'Skill/boxel-development';
 export const envSkillLocalPath = 'Skill/boxel-environment';

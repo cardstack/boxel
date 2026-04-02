@@ -36,7 +36,7 @@ NODE_ENV=test \
   \
   --fromUrl="${REALM_TEST_URL}/test/" \
   --toUrl="${REALM_TEST_URL}/test/" \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl="${REALM_BASE_URL}/base/" \
   --fromUrl='@cardstack/skills/' \
   --toUrl="${REALM_BASE_URL}/skills/"

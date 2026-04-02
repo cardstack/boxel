@@ -6,13 +6,13 @@
       "cardDescription": "A welcome card with onboarding content and lesson cards",
       "specType": "card",
       "ref": {
-        "module": "https://cardstack.com/base/welcome-to-boxel",
+        "module": "@cardstack/base/welcome-to-boxel",
         "name": "WelcomeToBoxel"
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

@@ -12,8 +12,6 @@ import {
 } from '@cardstack/runtime-common';
 import * as CodeRefSerializer from '@cardstack/runtime-common/serializers/code-ref';
 
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
 import {
   testRealmURL,
   setupCardLogs,
@@ -24,6 +22,8 @@ import {
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
+
+import type * as CardAPI from '@cardstack/base/card-api';
 
 module('code-ref', function (hooks) {
   setupRenderingTest(hooks);
@@ -42,16 +42,16 @@ module('code-ref', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': `
-          import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
-          import StringField from 'https://cardstack.com/base/string';
+          import { contains, field, CardDef } from '@cardstack/base/card-api';
+          import StringField from '@cardstack/base/string';
           export class Person extends CardDef {
             static displayName = 'Person';
             @field firstName = contains(StringField);
           }
         `,
           'code-ref-test.ts': `
-          import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-          import CodeRefField from 'https://cardstack.com/base/code-ref';
+          import { contains, field, Component, CardDef } from '@cardstack/base/card-api';
+          import CodeRefField from '@cardstack/base/code-ref';
 
           export class TestCard extends CardDef {
             @field ref = contains(CodeRefField);
@@ -84,9 +84,7 @@ module('code-ref', function (hooks) {
         meta: { adoptsFrom: ref },
       },
     };
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let person = await api.createFromSerialized<any>(doc.data, doc, undefined);
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
@@ -104,9 +102,7 @@ module('code-ref', function (hooks) {
         meta: { adoptsFrom },
       },
     };
-    let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api',
-    );
+    let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let testCard = await api.createFromSerialized<any>(
       doc.data,
       doc,

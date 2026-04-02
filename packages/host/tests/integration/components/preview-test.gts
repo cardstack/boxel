@@ -10,14 +10,14 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
-
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-let string: typeof import('https://cardstack.com/base/string');
+import type { Format } from '@cardstack/base/card-api';
+
+let cardApi: typeof import('@cardstack/base/card-api');
+let string: typeof import('@cardstack/base/string');
 
 class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);

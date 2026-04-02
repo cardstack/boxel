@@ -7,8 +7,8 @@ import {
   field,
   contains,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { Command } from '@cardstack/runtime-common';
 
 class ExportAlbumInput extends CardDef {

@@ -31,7 +31,7 @@ https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/replicate/v1/models/{ow
 **CRITICAL:** Enum `value` must exactly match API spec:
 
 ```gts
-import enumField from 'https://cardstack.com/base/enum';
+import enumField from '@cardstack/base/enum';
 
 const SizeField = enumField(StringField, {
   options: [

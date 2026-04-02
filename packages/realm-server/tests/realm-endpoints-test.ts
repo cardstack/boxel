@@ -16,6 +16,7 @@ import {
 import type { Realm } from '@cardstack/runtime-common';
 import {
   baseRealm,
+  registerCardReferencePrefix,
   CachingDefinitionLookup,
   SupportedMimeType,
   type LooseSingleCardDocument,
@@ -60,7 +61,7 @@ import type {
   RealmEvent,
   RealmEventContent,
   UpdateRealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 
@@ -729,7 +730,7 @@ module(basename(__filename), function () {
         field,
         Component,
         FieldDef,
-      } from 'https://cardstack.com/base/card-api';
+      } from '@cardstack/base/card-api';
       import { Country } from './country';
 
       export class TranspileTestField extends FieldDef {
@@ -1764,14 +1765,18 @@ module(basename(__filename), function () {
           virtualNetwork,
           testCreatePrerenderAuth,
         );
-        virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+        registerCardReferencePrefix(baseRealm.url, localBaseRealmURL.href);
+        virtualNetwork.addImportMap(
+          baseRealm.url,
+          (rest) => new URL(rest, localBaseRealmURL).href,
+        );
 
         ({ realm: base } = await createRealm({
           definitionLookup,
           withWorker: true,
           prerenderer,
           dir: basePath,
-          realmURL: baseRealm.url,
+          realmURL: localBaseRealmURL.href,
           virtualNetwork,
           publisher,
           runner,

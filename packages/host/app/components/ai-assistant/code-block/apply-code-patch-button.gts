@@ -7,9 +7,9 @@ import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-
 import ApplyButton from '../../ai-assistant/apply-button';
+
+import type { CodePatchStatus } from '@cardstack/base/matrix-event';
 
 export interface ApplyCodePatchButtonSignature {
   Args: {

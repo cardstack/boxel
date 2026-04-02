@@ -3,13 +3,13 @@ import {
   linksToMany,
   field,
   CardDef,
-} from 'https://cardstack.com/base/card-api';
-import { FileDef } from 'https://cardstack.com/base/file-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 
 const fileSearchQuery = {
   filter: {
-    type: { module: 'https://cardstack.com/base/file-api', name: 'FileDef' },
+    type: { module: '@cardstack/base/file-api', name: 'FileDef' },
   },
   realm: '$thisRealm',
 };

@@ -39,8 +39,8 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     await testRealm.write(
       'dependencies-card.gts',
       `
-        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
         export class ResourceIndexCard extends CardDef {
           @field title = contains(StringField);
         }
@@ -67,7 +67,7 @@ module(`realm-endpoints/${basename(__filename)}`, function (hooks) {
     assert.false(entry.attributes.hasError);
     assert.true(
       entry.attributes.dependencies.includes(
-        'https://cardstack.com/base/card-api',
+        '@cardstack/base/card-api',
       ),
       'includes consumed card-api module dependency',
     );

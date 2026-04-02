@@ -8,6 +8,7 @@ import type {
 import {
   type ResolvedCodeRef,
   RealmPaths,
+  logger,
   join,
   planModuleInstall,
   planInstanceInstall,
@@ -16,8 +17,8 @@ import {
   isCardInstance,
   isSingleCardDocument,
   type Relationship,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
-import { logger } from '@cardstack/runtime-common';
 import type {
   AtomicOperation,
   AtomicOperationResult,
@@ -25,14 +26,13 @@ import type {
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type { CardDef } from '@cardstack/base/card-api';
+import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 const log = logger('catalog:install');
@@ -107,7 +107,7 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let sourceOperations = await Promise.all(
       plan.modulesToInstall.map(async (moduleMeta: CopyModuleMeta) => {
         let { sourceModule, targetModule } = moduleMeta;
-        let res = await this.cardService.getSource(new URL(sourceModule));
+        let res = await this.cardService.getSource(cardIdToURL(sourceModule));
         let moduleResource: ModuleResource = {
           type: 'source',
           attributes: { content: res.content },

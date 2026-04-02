@@ -31,8 +31,6 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCards from '@cardstack/host/services/recent-cards-service';
 
-import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
-
 import { SORT_OPTIONS, type SortOption } from './constants';
 import SearchBar from './search-bar';
 import SearchContent from './search-content';
@@ -42,6 +40,8 @@ import {
   getFilterTypeRefs,
   shouldSkipSearchQuery,
 } from './utils';
+
+import type { CardContext, CardDef } from '@cardstack/base/card-api';
 
 import type { WithBoundArgs } from '@glint/template';
 

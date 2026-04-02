@@ -6,7 +6,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
   RealmServerEvent,
-} from 'https://cardstack.com/base/matrix-event';
+} from '@cardstack/base/matrix-event';
 import type { MatrixClient } from 'matrix-js-sdk';
 import type { IRoomEvent } from 'matrix-js-sdk';
 
@@ -24,7 +24,7 @@ import {
 } from '../matrix-constants';
 
 import { downloadFile } from './matrix-utils';
-import type { SerializedFileDef } from 'https://cardstack.com/base/file-api';
+import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { HistoryConstructionError } from './types';
 
 function getLog() {

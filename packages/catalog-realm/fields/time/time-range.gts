@@ -3,7 +3,7 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import ClockIcon from '@cardstack/boxel-icons/clock';
 import TimeField from '../time';
 

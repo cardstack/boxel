@@ -1,8 +1,8 @@
 import { Command } from '@cardstack/runtime-common';
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import MarkdownField from '@cardstack/base/markdown';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import { PrCard } from '../pr-card/pr-card';
 

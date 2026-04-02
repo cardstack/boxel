@@ -6,11 +6,11 @@ import {
   contains,
   containsMany,
   Component,
-} from 'https://cardstack.com/base/card-api'; // ¹ Core imports
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import TextAreaField from 'https://cardstack.com/base/text-area';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api'; // ¹ Core imports
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import TextAreaField from '@cardstack/base/text-area';
+import MarkdownField from '@cardstack/base/markdown';
 import { Button } from '@cardstack/boxel-ui/components'; // ² UI components
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';

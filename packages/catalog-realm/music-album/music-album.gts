@@ -3,10 +3,10 @@ import {
   contains,
   linksToMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import UrlField from '@cardstack/base/url';
 import { and, gt } from '@cardstack/boxel-ui/helpers';
 
 import { SongCard } from '../song/song';

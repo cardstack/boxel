@@ -2,8 +2,6 @@ import { service } from '@ember/service';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../../lib/host-base-command';
 
 import UseAiAssistantCommand from '../ai-assistant';
@@ -12,6 +10,7 @@ import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
 import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class CreateListingPRRequestCommand extends HostBaseCommand<

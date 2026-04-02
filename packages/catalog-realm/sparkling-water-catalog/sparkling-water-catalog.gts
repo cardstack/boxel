@@ -4,12 +4,12 @@ import {
   contains,
   linksToMany,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import ColorField from 'https://cardstack.com/base/color';
+import StringField from '@cardstack/base/string';
+import NumberField from '@cardstack/base/number';
+import MarkdownField from '@cardstack/base/markdown';
+import ColorField from '@cardstack/base/color';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn, concat, array } from '@ember/helper';

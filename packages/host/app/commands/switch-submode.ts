@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import { Submodes } from '../components/submode-switcher';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -10,6 +8,7 @@ import WriteTextFileCommand from './write-text-file';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type StoreService from '../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput,

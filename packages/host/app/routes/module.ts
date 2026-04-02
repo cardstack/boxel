@@ -30,6 +30,7 @@ import {
   getFieldDefinitions,
   CardError,
   unixTime,
+  cardIdToURL,
   type RenderRouteOptions,
 } from '@cardstack/runtime-common';
 import {
@@ -37,9 +38,6 @@ import {
   isCardErrorJSONAPI,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
-
-import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
 import { registerBoxelTransitionTo } from '../utils/register-boxel-transition';
@@ -53,6 +51,8 @@ import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RenderStoreService from '../services/render-store';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardDef, BaseDef } from '@cardstack/base/card-api';
 
 export type Model = {
   id: string;
@@ -192,7 +192,7 @@ export async function buildModuleModel(
   context: ModuleModelContext,
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
-  let moduleURL = trimExecutableExtension(new URL(id));
+  let moduleURL = trimExecutableExtension(cardIdToURL(id));
   registerBoxelTransitionTo(context.router);
 
   if (parsedOptions.clearCache) {
@@ -282,7 +282,7 @@ export async function buildModuleModel(
         let consumes = (
           await context.loaderService.loader.getConsumedModules(id)
         ).filter((u) => u !== id);
-        deps = consumes.map((d) => trimExecutableExtension(new URL(d)).href);
+        deps = consumes.map((d) => trimExecutableExtension(cardIdToURL(d)).href);
         let lastModifiedRFC7321 = response.headers.get('last-modified');
         let createdAtRFC7321 = response.headers.get('x-created');
         if (!lastModifiedRFC7321) {
@@ -386,7 +386,7 @@ async function makeDefinition(
     return {
       type: 'definition',
       definition,
-      moduleURL: trimExecutableExtension(new URL(url)).href,
+      moduleURL: trimExecutableExtension(cardIdToURL(url)).href,
       types: typesMaybeError.types.map(({ refURL }) => refURL),
     };
   } catch (err: any) {

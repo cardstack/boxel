@@ -13,12 +13,11 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-
 import type { createAuthErrorGuard } from './auth-error-guard';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
+import type { BaseDef } from '@cardstack/base/card-api';
 
 export type FileDefExport = {
   extractAttributes: (

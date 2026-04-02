@@ -2,9 +2,8 @@ import type Owner from '@ember/owner';
 import Service from '@ember/service';
 import { service } from '@ember/service';
 
-import type { BoxelErrorForContext } from 'https://cardstack.com/base/matrix-event';
-
 import type ResetService from './reset';
+import type { BoxelErrorForContext } from '@cardstack/base/matrix-event';
 
 export interface DisplayedErrorProvider {
   getError: () => BoxelErrorForContext;

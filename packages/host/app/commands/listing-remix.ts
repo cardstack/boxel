@@ -7,8 +7,6 @@ import {
 } from '@cardstack/runtime-common';
 import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
@@ -21,6 +19,7 @@ import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmServerService from '../services/realm-server';
+import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Listing } from '@cardstack/catalog/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<

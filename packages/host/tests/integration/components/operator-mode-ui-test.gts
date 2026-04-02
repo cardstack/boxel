@@ -95,8 +95,8 @@ module('Integration | operator-mode | ui', function (hooks) {
     await ctx.testRealm.write(
       'file-link-card.gts',
       `
-        import { CardDef, Component, field, contains, linksTo, StringField } from 'https://cardstack.com/base/card-api';
-        import { FileDef } from 'https://cardstack.com/base/file-api';
+        import { CardDef, Component, field, contains, linksTo, StringField } from '@cardstack/base/card-api';
+        import { FileDef } from '@cardstack/base/file-api';
 
         export class FileLinkCard extends CardDef {
           static displayName = 'File Link Card';

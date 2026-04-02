@@ -41,7 +41,7 @@ NODE_NO_WARNINGS=1 \
   --path='/persistent/base' \
   --username='base_realm' \
   --distURL='https://boxel-host.boxel.ai' \
-  --fromUrl='https://cardstack.com/base/' \
+  --fromUrl='@cardstack/base/' \
   --toUrl='https://app.boxel.ai/base/' \
   \
   --path='/persistent/catalog' \

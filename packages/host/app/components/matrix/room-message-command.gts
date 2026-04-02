@@ -36,12 +36,11 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import CodeBlock from '../ai-assistant/code-block';
 import CardRenderer from '../card-renderer';
 
 import type { ApplyButtonState } from '../ai-assistant/apply-button';
+import type { CardDef } from '@cardstack/base/card-api';
 
 interface Signature {
   Element: HTMLDivElement;

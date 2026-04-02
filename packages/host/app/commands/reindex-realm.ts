@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type RealmService from '../services/realm';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class ReindexRealmCommand extends HostBaseCommand<
   typeof BaseCommandModule.RealmUrlCard,

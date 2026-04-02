@@ -1,5 +1,5 @@
-import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import UseAiAssistantCommand from '@cardstack/boxel-host/commands/ai-assistant';
 import SetActiveLLMCommand from '@cardstack/boxel-host/commands/set-active-llm';
 import { Command, DEFAULT_CODING_LLM } from '@cardstack/runtime-common';

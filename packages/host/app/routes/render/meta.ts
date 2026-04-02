@@ -22,11 +22,10 @@ import {
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
-
 import { friendlyCardType } from '../../utils/render-error';
 
 import type { Model as ParentModel } from '../render';
+import type { BaseDef, CardDef } from '@cardstack/base/card-api';
 
 export type Model = PrerenderMeta | RenderError | undefined;
 

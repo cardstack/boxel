@@ -1,12 +1,12 @@
 import MapIcon from '@cardstack/boxel-icons/map';
 
-import StringField from 'https://cardstack.com/base/string';
+import StringField from '@cardstack/base/string';
 import {
   CardDef,
   contains,
   field,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 import GeoPointField from '../fields/geo-point';
 import { MapRender } from '../components/map-render';

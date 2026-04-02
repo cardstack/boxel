@@ -112,8 +112,8 @@ const SAMPLE_PREVIOUS_ACTIONS: AgentAction[] = [
     type: 'create_file',
     path: 'sticky-note.gts',
     content:
-      'import { contains, field, CardDef } from "https://cardstack.com/base/card-api";\n' +
-      'import StringField from "https://cardstack.com/base/string";\n\n' +
+      'import { contains, field, CardDef } from "@cardstack/base/card-api";\n' +
+      'import StringField from "@cardstack/base/string";\n\n' +
       'export class StickyNote extends CardDef {\n' +
       '  @field title = contains(StringField);\n' +
       '}',

@@ -2,11 +2,10 @@ import { service } from '@ember/service';
 
 import { SupportedMimeType } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import type NetworkService from '../services/network';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class ReadSourceCommand extends HostBaseCommand<
   typeof BaseCommandModule.ReadSourceInput,

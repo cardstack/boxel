@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 
-import type { RealmMetaField } from 'https://cardstack.com/base/command';
+import type { RealmMetaField } from '@cardstack/base/command';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { Pill } from '@cardstack/boxel-ui/components';

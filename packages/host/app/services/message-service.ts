@@ -2,10 +2,9 @@ import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import type NetworkService from './network';
 import type ResetService from './reset';
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export default class MessageService extends Service {
   @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =

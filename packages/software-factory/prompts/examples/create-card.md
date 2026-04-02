@@ -17,7 +17,7 @@ Ticket: "Create a StickyNote card with title and body fields"
     "type": "create_file",
     "path": "sticky-note.gts",
     "realm": "target",
-    "content": "import { contains, field, CardDef, Component } from 'https://cardstack.com/base/card-api';\nimport StringField from 'https://cardstack.com/base/string';\nimport MarkdownField from 'https://cardstack.com/base/markdown';\n\nexport class StickyNote extends CardDef {\n  static displayName = 'Sticky Note';\n  @field title = contains(StringField);\n  @field body = contains(MarkdownField);\n\n  static fitted = class Fitted extends Component<typeof StickyNote> {\n    <template>\n      <div class='sticky-note'>\n        <h3>{{@model.title}}</h3>\n        <p>{{@model.body}}</p>\n      </div>\n      <style scoped>\n        .sticky-note { padding: 1rem; background: #fef3c7; border-radius: 8px; }\n        h3 { margin: 0 0 0.5rem; }\n      </style>\n    </template>\n  };\n}\n"
+    "content": "import { contains, field, CardDef, Component } from '@cardstack/base/card-api';\nimport StringField from '@cardstack/base/string';\nimport MarkdownField from '@cardstack/base/markdown';\n\nexport class StickyNote extends CardDef {\n  static displayName = 'Sticky Note';\n  @field title = contains(StringField);\n  @field body = contains(MarkdownField);\n\n  static fitted = class Fitted extends Component<typeof StickyNote> {\n    <template>\n      <div class='sticky-note'>\n        <h3>{{@model.title}}</h3>\n        <p>{{@model.body}}</p>\n      </div>\n      <style scoped>\n        .sticky-note { padding: 1rem; background: #fef3c7; border-radius: 8px; }\n        h3 { margin: 0 0 0.5rem; }\n      </style>\n    </template>\n  };\n}\n"
   },
   {
     "type": "create_file",

@@ -5,6 +5,7 @@ import {
   isCardError,
   type RenderError,
   trimExecutableExtension,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   CardError,
@@ -12,7 +13,7 @@ import {
   serializableError,
 } from '@cardstack/runtime-common/error';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export interface RenderErrorContext {
   cardId?: string;
@@ -388,11 +389,11 @@ export function stripSelfDeps(
       return undefined;
     }
     try {
-      return trimExecutableExtension(new URL(value)).href;
+      return trimExecutableExtension(cardIdToURL(value)).href;
     } catch (_e) {
       if (moduleURL) {
         try {
-          return trimExecutableExtension(new URL(value, moduleURL)).href;
+          return trimExecutableExtension(new URL(cardIdToURL(value).href, moduleURL)).href;
         } catch (_e2) {
           return value;
         }
@@ -435,7 +436,7 @@ export async function deriveCardTypeFromDoc(
   }
   let cardDef = await loadCardDef(adoptsFrom, {
     loader,
-    relativeTo: new URL(cardURL),
+    relativeTo: cardIdToURL(cardURL),
   });
   return friendlyCardType(cardDef as typeof CardDef);
 }

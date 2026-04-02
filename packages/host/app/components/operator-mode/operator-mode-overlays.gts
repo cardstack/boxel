@@ -40,12 +40,6 @@ import {
   getMenuItems,
 } from '@cardstack/runtime-common';
 
-import type {
-  CardCrudFunctions,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api';
-
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
 import { removeFileExtension } from '../card-search/utils';
@@ -57,6 +51,11 @@ import type { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 import type { CardDefOrId } from './stack-item';
 import type StoreService from '../../services/store';
+import type {
+  CardCrudFunctions,
+  CardDef,
+  Format,
+} from '@cardstack/base/card-api';
 
 export default class OperatorModeOverlays extends Overlays {
   overlayClassName = 'actions-overlay';

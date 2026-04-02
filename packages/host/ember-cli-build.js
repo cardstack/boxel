@@ -77,7 +77,7 @@ module.exports = function (defaults) {
             new GlimmerScopedCSSWebpackPlugin(),
             new MonacoWebpackPlugin(),
             new webpack.IgnorePlugin({
-              resourceRegExp: /^https:\/\/cardstack\.com\/base/,
+              resourceRegExp: /^@cardstack\/(base|catalog|skills|openrouter)\//,
             }),
             new MomentLocalesPlugin({
               // 'en' is built into moment and cannot be removed. This strips the others.

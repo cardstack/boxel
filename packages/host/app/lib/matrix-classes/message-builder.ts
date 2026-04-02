@@ -38,8 +38,15 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CommandStatus } from 'https://cardstack.com/base/command';
-import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import { Message } from './message';
+
+import MessageCodePatchResult from './message-code-patch-result';
+
+import MessageCommand from './message-command';
+
+import type { RoomMember } from './member';
+import type { CommandStatus } from '@cardstack/base/command';
+import type { SerializedFile } from '@cardstack/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
@@ -48,14 +55,8 @@ import type {
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
-} from 'https://cardstack.com/base/matrix-event';
-import type { Skill } from 'https://cardstack.com/base/skill';
-
-import { Message } from './message';
-import MessageCodePatchResult from './message-code-patch-result';
-import MessageCommand from './message-command';
-
-import type { RoomMember } from './member';
+} from '@cardstack/base/matrix-event';
+import type { Skill } from '@cardstack/base/skill';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',

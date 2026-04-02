@@ -28,8 +28,6 @@ import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
 
-import type { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-
 import {
   p,
   cleanWhiteSpace,
@@ -74,6 +72,7 @@ import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { Captain } from '../../cards/captain';
+import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
 let loader: Loader;
 

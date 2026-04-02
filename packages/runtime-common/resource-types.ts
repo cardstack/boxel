@@ -1,6 +1,6 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
-import { resolveCardReference } from './card-reference-resolver';
+import { resolveCardReference, type CardOrModuleRef } from './card-reference-resolver';
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
@@ -98,7 +98,7 @@ export type LooseLinkableResource<T extends LinkableResource> = Omit<
   'id' | 'type'
 > & {
   type?: T['type'];
-  id?: string;
+  id?: CardOrModuleRef;
 };
 
 export type LooseCardResource = LooseLinkableResource<CardResource>;
@@ -106,7 +106,7 @@ export type LooseFileMetaResource = LooseLinkableResource<FileMetaResource>;
 
 //prerendered cards
 export interface PrerenderedCardResource {
-  id: string;
+  id: CardOrModuleRef;
   type: 'prerendered-card';
   attributes: {
     html: string;

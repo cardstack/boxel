@@ -1,4 +1,4 @@
-import BooleanField from 'https://cardstack.com/base/boolean';
+import BooleanField from '@cardstack/base/boolean';
 import {
   CardDef,
   field,
@@ -6,9 +6,9 @@ import {
   containsMany,
   Component,
   FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
 
 export class PhotoItem extends FieldDef {
   static displayName = 'Photo';

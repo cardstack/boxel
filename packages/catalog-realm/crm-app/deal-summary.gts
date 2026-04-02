@@ -10,7 +10,7 @@ import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CalculatorIcon from '@cardstack/boxel-icons/calculator';
 import NumbersIcon from '@cardstack/boxel-icons/numbers';
 import ChartCovariateIcon from '@cardstack/boxel-icons/chart-covariate';
-import { type CardContext } from 'https://cardstack.com/base/card-api';
+import { type CardContext } from '@cardstack/base/card-api';
 
 interface Signature {
   Args: {

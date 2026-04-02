@@ -3,9 +3,9 @@ import {
   Component,
   field,
   contains,
-} from 'https://cardstack.com/base/card-api';
-import DateField from 'https://cardstack.com/base/date';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import DateField from '@cardstack/base/date';
+import StringField from '@cardstack/base/string';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { action } from '@ember/object';
 import { not } from '@cardstack/boxel-ui/helpers';

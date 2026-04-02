@@ -13,7 +13,7 @@ export {
 
 import ENV from '@cardstack/host/config/environment';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from '@cardstack/base/card-api';
 
 export function stripFileExtension(path: string): string {
   return path.replace(/\.[^/.]+$/, '');

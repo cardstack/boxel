@@ -1,7 +1,5 @@
 import { service } from '@ember/service';
 
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import CreateAiAssistantRoomCommand from './create-ai-assistant-room';
@@ -10,6 +8,7 @@ import SendAiAssistantMessageCommand from './send-ai-assistant-message';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class AskAiCommand extends HostBaseCommand<
   typeof BaseCommandModule.AskAiInput,
