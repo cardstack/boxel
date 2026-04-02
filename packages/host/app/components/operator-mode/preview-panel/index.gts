@@ -186,7 +186,11 @@ export default class PreviewPanel extends Component<Signature> {
       return undefined;
     }
     let entries = this.cardTracker.filter(
-      [{ fieldType: 'linksTo' }, { fieldType: 'linksToMany' }],
+      [
+        { format: 'data' },
+        { fieldType: 'linksTo' },
+        { fieldType: 'linksToMany' },
+      ],
       'or',
       // the only linksTo field with isolated format is in the index card,
       // we don't want to show overlays for those cards here

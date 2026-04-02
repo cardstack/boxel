@@ -1,4 +1,10 @@
-import { visit, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  triggerEvent,
+  visit,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -326,6 +332,25 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       .exists('block card reference renders in embedded format');
     assert.dom('[data-test-pet-embedded]').hasText('Jackie');
     assert
+      .dom(
+        '[data-boxel-bfm-inline-ref] [data-test-field-component-card].display-container-false',
+      )
+      .exists(
+        'inline card reference renders without the shared card container',
+      );
+    assert
+      .dom(
+        '[data-boxel-bfm-block-ref] [data-test-field-component-card].display-container-false',
+      )
+      .exists('block card reference renders without the shared card container');
+    assert.strictEqual(
+      getComputedStyle(
+        document.querySelector('[data-boxel-bfm-block-ref]') as HTMLElement,
+      ).borderTopWidth,
+      '0px',
+      'block card wrapper does not add its own border',
+    );
+    assert
       .dom('[data-boxel-bfm-block-ref]')
       .doesNotIncludeText(
         `${testRealmURL}Pet/jackie`,
@@ -347,5 +372,90 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         'https://nonexistent.example/Card/missing',
         'unresolvable reference shows URL as fallback text',
       );
+  });
+
+  test('code mode shows overlays for markdown card references and clicking navigates', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}bfm-test.md`,
+    });
+
+    await waitFor('[data-test-markdown-bfm-inline-card]', { timeout: 10000 });
+    await waitFor('[data-test-markdown-bfm-block-card]', { timeout: 10000 });
+    await waitFor('[data-test-card-url-bar-input]');
+
+    let urlInput = document.querySelector(
+      '[data-test-card-url-bar-input]',
+    ) as HTMLInputElement | null;
+    let startingValue = urlInput?.value ?? '';
+
+    await triggerEvent('[data-test-markdown-bfm-block-card]', 'mouseenter');
+    assert
+      .dom('[data-test-card-overlay]')
+      .exists(
+        'block markdown card reference gets a hover overlay in code mode',
+      );
+
+    await triggerEvent('[data-test-markdown-bfm-inline-card]', 'mouseenter');
+    assert
+      .dom('[data-test-card-overlay]')
+      .exists(
+        'inline markdown card reference gets a hover overlay in code mode',
+      );
+
+    await click('[data-test-markdown-bfm-inline-card]');
+
+    await waitUntil(() => {
+      let currentValue =
+        (
+          document.querySelector(
+            '[data-test-card-url-bar-input]',
+          ) as HTMLInputElement | null
+        )?.value ?? '';
+      return currentValue !== startingValue;
+    });
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+  });
+
+  test('interact mode shows overlays for markdown card references and clicking navigates', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}bfm-test.md`,
+            type: 'file',
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await waitFor('[data-test-markdown-bfm-inline-card]', { timeout: 10000 });
+    await waitFor('[data-test-markdown-bfm-block-card]', { timeout: 10000 });
+
+    await triggerEvent('[data-test-markdown-bfm-inline-card]', 'mouseenter');
+    assert
+      .dom(`[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+      .exists(
+        'inline markdown card reference gets an action overlay in interact mode',
+      );
+
+    await triggerEvent('[data-test-markdown-bfm-block-card]', 'mouseenter');
+    assert
+      .dom(`[data-test-overlay-card="${testRealmURL}Pet/jackie"]`)
+      .exists(
+        'block markdown card reference gets an action overlay in interact mode',
+      );
+
+    await click('[data-test-markdown-bfm-block-card]');
+
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Pet/jackie"] [data-test-card-format="isolated"]`,
+      )
+      .exists('clicking a block markdown card reference opens the target card');
   });
 });
