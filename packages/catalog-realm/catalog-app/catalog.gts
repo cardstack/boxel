@@ -108,6 +108,7 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         on: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./listing/listing', import.meta.url).href,
           name:
             this.activeTabId === 'showcase'
@@ -128,6 +129,7 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./listing/category', import.meta.url).href,
           name: 'Category',
         },
@@ -269,6 +271,7 @@ class Isolated extends Component<typeof Catalog> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./listing/tag', import.meta.url).href,
           name: 'Tag',
         },

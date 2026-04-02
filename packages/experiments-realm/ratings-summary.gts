@@ -205,7 +205,7 @@ export class RatingsSummary extends FieldDef {
     <template>
       {{#if @model.average}}
         <span class='rating-summary'>
-          <StarIcon class='icon' @type='full' width='10' height='10' />
+          <StarIcon class='icon' @type='full' style='width: 10px; height: 10px;' />
           <span class='rating'><@fields.average /></span>
         </span>
       {{/if}}

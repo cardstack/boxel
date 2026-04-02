@@ -6,11 +6,7 @@
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
-    "lib": [
-      "es2022",
-      "dom",
-      "dom.iterable"
-    ],
+    "lib": ["es2022", "dom", "dom.iterable"],
     "noImplicitAny": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
@@ -29,14 +25,9 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": [
-        "../base/*"
-      ]
+      "https://cardstack.com/base/*": ["../base/*"]
     },
-    "types": [
-      "@cardstack/local-types",
-      "node"
-    ]
+    "types": ["@cardstack/local-types", "node"]
   },
   "include": [
     "../base/types/**/*.d.ts",
@@ -47,8 +38,5 @@
     "./playwright.global-setup.ts",
     "./playwright.global-teardown.ts"
   ],
-  "exclude": [
-    "./test-fixtures/**",
-    "./realm/**/*"
-  ]
+  "exclude": ["./test-fixtures/**", "./realm/**/*"]
 }
