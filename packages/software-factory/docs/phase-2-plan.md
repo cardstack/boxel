@@ -12,10 +12,12 @@ The factory loop iterates over **issues in the project**, one at a time. Each is
 
 1. Select the next unblocked issue (based on ordering / dependency rules)
 2. Hand it to the agent
-3. Wait for the agent to signal done or blocked
-4. Repeat
+3. Wait for the agent to exit
+4. Read updated issue state and repeat
 
-This makes the loop generic. It doesn't need to know whether an issue is "implement a card", "write tests", "create the project spec", or "break down the brief into tickets". The agent reads the issue, does the work, and updates the issue status.
+The agent always exits the same way — the orchestrator reads the issue's updated status/tags to decide what happened. If the agent tagged the issue as blocked (e.g., needs human clarification), the orchestrator skips it and moves on. If the issue is marked done, the orchestrator advances. This keeps the agent's exit path uniform — it doesn't need a separate "blocked" signal in its return type, it just updates the issue and exits.
+
+This makes the loop generic. It doesn't need to know whether an issue is "implement a card", "write tests", "create the project spec", or "break down the brief into tickets". The agent reads the issue, does the work, updates the issue status, and exits.
 
 ## Issue Ordering and Dependencies
 
@@ -76,7 +78,7 @@ This is the "quirk" where an issue's job is to create the project itself. But it
 
 ### Benefits
 
-- The LLM can ask clarifying questions during bootstrap (via blocked/clarification signals on the seed issue)
+- The LLM can ask clarifying questions during bootstrap (by tagging the seed issue as blocked)
 - Task breakdown quality improves because the LLM sees the full brief context and can make judgment calls
 - The bootstrap process is testable with the same MockFactoryAgent pattern used for implementation issues
 - Resume works naturally — if the factory crashes during bootstrap, the seed issue is still `in_progress` and gets picked up on restart
@@ -88,18 +90,14 @@ The phase 2 orchestrator becomes much thinner:
 ```
 while (hasUnblockedIssues()) {
   let issue = pickNextIssue();
-  let result = await agent.run(contextForIssue(issue), tools);
-
-  if (result.status === 'done') {
-    markIssueDone(issue);
-  } else if (result.status === 'blocked') {
-    markIssueBlocked(issue, result.message);
-  }
-  // needs_iteration → agent gets another turn on the same issue
+  await agent.run(contextForIssue(issue), tools);
+  // Agent updates issue status/tags directly, then exits.
+  // Orchestrator reads the issue state to decide what happened.
+  refreshIssueState(issue);
 }
 ```
 
-All domain logic (what to implement, how to test, when to create sub-issues) lives in the agent's prompt and skills, not in the orchestrator code.
+The agent signals completion by updating the issue — tagging it as blocked, marking it done, etc. The orchestrator doesn't inspect a return value for status; it reads the issue state from the realm after the agent exits. All domain logic (what to implement, how to test, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills, not in the orchestrator code.
 
 ## Issue Lifecycle
 
@@ -109,7 +107,7 @@ created → ready → in_progress → done
                 → failed (max retries exceeded)
 ```
 
-The orchestrator manages transitions. The agent signals intent via `AgentRunResult.status`. The orchestrator owns the actual state writes to the realm.
+The agent manages its own transitions by updating the issue directly (e.g., tagging as blocked, marking done). The orchestrator reads the issue state after the agent exits to decide what to do next — it does not inspect the agent's return value for status.
 
 ## Migration Path from Phase 1
 
@@ -121,7 +119,7 @@ Phase 1 and phase 2 can coexist:
 4. `ContextBuilder` gains an issue-aware mode that builds context from the current issue rather than a fixed ticket
 5. The `TestRunner` callback becomes a tool the agent can call, rather than a loop phase
 
-The `FactoryTool[]` and `AgentRunResult` types from phase 1 carry forward unchanged.
+The `FactoryTool[]` type from phase 1 carries forward unchanged. `AgentRunResult` may be simplified — in phase 2 the agent signals completion by updating the issue (tagging as blocked, marking done), so the orchestrator reads issue state rather than inspecting a return status. The agent just needs to exit; the orchestrator figures out what happened from the issue.
 
 ## Open Questions
 
