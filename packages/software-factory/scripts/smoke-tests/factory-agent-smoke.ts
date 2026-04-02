@@ -2,7 +2,7 @@
  * Smoke test for the FactoryAgent → OpenRouter round-trip.
  *
  * Usage:
- *   pnpm factory:agent-smoke --realm-server-url <url> [--model <model>]
+ *   pnpm smoke:agent --realm-server-url <url> [--model <model>]
  *
  * Prerequisites:
  *
@@ -15,7 +15,7 @@
  *      a. OPENROUTER_API_KEY env var (simplest for local dev / CI):
  *         Calls OpenRouter directly, bypassing the realm server proxy.
  *
- *           OPENROUTER_API_KEY=sk-or-... pnpm factory:agent-smoke --realm-server-url <url>
+ *           OPENROUTER_API_KEY=sk-or-... pnpm smoke:agent --realm-server-url <url>
  *
  *      b. Realm server proxy_endpoints table (production path):
  *         The factory goes through _request-forward, which reads the key from
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   let realmServerUrl = values['realm-server-url'];
   if (!realmServerUrl) {
     console.error(
-      'Usage: pnpm factory:agent-smoke --realm-server-url <url> [--model <model>]',
+      'Usage: pnpm smoke:agent --realm-server-url <url> [--model <model>]',
     );
     process.exit(1);
   }

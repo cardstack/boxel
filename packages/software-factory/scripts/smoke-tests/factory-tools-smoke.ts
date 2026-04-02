@@ -6,7 +6,7 @@
  * entirely in-process.
  *
  * Usage:
- *   pnpm factory:tools-smoke
+ *   pnpm smoke:tools
  */
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';

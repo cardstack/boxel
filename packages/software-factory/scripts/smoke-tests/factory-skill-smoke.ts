@@ -4,9 +4,9 @@
  * No servers, no API keys — runs entirely against local skill files on disk.
  *
  * Usage:
- *   pnpm factory:skill-smoke
- *   pnpm factory:skill-smoke --max-tokens 8000
- *   pnpm factory:skill-smoke --ticket-text "Create a .gts component with styling"
+ *   pnpm smoke:skill
+ *   pnpm smoke:skill --max-tokens 8000
+ *   pnpm smoke:skill --ticket-text "Create a .gts component with styling"
  */
 
 import { parseArgs } from 'node:util';

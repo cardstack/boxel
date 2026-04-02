@@ -5,11 +5,11 @@
  * No API keys, realm server, or network access required.
  *
  * Usage:
- *   pnpm factory:prompt-smoke
- *   pnpm factory:prompt-smoke -- --stage implement
- *   pnpm factory:prompt-smoke -- --stage iterate
- *   pnpm factory:prompt-smoke -- --stage test
- *   pnpm factory:prompt-smoke -- --stage all        (default)
+ *   pnpm smoke:prompt
+ *   pnpm smoke:prompt -- --stage implement
+ *   pnpm smoke:prompt -- --stage iterate
+ *   pnpm smoke:prompt -- --stage test
+ *   pnpm smoke:prompt -- --stage all        (default)
  */
 
 import { parseArgs } from 'node:util';

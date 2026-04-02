@@ -5,8 +5,8 @@
  * using real skill files from disk and the real SkillResolver/SkillLoader.
  *
  * Usage:
- *   pnpm factory:context-smoke
- *   pnpm factory:context-smoke --max-tokens 8000
+ *   pnpm smoke:context
+ *   pnpm smoke:context --max-tokens 8000
  */
 
 import { parseArgs } from 'node:util';

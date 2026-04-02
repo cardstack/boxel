@@ -5,8 +5,8 @@
  * collaborators to verify the loop state machine works end-to-end.
  *
  * Usage:
- *   pnpm factory:loop-smoke
- *   pnpm factory:loop-smoke --max-iterations 3
+ *   pnpm smoke:loop
+ *   pnpm smoke:loop --max-iterations 3
  */
 
 import { parseArgs } from 'node:util';
