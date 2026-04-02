@@ -18,7 +18,7 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "es2022",
+    "module": "node16",
     "strict": true,
     "experimentalDecorators": true,
     "paths": {

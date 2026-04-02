@@ -6,7 +6,7 @@
       "dom"
     ],
     "allowJs": true,
-    "module": "CommonJS",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,

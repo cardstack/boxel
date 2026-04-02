@@ -9,7 +9,7 @@
     "experimentalDecorators": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "module": "es2022",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "noEmit": true,
     "noEmitOnError": false,
