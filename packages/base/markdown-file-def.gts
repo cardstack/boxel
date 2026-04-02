@@ -1,11 +1,17 @@
-import { byteStreamToUint8Array } from '@cardstack/runtime-common';
+import {
+  byteStreamToUint8Array,
+  extractCardReferenceUrls,
+} from '@cardstack/runtime-common';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import {
   BaseDefComponent,
+  CardDef,
   Component,
   StringField,
   contains,
+  containsMany,
   field,
+  linksToMany,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import {
@@ -125,7 +131,11 @@ class Isolated extends Component<typeof MarkdownDef> {
   <template>
     <article class='markdown-isolated' data-test-markdown-isolated>
       {{#if this.hasContent}}
-        <MarkdownTemplate @content={{this.content}} />
+        <MarkdownTemplate
+          @content={{this.content}}
+          @linkedCards={{@model.linkedCards}}
+          @cardReferenceBaseUrl={{@model.id}}
+        />
       {{else}}
         <header class='markdown-isolated__title'>{{this.title}}</header>
       {{/if}}
@@ -183,7 +193,11 @@ class Embedded extends Component<typeof MarkdownDef> {
         <header class='markdown-embedded__title'>{{this.title}}</header>
       {{/unless}}
       <div class='markdown-embedded__content'>
-        <MarkdownTemplate @content={{this.content}} />
+        <MarkdownTemplate
+          @content={{this.content}}
+          @linkedCards={{@model.linkedCards}}
+          @cardReferenceBaseUrl={{@model.id}}
+        />
       </div>
     </article>
     <style scoped>
@@ -429,6 +443,23 @@ export class MarkdownDef extends FileDef {
   @field title = contains(StringField);
   @field excerpt = contains(StringField);
   @field content = contains(StringField);
+
+  @field cardReferenceUrls = containsMany(StringField, {
+    computeVia: function (this: MarkdownDef) {
+      if (!this.content) {
+        return [];
+      }
+      return extractCardReferenceUrls(this.content, this.id ?? '');
+    },
+  });
+
+  @field linkedCards = linksToMany(CardDef, {
+    query: {
+      filter: {
+        in: { id: '$this.cardReferenceUrls' },
+      },
+    },
+  });
 
   static isolated: BaseDefComponent = Isolated;
   static embedded: BaseDefComponent = Embedded;
