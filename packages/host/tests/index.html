@@ -8,9 +8,9 @@
 
     {{content-for "head"}} {{content-for "test-head"}}
 
-    <link rel="stylesheet" href="{{rootURL}}assets/vendor.css" />
-    <link rel="stylesheet" href="{{rootURL}}assets/@cardstack/host.css" />
-    <link rel="stylesheet" href="{{rootURL}}assets/test-support.css" />
+    <link rel="stylesheet" href="/@embroider/virtual/vendor.css" />
+    <link rel="stylesheet" href="/@embroider/virtual/app.css" />
+    <link rel="stylesheet" href="/@embroider/virtual/test-support.css" />
 
     {{content-for "head-footer"}} {{content-for "test-head-footer"}}
   </head>
@@ -35,16 +35,30 @@
       };
     </script>
 
-    <script type="module">
-      import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
-      globalThis.ContentTagGlobal = ContentTag;
+    <script>
+      globalThis.process = {
+        env: {},
+        cwd() {
+          return '';
+        },
+      };
+      globalThis.global = globalThis;
     </script>
-    <script src="/testem.js" integrity="" data-embroider-ignore></script>
-    <script src="{{rootURL}}assets/vendor.js"></script>
-    <script src="{{rootURL}}assets/test-support.js"></script>
-    <script src="{{rootURL}}assets/@cardstack/host.js"></script>
-    <script src="{{rootURL}}assets/tests.js"></script>
 
-    {{content-for "body-footer"}} {{content-for "test-body-footer"}}
+    <script src="/testem.js" integrity="" data-embroider-ignore></script>
+    <script src="/@embroider/virtual/vendor.js"></script>
+    <script src="/@embroider/virtual/test-support.js"></script>
+
+    <script type="module">
+      import 'ember-testing';
+    </script>
+    <script type="module">
+      import { start } from './test-helper';
+      let availableModules = import.meta.glob('./**/*-test.{js,ts,gjs,gts}');
+
+      start({ availableModules });
+    </script>
+
+    {{content-for "body-footer"}}
   </body>
 </html>

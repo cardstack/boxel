@@ -18,6 +18,7 @@ import { removeFieldPlugin } from './remove-field-plugin';
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import isEqual from 'lodash/isEqual';
+import * as ContentTag from 'content-tag';
 
 import {
   baseRealm,
@@ -347,7 +348,7 @@ export function gjsToPlaceholderJS(
   let placeholder = params?.placeholder ?? 'templatePlaceholder';
   let output = [];
   let offset = 0;
-  let matches = new ContentTagGlobal.Preprocessor().parse(src);
+  let matches = new ContentTag.Preprocessor().parse(src);
   const srcArray = Array.from(src); // to be multi-byte character safe, we need to slice on a string converted to an array
   for (let match of matches) {
     output.push(srcArray.slice(offset, match.range.startChar).join(''));

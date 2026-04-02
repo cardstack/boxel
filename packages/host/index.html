@@ -2,17 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <title>Boxel</title>
     <meta name="description" content="" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     {{content-for "head"}}
 
-    <link integrity="" rel="stylesheet" href="{{rootURL}}assets/vendor.css" />
-    <link
-      integrity=""
-      rel="stylesheet"
-      href="{{rootURL}}assets/@cardstack/host.css"
-    />
+    <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
+    <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
+    <link href="/boxel-favicon.png" rel="icon" type="image/x-icon" />
+    <link href="/boxel-webclip.png" rel="apple-touch-icon" />
     <style>
       /* Allow prerendered cards to scroll while card-specific CSS loads */
       #boxel-isolated-start + .boxel-card-container {
@@ -29,10 +28,8 @@
     {{content-for "head-footer"}}
 
     <meta data-boxel-head-start />
-    <title>Boxel</title>
     <meta data-boxel-head-end />
   </head>
-
   <body>
     <script type="x/boundary" id="boxel-isolated-start"></script>
     <script type="x/boundary" id="boxel-isolated-end"></script>
@@ -42,23 +39,24 @@
     <div id="ember-basic-dropdown-wormhole"></div>
     {{content-for "body"}}
 
-   <script>
-    globalThis.process = {
-      env: {},
-      version: '',
-      cwd() {
-        return '/';
-      },
-    };
-  </script>
-  <script type="module">
-    import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
-    globalThis.ContentTagGlobal = ContentTag;
-  </script>
-  <script src="{{rootURL}}assets/vendor.js"></script>
-  <script src="{{rootURL}}assets/@cardstack/host.js"></script>
+    <script>
+      globalThis.process = {
+        env: {},
+        cwd() {
+          return '';
+        },
+      };
+      globalThis.global = globalThis;
+    </script>
 
-  {{content-for "body-footer"}}
-</body>
+    <script src="/@embroider/virtual/vendor.js"></script>
+    <script type="module">
+      import Application from './app/app';
+      import environment from './app/config/environment';
 
+      Application.create(environment.APP);
+    </script>
+
+    {{content-for "body-footer"}}
+  </body>
 </html>

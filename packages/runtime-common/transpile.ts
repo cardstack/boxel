@@ -14,7 +14,11 @@ import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 
 //@ts-ignore no upstream types
 import decoratorTransforms from 'decorator-transforms';
-import { compiler } from './etc';
+
+//@ts-ignore no upstream types
+import * as compiler from 'ember-source/ember-template-compiler/index.js';
+
+import * as ContentTag from 'content-tag';
 
 const scopedCSSTransform = generateScopedCSSPlugin({
   noGlobal: true,
@@ -30,7 +34,7 @@ export async function transpileJS(
     return '';
   }
 
-  const processor = new ContentTagGlobal.Preprocessor();
+  const processor = new ContentTag.Preprocessor();
   content = processor.process(content, {
     filename: debugFilename,
     inline_source_map: true,

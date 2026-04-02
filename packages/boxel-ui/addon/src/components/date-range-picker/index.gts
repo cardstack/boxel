@@ -1,4 +1,5 @@
 import 'ember-power-calendar/styles';
+import 'ember-power-calendar/styles';
 
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';

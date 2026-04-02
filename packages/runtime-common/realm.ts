@@ -126,7 +126,6 @@ import {
 } from './matrix-client';
 import { PACKAGES_FAKE_ORIGIN } from './package-shim-handler';
 
-import { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import RealmPermissionChecker from './realm-permission-checker';
 import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 
@@ -261,6 +260,12 @@ type ModuleLoadResult =
       headers: Record<string, string>;
     };
 
+// If we change anything in the transpilation toolchain in an incompatible way,
+// we need to bump this number. Otherwise browsers will keep caching files that
+// were transpiled the old way, so long as the source files have constant
+// last-modified time.
+const transpilerToolchainVersion = 'v2';
+
 function buildEtag(
   lastModified: number | undefined,
   variant?: string,
@@ -268,7 +273,7 @@ function buildEtag(
   if (lastModified == null) {
     return undefined;
   }
-  let base = String(lastModified);
+  let base = transpilerToolchainVersion + ':' + String(lastModified);
   return variant ? `${base}:${variant}` : base;
 }
 
@@ -2217,13 +2222,13 @@ export class Realm {
         );
       }
     } catch (e: any) {
-      if (e instanceof TokenExpiredError) {
+      if (e?.constructor?.name === 'TokenExpiredError') {
         this.#log.warn(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}, expired at ${e.expiredAt}`,
         );
         throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);
       }
-      if (e instanceof JsonWebTokenError) {
+      if (e?.constructor?.name === 'JsonWebTokenError') {
         this.#log.warn(
           `JWT verification failed for ${request.method} ${request.url} (accept: ${request.headers.get('accept')}) with token string ${tokenString}. ${e.message}`,
         );

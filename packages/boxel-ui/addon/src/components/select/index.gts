@@ -1,4 +1,5 @@
 import 'ember-power-select/styles';
+import 'ember-power-select/styles';
 
 import Check from '@cardstack/boxel-icons/check';
 import { eq } from '@cardstack/boxel-ui/helpers';

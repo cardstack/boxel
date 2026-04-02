@@ -735,13 +735,10 @@ export class RealmServer {
       },
     );
 
-    indexHTML = indexHTML
-      .replace(/(src|href)="\//g, `$1="${this.assetsURL.href}`)
-      // This is imported within a script tag vs being in an attribute
-      .replace(
-        '/assets/content-tag/standalone.js',
-        new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
-      );
+    indexHTML = indexHTML.replace(
+      /(src|href)="\//g,
+      `$1="${this.assetsURL.href}`,
+    );
 
     // Strip any static favicon/apple-touch-icon links from the base HTML
     // since these are now dynamically injected between the head markers

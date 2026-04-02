@@ -719,14 +719,21 @@ export class Loader {
       throw new Error(`bug: should never get here`);
     }
 
-    let dependencyList: UnregisteredDep[];
-    let implementation: Function;
+    type DefineFunc = ((
+      mid: string,
+      depList: string[],
+      impl: Function,
+    ) => void) & {
+      dependencyList: UnregisteredDep[];
+      implementation: Function;
+    };
 
-    // this local is here for the evals to see
-    // @ts-ignore
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    let define = (_mid: string, depList: string[], impl: Function) => {
-      dependencyList = depList.map((depId) => {
+    // this local is here for the evals to see. We're sticking the
+    // dependencyList and implementation onto the function itself because that's
+    // a convenient way to ensure that build tools like Rollup don't optimize it
+    // away. Rollup violates the JS spec by removing a local that's visible to `eval`.
+    let define = ((_mid: string, depList: string[], impl: Function) => {
+      define.dependencyList = depList.map((depId) => {
         if (depId === 'exports') {
           return { type: 'exports' };
         } else if (depId === '__import_meta__') {
@@ -741,8 +748,8 @@ export class Loader {
           };
         }
       });
-      implementation = impl;
-    };
+      define.implementation = impl;
+    }) as DefineFunc;
 
     try {
       eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
@@ -758,8 +765,8 @@ export class Loader {
 
     let registeredModule: RegisteredModule = {
       state: 'registered',
-      dependencyList: dependencyList!,
-      implementation: implementation!,
+      dependencyList: define.dependencyList,
+      implementation: define.implementation,
     };
 
     this.setModule(moduleIdentifier, registeredModule);

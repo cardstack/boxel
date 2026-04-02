@@ -33,7 +33,7 @@
       "@cardstack/openrouter/*": ["../openrouter-realm/*"],
       "*": ["types/*"]
     },
-    "types": ["@cardstack/local-types"]
+    "types": ["@cardstack/local-types", "@embroider/core/types/virtual"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

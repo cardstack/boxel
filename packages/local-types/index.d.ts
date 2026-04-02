@@ -1,20 +1,6 @@
 import 'ember-source/types';
 import * as ContentTag from 'content-tag';
 
-declare global {
-  // Make ContentTagGlobal a property of globalThis
-  interface Window {
-    ContentTagGlobal: typeof ContentTag;
-  }
-
-  interface globalThis {
-    ContentTagGlobal: typeof ContentTag;
-  }
-
-  // For Node.js environments
-  let ContentTagGlobal: typeof ContentTag;
-}
-
 import { TemplateFactory } from 'htmlbars-inline-precompile';
 import '@glint/environment-ember-loose/registry';
 import '@glint/environment-ember-loose/native-integration';
@@ -27,7 +13,8 @@ import type EmberContextTemplateRegistry from 'ember-provide-consume-context/tem
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry
-    extends EmberContextTemplateRegistry,
+    extends
+      EmberContextTemplateRegistry,
       EmberAnimatedRegistry /* other addon registries */ {
     // local entries
   }
