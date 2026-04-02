@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
-    "@glint/ember-tsc": "1.5.0",
+    "@glint/ember-tsc": "catalog:",
     "concurrently": "catalog:",
     "sql-parser-cst": "catalog:"
   },

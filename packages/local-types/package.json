@@ -5,7 +5,7 @@
   "devDependencies": {
     "content-tag": "catalog:",
     "ember-source": "catalog:",
-    "@glint/template": "1.7.7",
+    "@glint/template": "catalog:",
     "ember-provide-consume-context": "^0.7.0"
   }
 }

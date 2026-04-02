@@ -39,7 +39,7 @@
     "@ember/test-waiters": "catalog:",
     "@embroider/addon-shim": "^1.8.9",
     "@floating-ui/dom": "catalog:",
-    "@glint/template": "1.7.7",
+    "@glint/template": "catalog:",
     "awesome-phonenumber": "catalog:",
     "classnames": "catalog:",
     "countries-list": "catalog:",
@@ -104,7 +104,7 @@
     "rollup": "catalog:",
     "rollup-plugin-copy": "catalog:",
     "svgo": "catalog:",
-    "@glint/ember-tsc": "1.5.0"
+    "@glint/ember-tsc": "catalog:"
   },
   "peerDependencies": {
     "ember-source": "catalog:",

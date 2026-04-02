@@ -59,7 +59,7 @@
     "@floating-ui/dom": "catalog:",
     "@glimmer/component": "catalog:",
     "@glimmer/tracking": "^1.1.2",
-    "@glint/template": "1.7.7",
+    "@glint/template": "catalog:",
     "@percy/cli": "catalog:",
     "@percy/ember": "catalog:",
     "@simple-dom/interface": "catalog:",
@@ -188,7 +188,7 @@
     "uuid": "catalog:",
     "wait-for-localhost-cli": "catalog:",
     "webpack": "catalog:",
-    "@glint/ember-tsc": "1.5.0"
+    "@glint/ember-tsc": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",

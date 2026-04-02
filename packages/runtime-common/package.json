@@ -17,7 +17,7 @@
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@eslint/js": "catalog:",
-    "@glint/template": "1.7.7",
+    "@glint/template": "catalog:",
     "@lukeed/uuid": "catalog:",
     "@types/babel__core": "catalog:",
     "@types/babel__generator": "catalog:",
@@ -82,7 +82,7 @@
     "ember-cli-htmlbars": "^6.3.0",
     "monaco-editor": "catalog:",
     "statuses": "catalog:",
-    "@glint/ember-tsc": "1.5.0"
+    "@glint/ember-tsc": "catalog:"
   },
   "peerDependencies": {
     "@babel/core": "catalog:",

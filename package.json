@@ -84,7 +84,7 @@
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "typescript": "catalog:",
-    "@glint/ember-tsc": "1.5.0"
+    "@glint/ember-tsc": "catalog:"
   },
   "engines": {
     "pnpm": "^10"

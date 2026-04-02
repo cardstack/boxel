@@ -262,7 +262,7 @@
     "@babel/preset-typescript": "catalog:",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@glint/template": "1.7.7",
+    "@glint/template": "catalog:",
     "@types/node": "catalog:",
     "@types/vscode": "^1.73.0",
     "@typescript-eslint/eslint-plugin": "catalog:",
@@ -272,6 +272,6 @@
     "esbuild": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:",
-    "@glint/ember-tsc": "1.5.0"
+    "@glint/ember-tsc": "catalog:"
   }
 }
