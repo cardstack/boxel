@@ -137,6 +137,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
+                  @pickerDestination='card-catalog-picker-wormhole'
                 />
               </:header>
               <:content>
@@ -177,6 +178,10 @@ export default class CardCatalogModal extends Component<Signature> {
                 </div>
               </:footer>
             </ModalContainer>
+            <div
+              id='card-catalog-picker-wormhole'
+              data-test-card-catalog-picker-wormhole
+            ></div>
           </SearchPanel>
         {{/each}}
       {{/if}}
@@ -229,7 +234,7 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   get focusTrapAdditionalElements() {
-    const el = document.getElementById('ember-basic-dropdown-wormhole');
+    const el = document.getElementById('card-catalog-picker-wormhole');
     return el ? [el] : [];
   }
 
