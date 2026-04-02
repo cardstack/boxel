@@ -30,6 +30,7 @@
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
+    "@cardstack/local-types": "workspace:*",
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "catalog:",
     "@ember/test-helpers": "catalog:",

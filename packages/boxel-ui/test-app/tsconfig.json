@@ -31,6 +31,10 @@
       ]
     },
     "skipLibCheck": true,
+    "types": [
+      "@cardstack/local-types",
+      "@types/node"
+    ],
     "strictNullChecks": true,
     "strictPropertyInitialization": true,
     "target": "es2020",
