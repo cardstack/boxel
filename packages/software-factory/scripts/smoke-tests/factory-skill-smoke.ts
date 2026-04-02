@@ -47,7 +47,8 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
     },
   },
   {
-    label: 'Realm sync work (triggers CLI skills)',
+    label:
+      'Realm sync work (CLI skills excluded — no boxel-cli tools in registry)',
     ticket: {
       id: 'Tickets/sync-work',
       title: 'Sync and restore workspace',
