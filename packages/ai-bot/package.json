@@ -38,7 +38,7 @@
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:glint": "ember-tsc --noEmit",
+    "lint:types": "ember-tsc --noEmit",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
     "get-chat": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/get_chat.ts"

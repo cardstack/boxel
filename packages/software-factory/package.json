@@ -22,7 +22,7 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:format": "prettier --check .",
     "lint:format:fix": "prettier --write .",
-    "lint:glint": "ember-tsc --noEmit",
+    "lint:types": "ember-tsc --noEmit",
     "serve:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/serve-realm.ts",
     "serve:support": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/serve-support.ts",
     "smoke:realm": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/smoke-realm.ts",

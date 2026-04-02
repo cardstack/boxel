@@ -131,7 +131,7 @@
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:glint": "ember-tsc --noEmit",
+    "lint:types": "ember-tsc --noEmit",
     "full-reset": "./scripts/full-reset.sh",
     "full-reindex": "./scripts/full-reindex.sh",
     "clear-modules-cache": "NODE_NO_WARNINGS=1 PGDATABASE=${PGDATABASE:-boxel} PGPORT=${PGPORT:-5435} ts-node --transpileOnly scripts/clear-modules-cache.ts",

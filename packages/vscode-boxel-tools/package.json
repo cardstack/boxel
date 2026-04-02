@@ -252,7 +252,7 @@
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:glint": "ember-tsc --noEmit",
+    "lint:types": "ember-tsc --noEmit",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {

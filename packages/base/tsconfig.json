@@ -23,10 +23,10 @@
     "experimentalDecorators": true,
     "paths": {
       "@cardstack/boxel-ui": [
-        "../boxel-ui/addon"
+        "../boxel-ui/addon/declarations"
       ],
       "@cardstack/boxel-ui/*": [
-        "../boxel-ui/addon/*"
+        "../boxel-ui/addon/declarations/*"
       ],
       "@cardstack/boxel-host/commands/*": [
         "../host/app/commands/*"
