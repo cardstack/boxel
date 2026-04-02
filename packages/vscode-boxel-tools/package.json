@@ -252,7 +252,7 @@
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:glint": "glint",
+    "lint:glint": "ember-tsc --noEmit",
     "watch": "node esbuild.mjs --watch"
   },
   "dependencies": {
@@ -262,10 +262,7 @@
     "@babel/preset-typescript": "catalog:",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@glint/core": "^1.3.0",
-    "@glint/environment-ember-loose": "catalog:",
-    "@glint/environment-ember-template-imports": "^1.3.0",
-    "@glint/template": "^1.3.0",
+    "@glint/template": "1.7.7",
     "@types/node": "catalog:",
     "@types/vscode": "^1.73.0",
     "@typescript-eslint/eslint-plugin": "catalog:",
@@ -274,6 +271,7 @@
     "concurrently": "catalog:",
     "esbuild": "catalog:",
     "eslint": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@glint/ember-tsc": "1.5.0"
   }
 }

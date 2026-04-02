@@ -16,22 +16,9 @@ declare global {
 }
 
 import { TemplateFactory } from 'htmlbars-inline-precompile';
-import '@glint/environment-ember-loose/registry';
-import '@glint/environment-ember-loose/native-integration';
+import '@glint/ember-tsc/types';
 import { ComponentLike } from '@glint/template';
-import 'ember-freestyle/glint';
 import './eslint-js';
-
-import type EmberAnimatedRegistry from 'ember-animated/template-registry';
-import type EmberContextTemplateRegistry from 'ember-provide-consume-context/template-registry';
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry
-    extends EmberContextTemplateRegistry,
-      EmberAnimatedRegistry /* other addon registries */ {
-    // local entries
-  }
-}
 
 // Types for compiled templates
 declare module '@cardstack/host/templates/*' {

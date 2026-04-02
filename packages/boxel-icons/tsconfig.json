@@ -26,14 +26,22 @@
     "target": "es2020",
     "traceResolution": false,
     "paths": {
-      "*": ["./src/types/*"],
-      "@cardstack/boxel-icons": ["./src"],
-      "@cardstack/boxel-icons/*": ["./src/*"]
+      "*": [
+        "./src/types/*"
+      ],
+      "@cardstack/boxel-icons": [
+        "./src"
+      ],
+      "@cardstack/boxel-icons/*": [
+        "./src/*"
+      ]
     },
-    "typeRoots": ["./src/types"]
+    "typeRoots": [
+      "./src/types"
+    ]
   },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  },
-  "include": ["src/**/*", "unpublished-development-types/**/*"]
+  "include": [
+    "src/**/*",
+    "unpublished-development-types/**/*"
+  ]
 }
