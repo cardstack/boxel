@@ -170,7 +170,7 @@ export default class Directory extends Component<Args> {
       }
 
       .file-tree-context-menu {
-        z-index: 1000;
+        z-index: var(--boxel-layer-floating-button);
       }
 
       .directory {
