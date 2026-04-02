@@ -17,7 +17,6 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { Listing } from './catalog-app/listing/listing';
 import { PrCard } from './pr-card/pr-card';
-import { FileContentField } from './submission-card/submission-card';
 import type { GithubEventCard } from './github-event/github-event';
 
 import {
@@ -81,20 +80,9 @@ const STEP_DEFINITIONS = [
 
 // ── Helper: resolve live workflow state ──
 
-function submissionStatusLabel(submissionStatus: string | null): string | undefined {
-  switch (submissionStatus) {
-    case 'preparing-submission': return 'Preparing submission files...';
-    case 'creating-pr': return 'Creating pull request on GitHub...';
-    case 'creating-pr-card': return 'Creating PR tracking card...';
-    case 'error': return 'An error occurred';
-    default: return undefined;
-  }
-}
-
 function resolveSubmissionWorkflowState(
   hasListing: boolean,
   hasPr: boolean,
-  submissionStatus: string | null,
   prActionLabel: string | null,
   ciAllPassed: boolean,
   ciHasFailure: boolean,
@@ -105,11 +93,6 @@ function resolveSubmissionWorkflowState(
 ): WorkflowState {
   let steps: ResolvedStep[] = [];
   let firstIncomplete = -1;
-
-  let isSubmissionInProgress = submissionStatus != null &&
-    submissionStatus !== 'ready' &&
-    submissionStatus !== 'error';
-  let isSubmissionError = submissionStatus === 'error';
 
   for (let i = 0; i < STEP_DEFINITIONS.length; i++) {
     let def = STEP_DEFINITIONS[i];
@@ -124,14 +107,6 @@ function resolveSubmissionWorkflowState(
         break;
       case 'create-pr':
         completed = hasPr;
-        if (!completed && hasListing && isSubmissionInProgress) {
-          inProgress = true;
-          statusDetail = submissionStatusLabel(submissionStatus);
-        }
-        if (!completed && isSubmissionError) {
-          blocked = true;
-          statusDetail = 'An error occurred during PR creation';
-        }
         break;
       case 'ci-checks':
         completed = hasPr && ciAllPassed;
@@ -238,8 +213,6 @@ export class SubmissionParticipantField extends FieldDef {
 
 // ── Main Card ──
 
-export { FileContentField };
-
 export class SubmissionWorkflowCard extends CardDef {
   static displayName = 'Submission Workflow';
   static prefersWideFormat = true;
@@ -248,15 +221,9 @@ export class SubmissionWorkflowCard extends CardDef {
   @field title = contains(StringField);
   @field submittedBy = contains(StringField);
 
-  // ── Submission status: tracks where we are in the async PR creation process ──
-  // Values: 'preparing-submission' | 'creating-pr' | 'creating-pr-card' | 'ready' | 'error'
-  @field submissionStatus = contains(StringField);
-  @field submissionError = contains(StringField);
-
-  // ── Submission data (absorbed from SubmissionCard) ──
+  // ── Submission data ──
   @field roomId = contains(StringField);
   @field branchName = contains(StringField);
-  @field allFileContents = containsMany(FileContentField);
 
   // ── Links to real cards ──
   @field listing = linksTo(() => Listing);
@@ -284,25 +251,25 @@ export class SubmissionWorkflowCard extends CardDef {
       return buildGithubEventCardRef(import.meta.url);
     }
 
-    get prNumber() {
-      return this.args.model.prCard?.prNumber ?? null;
+    get prBranchName() {
+      return this.args.model.prCard?.branchName ?? this.args.model.branchName ?? null;
     }
 
     // ── Event queries ──
     get pullRequestEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prNumber, 'pull_request');
+      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'pull_request');
     }
 
     get checkRunEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prNumber, 'check_run');
+      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'check_run');
     }
 
     get checkSuiteEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prNumber, 'check_suite');
+      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'check_suite');
     }
 
     get prReviewEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prNumber, 'pull_request_review');
+      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'pull_request_review');
     }
 
     // ── Live queries ──
@@ -358,7 +325,6 @@ export class SubmissionWorkflowCard extends CardDef {
       return buildCiItems(
         this.checkRunEventData?.instances ?? [],
         this.checkSuiteEventData?.instances ?? [],
-        this.prNumber,
       );
     }
 
@@ -408,7 +374,6 @@ export class SubmissionWorkflowCard extends CardDef {
       return resolveSubmissionWorkflowState(
         !!this.args.model.listing,
         !!this.args.model.prCard,
-        this.args.model.submissionStatus ?? null,
         this.prActionLabel,
         this.ciAllPassed,
         this.ciHasFailure,

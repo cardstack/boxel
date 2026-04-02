@@ -75,11 +75,11 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   }
 
   get prReviewEventQuery(): Query | undefined {
-    const prNumber = this.args.model.prCard?.prNumber;
-    if (!prNumber) return undefined;
+    const branchName = this.args.model.prCard?.branchName;
+    if (!branchName) return undefined;
     return searchEventQuery(
       this.githubEventCardRef,
-      prNumber,
+      branchName,
       'pull_request_review',
     );
   }

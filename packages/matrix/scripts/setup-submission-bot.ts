@@ -6,7 +6,7 @@ const botCommands = [
   {
     name: 'create-listing-pr',
     commandURL:
-      '@cardstack/catalog/commands/create-submission-workflow/default',
+      '@cardstack/catalog/commands/collect-submission-files/default',
     filter: {
       type: 'matrix-event',
       event_type: 'app.boxel.bot-trigger',

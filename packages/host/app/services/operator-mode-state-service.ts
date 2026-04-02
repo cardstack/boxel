@@ -227,7 +227,6 @@ export default class OperatorModeStateService extends Service {
     this.createListingModalPayload = undefined;
   };
 
-
   setNewFileDropdownOpen = () => {
     this._state.newFileDropdownOpen = true;
     this.schedulePersist();

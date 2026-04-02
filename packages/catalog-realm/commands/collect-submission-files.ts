@@ -7,7 +7,6 @@ import {
   logger,
   planInstanceInstall,
   planModuleInstall,
-  toBranchName,
   type ListingPathResolver,
   type LooseSingleCardDocument,
   type Relationship,
@@ -19,100 +18,82 @@ import {
   CardDef,
   field,
   contains,
-  type CardDefConstructor,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
 import ReadSourceCommand from '@cardstack/boxel-host/commands/read-source';
-import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import SerializeCardCommand from '@cardstack/boxel-host/commands/serialize-card';
 
 import type { Listing } from '../catalog-app/listing/listing';
 import {
   FileContentField,
-  SubmissionWorkflowCard,
-} from '../submission-workflow-card';
+  FileCollectionResult,
+} from '../fields/file-content';
 
-const log = logger('commands:prepare-submission');
+const log = logger('commands:collect-submission-files');
 
 interface FileWithContent {
   path: string;
   content: string;
 }
 
-class PrepareSubmissionInput extends CardDef {
-  @field roomId = contains(StringField);
-  @field realm = contains(StringField);
+class CollectSubmissionFilesInput extends CardDef {
   @field listingId = contains(StringField);
-  @field workflowCardUrl = contains(StringField);
-  @field submittedBy = contains(StringField);
+  @field listingRealm = contains(StringField);
 }
 
-export default class PrepareSubmissionCommand extends Command<
-  typeof PrepareSubmissionInput,
-  CardDefConstructor
+export default class CollectSubmissionFilesCommand extends Command<
+  typeof CollectSubmissionFilesInput,
+  typeof FileCollectionResult
 > {
-  description =
-    'Collect submission files for a catalog listing and patch the existing workflow card';
+  description = 'Collect submission files from a catalog listing';
 
-  requireInputFields = ['roomId', 'realm', 'listingId'];
+  requireInputFields = ['listingId', 'listingRealm'];
 
   async getInputType() {
-    return PrepareSubmissionInput;
+    return CollectSubmissionFilesInput;
   }
 
-  protected async run(input: PrepareSubmissionInput): Promise<CardDef> {
-    let { listingId, realm, roomId, workflowCardUrl } = input;
-    let realmUrl = new RealmPaths(new URL(realm)).url;
-    let getCardCommand = new GetCardCommand(this.commandContext);
-    let saveCardCommand = new SaveCardCommand(this.commandContext);
+  protected async run(
+    input: CollectSubmissionFilesInput,
+  ): Promise<FileCollectionResult> {
+    let { listingId, listingRealm } = input;
 
-    if (!listingId) {
-      throw new Error('Missing listingId for PrepareSubmission');
+    if (!listingId || !listingRealm) {
+      throw new Error('Missing listingId or listingRealm');
     }
+
+    let files = await this.collectFiles(listingId, listingRealm);
+    log.debug(`Collected ${files.length} files for submission`);
+
+    return new FileCollectionResult({
+      allFileContents: files.map(
+        (file) =>
+          new FileContentField({
+            filename: file.path,
+            contents: file.content,
+          }),
+      ),
+    });
+  }
+
+  private async collectFiles(
+    listingId: string,
+    listingRealm: string,
+  ): Promise<FileWithContent[]> {
+    let realmUrl = new RealmPaths(new URL(listingRealm)).url;
+    let getCardCommand = new GetCardCommand(this.commandContext);
+    let readSourceCommand = new ReadSourceCommand(this.commandContext);
 
     const listing = (await getCardCommand.execute({
       cardId: listingId,
     })) as Listing;
+
     if (!listing) {
-      throw new Error(`Listing not found: ${listingId}`);
+      log.warn(`Listing not found: ${listingId}, skipping file collection`);
+      return [];
     }
 
-    if (!listing.name) {
-      throw new Error('Missing listing.name for PrepareSubmission');
-    }
-    let branchName = toBranchName(roomId, listing.name);
-
-    // If we have an existing workflow card, fetch and patch it.
-    // Otherwise create a new one (backward compat).
-    let workflowCard: SubmissionWorkflowCard;
-
-    if (workflowCardUrl) {
-      workflowCard = (await getCardCommand.execute({
-        cardId: workflowCardUrl,
-      })) as SubmissionWorkflowCard;
-      if (!workflowCard) {
-        throw new Error(
-          `Workflow card not found: ${workflowCardUrl}`,
-        );
-      }
-      // Update fields on the existing card
-      workflowCard.roomId = roomId;
-      workflowCard.branchName = branchName;
-      workflowCard.submissionStatus = 'preparing-submission';
-    } else {
-      // Fallback: create a new workflow card
-      workflowCard = new SubmissionWorkflowCard({
-        title: `Submit ${listing.name}`,
-        submittedBy: input.submittedBy ?? undefined,
-        submissionStatus: 'preparing-submission',
-        listing,
-        roomId,
-        branchName,
-      });
-    }
-
-    // Collect files
     let examplesToSnapshot = listing.examples;
     if (listing.examples?.length) {
       examplesToSnapshot = await this.expandInstances(listing.examples);
@@ -134,39 +115,6 @@ export default class PrepareSubmissionCommand extends Command<
       );
 
     const plan = builder.build();
-
-    let filesWithContent = await this.collectAndFetchFiles(
-      listing,
-      plan,
-      realmUrl,
-    );
-
-    log.debug(`Prepared submission with ${filesWithContent.length} files`);
-
-    // Patch file contents and update status
-    workflowCard.allFileContents = filesWithContent.map(
-      (file) =>
-        new FileContentField({
-          filename: file.path,
-          contents: file.content,
-        }),
-    );
-    workflowCard.submissionStatus = 'creating-pr';
-
-    await saveCardCommand.execute({
-      card: workflowCard,
-      realm: realmUrl,
-    });
-
-    return workflowCard;
-  }
-
-  private async collectAndFetchFiles(
-    listing: Listing,
-    plan: ReturnType<PlanBuilder['build']>,
-    realmUrl: string,
-  ): Promise<FileWithContent[]> {
-    let readSourceCommand = new ReadSourceCommand(this.commandContext);
 
     const toRepoRelativePath = (fullUrl: string, extension: string): string => {
       let path = fullUrl;

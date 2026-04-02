@@ -8,8 +8,8 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 
 import UseAiAssistantCommand from './ai-assistant';
-import OpenInInteractModeCommand from './open-in-interact-mode';
 import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
+import OpenInInteractModeCommand from './open-in-interact-mode';
 
 import type MatrixService from '../services/matrix-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -71,7 +71,6 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         attributes: {
           title: `Submit ${listingName ?? 'Listing'}`,
           submittedBy: submittedBy ?? null,
-          submissionStatus: 'preparing-submission',
         },
         relationships: {
           listing: {
@@ -104,9 +103,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
 
     let workflowCardId = workflowCard.id;
     if (!workflowCardId) {
-      throw new Error(
-        'Submission workflow card was created but has no ID',
-      );
+      throw new Error('Submission workflow card was created but has no ID');
     }
 
     // Step 2: Open the workflow card in interact mode immediately
