@@ -398,6 +398,21 @@ module('factory-loop > max iterations', function () {
     assert.strictEqual(result.outcome, 'max_iterations');
     assert.strictEqual(result.iterations, 3);
   });
+
+  test('throws on invalid maxIterations', async function (assert) {
+    for (let value of [0, -1, 2.5]) {
+      try {
+        await runFactoryLoop(makeLoopConfig({ maxIterations: value }));
+        assert.ok(false, `should have thrown for maxIterations=${value}`);
+      } catch (err) {
+        let message = err instanceof Error ? err.message : '';
+        assert.ok(
+          message.includes('maxIterations must be a positive integer'),
+          `throws for maxIterations=${value}`,
+        );
+      }
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -421,6 +436,39 @@ module('factory-loop > done signal', function () {
     assert.strictEqual(agent.callCount, 1);
     assert.strictEqual(testRunCount, 0, 'tests were not run');
     assert.strictEqual(result.toolCallLog.length, 0, 'no tool calls');
+  });
+
+  test('bare done with prior failing tests returns max_iterations', async function (assert) {
+    let agent = new MockFactoryAgent([
+      // Iteration 1: write files, signal done
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'card.gts', content: 'v1' },
+          },
+        ],
+        status: 'done',
+      },
+      // Iteration 2: agent gives up — signals done with no tool calls
+      { toolCalls: [], status: 'done' },
+    ]);
+
+    let testRunner = makeTestRunner([makeFailingTestResult()]);
+
+    let result = await runFactoryLoop(makeLoopConfig({ agent, testRunner }));
+
+    assert.strictEqual(
+      result.outcome,
+      'max_iterations',
+      'bare done with failing tests is not treated as success',
+    );
+    assert.strictEqual(result.iterations, 2);
+    assert.strictEqual(
+      result.testResults?.status,
+      'failed',
+      'failing test results are preserved',
+    );
   });
 });
 

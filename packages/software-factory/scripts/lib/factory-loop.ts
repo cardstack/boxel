@@ -11,7 +11,7 @@
  * 3. Inspect AgentRunResult:
  *    - blocked → return clarification_needed
  *    - needs_iteration → loop back to step 1
- *    - done with no tool calls → return done
+ *    - done with no tool calls → return done (or max_iterations if prior tests failed)
  *    - done with tool calls → run tests
  * 4. If tests pass → return tests_passed
  * 5. If tests fail → update testResults, loop back to step 1
@@ -113,6 +113,12 @@ export async function runFactoryLoop(
     maxIterations = DEFAULT_MAX_ITERATIONS,
   } = config;
 
+  if (!Number.isInteger(maxIterations) || maxIterations <= 0) {
+    throw new Error(
+      `maxIterations must be a positive integer, got ${maxIterations}`,
+    );
+  }
+
   let allToolCalls: ToolCallEntry[] = [];
   let testResults: TestResult | undefined;
 
@@ -148,7 +154,17 @@ export async function runFactoryLoop(
 
     // Done — agent finished its work for this turn
     if (result.toolCalls.length === 0) {
-      // Bare done signal — nothing to test
+      // Bare done is only valid before any test failures. If prior tests
+      // failed and the agent signals done without making fixes, treat it
+      // as the agent giving up — return with the failing test results.
+      if (testResults && testResults.status !== 'passed') {
+        return {
+          outcome: 'max_iterations',
+          iterations: iteration,
+          toolCallLog: allToolCalls,
+          testResults,
+        };
+      }
       return {
         outcome: 'done',
         iterations: iteration,

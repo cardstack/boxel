@@ -166,7 +166,15 @@ const TOOLS: FactoryTool[] = [
 
 function makeTestRunner(results: TestResult[]): TestRunner {
   let i = 0;
-  return async () => results[i++];
+  return async () => {
+    if (i >= results.length) {
+      throw new Error(
+        `Smoke-test testRunner exhausted: requested run #${i + 1} ` +
+          `but only ${results.length} result(s) were configured.`,
+      );
+    }
+    return results[i++];
+  };
 }
 
 function makeBaseConfig(
