@@ -423,19 +423,52 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       // "Any Type" should be present with count
       assert
-        .dom('[data-test-boxel-picker-option-row="select-all"]')
-        .exists('"Any Type" option is present in modal');
-      assert
-        .dom('[data-test-boxel-picker-option-row="select-all"]')
-        .containsText('Any Type (', 'select-all shows type count in modal');
+        .dom(
+          '[data-test-boxel-picker-option-row="select-all"][data-test-boxel-picker-option-disabled="true"]',
+        )
+        .exists('"Any Type" is disabled when baseFilter constrains to Pet');
 
       // Options should be constrained by baseFilter (Pet types only)
       // Person should NOT appear as a type option since baseFilter constrains to Pet
       assert
-        .dom('[data-test-boxel-picker-option-row="Person"]')
+        .dom('[data-test-boxel-picker-option-label="Person"]')
         .doesNotExist(
           'Person type is not available when baseFilter constrains to Pet',
         );
+    });
+
+    test('type picker auto-selects constrained type and disables Any Type when baseFilter specifies a specific type', async function (assert) {
+      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+
+      // Open linksTo card picker for Pet field
+      await waitFor(`[data-test-add-new="pet"]`);
+      await click(`[data-test-add-new="pet"]`);
+      await waitFor('[data-test-card-catalog-modal]');
+      await settled();
+
+      // Type picker should auto-select Pet instead of "Any Type"
+      await waitFor('[data-test-boxel-picker-selected-item="Pet"]');
+      assert
+        .dom(
+          '[data-test-type-picker] [data-test-boxel-picker-selected-item="Pet"]',
+        )
+        .exists('Pet type is auto-selected when baseFilter constrains to Pet');
+
+      // Open type picker to verify "Any Type" is disabled
+      await click('[data-test-type-picker] [data-test-boxel-picker-trigger]');
+      await waitFor('[data-test-boxel-picker-option-row]');
+
+      assert
+        .dom(
+          '[data-test-boxel-picker-option-row="select-all"][data-test-boxel-picker-option-disabled="true"]',
+        )
+        .exists('"Any Type" is disabled when baseFilter auto-selects Pet');
     });
   });
 

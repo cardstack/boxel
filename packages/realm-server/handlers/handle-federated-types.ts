@@ -69,10 +69,17 @@ export default function handleFederatedTypes({
       let lowerSearch = searchKey.toLowerCase();
       allEntries = allEntries.filter(
         (entry) =>
-          entry.attributes.displayName.toLowerCase().includes(lowerSearch) ||
-          entry.id.toLowerCase().includes(lowerSearch),
+          entry.attributes.displayName?.toLowerCase().includes(lowerSearch) ||
+          entry.id?.toLowerCase().includes(lowerSearch),
       );
     }
+
+    // Sort alphabetically by displayName so pagination returns a stable order
+    allEntries.sort((a, b) =>
+      (a.attributes.displayName ?? '').localeCompare(
+        b.attributes.displayName ?? '',
+      ),
+    );
 
     let total = allEntries.length;
 
