@@ -4,6 +4,8 @@ import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 
+import { eq } from '@cardstack/boxel-ui/helpers';
+
 import {
   hasCodeBlocks,
   markdownToHtml,
@@ -11,6 +13,7 @@ import {
   resolveCardReference,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
+import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -32,6 +35,7 @@ interface CardSlot {
   element: HTMLElement;
   card: CardDef;
   format: 'atom' | 'embedded';
+  kind: 'inline' | 'block';
 }
 
 function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
@@ -122,7 +126,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         let card = cardsByUrl.get(resolved);
         if (card) {
           el.textContent = '';
-          slots.push({ element: el, card, format: 'atom' });
+          slots.push({ element: el, card, format: 'atom', kind: 'inline' });
         }
       }
 
@@ -137,7 +141,12 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         let card = cardsByUrl.get(resolved);
         if (card) {
           el.textContent = '';
-          slots.push({ element: el, card, format: 'embedded' });
+          slots.push({
+            element: el,
+            card,
+            format: 'embedded',
+            kind: 'block',
+          });
         }
       }
 
@@ -156,9 +165,43 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     </div>
     {{#each this.cardSlots as |slot|}}
       {{#in-element slot.element insertBefore=null}}
-        {{#let (this.getCardComponent slot.card) as |CardComponent|}}
-          <CardComponent @format={{slot.format}} />
-        {{/let}}
+        <CardContextConsumer as |context|>
+          {{#let (this.getCardComponent slot.card) as |CardComponent|}}
+            {{#if (eq slot.kind 'inline')}}
+              <span
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                data-test-markdown-bfm-inline-card
+                {{context.cardComponentModifier
+                  card=slot.card
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardComponent
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </span>
+            {{else}}
+              <div
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--block'
+                data-test-markdown-bfm-block-card
+                {{context.cardComponentModifier
+                  card=slot.card
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardComponent
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </div>
+            {{/if}}
+          {{/let}}
+        </CardContextConsumer>
       {{/in-element}}
     {{/each}}
     <style scoped>
@@ -416,9 +459,19 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         .markdown-content :deep([data-boxel-bfm-block-ref]) {
           display: block;
           margin: var(--boxel-sp) 0;
-          border: 1px solid var(--boxel-200);
-          border-radius: var(--boxel-border-radius);
-          overflow: hidden;
+        }
+
+        .markdown-bfm-card-slot {
+          max-width: 100%;
+        }
+
+        .markdown-bfm-card-slot--inline {
+          display: inline-flex;
+          vertical-align: middle;
+        }
+
+        .markdown-bfm-card-slot--block {
+          display: block;
         }
       }
     </style>
