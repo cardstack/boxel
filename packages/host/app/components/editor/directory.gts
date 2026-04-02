@@ -9,12 +9,9 @@ import { tracked } from '@glimmer/tracking';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  BoxelDropdown,
-  ContextButton,
-  Menu,
-  type BoxelDropdownAPI,
-} from '@cardstack/boxel-ui/components';
+import { velcro } from 'ember-velcro';
+
+import { ContextButton, Menu } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { DropdownArrowDown, IconTrash } from '@cardstack/boxel-ui/icons';
@@ -107,34 +104,17 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
-    {{#if @onDeleteFile}}
-      <BoxelDropdown
-        @registerAPI={{this.registerDropdownApi}}
-        @onClose={{this.clearFileMenu}}
-        @contentClass='file-tree-context-menu'
+    {{#if this.menuTriggerEl}}
+      <div
+        class='file-tree-context-menu'
+        {{velcro this.menuTriggerEl placement='bottom-start' strategy='fixed'}}
       >
-        <:trigger as |bindings|>
-          <button
-            type='button'
-            class='file-tree-menu-anchor'
-            aria-hidden='true'
-            tabindex='-1'
-            style={{this.anchorStyle}}
-            {{bindings}}
-          ></button>
-        </:trigger>
-        <:content as |dd|>
-          <Menu
-            class='file-tree-context-menu-list'
-            @items={{this.menuItems}}
-            @closeMenu={{dd.close}}
-            {{on 'pointerenter' this.cancelCloseMenuTimer}}
-            {{on 'pointerleave' this.startCloseMenuTimer}}
-            {{on 'focusin' this.cancelCloseMenuTimer}}
-            {{on 'focusout' this.startCloseMenuTimer}}
-          />
-        </:content>
-      </BoxelDropdown>
+        <Menu
+          class='file-tree-context-menu-list'
+          @items={{this.menuItems}}
+          @closeMenu={{this.closeMenu}}
+        />
+      </div>
     {{/if}}
     <style scoped>
       .level {
@@ -189,14 +169,9 @@ export default class Directory extends Component<Args> {
       .file-row:focus-within .file-menu-trigger {
         visibility: visible;
       }
-      .file-tree-menu-anchor {
-        position: fixed;
-        width: 0;
-        height: 0;
-        padding: 0;
-        border: 0;
-        opacity: 0;
-        pointer-events: none;
+
+      .file-tree-context-menu {
+        z-index: 1000;
       }
 
       .directory {
@@ -236,18 +211,18 @@ export default class Directory extends Component<Args> {
   );
 
   @tracked private selectedFile?: LocalPath;
-  @tracked private anchorStyle = '';
+  @tracked private menuTriggerEl?: HTMLElement;
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
-  private dropdownApi?: BoxelDropdownAPI;
   private menuEntryPath?: LocalPath;
   private closeMenuTimer?: ReturnType<typeof setTimeout>;
 
   constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     registerDestructor(this, () => {
-      this.dropdownApi = undefined;
       this.menuEntryPath = undefined;
+      this.menuTriggerEl = undefined;
       clearTimeout(this.closeMenuTimer);
+      document.removeEventListener('pointerdown', this.handleOutsideClick);
     });
   }
 
@@ -286,11 +261,6 @@ export default class Directory extends Component<Args> {
     return openDirs.includes(dirPath);
   }
 
-  @action
-  private registerDropdownApi(api: BoxelDropdownAPI) {
-    this.dropdownApi = api;
-  }
-
   private get menuItems() {
     if (!this.menuEntryPath) {
       return [];
@@ -306,10 +276,11 @@ export default class Directory extends Component<Args> {
   }
 
   @action
-  private clearFileMenu() {
+  private closeMenu() {
     this.menuEntryPath = undefined;
-    this.anchorStyle = '';
+    this.menuTriggerEl = undefined;
     clearTimeout(this.closeMenuTimer);
+    document.removeEventListener('pointerdown', this.handleOutsideClick);
   }
 
   @action
@@ -320,28 +291,25 @@ export default class Directory extends Component<Args> {
     e.preventDefault();
     e.stopPropagation();
     this.menuEntryPath = entryPath;
-    // Position the hidden anchor to match the clicked trigger so that
-    // ember-basic-dropdown calculates the correct dropdown position.
-    // We use a tracked anchorStyle so Glimmer preserves it through re-renders.
-    const triggerRect = (
-      e.currentTarget as HTMLElement
-    ).getBoundingClientRect();
-    this.anchorStyle = `top: ${triggerRect.top}px; left: ${triggerRect.left}px; width: ${triggerRect.width}px; height: ${triggerRect.height}px;`;
+    this.menuTriggerEl = e.currentTarget as HTMLElement;
     this.startCloseMenuTimer();
-    this.dropdownApi?.actions.open(e);
+    document.addEventListener('pointerdown', this.handleOutsideClick);
+  }
+
+  @action
+  private handleOutsideClick(e: PointerEvent) {
+    const menu = document.querySelector('.file-tree-context-menu');
+    if (menu && !menu.contains(e.target as Node)) {
+      this.closeMenu();
+    }
   }
 
   @action
   private startCloseMenuTimer() {
     clearTimeout(this.closeMenuTimer);
     this.closeMenuTimer = setTimeout(() => {
-      this.dropdownApi?.actions.close();
+      this.closeMenu();
     }, 800);
-  }
-
-  @action
-  private cancelCloseMenuTimer() {
-    clearTimeout(this.closeMenuTimer);
   }
 
   @action
