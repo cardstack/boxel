@@ -298,16 +298,13 @@ async function startRealmProcess(
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
             }
           : {}),
-        // When custom permissions are specified, skip the pre-cached template
-        // so startFactoryRealmServer calls ensureFactoryRealmTemplate with the
-        // custom permissions (the cache key includes permissions).
-        ...(preparedTemplate && !permissions
+        ...(preparedTemplate
           ? {
               SOFTWARE_FACTORY_TEMPLATE_DATABASE_NAME:
                 preparedTemplate.templateDatabaseName,
             }
           : {}),
-        ...(preparedTemplate && !permissions
+        ...(preparedTemplate
           ? {
               SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
                 preparedTemplate.templateRealmServerURL,
