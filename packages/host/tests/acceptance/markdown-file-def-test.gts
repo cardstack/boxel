@@ -314,11 +314,23 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     assert
       .dom('[data-test-pet-atom]')
       .hasText('Mango', 'inline atom shows correct card');
+    assert
+      .dom('[data-boxel-bfm-inline-ref]')
+      .doesNotIncludeText(
+        `${testRealmURL}Pet/mango`,
+        'inline fallback path is hidden after the card resolves',
+      );
 
     assert
       .dom('[data-test-pet-embedded]')
       .exists('block card reference renders in embedded format');
     assert.dom('[data-test-pet-embedded]').hasText('Jackie');
+    assert
+      .dom('[data-boxel-bfm-block-ref]')
+      .doesNotIncludeText(
+        `${testRealmURL}Pet/jackie`,
+        'block fallback path is hidden after the card resolves',
+      );
   });
 
   test('shows fallback text for unresolvable card references', async function (assert) {
