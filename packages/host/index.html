@@ -12,6 +12,12 @@
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
     <link href="/boxel-favicon.png" rel="icon" type="image/x-icon" />
     <link href="/boxel-webclip.png" rel="apple-touch-icon" />
+    <style>
+      /* Allow prerendered cards to scroll while card-specific CSS loads */
+      #boxel-isolated-start + .boxel-card-container {
+        overflow-y: auto;
+      }
+    </style>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
