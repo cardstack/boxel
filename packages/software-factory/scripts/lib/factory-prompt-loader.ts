@@ -339,7 +339,7 @@ function buildToolResultsData(
   }
 
   let toolManifestsByName = new Map<string, ToolManifest>();
-  for (let tool of context.tools) {
+  for (let tool of context.tools ?? []) {
     toolManifestsByName.set(tool.name, tool);
   }
 
@@ -381,7 +381,7 @@ export function assembleSystemPrompt(
     references: s.references ?? [],
   }));
 
-  let tools = context.tools.map((t: ToolManifest) => ({
+  let tools = (context.tools ?? []).map((t: ToolManifest) => ({
     name: t.name,
     description: t.description,
     category: t.category,

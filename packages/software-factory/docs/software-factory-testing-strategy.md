@@ -232,24 +232,49 @@ Examples:
 - rerunning bootstrap does not create duplicate cards
 - existing `in_progress` tickets are resumed instead of replaced
 
+## Terminology: "Spec" Disambiguation
+
+**IMPORTANT:** "Spec" has two completely different meanings in the software factory:
+
+1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance adopting from `https://cardstack.com/base/spec#Spec`. This is a catalog entry describing a card. Example: `Spec/sticky-note.json`.
+
+2. **Playwright test file** (`Tests/` folder, `.spec.ts` files) — A TypeScript Playwright test file that runs browser-level verification. Example: `Tests/sticky-note.spec.ts`.
+
+In tests, docs, and code, always use the qualified form. Never use bare "spec" without qualification.
+
 ## Layer 3: Loop Simulation Tests
 
 This is the main strategy for testing the agentic loop.
 
 Do not use a real LLM for most loop tests.
 
-Instead, introduce a fake executor that returns structured actions such as:
+Use `MockFactoryAgent` (from `scripts/lib/factory-agent.ts`) — a test double that takes pre-configured `AgentAction[][]` responses and returns them in sequence from `plan()`. It records every `AgentContext` it receives, enabling assertions about what the orchestrator fed the agent.
 
-- `create_file`
-- `update_file`
-- `create_card`
-- `update_ticket`
-- `run_verification`
-- `record_knowledge`
-- `request_clarification`
-- `stop`
+The agent produces actions using these actual action types:
+
+- `create_file` — create a card definition (.gts) or card instance (.json) in a realm
+- `update_file` — replace the content of an existing file
+- `create_test` — create a Playwright test file in the target realm's `Tests/` folder
+- `update_test` — update an existing Playwright test file
+- `update_ticket` — update the current ticket with notes or status changes
+- `create_knowledge` — create a knowledge article
+- `invoke_tool` — run a registered tool (search-realm, realm-read, etc.)
+- `request_clarification` — signal that the agent cannot proceed
+- `done` — signal that all work for this ticket is complete
 
 Then test the loop as a state machine.
+
+### Required test cases for `tests/factory-loop.test.ts`
+
+1. **Happy path** — agent returns file actions (card definition + sample instance + Catalog Spec card with linkedExamples) + `create_test` on iteration 1; tests pass; loop returns `tests_passed` with `iterations: 1`
+2. **Iteration path** — agent returns file actions on iteration 1; tests fail; agent returns fix actions on iteration 2; tests pass; loop returns `tests_passed` with `iterations: 2`
+3. **Max iterations** — agent keeps producing actions, tests keep failing for 5 iterations; loop returns `max_iterations`
+4. **Done signal** — agent returns `[{ type: 'done' }]` on first call; loop returns `done` with `iterations: 1`
+5. **Clarification** — agent returns `request_clarification`; loop returns `clarification_needed`
+6. **Tool-only round** — agent returns only `invoke_tool` actions (no files); loop feeds tool results back and calls `plan()` again; agent returns file actions on second call; tests pass
+7. **Context threading** — verify that `MockFactoryAgent.receivedContexts` shows correct `testResults`, `toolResults`, `previousActions`, and `iteration` values across iterations
+8. **Orchestrator-owned sequencing** — verify that all file writes complete before test execution begins
+9. **Catalog Spec card + sample instances** — verify that the agent creates sample card instances with realistic data and a Catalog Spec card (`Spec/*.json`) with `linkedExamples` pointing to those instances
 
 Assertions should be about workflow behavior:
 
@@ -259,6 +284,8 @@ Assertions should be about workflow behavior:
 - successful verification advances the loop
 - clarification paths stop correctly
 - retries and resumes are handled correctly
+- Catalog Spec cards with linkedExamples are written to the target realm
+- sample card instances are created with realistic data
 
 Do not assert exact natural-language output from the model.
 
@@ -275,8 +302,10 @@ Suggested acceptance cases:
 
 2. Sticky Note first implementation pass
    - loop executes the first active ticket
-   - one implementation artifact is created
-   - one verification result is recorded
+   - one implementation artifact is created (card definition + card instance)
+   - one Catalog Spec card is created in the `Spec/` folder
+   - one Playwright test file is created in the `Tests/` folder
+   - one TestRun card is created in the `Test Runs/` folder with verification results
 
 3. Resume after partial progress
    - rerun after partial state
@@ -357,7 +386,9 @@ Use:
 
 Use:
 
-- fake-executor simulation tests
+- `MockFactoryAgent`-based loop simulation tests (see Layer 3 above for the full list of required test cases)
+- action dispatcher tests with mock `fetch` and mock `ToolExecutor`
+- context builder tests with mock skill resolver/loader
 
 ### Resume and Idempotency
 
@@ -400,7 +431,11 @@ The current mapping is:
 - `CS-10451`
   - verification-policy unit tests
 - `CS-10450`
-  - fake-executor loop simulation tests
+  - execution loop implementation, broken into child tickets:
+    - action dispatcher (apply `AgentAction[]` to realms via HTTP)
+    - context builder (assemble `AgentContext` from skills, tools, realm state)
+    - core loop orchestrator (plan → execute → test → iterate cycle)
+    - wire loop into `factory:go --mode implement`
 - `CS-10452`
   - resume and rerun tests
 - `CS-10453`

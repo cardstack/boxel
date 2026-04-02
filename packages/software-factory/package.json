@@ -10,6 +10,7 @@
     "boxel:session": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-session.ts",
     "cache:prepare": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/cache-realm.ts",
     "factory:agent-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-agent-smoke.ts",
+    "factory:context-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-context-smoke.ts",
     "factory:go": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/factory-entrypoint.ts",
     "factory:prompt-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-prompt-smoke.ts",
     "factory:skill-smoke": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/factory-skill-smoke.ts",

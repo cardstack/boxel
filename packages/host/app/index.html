@@ -42,13 +42,23 @@
     <div id="ember-basic-dropdown-wormhole"></div>
     {{content-for "body"}}
 
-    <script type="module">
-      import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
-      globalThis.ContentTagGlobal = ContentTag;
-    </script>
-    <script src="{{rootURL}}assets/vendor.js"></script>
-    <script src="{{rootURL}}assets/@cardstack/host.js"></script>
+   <script>
+    globalThis.process = {
+      env: {},
+      version: '',
+      cwd() {
+        return '/';
+      },
+    };
+  </script>
+  <script type="module">
+    import * as ContentTag from '{{rootURL}}assets/content-tag/standalone.js';
+    globalThis.ContentTagGlobal = ContentTag;
+  </script>
+  <script src="{{rootURL}}assets/vendor.js"></script>
+  <script src="{{rootURL}}assets/@cardstack/host.js"></script>
 
-    {{content-for "body-footer"}}
-  </body>
+  {{content-for "body-footer"}}
+</body>
+
 </html>

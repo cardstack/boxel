@@ -646,6 +646,9 @@ function startIndexingProgressReporter(
           `\r  indexing: waiting for realm server ${elapsed}s`,
         );
       }
+    } catch {
+      // Progress reporting is best-effort; swallow errors so we don't
+      // crash the process with an unhandled rejection from setInterval.
     } finally {
       polling = false;
     }

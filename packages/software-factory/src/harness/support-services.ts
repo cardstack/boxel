@@ -71,8 +71,12 @@ function ensureBoxelUIDist(hostPackageDir: string): void {
       'dist',
     );
     if (
-      existsSync(join(rootRepoBoxelUIDistDir, 'components.js')) &&
-      existsSync(join(rootRepoBoxelUIDistDir, 'helpers.js'))
+      [
+        join(rootRepoBoxelUIDistDir, 'components.js'),
+        join(rootRepoBoxelUIDistDir, 'helpers.js'),
+        join(rootRepoBoxelUIDistDir, 'icons.js'),
+        join(rootRepoBoxelUIDistDir, 'styles', 'global.css'),
+      ].every((p) => existsSync(p))
     ) {
       supportLog.info(
         `symlinking boxel-ui dist from root repo: ${rootRepoBoxelUIDistDir} -> ${boxelUIDistDir}`,
@@ -91,6 +95,12 @@ function ensureBoxelUIDist(hostPackageDir: string): void {
         );
       }
     }
+  }
+
+  // Remove any leftover symlink so the build writes into the worktree,
+  // not through a symlink into the root repo.
+  if (existsSync(boxelUIDistDir)) {
+    rmSync(boxelUIDistDir, { recursive: true, force: true });
   }
 
   // Fall back to building boxel-ui.
@@ -486,6 +496,12 @@ function ensureBoxelIconsDist(): void {
     }
   }
 
+  // Remove any leftover symlink so the build writes into the worktree,
+  // not through a symlink into the root repo.
+  if (existsSync(distDir)) {
+    rmSync(distDir, { recursive: true, force: true });
+  }
+
   // Fall back to building boxel-icons.
   supportLog.info(`building boxel-icons dist at ${boxelIconsDir}...`);
   let result = spawnSync('pnpm', ['build'], {
@@ -512,6 +528,7 @@ function ensureBoxelIconsDist(): void {
 function startIconServerProcess(): {
   child: ReturnType<typeof spawn>;
   logs: () => string;
+  spawnFailed: () => boolean;
   stop: () => Promise<void>;
 } {
   let child = spawn('pnpm', ['serve'], {
@@ -522,6 +539,7 @@ function startIconServerProcess(): {
   });
 
   let captured = '';
+  let spawnError = false;
   child.stdout?.on('data', (chunk) => {
     captured = `${captured}${String(chunk)}`.slice(-20_000);
   });
@@ -529,6 +547,7 @@ function startIconServerProcess(): {
     captured = `${captured}${String(chunk)}`.slice(-20_000);
   });
   child.on('error', (err) => {
+    spawnError = true;
     captured = `${captured}\n[icon server spawn error] ${err.message}\n`.slice(
       -20_000,
     );
@@ -537,6 +556,7 @@ function startIconServerProcess(): {
   return {
     child,
     logs: () => captured,
+    spawnFailed: () => spawnError,
     async stop() {
       if (child.exitCode === null) {
         try {
@@ -577,6 +597,9 @@ async function ensureIconsReady(): Promise<{
             // If our process exited, either the port is already in use (dev
             // server running) or the start genuinely failed. Check if the
             // external server is healthy.
+            if (server.spawnFailed()) {
+              throw new Error(`icons server failed to spawn\n${server.logs()}`);
+            }
             if (server.child.exitCode !== null) {
               try {
                 let response = await fetch(DEFAULT_ICONS_PROBE_URL);
