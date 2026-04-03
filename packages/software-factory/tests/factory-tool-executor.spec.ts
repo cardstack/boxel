@@ -213,8 +213,10 @@ async function buildToolsForRealm(realm: {
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
-  // Fetch schemas from the source realm (where darkfactory.gts lives)
-  let sourceRealmUrl = sourceRealmURLFor(realm.realmServerURL).href + '/';
+  // Fetch schemas via _run-command. The realmUrl targets the test realm
+  // (where the owner has permissions), while the codeRef module URL points
+  // to the source realm where darkfactory.gts is defined.
+  let sourceRealmUrl = sourceRealmURLFor(realm.realmServerURL).href;
   let darkfactoryModule = `${sourceRealmUrl}darkfactory`;
   let authorization = `Bearer ${realm.ownerBearerToken}`;
 
@@ -228,7 +230,7 @@ async function buildToolsForRealm(realm: {
   for (let name of ['Project', 'Ticket', 'KnowledgeArticle']) {
     let schema = await fetchCardTypeSchema(
       realm.realmServerURL.href,
-      sourceRealmUrl,
+      realm.realmURL.href,
       { module: darkfactoryModule, name },
       { authorization },
     );
