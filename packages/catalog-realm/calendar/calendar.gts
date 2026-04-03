@@ -753,6 +753,7 @@ class CalendarIsolated extends Component<typeof CalendarCard> {
 
   private _addEvent = restartableTask(async () => {
     const calendarEventSource = {
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       module: new URL(import.meta.url).href,
       name: 'CalendarEvent',
     };
@@ -3036,12 +3037,14 @@ export class CalendarCard extends CardDef {
         every: [
           {
             type: {
+              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
               module: new URL(import.meta.url).href,
               name: 'CalendarEvent',
             },
           },
           {
             on: {
+              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
               module: new URL(import.meta.url).href,
               name: 'CalendarEvent',
             },
@@ -3053,6 +3056,7 @@ export class CalendarCard extends CardDef {
         {
           by: 'startTime',
           on: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL(import.meta.url).href,
             name: 'CalendarEvent',
           },

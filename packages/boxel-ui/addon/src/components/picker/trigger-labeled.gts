@@ -75,7 +75,7 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   @action
-  removeItem(item: any, event?: MouseEvent) {
+  removeItem(item: any, event?: Event) {
     event?.stopPropagation();
     const newSelected = this.args.select.selected.filter(
       (i: any) => i !== item,
@@ -85,10 +85,10 @@ export default class PickerLabeledTrigger extends Component<TriggerLabeledSignat
   }
 
   @action
-  openDropdown(event: MouseEvent) {
+  openDropdown(event: Event) {
     event.stopPropagation();
     if (!this.args.select.isOpen) {
-      this.args.select.actions.open(event);
+      this.args.select.actions.open(event as MouseEvent);
     }
   }
 

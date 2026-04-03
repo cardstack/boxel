@@ -263,6 +263,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
         orderBy: this.getOrderBy(),
       },
       taskSource: {
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./task', import.meta.url).href,
         name: 'CRMTask',
         getQuery: () => this.getTaskQuery,
@@ -272,6 +273,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
           searchKey: 'label',
           label: 'Status',
           codeRef: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./task', import.meta.url).href,
             name: 'Status',
           },
@@ -281,6 +283,7 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
           searchKey: 'name',
           label: 'Assignee',
           codeRef: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./representative', import.meta.url).href,
             name: 'Representative',
           },

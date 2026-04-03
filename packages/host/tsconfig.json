@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "module": "es2022",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
@@ -24,19 +24,34 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "paths": {
-      "@cardstack/host/tests/*": ["tests/*"],
-      "@cardstack/host/*": ["app/*"],
-      "@cardstack/boxel-host/commands/*": ["app/commands/*"],
-      "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/catalog/commands/*": ["../catalog-realm/commands/*"],
-      "@cardstack/catalog/*": ["../catalog-realm/catalog-app/*"],
-      "@cardstack/openrouter/*": ["../openrouter-realm/*"],
-      "*": ["types/*"]
+      "@cardstack/host/tests/*": [
+        "tests/*"
+      ],
+      "@cardstack/host/*": [
+        "app/*"
+      ],
+      "@cardstack/boxel-host/commands/*": [
+        "app/commands/*"
+      ],
+      "https://cardstack.com/base/*": [
+        "../base/*"
+      ],
+      "@cardstack/catalog/commands/*": [
+        "../catalog-realm/commands/*"
+      ],
+      "@cardstack/catalog/*": [
+        "../catalog-realm/catalog-app/*"
+      ],
+      "@cardstack/openrouter/*": [
+        "../openrouter-realm/*"
+      ],
+      "*": [
+        "types/*"
+      ]
     },
-    "types": ["@cardstack/local-types"]
-  },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
+    "types": [
+      "@cardstack/local-types"
+    ]
   },
   "include": [
     "../base/**/*",
@@ -47,5 +62,7 @@
     "tests/**/*",
     "types/**/*"
   ],
-  "exclude": ["../base/**/__boxel/**"]
+  "exclude": [
+    "../base/**/__boxel/**"
+  ]
 }

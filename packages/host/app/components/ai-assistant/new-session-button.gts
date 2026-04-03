@@ -35,10 +35,11 @@ export default class NewSessionButton extends Component<Signature> {
   }
 
   @action
-  handleCreateNewSession(event: MouseEvent) {
+  handleCreateNewSession(event: Event) {
+    let mouseEvent = event as MouseEvent;
     // Check if Shift key is pressed or menu is open
-    if (event.shiftKey || this.showMenu) {
-      event.preventDefault();
+    if (mouseEvent.shiftKey || this.showMenu) {
+      mouseEvent.preventDefault();
       this.showMenu = !this.showMenu;
       return;
     }

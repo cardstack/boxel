@@ -68,6 +68,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
 
   get githubEventCardRef() {
     return {
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       module: new URL('../../../github-event/github-event', import.meta.url)
         .href,
       name: 'GithubEventCard' as const,

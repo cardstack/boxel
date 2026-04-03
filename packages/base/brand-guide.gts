@@ -722,7 +722,7 @@ export default class BrandGuide extends DetailedStyleRef {
             (cssUrl 'background-image' @model.cardThumbnailURL)
           }}
           role={{if @model.cardThumbnailURL 'img'}}
-          alt={{if @model.cardThumbnailURL @model.cardTitle}}
+          aria-label={{if @model.cardThumbnailURL @model.cardTitle}}
         >
           {{#unless @model.cardThumbnailURL}}
             <@model.constructor.icon width='30' height='30' />
