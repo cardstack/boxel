@@ -475,10 +475,4 @@ class BoxelDropdown extends Component<Signature> {
   });
 }
 
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'Boxel::Dropdown': typeof BoxelDropdown;
-  }
-}
-
 export default BoxelDropdown;

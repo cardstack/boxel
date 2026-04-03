@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "es2023",
-    "lib": ["es2023", "dom"],
+    "lib": [
+      "es2023",
+      "dom"
+    ],
     "allowJs": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -25,18 +28,32 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "@cardstack/runtime-common": ["../runtime-common"],
-      "@cardstack/runtime-common/*": ["../runtime-common/*"],
-      "@cardstack/postgres": ["../postgres"],
-      "@cardstack/postgres/*": ["../postgres/*"]
+      "https://cardstack.com/base/*": [
+        "../base/*"
+      ],
+      "@cardstack/boxel-ui": [
+        "../boxel-ui/addon"
+      ],
+      "@cardstack/boxel-ui/*": [
+        "../boxel-ui/addon/*"
+      ],
+      "@cardstack/runtime-common": [
+        "../runtime-common"
+      ],
+      "@cardstack/runtime-common/*": [
+        "../runtime-common/*"
+      ],
+      "@cardstack/postgres": [
+        "../postgres"
+      ],
+      "@cardstack/postgres/*": [
+        "../postgres/*"
+      ]
     },
-    "types": ["@cardstack/local-types", "qunit"]
-  },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
+    "types": [
+      "@cardstack/local-types",
+      "qunit"
+    ]
   },
   "include": [
     "../base/**/*",
@@ -44,5 +61,7 @@
     "../postgres/**/*",
     "./**/*"
   ],
-  "exclude": ["../base/**/__boxel/**"]
+  "exclude": [
+    "../base/**/__boxel/**"
+  ]
 }

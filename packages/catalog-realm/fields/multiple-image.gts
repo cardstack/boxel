@@ -329,14 +329,14 @@ class MultipleImageFieldEdit extends Component<typeof MultipleImageField> {
   }
 
   @action
-  handleDragOver(event: DragEvent) {
+  handleDragOver(event: Event) {
     event.preventDefault();
   }
 
   @action
-  handleDrop(event: DragEvent) {
+  handleDrop(event: Event) {
     event.preventDefault();
-    const files = Array.from(event.dataTransfer?.files || []);
+    const files = Array.from((event as DragEvent).dataTransfer?.files || []);
     this.processFiles(files);
   }
 

@@ -24,7 +24,7 @@ export function formatNumber(val: number | undefined) {
 type StarType = 'full' | 'half' | 'empty';
 interface StarIconSignature {
   Args: { type: StarType };
-  Element: HTMLElement;
+  Element: SVGSVGElement;
 }
 const StarIcon: TemplateOnlyComponent<StarIconSignature> = <template>
   {{#if (eq @type 'full')}}

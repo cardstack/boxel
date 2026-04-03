@@ -19,6 +19,7 @@ export class ProductCatalog extends CardDef {
     query: {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./ikea-product', import.meta.url).href,
           name: 'IkeaProduct',
         },
@@ -26,6 +27,7 @@ export class ProductCatalog extends CardDef {
       sort: [
         {
           on: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./ikea-product', import.meta.url).href,
             name: 'IkeaProduct',
           },

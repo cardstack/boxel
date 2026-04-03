@@ -44,6 +44,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get githubEventCardRef() {
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     return buildGithubEventCardRef(import.meta.url);
   }
 
@@ -334,6 +335,7 @@ class FittedTemplate extends Component<typeof PrCard> {
   }
 
   get githubEventCardRef() {
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     return buildGithubEventCardRef(import.meta.url);
   }
 
