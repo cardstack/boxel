@@ -22,5 +22,9 @@ setupDeprecationWorkflow({
       handler: 'silence',
       matchId: 'deprecate-import-libraries-from-ember',
     },
+    {
+      handler: 'silence',
+      matchId: 'importing-inject-from-ember-service',
+    },
   ],
 });
