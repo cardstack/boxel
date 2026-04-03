@@ -17,6 +17,7 @@ import {
 } from '../scripts/lib/factory-tool-executor';
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
 import { buildFactoryTools } from '../scripts/lib/factory-tool-builder';
+import { fetchCardTypeSchema } from '../scripts/lib/darkfactory-schemas';
 
 test('realm-read fetches .realm.json from the test realm', async ({
   realm,
@@ -95,10 +96,11 @@ type CardReadResult = {
   document?: { data: { attributes: Record<string, unknown> } };
 };
 
-function buildToolsForRealm(realm: {
+async function buildToolsForRealm(realm: {
   realmURL: URL;
+  realmServerURL: URL;
   ownerBearerToken: string;
-}): FactoryTool[] {
+}): Promise<FactoryTool[]> {
   let registry = new ToolRegistry();
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
@@ -108,6 +110,31 @@ function buildToolsForRealm(realm: {
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
+  // Fetch schemas from the source realm (where darkfactory.gts lives)
+  let { sourceRealmURLFor } = await import('../src/harness/shared');
+  let sourceRealmUrl = sourceRealmURLFor(realm.realmServerURL).href + '/';
+  let darkfactoryModule = `${sourceRealmUrl}darkfactory`;
+  let authorization = `Bearer ${realm.ownerBearerToken}`;
+
+  let cardTypeSchemas = new Map<
+    string,
+    {
+      attributes: Record<string, unknown>;
+      relationships?: Record<string, unknown>;
+    }
+  >();
+  for (let name of ['Project', 'Ticket', 'KnowledgeArticle']) {
+    let schema = await fetchCardTypeSchema(
+      realm.realmServerURL.href,
+      sourceRealmUrl,
+      { module: darkfactoryModule, name },
+      { authorization },
+    );
+    if (schema) {
+      cardTypeSchemas.set(name, schema);
+    }
+  }
+
   return buildFactoryTools(
     {
       targetRealmUrl: realm.realmURL.href,
@@ -115,44 +142,28 @@ function buildToolsForRealm(realm: {
       realmTokens: {
         [realm.realmURL.href]: `Bearer ${realm.ownerBearerToken}`,
       },
+      cardTypeSchemas,
     },
     executor,
     registry,
   );
 }
 
-function makeCardDoc(
-  realmUrl: string,
-  className: string,
-  attributes: Record<string, unknown>,
-): string {
-  return JSON.stringify({
-    data: {
-      type: 'card',
-      attributes,
-      meta: {
-        adoptsFrom: {
-          module: `${realmUrl}darkfactory`,
-          name: className,
-        },
-      },
-    },
-  });
-}
-
 test('update_project writes and reads back a project card', async ({
   realm,
 }) => {
-  let tools = buildToolsForRealm(realm);
+  let tools = await buildToolsForRealm(realm);
   let updateProject = tools.find((t) => t.name === 'update_project')!;
   let readFile = tools.find((t) => t.name === 'read_file')!;
 
+  expect(updateProject).toBeDefined();
+
   let writeResult = (await updateProject.execute({
     path: 'Projects/tool-test-project.json',
-    content: makeCardDoc(realm.realmURL.href, 'Project', {
+    attributes: {
       objective: 'Test project for update_project tool',
-      status: 'in_progress',
-    }),
+      projectStatus: 'in_progress',
+    },
   })) as CardWriteResult;
 
   expect(writeResult.ok).toBe(true);
@@ -168,17 +179,19 @@ test('update_project writes and reads back a project card', async ({
 });
 
 test('update_ticket writes and reads back a ticket card', async ({ realm }) => {
-  let tools = buildToolsForRealm(realm);
+  let tools = await buildToolsForRealm(realm);
   let updateTicket = tools.find((t) => t.name === 'update_ticket')!;
   let readFile = tools.find((t) => t.name === 'read_file')!;
 
+  expect(updateTicket).toBeDefined();
+
   let writeResult = (await updateTicket.execute({
     path: 'Tickets/tool-test-ticket.json',
-    content: makeCardDoc(realm.realmURL.href, 'Ticket', {
+    attributes: {
       summary: 'Test ticket for update_ticket tool',
-      status: 'in_progress',
+      ticketStatus: 'in_progress',
       priority: 'high',
-    }),
+    },
   })) as CardWriteResult;
 
   expect(writeResult.ok).toBe(true);
@@ -191,22 +204,24 @@ test('update_ticket writes and reads back a ticket card', async ({ realm }) => {
   expect(readResult.document?.data.attributes.summary).toBe(
     'Test ticket for update_ticket tool',
   );
-  expect(readResult.document?.data.attributes.status).toBe('in_progress');
+  expect(readResult.document?.data.attributes.ticketStatus).toBe('in_progress');
 });
 
 test('create_knowledge writes and reads back a knowledge article', async ({
   realm,
 }) => {
-  let tools = buildToolsForRealm(realm);
+  let tools = await buildToolsForRealm(realm);
   let createKnowledge = tools.find((t) => t.name === 'create_knowledge')!;
   let readFile = tools.find((t) => t.name === 'read_file')!;
 
+  expect(createKnowledge).toBeDefined();
+
   let writeResult = (await createKnowledge.execute({
     path: 'Knowledge Articles/tool-test-article.json',
-    content: makeCardDoc(realm.realmURL.href, 'KnowledgeArticle', {
-      title: 'Test Knowledge Article',
+    attributes: {
+      articleTitle: 'Test Knowledge Article',
       content: 'This is a test knowledge article created by the tool.',
-    }),
+    },
   })) as CardWriteResult;
 
   expect(writeResult.ok).toBe(true);
@@ -216,7 +231,7 @@ test('create_knowledge writes and reads back a knowledge article', async ({
   })) as CardReadResult;
 
   expect(readResult.ok).toBe(true);
-  expect(readResult.document?.data.attributes.title).toBe(
+  expect(readResult.document?.data.attributes.articleTitle).toBe(
     'Test Knowledge Article',
   );
 });
