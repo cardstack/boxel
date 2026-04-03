@@ -129,21 +129,23 @@ class IsolatedTemplate extends Component<typeof EmailTemplateEditor> {
   }
 
   @action
-  handleKeydown(event: KeyboardEvent) {
+  handleKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
     // Prevent Enter from creating new lines in single-line fields
-    if (event.key === 'Enter' && !event.shiftKey) {
-      const target = event.target as HTMLElement;
+    if (kbEvent.key === 'Enter' && !kbEvent.shiftKey) {
+      const target = kbEvent.target as HTMLElement;
       if (target.dataset.multiline !== 'true') {
-        event.preventDefault();
+        kbEvent.preventDefault();
       }
     }
   }
 
   @action
-  handleOverlayKeydown(event: KeyboardEvent) {
+  handleOverlayKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
     // Close panel on Enter or Space key
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
+    if (kbEvent.key === 'Enter' || kbEvent.key === ' ') {
+      kbEvent.preventDefault();
       this.closeEditPanel();
     }
   }

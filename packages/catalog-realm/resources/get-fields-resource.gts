@@ -63,6 +63,7 @@ class GetFieldsResource extends Resource<GetFieldsResourceArgs> {
     this.error = null;
 
     try {
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       const loader = (import.meta as any).loader;
       const relativeTo = realm ? new URL(realm) : undefined;
       // Prefer getClass for unbound constructor when ref is simple

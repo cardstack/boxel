@@ -61,6 +61,7 @@ import {
   type RealmFetchOptions,
 } from './realm-operations';
 import { executeTestRunFromRealm } from './test-run-execution';
+import { fetchCardTypeSchema } from './darkfactory-schemas';
 
 import type { FactoryBootstrapResult } from '../../src/factory-bootstrap';
 
@@ -155,12 +156,20 @@ export async function runFactoryImplement(
     authorization: config.authorization,
   } satisfies ToolExecutorConfig);
 
+  // Fetch card type schemas for typed tool parameters
+  let cardTypeSchemas = await loadDarkFactorySchemas(
+    realmServerUrl,
+    targetRealmUrl,
+    { authorization: config.authorization, fetch: fetchImpl },
+  );
+
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
     testRealmUrl,
     realmTokens,
     serverToken,
     fetch: fetchImpl,
+    cardTypeSchemas,
     matrixAuth: matrixAuth
       ? {
           userId: matrixAuth.userId,
@@ -660,6 +669,63 @@ async function updateTicketStatus(
       `Failed to write ticket ${ticketId}: ${writeResult.error ?? 'unknown'}`,
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// DarkFactory schema loading
+// ---------------------------------------------------------------------------
+
+const DARKFACTORY_CARD_TYPES = ['Project', 'Ticket', 'KnowledgeArticle'];
+
+/**
+ * Fetch JSON schemas for the DarkFactory card types (Project, Ticket,
+ * KnowledgeArticle) from the realm server. Returns a Map suitable for
+ * passing to ToolBuilderConfig.cardTypeSchemas.
+ */
+async function loadDarkFactorySchemas(
+  realmServerUrl: string,
+  targetRealmUrl: string,
+  options: { authorization?: string; fetch?: typeof globalThis.fetch },
+): Promise<
+  | Map<
+      string,
+      {
+        attributes: Record<string, unknown>;
+        relationships?: Record<string, unknown>;
+      }
+    >
+  | undefined
+> {
+  let darkfactoryModule = `${ensureTrailingSlash(targetRealmUrl)}darkfactory`;
+  let schemas = new Map<
+    string,
+    {
+      attributes: Record<string, unknown>;
+      relationships?: Record<string, unknown>;
+    }
+  >();
+
+  for (let cardName of DARKFACTORY_CARD_TYPES) {
+    try {
+      let schema = await fetchCardTypeSchema(
+        realmServerUrl,
+        targetRealmUrl,
+        { module: darkfactoryModule, name: cardName },
+        options,
+      );
+      if (schema) {
+        schemas.set(cardName, schema);
+      }
+    } catch (error) {
+      console.warn(
+        `[factory-implement] Could not fetch schema for ${cardName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  return schemas.size > 0 ? schemas : undefined;
 }
 
 // Re-export for convenience

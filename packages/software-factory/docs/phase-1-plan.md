@@ -1807,6 +1807,46 @@ To expose a new realm server API:
 1. add a manifest entry with `category: 'realm-api'`
 2. implement the HTTP call pattern in `RealmApiToolExecutor`
 
+## Runtime JSON Schema for Card Type Tools
+
+The `update_project`, `update_ticket`, and `create_knowledge` tools accept structured `attributes` and `relationships` parameters instead of a bare `content: string`. The JSON schemas for these parameters are derived from the actual card definitions at runtime, ensuring they never drift from the source of truth.
+
+### How It Works
+
+1. **Host command**: `GetCardTypeSchemaCommand` (`packages/host/app/commands/get-card-type-schema.ts`) takes a `ResolvedCodeRef` (`{ module, name }`) and calls `generateJsonSchemaForCardType()` in the prerenderer's browser context where the Loader, CardAPI, and field mappings are available.
+
+2. **Transport**: `runRealmCommand()` in `realm-operations.ts` calls the realm server's `/_run-command` endpoint, which enqueues a job that the prerenderer executes. This is a general-purpose function — any host command can be invoked through it.
+
+3. **Schema fetch**: `fetchCardTypeSchema()` in `darkfactory-schemas.ts` wraps `runRealmCommand` with the `GetCardTypeSchemaCommand` specifier and parses the `JsonCard` result.
+
+4. **Caching**: Before the execution loop starts, the factory fetches schemas for `Project`, `Ticket`, and `KnowledgeArticle` once per session. The results are cached in a `Map<string, CardSchema>` and passed to the tool builder via `ToolBuilderConfig.cardTypeSchemas`.
+
+5. **Fallback**: If the realm server is unavailable or the command fails, static hand-crafted schemas in `darkfactory-schemas.ts` are used as fallbacks.
+
+### LLM-Facing Tool Interface
+
+The card tools accept structured parameters with field-level type/enum/description info:
+
+```
+update_ticket({
+  path: "Ticket/1.json",
+  attributes: {
+    status: "in_progress",     // enum: backlog, in_progress, blocked, review, done
+    summary: "Build sticky note",
+    agentNotes: "Started implementation..."
+  },
+  relationships: {
+    project: { links: { self: "https://realm/Project/mvp" } }
+  }
+})
+```
+
+The tool's `execute` function auto-constructs the JSON:API document with the correct `adoptsFrom` module URL — the LLM never needs to know about JSON:API format.
+
+### `run_command` Tool
+
+A general-purpose `run_command` tool is also available to the LLM, allowing it to invoke any host command via the prerenderer. This is documented in the `software-factory-operations` skill and is useful for dynamically inspecting card type schemas, serializing cards, or running other host operations.
+
 ## First-Version Execution Contract
 
 The first version of `factory:go` should do exactly this:

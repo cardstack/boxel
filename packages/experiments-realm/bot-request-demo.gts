@@ -39,6 +39,7 @@ class Isolated extends Component<typeof BotRequestDemo> {
   }
 
   get experimentsRealmURL() {
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     return new URL('./', import.meta.url).href;
   }
 

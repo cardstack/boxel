@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "module": "es2022",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
@@ -22,12 +22,15 @@
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"]
+      "@cardstack/boxel-ui": [
+        "../boxel-ui/addon/declarations"
+      ],
+      "@cardstack/boxel-ui/*": [
+        "../boxel-ui/addon/declarations/*"
+      ],
+      "@cardstack/boxel-host/commands/*": [
+        "../host/app/commands/*"
+      ]
     }
-  },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
   }
 }

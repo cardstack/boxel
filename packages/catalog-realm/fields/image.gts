@@ -221,14 +221,14 @@ class ImageFieldEdit extends Component<typeof ImageField> {
   }
 
   @action
-  handleDragOver(event: DragEvent) {
+  handleDragOver(event: Event) {
     event.preventDefault();
   }
 
   @action
-  handleDrop(event: DragEvent) {
+  handleDrop(event: Event) {
     event.preventDefault();
-    const file = event.dataTransfer?.files?.[0];
+    const file = (event as DragEvent).dataTransfer?.files?.[0];
 
     if (file && file.type.startsWith('image/')) {
       const fakeEvent = {

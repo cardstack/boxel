@@ -354,12 +354,7 @@ export default class InputUsage extends Component {
 
     <FreestyleUsage class='remove-in-percy' @name='Usage on sidebar'>
       <:example>
-        <BoxelContainer
-          for='usage-input-sidebar'
-          @tag='aside'
-          @display='grid'
-          class='sidebar-container'
-        >
+        <BoxelContainer @tag='aside' @display='grid' class='sidebar-container'>
           Sidebar:
           <BoxelInput
             @id='usage-input-sidebar'

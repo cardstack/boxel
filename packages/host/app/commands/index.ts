@@ -22,6 +22,7 @@ import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
+import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
@@ -355,6 +356,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetCardCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-card-type-schema',
+    GetCardTypeSchemaCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-all-realm-metas',
     GetAllRealmMetasCommandModule,
   );
@@ -398,6 +403,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetCardCommandModule.default,
+  GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,

@@ -65,9 +65,11 @@ class IsolatedTemplate extends Component<typeof GameRecordsBoard> {
 
     const adoptsFromModule = new URL(
       this.selectedGameRef.adoptsFrom.module,
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       import.meta.url,
     ).href;
     const adoptsFromName = this.selectedGameRef.adoptsFrom.name;
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     const refModule = new URL(this.selectedGameRef.ref.module, import.meta.url)
       .href;
     const refName = this.selectedGameRef.ref.name;

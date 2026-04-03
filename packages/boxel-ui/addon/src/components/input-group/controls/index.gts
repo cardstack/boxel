@@ -17,7 +17,7 @@ interface InputSignature {
     value?: string;
   };
   Blocks: Record<string, never>;
-  Element: HTMLSpanElement;
+  Element: HTMLInputElement;
 }
 
 export const Input: TemplateOnlyComponent<InputSignature> = <template>
@@ -41,7 +41,7 @@ interface TextareaSignature {
     value?: string;
   };
   Blocks: Record<string, never>;
-  Element: HTMLSpanElement;
+  Element: HTMLTextAreaElement;
 }
 
 export const Textarea: TemplateOnlyComponent<TextareaSignature> = <template>

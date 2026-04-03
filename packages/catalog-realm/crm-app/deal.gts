@@ -67,6 +67,7 @@ interface DealSizeSummary {
 }
 
 const taskSource = {
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
@@ -193,6 +194,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./crm/deal', import.meta.url).href,
           name: 'Deal',
         },
