@@ -18,7 +18,7 @@ import {
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
 import { buildFactoryTools } from '../scripts/lib/factory-tool-builder';
 import { fetchCardTypeSchema } from '../scripts/lib/darkfactory-schemas';
-import { DEFAULT_REALM_OWNER } from '../src/harness/shared';
+import { DEFAULT_REALM_OWNER, sourceRealmURLFor } from '../src/harness/shared';
 import {
   readSupportMetadata,
   registerMatrixUser,
@@ -214,7 +214,6 @@ async function buildToolsForRealm(realm: {
   });
 
   // Fetch schemas from the source realm (where darkfactory.gts lives)
-  let { sourceRealmURLFor } = await import('../src/harness/shared');
   let sourceRealmUrl = sourceRealmURLFor(realm.realmServerURL).href + '/';
   let darkfactoryModule = `${sourceRealmUrl}darkfactory`;
   let authorization = `Bearer ${realm.ownerBearerToken}`;
