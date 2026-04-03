@@ -40,7 +40,10 @@ import {
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import { spendUsageCost } from '@cardstack/billing/ai-billing';
+import {
+  spendUsageCost,
+  fetchGenerationCostWithBackoff,
+} from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { OpenAIError } from 'openai/error';
@@ -86,16 +89,41 @@ class Assistant {
     this.aiBotInstanceId = aiBotInstanceId;
   }
 
-  async trackAiUsageCost(matrixUserId: string, costInUsd: number) {
+  async trackAiUsageCost(
+    matrixUserId: string,
+    opts: { costInUsd?: number; generationId?: string },
+  ) {
     if (trackAiUsageCostPromises.has(matrixUserId)) {
       return;
     }
-    trackAiUsageCostPromises.set(
-      matrixUserId,
-      spendUsageCost(this.pgAdapter, matrixUserId, costInUsd).finally(() => {
-        trackAiUsageCostPromises.delete(matrixUserId);
-      }),
-    );
+    const promise = (async () => {
+      let { costInUsd, generationId } = opts;
+      if (
+        typeof costInUsd === 'number' &&
+        Number.isFinite(costInUsd) &&
+        costInUsd > 0
+      ) {
+        await spendUsageCost(this.pgAdapter, matrixUserId, costInUsd);
+      } else if (generationId) {
+        log.info(
+          `No inline cost for user ${matrixUserId}, falling back to generation cost API (generationId: ${generationId})`,
+        );
+        const fetchedCost = await fetchGenerationCostWithBackoff(
+          generationId,
+          process.env.OPENROUTER_API_KEY!,
+        );
+        if (fetchedCost !== null) {
+          await spendUsageCost(this.pgAdapter, matrixUserId, fetchedCost);
+        }
+      } else {
+        log.warn(
+          `No usage cost and no generation ID for user ${matrixUserId}, skipping credit deduction`,
+        );
+      }
+    })().finally(() => {
+      trackAiUsageCostPromises.delete(matrixUserId);
+    });
+    trackAiUsageCostPromises.set(matrixUserId, promise);
   }
 
   getResponse(prompt: PromptParts, senderMatrixUserId?: string) {
@@ -282,10 +310,9 @@ Common issues are:
             isCanceled: true,
           });
           if (activeGeneration.lastGeneratedChunkId) {
-            await assistant.trackAiUsageCost(
-              senderMatrixUserId,
-              activeGeneration.lastGeneratedChunkId,
-            );
+            await assistant.trackAiUsageCost(senderMatrixUserId, {
+              generationId: activeGeneration.lastGeneratedChunkId,
+            });
           }
           activeGenerations.delete(room.roomId);
         }
@@ -523,17 +550,10 @@ Common issues are:
               await responder.onError(error as OpenAIError);
             }
           } finally {
-            if (
-              typeof costInUsd === 'number' &&
-              Number.isFinite(costInUsd) &&
-              costInUsd > 0
-            ) {
-              assistant.trackAiUsageCost(senderMatrixUserId, costInUsd);
-            } else {
-              log.warn(
-                `No usage cost in streaming response for user ${senderMatrixUserId} (generationId: ${generationId})`,
-              );
-            }
+            assistant.trackAiUsageCost(senderMatrixUserId, {
+              costInUsd,
+              generationId,
+            });
             activeGenerations.delete(room.roomId);
           }
 

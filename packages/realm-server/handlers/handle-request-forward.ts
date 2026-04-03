@@ -74,7 +74,7 @@ async function handleStreamingRequest(
               endpointConfig.creditStrategy.saveUsageCost(
                 dbAdapter,
                 matrixUserId,
-                { usage: { cost: costInUsd } },
+                { id: generationId, usage: { cost: costInUsd } },
               ),
             )
             .finally(() => {

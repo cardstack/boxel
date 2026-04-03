@@ -6,6 +6,7 @@ import {
 import {
   validateAICredits,
   spendUsageCost as spendUsageCostFromBilling,
+  fetchGenerationCostWithBackoff,
 } from '@cardstack/billing/ai-billing';
 
 const log = logger('credit-strategies');
@@ -61,9 +62,24 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
       costInUsd > 0
     ) {
       await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
+      return;
+    }
+
+    const generationId = response?.id;
+    if (generationId) {
+      log.info(
+        `No inline cost for user ${matrixUserId}, falling back to generation cost API (generationId: ${generationId})`,
+      );
+      const fetchedCost = await fetchGenerationCostWithBackoff(
+        generationId,
+        this.openRouterApiKey,
+      );
+      if (fetchedCost !== null) {
+        await spendUsageCostFromBilling(dbAdapter, matrixUserId, fetchedCost);
+      }
     } else {
       log.warn(
-        `No usage cost found in response for user ${matrixUserId}, skipping credit deduction`,
+        `No usage cost and no generation ID in response for user ${matrixUserId}, skipping credit deduction`,
       );
     }
   }

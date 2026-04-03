@@ -372,6 +372,111 @@ module(basename(__filename), function () {
       }
     });
 
+    test('should fall back to generation cost API when inline cost is missing', async function (assert) {
+      // Mock streaming response WITHOUT usage.cost (simulates cancelled stream or missing cost)
+      const originalFetch = global.fetch;
+      const mockFetch = sinon.stub(global, 'fetch');
+
+      const mockStreamResponse = new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'data: {"id":"gen-no-cost-456","choices":[{"delta":{"content":"Hello"}}]}\n\n',
+              ),
+            );
+            // No usage.cost in any chunk
+            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+            controller.close();
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'text/event-stream',
+          },
+        },
+      );
+
+      // Mock generation cost API response (fallback)
+      const mockCostResponse = {
+        data: {
+          id: 'gen-no-cost-456',
+          total_cost: 0.003,
+        },
+      };
+
+      mockFetch.callsFake(
+        async (input: string | URL | Request, _init?: RequestInit) => {
+          const url = typeof input === 'string' ? input : input.toString();
+
+          if (url.includes('/generation?id=')) {
+            return new Response(JSON.stringify(mockCostResponse), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            });
+          } else if (url.includes('/chat/completions')) {
+            return mockStreamResponse;
+          } else {
+            return new Response(JSON.stringify({ error: 'Not found' }), {
+              status: 404,
+            });
+          }
+        },
+      );
+
+      try {
+        const jwt = createRealmServerJWT(
+          { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
+          realmSecretSeed,
+        );
+
+        const response = await request
+          .post('/_request-forward')
+          .set('Accept', 'text/event-stream')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt}`)
+          .send({
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            method: 'POST',
+            requestBody: JSON.stringify({
+              model: 'openai/gpt-3.5-turbo',
+              messages: [{ role: 'user', content: 'Hello' }],
+              stream: true,
+            }),
+            stream: true,
+          });
+
+        assert.strictEqual(response.status, 200, 'Should return 200 status');
+        assert.true(
+          response.text.includes('data: [DONE]'),
+          'Should include end of stream marker',
+        );
+
+        // Verify credits were deducted via fallback (0.003 USD * 1000 = 3 credits)
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 47;
+          },
+          {
+            timeoutMessage:
+              'Credits should be deducted via fallback (50 - 3 = 47)',
+          },
+        );
+      } finally {
+        mockFetch.restore();
+        global.fetch = originalFetch;
+      }
+    });
+
     test('should reject streaming for non-streaming endpoints', async function (assert) {
       const jwt = createRealmServerJWT(
         { user: '@testuser:localhost', sessionRoom: 'test-session-room' },
