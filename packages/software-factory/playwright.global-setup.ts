@@ -300,7 +300,12 @@ export default async function globalSetup() {
   );
 
   let preparedRealmDirs = [
-    ...new Set([realmDir, bootstrapTargetRealmDir, testRealmRunnerDir]),
+    ...new Set([
+      realmDir,
+      bootstrapTargetRealmDir,
+      testRealmRunnerDir,
+      testSourceRealmDir,
+    ]),
   ];
   let preparedTemplates = await prepareTemplatesForRealms(
     preparedRealmDirs,
