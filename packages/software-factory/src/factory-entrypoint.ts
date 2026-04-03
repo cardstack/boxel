@@ -31,6 +31,7 @@ export interface FactoryEntrypointOptions {
   realmServerUrl: string | null;
   mode: FactoryEntrypointMode;
   model?: string;
+  debug?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -109,6 +110,7 @@ export function getFactoryEntrypointUsage(): string {
     '  --realm-server-url <url>   Realm server URL (default: http://localhost:4201/)',
     '  --mode <mode>               One of: bootstrap, implement, resume',
     '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
+    '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
     '',
     'Auth:',
@@ -152,6 +154,9 @@ export function parseFactoryEntrypointArgs(
         model: {
           type: 'string',
         },
+        debug: {
+          type: 'boolean',
+        },
       },
     });
   } catch (error) {
@@ -186,6 +191,7 @@ export function parseFactoryEntrypointArgs(
     realmServerUrl,
     mode,
     model,
+    debug: parsed.values.debug === true ? true : undefined,
   };
 }
 
@@ -250,6 +256,7 @@ export async function runFactoryEntrypoint(
       authorization: targetRealm.authorization,
       bootstrapResult: artifacts,
       model: options.model,
+      debug: options.debug,
       fetch: dependencies?.fetch,
     });
 

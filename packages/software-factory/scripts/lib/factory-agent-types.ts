@@ -57,6 +57,8 @@ export interface FactoryAgentConfig {
   /** Call OpenRouter directly with this API key instead of going through the
    *  realm server _request-forward proxy. Useful for local dev / CI. */
   openRouterApiKey?: string;
+  /** When true, log prompts sent to the LLM and responses received to stderr. */
+  debug?: boolean;
 }
 
 export interface ProjectCard {

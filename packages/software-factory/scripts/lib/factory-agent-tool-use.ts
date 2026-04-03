@@ -123,10 +123,32 @@ export class ToolUseFactoryAgent implements LoopAgent {
     let toolDefs = this.buildToolDefinitions(tools);
     let toolCallLog: ToolCallEntry[] = [];
 
+    if (this.config.debug) {
+      this.debugLog('=== Initial prompt ===');
+      for (let msg of messages) {
+        this.debugLog(
+          `[${msg.role}] ${(msg.content ?? '').slice(0, 2000)}${(msg.content ?? '').length > 2000 ? '... (truncated)' : ''}`,
+        );
+      }
+      this.debugLog(
+        `=== Tools (${toolDefs.length}): ${toolDefs.map((t) => t.function.name).join(', ')} ===`,
+      );
+    }
+
     // Multi-turn tool-calling loop
     for (let turn = 0; turn < MAX_TOOL_USE_TURNS; turn++) {
       let response = await this.callOpenRouterWithTools(messages, toolDefs);
       let choice = response.choices?.[0];
+
+      if (this.config.debug) {
+        this.debugLog(`=== LLM response (turn ${turn + 1}) ===`);
+        this.debugLog(JSON.stringify(choice?.message ?? {}, null, 2));
+        if (response.usage) {
+          this.debugLog(
+            `tokens: prompt=${response.usage.prompt_tokens} completion=${response.usage.completion_tokens} total=${response.usage.total_tokens}`,
+          );
+        }
+      }
 
       if (!choice?.message) {
         throw new Error(
@@ -177,6 +199,10 @@ export class ToolUseFactoryAgent implements LoopAgent {
           args = {};
         }
 
+        if (this.config.debug) {
+          this.debugLog(`>>> tool call: ${toolName}(${JSON.stringify(args)})`);
+        }
+
         let start = Date.now();
         let result: unknown;
         try {
@@ -187,6 +213,13 @@ export class ToolUseFactoryAgent implements LoopAgent {
           };
         }
         let durationMs = Date.now() - start;
+
+        if (this.config.debug) {
+          let resultStr = JSON.stringify(result);
+          this.debugLog(
+            `<<< tool result: ${toolName} (${durationMs}ms) ${resultStr.slice(0, 1000)}${resultStr.length > 1000 ? '... (truncated)' : ''}`,
+          );
+        }
 
         toolCallLog.push({ tool: toolName, args, result, durationMs });
 
@@ -358,5 +391,9 @@ export class ToolUseFactoryAgent implements LoopAgent {
     }
 
     return (await response.json()) as OpenRouterChatResponse;
+  }
+
+  private debugLog(message: string): void {
+    process.stderr.write(`[factory:debug] ${message}\n`);
   }
 }

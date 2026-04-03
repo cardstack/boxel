@@ -73,6 +73,7 @@ module('factory-entrypoint', function (hooks) {
       realmServerUrl: 'https://realms.example.test/',
       mode: 'implement',
       model: undefined,
+      debug: undefined,
     });
   });
 

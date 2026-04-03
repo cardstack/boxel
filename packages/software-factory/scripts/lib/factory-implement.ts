@@ -92,6 +92,8 @@ export interface ImplementConfig {
   model?: string;
   /** Maximum loop iterations before giving up. Default: 5. */
   maxIterations?: number;
+  /** Log LLM prompts and responses to stderr. */
+  debug?: boolean;
   /** Fetch implementation (injectable for testing). */
   fetch?: typeof globalThis.fetch;
   /** Override the agent (injectable for testing). */
@@ -201,6 +203,7 @@ export async function runFactoryImplement(
       model,
       realmServerUrl,
       authorization: config.authorization,
+      debug: config.debug,
     } satisfies FactoryAgentConfig);
 
   // 7. Set up test runner
