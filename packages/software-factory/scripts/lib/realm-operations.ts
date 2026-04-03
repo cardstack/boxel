@@ -226,6 +226,8 @@ export async function readFile(
 ): Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;
+  /** Raw text content for non-JSON files (e.g., .gts source). */
+  content?: string;
   error?: string;
 }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
@@ -248,8 +250,14 @@ export async function readFile(
       };
     }
 
-    let document = (await response.json()) as LooseSingleCardDocument;
-    return { ok: true, document };
+    let text = await response.text();
+    try {
+      let document = JSON.parse(text) as LooseSingleCardDocument;
+      return { ok: true, document };
+    } catch {
+      // Non-JSON content (e.g., .gts source files) — return as raw text
+      return { ok: true, content: text };
+    }
   } catch (err) {
     return {
       ok: false,

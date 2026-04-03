@@ -159,13 +159,15 @@ export async function runFactoryImplement(
   } satisfies ToolExecutorConfig);
 
   // Fetch card type schemas for typed tool parameters.
-  // DarkFactory card types live in the source realm (software-factory/),
-  // not the target realm. Uses the server token because _run-command is a
-  // server-level endpoint.
-  let sourceRealmUrl = new URL('software-factory/', realmServerUrl).href;
+  // The _run-command targets the user's target realm (where they have
+  // permissions). The codeRef module URLs point to the source realm
+  // (software-factory/) where darkfactory.gts lives — the card loader
+  // resolves cross-realm module references.
+  let darkfactoryModuleBase = new URL('software-factory/', realmServerUrl).href;
   let cardTypeSchemas = await loadDarkFactorySchemas(
     realmServerUrl,
-    sourceRealmUrl,
+    targetRealmUrl,
+    darkfactoryModuleBase,
     { authorization: serverToken, fetch: fetchImpl },
   );
 
@@ -697,7 +699,8 @@ const BASE_CARD_TYPES: { module: string; name: string }[] = [
  */
 async function loadDarkFactorySchemas(
   realmServerUrl: string,
-  sourceRealmUrl: string,
+  commandRealmUrl: string,
+  darkfactoryModuleBase: string,
   options: { authorization?: string; fetch?: typeof globalThis.fetch },
 ): Promise<
   | Map<
@@ -709,7 +712,7 @@ async function loadDarkFactorySchemas(
     >
   | undefined
 > {
-  let darkfactoryModule = `${ensureTrailingSlash(sourceRealmUrl)}darkfactory`;
+  let darkfactoryModule = `${ensureTrailingSlash(darkfactoryModuleBase)}darkfactory`;
   let schemas = new Map<
     string,
     {
@@ -722,7 +725,7 @@ async function loadDarkFactorySchemas(
     try {
       let schema = await fetchCardTypeSchema(
         realmServerUrl,
-        sourceRealmUrl,
+        commandRealmUrl,
         { module: darkfactoryModule, name: cardName },
         options,
       );
@@ -743,7 +746,7 @@ async function loadDarkFactorySchemas(
     try {
       let schema = await fetchCardTypeSchema(
         realmServerUrl,
-        sourceRealmUrl,
+        commandRealmUrl,
         { module: mod, name },
         options,
       );
