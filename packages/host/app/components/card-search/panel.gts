@@ -16,6 +16,7 @@ import type { PickerOption } from '@cardstack/boxel-ui/components';
 
 import {
   type Filter,
+  type ResolvedCodeRef,
   type getCardCollection,
   baseCardRef,
   baseFieldRef,
@@ -58,6 +59,7 @@ interface Signature {
   Args: {
     searchKey: string;
     baseFilter?: Filter;
+    initialSelectedType?: ResolvedCodeRef;
     availableRealmUrls?: string[];
     consumingRealm?: URL;
     preselectConsumingRealm?: boolean;
@@ -181,10 +183,7 @@ export default class SearchPanel extends Component<Signature> {
     const realmFiltered = cards.filter(
       (c) => c.id && realmURLs.some((url) => c.id.startsWith(url)),
     );
-    const typeRefs = getFilterTypeRefs(
-      this.args.baseFilter,
-      this.args.searchKey,
-    );
+    const typeRefs = getFilterTypeRefs(this.args.baseFilter);
     return filterCardsByTypeRefs(realmFiltered, typeRefs);
   }
 
@@ -230,13 +229,17 @@ export default class SearchPanel extends Component<Signature> {
         this._typesTotalCount = result.meta.page.total;
         this._hasMoreTypes = result.data.length < result.meta.page.total;
 
-        // If there are selected types not yet in the fetched results,
-        // keep fetching more pages until they're all found (or no more pages).
+        // If there are selected types (or an initialSelectedType) not yet in
+        // the fetched results, keep fetching more pages until they're found.
         const selectedIds = new Set(
           this._previousSelectedTypes
             .filter((opt) => opt.type !== 'select-all')
             .map((opt) => opt.id),
         );
+        const initialType = this.args.initialSelectedType;
+        if (initialType) {
+          selectedIds.add(internalKeyFor(initialType, undefined));
+        }
 
         if (selectedIds.size > 0 && this._hasMoreTypes) {
           while (this._hasMoreTypes) {
@@ -289,7 +292,7 @@ export default class SearchPanel extends Component<Signature> {
   });
 
   private get baseFilterCodeRefs(): Set<string> | undefined {
-    const typeRefs = getFilterTypeRefs(this.args.baseFilter, '');
+    const typeRefs = getFilterTypeRefs(this.args.baseFilter);
     if (!typeRefs || typeRefs.length === 0) {
       return undefined;
     }
@@ -378,20 +381,29 @@ export default class SearchPanel extends Component<Signature> {
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
 
     if (hadSelectAll) {
-      // If baseFilter constrains to specific types and they exist in options,
-      // auto-select them instead of defaulting to "Any Type"
-      const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter, '');
-      const baseRefs =
-        baseTypeRefs
-          ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
-          .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
-      if (baseRefs.length > 0) {
-        const autoSelected = baseRefs
-          .filter((ref) => optionsById.has(ref))
-          .map((ref) => optionsById.get(ref)!);
-        value.selected = autoSelected.length > 0 ? autoSelected : [];
+      // If initialSelectedType is provided (e.g., from "Find Instances"),
+      // pre-select that type in the picker
+      const initialType = this.args.initialSelectedType;
+      if (initialType) {
+        const typeKey = internalKeyFor(initialType, undefined);
+        const matchingOption = optionsById.get(typeKey);
+        value.selected = matchingOption ? [matchingOption] : [];
       } else {
-        value.selected = [];
+        // If baseFilter constrains to specific types and they exist in options,
+        // auto-select them instead of defaulting to "Any Type"
+        const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter);
+        const baseRefs =
+          baseTypeRefs
+            ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
+            .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
+        if (baseRefs.length > 0) {
+          const autoSelected = baseRefs
+            .filter((ref) => optionsById.has(ref))
+            .map((ref) => optionsById.get(ref)!);
+          value.selected = autoSelected.length > 0 ? autoSelected : [];
+        } else {
+          value.selected = [];
+        }
       }
     } else if (this._isLoadingTypes || this._isLoadingMoreTypes) {
       // Type summaries still loading — keep previous selections

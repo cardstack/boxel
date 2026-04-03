@@ -22,6 +22,7 @@ import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import {
   type Filter,
+  type ResolvedCodeRef,
   baseCardRef,
   baseFieldRef,
 } from '@cardstack/runtime-common';
@@ -29,7 +30,6 @@ import {
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import SearchPanel from '../card-search/panel';
-import { getCodeRefFromSearchKey } from '../card-search/utils';
 
 import type StoreService from '../../services/store';
 
@@ -48,7 +48,9 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     mode: SearchSheetMode;
-    onSetup: (doSearch: (term: string) => void) => void;
+    onSetup: (
+      doSearch: (term: string, typeRef?: ResolvedCodeRef) => void,
+    ) => void;
     onCancel: () => void;
     onFocus: () => void;
     onBlur: () => void;
@@ -62,6 +64,7 @@ interface Signature {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
+  @tracked private initialSelectedType: ResolvedCodeRef | undefined;
 
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
@@ -103,10 +106,6 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get searchKeyIsURL() {
-    let maybeType = getCodeRefFromSearchKey(this.searchKey);
-    if (maybeType) {
-      return false;
-    }
     try {
       new URL(this.searchKey);
       return true;
@@ -138,12 +137,14 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   @action
-  private doExternallyTriggeredSearch(term: string) {
+  private doExternallyTriggeredSearch(term: string, typeRef?: ResolvedCodeRef) {
     this.searchKey = term;
+    this.initialSelectedType = typeRef;
   }
 
   private resetState() {
     this.searchKey = '';
+    this.initialSelectedType = undefined;
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -246,6 +247,7 @@ export default class SearchSheet extends Component<Signature> {
         <SearchPanel
           @searchKey={{this.searchKey}}
           @baseFilter={{this.baseFilter}}
+          @initialSelectedType={{this.initialSelectedType}}
           @onFilterChange={{@onFilterChange}}
           as |Bar Content joinedRealmURLs|
         >

@@ -72,7 +72,7 @@ interface Signature {
     default: [
       {
         openSearchToPrompt: () => void;
-        openSearchToResults: (term: string) => void;
+        openSearchToResults: (term: string, typeRef?: ResolvedCodeRef) => void;
         updateSubmode: (submode: Submode) => void;
       },
     ];
@@ -122,7 +122,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
-  declare private doSearch: (term: string) => void;
+  declare private doSearch: (term: string, typeRef?: ResolvedCodeRef) => void;
 
   @action
   private storeTopBarCenterElement(element: Element) {
@@ -362,32 +362,36 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchElement.focus();
   }
   @action
-  private openSearchAndShowResults(term: string) {
-    this.doOpenSearchAndShowResults.perform(term);
+  private openSearchAndShowResults(term: string, typeRef?: ResolvedCodeRef) {
+    this.doOpenSearchAndShowResults.perform(term, typeRef);
   }
 
   @action
-  private setupSearch(doSearch: (term: string) => void) {
+  private setupSearch(
+    doSearch: (term: string, typeRef?: ResolvedCodeRef) => void,
+  ) {
     this.doSearch = doSearch;
   }
 
-  private doOpenSearchAndShowResults = restartableTask(async (term: string) => {
-    this.suppressSearchClose = true;
+  private doOpenSearchAndShowResults = restartableTask(
+    async (term: string, typeRef?: ResolvedCodeRef) => {
+      this.suppressSearchClose = true;
 
-    let wasClosed = this.searchSheetMode === SearchSheetModes.Closed;
-    this.searchSheetMode = SearchSheetModes.SearchResults;
-    this.searchElement?.focus();
-    if (wasClosed) {
-      this.args.onSearchSheetOpened?.();
-    }
-    this.doSearch(term);
+      let wasClosed = this.searchSheetMode === SearchSheetModes.Closed;
+      this.searchSheetMode = SearchSheetModes.SearchResults;
+      this.searchElement?.focus();
+      if (wasClosed) {
+        this.args.onSearchSheetOpened?.();
+      }
+      this.doSearch(term, typeRef);
 
-    // we need to prevent the onblur of the search sheet from triggering a
-    // search sheet close from the click that actually triggered the search
-    // sheet to show in the first place
-    await timeout(250);
-    this.suppressSearchClose = false;
-  });
+      // we need to prevent the onblur of the search sheet from triggering a
+      // search sheet close from the click that actually triggered the search
+      // sheet to show in the first place
+      await timeout(250);
+      this.suppressSearchClose = false;
+    },
+  );
 
   @tracked private isChooseSubscriptionPlanModalOpen = false;
 
