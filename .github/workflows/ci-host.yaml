@@ -43,10 +43,11 @@ jobs:
             exit 0
           fi
 
-          REVIEWER_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} --jq '(.requested_reviewers | length) + (.requested_teams | length)')
-          if [[ "$REVIEWER_COUNT" -eq 0 ]]; then
+          OUTSTANDING_REVIEWER_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} --jq '(.requested_reviewers | length) + (.requested_teams | length)')
+          EXISTING_REVIEW_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews --paginate --jq 'length')
+          if [[ "$OUTSTANDING_REVIEWER_COUNT" -eq 0 && "$EXISTING_REVIEW_COUNT" -eq 0 ]]; then
             echo "percy_needed=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping Percy — no reviewers assigned. Percy snapshots are limited (10k/month), so they only run once a reviewer is assigned to avoid burning through the quota on work-in-progress PRs. Add a reviewer to trigger Percy."
+            echo "Skipping Percy — no reviewers have been assigned yet. Percy snapshots are limited (10k/month), so they only run once a PR has entered review to avoid burning through the quota on work-in-progress PRs. Add a reviewer to trigger Percy."
             exit 0
           fi
 
