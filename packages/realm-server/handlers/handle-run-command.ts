@@ -90,18 +90,21 @@ export default function handleRunCommand({
 
       let result = await job.done;
 
-      setContextResponse(ctxt, {
-        body: JSON.stringify({
-          data: {
-            type: 'run-command-result',
-            attributes: result,
+      await setContextResponse(
+        ctxt,
+        new Response(
+          JSON.stringify({
+            data: {
+              type: 'run-command-result',
+              attributes: result,
+            },
+          }),
+          {
+            status: 201,
+            headers: { 'Content-Type': 'application/vnd.api+json' },
           },
-        }),
-        status: 201,
-        headers: {
-          'content-type': 'application/vnd.api+json',
-        },
-      });
+        ),
+      );
     } catch (error) {
       console.error('Failed to execute run-command job:', error);
       return sendResponseForSystemError(ctxt, 'Run command failed');
