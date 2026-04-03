@@ -146,8 +146,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const backgroundWork = Promise.all([
       this.autoPatchName(listingCard, codeRef),
       this.autoPatchSummary(listingCard, codeRef),
-      this.autoLinkTag(listingCard),
-      this.autoLinkCategory(listingCard),
+      this.autoLinkTag(listingCard, codeRef),
+      this.autoLinkCategory(listingCard, codeRef),
       this.autoLinkLicense(listingCard),
       this.autoLinkExample(listingCard, codeRef, openCardIds),
       this.linkSpecs(
@@ -285,12 +285,19 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   // --- Linking helpers now use SearchAndChooseCommand ---
   private async chooseCards(
-    codeRef: ResolvedCodeRef,
-    opts?: { max?: number; additionalSystemPrompt?: string },
+    params: {
+      candidateTypeCodeRef: ResolvedCodeRef;
+      sourceContextCodeRef?: ResolvedCodeRef;
+    },
+    opts?: {
+      max?: number;
+      additionalSystemPrompt?: string;
+    },
   ) {
     const command = new SearchAndChooseCommand(this.commandContext);
     const result = await command.execute({
-      codeRef,
+      candidateTypeCodeRef: params.candidateTypeCodeRef,
+      sourceContextCodeRef: params.sourceContextCodeRef,
       max: opts?.max ?? 2,
       additionalSystemPrompt: opts?.additionalSystemPrompt,
     });
@@ -418,22 +425,25 @@ export default class ListingCreateCommand extends HostBaseCommand<
       uniqueById.size < MAX_EXAMPLES
     ) {
       try {
-        const searchAndChoose = new SearchAndChooseCommand(this.commandContext);
         const existingIds = Array.from(uniqueById.keys());
-        const result = await searchAndChoose.execute({
-          codeRef,
-          max: Math.max(1, MAX_EXAMPLES - existingIds.length),
-          additionalSystemPrompt: [
-            'Prefer examples that showcase common or high-impact use cases.',
-            existingIds.length
-              ? `Do not include any id already linked: ${existingIds.join(', ')}.`
-              : '',
-            'Return [] if nothing relevant is found.',
-          ]
-            .filter(Boolean)
-            .join(' '),
-        });
-        for (const card of result.selectedCards ?? []) {
+        const additionalExamples = await this.chooseCards(
+          {
+            candidateTypeCodeRef: codeRef,
+          },
+          {
+            max: Math.max(1, MAX_EXAMPLES - existingIds.length),
+            additionalSystemPrompt: [
+              'Prefer examples that showcase common or high-impact use cases.',
+              existingIds.length
+                ? `Do not include any id already linked: ${existingIds.join(', ')}.`
+                : '',
+              'Return [] if nothing relevant is found.',
+            ]
+              .filter(Boolean)
+              .join(' '),
+          },
+        );
+        for (const card of additionalExamples) {
           addCard(card as CardAPI.CardDef);
         }
       } catch (error) {
@@ -449,41 +459,58 @@ export default class ListingCreateCommand extends HostBaseCommand<
   private async autoLinkLicense(listing: CardAPI.CardDef) {
     const selected = await this.chooseCards(
       {
-        module: `${this.catalogRealm}catalog-app/listing/license`,
-        name: 'License',
-      } as ResolvedCodeRef,
+        candidateTypeCodeRef: {
+          module: `${this.catalogRealm}catalog-app/listing/license`,
+          name: 'License',
+        } as ResolvedCodeRef,
+      },
       { max: 1 },
     );
     (listing as any).license = selected[0];
   }
 
-  private async autoLinkTag(listing: CardAPI.CardDef) {
+  private async autoLinkTag(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+  ) {
     const selected = await this.chooseCards(
       {
-        module: `${this.catalogRealm}catalog-app/listing/tag`,
-        name: 'Tag',
-      } as ResolvedCodeRef,
+        candidateTypeCodeRef: {
+          module: `${this.catalogRealm}catalog-app/listing/tag`,
+          name: 'Tag',
+        } as ResolvedCodeRef,
+        sourceContextCodeRef: codeRef,
+      },
       {
         max: 2,
         additionalSystemPrompt:
-          'RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
+          "Choose tags that best describe the card's nature or usage pattern." +
+          ' RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
       },
     );
     (listing as any).tags = selected;
   }
 
-  private async autoLinkCategory(listing: CardAPI.CardDef) {
+  private async autoLinkCategory(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+  ) {
     const selected = await this.chooseCards(
       {
-        module: `${this.catalogRealm}catalog-app/listing/category`,
-        name: 'Category',
-      } as ResolvedCodeRef,
-      { max: 2 },
+        candidateTypeCodeRef: {
+          module: `${this.catalogRealm}catalog-app/listing/category`,
+          name: 'Category',
+        } as ResolvedCodeRef,
+        sourceContextCodeRef: codeRef,
+      },
+      {
+        max: 2,
+        additionalSystemPrompt:
+          "Choose categories that best match the card's domain or purpose.",
+      },
     );
     (listing as any).categories = selected;
   }
-
-  // Removed bespoke AI selection/parsing helpers in favor of SearchAndChooseCommand
 
   private async getStringPatch(opts: {
     systemPrompt: string;
