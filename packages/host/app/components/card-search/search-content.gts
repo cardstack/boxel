@@ -40,7 +40,6 @@ import {
 } from './constants';
 import SearchResultHeader from './search-result-header';
 import SearchResultSection from './search-result-section';
-import { getCodeRefFromSearchKey } from './utils';
 
 import type { PrerenderedCard } from '../prerendered-card-search';
 
@@ -199,10 +198,6 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get searchKeyIsURL() {
-    let maybeType = getCodeRefFromSearchKey(this.args.searchKey);
-    if (maybeType) {
-      return false;
-    }
     try {
       new URL(this.args.searchKey);
       return true;
@@ -215,8 +210,7 @@ export default class SearchContent extends Component<Signature> {
     if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
       return undefined;
     }
-    const type = getCodeRefFromSearchKey(this.args.searchKey);
-    return type ? undefined : this.args.searchKey;
+    return this.args.searchKey;
   }
 
   private get searchKeyAsURL() {

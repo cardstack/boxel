@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
 
@@ -23,16 +24,30 @@ export default class RealmPicker extends Component<Signature> {
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
+  // Provide a default selection so Picker's ensureDefaultSelection() never
+  // fires onChange to the parent. Without this, Picker sees an empty @selected
+  // on first render and calls onChange([select-all]), which the parent
+  // interprets as a user-initiated filter change (expanding the search sheet).
+  @cached
+  get selectAllOption(): PickerOption {
+    const urls = this.realmServer.availableRealmURLs;
+    return {
+      id: 'select-all',
+      label: `Select All (${urls.length})`,
+      shortLabel: `All`,
+      type: 'select-all',
+    };
+  }
+
+  get selected(): PickerOption[] {
+    return this.args.selected.length > 0
+      ? this.args.selected
+      : [this.selectAllOption];
+  }
+
   get realmOptions(): PickerOption[] {
     const urls = this.realmServer.availableRealmURLs;
-    const options: PickerOption[] = [
-      {
-        id: 'select-all',
-        label: `Select All (${urls.length})`,
-        shortLabel: `All`,
-        type: 'select-all',
-      },
-    ];
+    const options: PickerOption[] = [this.selectAllOption];
     for (const realmURL of urls) {
       const info = this.realm.info(realmURL);
       const label = info?.name ?? this.realmDisplayNameFromURL(realmURL);
@@ -66,7 +81,7 @@ export default class RealmPicker extends Component<Signature> {
         <Picker
           @label={{if @label @label 'Realm'}}
           @options={{this.realmOptions}}
-          @selected={{@selected}}
+          @selected={{this.selected}}
           @onChange={{@onChange}}
           @placeholder={{@placeholder}}
           @searchPlaceholder='Search for a realm'

@@ -2509,9 +2509,7 @@ export class ExportedCard extends ExportedCardParent {
 
     await click('[data-test-action-button="Find instances"]');
     await waitFor('[data-test-search-sheet-search-result]');
-    assert
-      .dom('[data-test-search-field]')
-      .hasValue(`carddef:${testRealmURL}pet/Pet`);
+    assert.dom('[data-test-search-field]').hasValue('');
     await waitUntil(() =>
       (
         document.querySelector('[data-test-search-label]') as HTMLElement
