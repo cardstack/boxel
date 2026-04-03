@@ -1506,6 +1506,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'card-refs.md': {
+                links: {
+                  related: `${testRealmHref}card-refs.md`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'chess-gallery.gts': {
                 links: {
                   related: `${testRealmHref}chess-gallery.gts`,
