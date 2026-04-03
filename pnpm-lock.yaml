@@ -2011,8 +2011,8 @@ importers:
         specifier: ^2.0.0
         version: 2.0.0(@glint/environment-ember-loose@1.5.2(@glimmer/component@2.0.0)(@glint/template@1.3.0)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))))(@glint/template@1.3.0)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))
       ember-exam:
-        specifier: ^10.0.0
-        version: 10.0.1(@glint/template@1.3.0)(ember-qunit@9.0.4(@ember/test-helpers@5.4.1(@babel/core@7.28.6)(@glint/template@1.3.0))(@glint/template@1.3.0)(qunit@2.25.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))(qunit@2.25.0)(webpack@5.104.1)
+        specifier: ^10.1.0
+        version: 10.1.0(@glint/template@1.3.0)(ember-qunit@9.0.4(@ember/test-helpers@5.4.1(@babel/core@7.28.6)(@glint/template@1.3.0))(@glint/template@1.3.0)(qunit@2.25.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))(qunit@2.25.0)(webpack@5.104.1)
       ember-focus-trap:
         specifier: ^1.0.1
         version: 1.1.1(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))
@@ -8784,8 +8784,8 @@ packages:
       '@typescript-eslint/parser':
         optional: true
 
-  ember-exam@10.0.1:
-    resolution: {integrity: sha512-ieWoVWrqCnuAx+5+u6epnKPgEAraWFM/1xqlhN963cyTj9lyaNZKfRM4XaiVOXPd1RW3ULOLOCdnY/fw2KEk+A==}
+  ember-exam@10.1.0:
+    resolution: {integrity: sha512-6jUftmu2zpmLZ35PCsZDbdsAXTm2GjCGT3SjRX+BkUr2yKYpbD9B2R7hqCUnqOOTkdp2lzhBcGZ+KwwLLdH7eg==}
     engines: {node: '>= 18'}
     peerDependencies:
       ember-qunit: '*'
@@ -21812,14 +21812,14 @@ snapshots:
     transitivePeerDependencies:
       - eslint
 
-  ember-exam@10.0.1(@glint/template@1.3.0)(ember-qunit@9.0.4(@ember/test-helpers@5.4.1(@babel/core@7.28.6)(@glint/template@1.3.0))(@glint/template@1.3.0)(qunit@2.25.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))(qunit@2.25.0)(webpack@5.104.1):
+  ember-exam@10.1.0(@glint/template@1.3.0)(ember-qunit@9.0.4(@ember/test-helpers@5.4.1(@babel/core@7.28.6)(@glint/template@1.3.0))(@glint/template@1.3.0)(qunit@2.25.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5))(qunit@2.25.0)(webpack@5.104.1):
     dependencies:
       '@babel/core': 7.28.6(supports-color@8.1.1)
       chalk: 5.6.2
       cli-table3: 0.6.5
       debug: 4.4.3(supports-color@8.1.1)
       ember-auto-import: 2.12.0(@glint/template@1.3.0)(webpack@5.104.1)
-      ember-cli-babel: 8.2.0(@babel/core@7.28.6)
+      ember-cli-babel: 8.3.1(@babel/core@7.28.6)
       ember-qunit: 9.0.4(@ember/test-helpers@5.4.1(@babel/core@7.28.6)(@glint/template@1.3.0))(@glint/template@1.3.0)(qunit@2.25.0)
       ember-source: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.0.0)(rsvp@4.8.5)
       execa: 8.0.1
