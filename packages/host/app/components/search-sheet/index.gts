@@ -20,7 +20,11 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
-import { type Filter, baseRef } from '@cardstack/runtime-common';
+import {
+  type Filter,
+  baseCardRef,
+  baseFieldRef,
+} from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -164,7 +168,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get baseFilter(): Filter {
-    return { type: baseRef };
+    return { any: [{ type: baseCardRef }, { type: baseFieldRef }] };
   }
 
   private get searchKeyAsURL() {
