@@ -97,6 +97,10 @@ export class Prerenderer {
     });
   }
 
+  set serverURL(url: string) {
+    this.#pagePool.serverURL = url;
+  }
+
   getWarmAffinities(): string[] {
     return this.#pagePool.getWarmAffinities();
   }

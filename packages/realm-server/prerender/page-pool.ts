@@ -141,6 +141,10 @@ export class PagePool {
     this.#disableStandbyRefill = options.disableStandbyRefill ?? false;
   }
 
+  set serverURL(url: string) {
+    this.#serverURL = url;
+  }
+
   getWarmAffinities(): string[] {
     return [...this.#affinityPages.keys()];
   }
