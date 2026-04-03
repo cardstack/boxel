@@ -109,50 +109,7 @@ export async function spendUsageCost(
   }
 }
 
-export async function saveUsageCost(
-  dbAdapter: DBAdapter,
-  matrixUserId: string,
-  generationId: string,
-  openRouterApiKey: string,
-) {
-  try {
-    // Generation data is sometimes not immediately available, so we retry a couple of times until we are able to get the cost
-    let costInUsd = await fetchGenerationCostWithBackoff(
-      generationId,
-      openRouterApiKey,
-    );
-
-    if (costInUsd === null) {
-      Sentry.captureException(
-        new Error(
-          `Failed to fetch generation cost after retries (generationId: ${generationId})`,
-        ),
-      );
-      return;
-    }
-
-    let creditsConsumed = Math.round(costInUsd * CREDITS_PER_USD);
-
-    let user = await getUserByMatrixUserId(dbAdapter, matrixUserId);
-
-    if (!user) {
-      throw new Error(
-        `should not happen: user with matrix id ${matrixUserId} not found in the users table`,
-      );
-    }
-
-    await spendCredits(dbAdapter, user.id, creditsConsumed);
-  } catch (err) {
-    log.error(
-      `Failed to track AI usage (matrixUserId: ${matrixUserId}, generationId: ${generationId}):`,
-      err,
-    );
-    Sentry.captureException(err);
-    // Don't throw, because we don't want to crash the application over this
-  }
-}
-
-async function fetchGenerationCostWithBackoff(
+export async function fetchGenerationCostWithBackoff(
   generationId: string,
   openRouterApiKey: string,
 ): Promise<number | null> {
@@ -202,7 +159,6 @@ async function fetchGenerationCost(
     },
   );
 
-  // 404 means generation data probably isn't available yet - return null to trigger retry
   if (response.status === 404) {
     return null;
   }
@@ -223,25 +179,4 @@ async function fetchGenerationCost(
   }
 
   return data.data.total_cost;
-}
-
-export function extractGenerationIdFromResponse(
-  response: any,
-): string | undefined {
-  // OpenRouter responses typically include a generation_id in the response
-  // This might be in different places depending on the endpoint
-  if (response.id) {
-    return response.id;
-  }
-
-  if (response.choices && response.choices[0] && response.choices[0].id) {
-    return response.choices[0].id;
-  }
-
-  // For chat completions, the generation ID might be in usage
-  if (response.usage && response.usage.generation_id) {
-    return response.usage.generation_id;
-  }
-
-  return undefined;
 }
