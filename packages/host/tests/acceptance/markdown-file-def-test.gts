@@ -438,6 +438,17 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     await waitFor('[data-test-pet-embedded]', { timeout: 10000 });
     await waitFor('[data-test-card-url-bar-input]');
 
+    // Wait for the overlay click handler to be bound (cursor: pointer is set by the Overlays component)
+    await waitUntil(
+      () => {
+        let el = document.querySelector(
+          '[data-test-markdown-bfm-inline-card]',
+        ) as HTMLElement | null;
+        return el?.style.cursor === 'pointer';
+      },
+      { timeout: 5000 },
+    );
+
     await click('[data-test-markdown-bfm-inline-card]');
 
     await waitUntil(
