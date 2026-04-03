@@ -262,19 +262,7 @@ module(basename(__filename), function () {
       });
     });
 
-    test('file meta for markdown with card references includes sideloaded linked cards', async function (assert) {
-      let realmEventTimestampStart = Date.now();
-
-      await testRealm.write(
-        'card-refs.md',
-        `# Card References\n\nInline ref: :card[${testRealmHref}hassan]\n\n::card[${testRealmHref}jade]\n`,
-      );
-
-      await waitForIncrementalIndexEvent(
-        getMessagesSince,
-        realmEventTimestampStart,
-      );
-
+    test('file meta for markdown with card references stores cardReferenceUrls', async function (assert) {
       let response = await request
         .get(`/card-refs.md`)
         .set('Accept', SupportedMimeType.FileMeta)
@@ -292,26 +280,18 @@ module(basename(__filename), function () {
         name: 'MarkdownDef',
       });
 
-      // The linkedCards query relationship should be populated
-      let linkedCards = json.data.relationships?.linkedCards;
-      assert.ok(linkedCards, 'linkedCards relationship is present');
+      let cardReferenceUrls = json.data.attributes?.cardReferenceUrls;
       assert.ok(
-        linkedCards?.links?.search,
-        'linkedCards has a search link',
-      );
-
-      // Sideloaded included resources should contain the referenced cards
-      assert.ok(json.included, 'response has included resources');
-      let includedIds = (json.included ?? []).map(
-        (r: { id: string }) => r.id,
+        Array.isArray(cardReferenceUrls),
+        'cardReferenceUrls attribute is present',
       );
       assert.true(
-        includedIds.some((id: string) => id.includes('hassan')),
-        'included resources contain hassan card',
+        cardReferenceUrls.some((url: string) => url.includes('hassan')),
+        'cardReferenceUrls includes hassan',
       );
       assert.true(
-        includedIds.some((id: string) => id.includes('jade')),
-        'included resources contain jade card',
+        cardReferenceUrls.some((url: string) => url.includes('jade')),
+        'cardReferenceUrls includes jade',
       );
     });
 
