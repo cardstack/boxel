@@ -107,6 +107,9 @@ const ALWAYS_LOAD_REFERENCES: readonly string[] = [
   'dev-core-concept.md',
   'dev-technical-rules.md',
   'dev-quick-reference.md',
+  'dev-realm-search.md',
+  'dev-playwright-testing.md',
+  'dev-spec-usage.md',
 ];
 
 // ---------------------------------------------------------------------------
