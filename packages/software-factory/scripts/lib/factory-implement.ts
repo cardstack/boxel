@@ -173,11 +173,13 @@ export async function runFactoryImplement(
     { authorization: serverToken, fetch: fetchImpl },
   );
 
+  let testResultsModuleUrl = `${new URL('software-factory/test-results', realmServerUrl).href}`;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
     testRealmUrl,
     realmTokens,
     serverToken,
+    testResultsModuleUrl,
     fetch: fetchImpl,
     cardTypeSchemas,
     matrixAuth: matrixAuth
@@ -535,7 +537,7 @@ function buildTestRunner(
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
-        testResultsModuleUrl: `${ensureTrailingSlash(targetRealmUrl)}test-results`,
+        testResultsModuleUrl: `${ensureTrailingSlash(runConfig.realmServerUrl)}software-factory/test-results`,
         slug,
         specPaths,
         testNames: [],
