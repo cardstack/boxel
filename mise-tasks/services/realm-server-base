@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Start base realm server only"
-#MISE depends=["infra:ensure-pg"]
+#MISE depends=["infra:ensure-traefik", "infra:ensure-pg"]
 #MISE dir="packages/realm-server"
 
 if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
@@ -8,10 +8,27 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
   export MATRIX_REGISTRATION_SHARED_SECRET
 fi
 
+# The base-only realm server uses dedicated port/db/paths that differ from
+# the main development realm server. In env mode, use the env vars; in
+# standard mode, use the base-specific defaults.
+if [ -n "$ENV_MODE" ]; then
+  WORKER_MANAGER_ARG="--workerManagerUrl=${WORKER_MGR_URL}"
+  REALM_BASE_PORT="${REALM_PORT}"
+  REALM_BASE_DB="${PGDATABASE}"
+  REALM_BASE_ROOT="${REALMS_ROOT}"
+  REALM_BASE_TO_URL="${REALM_BASE_URL}/base/"
+else
+  WORKER_MANAGER_ARG="$1"
+  REALM_BASE_PORT=4201
+  REALM_BASE_DB=boxel_base
+  REALM_BASE_ROOT="./realms/localhost_4201_base"
+  REALM_BASE_TO_URL="http://localhost:4201/base/"
+fi
+
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
   PGPORT="${PGPORT}" \
-  PGDATABASE=boxel_base \
+  PGDATABASE="${REALM_BASE_DB}" \
   REALM_SERVER_SECRET_SEED="mum's the word" \
   REALM_SECRET_SEED="shhh! it's a secret" \
   GRAFANA_SECRET="shhh! it's a secret" \
@@ -19,14 +36,14 @@ NODE_ENV=development \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
   ts-node \
   --transpileOnly main \
-  --port=4201 \
+  --port="${REALM_BASE_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
-  --realmsRootPath='./realms/localhost_4201_base' \
+  --realmsRootPath="${REALM_BASE_ROOT}" \
   --prerendererUrl="${PRERENDER_URL}" \
   --migrateDB \
-  $1 \
+  $WORKER_MANAGER_ARG \
   \
   --path='../base' \
   --username='base_realm' \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/'
+  --toUrl="${REALM_BASE_TO_URL}"

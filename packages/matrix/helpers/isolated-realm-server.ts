@@ -6,6 +6,12 @@ import { ensureDirSync, copySync, readFileSync } from 'fs-extra';
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from '../docker/synapse';
+import {
+  isEnvironmentMode,
+  getEnvironmentSlug,
+  registerServiceWithTraefik,
+  deregisterServiceFromTraefik,
+} from './environment-config';
 
 setGracefulCleanup();
 
@@ -18,7 +24,20 @@ const skillsRealmDir = resolve(
 );
 const baseRealmDir = resolve(join(__dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(__dirname, '..'));
-export const appURL = 'http://localhost:4205/test';
+
+const ISOLATED_REALM_SERVICE = 'realm-matrix-test';
+const ISOLATED_WORKER_SERVICE = 'worker-matrix-test';
+const ISOLATED_PRERENDER_SERVICE = 'prerender-matrix-test';
+
+// Compute URLs from BOXEL_ENVIRONMENT directly so that setting just that
+// one env var is sufficient — no need to source env-vars.sh first.
+const envMode = isEnvironmentMode();
+const envSlug = envMode ? getEnvironmentSlug() : '';
+export const serverIndexUrl = envMode
+  ? `http://${ISOLATED_REALM_SERVICE}.${envSlug}.localhost`
+  : 'http://localhost:4205';
+export const appURL = `${serverIndexUrl}/test`;
+export const realmDomain = serverIndexUrl.replace(/^https?:\/\//, '');
 
 const DEFAULT_PRERENDER_PORT = 4231;
 
@@ -53,7 +72,8 @@ async function isPortAvailable(port: number): Promise<boolean> {
 }
 
 async function findAvailablePort(preferred?: number): Promise<number> {
-  if (typeof preferred === 'number' && (await isPortAvailable(preferred))) {
+  // port 0 means "pick any available port" — skip straight to dynamic allocation
+  if (typeof preferred === 'number' && preferred > 0 && (await isPortAvailable(preferred))) {
     return preferred;
   }
   return await new Promise((resolve, reject) => {
@@ -136,13 +156,23 @@ function stopChildProcess(
 export async function startPrerenderServer(
   options?: PrerenderServerConfig,
 ): Promise<RunningPrerenderServer> {
-  let port = await findAvailablePort(options?.port ?? DEFAULT_PRERENDER_PORT);
-  let url = `http://localhost:${port}`;
+  let preferredPort = envMode ? 0 : (options?.port ?? DEFAULT_PRERENDER_PORT);
+  let port = await findAvailablePort(preferredPort);
+  let localUrl = `http://localhost:${port}`;
   let env = {
     ...process.env,
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     NODE_NO_WARNINGS: '1',
-    BOXEL_HOST_URL: process.env.HOST_URL ?? 'http://localhost:4200',
+    // Point the prerender at the isolated realm server itself. It proxies
+    // the host app's index.html and serves realm content on the same origin,
+    // avoiding CORS issues between host.*.localhost and realm-server.*.localhost.
+    // Standby creation will fail during initial boot but succeeds once indexing
+    // completes (the prerender retries automatically).
+    BOXEL_HOST_URL: envMode
+      ? serverIndexUrl
+      : (process.env.HOST_URL ?? 'http://localhost:4200'),
+    // Use a distinct service name so it doesn't overwrite the dev prerender
+    PRERENDER_SERVICE_NAME: ISOLATED_PRERENDER_SERVICE,
     LOG_LEVELS:
       process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ?? process.env.LOG_LEVELS,
   };
@@ -186,7 +216,7 @@ export async function startPrerenderServer(
   });
 
   try {
-    await Promise.race([waitForHttpReady(url, 60_000), exitPromise]);
+    await Promise.race([waitForHttpReady(localUrl, 60_000), exitPromise]);
   } finally {
     if (exitListener) {
       child.removeListener('exit', exitListener);
@@ -196,10 +226,22 @@ export async function startPrerenderServer(
     }
   }
 
+  // In env mode, register with Traefik so parallel environments don't collide
+  let url: string;
+  if (envMode) {
+    registerServiceWithTraefik(ISOLATED_PRERENDER_SERVICE, port);
+    url = `http://${ISOLATED_PRERENDER_SERVICE}.${envSlug}.localhost`;
+  } else {
+    url = localUrl;
+  }
+
   return {
     port,
     url,
     async stop() {
+      if (envMode) {
+        deregisterServiceFromTraefik(ISOLATED_PRERENDER_SERVICE);
+      }
       await stopChildProcess(child);
     },
   };
@@ -215,18 +257,41 @@ export async function startServer({
   copySync(testRealmCards, testRealmDir);
 
   let testDBName = `test_db_${Math.floor(10000000 * Math.random())}`;
-  let workerManagerPort = await findAvailablePort(4232);
+  let envMode = isEnvironmentMode();
+  let preferredWorkerPort = envMode
+    ? 0
+    : parseInt(process.env.MATRIX_TEST_WORKER_PORT || '4232', 10);
+  let workerManagerPort = await findAvailablePort(preferredWorkerPort);
+  let preferredRealmPort = envMode
+    ? 0
+    : parseInt(process.env.MATRIX_TEST_REALM_PORT || '4205', 10);
+  let realmPort = await findAvailablePort(preferredRealmPort);
 
-  process.env.PGPORT = '5435';
+  let publishedDomain =
+    process.env.MATRIX_TEST_PUBLISHED_DOMAIN || realmDomain;
+
+  // Register with Traefik BEFORE spawning processes so the worker can
+  // reach the realm server via the Traefik hostname from the start.
+  if (envMode) {
+    registerServiceWithTraefik(ISOLATED_REALM_SERVICE, realmPort);
+    registerServiceWithTraefik(ISOLATED_WORKER_SERVICE, workerManagerPort);
+  }
+
+  process.env.PGPORT = process.env.PGPORT || '5435';
   process.env.PGDATABASE = testDBName;
   process.env.NODE_NO_WARNINGS = '1';
   process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.GRAFANA_SECRET = "shhh! it's a secret";
-  let matrixURL = `http://localhost:${synapse.port}`;
+  let matrixURL = envMode
+    ? `http://matrix-test.${envSlug}.localhost`
+    : `http://localhost:${synapse.port}`;
   process.env.MATRIX_URL = matrixURL;
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
   process.env.NODE_ENV = 'test';
+  // Limit connection pool to avoid exhausting Postgres max_connections
+  // when running alongside the dev stack
+  process.env.PG_POOL_MAX = process.env.PG_POOL_MAX || '5';
   process.env.LOW_CREDIT_THRESHOLD = '2000';
 
   let workerArgs = [
@@ -236,9 +301,11 @@ export async function startServer({
     `--matrixURL='${matrixURL}'`,
     `--prerendererUrl='${prerenderURL}'`,
     `--migrateDB`,
+    // Use a distinct service name so the worker doesn't overwrite the dev worker
+    ...(envMode ? [`--serviceName='${ISOLATED_WORKER_SERVICE}'`] : []),
 
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='${serverIndexUrl}/test/'`,
+    `--toUrl='${serverIndexUrl}/test/'`,
   ];
   workerArgs = workerArgs.concat([
     `--fromUrl='@cardstack/skills/'`,
@@ -246,7 +313,7 @@ export async function startServer({
   ]);
   workerArgs = workerArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='${serverIndexUrl}/base/'`,
   ]);
 
   let workerManager = spawn('ts-node', workerArgs, {
@@ -267,29 +334,31 @@ export async function startServer({
   let serverArgs = [
     `--transpileOnly`,
     'main',
-    `--port=4205`,
+    `--port=${realmPort}`,
     `--matrixURL='${matrixURL}'`,
     `--realmsRootPath='${dir.name}'`,
     `--workerManagerPort=${workerManagerPort}`,
-    `--prerendererUrl="${prerenderURL}"`,
+    `--prerendererUrl='${prerenderURL}'`,
     `--useRegistrationSecretFunction`,
+    // Use a distinct service name so it doesn't overwrite the dev realm server
+    ...(envMode ? [`--serviceName='${ISOLATED_REALM_SERVICE}'`] : []),
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
-    `--fromUrl='http://localhost:4205/test/'`,
-    `--toUrl='http://localhost:4205/test/'`,
+    `--fromUrl='${serverIndexUrl}/test/'`,
+    `--toUrl='${serverIndexUrl}/test/'`,
   ];
   serverArgs = serverArgs.concat([
     `--username='skills_realm'`,
     `--path='${skillsRealmDir}'`,
     `--fromUrl='@cardstack/skills/'`,
-    `--toUrl='http://localhost:4205/skills/'`,
+    `--toUrl='${serverIndexUrl}/skills/'`,
   ]);
   serverArgs = serverArgs.concat([
     `--username='base_realm'`,
     `--path='${baseRealmDir}'`,
     `--fromUrl='https://cardstack.com/base/'`,
-    `--toUrl='http://localhost:4205/base/'`,
+    `--toUrl='${serverIndexUrl}/base/'`,
   ]);
 
   console.log(`realm server database: ${testDBName}`);
@@ -302,8 +371,8 @@ export async function startServer({
       // Matrix tests don't exercise GitHub PR creation, so disable that route
       // to avoid pulling Octokit into the realm server startup path.
       DISABLE_GITHUB_PR_ROUTE: 'true',
-      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
-      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
+      PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: publishedDomain,
+      PUBLISHED_REALM_BOXEL_SITE_DOMAIN: publishedDomain,
     },
   });
   realmServer.unref();
@@ -354,6 +423,7 @@ export async function startServer({
     workerManager,
     testRealmDir,
     testDBName,
+    envMode,
   );
 }
 
@@ -394,6 +464,7 @@ export class IsolatedRealmServer implements SQLExecutor {
     private workerManagerProcess: ReturnType<typeof spawn>,
     readonly realmPath: string, // useful for debugging
     readonly db: string,
+    private envMode: boolean = false,
   ) {
     workerManagerProcess.on('message', (message) => {
       if (message === 'stopped') {
@@ -450,6 +521,11 @@ export class IsolatedRealmServer implements SQLExecutor {
   }
 
   async stop() {
+    if (this.envMode) {
+      deregisterServiceFromTraefik(ISOLATED_REALM_SERVICE);
+      deregisterServiceFromTraefik(ISOLATED_WORKER_SERVICE);
+    }
+
     let realmServerStop = new Promise<void>(
       (r) => (this.realmServerStopped = r),
     );

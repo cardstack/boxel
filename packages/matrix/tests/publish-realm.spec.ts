@@ -1,6 +1,9 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
-import { appURL } from '../helpers/isolated-realm-server';
+import {
+  serverIndexUrl,
+  realmDomain,
+} from '../helpers/isolated-realm-server';
 import {
   clearLocalStorage,
   createRealm,
@@ -8,8 +11,6 @@ import {
   postCardSource,
   postNewCard,
 } from '../helpers';
-
-let serverIndexUrl = new URL(appURL).origin;
 
 test.describe('Publish realm', () => {
   let user: { username: string; password: string; credentials: any };
@@ -60,11 +61,11 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `http://${user.username}.${realmDomain}/new-workspace/`,
     );
     await expect(
       newTab.locator(
-        `[data-test-card="http://${user.username}.localhost:4205/new-workspace/index"]`,
+        `[data-test-card="http://${user.username}.${realmDomain}/new-workspace/index"]`,
       ),
     ).toBeVisible();
     await newTab.close();
@@ -119,11 +120,11 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      'http://acceptable-subdomain.localhost:4205/',
+      `http://acceptable-subdomain.${realmDomain}/`,
     );
     await expect(
       newTab.locator(
-        '[data-test-card="http://acceptable-subdomain.localhost:4205/index"]',
+        `[data-test-card="http://acceptable-subdomain.${realmDomain}/index"]`,
       ),
     ).toBeVisible();
     await newTab.close();
@@ -251,7 +252,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `http://${user.username}.${realmDomain}/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();
@@ -281,7 +282,7 @@ test.describe('Publish realm', () => {
     await newTab.waitForLoadState();
 
     await expect(newTab).toHaveURL(
-      `http://${user.username}.localhost:4205/new-workspace/`,
+      `http://${user.username}.${realmDomain}/new-workspace/`,
     );
     await newTab.close();
     await page.bringToFront();

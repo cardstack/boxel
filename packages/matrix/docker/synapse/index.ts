@@ -17,7 +17,7 @@ import {
   isEnvironmentMode,
   getSynapseContainerName,
   getSynapseURL,
-  registerSynapseWithTraefik,
+  registerServiceWithTraefik,
 } from '../../helpers/environment-config';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
@@ -157,6 +157,7 @@ interface StartOptions {
   dataDir?: string;
   containerName?: string;
   suppressRegistrationSecretFile?: true;
+  traefikServiceName?: string;
   dynamicHostPort?: true;
 }
 
@@ -230,6 +231,9 @@ export async function synapseStart(
       );
     }
 
+    // Clean up stale container from a previous interrupted run
+    await dockerStop({ containerId: containerName }).catch(() => {});
+
     try {
       synapseId = await dockerRun({
         image: 'matrixdotorg/synapse:v1.126.0',
@@ -286,7 +290,8 @@ export async function synapseStart(
   }
 
   if (isEnvironmentMode()) {
-    registerSynapseWithTraefik(hostPort);
+    let synapseServiceName = opts?.traefikServiceName || 'matrix';
+    registerServiceWithTraefik(synapseServiceName, hostPort);
   }
 
   const synapse: SynapseInstance = {

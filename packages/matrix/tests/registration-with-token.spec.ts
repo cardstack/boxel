@@ -5,7 +5,7 @@ import {
   getAccountData,
   type SynapseInstance,
 } from '../docker/synapse';
-import { appURL } from '../helpers/isolated-realm-server';
+import { serverIndexUrl } from '../helpers/isolated-realm-server';
 import {
   validateEmail,
   gotoRegistration,
@@ -22,8 +22,6 @@ import {
   getMatrixTestContext,
 } from '../helpers';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '../helpers/matrix-constants';
-
-const serverIndexUrl = new URL(appURL).origin;
 
 function getSynapse(): SynapseInstance {
   return getMatrixTestContext().synapse;
@@ -253,7 +251,7 @@ test.describe('User Registration w/ Token', () => {
       APP_BOXEL_REALMS_EVENT_TYPE,
     );
     expect(realms).toEqual({
-      realms: [`http://localhost:4205/${firstUser.username}/personal/`],
+      realms: [`${serverIndexUrl}/${firstUser.username}/personal/`],
     });
   });
 
