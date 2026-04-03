@@ -597,10 +597,14 @@ function buildTestRunner(
   };
 }
 
+const SPEC_DISCOVERY_TIMEOUT_MS = 30_000;
+const SPEC_DISCOVERY_POLL_MS = 1_000;
+
 /**
  * Find Playwright spec file paths in the target realm's Tests/ folder.
- * Uses the realm's _mtimes endpoint to list all files, then filters for
- * paths matching Tests/*.spec.ts.
+ * Polls the realm's _mtimes endpoint until spec files appear or
+ * the timeout is reached. This handles the indexing delay after
+ * the agent writes test files to the realm.
  */
 async function findSpecPaths(
   targetRealmUrl: string,
@@ -608,36 +612,48 @@ async function findSpecPaths(
 ): Promise<string[]> {
   let fetchImpl = fetchOptions.fetch ?? globalThis.fetch;
   let mtimesUrl = new URL('_mtimes', ensureTrailingSlash(targetRealmUrl)).href;
-
-  try {
-    let headers: Record<string, string> = {};
-    if (fetchOptions.authorization) {
-      headers['Authorization'] = fetchOptions.authorization;
-    }
-
-    let response = await fetchImpl(mtimesUrl, { headers });
-    if (!response.ok) {
-      console.error(
-        `[factory-implement] _mtimes returned ${response.status} for ${mtimesUrl}`,
-      );
-      return [];
-    }
-
-    let mtimes = (await response.json()) as Record<string, number>;
-    let allPaths = Object.keys(mtimes);
-    let specPaths = allPaths.filter(
-      (p) => p.startsWith('Tests/') && p.endsWith('.spec.ts'),
-    );
-    console.error(
-      `[factory-implement] _mtimes found ${allPaths.length} files, ${specPaths.length} spec(s): ${specPaths.join(', ') || '(none)'}`,
-    );
-    return specPaths;
-  } catch (error) {
-    console.error(
-      `[factory-implement] _mtimes fetch failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return [];
+  let headers: Record<string, string> = {};
+  if (fetchOptions.authorization) {
+    headers['Authorization'] = fetchOptions.authorization;
   }
+
+  let startedAt = Date.now();
+  while (Date.now() - startedAt < SPEC_DISCOVERY_TIMEOUT_MS) {
+    try {
+      let response = await fetchImpl(mtimesUrl, { headers });
+      if (!response.ok) {
+        console.error(
+          `[factory-implement] _mtimes returned ${response.status} for ${mtimesUrl}`,
+        );
+        break;
+      }
+
+      let mtimes = (await response.json()) as Record<string, number>;
+      let specPaths = Object.keys(mtimes).filter(
+        (p) => p.startsWith('Tests/') && p.endsWith('.spec.ts'),
+      );
+
+      if (specPaths.length > 0) {
+        console.error(
+          `[factory-implement] Found ${specPaths.length} spec(s): ${specPaths.join(', ')}`,
+        );
+        return specPaths;
+      }
+    } catch (error) {
+      console.error(
+        `[factory-implement] _mtimes fetch failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      break;
+    }
+
+    // Wait before retrying — realm may still be indexing
+    await new Promise((resolve) => setTimeout(resolve, SPEC_DISCOVERY_POLL_MS));
+  }
+
+  console.error(
+    `[factory-implement] No spec files found after ${SPEC_DISCOVERY_TIMEOUT_MS}ms`,
+  );
+  return [];
 }
 
 // ---------------------------------------------------------------------------
