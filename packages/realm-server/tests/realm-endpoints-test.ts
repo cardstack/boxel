@@ -482,6 +482,51 @@ module(basename(__filename), function () {
         );
       });
 
+      test('card responses reflect updated realm config without re-indexing', async function (assert) {
+        // Fetch a card before updating realm config
+        let cardResponse = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(cardResponse.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          cardResponse.body.data.meta.realmInfo,
+          testRealmInfo,
+          'card has original realmInfo before config change',
+        );
+
+        // Update the realm config
+        let patchResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: { name: 'Updated Realm Name' },
+            },
+          });
+        assert.strictEqual(patchResponse.status, 200, 'config patch succeeded');
+
+        // Fetch the same card again — realmInfo should reflect the new config
+        // without needing to re-index
+        let updatedCardResponse = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(updatedCardResponse.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          updatedCardResponse.body.data.meta.realmInfo.name,
+          'Updated Realm Name',
+          'card realmInfo reflects updated realm name without re-indexing',
+        );
+      });
+
       test('returns bad request for invalid json body', async function (assert) {
         let response = await request
           .patch('/_config')
