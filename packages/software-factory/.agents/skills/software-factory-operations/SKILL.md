@@ -31,9 +31,10 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 ### Updating Project State
 
-- `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. Pass field values directly as structured attributes (e.g., `{ projectStatus: "active", objective: "..." }`). The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
-- `update_ticket({ path, attributes, relationships? })` — Update a Ticket card. Same structured interface — pass field values (e.g., `{ status: "in_progress", summary: "..." }`).
-- `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface (e.g., `{ articleTitle: "Guide", content: "...", tags: ["deploy"] }`).
+- `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. The tool's parameters include a dynamic JSON schema describing available fields — use it to know valid field names and types. The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
+- `update_ticket({ path, attributes, relationships? })` — Update a Ticket card. Same structured interface with dynamic field schema in the tool parameters.
+- `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
+- `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `https://cardstack.com/base/spec#Spec`.
 
 ### Testing
 
