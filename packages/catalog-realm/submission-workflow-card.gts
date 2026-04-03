@@ -388,12 +388,8 @@ export class SubmissionWorkflowCard extends CardDef {
       return this.args.model.listing?.name ?? 'No listing selected';
     }
 
-    get prUrl() {
-      return this.args.model.prCard?.prUrl ?? null;
-    }
-
     get prTitle() {
-      return this.args.model.prCard?.prTitle ?? null;
+      return 'Pull Request';
     }
 
     get overallStatusLabel(): string {
@@ -492,12 +488,6 @@ export class SubmissionWorkflowCard extends CardDef {
                         <div class='sw-detail-card pr'>
                           <span class='sw-detail-type'>Pull Request</span>
                           <span class='sw-detail-name'>{{this.prTitle}}</span>
-                          {{#if this.prUrl}}
-                            <a href={{this.prUrl}} target='_blank' rel='noopener noreferrer' class='sw-detail-link'>
-                              View on GitHub
-                              <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'/><polyline points='15 3 21 3 21 9'/><line x1='10' y1='14' x2='21' y2='3'/></svg>
-                            </a>
-                          {{/if}}
                         </div>
                       </div>
                     {{/if}}

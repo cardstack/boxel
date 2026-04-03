@@ -8,7 +8,6 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import NumberField from 'https://cardstack.com/base/number';
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import { FileContentField } from '../fields/file-content';
 import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
@@ -134,11 +133,17 @@ class IsolatedTemplate extends Component<typeof PrCard> {
   }
 
   get prTitle() {
-    return this.args.model.prTitle ?? 'Pull Request';
+    return (
+      this.latestPrEventInstance?.payload?.pull_request?.title ?? 'Pull Request'
+    );
+  }
+
+  get prNumber() {
+    return this.latestPrEventInstance?.prNumber ?? null;
   }
 
   get prUrl() {
-    return this.args.model.prUrl ?? null;
+    return this.latestPrEventInstance?.payload?.pull_request?.html_url ?? null;
   }
 
   get prBranchName() {
@@ -197,8 +202,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
 
   get latestReviewerName() {
     return (
-      this.latestPrReviewEventInstance?.payload?.review?.user?.login ??
-      null
+      this.latestPrReviewEventInstance?.payload?.review?.user?.login ?? null
     );
   }
 
@@ -244,7 +248,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     <article class='pr-card'>
       <HeaderSection
         @title={{this.prTitle}}
-        @prNumber={{@model.prNumber}}
+        @prNumber={{this.prNumber}}
         @branchName={{this.prBranchName}}
         @prUrl={{this.prUrl}}
         @actionLabel={{this.latestPrActionLabel}}
@@ -424,11 +428,17 @@ class FittedTemplate extends Component<typeof PrCard> {
   }
 
   get prTitle() {
-    return this.args.model.prTitle ?? 'Pull Request';
+    return (
+      this.latestPrEventInstance?.payload?.pull_request?.title ?? 'Pull Request'
+    );
+  }
+
+  get prNumber() {
+    return this.latestPrEventInstance?.prNumber ?? null;
   }
 
   get prUrl() {
-    return this.args.model.prUrl ?? null;
+    return this.latestPrEventInstance?.payload?.pull_request?.html_url ?? null;
   }
 
   get prBranchName() {
@@ -533,8 +543,8 @@ class FittedTemplate extends Component<typeof PrCard> {
         <div class='pr-title-row'>
           <p class='pr-title'>
             {{this.prTitle}}
-            {{#if @model.prNumber}}
-              <span class='pr-number'>#{{@model.prNumber}}</span>
+            {{#if this.prNumber}}
+              <span class='pr-number'>#{{this.prNumber}}</span>
             {{/if}}
           </p>
           <a
@@ -1065,10 +1075,6 @@ export class PrCard extends CardDef {
   static icon = GitPullRequestIcon;
   static headerColor = '#24292f';
 
-  // === PR identity (set on the card instance) ===
-  @field prNumber = contains(NumberField);
-  @field prUrl = contains(StringField);
-  @field prTitle = contains(StringField);
   @field branchName = contains(StringField);
   @field prSummary = contains(MarkdownField);
 
@@ -1082,14 +1088,6 @@ export class PrCard extends CardDef {
   // === Computed ===
   @field cardTitle = contains(StringField, {
     computeVia(this: PrCard) {
-      if (this.prTitle) {
-        return this.prTitle;
-      }
-
-      if (this.prNumber !== null && this.prNumber !== undefined) {
-        return `PR #${this.prNumber}`;
-      }
-
       return 'Pull request';
     },
   });

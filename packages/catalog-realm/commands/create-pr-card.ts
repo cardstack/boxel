@@ -1,6 +1,7 @@
 import { Command } from '@cardstack/runtime-common';
 
 import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from 'https://cardstack.com/base/string';
 import { JsonField } from 'https://cardstack.com/base/commands/search-card-result';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
@@ -12,6 +13,7 @@ class CreatePrCardInput extends CardDef {
   @field realm = contains(StringField);
   @field branchName = contains(StringField);
   @field submittedBy = contains(StringField);
+  @field prSummary = contains(MarkdownField);
   @field allFileContents = contains(JsonField);
 }
 
@@ -26,7 +28,7 @@ export default class CreatePrCardCommand extends Command<
   }
 
   protected async run(input: CreatePrCardInput): Promise<PrCard> {
-    let { realm, branchName, submittedBy, allFileContents } = input;
+    let { realm, branchName, submittedBy, prSummary, allFileContents } = input;
 
     let rawFiles = Array.isArray(allFileContents) ? allFileContents : [];
     let fileContents = rawFiles.map(
@@ -40,6 +42,7 @@ export default class CreatePrCardCommand extends Command<
     let card = new PrCard({
       branchName,
       submittedBy,
+      prSummary,
       submittedAt: new Date(),
       allFileContents: fileContents,
     });

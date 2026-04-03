@@ -54,23 +54,23 @@ export function extractRealmFromPrBody(
 }
 
 /**
- * Extract the PR number from a GitHub webhook payload.
- * Different event types store the PR number in different locations.
+ * Extract the branch name from a GitHub webhook payload.
+ * Different event types store the branch name in different locations.
  */
-export function extractPrNumberFromPayload(
+export function extractBranchNameFromPayload(
   payload: Record<string, any>,
-): number | null {
+): string | null {
   // pull_request, pull_request_review, pull_request_review_comment events
-  if (payload.pull_request?.number != null) {
-    return payload.pull_request.number;
+  if (payload.pull_request?.head?.ref != null) {
+    return payload.pull_request.head.ref;
   }
   // check_run events
-  if (payload.check_run?.pull_requests?.[0]?.number != null) {
-    return payload.check_run.pull_requests[0].number;
+  if (payload.check_run?.check_suite?.head_branch != null) {
+    return payload.check_run.check_suite.head_branch;
   }
   // check_suite events
-  if (payload.check_suite?.pull_requests?.[0]?.number != null) {
-    return payload.check_suite.pull_requests[0].number;
+  if (payload.check_suite?.head_branch != null) {
+    return payload.check_suite.head_branch;
   }
   return null;
 }
@@ -84,16 +84,16 @@ function extractPrBodyFromPayload(payload: Record<string, any>): string | null {
 }
 
 /**
- * Look up the realm URL for a PrCard with the given PR number by querying
+ * Look up the realm URL for a PrCard with the given branch name by querying
  * the card index database.
  *
  * The query restricts results to PrCard instances (URL contains '/PrCard/')
- * to avoid matching GithubEventCard instances which also carry a prNumber
+ * to avoid matching GithubEventCard instances which also carry a branchName
  * field but may exist in a different realm.
  */
-async function lookupRealmByPrNumber(
+async function lookupRealmByBranchName(
   dbAdapter: DBAdapter,
-  prNumber: number,
+  branchName: string,
 ): Promise<string | null> {
   try {
     let rows = await query(dbAdapter, [
@@ -101,8 +101,8 @@ async function lookupRealmByPrNumber(
       `WHERE type = 'instance'`,
       `AND (is_deleted = FALSE OR is_deleted IS NULL)`,
       `AND url LIKE '%/PrCard/%'`,
-      `AND search_doc->>'prNumber' =`,
-      param(String(prNumber)),
+      `AND search_doc->>'branchName' =`,
+      param(branchName),
       `ORDER BY indexed_at DESC`,
       `LIMIT 1`,
     ]);
@@ -110,7 +110,10 @@ async function lookupRealmByPrNumber(
       return rows[0].realm_url as string;
     }
   } catch (error) {
-    console.warn(`Failed to look up realm for PR #${prNumber}:`, error);
+    console.warn(
+      `Failed to look up realm for branch "${branchName}":`,
+      error,
+    );
   }
   return null;
 }
@@ -120,7 +123,7 @@ async function lookupRealmByPrNumber(
  *
  * Strategy:
  * 1. If the payload contains a PR body, extract the origin from the Submission Card URL
- * 2. Otherwise, look up the PrCard by prNumber in the index DB and extract its origin
+ * 2. Look up the PrCard by branchName in the index DB and extract its origin
  *
  * Returns null if the origin cannot be determined.
  */
@@ -139,11 +142,11 @@ async function resolveOriginFromPayload(
     }
   }
 
-  // Strategy 2: Look up PrCard by prNumber (for check_run, check_suite events)
+  // Strategy 2: Look up PrCard by branchName (reliable — branchName is always set on PrCards)
   if (dbAdapter) {
-    let prNumber = extractPrNumberFromPayload(payload);
-    if (prNumber != null) {
-      let realmUrl = await lookupRealmByPrNumber(dbAdapter, prNumber);
+    let branchName = extractBranchNameFromPayload(payload);
+    if (branchName) {
+      let realmUrl = await lookupRealmByBranchName(dbAdapter, branchName);
       if (realmUrl) {
         try {
           return new URL(realmUrl).origin;
@@ -202,10 +205,10 @@ class GithubEventFilterHandler implements WebhookFilterHandler {
         // Could not resolve origin from payload — reject the match to prevent
         // cross-environment broadcast. This is the safer default: if we can't
         // determine which environment the PR belongs to, don't process it.
-        let prNumber = extractPrNumberFromPayload(payload);
+        let branchName = extractBranchNameFromPayload(payload);
         console.warn(
           `Could not resolve realm origin from webhook payload ` +
-            `(eventType=${eventType}, prNumber=${prNumber ?? 'unknown'}), ` +
+            `(eventType=${eventType}, branchName=${branchName ?? 'unknown'}), ` +
             `rejecting match`,
         );
         return false;
