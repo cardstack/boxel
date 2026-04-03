@@ -616,13 +616,26 @@ async function findSpecPaths(
     }
 
     let response = await fetchImpl(mtimesUrl, { headers });
-    if (!response.ok) return [];
+    if (!response.ok) {
+      console.error(
+        `[factory-implement] _mtimes returned ${response.status} for ${mtimesUrl}`,
+      );
+      return [];
+    }
 
     let mtimes = (await response.json()) as Record<string, number>;
-    return Object.keys(mtimes).filter(
+    let allPaths = Object.keys(mtimes);
+    let specPaths = allPaths.filter(
       (p) => p.startsWith('Tests/') && p.endsWith('.spec.ts'),
     );
-  } catch {
+    console.error(
+      `[factory-implement] _mtimes found ${allPaths.length} files, ${specPaths.length} spec(s): ${specPaths.join(', ') || '(none)'}`,
+    );
+    return specPaths;
+  } catch (error) {
+    console.error(
+      `[factory-implement] _mtimes fetch failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return [];
   }
 }
