@@ -1,14 +1,10 @@
 /**
- * JSON Schemas for DarkFactory card types (Project, Ticket, KnowledgeArticle).
+ * Runtime JSON schema fetching for card types via GetCardTypeSchemaCommand.
  *
- * Provides two schema sources:
- *   1. Runtime — fetched via GetCardTypeSchemaCommand through the realm
- *      server's /run-command endpoint (authoritative, derived from card defs)
- *   2. Static fallbacks — hand-crafted from realm/darkfactory.gts, used when
- *      the realm server is unavailable or the command fails
- *
- * If the card definitions in darkfactory.gts change, update the static
- * fallbacks to match.
+ * Schemas are fetched through the realm server's `/_run-command` endpoint,
+ * which enqueues a job that runs in the prerenderer's browser context where
+ * CardAPI, Loader, and field mappings are available. This ensures schemas
+ * are always derived from the actual card definitions.
  */
 
 import type {
@@ -30,10 +26,20 @@ import {
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';
 
+/** Per-session cache so we never fetch the same schema twice. */
+const schemaCache = new Map<
+  string,
+  {
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, unknown>;
+  }
+>();
+
 /**
  * Fetch the JSON schema for a single card type via the realm server's
- * prerenderer. Returns the schema (attributes + relationships) or
- * undefined on failure.
+ * prerenderer. Results are cached per `module#name` for the lifetime
+ * of the process (one factory session). Returns the schema
+ * (attributes + relationships) or undefined on failure.
  */
 export async function fetchCardTypeSchema(
   realmServerUrl: string,
@@ -47,6 +53,12 @@ export async function fetchCardTypeSchema(
     }
   | undefined
 > {
+  let cacheKey = `${codeRef.module}#${codeRef.name}`;
+  let cached = schemaCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   let response = await runRealmCommand(
     realmServerUrl,
     realmUrl,
@@ -57,7 +69,7 @@ export async function fetchCardTypeSchema(
 
   if (response.status !== 'ready' || !response.result) {
     console.warn(
-      `[darkfactory-schemas] Failed to fetch schema for ${codeRef.module}#${codeRef.name}: ${response.error ?? response.status}`,
+      `[darkfactory-schemas] Failed to fetch schema for ${cacheKey}: ${response.error ?? response.status}`,
     );
     return undefined;
   }
@@ -66,13 +78,15 @@ export async function fetchCardTypeSchema(
     let parsed = JSON.parse(response.result);
     // The result is a serialized JsonCard; the schema is in the json field
     let schema = parsed?.data?.attributes?.json ?? parsed;
-    return schema as {
+    let result = schema as {
       attributes: Record<string, unknown>;
       relationships?: Record<string, unknown>;
     };
+    schemaCache.set(cacheKey, result);
+    return result;
   } catch {
     console.warn(
-      `[darkfactory-schemas] Failed to parse schema for ${codeRef.module}#${codeRef.name}`,
+      `[darkfactory-schemas] Failed to parse schema for ${cacheKey}`,
     );
     return undefined;
   }

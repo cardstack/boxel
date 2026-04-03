@@ -57,10 +57,8 @@ export interface ToolBuilderConfig {
   };
   /** Override for executeTestRunFromRealm (injectable for testing). */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
-  /** Realm server URL for /run-command calls (e.g., "http://localhost:4201/"). */
+  /** Realm server URL for /_run-command calls (e.g., "http://localhost:4201/"). */
   realmServerUrl?: string;
-  /** Matrix user ID for prerenderer affinity routing. */
-  userId?: string;
   /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
   cardTypeSchemas?: Map<
     string,
@@ -111,14 +109,32 @@ export function buildFactoryTools(
     buildWriteFileTool(config),
     buildReadFileTool(config),
     buildSearchRealmTool(config),
-    buildUpdateProjectTool(config),
-    buildUpdateTicketTool(config),
-    buildCreateKnowledgeTool(config),
     buildRunTestsTool(config),
     buildRunCommandTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
+
+  // Card tools are only available when runtime schemas have been fetched.
+  let schemas = config.cardTypeSchemas;
+  let cardToolEntries: [string, string, () => FactoryTool][] = [
+    ['Project', 'update_project', () => buildUpdateProjectTool(config)],
+    ['Ticket', 'update_ticket', () => buildUpdateTicketTool(config)],
+    [
+      'KnowledgeArticle',
+      'create_knowledge',
+      () => buildCreateKnowledgeTool(config),
+    ],
+  ];
+  for (let [cardName, toolName, buildFn] of cardToolEntries) {
+    if (schemas?.has(cardName)) {
+      tools.push(buildFn());
+    } else {
+      console.warn(
+        `[factory-tool-builder] Omitting ${toolName} tool: no schema for ${cardName}`,
+      );
+    }
+  }
 
   // Add registered script/realm-api tools as FactoryTool wrappers.
   // Realm-api tools get the config so they can resolve per-realm JWTs.
@@ -224,25 +240,33 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
 }
 
 /**
- * Resolve the schema for a card type from runtime cache or static fallback.
+ * Resolve the schema for a card type from the runtime cache.
+ * Only called when the card type is known to exist in cardTypeSchemas
+ * (callers check before building the tool).
  */
-function resolveCardSchema(
-  config: ToolBuilderConfig,
-  cardName: string,
-): {
-  attributes: Record<string, unknown>;
-  relationships: Record<string, unknown>;
-} {
-  let cached = config.cardTypeSchemas?.get(cardName);
-  if (!cached) {
-    throw new Error(
-      `No schema available for card type "${cardName}". Ensure cardTypeSchemas is populated via fetchCardTypeSchema() before building tools.`,
-    );
-  }
+function resolveCardSchema(config: ToolBuilderConfig, cardName: string) {
+  let cached = config.cardTypeSchemas!.get(cardName)!;
   return {
     attributes: cached.attributes,
-    relationships: cached.relationships ?? {},
+    relationships: cached.relationships,
   };
+}
+
+function buildCardToolParams(
+  pathDescription: string,
+  schema: {
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, unknown>;
+  },
+) {
+  let properties: Record<string, unknown> = {
+    path: { type: 'string', description: pathDescription },
+    attributes: schema.attributes,
+  };
+  if (schema.relationships) {
+    properties.relationships = schema.relationships;
+  }
+  return { type: 'object', properties, required: ['path', 'attributes'] };
 }
 
 function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
@@ -251,19 +275,10 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
     name: 'update_project',
     description:
       'Update a project card in the target realm (e.g., update status or success criteria).',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
-        },
-        attributes: schema.attributes,
-        relationships: schema.relationships,
-      },
-      required: ['path', 'attributes'],
-    },
+    parameters: buildCardToolParams(
+      'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
+      schema,
+    ),
     execute: async (args) => {
       let path = args.path as string;
       let attributes = args.attributes as Record<string, unknown>;
@@ -288,19 +303,10 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'update_ticket',
     description: 'Update a ticket card in the target realm.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
-        },
-        attributes: schema.attributes,
-        relationships: schema.relationships,
-      },
-      required: ['path', 'attributes'],
-    },
+    parameters: buildCardToolParams(
+      'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
+      schema,
+    ),
     execute: async (args) => {
       let path = args.path as string;
       let attributes = args.attributes as Record<string, unknown>;
@@ -326,19 +332,10 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
     name: 'create_knowledge',
     description:
       'Create or update a knowledge article card in the target realm.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
-        },
-        attributes: schema.attributes,
-        relationships: schema.relationships,
-      },
-      required: ['path', 'attributes'],
-    },
+    parameters: buildCardToolParams(
+      'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
+      schema,
+    ),
     execute: async (args) => {
       let path = args.path as string;
       let attributes = args.attributes as Record<string, unknown>;
@@ -479,11 +476,11 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
       required: ['command'],
     },
     execute: async (args) => {
-      if (!config.realmServerUrl || !config.serverToken || !config.userId) {
+      if (!config.realmServerUrl || !config.serverToken) {
         return {
           status: 'error',
           error:
-            'run_command requires realmServerUrl, serverToken, and userId in config',
+            'run_command requires realmServerUrl and serverToken in config',
         };
       }
       return runRealmCommand(
@@ -493,7 +490,6 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
         args.commandInput as Record<string, unknown> | undefined,
         {
           authorization: config.serverToken,
-          userId: config.userId,
           fetch: config.fetch,
         },
       );

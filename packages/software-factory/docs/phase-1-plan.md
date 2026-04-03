@@ -1815,7 +1815,7 @@ The `update_project`, `update_ticket`, and `create_knowledge` tools accept struc
 
 1. **Host command**: `GetCardTypeSchemaCommand` (`packages/host/app/commands/get-card-type-schema.ts`) takes a `ResolvedCodeRef` (`{ module, name }`) and calls `generateJsonSchemaForCardType()` in the prerenderer's browser context where the Loader, CardAPI, and field mappings are available.
 
-2. **Transport**: `runRealmCommand()` in `realm-operations.ts` calls the realm server's `/run-command` endpoint, which proxies to the prerenderer. This is a general-purpose function — any host command can be invoked through it.
+2. **Transport**: `runRealmCommand()` in `realm-operations.ts` calls the realm server's `/_run-command` endpoint, which enqueues a job that the prerenderer executes. This is a general-purpose function — any host command can be invoked through it.
 
 3. **Schema fetch**: `fetchCardTypeSchema()` in `darkfactory-schemas.ts` wraps `runRealmCommand` with the `GetCardTypeSchemaCommand` specifier and parses the `JsonCard` result.
 

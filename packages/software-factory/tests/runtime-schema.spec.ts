@@ -37,10 +37,7 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
         name: 'Project',
       },
     },
-    {
-      authorization: `Bearer ${realm.ownerBearerToken}`,
-      userId: '@test:localhost',
-    },
+    { authorization: `Bearer ${realm.ownerBearerToken}` },
   );
 
   expect(response.status).toBe('ready');
@@ -64,11 +61,11 @@ test('fetches Ticket schema with enum fields', async ({ realm }) => {
   let schema = await fetchCardTypeSchema(
     realmServerUrl,
     realmUrl,
-    { module: `${realmUrl}darkfactory`, name: 'Ticket' },
     {
-      authorization: `Bearer ${realm.ownerBearerToken}`,
-      userId: '@test:localhost',
+      module: `${realmUrl}darkfactory`,
+      name: 'Ticket',
     },
+    { authorization: `Bearer ${realm.ownerBearerToken}` },
   );
 
   expect(schema).toBeDefined();
@@ -90,11 +87,11 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
   let schema = await fetchCardTypeSchema(
     realmServerUrl,
     realmUrl,
-    { module: `${realmUrl}darkfactory`, name: 'KnowledgeArticle' },
     {
-      authorization: `Bearer ${realm.ownerBearerToken}`,
-      userId: '@test:localhost',
+      module: `${realmUrl}darkfactory`,
+      name: 'KnowledgeArticle',
     },
+    { authorization: `Bearer ${realm.ownerBearerToken}` },
   );
 
   expect(schema).toBeDefined();

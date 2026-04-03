@@ -36,10 +36,7 @@ export interface SearchRealmOptions extends RealmFetchOptions {
   realmUrl: string;
 }
 
-export interface RunCommandOptions extends RealmFetchOptions {
-  /** Matrix user ID for affinity routing (required by the prerenderer). */
-  userId: string;
-}
+export type RunCommandOptions = RealmFetchOptions;
 
 export interface RunCommandResponse {
   status: 'ready' | 'error' | 'unusable';
@@ -128,14 +125,8 @@ export async function searchRealm(
  * prerenderer's headless Chrome where the full card runtime (Loader,
  * CardAPI, services) is available.
  *
- * @param realmServerUrl — base URL of the realm server
- *   (e.g., "http://localhost:4201/")
- * @param realmUrl — the realm URL to run the command against
- *   (e.g., "http://localhost:4201/user/workspace/")
- * @param command — command specifier, e.g.
- *   "@cardstack/boxel-host/commands/get-card-type-schema/default"
- * @param commandInput — optional input for the command
- * @param options — auth (JWT) + userId
+ * The authenticated user is derived from the JWT in the Authorization
+ * header — no separate userId is needed.
  */
 export async function runRealmCommand(
   realmServerUrl: string,
@@ -166,11 +157,19 @@ export async function runRealmCommand(
     headers['Authorization'] = options.authorization;
   }
 
-  let response = await fetchImpl(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return {
+      status: 'error',
+      error: `run-command fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 
   if (!response.ok) {
     return {

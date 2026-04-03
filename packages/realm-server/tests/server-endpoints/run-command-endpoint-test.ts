@@ -86,7 +86,8 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 400, 'HTTP 400 for missing command');
     });
 
-    test('executes GetCardTypeSchemaCommand and returns schema', async function (assert) {
+    // Uses GetCardTypeSchemaCommand to verify end-to-end command execution
+    test('can successfully run a command', async function (assert) {
       let matrixUserId = '@node-test_realm:localhost';
 
       let response = await context.request

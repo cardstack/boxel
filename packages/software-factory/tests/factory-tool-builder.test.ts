@@ -795,17 +795,17 @@ module(
       assert.true('content' in knowledgeAttrs.properties);
     });
 
-    test('throws when cardTypeSchemas is missing for a card type', function (assert) {
+    test('card tools are omitted when cardTypeSchemas is not provided', function (assert) {
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
       let config = makeConfig({ cardTypeSchemas: undefined });
-      assert.throws(
-        () => buildFactoryTools(config, executor, registry),
-        (err: Error) =>
-          err.message.includes('No schema available') &&
-          err.message.includes('Project'),
-        'throws with card type name when cardTypeSchemas not provided',
-      );
+      let tools = buildFactoryTools(config, executor, registry);
+      let toolNames = tools.map((t) => t.name);
+      assert.false(toolNames.includes('update_project'));
+      assert.false(toolNames.includes('update_ticket'));
+      assert.false(toolNames.includes('create_knowledge'));
+      assert.true(toolNames.includes('write_file'));
+      assert.true(toolNames.includes('run_command'));
     });
 
     test('update_ticket assembles JSON:API document from attributes', async function (assert) {
