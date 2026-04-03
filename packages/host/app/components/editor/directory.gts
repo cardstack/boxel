@@ -7,6 +7,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { velcro } from 'ember-velcro';
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -107,6 +108,7 @@ export default class Directory extends Component<Args> {
       <div
         class='file-tree-context-menu'
         {{velcro this.menuTriggerEl placement='bottom-start' strategy='fixed'}}
+        {{onClickOutside this.closeMenu exceptSelector='.file-menu-trigger'}}
       >
         <Menu
           class='file-tree-context-menu-list'
@@ -218,7 +220,6 @@ export default class Directory extends Component<Args> {
     registerDestructor(this, () => {
       this.menuEntryPath = undefined;
       this.menuTriggerEl = undefined;
-      document.removeEventListener('pointerdown', this.handleOutsideClick);
     });
   }
 
@@ -275,7 +276,6 @@ export default class Directory extends Component<Args> {
   private closeMenu() {
     this.menuEntryPath = undefined;
     this.menuTriggerEl = undefined;
-    document.removeEventListener('pointerdown', this.handleOutsideClick);
   }
 
   @action
@@ -291,19 +291,6 @@ export default class Directory extends Component<Args> {
     }
     this.menuEntryPath = entryPath;
     this.menuTriggerEl = e.currentTarget as HTMLElement;
-    document.addEventListener('pointerdown', this.handleOutsideClick);
-  }
-
-  @action
-  private handleOutsideClick(e: PointerEvent) {
-    const menu = document.querySelector('.file-tree-context-menu');
-    if (
-      menu &&
-      !menu.contains(e.target as Node) &&
-      !this.menuTriggerEl?.contains(e.target as Node)
-    ) {
-      this.closeMenu();
-    }
   }
 
   @action
