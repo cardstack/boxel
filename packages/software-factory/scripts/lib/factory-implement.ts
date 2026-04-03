@@ -682,10 +682,16 @@ async function updateTicketStatus(
 
 const DARKFACTORY_CARD_TYPES = ['Project', 'Ticket', 'KnowledgeArticle'];
 
+/** Card types from base that the factory also needs schemas for. */
+const BASE_CARD_TYPES: { module: string; name: string }[] = [
+  { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+];
+
 /**
- * Fetch JSON schemas for the DarkFactory card types (Project, Ticket,
- * KnowledgeArticle) from the realm server. Returns a Map suitable for
- * passing to ToolBuilderConfig.cardTypeSchemas.
+ * Fetch JSON schemas for card types the factory uses. Includes both
+ * DarkFactory types (Project, Ticket, KnowledgeArticle) from the target
+ * realm and base types (Spec) from the base realm. Returns a Map
+ * suitable for passing to ToolBuilderConfig.cardTypeSchemas.
  */
 async function loadDarkFactorySchemas(
   realmServerUrl: string,
@@ -724,6 +730,27 @@ async function loadDarkFactorySchemas(
     } catch (error) {
       console.warn(
         `[factory-implement] Could not fetch schema for ${cardName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  // Fetch base card type schemas (e.g., Spec from cardstack.com/base)
+  for (let { module: mod, name } of BASE_CARD_TYPES) {
+    try {
+      let schema = await fetchCardTypeSchema(
+        realmServerUrl,
+        targetRealmUrl,
+        { module: mod, name },
+        options,
+      );
+      if (schema) {
+        schemas.set(name, schema);
+      }
+    } catch (error) {
+      console.warn(
+        `[factory-implement] Could not fetch schema for ${name}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

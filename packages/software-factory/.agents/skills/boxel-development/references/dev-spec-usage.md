@@ -1,3 +1,79 @@
+# Catalog Spec Card Instances
+
+For each top-level card definition, create a Catalog Spec card instance in the target realm's `Spec/` folder. This makes the card discoverable in the Boxel catalog.
+
+The Spec card adopts from `https://cardstack.com/base/spec#Spec`.
+
+## Spec Card JSON Structure
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "ref": { "module": "../sticky-note", "name": "StickyNote" },
+      "specType": "card",
+      "readMe": "# StickyNote\n\nA simple sticky note card with title and body fields.",
+      "cardTitle": "Sticky Note",
+      "cardDescription": "A sticky note card for quick notes",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": "../StickyNote/welcome-note"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
+```
+
+## Key Fields
+
+- `ref.module` — relative path from the Spec card instance to the `.gts` definition (e.g., `../sticky-note` from `Spec/sticky-note.json`)
+- `ref.name` — the exported class name
+- `specType` — `"card"` for CardDef, `"field"` for FieldDef, `"component"` for standalone components
+- `readMe` — markdown documentation for the card
+- `cardTitle` / `cardDescription` — human-readable title and short description
+- `linkedExamples` — a `linksToMany` relationship pointing to sample card instances that demonstrate the card in use. Create at least one sample instance and link it here.
+
+## Sample Card Instance
+
+Create at least one sample instance with realistic data. Sample instances serve as both catalog examples and test fixtures.
+
+```json
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Welcome Note",
+      "body": "This is a sample sticky note with realistic content."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sticky-note",
+        "name": "StickyNote"
+      }
+    }
+  }
+}
+```
+
+Place sample instances in a folder named after the card type (e.g., `StickyNote/welcome-note.json`). The `linkedExamples` relationship in the Spec card points to these using a relative path (e.g., `../StickyNote/welcome-note`).
+
+---
+
+# Spec Type Usage Patterns
+
+Below are usage patterns for each `specType`, showing how each type of definition is imported and used in code.
+
 **Card specs (linksTo/linksToMany):**
 
 ```gts

@@ -7,6 +7,11 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
+import type {
+  LooseSingleCardDocument,
+  Relationship,
+} from '@cardstack/runtime-common';
+
 import type { ToolResult } from './factory-agent';
 import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
@@ -124,6 +129,7 @@ export function buildFactoryTools(
       'create_knowledge',
       () => buildCreateKnowledgeTool(config),
     ],
+    ['Spec', 'create_catalog_spec', () => buildCreateCatalogSpecTool(config)],
   ];
   for (let [cardName, toolName, buildFn] of cardToolEntries) {
     if (schemas?.has(cardName)) {
@@ -367,6 +373,54 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
         realmUrl,
         path,
         JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
+    },
+  };
+}
+
+function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Spec');
+  return {
+    name: 'create_catalog_spec',
+    description:
+      "Create a Catalog Spec card in the target realm's Spec/ folder. " +
+      'This makes a card definition discoverable in the Boxel catalog. ' +
+      'Auth: per-realm JWT.',
+    parameters: buildCardToolParams(
+      'Realm-relative path for the Spec card (e.g., "Spec/sticky-note.json")',
+      schema,
+    ),
+    execute: async (args) => {
+      let path = args.path as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+      // Spec cards adopt from https://cardstack.com/base/spec, not darkfactory
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes,
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/spec',
+              name: 'Spec',
+            },
+          },
+        },
+      };
+      if (relationships && Object.keys(relationships).length > 0) {
+        doc.data.relationships = relationships as {
+          [fieldName: string]: Relationship | Relationship[];
+        };
+      }
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(doc, null, 2),
         fetchOptions,
       );
     },
