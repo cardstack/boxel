@@ -1,13 +1,14 @@
 import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+  logger,
 } from '@cardstack/runtime-common';
 import {
   validateAICredits,
-  extractGenerationIdFromResponse,
-  saveUsageCost as saveUsageCostFromBilling,
   spendUsageCost as spendUsageCostFromBilling,
 } from '@cardstack/billing/ai-billing';
+
+const log = logger('credit-strategies');
 
 export interface CreditStrategy {
   name: string;
@@ -23,11 +24,6 @@ export interface CreditStrategy {
     dbAdapter: DBAdapter,
     matrixUserId: string,
     response: any,
-  ): Promise<void>;
-  spendUsageCost(
-    dbAdapter: DBAdapter,
-    matrixUserId: string,
-    costInUsd: number,
   ): Promise<void>;
 }
 
@@ -58,23 +54,18 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
     matrixUserId: string,
     response: any,
   ): Promise<void> {
-    const generationId = extractGenerationIdFromResponse(response);
-    if (generationId) {
-      await saveUsageCostFromBilling(
-        dbAdapter,
-        matrixUserId,
-        generationId,
-        this.openRouterApiKey,
+    const costInUsd = response?.usage?.cost;
+    if (
+      typeof costInUsd === 'number' &&
+      Number.isFinite(costInUsd) &&
+      costInUsd > 0
+    ) {
+      await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
+    } else {
+      log.warn(
+        `No usage cost found in response for user ${matrixUserId}, skipping credit deduction`,
       );
     }
-  }
-
-  async spendUsageCost(
-    dbAdapter: DBAdapter,
-    matrixUserId: string,
-    costInUsd: number,
-  ): Promise<void> {
-    await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
   }
 }
 
@@ -93,14 +84,6 @@ export class NoCreditStrategy implements CreditStrategy {
     _dbAdapter: DBAdapter,
     _matrixUserId: string,
     _response: any,
-  ): Promise<void> {
-    // No-op for no-credit strategy
-  }
-
-  async spendUsageCost(
-    _dbAdapter: DBAdapter,
-    _matrixUserId: string,
-    _costInUsd: number,
   ): Promise<void> {
     // No-op for no-credit strategy
   }

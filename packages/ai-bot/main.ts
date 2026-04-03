@@ -40,7 +40,7 @@ import {
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import { saveUsageCost } from '@cardstack/billing/ai-billing';
+import { spendUsageCost } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
 import type { OpenAIError } from 'openai/error';
@@ -86,19 +86,13 @@ class Assistant {
     this.aiBotInstanceId = aiBotInstanceId;
   }
 
-  async trackAiUsageCost(matrixUserId: string, generationId: string) {
+  async trackAiUsageCost(matrixUserId: string, costInUsd: number) {
     if (trackAiUsageCostPromises.has(matrixUserId)) {
       return;
     }
-    // intentionally do not await saveUsageCost promise - it has a backoff mechanism to retry if the cost is not immediately available so we don't want to block the main thread
     trackAiUsageCostPromises.set(
       matrixUserId,
-      saveUsageCost(
-        this.pgAdapter,
-        matrixUserId,
-        generationId,
-        process.env.OPENROUTER_API_KEY!,
-      ).finally(() => {
+      spendUsageCost(this.pgAdapter, matrixUserId, costInUsd).finally(() => {
         trackAiUsageCostPromises.delete(matrixUserId);
       }),
     );
@@ -448,6 +442,7 @@ Common issues are:
 
           let chunkHandlingError: string | undefined;
           let generationId: string | undefined;
+          let costInUsd: number | undefined;
           log.info(
             `[${eventId}] Starting generation with model %s`,
             promptParts.model,
@@ -471,6 +466,9 @@ Common issues are:
                 });
               }
               generationId = chunk.id;
+              if (chunk.usage && (chunk.usage as any).cost != null) {
+                costInUsd = (chunk.usage as any).cost;
+              }
               let activeGeneration = activeGenerations.get(room.roomId);
               if (activeGeneration) {
                 activeGeneration.lastGeneratedChunkId = generationId;
@@ -525,8 +523,16 @@ Common issues are:
               await responder.onError(error as OpenAIError);
             }
           } finally {
-            if (generationId) {
-              assistant.trackAiUsageCost(senderMatrixUserId, generationId);
+            if (
+              typeof costInUsd === 'number' &&
+              Number.isFinite(costInUsd) &&
+              costInUsd > 0
+            ) {
+              assistant.trackAiUsageCost(senderMatrixUserId, costInUsd);
+            } else {
+              log.warn(
+                `No usage cost in streaming response for user ${senderMatrixUserId} (generationId: ${generationId})`,
+              );
             }
             activeGenerations.delete(room.roomId);
           }

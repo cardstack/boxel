@@ -57,6 +57,7 @@ async function handleStreamingRequest(
     if (!reader) throw new Error('No readable stream available');
 
     let generationId: string | undefined;
+    let costInUsd: number | undefined;
     let lastPing = Date.now();
 
     await proxySSE(
@@ -64,26 +65,25 @@ async function handleStreamingRequest(
       async (data) => {
         // Handle end of stream
         if (data === '[DONE]') {
-          if (generationId) {
-            // Save cost in the background so we don't block the stream on OpenRouter's generation cost API.
-            // Chain per-user promises so costs are recorded sequentially.
-            const previousPromise =
-              pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
-            const costPromise = previousPromise
-              .then(() =>
-                endpointConfig.creditStrategy.saveUsageCost(
-                  dbAdapter,
-                  matrixUserId,
-                  { id: generationId },
-                ),
-              )
-              .finally(() => {
-                if (pendingCostPromises.get(matrixUserId) === costPromise) {
-                  pendingCostPromises.delete(matrixUserId);
-                }
-              });
-            pendingCostPromises.set(matrixUserId, costPromise);
-          }
+          // Deduct credits using the cost from the streaming response.
+          // Chain per-user promises so costs are recorded sequentially.
+          const previousPromise =
+            pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
+          const costPromise = previousPromise
+            .then(() =>
+              endpointConfig.creditStrategy.saveUsageCost(
+                dbAdapter,
+                matrixUserId,
+                { usage: { cost: costInUsd } },
+              ),
+            )
+            .finally(() => {
+              if (pendingCostPromises.get(matrixUserId) === costPromise) {
+                pendingCostPromises.delete(matrixUserId);
+              }
+            });
+          pendingCostPromises.set(matrixUserId, costPromise);
+
           ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';
         }
@@ -94,6 +94,10 @@ async function handleStreamingRequest(
 
           if (!generationId && dataObj.id) {
             generationId = dataObj.id;
+          }
+
+          if (dataObj.usage?.cost != null) {
+            costInUsd = dataObj.usage.cost;
           }
         } catch {
           log.warn('Invalid JSON in streaming response:', data);
@@ -499,46 +503,22 @@ export default function handleRequestForward({
 
       const responseData = await externalResponse.json();
 
-      // 6. Deduct credits in the background using the cost from the response,
-      //    or fall back to saveUsageCost when the cost is not provided.
-      const costInUsd = responseData?.usage?.cost;
+      // 6. Deduct credits in the background using the cost from the response.
       const previousPromise =
         pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
-      let costPromise: Promise<void>;
-
-      if (
-        typeof costInUsd === 'number' &&
-        Number.isFinite(costInUsd) &&
-        costInUsd > 0
-      ) {
-        costPromise = previousPromise
-          .then(() =>
-            destinationConfig.creditStrategy.spendUsageCost(
-              dbAdapter,
-              matrixUserId,
-              costInUsd,
-            ),
-          )
-          .finally(() => {
-            if (pendingCostPromises.get(matrixUserId) === costPromise) {
-              pendingCostPromises.delete(matrixUserId);
-            }
-          });
-      } else {
-        costPromise = previousPromise
-          .then(() =>
-            destinationConfig.creditStrategy.saveUsageCost(
-              dbAdapter,
-              matrixUserId,
-              responseData,
-            ),
-          )
-          .finally(() => {
-            if (pendingCostPromises.get(matrixUserId) === costPromise) {
-              pendingCostPromises.delete(matrixUserId);
-            }
-          });
-      }
+      const costPromise = previousPromise
+        .then(() =>
+          destinationConfig.creditStrategy.saveUsageCost(
+            dbAdapter,
+            matrixUserId,
+            responseData,
+          ),
+        )
+        .finally(() => {
+          if (pendingCostPromises.get(matrixUserId) === costPromise) {
+            pendingCostPromises.delete(matrixUserId);
+          }
+        });
       pendingCostPromises.set(matrixUserId, costPromise);
 
       // 7. Return response

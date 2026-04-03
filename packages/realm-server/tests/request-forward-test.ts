@@ -257,23 +257,23 @@ module(basename(__filename), function () {
       );
     });
 
-    test('should handle streaming requests', async function (assert) {
+    test('should handle streaming requests and deduct credits from inline cost', async function (assert) {
       // Mock external fetch calls
       const originalFetch = global.fetch;
       const mockFetch = sinon.stub(global, 'fetch');
 
-      // Mock streaming response
+      // Mock streaming response with usage.cost in the final data chunk
       const mockStreamResponse = new Response(
         new ReadableStream({
           start(controller) {
             controller.enqueue(
               new TextEncoder().encode(
-                'data: {"id":"gen-stream-123","choices":[{"text":"Hello"}]}\n\n',
+                'data: {"id":"gen-stream-123","choices":[{"delta":{"content":"Hello"}}]}\n\n',
               ),
             );
             controller.enqueue(
               new TextEncoder().encode(
-                'data: {"choices":[{"text":" world"}]}\n\n',
+                'data: {"choices":[{"delta":{"content":" world"}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"cost":0.002}}\n\n',
               ),
             );
             controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
@@ -286,27 +286,12 @@ module(basename(__filename), function () {
         },
       );
 
-      // Mock generation cost API response
-      const mockCostResponse = {
-        data: {
-          id: 'gen-stream-123',
-          total_cost: 0.002,
-          total_tokens: 100,
-          model: 'openai/gpt-3.5-turbo',
-        },
-      };
-
-      // Set up fetch to return different responses based on URL
+      // Set up fetch to return streaming response (no generation cost API mock needed)
       mockFetch.callsFake(
         async (input: string | URL | Request, _init?: RequestInit) => {
           const url = typeof input === 'string' ? input : input.toString();
 
-          if (url.includes('/generation?id=')) {
-            return new Response(JSON.stringify(mockCostResponse), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            });
-          } else if (url.includes('/chat/completions')) {
+          if (url.includes('/chat/completions')) {
             return mockStreamResponse;
           } else {
             return new Response(JSON.stringify({ error: 'Not found' }), {
@@ -339,8 +324,6 @@ module(basename(__filename), function () {
         // Verify streaming response headers
         assert.strictEqual(response.status, 200, 'Should return 200 status');
 
-        // Note: content-type header is not captured by supertest for streaming responses
-        // because it's sent immediately with flushHeaders(), but we can verify other SSE headers
         assert.strictEqual(
           response.headers['cache-control'],
           'no-cache, no-store, must-revalidate',
@@ -364,12 +347,24 @@ module(basename(__filename), function () {
           'Should include first streaming data',
         );
         assert.true(
-          responseText.includes('data: {"choices":[{"text":" world"}]}'),
-          'Should include second streaming data',
-        );
-        assert.true(
           responseText.includes('data: [DONE]'),
           'Should include end of stream marker',
+        );
+
+        // Verify credits were deducted from inline cost (0.002 USD * 1000 = 2 credits)
+        const user = await getUserByMatrixUserId(
+          dbAdapter,
+          '@testuser:localhost',
+        );
+        await waitUntil(
+          async () => {
+            const credits = await sumUpCreditsLedger(dbAdapter, {
+              creditType: ['extra_credit', 'extra_credit_used'],
+              userId: user!.id,
+            });
+            return credits === 48;
+          },
+          { timeoutMessage: 'Credits should be deducted (50 - 2 = 48)' },
         );
       } finally {
         mockFetch.restore();
