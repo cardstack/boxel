@@ -1,5 +1,6 @@
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
@@ -144,6 +145,11 @@ export default class BoxelInput extends Component<Signature> {
     return this.isInvalid && this.args.errorMessage;
   }
 
+  @action
+  private onKeyPress(event: Event) {
+    this.args.onKeyPress?.(event as KeyboardEvent);
+  }
+
   <template>
     <div
       class={{cn
@@ -194,7 +200,7 @@ export default class BoxelInput extends Component<Signature> {
           data-test-boxel-input-validation-state={{if @disabled false @state}}
           {{on 'input' (pick this.onInputPath (optional @onInput))}}
           {{on 'blur' (optional @onBlur)}}
-          {{on 'keypress' (optional @onKeyPress)}}
+          {{on 'keypress' this.onKeyPress}}
           {{on 'focus' (optional @onFocus)}}
           {{on 'change' (optional @onChange)}}
           ...attributes

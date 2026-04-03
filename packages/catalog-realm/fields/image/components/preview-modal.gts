@@ -25,15 +25,16 @@ export default class PreviewModal extends GlimmerComponent<PreviewModalArgs> {
   }
 
   @action
-  handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
+  handleKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
+    if (kbEvent.key === 'Escape') {
+      kbEvent.preventDefault();
       this.args.onClose();
     }
   }
 
   @action
-  handleOverlayClick(event: MouseEvent) {
+  handleOverlayClick(event: Event) {
     // Only close if clicking directly on the overlay, not on modal content
     if (event.target === event.currentTarget) {
       this.args.onClose();

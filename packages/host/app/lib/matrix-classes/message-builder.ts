@@ -2,7 +2,7 @@ import type Owner from '@ember/owner';
 
 import { getOwner, setOwner } from '@ember/owner';
 
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 

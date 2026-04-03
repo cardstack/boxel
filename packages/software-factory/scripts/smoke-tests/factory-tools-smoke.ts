@@ -6,7 +6,7 @@
  * entirely in-process.
  *
  * Usage:
- *   pnpm factory:tools-smoke
+ *   pnpm smoke:tools
  */
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -15,15 +15,15 @@ import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
-} from './lib/factory-tool-executor';
+} from '../lib/factory-tool-executor';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
   CLARIFICATION_SIGNAL,
   type DoneResult,
   type ClarificationResult,
-} from './lib/factory-tool-builder';
-import { ToolRegistry } from './lib/factory-tool-registry';
+} from '../lib/factory-tool-builder';
+import { ToolRegistry } from '../lib/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Helpers

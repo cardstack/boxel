@@ -103,6 +103,7 @@ class Isolated extends Component<typeof SubmissionCardPortal> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./submission-card', import.meta.url).href,
           name: 'SubmissionCard',
         },

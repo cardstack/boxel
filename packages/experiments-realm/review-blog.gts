@@ -19,6 +19,7 @@ export class ReviewBlog extends BlogApp {
       sortOptions: BlogApp.sortOptionList,
       cardRef: {
         name: 'Review',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./review', import.meta.url).href,
       },
     },
@@ -29,6 +30,7 @@ export class ReviewBlog extends BlogApp {
       createNewButtonText: 'Author',
       cardRef: {
         name: 'Author',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./author', import.meta.url).href,
       },
     },
@@ -39,6 +41,7 @@ export class ReviewBlog extends BlogApp {
       createNewButtonText: 'Category',
       cardRef: {
         name: 'BlogCategory',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./blog-category', import.meta.url).href,
       },
     },

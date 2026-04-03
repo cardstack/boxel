@@ -164,7 +164,7 @@ import type { FileDef } from './file-api';
 export const BULK_GENERATED_ITEM_COUNT = 3;
 
 interface CardOrFieldTypeIconSignature {
-  Element: SVGElement;
+  Element: SVGSVGElement;
 }
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
