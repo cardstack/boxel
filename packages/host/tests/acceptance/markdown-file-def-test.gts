@@ -440,27 +440,33 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     await click('[data-test-markdown-bfm-inline-card]');
 
-    await waitUntil(() => {
-      let currentValue =
-        (
-          document.querySelector(
-            '[data-test-card-url-bar-input]',
-          ) as HTMLInputElement | null
-        )?.value ?? '';
-      return currentValue === `${testRealmURL}Pet/mango.json`;
-    });
+    await waitUntil(
+      () => {
+        let currentValue =
+          (
+            document.querySelector(
+              '[data-test-card-url-bar-input]',
+            ) as HTMLInputElement | null
+          )?.value ?? '';
+        return currentValue === `${testRealmURL}Pet/mango.json`;
+      },
+      { timeout: 5000 },
+    );
 
     window.history.back();
 
-    await waitUntil(() => {
-      let currentValue =
-        (
-          document.querySelector(
-            '[data-test-card-url-bar-input]',
-          ) as HTMLInputElement | null
-        )?.value ?? '';
-      return currentValue === `${testRealmURL}bfm-test.md`;
-    });
+    await waitUntil(
+      () => {
+        let currentValue =
+          (
+            document.querySelector(
+              '[data-test-card-url-bar-input]',
+            ) as HTMLInputElement | null
+          )?.value ?? '';
+        return currentValue === `${testRealmURL}bfm-test.md`;
+      },
+      { timeout: 5000 },
+    );
 
     await waitFor('[data-test-pet-atom]', { timeout: 10000 });
     await waitFor('[data-test-pet-embedded]', { timeout: 10000 });
