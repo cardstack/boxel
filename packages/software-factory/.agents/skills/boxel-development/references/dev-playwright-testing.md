@@ -132,6 +132,27 @@ expect(card.data.attributes.fieldName).toBe('expected value');
 
 **The `adoptsFrom.module` path** must point to the card definition in the **source realm** (target realm). Use `sourceRealmUrl + '<definition-file-without-extension>'`. For example, if the card definition is `sticky-note.gts` in the target realm, use `sourceRealmUrl + 'sticky-note'`.
 
+## Debugging Test Failures
+
+When tests fail, the orchestrator feeds test failure details back to the agent. For more detail:
+
+- **TestRun cards** live in the target realm's `Test Runs/` folder. To find all test runs, search by the TestRun card type in the target realm:
+
+  ```json
+  {
+    "filter": {
+      "type": {
+        "module": "<targetRealmUrl>test-results",
+        "name": "TestRun"
+      }
+    }
+  }
+  ```
+
+  Each TestRun has a `sequenceNumber` that increases with each iteration of the agentic loop. To see the latest run, sort by `sequenceNumber` descending. Each TestRun contains structured `specResults` with individual test pass/fail status, error messages, and stack traces. Use `read_file` on a specific TestRun for full details.
+
+- **Test artifacts realm** contains the card instances created during test execution. The Project card's `testArtifactsRealmUrl` field has the realm URL. Each test run gets its own folder (`Run 1/`, `Run 2/`, etc.). You can use `search_realm` against the test artifacts realm to inspect what was created during a failing test run.
+
 ## Rules
 
 - **Never use `networkidle`** — Boxel host pages have long-lived network activity. Use `domcontentloaded` plus visible element assertions instead.

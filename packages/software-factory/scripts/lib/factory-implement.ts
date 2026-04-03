@@ -561,16 +561,25 @@ function buildTestRunner(
           durationMs,
         };
       } else if (handle.status === 'failed') {
+        // Read the TestRun card to get detailed failure info
+        let failures = await readTestRunFailures(
+          targetRealmUrl,
+          handle.testRunId,
+          { authorization: runConfig.authorization, fetch: runConfig.fetch },
+        );
         return {
           status: 'failed',
           passedCount: 0,
-          failedCount: specPaths.length,
-          failures: [
-            {
-              testName: slug,
-              error: handle.errorMessage ?? 'Tests failed',
-            },
-          ],
+          failedCount: failures.length || specPaths.length,
+          failures:
+            failures.length > 0
+              ? failures
+              : [
+                  {
+                    testName: slug,
+                    error: handle.errorMessage ?? 'Tests failed',
+                  },
+                ],
           durationMs,
         };
       } else {
@@ -657,6 +666,71 @@ async function findSpecPaths(
     `[factory-implement] Confirmed ${confirmedPaths.length}/${writtenSpecPaths.length} spec(s): ${confirmedPaths.join(', ')}`,
   );
   return confirmedPaths;
+}
+
+// ---------------------------------------------------------------------------
+// TestRun failure extraction
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a TestRun card from the realm and extract failure details.
+ * The TestRun card has specResults containing individual test results.
+ */
+async function readTestRunFailures(
+  realmUrl: string,
+  testRunId: string,
+  fetchOptions: RealmFetchOptions,
+): Promise<{ testName: string; error: string; stackTrace?: string }[]> {
+  try {
+    // testRunId is a full URL — extract the realm-relative path
+    let path: string;
+    try {
+      let url = new URL(testRunId);
+      let realmBase = ensureTrailingSlash(realmUrl);
+      path = url.href.startsWith(realmBase)
+        ? url.href.slice(realmBase.length)
+        : url.pathname.slice(1);
+    } catch {
+      path = testRunId;
+    }
+
+    let result = await readFile(realmUrl, path, fetchOptions);
+    if (!result.ok || !result.document) {
+      return [];
+    }
+
+    let attrs = result.document.data.attributes as Record<string, unknown>;
+    let specResults = attrs.specResults as
+      | {
+          results?: {
+            testName?: string;
+            status?: string;
+            message?: string;
+            stackTrace?: string;
+          }[];
+        }[]
+      | undefined;
+
+    if (!specResults) return [];
+
+    let failures: { testName: string; error: string; stackTrace?: string }[] =
+      [];
+    for (let spec of specResults) {
+      for (let r of spec.results ?? []) {
+        if (r.status === 'failed' || r.status === 'error') {
+          failures.push({
+            testName: r.testName ?? 'unknown',
+            error: r.message ?? 'Test failed',
+            stackTrace: r.stackTrace,
+          });
+        }
+      }
+    }
+
+    return failures;
+  } catch {
+    return [];
+  }
 }
 
 // ---------------------------------------------------------------------------
