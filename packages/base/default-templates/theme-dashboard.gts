@@ -1,7 +1,9 @@
+import { tracked } from '@glimmer/tracking';
 import GlimmerComponent from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { modifier } from 'ember-modifier';
 
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
@@ -121,6 +123,400 @@ export class CssFieldEditor extends GlimmerComponent<{
       }
       .css-textarea::placeholder {
         opacity: 0.5;
+      }
+    </style>
+  </template>
+}
+
+export class CardContainerCss extends GlimmerComponent<{
+  Args: {
+    cssVariables: string;
+  };
+  Element: HTMLElement;
+}> {
+  @tracked private cardElement: Element | null = null;
+
+  private captureElement = modifier((el: Element) => {
+    this.cardElement = el;
+    return () => {
+      this.cardElement = null;
+    };
+  });
+
+  private get currentScale(): string {
+    void this.args.cssVariables;
+    let el = this.cardElement;
+    if (!el) return '1.333';
+    return (
+      getComputedStyle(el).getPropertyValue('--theme-scale').trim() || '1.333'
+    );
+  }
+
+  private get currentFontSize(): string {
+    void this.args.cssVariables;
+    let el = this.cardElement;
+    if (!el) return '16px';
+    return (
+      getComputedStyle(el).getPropertyValue('--boxel-font-size').trim() ||
+      '16px'
+    );
+  }
+
+  private get currentSpacing(): string {
+    void this.args.cssVariables;
+    let el = this.cardElement;
+    if (!el) return '0.25rem';
+    return getComputedStyle(el).getPropertyValue('--boxel-sp').trim() || '1rem';
+  }
+
+  private collectBoxelVars(
+    prefixes: string[],
+    opts?: {
+      blocklist?: Set<string>;
+      excludePrefixes?: string[];
+      resolveValues?: boolean;
+    },
+  ): string {
+    let el = this.cardElement;
+    if (!el) {
+      return '';
+    }
+    let style = getComputedStyle(el);
+    let vars = new Map<string, string>();
+    for (let sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (let rule of Array.from(rules)) {
+        if (rule instanceof CSSStyleRule) {
+          for (let prop of Array.from(rule.style)) {
+            if (opts?.blocklist?.has(prop)) {
+              continue;
+            }
+            if (opts?.excludePrefixes?.some((p) => prop.startsWith(p))) {
+              continue;
+            }
+            if (prefixes.some((p) => prop.startsWith(p))) {
+              vars.set(prop, rule.style.getPropertyValue(prop).trim());
+            }
+          }
+        }
+      }
+    }
+    let entries: Array<{ name: string; value: string; numericValue: number }> =
+      [];
+    if (opts?.resolveValues) {
+      let probe = document.createElement('div');
+      probe.style.cssText =
+        'position:absolute;visibility:hidden;pointer-events:none';
+      el.appendChild(probe);
+      for (let [name] of vars.entries()) {
+        probe.style.setProperty('width', `var(${name})`);
+        let value = getComputedStyle(probe).width;
+        probe.style.removeProperty('width');
+        if (value) {
+          let numericValue = parseFloat(value);
+          let unit = value.replace(String(numericValue), '').trim();
+          let rounded = parseFloat(numericValue.toFixed(2));
+          entries.push({
+            name,
+            value: `${rounded}${unit}`,
+            numericValue: rounded,
+          });
+        }
+      }
+      probe.remove();
+      entries.sort((a, b) => a.numericValue - b.numericValue);
+    } else {
+      for (let [name] of Array.from(vars.entries()).sort()) {
+        let value = style.getPropertyValue(name).trim();
+        if (value) {
+          entries.push({ name, value, numericValue: 0 });
+        }
+      }
+    }
+    return entries.map(({ name, value }) => `${name}: ${value};`).join('\n');
+  }
+
+  get typographyVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars([
+      '--boxel-body',
+      '--boxel-heading',
+      '--boxel-subheading',
+      '--boxel-section-heading',
+      '--boxel-caption',
+    ]);
+  }
+
+  get spacingVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars(['--boxel-sp'], {
+      blocklist: new Set([
+        '--boxel-spacing',
+        '--boxel-sp-xxl',
+        '--boxel-sp-xxs',
+        '--boxel-sp-xxxl',
+        '--boxel-sp-xxxs',
+      ]),
+      excludePrefixes: ['--boxel-spec'],
+      resolveValues: true,
+    });
+  }
+
+  get borderRadiusVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars(['--boxel-border-radius'], {
+      blocklist: new Set([
+        '--boxel-border-radius-xxs',
+        '--boxel-border-radius-xxl',
+      ]),
+      resolveValues: true,
+    });
+  }
+
+  get fontSizeVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars(['--boxel-font-size'], {
+      resolveValues: true,
+    });
+  }
+
+  get fontScaleVarsString(): string {
+    void this.args.cssVariables;
+    return this.collectBoxelVars(['--boxel-fs'], { resolveValues: true });
+  }
+
+  <template>
+    <div {{this.captureElement}} ...attributes>
+      <p class='card-container-description'>
+        When a theme is set, the card container applies your theme variables to
+        set its background, font color, border-radius, typography and spacing
+        scale. Typography settings are optional — Boxel defaults are used when
+        not overridden. All theme variables are mapped to
+        <code>--boxel-*</code>
+        internals with Boxel defaults as fallbacks.
+      </p>
+      <div class='card-container-mappings'>
+        <div class='card-container-mapping-group'>
+          <h4>Layout</h4>
+          <dl>
+            <dt><code>--background</code></dt><dd>background-color</dd>
+            <dt><code>--foreground</code></dt><dd>color</dd>
+            <dt><code>--border</code></dt><dd>border color (when boundaries
+              shown)</dd>
+            <dt><code>--radius</code></dt><dd>base border-radius (all steps,
+              base default: 0.625rem [10px])</dd>
+            <dt><code>--spacing * 4</code></dt><dd>base spacing (all steps, base
+              default: 0.25rem * 4 = 1rem [16px])</dd>
+            <dt><code>--theme-font-size</code></dt><dd>base font-size (all
+              steps, default 1rem [16px])</dd>
+            <dt><code>--theme-scale</code></dt><dd>type and spacing scale ratio
+              (default 1.333)</dd>
+            <dt><code>--font-sans</code></dt><dd>font-family (default: IBM Plex
+              Sans, sans-serif)</dd>
+          </dl>
+        </div>
+        <div class='card-container-mapping-group'>
+          <h4>Layering Pairs</h4>
+          <p class='card-container-mapping-note'>Use these pairs on nested
+            containers to differentiate visual layers without repeating colors.</p>
+          <dl>
+            <dt><code>--background</code></dt><dd><code>--foreground</code></dd>
+            <dt><code>--card</code></dt><dd><code>--card-foreground</code></dd>
+            <dt><code>--sidebar</code></dt><dd><code
+              >--sidebar-foreground</code></dd>
+            <dt><code>--popover</code></dt><dd><code
+              >--popover-foreground</code></dd>
+          </dl>
+        </div>
+        <div class='card-container-mapping-group'>
+          <h4>Typography <em>(optional overrides)</em></h4>
+          <dl>
+            <dt><code>--boxel-heading-*</code></dt><dd>h1</dd>
+            <dt><code>--boxel-section-heading-*</code></dt><dd>h2</dd>
+            <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
+            <dt><code>--boxel-body-*</code></dt><dd>p</dd>
+            <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
+          </dl>
+        </div>
+      </div>
+      <h3 class='computed-vars-heading'>Computed CSS Variables</h3>
+      <div class='computed-vars-section'>
+        <div class='computed-vars-group'>
+          <h4>Spacing</h4>
+          <p class='computed-vars-description'>Each step is scaled by
+            <strong><code>--theme-scale</code></strong>
+            (currently
+            <strong>{{this.currentScale}}</strong>) from the base
+            <strong><code>--spacing</code></strong>
+            * 4 =
+            <strong><code>--boxel-sp</code></strong>
+            (currently
+            <strong>{{this.currentSpacing}}</strong>). Steps above the base
+            multiply by the ratio; steps below divide.</p>
+          {{#if this.spacingVarsString}}
+            <pre class='computed-vars-pre'>{{this.spacingVarsString}}</pre>
+          {{/if}}
+        </div>
+        <div class='computed-vars-group'>
+          <h4>Font Size</h4>
+          <p class='computed-vars-description'><strong><code
+              >--boxel-font-size</code></strong>
+            is set by
+            <strong><code>--theme-font-size</code></strong>
+            (currently
+            <strong>{{this.currentFontSize}}</strong>).</p>
+
+          <p class='computed-vars-description'><strong><code
+              >--boxel-font-size-*</code></strong>
+            use fixed multipliers from that base (2xs 0.6875×, xs 0.75×, sm
+            0.875×, md 1.25×, lg 1.375×, xl 2×, 2xl 2.25×).</p>
+          {{#if this.fontSizeVarsString}}
+            <pre class='computed-vars-pre'>{{this.fontSizeVarsString}}</pre>
+          {{/if}}
+          <p class='computed-vars-description'><strong><code
+              >--boxel-fs</code></strong>
+            aliases the base, and
+            <strong><code>--boxel-fs-*</code></strong>
+            use a ratio scale driven by
+            <strong><code>--theme-scale</code></strong>
+            (currently
+            <strong>{{this.currentScale}}</strong>).</p>
+          {{#if this.fontScaleVarsString}}
+            <pre class='computed-vars-pre'>{{this.fontScaleVarsString}}</pre>
+          {{/if}}
+        </div>
+        <div class='computed-vars-group'>
+          <h4>Border Radius</h4>
+          <p class='computed-vars-description'><strong><code
+              >--boxel-border-radius</code></strong>
+            equals the
+            <strong><code>--radius</code></strong>
+            theme variable. All other steps are derived from it by adding or
+            subtracting fixed pixel offsets.</p>
+          {{#if this.borderRadiusVarsString}}
+            <pre class='computed-vars-pre'>{{this.borderRadiusVarsString}}</pre>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+    <style scoped>
+      .card-container-description {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--dsr-muted-fg);
+        margin-block: 0 var(--boxel-sp-lg);
+      }
+      .card-container-description code,
+      .card-container-mappings code {
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: 0.9em;
+      }
+      .card-container-mappings {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+        gap: var(--boxel-sp-lg);
+        margin-bottom: var(--boxel-sp-lg);
+      }
+      .card-container-mapping-group {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border: 1px solid var(--dsr-border);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+      }
+      .card-container-mapping-group h4 {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--dsr-muted-fg);
+        margin-bottom: var(--boxel-sp-xs);
+      }
+      .card-container-mapping-group dl {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: var(--boxel-sp-4xs) var(--boxel-sp-sm);
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+        align-items: baseline;
+      }
+      .card-container-mapping-note {
+        font-size: var(--boxel-font-size-xs);
+        color: var(--dsr-muted-fg);
+        margin-bottom: var(--boxel-sp-xs);
+      }
+      .card-container-mapping-group dt {
+        font-weight: 500;
+      }
+      .card-container-mapping-group dd {
+        margin: 0;
+        color: var(--dsr-muted-fg);
+      }
+      .computed-vars-heading {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--dsr-muted-fg);
+        margin-block: var(--boxel-sp-lg) var(--boxel-sp-sm);
+        padding-top: var(--boxel-sp-lg);
+        border-top: 1px solid var(--dsr-border);
+      }
+      .computed-vars-section {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+        gap: var(--boxel-sp-lg);
+      }
+      .computed-vars-group {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border: 1px solid var(--dsr-border);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .computed-vars-group h4 {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--dsr-muted-fg);
+        margin: 0;
+      }
+      .computed-vars-group--full {
+        grid-column: 1 / -1;
+      }
+      .computed-vars-description {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        color: var(--dsr-muted-fg);
+      }
+      .computed-vars-description code {
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: 0.9em;
+      }
+      .computed-vars-pre {
+        margin: 0;
+        padding: var(--boxel-sp-xs) 0 0;
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: var(--boxel-font-size-xs);
+        white-space: pre-wrap;
+        flex: 1;
       }
     </style>
   </template>

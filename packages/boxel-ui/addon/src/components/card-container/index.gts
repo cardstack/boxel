@@ -63,169 +63,16 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     :global(.boxel-card-container--themed) {
-      --_theme-heading-font-size: var(
-        --brand-heading-font-size,
-        var(--theme-heading-font-size)
-      );
-      --_theme-heading-font-family: var(
-        --brand-heading-font-family,
-        var(--theme-heading-font-family)
-      );
-      --_theme-heading-font-weight: var(
-        --brand-heading-font-weight,
-        var(--theme-heading-font-weight)
-      );
-      --_theme-heading-line-height: var(
-        --brand-heading-line-height,
-        var(--theme-heading-line-height)
-      );
-
-      --_theme-section-heading-font-size: var(
-        --brand-section-heading-font-size,
-        var(--theme-section-heading-font-size)
-      );
-      --_theme-section-heading-font-family: var(
-        --brand-section-heading-font-family,
-        var(--theme-section-heading-font-family)
-      );
-      --_theme-section-heading-font-weight: var(
-        --brand-section-heading-font-weight,
-        var(--theme-section-heading-font-weight)
-      );
-      --_theme-section-heading-line-height: var(
-        --brand-section-heading-line-height,
-        var(--theme-section-heading-line-height)
-      );
-
-      --_theme-subheading-font-size: var(
-        --brand-subheading-font-size,
-        var(--theme-subheading-font-size)
-      );
-      --_theme-subheading-font-family: var(
-        --brand-subheading-font-family,
-        var(--theme-subheading-font-family)
-      );
-      --_theme-subheading-font-weight: var(
-        --brand-subheading-font-weight,
-        var(--theme-subheading-font-weight)
-      );
-      --_theme-subheading-line-height: var(
-        --brand-subheading-line-height,
-        var(--theme-subheading-line-height)
-      );
-
-      --_theme-body-font-size: var(
-        --brand-body-font-size,
-        var(--theme-body-font-size)
-      );
-      --_theme-body-font-family: var(
-        --brand-body-font-family,
-        var(--theme-body-font-family)
-      );
-      --_theme-body-font-weight: var(
-        --brand-body-font-weight,
-        var(--theme-body-font-weight)
-      );
-      --_theme-body-line-height: var(
-        --brand-body-line-height,
-        var(--theme-body-line-height)
-      );
-
-      --_theme-caption-font-size: var(
-        --brand-caption-font-size,
-        var(--theme-caption-font-size)
-      );
-      --_theme-caption-font-family: var(
-        --brand-caption-font-family,
-        var(--theme-caption-font-family)
-      );
-      --_theme-caption-font-weight: var(
-        --brand-caption-font-weight,
-        var(--theme-caption-font-weight)
-      );
-      --_theme-caption-line-height: var(
-        --brand-caption-line-height,
-        var(--theme-caption-line-height)
-      );
-
       /* setting boxel base css variable overrides, with boxel defaults as fallback */
-      --_theme-spacing: calc(var(--spacing) * 4);
-      --boxel-font-size: var(--_theme-body-font-size, var(--_boxel-font-size));
-      --boxel-spacing: var(--_theme-spacing, var(--_boxel-spacing));
+      --_boxel-scale: var(--theme-scale, var(--boxel-ratio));
+      --theme-spacing: calc(var(--spacing) * 4);
+      --boxel-spacing: var(--theme-spacing, var(--_boxel-spacing));
+      --boxel-font-size: var(
+        --theme-font-size,
+        var(--theme-body-font-size, var(--_boxel-font-size))
+      );
       --boxel-radius: var(--radius, var(--_boxel-radius));
-
-      --boxel-heading-font-family: var(
-        --_theme-heading-font-family,
-        var(--font-sans, var(--boxel-font-family))
-      );
-      --boxel-heading-font-size: var(
-        --_theme-heading-font-size,
-        var(--boxel-font-size-lg)
-      );
-      --boxel-heading-line-height: var(
-        --_theme-heading-line-height,
-        var(--boxel-line-height-lg)
-      );
-      --boxel-heading-font-weight: var(--_theme-heading-font-weight, 700);
-
-      --boxel-section-heading-font-family: var(
-        --_theme-section-heading-font-family,
-        var(--font-sans, var(--boxel-font-family))
-      );
-      --boxel-section-heading-font-size: var(
-        --_theme-section-heading-font-size,
-        var(--boxel-font-size-md)
-      );
-      --boxel-section-heading-line-height: var(
-        --_theme-section-heading-line-height,
-        var(--boxel-line-height-md)
-      );
-      --boxel-section-heading-font-weight: var(
-        --_theme-section-heading-font-weight,
-        500
-      );
-
-      --boxel-subheading-font-family: var(
-        --_theme-subheading-font-family,
-        var(--font-sans, var(--boxel-font-family))
-      );
-      --boxel-subheading-font-size: var(
-        --_theme-subheading-font-size,
-        var(--boxel-font-size)
-      );
-      --boxel-subheading-line-height: var(
-        --_theme-subheading-line-height,
-        var(--boxel-line-height)
-      );
-      --boxel-subheading-font-weight: var(--_theme-subheading-font-weight, 500);
-
-      --boxel-body-font-family: var(
-        --_theme-body-font-family,
-        var(--font-sans, var(--boxel-font-family))
-      );
-      --boxel-body-font-size: var(
-        --_theme-body-font-size,
-        var(--boxel-font-size-sm)
-      );
-      --boxel-body-line-height: var(
-        --_theme-body-line-height,
-        var(--boxel-line-height-sm)
-      );
-      --boxel-body-font-weight: var(--_theme-body-font-weight, 400);
-
-      --boxel-caption-font-family: var(
-        --_theme-caption-font-family,
-        var(--font-sans, var(--boxel-font-family))
-      );
-      --boxel-caption-font-size: var(
-        --_theme-caption-font-size,
-        var(--boxel-font-size-xs)
-      );
-      --boxel-caption-line-height: var(
-        --_theme-caption-line-height,
-        var(--boxel-line-height-xs)
-      );
-      --boxel-caption-font-weight: var(--_theme-caption-font-weight, 500);
+      --_boxel-ff: var(--font-sans, var(--boxel-font-family));
 
       /*** code below this line is from "variables.css". values will be recalculated based on theming variable values ***/
       /* font-sizes */
@@ -235,22 +82,35 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-font-size-md: calc(var(--boxel-font-size) * 1.25);
       --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875);
       --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75);
+      --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875);
+
+      /* font-size options based on font-scale */
+      --boxel-fs-2xl: calc(var(--boxel-fs-xl) * var(--_boxel-scale)); /* h1 */
+      --boxel-fs-xl: calc(var(--boxel-fs-lg) * var(--_boxel-scale)); /* h2 */
+      --boxel-fs-lg: calc(var(--boxel-fs-md) * var(--_boxel-scale)); /* h3 */
+      --boxel-fs-md: calc(var(--boxel-fs) * var(--_boxel-scale)); /* h4 */
+      --boxel-fs: var(--boxel-font-size); /* p */
+      --boxel-fs-sm: calc(var(--boxel-fs) / var(--_boxel-scale));
+      --boxel-fs-xs: calc(var(--boxel-fs-sm) / var(--_boxel-scale));
+      --boxel-fs-2xs: calc(var(--boxel-fs-xs) / var(--_boxel-scale));
+
       /* spacing */
-      --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--boxel-ratio));
-      --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--boxel-ratio));
-      --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--boxel-ratio));
-      --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--boxel-ratio));
-      --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--boxel-ratio));
-      --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--boxel-ratio));
-      --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio));
+      --boxel-sp-6xs: calc(var(--boxel-sp-5xs) / var(--_boxel-scale));
+      --boxel-sp-5xs: calc(var(--boxel-sp-4xs) / var(--_boxel-scale));
+      --boxel-sp-4xs: calc(var(--boxel-sp-3xs) / var(--_boxel-scale));
+      --boxel-sp-3xs: calc(var(--boxel-sp-2xs) / var(--_boxel-scale));
+      --boxel-sp-2xs: calc(var(--boxel-sp-xs) / var(--_boxel-scale));
+      --boxel-sp-xs: calc(var(--boxel-sp-sm) / var(--_boxel-scale));
+      --boxel-sp-sm: calc(var(--boxel-sp) / var(--_boxel-scale));
       --boxel-sp: var(--boxel-spacing); /* base */
-      --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio));
-      --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio));
-      --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--boxel-ratio));
-      --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--boxel-ratio));
-      --boxel-sp-4xl: calc(var(--boxel-sp-3xl) * var(--boxel-ratio));
-      --boxel-sp-5xl: calc(var(--boxel-sp-4xl) * var(--boxel-ratio));
-      --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--boxel-ratio));
+      --boxel-sp-lg: calc(var(--boxel-sp) * var(--_boxel-scale));
+      --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--_boxel-scale));
+      --boxel-sp-2xl: calc(var(--boxel-sp-xl) * var(--_boxel-scale));
+      --boxel-sp-3xl: calc(var(--boxel-sp-2xl) * var(--_boxel-scale));
+      --boxel-sp-4xl: calc(var(--boxel-sp-3xl) * var(--_boxel-scale));
+      --boxel-sp-5xl: calc(var(--boxel-sp-4xl) * var(--_boxel-scale));
+      --boxel-sp-6xl: calc(var(--boxel-sp-5xl) * var(--_boxel-scale));
+
       /* border-radius */
       --boxel-border-radius-xxs: calc(var(--boxel-border-radius-xs) - 2.5px);
       --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 3px);
@@ -260,6 +120,81 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-border-radius-xl: calc(var(--boxel-border-radius-lg) + 3px);
       --boxel-border-radius-xxl: calc(var(--boxel-border-radius-xl) + 5px);
       --boxel-form-control-border-radius: var(--boxel-border-radius);
+
+      /* h1 */
+      --boxel-heading-font-family: var(
+        --theme-heading-font-family,
+        var(--_boxel-ff)
+      );
+      --boxel-heading-font-size: var(
+        --theme-heading-font-size,
+        var(--boxel-font-size-lg)
+      );
+      --boxel-heading-line-height: var(
+        --theme-heading-line-height,
+        var(--boxel-line-height-lg)
+      );
+      --boxel-heading-font-weight: var(--theme-heading-font-weight, 700);
+
+      /* h2 */
+      --boxel-section-heading-font-family: var(
+        --theme-section-heading-font-family,
+        var(--boxel-heading-font-family)
+      );
+      --boxel-section-heading-font-size: var(
+        --theme-section-heading-font-size,
+        var(--boxel-font-size-md)
+      );
+      --boxel-section-heading-line-height: var(
+        --theme-section-heading-line-height,
+        var(--boxel-heading-line-height)
+      );
+      --boxel-section-heading-font-weight: var(
+        --theme-section-heading-font-weight,
+        var(--boxel-heading-font-weight, 500)
+      );
+
+      /* h3 */
+      --boxel-subheading-font-family: var(
+        --theme-subheading-font-family,
+        var(--boxel-heading-font-family)
+      );
+      --boxel-subheading-font-size: var(
+        --theme-subheading-font-size,
+        var(--boxel-font-size)
+      );
+      --boxel-subheading-line-height: var(
+        --theme-subheading-line-height,
+        var(--boxel-heading-line-height)
+      );
+      --boxel-subheading-font-weight: var(--theme-subheading-font-weight, 500);
+
+      /* base */
+      --boxel-body-font-family: var(--theme-body-font-family, var(--_boxel-ff));
+      --boxel-body-font-size: var(
+        --theme-body-font-size,
+        var(--boxel-font-size-sm)
+      );
+      --boxel-body-line-height: var(
+        --theme-body-line-height,
+        var(--boxel-line-height-sm)
+      );
+      --boxel-body-font-weight: var(--theme-body-font-weight, 400);
+
+      /* small text */
+      --boxel-caption-font-family: var(
+        --theme-caption-font-family,
+        var(--boxel-body-font-family)
+      );
+      --boxel-caption-font-size: var(
+        --theme-caption-font-size,
+        var(--boxel-font-size-xs)
+      );
+      --boxel-caption-line-height: var(
+        --theme-caption-line-height,
+        var(--boxel-line-height-xs)
+      );
+      --boxel-caption-font-weight: var(--theme-caption-font-weight, 500);
 
       font-family: var(--boxel-body-font-family);
       font-size: var(--boxel-body-font-size);
@@ -300,11 +235,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
         font-weight: var(--boxel-subheading-font-weight);
         line-height: var(--boxel-subheading-line-height);
       }
-      :global(p) {
-        font-family: var(--boxel-body-font-family);
-        font-size: var(--boxel-body-font-size);
-        font-weight: var(--boxel-body-font-weight);
-        line-height: var(--boxel-body-line-height);
+      :global(h4, h5, h6) {
+        font-size: inherit;
       }
       :global(small) {
         font-size: var(--boxel-caption-font-size);

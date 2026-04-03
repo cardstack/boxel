@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
+import { modifier } from 'ember-modifier';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import {
@@ -25,18 +26,18 @@ import {
   generateCssVariables,
   getContrastColor,
   buildCssVariableName,
+  sanitizeHtmlSafe,
   eq,
 } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import BrandTypography from './brand-typography';
 import BrandFunctionalPalette, {
   formatSwatchName,
 } from './brand-functional-palette';
 import BrandLogo from './brand-logo';
-import CSSValueField from './css-value';
 import { mergeRuleMaps } from './structured-theme';
+import { ThemeTypographyField } from './structured-theme-variables';
 import DetailedStyleRef from './detailed-style-reference';
 import {
   ThemeDashboard,
@@ -44,14 +45,13 @@ import {
   NavSection,
   ModeToggle,
   CssFieldEditor,
+  CardContainerCss,
 } from './default-templates/theme-dashboard';
 
 const sharedBrandVarsMap: Record<string, string> = {
   '--primary': '--brand-primary',
   '--secondary': '--brand-secondary',
   '--accent': '--brand-accent',
-  '--spacing': '--brand-spacing',
-  '--radius': '--brand-radius',
 };
 
 const rootToBrandVariableMapping: Record<string, string> = {
@@ -80,6 +80,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           @title={{@model.cardTitle}}
           @description={{@model.cardDescription}}
           @isDarkMode={{this.isDarkMode}}
+          @version={{@model.version}}
         >
           <:meta>
             {{#if @model.markUsage.primaryMark1}}
@@ -120,6 +121,72 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     {{/if}}
                   </div>
                 </GridContainer>
+              {{else if (eq section.id 'typography')}}
+                <GridContainer class='typography-grid'>
+                  {{#if @model.typography.heading}}
+                    <div class='typography-block'>
+                      <div class='typography-preview'>
+                        <h1
+                          style={{this.headingPreviewStyle}}
+                          {{this.captureHeadingEl}}
+                        >
+                          {{#if @model.typography.heading.sampleText}}
+                            {{@model.typography.heading.sampleText}}
+                          {{else}}
+                            The quick brown fox
+                          {{/if}}
+                        </h1>
+                      </div>
+                      <div class='typography-meta'>
+                        <span class='typography-label'>Headline</span>
+                        {{#if this.headingComputedStyles}}
+                          <dl class='style-details'>
+                            <dt>Family</dt>
+                            <dd>{{this.headingComputedStyles.fontFamily}}</dd>
+                            <dt>Size</dt>
+                            <dd>{{this.headingComputedStyles.fontSize}}</dd>
+                            <dt>Weight</dt>
+                            <dd>{{this.headingComputedStyles.fontWeight}}</dd>
+                            <dt>Line Height</dt>
+                            <dd>{{this.headingComputedStyles.lineHeight}}</dd>
+                          </dl>
+                        {{/if}}
+                      </div>
+                    </div>
+                  {{/if}}
+                  {{#if @model.typography.body}}
+                    <div class='typography-block'>
+                      <div class='typography-preview'>
+                        <p
+                          style={{this.bodyPreviewStyle}}
+                          {{this.captureBodyEl}}
+                        >
+                          {{#if @model.typography.body.sampleText}}
+                            {{@model.typography.body.sampleText}}
+                          {{else}}
+                            The quick brown fox
+                          {{/if}}
+                        </p>
+                      </div>
+                      <div class='typography-meta'>
+                        <span class='typography-label'>Body</span>
+                        {{#if this.bodyComputedStyles}}
+                          <dl class='style-details'>
+                            <dt>Family</dt>
+                            <dd>{{this.bodyComputedStyles.fontFamily}}</dd>
+                            <dt>Size</dt>
+                            <dd>{{this.bodyComputedStyles.fontSize}}</dd>
+                            <dt>Weight</dt>
+                            <dd>{{this.bodyComputedStyles.fontWeight}}</dd>
+                            <dt>Line Height</dt>
+                            <dd>{{this.bodyComputedStyles.lineHeight}}</dd>
+                          </dl>
+                        {{/if}}
+                      </div>
+                    </div>
+                  {{/if}}
+                </GridContainer>
+                <@fields.typography class='brand-typography-preview' />
               {{else if (eq section.id 'ui-components')}}
                 <GridContainer class='cta-grid'>
                   <FieldContainer @label='Primary CTA' @vertical={{true}}>
@@ -215,6 +282,109 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     </div>
                   {{/if}}
                 </div>
+              {{else if (eq section.id 'card-container-css')}}
+                {{#if @model.cssVariables}}
+                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                  <hr class='brand-guide-vars-divider' />
+                  <h3 class='brand-guide-vars-heading'>Brand Guide-Specific
+                    Variables</h3>
+                  <p class='brand-guide-vars-description'>These variables are
+                    only available for Brand Guides. They are not available as
+                    general Theme Card variables.</p>
+                  <div class='brand-guide-vars-box'>
+                    <h4 class='brand-guide-vars-title'>Functional Palette
+                      Variables</h4>
+                    <dl class='brand-guide-vars'>
+                      <dt><code>--brand-primary</code></dt>
+                      <dd>Primary brand color</dd>
+                      <dt><code>--brand-secondary</code></dt>
+                      <dd>Secondary brand color</dd>
+                      <dt><code>--brand-accent</code></dt>
+                      <dd>Accent brand color</dd>
+                      <dt><code>--brand-light</code></dt>
+                      <dd>Light brand color — used as
+                        <code>--background</code>
+                        in light mode and
+                        <code>--foreground</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-dark</code></dt>
+                      <dd>Dark brand color — used as
+                        <code>--foreground</code>
+                        in light mode and
+                        <code>--background</code>
+                        in dark mode</dd>
+                    </dl>
+                  </div>
+                  <div class='brand-guide-vars-box'>
+                    <h4 class='brand-guide-vars-title'>Brand Mark Variables</h4>
+                    <p class='brand-guide-vars-description'>These variables are
+                      automatically set from your brand mark fields. Use them in
+                      card CSS to reference the correct mark for the current
+                      color scheme without manual light/dark switching.</p>
+                    <dl class='brand-guide-vars'>
+                      <dt><code>--brand-primary-mark</code></dt>
+                      <dd>Primary mark URL —
+                        <code>--brand-primary-mark-1</code>
+                        in light mode,
+                        <code>--brand-primary-mark-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-secondary-mark</code></dt>
+                      <dd>Secondary mark URL —
+                        <code>--brand-secondary-mark-1</code>
+                        in light mode,
+                        <code>--brand-secondary-mark-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-primary-mark-greyscale</code></dt>
+                      <dd>Primary mark greyscale URL —
+                        <code>--brand-primary-mark-greyscale-1</code>
+                        in light mode,
+                        <code>--brand-primary-mark-greyscale-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-secondary-mark-greyscale</code></dt>
+                      <dd>Secondary mark greyscale URL —
+                        <code>--brand-secondary-mark-greyscale-1</code>
+                        in light mode,
+                        <code>--brand-secondary-mark-greyscale-2</code>
+                        in dark mode</dd>
+                      <dt><code>--brand-social-media-profile-icon</code></dt>
+                      <dd>Social media profile icon URL</dd>
+                      <dt><code>--brand-primary-mark-min-height</code></dt>
+                      <dd>Minimum display height for the primary mark</dd>
+                      <dt><code>--brand-primary-mark-clearance-ratio</code></dt>
+                      <dd>Clear-space ratio around the primary mark (multiplied
+                        by
+                        <code>--brand-primary-mark-min-height</code>)</dd>
+                      <dt><code>--brand-secondary-mark-min-height</code></dt>
+                      <dd>Minimum display height for the secondary mark</dd>
+                      <dt><code
+                        >--brand-secondary-mark-clearance-ratio</code></dt>
+                      <dd>Clear-space ratio around the secondary mark
+                        (multiplied by
+                        <code>--brand-secondary-mark-min-height</code>)</dd>
+                    </dl>
+                  </div>
+                  {{#if @model.brandColorPalette.length}}
+                    <h3 class='brand-guide-vars-heading'>Brand-Specific
+                      Variables</h3>
+                    <p class='brand-guide-vars-description'>These variables are
+                      custom css properties for usage by the specific brand.</p>
+                    <div class='brand-guide-vars-box'>
+                      <h4 class='brand-guide-vars-title'>Custom Brand Variables</h4>
+                      <p class='brand-guide-vars-description'>Additional brand
+                        colors as defined in the Brand Color Palette.</p>
+                      <dl class='brand-guide-vars'>
+                        {{#each @model.brandColorPalette as |color|}}
+                          {{#if color.name}}
+                            <dt><code>{{buildCssVariableName
+                                  color.name
+                                }}</code></dt>
+                            <dd>Custom brand color</dd>
+                          {{/if}}
+                        {{/each}}
+                      </dl>
+                    </div>
+                  {{/if}}
+                {{/if}}
               {{else if (eq section.id 'import-css')}}
                 <CssFieldEditor @setCss={{@model.setCss}} />
               {{else if (eq section.id 'inspirations')}}
@@ -326,6 +496,65 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         background-size: cover;
       }
 
+      /* typography section */
+      .typography-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .typography-block {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+      }
+      .typography-preview {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 11.25rem;
+        background-color: var(--muted, var(--boxel-100));
+        color: var(--foreground, var(--boxel-dark));
+        border-radius: var(--boxel-border-radius);
+        text-align: center;
+        overflow: hidden;
+        padding: var(--boxel-sp);
+      }
+      .typography-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .typography-label {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-foreground, var(--boxel-400));
+      }
+      .typography-preview h1,
+      .typography-preview p {
+        margin: 0;
+      }
+      .style-details {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 0.125rem var(--boxel-sp-sm);
+        margin: 0;
+        font-size: var(--boxel-font-size-xs);
+      }
+      .style-details dt {
+        color: var(--muted-foreground, var(--boxel-400));
+        font-weight: 500;
+      }
+      .style-details dd {
+        margin: 0;
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+      }
+      .brand-typography-preview {
+        margin-top: var(--boxel-sp-xl);
+      }
+
       /* dsr styles */
       .dsr-section {
         margin-bottom: calc(var(--boxel-sp) * 4);
@@ -397,6 +626,60 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         border-color: var(--dsr-fg);
       }
 
+      /* Brand Guide Variables */
+      .brand-guide-vars-divider {
+        border: none;
+        border-top: 1px solid var(--dsr-border);
+        margin-block: var(--boxel-sp-xl) 0;
+      }
+      .brand-guide-vars-heading {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .brand-guide-vars-box + .brand-guide-vars-box {
+        margin-top: var(--boxel-sp);
+      }
+      .brand-guide-vars-box {
+        background-color: var(--dsr-card);
+        color: var(--dsr-card-fg);
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+        border: 1px solid var(--dsr-border);
+        margin-top: var(--boxel-sp-lg);
+      }
+      .brand-guide-vars-title {
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-block: 0 var(--boxel-sp-sm);
+      }
+      .brand-guide-vars-description {
+        font-size: var(--boxel-font-size-sm);
+        color: var(--dsr-muted-fg);
+        margin-block: 0 var(--boxel-sp);
+      }
+      .brand-guide-vars {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        font-size: var(--boxel-font-size-sm);
+        align-items: baseline;
+      }
+      .brand-guide-vars dt {
+        font-weight: 600;
+      }
+      .brand-guide-vars dd {
+        margin: 0;
+        color: var(--dsr-muted-fg);
+      }
+      .brand-guide-vars code {
+        font-family: var(
+          --font-mono,
+          var(--boxel-monospace-font-family, monospace)
+        );
+        font-size: 0.9em;
+      }
+
       /* Import Custom CSS */
       .css-textarea {
         --boxel-input-height: 19rem;
@@ -411,6 +694,70 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   </template>
 
   @tracked private isDarkMode = false;
+  @tracked private headingEl: Element | null = null;
+  @tracked private bodyEl: Element | null = null;
+
+  private captureHeadingEl = modifier((el: Element) => {
+    this.headingEl = el;
+    return () => {
+      this.headingEl = null;
+    };
+  });
+
+  private captureBodyEl = modifier((el: Element) => {
+    this.bodyEl = el;
+    return () => {
+      this.bodyEl = null;
+    };
+  });
+
+  private get headingComputedStyles() {
+    void this.args.model.typography?.heading;
+    let el = this.headingEl;
+    if (!el) return null;
+    let style = getComputedStyle(el);
+    return {
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      lineHeight: style.lineHeight,
+    };
+  }
+
+  private get bodyComputedStyles() {
+    void this.args.model.typography?.body;
+    let el = this.bodyEl;
+    if (!el) return null;
+    let style = getComputedStyle(el);
+    return {
+      fontFamily: style.fontFamily,
+      fontSize: style.fontSize,
+      fontWeight: style.fontWeight,
+      lineHeight: style.lineHeight,
+    };
+  }
+
+  private get headingPreviewStyle() {
+    let { fontFamily, fontSize, fontWeight, lineHeight } =
+      this.args.model.typography?.heading ?? {};
+    let styles: string[] = [];
+    if (fontFamily) styles.push(`font-family: ${fontFamily}`);
+    if (fontSize) styles.push(`font-size: ${fontSize}`);
+    if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
+    if (lineHeight) styles.push(`line-height: ${lineHeight}`);
+    return sanitizeHtmlSafe(styles.join('; '));
+  }
+
+  private get bodyPreviewStyle() {
+    let { fontFamily, fontSize, fontWeight, lineHeight } =
+      this.args.model.typography?.body ?? {};
+    let styles: string[] = [];
+    if (fontFamily) styles.push(`font-family: ${fontFamily}`);
+    if (fontSize) styles.push(`font-size: ${fontSize}`);
+    if (fontWeight) styles.push(`font-weight: ${fontWeight}`);
+    if (lineHeight) styles.push(`line-height: ${lineHeight}`);
+    return sanitizeHtmlSafe(styles.join('; '));
+  }
 
   private toggleDarkMode = () => {
     this.isDarkMode = !this.isDarkMode;
@@ -448,6 +795,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
       if (idsToInclude.includes(section.id)) {
         return true;
+      }
+
+      if (section.id === 'card-container-css') {
+        return Boolean(this.args.model.cssVariables);
       }
 
       if (section.id === 'brand-palette') {
@@ -491,10 +842,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
     return Boolean(
       model.colorPalette ||
-        model.typographySystem ||
-        model.geometricLanguage ||
-        model.materialVocabulary ||
-        model.wallpaperImages?.length,
+      model.typographySystem ||
+      model.geometricLanguage ||
+      model.materialVocabulary ||
+      model.wallpaperImages?.length,
     );
   }
 }
@@ -567,8 +918,16 @@ export default class BrandGuide extends DetailedStyleRef {
     // add brand typography variables
     this.appendRules(this.typography?.cssRuleMap, brandRules);
 
-    // add brand mark variables
-    this.appendRules(this.markUsage?.cssRuleMap, brandRules);
+    // add brand mark variables (exclude -1/-2 light/dark variants — these are
+    // exposed only as mode-aware aliases, e.g. --brand-primary-mark)
+    if (this.markUsage?.cssRuleMap?.size) {
+      for (let [name, value] of this.markUsage.cssRuleMap.entries()) {
+        if (!name || !value || brandRules.has(name) || /-(1|2)$/.test(name)) {
+          continue;
+        }
+        brandRules.set(name, value);
+      }
+    }
 
     if (!brandRules.size) {
       return;
@@ -635,12 +994,9 @@ export default class BrandGuide extends DetailedStyleRef {
     return combinedRules;
   }
 
-  // Color Palettes
   @field brandColorPalette = containsMany(CompoundColorField);
   @field functionalPalette = contains(BrandFunctionalPalette);
-  @field typography = contains(BrandTypography);
-  @field cornerRadius = contains(CSSValueField);
-  @field spacing = contains(CSSValueField);
+  @field typography = contains(ThemeTypographyField);
   @field markUsage = contains(BrandLogo);
 
   // CSS Variables computed from field entries
@@ -650,10 +1006,69 @@ export default class BrandGuide extends DetailedStyleRef {
         return;
       }
       let brandRules = this.calculateBrandRuleMap();
-      let rootRules = mergeRuleMaps(this.calculatedRules(), brandRules);
+      let markMap = this.markUsage?.cssRuleMap;
+      const toUrlValue = (url?: string) => (url ? `url(${url})` : undefined);
+      let rootMarkAliases = new Map(
+        [
+          [
+            '--brand-primary-mark',
+            toUrlValue(markMap?.get('--brand-primary-mark-1')),
+          ],
+          [
+            '--brand-secondary-mark',
+            toUrlValue(markMap?.get('--brand-secondary-mark-1')),
+          ],
+          [
+            '--brand-primary-mark-greyscale',
+            toUrlValue(markMap?.get('--brand-primary-mark-greyscale-1')),
+          ],
+          [
+            '--brand-secondary-mark-greyscale',
+            toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-1')),
+          ],
+        ].filter(([, v]) => v) as [string, string][],
+      );
+      let darkMarkAliases = new Map(
+        [
+          [
+            '--brand-primary-mark',
+            toUrlValue(
+              markMap?.get('--brand-primary-mark-2') ??
+                markMap?.get('--brand-primary-mark-1'),
+            ),
+          ],
+          [
+            '--brand-secondary-mark',
+            toUrlValue(
+              markMap?.get('--brand-secondary-mark-2') ??
+                markMap?.get('--brand-secondary-mark-1'),
+            ),
+          ],
+          [
+            '--brand-primary-mark-greyscale',
+            toUrlValue(
+              markMap?.get('--brand-primary-mark-greyscale-2') ??
+                markMap?.get('--brand-primary-mark-greyscale-1'),
+            ),
+          ],
+          [
+            '--brand-secondary-mark-greyscale',
+            toUrlValue(
+              markMap?.get('--brand-secondary-mark-greyscale-2') ??
+                markMap?.get('--brand-secondary-mark-greyscale-1'),
+            ),
+          ],
+        ].filter(([, v]) => v) as [string, string][],
+      );
+      let rootRules = mergeRuleMaps(
+        this.calculatedRules(),
+        brandRules,
+        rootMarkAliases,
+      );
       let darkRules = mergeRuleMaps(
         this.calculatedRules({ darkMode: true }),
         brandRules,
+        darkMarkAliases,
       );
       return generateCssVariables(
         buildCssGroups([

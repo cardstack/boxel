@@ -13,6 +13,7 @@ import UrlField from './url';
 import {
   ThemeVisualizer,
   ThemeDashboard,
+  CardContainerCss,
   CssFieldEditor,
   ResetButton,
   SimpleNavBar,
@@ -98,6 +99,13 @@ class Isolated extends Component<typeof StyleReference> {
                   </div>
                 {{/each}}
               </div>
+            </section>
+          {{/if}}
+
+          {{#if @model.cssVariables}}
+            <section id='card-container-css'>
+              <h2>Card Container CSS</h2>
+              <CardContainerCss @cssVariables={{@model.cssVariables}} />
             </section>
           {{/if}}
 
