@@ -6,7 +6,8 @@
  * prerenderer → headless Chrome → GetCardTypeSchemaCommand →
  * generateJsonSchemaForCardType()
  *
- * Uses the darkfactory-adopter test realm which has darkfactory.gts deployed.
+ * Uses the darkfactory-adopter test realm which has darkfactory.gts deployed
+ * in the source realm (software-factory/).
  */
 
 import { test } from './fixtures';
@@ -17,6 +18,7 @@ import {
   ensureTrailingSlash,
 } from '../scripts/lib/realm-operations';
 import { fetchCardTypeSchema } from '../scripts/lib/darkfactory-schemas';
+import { sourceRealmURLFor } from '../src/harness/shared';
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';
@@ -25,15 +27,18 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
   realm,
 }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let realmUrl = ensureTrailingSlash(realm.realmURL.href);
+  // The darkfactory module lives in the source realm, not the test realm
+  let sourceRealmUrl = ensureTrailingSlash(
+    sourceRealmURLFor(realm.realmServerURL).href,
+  );
 
   let response = await runRealmCommand(
     realmServerUrl,
-    realmUrl,
+    sourceRealmUrl,
     GET_CARD_TYPE_SCHEMA_COMMAND,
     {
       codeRef: {
-        module: `${realmUrl}darkfactory`,
+        module: `${sourceRealmUrl}darkfactory`,
         name: 'Project',
       },
     },
@@ -56,15 +61,14 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
 
 test('fetches Ticket schema with enum fields', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let realmUrl = ensureTrailingSlash(realm.realmURL.href);
+  let sourceRealmUrl = ensureTrailingSlash(
+    sourceRealmURLFor(realm.realmServerURL).href,
+  );
 
   let schema = await fetchCardTypeSchema(
     realmServerUrl,
-    realmUrl,
-    {
-      module: `${realmUrl}darkfactory`,
-      name: 'Ticket',
-    },
+    sourceRealmUrl,
+    { module: `${sourceRealmUrl}darkfactory`, name: 'Ticket' },
     { authorization: `Bearer ${realm.ownerBearerToken}` },
   );
 
@@ -82,15 +86,14 @@ test('fetches Ticket schema with enum fields', async ({ realm }) => {
 
 test('fetches KnowledgeArticle schema', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
-  let realmUrl = ensureTrailingSlash(realm.realmURL.href);
+  let sourceRealmUrl = ensureTrailingSlash(
+    sourceRealmURLFor(realm.realmServerURL).href,
+  );
 
   let schema = await fetchCardTypeSchema(
     realmServerUrl,
-    realmUrl,
-    {
-      module: `${realmUrl}darkfactory`,
-      name: 'KnowledgeArticle',
-    },
+    sourceRealmUrl,
+    { module: `${sourceRealmUrl}darkfactory`, name: 'KnowledgeArticle' },
     { authorization: `Bearer ${realm.ownerBearerToken}` },
   );
 
