@@ -7,7 +7,7 @@ import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers';
 import {
   extractRealmFromPrBody,
-  extractPrNumberFromPayload,
+  extractBranchNameFromPayload,
 } from '../../handlers/webhook-filter-handlers';
 
 module(`server-endpoints/${basename(__filename)}`, function () {
@@ -851,7 +851,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `,`,
         `'{}'::jsonb`,
         `,`,
-        `'{"prNumber": "55"}'::jsonb`,
+        `'{"prNumber": "55", "branchName": "feature/test-branch"}'::jsonb`,
         `,`,
         `'[]'::jsonb`,
         `,`,
@@ -908,6 +908,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         action: 'completed',
         check_run: {
           id: 1,
+          check_suite: { head_branch: 'feature/test-branch' },
           pull_requests: [{ number: 55 }],
         },
       });
@@ -964,7 +965,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         `,`,
         `'{}'::jsonb`,
         `,`,
-        `'{"prNumber": "77"}'::jsonb`,
+        `'{"branchName": "feature/staging-branch"}'::jsonb`,
         `,`,
         `'[]'::jsonb`,
         `,`,
@@ -1018,11 +1019,12 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-      // check_run for PR #77 — PrCard is in staging, command is production
+      // check_run — PrCard is in staging, command is production
       let payload = JSON.stringify({
         action: 'completed',
         check_run: {
           id: 2,
+          check_suite: { head_branch: 'feature/staging-branch' },
           pull_requests: [{ number: 77 }],
         },
       });
@@ -1102,44 +1104,46 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     });
   });
 
-  module('extractPrNumberFromPayload', function () {
-    test('extracts PR number from pull_request event', function (assert) {
+  module('extractBranchNameFromPayload', function () {
+    test('extracts branch name from pull_request event', function (assert) {
       assert.strictEqual(
-        extractPrNumberFromPayload({
+        extractBranchNameFromPayload({
           action: 'opened',
-          pull_request: { number: 296, body: '...' },
+          pull_request: { head: { ref: 'feature/my-branch' }, number: 1 },
         }),
-        296,
+        'feature/my-branch',
       );
     });
 
-    test('extracts PR number from check_run event', function (assert) {
+    test('extracts branch name from check_run event', function (assert) {
       assert.strictEqual(
-        extractPrNumberFromPayload({
+        extractBranchNameFromPayload({
           action: 'completed',
           check_run: {
+            check_suite: { head_branch: 'feature/ci-branch' },
             pull_requests: [{ number: 42 }],
           },
         }),
-        42,
+        'feature/ci-branch',
       );
     });
 
-    test('extracts PR number from check_suite event', function (assert) {
+    test('extracts branch name from check_suite event', function (assert) {
       assert.strictEqual(
-        extractPrNumberFromPayload({
+        extractBranchNameFromPayload({
           action: 'completed',
           check_suite: {
+            head_branch: 'feature/suite-branch',
             pull_requests: [{ number: 99 }],
           },
         }),
-        99,
+        'feature/suite-branch',
       );
     });
 
-    test('returns null when no PR number found', function (assert) {
+    test('returns null when no branch name found', function (assert) {
       assert.strictEqual(
-        extractPrNumberFromPayload({ action: 'created', comment: {} }),
+        extractBranchNameFromPayload({ action: 'created', comment: {} }),
         null,
       );
     });

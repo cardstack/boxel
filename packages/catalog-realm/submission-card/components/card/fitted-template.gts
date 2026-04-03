@@ -14,10 +14,6 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
     return this.args.model.listing?.images?.[0];
   }
 
-  get prNumber() {
-    return this.args.model.prCard?.prNumber;
-  }
-
   get submittedAt() {
     return this.args.model.prCard?.submittedAt;
   }
@@ -56,9 +52,6 @@ export class FittedTemplate extends Component<typeof SubmissionCard> {
         <div class='info-main'>
           <div class='title-row'>
             <h3 class='title'>{{@model.cardTitle}}</h3>
-            {{#if this.prNumber}}
-              <span class='pr-number'>PR #{{this.prNumber}}</span>
-            {{/if}}
           </div>
 
           {{#if @model.branchName}}

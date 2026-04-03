@@ -99,7 +99,6 @@ export class CommandRunner {
           listingId,
           realmURL,
         });
-
         let filesResult = await this.enqueueRunCommand({
           runAs,
           realmURL,
@@ -129,15 +128,24 @@ export class CommandRunner {
           fileCount: allFileContents.length,
         });
 
+        // Build PR summary from available info
+        let listingSummary =
+          typeof input.listingSummary === 'string'
+            ? input.listingSummary.trim()
+            : '';
+        let prSummary = [
+          '## Summary',
+          ...(listingSummary ? [listingSummary, '', '---'] : []),
+          `- Listing Name: ${listingName ?? 'Untitled'}`,
+          `- Room ID: \`${roomId ?? ''}\``,
+          `- User ID: \`${runAs}\``,
+          `- Number of Files: ${allFileContents.length}`,
+          ...(workflowCardUrl
+            ? [`- Workflow Card: [${workflowCardUrl}](${workflowCardUrl})`]
+            : []),
+        ].join('\n');
+
         // Step 2: Create PrCard — runs as SUBMISSION BOT in the SUBMISSIONS realm
-        log.info('pr-listing-create: creating PrCard', {
-          submissionBotUserId: this.submissionBotUserId,
-          submissionRealm,
-          branchName,
-          submittedBy: runAs,
-          fileCount: allFileContents.length,
-          inputPayloadSize: JSON.stringify(allFileContents).length,
-        });
         let prCardResult = await this.enqueueRunCommand({
           runAs: this.submissionBotUserId,
           realmURL: submissionRealm,
@@ -146,7 +154,8 @@ export class CommandRunner {
             realm: submissionRealm,
             branchName,
             submittedBy: runAs,
-            allFileContents: allFileContents,
+            prSummary,
+            allFileContents,
           },
         });
 
