@@ -36,6 +36,15 @@ export interface SearchRealmOptions extends RealmFetchOptions {
   realmUrl: string;
 }
 
+export type RunCommandOptions = RealmFetchOptions;
+
+export interface RunCommandResponse {
+  status: 'ready' | 'error' | 'unusable';
+  /** Serialized command result (JSON string), or null. */
+  result?: string | null;
+  error?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -104,6 +113,87 @@ export async function searchRealm(
   } catch {
     return undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Run Command (prerenderer)
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a host command on the realm server via the `/_run-command`
+ * endpoint. The command is enqueued as a job and executed in the
+ * prerenderer's headless Chrome where the full card runtime (Loader,
+ * CardAPI, services) is available.
+ *
+ * The authenticated user is derived from the JWT in the Authorization
+ * header — no separate userId is needed.
+ */
+export async function runRealmCommand(
+  realmServerUrl: string,
+  realmUrl: string,
+  command: string,
+  commandInput?: Record<string, unknown>,
+  options?: RunCommandOptions,
+): Promise<RunCommandResponse> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let url = `${ensureTrailingSlash(realmServerUrl)}_run-command`;
+
+  let body = {
+    data: {
+      type: 'run-command',
+      attributes: {
+        realmURL: realmUrl,
+        command,
+        commandInput: commandInput ?? null,
+      },
+    },
+  };
+
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/vnd.api+json',
+    Accept: 'application/vnd.api+json',
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return {
+      status: 'error',
+      error: `run-command fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      status: 'error',
+      error: `run-command HTTP ${response.status}: ${await response.text().catch(() => '(no body)')}`,
+    };
+  }
+
+  let json = (await response.json()) as {
+    data?: {
+      attributes?: {
+        status?: string;
+        cardResultString?: string | null;
+        error?: string | null;
+      };
+    };
+  };
+
+  let attrs = json.data?.attributes;
+  return {
+    status: (attrs?.status as RunCommandResponse['status']) ?? 'error',
+    result: attrs?.cardResultString ?? null,
+    error: attrs?.error ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
