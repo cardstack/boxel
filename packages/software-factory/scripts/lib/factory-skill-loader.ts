@@ -98,6 +98,7 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'dev-command-development.md': ['command', 'action', 'invoke'],
   'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
   'dev-playwright-testing.md': ['test', 'playwright', 'spec.ts', 'verify'],
+  'dev-realm-search.md': ['search', 'query', 'filter', 'find', 'realm'],
   'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
 };
 
