@@ -471,6 +471,7 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
+  #cachedRealmInfo: RealmInfo | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -1160,6 +1161,11 @@ export class Realm {
     }
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
+      if (
+        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('.realm.json'))
+      ) {
+        this.#cachedRealmInfo = null;
+      }
       this.broadcastRealmEvent({
         eventName: 'update',
         ...(addedFiles.length ? { added: addedFiles } : {}),
@@ -4346,7 +4352,10 @@ export class Realm {
   }
 
   async getRealmInfo(): Promise<RealmInfo> {
-    return this.parseRealmInfo();
+    if (!this.#cachedRealmInfo) {
+      this.#cachedRealmInfo = await this.parseRealmInfo();
+    }
+    return this.#cachedRealmInfo;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -4478,6 +4487,7 @@ export class Realm {
     Object.assign(realmConfig, attributes);
     let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
     await this.write(realmConfigPath, serializedConfig);
+    this.#cachedRealmInfo = null;
 
     let realmInfo = await this.parseRealmInfo();
     let doc = {
