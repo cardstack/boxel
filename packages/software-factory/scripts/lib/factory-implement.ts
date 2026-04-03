@@ -156,11 +156,13 @@ export async function runFactoryImplement(
     authorization: config.authorization,
   } satisfies ToolExecutorConfig);
 
-  // Fetch card type schemas for typed tool parameters
+  // Fetch card type schemas for typed tool parameters.
+  // Uses the server token (not per-realm JWT) because _run-command is a
+  // server-level endpoint.
   let cardTypeSchemas = await loadDarkFactorySchemas(
     realmServerUrl,
     targetRealmUrl,
-    { authorization: config.authorization, fetch: fetchImpl },
+    { authorization: serverToken, fetch: fetchImpl },
   );
 
   let toolBuilderConfig: ToolBuilderConfig = {
