@@ -426,7 +426,6 @@ module(`Integration | realm indexing`, function (hooks) {
               `${testRealmURL}Pet/mango.json`,
             ),
             resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
-
             realmURL: 'http://test-realm/test/',
           },
         });
@@ -510,7 +509,6 @@ module(`Integration | realm indexing`, function (hooks) {
             module: 'http://localhost:4202/test/pet',
             name: 'Pet',
           },
-
           realmURL: 'http://test-realm/test/',
         },
       });
@@ -556,7 +554,6 @@ module(`Integration | realm indexing`, function (hooks) {
               module: 'http://localhost:4202/test/pet',
               name: 'Pet',
             },
-
             realmURL: 'http://test-realm/test/',
           },
         });
@@ -645,7 +642,6 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}Pet/mango.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
-
           realmURL: 'http://test-realm/test/',
         },
       });
@@ -731,7 +727,6 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}Pet/mango.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
-
           realmURL: 'http://test-realm/test/',
         },
       });
@@ -814,7 +809,6 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}person-spec.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
-
           realmURL: testRealmURL,
         },
       });
@@ -933,7 +927,6 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}person-spec.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'person-spec.json'),
-
           realmURL: testRealmURL,
         },
       });
@@ -996,7 +989,6 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}people-skill.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'people-skill.json'),
-
           realmURL: testRealmURL,
         },
       });
@@ -1512,7 +1504,6 @@ module(`Integration | realm indexing`, function (hooks) {
             `${testRealmURL}vangogh.json`,
           ),
           resourceCreatedAt: await getFileCreatedAt(realm, 'vangogh.json'),
-
           realmURL: testRealmURL,
         },
       },
@@ -2166,7 +2157,6 @@ module(`Integration | realm indexing`, function (hooks) {
               realm,
               'Vendor/vendor1.json',
             ),
-
             realmURL: 'http://test-realm/test/',
           },
         },
@@ -2197,7 +2187,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 `${testRealmURL}Chain/1.json`,
               ),
               resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/1.json'),
-
               realmURL: 'http://test-realm/test/',
             },
           },
@@ -2227,7 +2216,6 @@ module(`Integration | realm indexing`, function (hooks) {
                 `${testRealmURL}Chain/2.json`,
               ),
               resourceCreatedAt: await getFileCreatedAt(realm, 'Chain/2.json'),
-
               realmURL: 'http://test-realm/test/',
             },
           },
@@ -2685,7 +2673,6 @@ module(`Integration | realm indexing`, function (hooks) {
             realm,
             'PetPerson/hassan.json',
           ),
-
           realmURL: 'http://test-realm/test/',
         },
       });
@@ -2711,7 +2698,6 @@ module(`Integration | realm indexing`, function (hooks) {
               `${testRealmURL}Pet/mango.json`,
             ),
             resourceCreatedAt: await getFileCreatedAt(realm, 'Pet/mango.json'),
-
             realmURL: 'http://test-realm/test/',
           },
         },
@@ -2739,7 +2725,6 @@ module(`Integration | realm indexing`, function (hooks) {
               realm,
               'Pet/vanGogh.json',
             ),
-
             realmURL: 'http://test-realm/test/',
           },
         },
@@ -2849,7 +2834,6 @@ module(`Integration | realm indexing`, function (hooks) {
               realm,
               'PetPerson/burcu.json',
             ),
-
             realmURL: 'http://test-realm/test/',
           },
         },
@@ -2974,7 +2958,6 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}pet-person-spec.json`,
           ),
-
           realmURL: 'http://test-realm/test/',
           resourceCreatedAt: await getFileCreatedAt(
             realm,
@@ -3128,7 +3111,6 @@ module(`Integration | realm indexing`, function (hooks) {
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}Friend/hassan.json`,
           ),
-
           realmURL: 'http://test-realm/test/',
           resourceCreatedAt: await getFileCreatedAt(
             realm,
@@ -3268,7 +3250,6 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Friend/hassan.json`,
             ),
-
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt: await getFileCreatedAt(
               realm,
@@ -3308,7 +3289,6 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Friend/mango.json`,
               ),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -3394,7 +3374,6 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Friend/mango.json`,
             ),
-
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt: await getFileCreatedAt(
               realm,
@@ -3434,7 +3413,6 @@ module(`Integration | realm indexing`, function (hooks) {
               lastModified: adapter.lastModifiedMap.get(
                 `${testRealmURL}Friend/hassan.json`,
               ),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -3550,7 +3528,6 @@ module(`Integration | realm indexing`, function (hooks) {
             lastModified: adapter.lastModifiedMap.get(
               `${testRealmURL}Friend/hassan.json`,
             ),
-
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt: await getFileCreatedAt(
               realm,
@@ -3688,7 +3665,6 @@ module(`Integration | realm indexing`, function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
-
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt: await getFileCreatedAt(
               realm,
@@ -3723,7 +3699,6 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -3752,7 +3727,6 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -3830,7 +3804,6 @@ module(`Integration | realm indexing`, function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
-
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt: await getFileCreatedAt(
               realm,
@@ -3868,7 +3841,6 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -3897,7 +3869,6 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -3981,7 +3952,6 @@ module(`Integration | realm indexing`, function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModifiedMap.get(`${vanGoghID}.json`),
-
             realmURL: 'http://test-realm/test/',
             resourceCreatedAt: await getFileCreatedAt(
               realm,
@@ -4019,7 +3989,6 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${hassanID}.json`),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
@@ -4048,7 +4017,6 @@ module(`Integration | realm indexing`, function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModifiedMap.get(`${mangoID}.json`),
-
               realmURL: 'http://test-realm/test/',
               resourceCreatedAt: await getFileCreatedAt(
                 realm,
