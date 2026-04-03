@@ -149,10 +149,11 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onSearch?.(searchKey);
   }
 
-  @action private onSearchInputKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
+  @action private onSearchInputKeyDown(e: Event) {
+    let kbEvent = e as KeyboardEvent;
+    if (kbEvent.key === 'Escape') {
       this.onCancel();
-      (e.target as HTMLInputElement)?.blur?.();
+      (kbEvent.target as HTMLInputElement)?.blur?.();
     }
   }
 

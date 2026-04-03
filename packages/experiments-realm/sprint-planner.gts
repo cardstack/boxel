@@ -179,6 +179,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
         },
       },
       taskSource: {
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./sprint-task', import.meta.url).href,
         name: 'SprintTask',
         getQuery: () => this.getTaskQuery,
@@ -188,6 +189,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
           searchKey: 'label',
           label: 'Status',
           codeRef: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./sprint-task', import.meta.url).href,
             name: 'Status',
           },
@@ -197,6 +199,7 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
           searchKey: 'name',
           label: 'Assignee',
           codeRef: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./sprint-task', import.meta.url).href,
             name: 'TeamMember',
           },

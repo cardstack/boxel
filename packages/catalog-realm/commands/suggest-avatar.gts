@@ -24,6 +24,7 @@ export class SuggestAvatar extends Command<
   protected async run(input: SuggestAvatarInput): Promise<undefined> {
     let { name } = input;
 
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     let skillCardId = new URL('../Skill/avatar-suggestion', import.meta.url)
       .href;
 
