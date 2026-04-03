@@ -11,6 +11,7 @@ import {
   SupportedMimeType,
   isFieldDef,
   isResolvedCodeRef,
+  trimExecutableExtension,
 } from '@cardstack/runtime-common';
 import {
   loadCardDef,
@@ -74,7 +75,16 @@ export default class ListingCreateCommand extends HostBaseCommand<
   requireInputFields = ['codeRef', 'targetRealm'];
 
   private sanitizeModuleList(modulesToCreate: Iterable<string>) {
-    let uniqueModules = Array.from(new Set(modulesToCreate));
+    // Normalize to extensionless URLs before deduplication so that e.g.
+    // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
+    const seen = new Map<string, string>(); // normalized → original
+    for (const m of modulesToCreate) {
+      const normalized = trimExecutableExtension(new URL(m)).href;
+      if (!seen.has(normalized)) {
+        seen.set(normalized, m);
+      }
+    }
+    let uniqueModules = Array.from(seen.values());
     return uniqueModules.filter((dep) => {
       // Exclude scoped CSS requests
       if (isScopedCSSRequest(dep)) {
@@ -155,6 +165,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         targetRealm,
         firstOpenCardId ?? codeRef?.module,
         codeRef.module,
+        codeRef,
       ),
     ]).catch((error) => {
       console.warn('Background autopatch failed:', error);
@@ -216,6 +227,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     targetRealm: string,
     resourceUrl: string, // can be module or card instance id
     moduleUrl: string, // the module URL of the card type being listed
+    codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
     const resourceRealm =
       this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
@@ -258,15 +270,29 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     if (sanitizedModules.length > 0) {
       const createSpecCommand = new CreateSpecCommand(this.commandContext);
+      const normalizedModuleUrl = trimExecutableExtension(
+        new URL(moduleUrl),
+      ).href;
       const specResults = await Promise.all(
-        sanitizedModules.map((module) =>
-          createSpecCommand
-            .execute({ module, targetRealm, autoGenerateReadme: true })
-            .catch((e) => {
-              console.warn('Failed to create spec(s) for', module, e);
-              return undefined;
-            }),
-        ),
+        sanitizedModules.map((module) => {
+          // For the main module, use the specific codeRef (with export name) so
+          // only the listed export gets a spec, not every export in the file.
+          // Normalize both sides before comparing — _dependencies can return
+          // URLs with executable extensions (e.g. .gts) while moduleUrl/codeRef.module
+          // is often extensionless, so a bare string comparison would create
+          // duplicate specs for the same source file.
+          const normalizedModule = trimExecutableExtension(
+            new URL(module),
+          ).href;
+          const input =
+            normalizedModule === normalizedModuleUrl
+              ? { codeRef, targetRealm, autoGenerateReadme: true }
+              : { module, targetRealm, autoGenerateReadme: true };
+          return createSpecCommand.execute(input).catch((e: unknown) => {
+            console.warn('Failed to create spec(s) for', module, e);
+            return undefined;
+          });
+        }),
       );
 
       specResults.forEach((result) => {
