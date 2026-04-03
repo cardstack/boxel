@@ -11,7 +11,11 @@
  * fallbacks to match.
  */
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import type {
+  ResolvedCodeRef,
+  LooseSingleCardDocument,
+  Relationship,
+} from '@cardstack/runtime-common';
 
 import {
   runRealmCommand,
@@ -318,23 +322,9 @@ export function buildCardDocument(
   realmUrl: string,
   attributes: Record<string, unknown>,
   relationships?: Record<string, unknown>,
-): {
-  data: {
-    type: string;
-    attributes: Record<string, unknown>;
-    relationships?: Record<string, unknown>;
-    meta: { adoptsFrom: { module: string; name: string } };
-  };
-} {
+): LooseSingleCardDocument {
   let moduleUrl = `${ensureTrailingSlash(realmUrl)}darkfactory`;
-  let doc: {
-    data: {
-      type: string;
-      attributes: Record<string, unknown>;
-      relationships?: Record<string, unknown>;
-      meta: { adoptsFrom: { module: string; name: string } };
-    };
-  } = {
+  let doc: LooseSingleCardDocument = {
     data: {
       type: 'card',
       attributes,
@@ -347,7 +337,9 @@ export function buildCardDocument(
     },
   };
   if (relationships && Object.keys(relationships).length > 0) {
-    doc.data.relationships = relationships;
+    doc.data.relationships = relationships as {
+      [fieldName: string]: Relationship | Relationship[];
+    };
   }
   return doc;
 }
