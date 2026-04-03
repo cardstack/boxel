@@ -88,7 +88,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
       systemPrompt,
       userPrompt,
       llmModel: llmModel || 'anthropic/claude-3-haiku',
-      ...(selectionContextCodeRef ? { codeRef: selectionContextCodeRef } : {}),
+      codeRef: selectionContextCodeRef ?? candidateTypeCodeRef,
     });
 
     const selectedIds = this.parseIdsFromLlmOutput(r.output || '[]').slice(
@@ -115,7 +115,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
       throw new Error(`${fieldName} is required`);
     }
     if (!isResolvedCodeRef(codeRef)) {
-      throw new Error(`${fieldName} must have an absolute module URL`);
+      throw new Error(`${fieldName} must be a resolved code ref`);
     }
     return codeRef;
   }
