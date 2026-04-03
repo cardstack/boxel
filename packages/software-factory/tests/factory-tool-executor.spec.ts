@@ -200,7 +200,12 @@ import type { FactoryTool } from '../scripts/lib/factory-tool-builder';
 type CardWriteResult = { ok: boolean; error?: string };
 type CardReadResult = {
   ok: boolean;
-  document?: { data: { attributes: Record<string, unknown> } };
+  document?: {
+    data: {
+      attributes: Record<string, unknown>;
+      meta: { adoptsFrom: { module: string; name: string } };
+    };
+  };
 };
 
 async function buildToolsForRealm(realm: {
