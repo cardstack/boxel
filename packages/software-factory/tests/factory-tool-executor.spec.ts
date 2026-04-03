@@ -18,7 +18,11 @@ import {
 import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
 import { buildFactoryTools } from '../scripts/lib/factory-tool-builder';
 import { fetchCardTypeSchema } from '../scripts/lib/darkfactory-schemas';
-import { DEFAULT_REALM_OWNER, sourceRealmURLFor } from '../src/harness/shared';
+import {
+  baseRealmURLFor,
+  DEFAULT_REALM_OWNER,
+  sourceRealmURLFor,
+} from '../src/harness/shared';
 import {
   readSupportMetadata,
   registerMatrixUser,
@@ -239,6 +243,18 @@ async function buildToolsForRealm(realm: {
     }
   }
 
+  // Fetch Spec card schema from the base realm
+  let baseRealmUrl = baseRealmURLFor(realm.realmServerURL).href;
+  let specSchema = await fetchCardTypeSchema(
+    realm.realmServerURL.href,
+    baseRealmUrl,
+    { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+    { authorization },
+  );
+  if (specSchema) {
+    cardTypeSchemas.set('Spec', specSchema);
+  }
+
   return buildFactoryTools(
     {
       targetRealmUrl: realm.realmURL.href,
@@ -338,6 +354,38 @@ test('create_knowledge writes and reads back a knowledge article', async ({
   expect(readResult.document?.data.attributes.articleTitle).toBe(
     'Test Knowledge Article',
   );
+});
+
+test('create_catalog_spec writes and reads back a Spec card', async ({
+  realm,
+}) => {
+  let tools = await buildToolsForRealm(realm);
+  let createCatalogSpec = tools.find((t) => t.name === 'create_catalog_spec')!;
+  let readFile = tools.find((t) => t.name === 'read_file')!;
+
+  expect(createCatalogSpec).toBeDefined();
+
+  let writeResult = (await createCatalogSpec.execute({
+    path: 'Spec/tool-test-spec.json',
+    attributes: {
+      ref: { module: '../hello', name: 'HelloCard' },
+      specType: 'card',
+      readMe: '# HelloCard\n\nA test card for the catalog spec tool.',
+    },
+  })) as CardWriteResult;
+
+  expect(writeResult.ok).toBe(true);
+
+  let readResult = (await readFile.execute({
+    path: 'Spec/tool-test-spec.json',
+  })) as CardReadResult;
+
+  expect(readResult.ok).toBe(true);
+  expect(readResult.document?.data.attributes.specType).toBe('card');
+  expect(readResult.document?.data.meta.adoptsFrom.module).toBe(
+    'https://cardstack.com/base/spec',
+  );
+  expect(readResult.document?.data.meta.adoptsFrom.name).toBe('Spec');
 });
 
 // ---------------------------------------------------------------------------
