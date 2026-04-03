@@ -13,6 +13,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { commandData } from 'https://cardstack.com/base/resources/command-data';
 import MarkdownField from 'https://cardstack.com/base/markdown';
+import { ImageDef } from 'https://cardstack.com/base/image-file-def';
 import { Spec } from 'https://cardstack.com/base/spec';
 import { Skill } from 'https://cardstack.com/base/skill';
 import type {
@@ -566,6 +567,7 @@ export class Listing extends CardDef {
   static headerColor = '#6638ff';
   static isListingDef = true;
 
+  @field thumbnail = linksTo(() => ImageDef);
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
   @field specs = linksToMany(() => Spec);
@@ -580,6 +582,12 @@ export class Listing extends CardDef {
   @field cardTitle = contains(StringField, {
     computeVia(this: Listing) {
       return this.name;
+    },
+  });
+
+  @field cardThumbnailURL = contains(StringField, {
+    computeVia(this: Listing) {
+      return this.thumbnail?.url ?? this.cardInfo?.cardThumbnailURL;
     },
   });
 
