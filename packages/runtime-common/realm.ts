@@ -133,10 +133,7 @@ import type { ResponseWithNodeStream, VirtualNetwork } from './virtual-network';
 import { RealmAuthDataSource } from './realm-auth-data-source';
 import { AliasCache } from './cache/alias-cache';
 import { fetcher } from './fetcher';
-import {
-  RealmIndexQueryEngine,
-  relativizeDocument,
-} from './realm-index-query-engine';
+import { RealmIndexQueryEngine } from './realm-index-query-engine';
 import { RealmIndexUpdater } from './realm-index-updater';
 import serialize from './file-serializer';
 import { validateWriteSize } from './write-size-validation';
@@ -2682,7 +2679,6 @@ export class Realm {
         attributes[key] = value;
       }
     }
-    let relationships = fileEntry.resource?.relationships;
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -2690,7 +2686,6 @@ export class Realm {
         attributes: {
           ...attributes,
         },
-        ...(relationships ? { relationships } : {}),
         meta: {
           adoptsFrom,
           realmInfo,
@@ -2699,17 +2694,6 @@ export class Realm {
         links: { self: fileURL },
       },
     };
-    let included = await this.#realmIndexQueryEngine.loadLinksForResource(
-      doc.data,
-      { loadLinks: true },
-    );
-    if (included.length > 0) {
-      doc.included = included;
-    }
-    relativizeDocument(
-      doc as unknown as SingleCardDocument,
-      new URL(this.url),
-    );
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {
