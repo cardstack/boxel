@@ -234,9 +234,14 @@ function resolveCardSchema(
   relationships: Record<string, unknown>;
 } {
   let cached = config.cardTypeSchemas?.get(cardName);
+  if (!cached) {
+    throw new Error(
+      `No schema available for card type "${cardName}". Ensure cardTypeSchemas is populated via fetchCardTypeSchema() before building tools.`,
+    );
+  }
   return {
-    attributes: cached?.attributes ?? {},
-    relationships: cached?.relationships ?? {},
+    attributes: cached.attributes,
+    relationships: cached.relationships ?? {},
   };
 }
 

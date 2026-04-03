@@ -26,6 +26,42 @@ const TEST_REALM = 'https://realms.example.test/user/target-tests/';
 const TARGET_TOKEN = 'Bearer target-jwt-123';
 const TEST_TOKEN = 'Bearer test-jwt-456';
 
+const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
+  string,
+  {
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, unknown>;
+  }
+>([
+  [
+    'Project',
+    {
+      attributes: {
+        type: 'object',
+        properties: { projectName: { type: 'string' } },
+      },
+    },
+  ],
+  [
+    'Ticket',
+    {
+      attributes: {
+        type: 'object',
+        properties: { summary: { type: 'string' } },
+      },
+    },
+  ],
+  [
+    'KnowledgeArticle',
+    {
+      attributes: {
+        type: 'object',
+        properties: { articleTitle: { type: 'string' } },
+      },
+    },
+  ],
+]);
+
 function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
   return {
     targetRealmUrl: TARGET_REALM,
@@ -34,6 +70,7 @@ function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
       [TARGET_REALM]: TARGET_TOKEN,
       [TEST_REALM]: TEST_TOKEN,
     },
+    cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
     ...overrides,
   };
 }
@@ -758,16 +795,17 @@ module(
       assert.true('content' in knowledgeAttrs.properties);
     });
 
-    test('card tools have empty schemas when no cardTypeSchemas provided', function (assert) {
+    test('throws when cardTypeSchemas is missing for a card type', function (assert) {
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig();
-      let tools = buildFactoryTools(config, executor, registry);
-      let tool = findTool(tools, 'update_project');
-      let params = tool.parameters as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-      assert.deepEqual(params.properties.attributes, {});
+      let config = makeConfig({ cardTypeSchemas: undefined });
+      assert.throws(
+        () => buildFactoryTools(config, executor, registry),
+        (err: Error) =>
+          err.message.includes('No schema available') &&
+          err.message.includes('Project'),
+        'throws with card type name when cardTypeSchemas not provided',
+      );
     });
 
     test('update_ticket assembles JSON:API document from attributes', async function (assert) {

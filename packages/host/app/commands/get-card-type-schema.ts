@@ -32,9 +32,7 @@ export default class GetCardTypeSchemaCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.JsonCard> {
     let codeRef = input.codeRef as unknown as ResolvedCodeRef;
     if (!codeRef?.module || !codeRef?.name) {
-      throw new Error(
-        'codeRef must be a ResolvedCodeRef with module and name',
-      );
+      throw new Error('codeRef must be a ResolvedCodeRef with module and name');
     }
 
     let loader = this.loaderService.loader;
