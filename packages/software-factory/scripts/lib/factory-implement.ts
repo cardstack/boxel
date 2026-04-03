@@ -47,6 +47,7 @@ import {
   buildFactoryTools,
   type FactoryTool,
   type ToolBuilderConfig,
+  type ToolCallEntry,
 } from './factory-tool-builder';
 import { ToolExecutor, type ToolExecutorConfig } from './factory-tool-executor';
 import {
@@ -57,6 +58,7 @@ import {
 import {
   ensureTrailingSlash,
   readFile,
+  waitForRealmFile,
   writeFile,
   type RealmFetchOptions,
 } from './realm-operations';
@@ -210,11 +212,21 @@ export async function runFactoryImplement(
       debug: config.debug,
     } satisfies FactoryAgentConfig);
 
-  // 7. Set up test runner
+  // 7. Set up test runner with a shared tool call log.
+  // Wrap the agent to intercept tool calls so the TestRunner
+  // can find which spec files the agent wrote.
+  let sharedToolCallLog: ToolCallEntry[] = [];
+  let wrappedAgent: LoopAgent = {
+    async run(ctx, t) {
+      let result = await agent.run(ctx, t);
+      sharedToolCallLog.push(...result.toolCalls);
+      return result;
+    },
+  };
   let projectCardUrl = `${targetRealmUrl}${project.id}`;
   let testRunner: TestRunner =
     config.testRunner ??
-    buildTestRunner(targetRealmUrl, testRealmUrl, ticket, {
+    buildTestRunner(targetRealmUrl, testRealmUrl, ticket, sharedToolCallLog, {
       authorization: config.authorization,
       serverToken,
       matrixAuth: matrixAuth
@@ -231,7 +243,7 @@ export async function runFactoryImplement(
 
   // 8. Run the execution loop
   let loopResult = await runFactoryLoop({
-    agent,
+    agent: wrappedAgent,
     contextBuilder,
     tools,
     testRunner,
@@ -488,10 +500,11 @@ function buildTestRunner(
   targetRealmUrl: string,
   testRealmUrl: string,
   ticket: TicketCard,
+  toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {
   return async (): Promise<TestResult> => {
-    let specPaths = await findSpecPaths(targetRealmUrl, {
+    let specPaths = await findSpecPaths(targetRealmUrl, toolCallLog, {
       authorization: runConfig.authorization,
       fetch: runConfig.fetch,
     });
@@ -597,63 +610,53 @@ function buildTestRunner(
   };
 }
 
-const SPEC_DISCOVERY_TIMEOUT_MS = 30_000;
-const SPEC_DISCOVERY_POLL_MS = 1_000;
-
 /**
- * Find Playwright spec file paths in the target realm's Tests/ folder.
- * Polls the realm's _mtimes endpoint until spec files appear or
- * the timeout is reached. This handles the indexing delay after
- * the agent writes test files to the realm.
+ * Find Playwright spec file paths by inspecting the agent's tool call log
+ * for write_file calls targeting Tests/*.spec.ts, then polling the realm
+ * until each file is accessible (handles indexing delay).
  */
 async function findSpecPaths(
   targetRealmUrl: string,
+  toolCallLog: ToolCallEntry[],
   fetchOptions: RealmFetchOptions,
 ): Promise<string[]> {
-  let fetchImpl = fetchOptions.fetch ?? globalThis.fetch;
-  let mtimesUrl = new URL('_mtimes', ensureTrailingSlash(targetRealmUrl)).href;
-  let headers: Record<string, string> = {};
-  if (fetchOptions.authorization) {
-    headers['Authorization'] = fetchOptions.authorization;
+  // Extract spec paths the agent wrote from the tool call log
+  let writtenSpecPaths = toolCallLog
+    .filter(
+      (entry) =>
+        entry.tool === 'write_file' &&
+        typeof entry.args.path === 'string' &&
+        entry.args.path.startsWith('Tests/') &&
+        entry.args.path.endsWith('.spec.ts'),
+    )
+    .map((entry) => entry.args.path as string);
+
+  if (writtenSpecPaths.length === 0) {
+    console.error(`[factory-implement] No spec files found in tool call log`);
+    return [];
   }
 
-  let startedAt = Date.now();
-  while (Date.now() - startedAt < SPEC_DISCOVERY_TIMEOUT_MS) {
-    try {
-      let response = await fetchImpl(mtimesUrl, { headers });
-      if (!response.ok) {
+  // Wait for all spec files concurrently
+  let results = await Promise.all(
+    writtenSpecPaths.map(async (specPath) => {
+      let found = await waitForRealmFile(targetRealmUrl, specPath, {
+        ...fetchOptions,
+        pollMs: 300,
+      });
+      if (!found) {
         console.error(
-          `[factory-implement] _mtimes returned ${response.status} for ${mtimesUrl}`,
+          `[factory-implement] Spec file not found after polling: ${specPath}`,
         );
-        break;
       }
-
-      let mtimes = (await response.json()) as Record<string, number>;
-      let specPaths = Object.keys(mtimes).filter(
-        (p) => p.startsWith('Tests/') && p.endsWith('.spec.ts'),
-      );
-
-      if (specPaths.length > 0) {
-        console.error(
-          `[factory-implement] Found ${specPaths.length} spec(s): ${specPaths.join(', ')}`,
-        );
-        return specPaths;
-      }
-    } catch (error) {
-      console.error(
-        `[factory-implement] _mtimes fetch failed: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      break;
-    }
-
-    // Wait before retrying — realm may still be indexing
-    await new Promise((resolve) => setTimeout(resolve, SPEC_DISCOVERY_POLL_MS));
-  }
+      return found ? specPath : null;
+    }),
+  );
+  let confirmedPaths = results.filter((p): p is string => p !== null);
 
   console.error(
-    `[factory-implement] No spec files found after ${SPEC_DISCOVERY_TIMEOUT_MS}ms`,
+    `[factory-implement] Confirmed ${confirmedPaths.length}/${writtenSpecPaths.length} spec(s): ${confirmedPaths.join(', ')}`,
   );
-  return [];
+  return confirmedPaths;
 }
 
 // ---------------------------------------------------------------------------

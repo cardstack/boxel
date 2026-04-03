@@ -707,6 +707,33 @@ export async function waitForRealmReady(
   };
 }
 
+/**
+ * Poll a specific realm file path until it exists (non-404), or the
+ * timeout is reached. Useful after writing a file to wait for the
+ * realm to finish processing it before reading it back.
+ *
+ * @returns true if the file was found, false on timeout.
+ */
+export async function waitForRealmFile(
+  realmUrl: string,
+  path: string,
+  options?: RealmFetchOptions & { timeoutMs?: number; pollMs?: number },
+): Promise<boolean> {
+  let timeoutMs = options?.timeoutMs ?? 30_000;
+  let pollMs = options?.pollMs ?? 300;
+  let startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    let result = await readFile(realmUrl, path, options);
+    if (result.ok) {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Matrix Account Data
 // ---------------------------------------------------------------------------
