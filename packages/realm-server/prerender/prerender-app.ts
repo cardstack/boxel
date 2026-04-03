@@ -22,7 +22,6 @@ import {
 } from '../middleware';
 import { Prerenderer } from './index';
 import { resolvePrerenderManagerURL } from './config';
-import { isEnvironmentMode, serviceURL } from '../lib/dev-service-registry';
 import {
   PRERENDER_SERVER_DRAINING_STATUS_CODE,
   PRERENDER_SERVER_STATUS_DRAINING,
@@ -700,9 +699,6 @@ export function buildPrerenderApp(options: {
 }
 
 function resolvePrerenderServerURL(port?: number): string {
-  if (isEnvironmentMode()) {
-    return serviceURL('prerender');
-  }
   let hostname = process.env.HOSTNAME ?? 'localhost';
   let resolvedPort = port ?? defaultPrerenderServerPort;
   return `http://${hostname}:${resolvedPort}`.replace(/\/$/, '');
@@ -836,6 +832,13 @@ export function createPrerenderHttpServer(options?: {
   // best-effort registration (async, non-blocking)
   server.on('listening', () => {
     try {
+      // When port=0 (e.g. multiple prerender servers), resolve the actual port
+      let addr = server.address() as import('net').AddressInfo | null;
+      if (addr && typeof addr !== 'string' && addr.port !== options?.port) {
+        let actualURL = resolvePrerenderServerURL(addr.port);
+        serverURL = actualURL;
+        prerenderer.serverURL = actualURL;
+      }
       startHeartbeatLoop();
     } catch (e) {
       log.debug('Error scheduling registration with prerender manager:', e);
