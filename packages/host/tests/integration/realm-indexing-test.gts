@@ -153,6 +153,18 @@ module(`Integration | realm indexing`, function (hooks) {
             name: 'CardDef',
           },
           realmURL: 'http://test-realm/test/',
+          realmInfo: {
+            backgroundURL: null,
+            hostHome: null,
+            iconURL: null,
+            interactHome: null,
+            lastPublishedAt: null,
+            name: 'Unnamed Workspace',
+            publishable: null,
+            realmUserId: '@realm_server:localhost',
+            showAsCatalog: null,
+            visibility: 'public',
+          },
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}empty.json`,
           ),
