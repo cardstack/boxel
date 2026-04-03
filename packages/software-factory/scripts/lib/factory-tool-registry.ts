@@ -325,7 +325,7 @@ const BOXEL_CLI_TOOLS: ToolManifest[] = [
 const REALM_API_TOOLS: ToolManifest[] = [
   {
     name: 'realm-read',
-    description: 'Fetch a card or file from a realm.',
+    description: 'Fetch a card or file from a realm. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -345,7 +345,8 @@ const REALM_API_TOOLS: ToolManifest[] = [
   },
   {
     name: 'realm-write',
-    description: 'Create or update a card or file in a realm.',
+    description:
+      'Create or update a card or file in a realm. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -371,7 +372,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
   },
   {
     name: 'realm-delete',
-    description: 'Delete a card or file from a realm.',
+    description: 'Delete a card or file from a realm. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -391,7 +392,8 @@ const REALM_API_TOOLS: ToolManifest[] = [
   },
   {
     name: 'realm-atomic',
-    description: 'Batch operations that succeed or fail atomically.',
+    description:
+      'Batch operations that succeed or fail atomically. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -412,7 +414,8 @@ const REALM_API_TOOLS: ToolManifest[] = [
   },
   {
     name: 'realm-search',
-    description: 'Search for cards using structured queries.',
+    description:
+      'Search for cards using structured queries. Auth: per-realm JWT.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -432,7 +435,8 @@ const REALM_API_TOOLS: ToolManifest[] = [
   },
   {
     name: 'realm-create',
-    description: 'Create a new realm on the realm server.',
+    description:
+      'Create a new realm on the realm server. Auth: realm server token.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -474,7 +478,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
   {
     name: 'realm-server-session',
     description:
-      'Obtain a realm server JWT for management operations. Returns the JWT in the output.',
+      'Obtain a realm server JWT for management operations. Returns the JWT in the output. Auth: OpenID token from Matrix.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [
@@ -496,7 +500,7 @@ const REALM_API_TOOLS: ToolManifest[] = [
   {
     name: 'realm-auth',
     description:
-      'Get per-realm JWTs for all realms accessible to the authenticated user.',
+      'Get per-realm JWTs for all realms accessible to the authenticated user. Auth: realm server token.',
     category: 'realm-api',
     outputFormat: 'json',
     args: [

@@ -155,7 +155,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'write_file',
     description:
-      'Write a file to a realm. The path must include the file extension.',
+      'Write a file to a realm. The path must include the file extension. Auth: per-realm JWT.',
     parameters: {
       type: 'object',
       properties: {
@@ -186,7 +186,8 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
 function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'read_file',
-    description: 'Read a file from a realm as card source JSON.',
+    description:
+      'Read a file from a realm as card source JSON. Auth: per-realm JWT.',
     parameters: {
       type: 'object',
       properties: {
@@ -214,7 +215,8 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
 function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'search_realm',
-    description: 'Search for cards in a realm using a structured query.',
+    description:
+      'Search for cards in a realm using a structured query. Auth: per-realm JWT.',
     parameters: {
       type: 'object',
       properties: {
@@ -274,7 +276,7 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'update_project',
     description:
-      'Update a project card in the target realm (e.g., update status or success criteria).',
+      'Update a project card in the target realm (e.g., update status or success criteria). Auth: per-realm JWT.',
     parameters: buildCardToolParams(
       'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
       schema,
@@ -302,7 +304,8 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
   let schema = resolveCardSchema(config, 'Ticket');
   return {
     name: 'update_ticket',
-    description: 'Update a ticket card in the target realm.',
+    description:
+      'Update a ticket card in the target realm. Auth: per-realm JWT.',
     parameters: buildCardToolParams(
       'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
       schema,
@@ -331,7 +334,7 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'create_knowledge',
     description:
-      'Create or update a knowledge article card in the target realm.',
+      'Create or update a knowledge article card in the target realm. Auth: per-realm JWT.',
     parameters: buildCardToolParams(
       'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
       schema,
@@ -361,7 +364,8 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
     description:
       'Execute Playwright tests against the target realm. Pulls test spec files from the realm, ' +
       'runs them via the Playwright harness, and returns structured test results (pass/fail counts, ' +
-      'failure details with error messages and stack traces).',
+      'failure details with error messages and stack traces). Auth: per-realm JWT for target realm, ' +
+      'realm server token for test artifacts realm creation.',
     parameters: {
       type: 'object',
       properties: {
@@ -459,7 +463,8 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
     description:
       'Execute a host command on the realm server via the prerenderer. ' +
       'Commands run in browser context with full card runtime access. ' +
-      'Use "@cardstack/boxel-host/commands/<name>/default" as the command specifier.',
+      'Use "@cardstack/boxel-host/commands/<name>/default" as the command specifier. ' +
+      'Auth: realm server token.',
     parameters: {
       type: 'object',
       properties: {
