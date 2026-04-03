@@ -86,6 +86,47 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.strictEqual(response.status, 400, 'HTTP 400 for missing command');
     });
 
+    test('executes GetCardTypeSchemaCommand and returns schema', async function (assert) {
+      let matrixUserId = '@node-test_realm:localhost';
+
+      let response = await context.request
+        .post('/_run-command')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'run-command',
+            attributes: {
+              realmURL: testRealmURL.href,
+              command:
+                '@cardstack/boxel-host/commands/get-card-type-schema/default',
+              commandInput: {
+                codeRef: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 201, 'HTTP 201 status');
+      let attrs = response.body?.data?.attributes;
+      assert.strictEqual(attrs?.status, 'ready', 'command completed');
+      assert.ok(attrs?.cardResultString, 'has result');
+
+      let result = JSON.parse(attrs.cardResultString);
+      let schema = result?.data?.attributes?.json ?? result;
+      assert.ok(schema?.attributes, 'schema has attributes');
+    });
+
     test('rejects invalid JSON body', async function (assert) {
       let matrixUserId = '@run-cmd-test3:localhost';
       await insertUser(

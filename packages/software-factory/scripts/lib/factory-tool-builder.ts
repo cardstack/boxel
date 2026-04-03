@@ -8,10 +8,7 @@
  */
 
 import type { ToolResult } from './factory-agent';
-import {
-  STATIC_FALLBACK_SCHEMAS,
-  buildCardDocument,
-} from './darkfactory-schemas';
+import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { executeTestRunFromRealm } from './test-run-execution';
@@ -237,10 +234,9 @@ function resolveCardSchema(
   relationships: Record<string, unknown>;
 } {
   let cached = config.cardTypeSchemas?.get(cardName);
-  let fallback = STATIC_FALLBACK_SCHEMAS[cardName];
   return {
-    attributes: cached?.attributes ?? fallback?.attributes ?? {},
-    relationships: cached?.relationships ?? fallback?.relationships ?? {},
+    attributes: cached?.attributes ?? {},
+    relationships: cached?.relationships ?? {},
   };
 }
 

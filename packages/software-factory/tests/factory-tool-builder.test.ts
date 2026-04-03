@@ -667,7 +667,98 @@ module('factory-tool-builder > registered tool JWT resolution', function () {
 module(
   'factory-tool-builder > card tool schemas and document assembly',
   function () {
-    test('update_project has structured attribute schema with enum fields', function (assert) {
+    test('card tools use runtime schemas from cardTypeSchemas config', function (assert) {
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({
+        cardTypeSchemas: new Map([
+          [
+            'Project',
+            {
+              attributes: {
+                type: 'object',
+                properties: {
+                  projectName: { type: 'string' },
+                  projectStatus: {
+                    type: 'string',
+                    enum: ['planning', 'active'],
+                  },
+                },
+              },
+            },
+          ],
+          [
+            'Ticket',
+            {
+              attributes: {
+                type: 'object',
+                properties: {
+                  summary: { type: 'string' },
+                  status: { type: 'string', enum: ['backlog', 'done'] },
+                },
+              },
+              relationships: {
+                type: 'object',
+                properties: {
+                  project: { type: 'object' },
+                },
+              },
+            },
+          ],
+          [
+            'KnowledgeArticle',
+            {
+              attributes: {
+                type: 'object',
+                properties: {
+                  articleTitle: { type: 'string' },
+                  content: { type: 'string' },
+                },
+              },
+            },
+          ],
+        ]),
+      });
+      let tools = buildFactoryTools(config, executor, registry);
+
+      // update_project uses runtime schema
+      let projectTool = findTool(tools, 'update_project');
+      let projectParams = projectTool.parameters as {
+        properties: Record<string, Record<string, unknown>>;
+        required: string[];
+      };
+      assert.true('attributes' in projectParams.properties);
+      assert.true(projectParams.required.includes('attributes'));
+      let projectAttrs = projectParams.properties.attributes as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      assert.true('projectName' in projectAttrs.properties);
+      assert.deepEqual(
+        (projectAttrs.properties.projectStatus as { enum: string[] }).enum,
+        ['planning', 'active'],
+      );
+
+      // update_ticket uses runtime schema with relationships
+      let ticketTool = findTool(tools, 'update_ticket');
+      let ticketParams = ticketTool.parameters as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      assert.true('attributes' in ticketParams.properties);
+      assert.true('relationships' in ticketParams.properties);
+
+      // create_knowledge uses runtime schema
+      let knowledgeTool = findTool(tools, 'create_knowledge');
+      let knowledgeParams = knowledgeTool.parameters as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      let knowledgeAttrs = knowledgeParams.properties.attributes as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      assert.true('articleTitle' in knowledgeAttrs.properties);
+      assert.true('content' in knowledgeAttrs.properties);
+    });
+
+    test('card tools have empty schemas when no cardTypeSchemas provided', function (assert) {
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
       let config = makeConfig();
@@ -675,67 +766,8 @@ module(
       let tool = findTool(tools, 'update_project');
       let params = tool.parameters as {
         properties: Record<string, Record<string, unknown>>;
-        required: string[];
       };
-
-      assert.true('attributes' in params.properties);
-      assert.true(params.required.includes('attributes'));
-
-      let attrs = params.properties.attributes as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-      assert.true('projectName' in attrs.properties);
-      assert.true('projectStatus' in attrs.properties);
-      assert.deepEqual(
-        (attrs.properties.projectStatus as { enum: string[] }).enum,
-        ['planning', 'active', 'on_hold', 'completed', 'archived'],
-      );
-    });
-
-    test('update_ticket has structured attribute schema with enum fields', function (assert) {
-      let registry = new ToolRegistry();
-      let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig();
-      let tools = buildFactoryTools(config, executor, registry);
-      let tool = findTool(tools, 'update_ticket');
-      let params = tool.parameters as {
-        properties: Record<string, Record<string, unknown>>;
-        required: string[];
-      };
-
-      assert.true('attributes' in params.properties);
-      assert.true('relationships' in params.properties);
-
-      let attrs = params.properties.attributes as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-      assert.true('summary' in attrs.properties);
-      assert.true('status' in attrs.properties);
-      assert.deepEqual((attrs.properties.status as { enum: string[] }).enum, [
-        'backlog',
-        'in_progress',
-        'blocked',
-        'review',
-        'done',
-      ]);
-    });
-
-    test('create_knowledge has structured attribute schema', function (assert) {
-      let registry = new ToolRegistry();
-      let { executor } = createMockToolExecutor(new Map());
-      let config = makeConfig();
-      let tools = buildFactoryTools(config, executor, registry);
-      let tool = findTool(tools, 'create_knowledge');
-      let params = tool.parameters as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-
-      let attrs = params.properties.attributes as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-      assert.true('articleTitle' in attrs.properties);
-      assert.true('content' in attrs.properties);
-      assert.true('tags' in attrs.properties);
+      assert.deepEqual(params.properties.attributes, {});
     });
 
     test('update_ticket assembles JSON:API document from attributes', async function (assert) {
@@ -759,34 +791,6 @@ module(
       assert.strictEqual(
         body.data.meta.adoptsFrom.module,
         `${TARGET_REALM}darkfactory`,
-      );
-    });
-
-    test('card tools use runtime schemas when provided', function (assert) {
-      let registry = new ToolRegistry();
-      let { executor } = createMockToolExecutor(new Map());
-      let runtimeSchema = {
-        attributes: {
-          type: 'object',
-          properties: { customField: { type: 'string' } },
-        },
-      };
-      let config = makeConfig({
-        cardTypeSchemas: new Map([['Project', runtimeSchema]]),
-      });
-      let tools = buildFactoryTools(config, executor, registry);
-      let tool = findTool(tools, 'update_project');
-      let params = tool.parameters as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-
-      let attrs = params.properties.attributes as {
-        properties: Record<string, Record<string, unknown>>;
-      };
-      assert.true('customField' in attrs.properties, 'uses runtime schema');
-      assert.false(
-        'projectName' in attrs.properties,
-        'does not use static fallback',
       );
     });
 
