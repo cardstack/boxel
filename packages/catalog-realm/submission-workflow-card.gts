@@ -384,14 +384,6 @@ export class SubmissionWorkflowCard extends CardDef {
       );
     }
 
-    get listingName() {
-      return this.args.model.listing?.name ?? 'No listing selected';
-    }
-
-    get prTitle() {
-      return 'Pull Request';
-    }
-
     get overallStatusLabel(): string {
       switch (this.workflowState.overallStatus) {
         case 'completed': return 'Completed';
@@ -473,22 +465,16 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{! ── Step detail cards ── }}
                   {{#if (eq step.key 'choose-listing')}}
                     {{#if @model.listing}}
-                      <div class='sw-step-detail'>
-                        <div class='sw-detail-card listing'>
-                          <span class='sw-detail-type'>Listing</span>
-                          <span class='sw-detail-name'>{{this.listingName}}</span>
-                        </div>
+                      <div class='sw-step-detail sw-fitted-card-container'>
+                        <@fields.listing @format='fitted' />
                       </div>
                     {{/if}}
                   {{/if}}
 
                   {{#if (eq step.key 'create-pr')}}
                     {{#if @model.prCard}}
-                      <div class='sw-step-detail'>
-                        <div class='sw-detail-card pr'>
-                          <span class='sw-detail-type'>Pull Request</span>
-                          <span class='sw-detail-name'>{{this.prTitle}}</span>
-                        </div>
+                      <div class='sw-step-detail sw-fitted-card-container'>
+                        <@fields.prCard @format='fitted' />
                       </div>
                     {{/if}}
                   {{/if}}
@@ -589,15 +575,13 @@ export class SubmissionWorkflowCard extends CardDef {
           <div class='sw-sidebar-section'>
             <div class='sw-sidebar-heading'>Linked Cards</div>
             {{#if @model.listing}}
-              <div class='sw-sidebar-linked'>
-                <span class='sw-linked-type'>Listing</span>
-                <span class='sw-linked-name'>{{this.listingName}}</span>
+              <div class='sw-sidebar-fitted-card'>
+                <@fields.listing @format='fitted' />
               </div>
             {{/if}}
             {{#if @model.prCard}}
-              <div class='sw-sidebar-linked'>
-                <span class='sw-linked-type'>PR Card</span>
-                <span class='sw-linked-name'>{{this.prTitle}}</span>
+              <div class='sw-sidebar-fitted-card'>
+                <@fields.prCard @format='fitted' />
               </div>
             {{/if}}
             {{#unless @model.listing}}
@@ -831,6 +815,15 @@ export class SubmissionWorkflowCard extends CardDef {
           margin-top: 10px;
         }
 
+        .sw-fitted-card-container {
+          max-width: 360px;
+          height: 180px;
+          border-radius: 10px;
+          overflow: hidden;
+          border: 1px solid var(--c-border);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
         .sw-detail-card {
           display: flex;
           flex-direction: column;
@@ -841,8 +834,6 @@ export class SubmissionWorkflowCard extends CardDef {
           background: var(--c-surface);
           max-width: 360px;
         }
-        .sw-detail-card.listing { border-left: 3px solid var(--c-active); }
-        .sw-detail-card.pr { border-left: 3px solid #0f172a; }
         .sw-detail-card.ci.passed { border-left: 3px solid var(--c-success); }
         .sw-detail-card.ci.failed { border-left: 3px solid var(--c-danger); }
         .sw-detail-card.ci.pending { border-left: 3px solid #f59e0b; }
@@ -863,19 +854,6 @@ export class SubmissionWorkflowCard extends CardDef {
           font-weight: 600;
           color: var(--c-text);
         }
-        .sw-detail-link {
-          font-size: 11px;
-          font-weight: 600;
-          color: var(--c-active);
-          text-decoration: none;
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          margin-top: 2px;
-          transition: color 0.15s;
-        }
-        .sw-detail-link:hover { color: #4338ca; }
-
         /* ── Sidebar ── */
         .sw-sidebar {
           display: flex;
@@ -1036,30 +1014,12 @@ export class SubmissionWorkflowCard extends CardDef {
         }
 
         /* ── Sidebar linked cards ── */
-        .sw-sidebar-linked {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          padding: 8px 10px;
-          border: 1px solid var(--c-border);
+        .sw-sidebar-fitted-card {
+          height: 100px;
           border-radius: 8px;
-          background: var(--c-surface);
-          margin-bottom: 6px;
-        }
-        .sw-linked-type {
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          color: var(--c-muted);
-        }
-        .sw-linked-name {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--c-text);
-          white-space: nowrap;
           overflow: hidden;
-          text-overflow: ellipsis;
+          border: 1px solid var(--c-border);
+          margin-bottom: 6px;
         }
         .sw-sidebar-empty {
           font-size: 12px;
