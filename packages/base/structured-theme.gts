@@ -109,7 +109,7 @@ const resetTypographyVariables = (
     let subField = (typography as any)[fieldName];
     if (!subField?.fieldEntries) continue;
     for (let { name } of subField.fieldEntries) {
-      if (name) (subField as any)[name] = null;
+      if (name && name !== 'sampleText') (subField as any)[name] = null;
     }
   }
 };

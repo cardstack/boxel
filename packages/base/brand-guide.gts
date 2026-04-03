@@ -1032,19 +1032,31 @@ export default class BrandGuide extends DetailedStyleRef {
         [
           [
             '--brand-primary-mark',
-            toUrlValue(markMap?.get('--brand-primary-mark-2')),
+            toUrlValue(
+              markMap?.get('--brand-primary-mark-2') ??
+                markMap?.get('--brand-primary-mark-1'),
+            ),
           ],
           [
             '--brand-secondary-mark',
-            toUrlValue(markMap?.get('--brand-secondary-mark-2')),
+            toUrlValue(
+              markMap?.get('--brand-secondary-mark-2') ??
+                markMap?.get('--brand-secondary-mark-1'),
+            ),
           ],
           [
             '--brand-primary-mark-greyscale',
-            toUrlValue(markMap?.get('--brand-primary-mark-greyscale-2')),
+            toUrlValue(
+              markMap?.get('--brand-primary-mark-greyscale-2') ??
+                markMap?.get('--brand-primary-mark-greyscale-1'),
+            ),
           ],
           [
             '--brand-secondary-mark-greyscale',
-            toUrlValue(markMap?.get('--brand-secondary-mark-greyscale-2')),
+            toUrlValue(
+              markMap?.get('--brand-secondary-mark-greyscale-2') ??
+                markMap?.get('--brand-secondary-mark-greyscale-1'),
+            ),
           ],
         ].filter(([, v]) => v) as [string, string][],
       );
