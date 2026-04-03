@@ -3,18 +3,48 @@ import config from '@cardstack/host/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
-import examStart from 'ember-exam/test-support/start';
-import { useTestWaiters } from '@cardstack/runtime-common';
-import * as TestWaiters from '@ember/test-waiters';
+import { start as examStart } from 'ember-exam/test-support';
+// eslint-disable-next-line ember/no-test-import-export
+import { loadRealmTests } from './live-test';
+import { setupQUnit } from './helpers/setup-qunit';
 
-export function start(options) {
-  QUnit.dump.maxDepth = 20;
+export async function start(examOptions) {
+  const application = Application.create({
+    ...config.APP,
+    rootElement: '#ember-testing',
+  });
 
-  useTestWaiters(TestWaiters);
-  setApplication(Application.create(config.APP));
+  async function setupHostTests() {
+    setApplication(application);
+    setupQUnit();
+    setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
   setup(QUnit.assert);
   setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
-  examStart(options);
+    if (isParallelExamRun) {
+      QUnit.config.failOnZeroTests = false;
+    }
+
+    await examStart(examOptions);
+  }
+
+  function setupLiveTests() {
+    setApplication(application);
+    setupQUnit();
+
+    loadRealmTests(application).catch((error) => {
+      console.error('Failed to load realm tests', error);
+      QUnit.start(); //restarting test due to failure
+    });
+  }
+
+  // Single check — prevents double QUnit initialization (one QUnit instance only).
+  const isLiveTest = new URL(window.location.href).searchParams.has('liveTest');
+
+  if (isLiveTest) {
+    setupLiveTests();
+  } else {
+    await setupHostTests();
+  }
 }

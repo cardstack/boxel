@@ -56,7 +56,7 @@
       import { start } from './test-helper';
       let availableModules = import.meta.glob('./**/*-test.{js,ts,gjs,gts}');
 
-      start({ availableModules });
+      await start({ availableModules });
     </script>
 
     {{content-for "body-footer"}}
