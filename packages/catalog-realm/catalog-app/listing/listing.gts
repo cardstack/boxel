@@ -567,7 +567,7 @@ export class Listing extends CardDef {
   static headerColor = '#6638ff';
   static isListingDef = true;
 
-  @field logo = linksTo(() => ImageDef);
+  @field thumbnail = linksTo(() => ImageDef);
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
   @field specs = linksToMany(() => Spec);
@@ -587,7 +587,7 @@ export class Listing extends CardDef {
 
   @field cardThumbnailURL = contains(StringField, {
     computeVia(this: Listing) {
-      return this.logo?.url ?? this.cardInfo?.cardThumbnailURL;
+      return this.thumbnail?.url ?? this.cardInfo?.cardThumbnailURL;
     },
   });
 
