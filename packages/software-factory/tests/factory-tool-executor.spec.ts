@@ -8,6 +8,8 @@
  * that happen to use the Playwright test runner for harness management.
  */
 
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
@@ -198,15 +200,7 @@ test('unregistered tool is rejected without reaching the server', async ({
 import type { FactoryTool } from '../scripts/lib/factory-tool-builder';
 
 type CardWriteResult = { ok: boolean; error?: string };
-type CardReadResult = {
-  ok: boolean;
-  document?: {
-    data: {
-      attributes: Record<string, unknown>;
-      meta: { adoptsFrom: { module: string; name: string } };
-    };
-  };
-};
+type CardReadResult = { ok: boolean; document?: LooseSingleCardDocument };
 
 async function buildToolsForRealm(realm: {
   realmURL: URL;

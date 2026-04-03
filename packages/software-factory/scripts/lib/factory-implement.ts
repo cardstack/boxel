@@ -159,11 +159,13 @@ export async function runFactoryImplement(
   } satisfies ToolExecutorConfig);
 
   // Fetch card type schemas for typed tool parameters.
-  // Uses the server token (not per-realm JWT) because _run-command is a
+  // DarkFactory card types live in the source realm (software-factory/),
+  // not the target realm. Uses the server token because _run-command is a
   // server-level endpoint.
+  let sourceRealmUrl = new URL('software-factory/', realmServerUrl).href;
   let cardTypeSchemas = await loadDarkFactorySchemas(
     realmServerUrl,
-    targetRealmUrl,
+    sourceRealmUrl,
     { authorization: serverToken, fetch: fetchImpl },
   );
 
@@ -695,7 +697,7 @@ const BASE_CARD_TYPES: { module: string; name: string }[] = [
  */
 async function loadDarkFactorySchemas(
   realmServerUrl: string,
-  targetRealmUrl: string,
+  sourceRealmUrl: string,
   options: { authorization?: string; fetch?: typeof globalThis.fetch },
 ): Promise<
   | Map<
@@ -707,7 +709,7 @@ async function loadDarkFactorySchemas(
     >
   | undefined
 > {
-  let darkfactoryModule = `${ensureTrailingSlash(targetRealmUrl)}darkfactory`;
+  let darkfactoryModule = `${ensureTrailingSlash(sourceRealmUrl)}darkfactory`;
   let schemas = new Map<
     string,
     {
@@ -720,7 +722,7 @@ async function loadDarkFactorySchemas(
     try {
       let schema = await fetchCardTypeSchema(
         realmServerUrl,
-        targetRealmUrl,
+        sourceRealmUrl,
         { module: darkfactoryModule, name: cardName },
         options,
       );
@@ -741,7 +743,7 @@ async function loadDarkFactorySchemas(
     try {
       let schema = await fetchCardTypeSchema(
         realmServerUrl,
-        targetRealmUrl,
+        sourceRealmUrl,
         { module: mod, name },
         options,
       );
