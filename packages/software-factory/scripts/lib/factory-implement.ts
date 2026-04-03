@@ -56,8 +56,8 @@ import {
 } from './factory-tool-registry';
 import {
   ensureTrailingSlash,
-  readCardSource,
-  writeCardSource,
+  readFile,
+  writeFile,
   type RealmFetchOptions,
 } from './realm-operations';
 import { executeTestRunFromRealm } from './test-run-execution';
@@ -415,7 +415,7 @@ async function fetchCard(
   cardId: string,
   fetchOptions: RealmFetchOptions,
 ): Promise<{ id: string; [key: string]: unknown }> {
-  let result = await readCardSource(realmUrl, cardId, fetchOptions);
+  let result = await readFile(realmUrl, cardId, fetchOptions);
 
   if (!result.ok || !result.document) {
     throw new Error(
@@ -650,7 +650,7 @@ async function updateTicketStatus(
   status: string,
   fetchOptions: RealmFetchOptions,
 ): Promise<void> {
-  let result = await readCardSource(realmUrl, ticketId, fetchOptions);
+  let result = await readFile(realmUrl, ticketId, fetchOptions);
   if (!result.ok || !result.document) {
     throw new Error(
       `Cannot read ticket ${ticketId}: ${result.error ?? 'unknown'}`,
@@ -663,10 +663,10 @@ async function updateTicketStatus(
     status,
   };
 
-  let writeResult = await writeCardSource(
+  let writeResult = await writeFile(
     realmUrl,
     ticketId,
-    doc,
+    JSON.stringify(doc, null, 2),
     fetchOptions,
   );
   if (!writeResult.ok) {

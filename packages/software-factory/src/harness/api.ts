@@ -43,6 +43,7 @@ import {
   buildCombinedTemplateDatabase,
   buildTemplateDatabase,
   clearModuleCache,
+  clearRealmPermissions,
   cloneDatabaseFromTemplate,
   databaseExists,
   dropDatabase,
@@ -429,6 +430,15 @@ export async function startFactoryRealmServer(
         sourceRealmURL,
         DEFAULT_SOURCE_REALM_PERMISSIONS,
       );
+
+      // Apply custom test-realm permissions if provided. We clear the
+      // template's permissions first so leftover rows (e.g. the default
+      // '*' public-read grant) don't leak into the private realm.
+      let permissions = options.permissions;
+      if (permissions) {
+        await clearRealmPermissions(databaseName, realmURL);
+        await seedRealmPermissions(databaseName, realmURL, permissions);
+      }
 
       stack = await startIsolatedRealmStack({
         realmDir,

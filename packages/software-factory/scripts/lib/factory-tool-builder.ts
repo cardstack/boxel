@@ -14,9 +14,8 @@ import type { ToolRegistry } from './factory-tool-registry';
 import { executeTestRunFromRealm } from './test-run-execution';
 import type { ExecuteTestRunOptions, TestRunHandle } from './test-run-types';
 import {
-  writeModuleSource,
-  writeCardSource,
-  readCardSource,
+  writeFile,
+  readFile,
   searchRealm,
   runRealmCommand,
   ensureTrailingSlash,
@@ -178,7 +177,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
       let content = args.content as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return writeModuleSource(realmUrl, path, content, fetchOptions);
+      return writeFile(realmUrl, path, content, fetchOptions);
     },
   };
 }
@@ -207,7 +206,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
       let path = args.path as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return readCardSource(realmUrl, path, fetchOptions);
+      return readFile(realmUrl, path, fetchOptions);
     },
   };
 }
@@ -236,7 +235,8 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
       let query = args.query as Record<string, unknown>;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return searchRealm(realmUrl, query, fetchOptions);
+      let result = await searchRealm(realmUrl, query, fetchOptions);
+      return result.ok ? { data: result.data } : { error: result.error };
     },
   };
 }
@@ -295,7 +295,12 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
         attributes,
         relationships,
       );
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }
@@ -324,7 +329,12 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
         attributes,
         relationships,
       );
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }
@@ -353,7 +363,12 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
         attributes,
         relationships,
       );
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }

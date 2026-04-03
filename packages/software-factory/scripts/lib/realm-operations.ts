@@ -85,7 +85,10 @@ export async function searchRealm(
   realmUrl: string,
   query: Record<string, unknown>,
   options?: RealmFetchOptions,
-): Promise<{ data?: Record<string, unknown>[] } | undefined> {
+): Promise<
+  | { ok: true; data?: Record<string, unknown>[] }
+  | { ok: false; status: number; error: string }
+> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedUrl = ensureTrailingSlash(realmUrl);
   let searchUrl = `${normalizedUrl}_search`;
@@ -106,12 +109,24 @@ export async function searchRealm(
     });
 
     if (!response.ok) {
-      return undefined;
+      let body = await response.text();
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
     }
 
-    return (await response.json()) as { data?: Record<string, unknown>[] };
-  } catch {
-    return undefined;
+    let result = (await response.json()) as {
+      data?: Record<string, unknown>[];
+    };
+    return { ok: true, data: result.data };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -197,15 +212,16 @@ export async function runRealmCommand(
 }
 
 // ---------------------------------------------------------------------------
-// Card Read / Write
+// File Read / Write / Delete
 // ---------------------------------------------------------------------------
 
 /**
- * Read a card from a realm as card source JSON.
+ * Read a file from a realm using the card+source MIME type.
+ * Path should include the file extension (e.g. `Card/foo.json`, `my-card.gts`).
  */
-export async function readCardSource(
+export async function readFile(
   realmUrl: string,
-  cardPath: string,
+  path: string,
   options?: RealmFetchOptions,
 ): Promise<{
   ok: boolean;
@@ -213,7 +229,7 @@ export async function readCardSource(
   error?: string;
 }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(cardPath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {
@@ -243,54 +259,17 @@ export async function readCardSource(
 }
 
 /**
- * Write a card to a realm using card source MIME type.
- * The path should include the `.json` extension.
+ * Write a file to a realm using the card+source MIME type.
+ * Path should include the file extension. Content is sent as-is.
  */
-export async function writeCardSource(
+export async function writeFile(
   realmUrl: string,
-  cardPathWithExtension: string,
-  document: LooseSingleCardDocument,
-  options?: RealmFetchOptions,
-): Promise<{ ok: boolean; error?: string }> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(cardPathWithExtension, ensureTrailingSlash(realmUrl)).href;
-
-  try {
-    let response = await fetchImpl(url, {
-      method: 'POST',
-      headers: buildCardSourceHeaders(options?.authorization),
-      body: JSON.stringify(document, null, 2),
-    });
-
-    if (!response.ok) {
-      let body = await response.text();
-      return {
-        ok: false,
-        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-      };
-    }
-
-    return { ok: true };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/**
- * Write a module (.gts, .ts) to a realm as raw source content.
- * Unlike writeCardSource, this sends the raw text — no JSON wrapping.
- */
-export async function writeModuleSource(
-  realmUrl: string,
-  modulePath: string,
+  path: string,
   content: string,
   options?: RealmFetchOptions,
 ): Promise<{ ok: boolean; error?: string }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {
@@ -323,7 +302,7 @@ export async function writeModuleSource(
 /**
  * Delete a card or file from a realm.
  */
-export async function deleteCard(
+export async function deleteFile(
   realmUrl: string,
   cardPath: string,
   options?: RealmFetchOptions,
@@ -334,7 +313,10 @@ export async function deleteCard(
   try {
     let response = await fetchImpl(url, {
       method: 'DELETE',
-      headers: buildAuthHeaders(options?.authorization),
+      headers: buildAuthHeaders(
+        options?.authorization,
+        SupportedMimeType.CardSource,
+      ),
     });
 
     if (!response.ok) {
