@@ -5,6 +5,7 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
+import * as emberRunloop from '@ember/runloop';
 import * as emberService from '@ember/service';
 
 import * as emberTemplate from '@ember/template';
@@ -90,6 +91,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
   virtualNetwork.shimModule('@ember/object', emberObject);
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
+  virtualNetwork.shimModule('@ember/runloop', emberRunloop);
   virtualNetwork.shimModule('@ember/service', emberService);
   virtualNetwork.shimModule('@ember/template', emberTemplate);
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);

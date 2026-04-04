@@ -1,13 +1,20 @@
 import { task } from 'ember-concurrency';
+import { scheduleOnce } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
+  resolveCardReference,
 } from '@cardstack/runtime-common';
+import { type BaseDef, type CardDef, getComponent } from '../card-api';
+import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -25,10 +32,34 @@ function wrapTablesHtml(html: string | null | undefined): string {
   return doc.body.innerHTML;
 }
 
+interface CardSlot {
+  element: HTMLElement;
+  card: CardDef;
+  format: 'atom' | 'embedded';
+  kind: 'inline' | 'block';
+}
+
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  try {
+    return resolveCardReference(raw, baseUrl || undefined);
+  } catch {
+    return raw;
+  }
+}
+
 export default class MarkDownTemplate extends GlimmerComponent<{
-  Args: { content: string | null };
+  Args: {
+    content: string | null;
+    linkedCards?: CardDef[] | null;
+    cardReferenceBaseUrl?: string | null;
+  };
 }> {
   @tracked monacoContextInternal: any = undefined;
+  @tracked cardSlots: CardSlot[] = [];
+  // Tracks whether the modifier has run at least once. On the first run,
+  // linkedCards is likely still loading (empty []) so we skip fallback text
+  // injection to avoid flashing raw URLs for cards that will soon resolve.
+  private _modifierHasRun = false;
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
@@ -70,11 +101,212 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     // reparses that sanitized HTML so it can add wrapper divs around tables we
     // control for styling/overflow behavior. Re-sanitizing the result was
     // adding avoidable DOMParser churn during prerender and acceptance tests.
-    return htmlSafe(wrapTablesHtml(html));
+    html = wrapTablesHtml(html);
+    // Strip text content from card-type BFM refs so there is no flash of raw
+    // URLs. The URL is preserved in the data attribute; the modifier will
+    // inject fallback text for refs that can't be resolved to a card.
+    if (
+      typeof DOMParser !== 'undefined' &&
+      html.includes('data-boxel-bfm-type="card"')
+    ) {
+      let doc = new DOMParser().parseFromString(html, 'text/html');
+      doc
+        .querySelectorAll('[data-boxel-bfm-type="card"]')
+        .forEach((el) => (el.textContent = ''));
+      html = doc.body.innerHTML;
+    }
+    return htmlSafe(html);
   }
 
+  captureCardSlots = modifier(
+    (element: HTMLElement, _positional: unknown[]) => {
+      let linkedCards = this.args.linkedCards;
+      let baseUrl = this.args.cardReferenceBaseUrl;
+      let pendingUpdate = false;
+      let showFallback = this._modifierHasRun;
+      this._modifierHasRun = true;
+
+      let collectSlots = () => {
+        let cardsByUrl = new Map<string, CardDef>();
+        if (linkedCards?.length) {
+          for (let card of linkedCards) {
+            if (card?.id) {
+              cardsByUrl.set(card.id, card);
+            }
+          }
+        }
+
+        let slots: CardSlot[] = [];
+
+        for (let el of Array.from(
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
+          ),
+        )) {
+          let rawUrl = el.dataset.boxelBfmInlineRef;
+          if (!rawUrl) continue;
+          let resolved = resolveUrl(rawUrl, baseUrl);
+          let card = cardsByUrl.get(resolved);
+          if (card) {
+            if (el.firstChild?.nodeType === Node.TEXT_NODE) {
+              el.firstChild.remove();
+            }
+            slots.push({ element: el, card, format: 'atom', kind: 'inline' });
+          }
+        }
+
+        for (let el of Array.from(
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
+          ),
+        )) {
+          let rawUrl = el.dataset.boxelBfmBlockRef;
+          if (!rawUrl) continue;
+          let resolved = resolveUrl(rawUrl, baseUrl);
+          let card = cardsByUrl.get(resolved);
+          if (card) {
+            if (el.firstChild?.nodeType === Node.TEXT_NODE) {
+              el.firstChild.remove();
+            }
+            slots.push({
+              element: el,
+              card,
+              format: 'embedded',
+              kind: 'block',
+            });
+          }
+        }
+
+        // Inject fallback text for unresolvable card refs. Text content was
+        // stripped from the HTML in renderedHtml to prevent flash, so the URL
+        // must be read from the data attribute. Only runs after the first
+        // modifier setup (showFallback) so we don't flash URLs while
+        // linkedCards is still loading.
+        if (showFallback) {
+          let resolvedEls = new Set(slots.map((s) => s.element));
+          for (let el of Array.from(
+            element.querySelectorAll<HTMLElement>(
+              '[data-boxel-bfm-type="card"]',
+            ),
+          )) {
+            let url =
+              el.dataset.boxelBfmInlineRef ||
+              el.dataset.boxelBfmBlockRef ||
+              '';
+            if (
+              !resolvedEls.has(el) &&
+              el.childElementCount === 0 &&
+              el.textContent !== url
+            ) {
+              el.textContent = url;
+            }
+          }
+        }
+
+        return slots;
+      };
+
+      // Deferred via scheduleOnce to avoid Glimmer backtracking assertion.
+      // The didChange guard prevents an infinite loop: MutationObserver fires
+      // when #in-element renders cards → collectSlots → set cardSlots →
+      // re-render → observer fires again.
+      let updateSlots = () => {
+        pendingUpdate = false;
+        let nextSlots = collectSlots();
+        let didChange =
+          nextSlots.length !== this.cardSlots.length ||
+          nextSlots.some((slot, index) => {
+            let current = this.cardSlots[index];
+            return (
+              !current ||
+              current.element !== slot.element ||
+              current.card !== slot.card ||
+              current.format !== slot.format ||
+              current.kind !== slot.kind
+            );
+          });
+
+        if (didChange) {
+          this.cardSlots = nextSlots;
+        }
+      };
+
+      let scheduleUpdate = () => {
+        if (pendingUpdate) {
+          return;
+        }
+        pendingUpdate = true;
+        scheduleOnce('afterRender', this, updateSlots);
+      };
+
+      scheduleUpdate();
+
+      // MutationObserver re-collects slots when the DOM is reconstructed
+      // (e.g. after browser back-navigation rebuilds the element's children).
+      if (typeof MutationObserver === 'undefined') {
+        return;
+      }
+
+      let observer = new MutationObserver(scheduleUpdate);
+      observer.observe(element, {
+        childList: true,
+        subtree: true,
+      });
+
+      return () => observer.disconnect();
+    },
+  );
+
+  getCardComponent = (card: BaseDef) => getComponent(card);
+
   <template>
-    <div class='markdown-content'>{{this.renderedHtml}}</div>
+    <div
+      class='markdown-content'
+      {{this.captureCardSlots this.renderedHtml @linkedCards}}
+    >
+      {{this.renderedHtml}}
+    </div>
+    {{#each this.cardSlots as |slot|}}
+      {{#in-element slot.element insertBefore=null}}
+        <CardContextConsumer as |context|>
+          {{#let (this.getCardComponent slot.card) as |CardComponent|}}
+            {{#if (eq slot.kind 'inline')}}
+              <span
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                data-test-markdown-bfm-inline-card
+                {{context.cardComponentModifier
+                  card=slot.card
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardComponent
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </span>
+            {{else}}
+              <div
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--block'
+                data-test-markdown-bfm-block-card
+                {{context.cardComponentModifier
+                  card=slot.card
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
+              >
+                <CardComponent
+                  @format={{slot.format}}
+                  @displayContainer={{false}}
+                />
+              </div>
+            {{/if}}
+          {{/let}}
+        </CardContextConsumer>
+      {{/in-element}}
+    {{/each}}
     <style scoped>
       @layer baseComponent {
         .markdown-content {
@@ -320,6 +552,29 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
         .markdown-content :deep(tr:not(:last-child) td) {
           border-bottom: 1px solid var(--md-border);
+        }
+
+        /* BFM references (card, file, etc.) */
+        .markdown-content :deep([data-boxel-bfm-inline-ref]) {
+          display: inline;
+        }
+
+        .markdown-content :deep([data-boxel-bfm-block-ref]) {
+          display: block;
+          margin: var(--boxel-sp) 0;
+        }
+
+        .markdown-bfm-card-slot {
+          max-width: 100%;
+        }
+
+        .markdown-bfm-card-slot--inline {
+          display: inline-flex;
+          vertical-align: middle;
+        }
+
+        .markdown-bfm-card-slot--block {
+          display: block;
         }
       }
     </style>
