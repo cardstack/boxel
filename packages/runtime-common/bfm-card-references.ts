@@ -5,7 +5,9 @@ import type { TokenizerAndRendererExtension } from 'marked';
 // Regex patterns for stripping code before extraction.
 // These avoid backtick-in-regex issues that break content-tag in .gts files.
 const FENCED_CODE_RE = /```[\s\S]*?```/g;
-const INLINE_CODE_RE = /`([^`]+)`/g;
+// Match code spans with any number of consecutive backticks as delimiter
+// (e.g. `code`, ``code``, ```code```).
+const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 
 function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
   try {
@@ -36,8 +38,8 @@ export function extractBfmReferences(
     .replace(FENCED_CODE_RE, '')
     .replace(INLINE_CODE_RE, '');
 
-  let seen = new Set<string>();
-  let refs: BfmReference[] = [];
+  // Collect all matches with their position so we can sort by document order
+  let matches: { index: number; url: string; keyword: string }[] = [];
 
   for (let keyword of keywords) {
     let blockRe = new RegExp(`^::${keyword}\\[([^\\]]+)\\]`, 'gm');
@@ -46,17 +48,27 @@ export function extractBfmReferences(
 
     for (let match of stripped.matchAll(blockRe)) {
       let resolved = resolveUrl(match[1], baseUrl);
-      if (resolved && !seen.has(resolved)) {
-        seen.add(resolved);
-        refs.push({ url: resolved, keyword });
+      if (resolved) {
+        matches.push({ index: match.index!, url: resolved, keyword });
       }
     }
     for (let match of stripped.matchAll(inlineRe)) {
       let resolved = resolveUrl(match[1], baseUrl);
-      if (resolved && !seen.has(resolved)) {
-        seen.add(resolved);
-        refs.push({ url: resolved, keyword });
+      if (resolved) {
+        matches.push({ index: match.index!, url: resolved, keyword });
       }
+    }
+  }
+
+  // Sort by position in the document, then deduplicate by URL (keeping first)
+  matches.sort((a, b) => a.index - b.index);
+
+  let seen = new Set<string>();
+  let refs: BfmReference[] = [];
+  for (let m of matches) {
+    if (!seen.has(m.url)) {
+      seen.add(m.url);
+      refs.push({ url: m.url, keyword: m.keyword });
     }
   }
 
@@ -77,11 +89,13 @@ export function extractCardReferenceUrls(
 /**
  * Creates marked v12 extensions for a given BFM keyword.
  *
- * Block: `::keyword[URL]` → `<div data-boxel-bfm-block-ref="URL" data-boxel-bfm-type="keyword"></div>`
- * Inline: `:keyword[URL]` → `<span data-boxel-bfm-inline-ref="URL" data-boxel-bfm-type="keyword"></span>`
+ * Block: `::keyword[URL]` → `<div data-boxel-bfm-block-ref="URL" data-boxel-bfm-type="keyword">URL</div>`
+ * Inline: `:keyword[URL]` → `<span data-boxel-bfm-inline-ref="URL" data-boxel-bfm-type="keyword">URL</span>`
  *
- * URLs are emitted as-is (unresolved). The consumer is responsible for
- * resolving them against a base URL before matching to instance IDs.
+ * The URL text content serves as fallback text shown before referenced cards
+ * load or when they cannot be resolved. URLs are emitted as-is (unresolved).
+ * The consumer is responsible for resolving them against a base URL before
+ * matching to instance IDs.
  */
 export function bfmExtensionsForKeyword(
   keyword: string,
