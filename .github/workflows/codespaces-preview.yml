@@ -1,0 +1,106 @@
+name: Codespaces Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      codespace_name:
+        description: "Codespace name (used to derive forwarded port URLs)"
+        required: true
+        type: string
+      realm_server_url:
+        description: "Codespace realm server URL (e.g. https://<name>-4201.app.github.dev)"
+        required: true
+        type: string
+      matrix_url:
+        description: "Codespace Matrix URL (e.g. https://<name>-8008.app.github.dev)"
+        required: true
+        type: string
+      icons_url:
+        description: "Codespace icons URL (e.g. https://<name>-4206.app.github.dev)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+  checks: write
+  pull-requests: write
+  id-token: write
+  statuses: write
+
+jobs:
+  deploy-codespaces-preview:
+    name: Build and deploy host preview for Codespaces
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+
+      - uses: ./.github/actions/init
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
+        with:
+          role-to-assume: arn:aws:iam::680542703984:role/boxel-host
+          aws-region: us-east-1
+
+      - name: Set environment variables for Codespaces backend
+        shell: bash
+        run: |
+          # Point the host build at the Codespace's backend services
+          echo "REALM_SERVER_DOMAIN=${{ inputs.realm_server_url }}/" >> $GITHUB_ENV
+          echo "RESOLVED_BASE_REALM_URL=${{ inputs.realm_server_url }}/base/" >> $GITHUB_ENV
+          echo "RESOLVED_CATALOG_REALM_URL=${{ inputs.realm_server_url }}/catalog/" >> $GITHUB_ENV
+          echo "RESOLVED_NEW_CATALOG_REALM_URL=${{ inputs.realm_server_url }}/catalog-new/" >> $GITHUB_ENV
+          echo "RESOLVED_SKILLS_REALM_URL=${{ inputs.realm_server_url }}/skills/" >> $GITHUB_ENV
+          echo "MATRIX_URL=${{ inputs.matrix_url }}" >> $GITHUB_ENV
+          echo "MATRIX_SERVER_NAME=localhost" >> $GITHUB_ENV
+          echo "ICONS_URL=${{ inputs.icons_url }}" >> $GITHUB_ENV
+
+      - name: Set PR branch name for S3 prefix
+        shell: bash
+        run: |
+          RAW_BRANCH="${GITHUB_REF_NAME}"
+          echo "PR_BRANCH_NAME=$(echo "${RAW_BRANCH}" | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60)" >> $GITHUB_ENV
+
+      - name: Build and deploy preview
+        shell: bash
+        env:
+          S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
+          AWS_S3_BUCKET: boxel-host-preview.stack.cards
+          AWS_REGION: us-east-1
+          AWS_CLOUDFRONT_DISTRIBUTION: EU4RGLH4EOCHJ
+        run: pnpm deploy:boxel-host:preview-staging
+
+      - name: Store preview URL
+        shell: bash
+        run: echo "PREVIEW_HOST=https://${PR_BRANCH_NAME}.boxel-host-preview.stack.cards/" >> $GITHUB_ENV
+
+      - name: Post status check with preview link
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          curl \
+            -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA" \
+            -d '{"context":"Preview boxel-host codespaces","description":"Host preview connected to Codespace backend","target_url":"'"$PREVIEW_HOST"'","state":"success"}'
+
+      - name: Find associated PR and comment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_NUMBER=$(gh pr list --head "${GITHUB_REF_NAME}" --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr comment "$PR_NUMBER" --body "### Codespaces Preview
+
+          - [Host preview (connected to Codespace)]($PREVIEW_HOST)
+          - Realm server: ${{ inputs.realm_server_url }}
+          - Matrix: ${{ inputs.matrix_url }}
+
+          > This preview build is connected to the Codespace \`${{ inputs.codespace_name }}\`. The preview will stop working when the Codespace is stopped."
+          fi
