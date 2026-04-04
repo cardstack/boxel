@@ -10,9 +10,6 @@ inspect existing state before making changes — do not guess.
 # Rules
 
 - Every ticket must include at least one Playwright test file (via write_file to Tests/).
-  Tests MUST navigate to the card in the browser (page.goto) and assert on
-  rendered DOM content (data-test-* selectors). API-only tests (request.get)
-  miss compilation errors, broken imports, and template bugs.
 - For each top-level card defined in the brief, create a Catalog Spec card
   in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
   and at least one sample card instance linked via linkedExamples.

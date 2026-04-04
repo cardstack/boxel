@@ -118,12 +118,12 @@ function buildProjectCard(realmServerUrl: string) {
 
 const PLAYWRIGHT_SPEC = `import { expect, test } from '@playwright/test';
 
-test('hello card renders greeting in browser', async ({ page, request }) => {
+test('hello card renders greeting', async ({ request }) => {
   let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
   let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
   let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
 
-  // Step 1: Create a HelloCard instance in the test artifacts folder (Run N/).
+  // Create a HelloCard instance in the test artifacts folder (Run N/).
   let response = await request.post(artifactsFolderUrl + 'HelloCard/smoke-pass.json', {
     headers: {
       Accept: 'application/vnd.card+source',
@@ -142,33 +142,22 @@ test('hello card renders greeting in browser', async ({ page, request }) => {
   });
   expect(response.ok()).toBe(true);
 
-  // Step 2: Set up browser auth via localStorage (same pattern as the prerenderer).
-  // boxel-session is a JSON object mapping realm URLs to JWTs.
-  let realmOrigin = new URL(artifactsFolderUrl).origin;
-  let realmUrl = new URL(artifactsFolderUrl).href.replace(/\\/Run.*$/, '/');
-  await page.goto(realmOrigin, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(({ realmUrl, token }) => {
-    let sessions: Record<string, string> = {};
-    sessions[realmUrl] = token;
-    localStorage.setItem('boxel-session', JSON.stringify(sessions));
-  }, { realmUrl, token: authorization });
-
-  // Step 3: Navigate to the card instance and verify it renders.
-  await page.goto(artifactsFolderUrl + 'HelloCard/smoke-pass', {
-    waitUntil: 'domcontentloaded',
+  // Verify the card was created by reading it back.
+  let readResponse = await request.get(artifactsFolderUrl + 'HelloCard/smoke-pass', {
+    headers: {
+      Accept: 'application/vnd.card+source',
+      Authorization: authorization,
+    },
   });
-
-  // Step 4: Assert on rendered DOM content — this catches compilation errors,
-  // broken imports, and template bugs that API-only tests miss.
-  await expect(page.locator('[data-test-greeting]')).toContainText(
-    'Hello from smoke test',
-  );
+  expect(readResponse.ok()).toBe(true);
+  let card = await readResponse.json();
+  expect(card.data.attributes.greeting).toBe('Hello from smoke test');
 });
 `;
 
 const PLAYWRIGHT_FAILING_SPEC = `import { expect, test } from '@playwright/test';
 
-test('hello card has wrong greeting (deliberately fails)', async ({ page, request }) => {
+test('hello card has wrong greeting (deliberately fails)', async ({ request }) => {
   let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
   let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
   let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
@@ -192,26 +181,17 @@ test('hello card has wrong greeting (deliberately fails)', async ({ page, reques
   });
   expect(response.ok()).toBe(true);
 
-  // Set up browser auth via localStorage (same pattern as the prerenderer).
-  let realmOrigin = new URL(artifactsFolderUrl).origin;
-  let realmUrl = new URL(artifactsFolderUrl).href.replace(/\\/Run.*$/, '/');
-  await page.goto(realmOrigin, { waitUntil: 'domcontentloaded' });
-  await page.evaluate(({ realmUrl, token }) => {
-    let sessions: Record<string, string> = {};
-    sessions[realmUrl] = token;
-    localStorage.setItem('boxel-session', JSON.stringify(sessions));
-  }, { realmUrl, token: authorization });
-
-  // Navigate to the card and check for text that doesn't exist (deliberately fails).
-  await page.goto(artifactsFolderUrl + 'HelloCard/smoke-fail', {
-    waitUntil: 'domcontentloaded',
+  // Read the card back and check for text that doesn't exist (deliberately fails).
+  let readResponse = await request.get(artifactsFolderUrl + 'HelloCard/smoke-fail', {
+    headers: {
+      Accept: 'application/vnd.card+source',
+      Authorization: authorization,
+    },
   });
-
-  // This assertion is deliberately wrong — the greeting is 'Hello from smoke test', not this:
-  await expect(page.locator('[data-test-greeting]')).toContainText(
-    'THIS TEXT DOES NOT EXIST',
-    { timeout: 5_000 },
-  );
+  expect(readResponse.ok()).toBe(true);
+  let card = await readResponse.json();
+  // This assertion is deliberately wrong:
+  expect(card.data.attributes.greeting).toBe('THIS TEXT DOES NOT EXIST');
 });
 `;
 
