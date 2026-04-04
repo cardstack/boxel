@@ -299,6 +299,8 @@ Each tool's `execute` function looks up the correct per-realm JWT based on which
 
 Boxel-cli tools (`boxel-sync`, `boxel-push`, `boxel-pull`, etc.) are excluded from the agent's tool registry until CS-10520 lands (boxel-cli auth integration). The `ToolRegistry` is constructed with only `SCRIPT_TOOLS` and `REALM_API_TOOLS`. All file operations use the realm HTTP API directly.
 
+Card write tools (`update_project`, `update_ticket`, `create_knowledge`, `create_catalog_spec`) use **dynamic JSON schemas** fetched at startup from the realm server via `GetCardTypeSchemaCommand` (`_run-command`). DarkFactory schemas come from the source realm (`software-factory/`); the Spec card schema comes from the base realm (`https://cardstack.com/base/spec`). This ensures tool parameter definitions always match the actual card field definitions. Skills reference the tool schemas rather than hardcoding field names.
+
 Test generation rule:
 
 - the agent must produce at least one Playwright test file per ticket before a ticket can be marked as done
@@ -324,7 +326,7 @@ Test execution policy:
 - the orchestrator owns test execution — the agent writes test files via `write_file` tool calls, and the orchestrator triggers test execution as a separate phase after the agent finishes its turn
 - Playwright test files are pulled from the target realm to a local temp directory, then run via Playwright against the live target realm
 - test results (pass/fail, error messages, stack traces) are saved as `TestRun` card instances in the target realm's `Test Runs/` folder
-- on failure, the full test output is fed back to the agent as context for the next implementation attempt
+- on failure, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (individual test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. The agent also has access to the `Test Runs/` folder via `search_realm` and `read_file` for historical test run analysis.
 - on success, the TestRun card serves as durable proof that the ticket was verified
 
 Target realm artifact structure (Playwright test files and results co-located with implementation):
@@ -347,6 +349,7 @@ Implementation note:
 - the test harness output format should match what the agent needs to diagnose failures and iterate
 - the test artifacts realm is auto-created from the project name and its URL is persisted on the Project card (`testArtifactsRealmUrl` field)
 - before test execution, all indexing jobs (running + pending) are cancelled on the test artifacts realm via `_cancel-indexing-job` with `cancelPending: true`
+- spec file paths are extracted from the agent's tool call log (write_file calls to `Tests/*.spec.ts`) rather than scanning `_mtimes`. Each path is polled via `waitForRealmFile` (300ms interval, 30s timeout) to handle the indexing delay after the agent writes files to the realm
 
 ### Phase 6: Stop Conditions
 
@@ -462,7 +465,9 @@ CLI parameters for the first version:
 - `--target-realm-url`
   - Required. Absolute URL for the realm where generated artifacts should land.
 - `--realm-server-url`
-  - Optional. Explicit realm server URL for target-realm bootstrap when it should not be inferred from the target realm URL.
+  - Optional. Explicit realm server URL. Defaults to `http://localhost:4201/`. **Never inferred from the target realm URL** — realms and realm servers can be mounted arbitrarily, so the relationship between their URLs is not predictable. Not read from an environment variable.
+- `--debug`
+  - Optional. Log LLM prompts and responses to stderr for debugging.
 - `--mode`
   - Optional. `bootstrap`, `implement`, or `resume`. Default should be `implement`.
 - `--model`
@@ -1386,7 +1391,7 @@ interface SkillResolver {
 }
 ```
 
-A default implementation loads `boxel-development` + `boxel-file-structure` for all Boxel card work, plus `ember-best-practices` when `.gts` files are involved. This covers the majority of factory tickets.
+A default implementation loads `boxel-development` + `boxel-file-structure` for all Boxel card work, plus `ember-best-practices` when `.gts` files are involved. Within `boxel-development`, certain reference files are always loaded regardless of ticket content because they are needed on every ticket: `dev-realm-search.md` (query syntax and field discovery), `dev-playwright-testing.md` (test patterns, env vars, test artifacts realm), and `dev-spec-usage.md` (Catalog Spec card creation).
 
 #### Skill Loading
 
@@ -1992,3 +1997,47 @@ The test realm is central to the quality feedback loop. The agent writes code in
 That is the smallest path to turning the current software-factory idea into something that feels like:
 
 “Point at a brief, say go, and watch it enter the delivery loop.”
+
+## Implementation Findings
+
+The following findings emerged during the CS-10569 implementation (wire execution loop into `factory:go --mode implement`). They document decisions, surprises, and remaining work that the plan did not anticipate.
+
+### End-to-End Validation
+
+The factory has been validated end-to-end against a live LLM (Claude Sonnet 4 via OpenRouter). Starting from the `sticky-note` brief, the factory:
+
+1. Bootstraps the target realm with Project, Tickets, and KnowledgeArticles
+2. The agent writes a card definition (`.gts`), sample instances, a Catalog Spec card, and Playwright test files
+3. The orchestrator discovers the test files, runs Playwright, and feeds failures back
+4. The agent self-corrects and the tests pass on the second iteration
+5. The ticket is marked done
+
+### Realm Server URL Must Be Explicit
+
+The plan assumed the realm server URL could be inferred from the target realm URL. This is wrong — realms and realm servers can be mounted arbitrarily. The `--realm-server-url` CLI argument defaults to `http://localhost:4201/` but is never inferred from `--target-realm-url`. The `REALM_SERVER_URL` environment variable is not accepted by `factory:go`.
+
+### Source Realm vs Target Realm for Module References
+
+Several components need to distinguish between the **source realm** (`software-factory/`) where shared modules like `darkfactory.gts` and `test-results.gts` live, and the **target realm** where generated artifacts land:
+
+- **Card type schemas** are fetched from the source realm via `_run-command` (the target realm doesn't have `darkfactory.gts`)
+- **TestRun card `adoptsFrom`** must reference `<realmServerUrl>/software-factory/test-results`, not the target realm
+- **Bootstrap `darkfactoryModuleUrl`** uses `<realmServerUrl>/software-factory/darkfactory`
+
+The `_run-command` endpoint requires the user to have permissions on the realm specified in the request body. For world-readable realms like `software-factory/`, any authenticated user has read access via the `*` wildcard in `realm_user_permissions`. When the source realm isn't accessible, `_run-command` can target the user's own realm while the `codeRef` module URL points to the source realm — the card loader resolves cross-realm module references.
+
+### Spec File Discovery Requires Polling
+
+After the agent writes test files to the realm, there's an indexing delay before the files are accessible. The orchestrator polls each spec file path via `readFile` (300ms interval, 30s timeout) using the `waitForRealmFile` utility. The spec paths are extracted from the agent's tool call log rather than scanning `_mtimes`.
+
+### Skills Must Be Always-Loaded
+
+The plan described keyword-based skill resolution, but in practice the LLM needs search query guidance, Playwright test patterns, and Catalog Spec instructions on every ticket. These references (`dev-realm-search.md`, `dev-playwright-testing.md`, `dev-spec-usage.md`) are now always loaded regardless of ticket content. A future reorganization (CS-10597) should make the factory-agent skills self-contained.
+
+### Dynamic Card Type Schemas
+
+Card tool parameters (`update_project`, `update_ticket`, `create_knowledge`, `create_catalog_spec`) use JSON schemas fetched at runtime from the realm server via `GetCardTypeSchemaCommand`. This ensures tool parameter definitions always match the actual card field definitions. Skills reference the tool schemas rather than hardcoding field names.
+
+### TestRun Failure Details
+
+When tests fail, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. Without this, the agent only sees “Tests failed” and can't diagnose the problem.

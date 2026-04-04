@@ -292,7 +292,7 @@ test('update_project writes and reads back a project card', async ({
   })) as CardReadResult;
 
   expect(readResult.ok).toBe(true);
-  expect(readResult.document?.data.attributes.objective).toBe(
+  expect(readResult.document!.data.attributes!.objective).toBe(
     'Test project for update_project tool',
   );
 });
@@ -320,10 +320,12 @@ test('update_ticket writes and reads back a ticket card', async ({ realm }) => {
   })) as CardReadResult;
 
   expect(readResult.ok).toBe(true);
-  expect(readResult.document?.data.attributes.summary).toBe(
+  expect(readResult.document!.data.attributes!.summary).toBe(
     'Test ticket for update_ticket tool',
   );
-  expect(readResult.document?.data.attributes.ticketStatus).toBe('in_progress');
+  expect(readResult.document!.data.attributes!.ticketStatus).toBe(
+    'in_progress',
+  );
 });
 
 test('create_knowledge writes and reads back a knowledge article', async ({
@@ -350,7 +352,7 @@ test('create_knowledge writes and reads back a knowledge article', async ({
   })) as CardReadResult;
 
   expect(readResult.ok).toBe(true);
-  expect(readResult.document?.data.attributes.articleTitle).toBe(
+  expect(readResult.document!.data.attributes!.articleTitle).toBe(
     'Test Knowledge Article',
   );
 });
@@ -380,11 +382,13 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
   })) as CardReadResult;
 
   expect(readResult.ok).toBe(true);
-  expect(readResult.document?.data.attributes.specType).toBe('card');
-  expect(readResult.document?.data.meta.adoptsFrom.module).toBe(
-    'https://cardstack.com/base/spec',
-  );
-  expect(readResult.document?.data.meta.adoptsFrom.name).toBe('Spec');
+  expect(readResult.document!.data.attributes!.specType).toBe('card');
+  let adoptsFrom = readResult.document!.data.meta.adoptsFrom as {
+    module: string;
+    name: string;
+  };
+  expect(adoptsFrom.module).toBe('https://cardstack.com/base/spec');
+  expect(adoptsFrom.name).toBe('Spec');
 });
 
 // ---------------------------------------------------------------------------
