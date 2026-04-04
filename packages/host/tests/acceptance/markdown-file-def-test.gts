@@ -1,13 +1,14 @@
 import {
   click,
+  fillIn,
   triggerEvent,
+  triggerKeyEvent,
   visit,
   waitFor,
   waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
-import window from 'ember-window-mock';
 
 import { module, test } from 'qunit';
 
@@ -428,7 +429,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       .hasValue(`${testRealmURL}Pet/mango.json`);
   });
 
-  test('code mode restores embedded markdown card references after browser back navigation', async function (assert) {
+  test('code mode restores embedded markdown card references after navigating away and back', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}bfm-test.md`,
@@ -472,23 +473,16 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       },
     );
 
-    window.history.back();
-
-    await waitUntil(
-      () => {
-        let currentValue =
-          (
-            document.querySelector(
-              '[data-test-card-url-bar-input]',
-            ) as HTMLInputElement | null
-          )?.value ?? '';
-        return currentValue === `${testRealmURL}bfm-test.md`;
-      },
-      {
-        timeout: 15000,
-        timeoutMessage:
-          'URL bar did not navigate back to bfm-test.md after history.back()',
-      },
+    // Navigate back to the markdown file via the URL bar (code-mode navigation
+    // uses replaceState, so history.back() has no entry to return to).
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}bfm-test.md`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
     );
 
     await waitFor('[data-test-pet-atom]', { timeout: 10000 });
@@ -496,10 +490,10 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     assert
       .dom('[data-test-pet-atom]')
-      .exists('inline markdown card reference is restored after going back');
+      .exists('inline markdown card reference is restored after navigating back');
     assert
       .dom('[data-test-pet-embedded]')
-      .exists('block markdown card reference is restored after going back');
+      .exists('block markdown card reference is restored after navigating back');
   });
 
   test('interact mode shows overlays for markdown card references and clicking navigates', async function (assert) {
