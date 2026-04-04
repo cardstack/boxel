@@ -438,7 +438,9 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     await waitFor('[data-test-pet-embedded]', { timeout: 10000 });
     await waitFor('[data-test-card-url-bar-input]');
 
-    // Wait for the overlay click handler to be bound (cursor: pointer is set by the Overlays component)
+    // Wait for the overlay click handler to be bound (cursor: pointer is set by the Overlays component).
+    // CI runners under load can take longer for the two render cycles (ElementTracker afterRender →
+    // Overlays re-render + handler bind), so use a generous timeout.
     await waitUntil(
       () => {
         let el = document.querySelector(
@@ -446,7 +448,7 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         ) as HTMLElement | null;
         return el?.style.cursor === 'pointer';
       },
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
 
     await click('[data-test-markdown-bfm-inline-card]');
