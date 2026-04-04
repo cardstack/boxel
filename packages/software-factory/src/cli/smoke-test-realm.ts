@@ -415,6 +415,7 @@ async function main() {
     projectCardUrl,
     matrixAuth: matrixAuthForRealm,
     serverToken,
+    realmServerUrl: matrixAuth.credentials.realmServerUrl,
   });
 
   console.log(`  TestRun ID:  ${handle.testRunId}`);

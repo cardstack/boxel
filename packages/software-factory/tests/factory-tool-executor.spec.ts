@@ -258,6 +258,7 @@ async function buildToolsForRealm(realm: {
     {
       targetRealmUrl: realm.realmURL.href,
       testRealmUrl: realm.realmURL.href,
+      realmServerUrl: realm.realmServerURL.href,
       realmTokens: {
         [realm.realmURL.href]: `Bearer ${realm.ownerBearerToken}`,
       },

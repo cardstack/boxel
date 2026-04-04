@@ -177,6 +177,7 @@ export async function runFactoryImplement(
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
     testRealmUrl,
+    realmServerUrl,
     realmTokens,
     serverToken,
     testResultsModuleUrl,
@@ -547,6 +548,7 @@ function buildTestRunner(
         matrixAuth: runConfig.matrixAuth,
         serverToken: runConfig.serverToken,
         projectCardUrl: runConfig.projectCardUrl,
+        realmServerUrl: runConfig.realmServerUrl,
       });
 
       let durationMs = Date.now() - start;

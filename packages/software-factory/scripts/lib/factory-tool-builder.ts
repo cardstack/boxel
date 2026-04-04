@@ -62,7 +62,8 @@ export interface ToolBuilderConfig {
   /** Override for executeTestRunFromRealm (injectable for testing). */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
   /** Realm server URL for /_run-command calls (e.g., "http://localhost:4201/"). */
-  realmServerUrl?: string;
+  /** Realm server URL. Required — never inferred from realm URLs. */
+  realmServerUrl: string;
   /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
   cardTypeSchemas?: Map<
     string,
@@ -483,6 +484,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         testRealmUrl: config.testRealmUrl,
         matrixAuth: config.matrixAuth,
         serverToken: config.serverToken,
+        realmServerUrl: config.realmServerUrl,
       });
 
       return result;
@@ -550,11 +552,10 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
       required: ['command'],
     },
     execute: async (args) => {
-      if (!config.realmServerUrl || !config.serverToken) {
+      if (!config.serverToken) {
         return {
           status: 'error',
-          error:
-            'run_command requires realmServerUrl and serverToken in config',
+          error: 'run_command requires serverToken in config',
         };
       }
       return runRealmCommand(
