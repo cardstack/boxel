@@ -1,6 +1,6 @@
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { readCardSource, writeCardSource } from './realm-operations';
+import { readFile, writeFile } from './realm-operations';
 import type {
   CreateTestRunOptions,
   SpecResultData,
@@ -32,10 +32,10 @@ export async function createTestRun(
     },
   );
 
-  let result = await writeCardSource(
+  let result = await writeFile(
     options.testRealmUrl,
     `${testRunId}.json`,
-    document,
+    JSON.stringify(document, null, 2),
     { authorization: options.authorization, fetch: options.fetch },
   );
 
@@ -61,13 +61,9 @@ export async function completeTestRun(
 
   // Retry the read — after a long spawnSync (Playwright), TCP connections
   // may be stale causing the first fetch to fail with "fetch failed".
-  let readResult: Awaited<ReturnType<typeof readCardSource>> | undefined;
+  let readResult: Awaited<ReturnType<typeof readFile>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await readCardSource(
-      options.testRealmUrl,
-      testRunId,
-      fetchOptions,
-    );
+    readResult = await readFile(options.testRealmUrl, testRunId, fetchOptions);
     if (readResult.ok && readResult.document) {
       break;
     }
@@ -109,10 +105,10 @@ export async function completeTestRun(
     };
   }
 
-  let writeResult = await writeCardSource(
+  let writeResult = await writeFile(
     options.testRealmUrl,
     `${testRunId}.json`,
-    readResult.document,
+    JSON.stringify(readResult.document, null, 2),
     fetchOptions,
   );
 

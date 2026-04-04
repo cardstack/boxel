@@ -224,6 +224,28 @@ export async function seedRealmPermissions(
   );
 }
 
+export async function clearRealmPermissions(
+  databaseName: string,
+  realmURL: URL,
+): Promise<void> {
+  await logTimed(
+    templateLog,
+    `clearRealmPermissions ${databaseName} ${realmURL.href}`,
+    async () => {
+      let client = new PgClient(pgAdminConnectionConfig(databaseName));
+      try {
+        await client.connect();
+        await client.query(
+          `DELETE FROM realm_user_permissions WHERE realm_url = $1`,
+          [realmURL.href],
+        );
+      } finally {
+        await client.end();
+      }
+    },
+  );
+}
+
 export async function resetRealmState(
   databaseName: string,
   realmURL: URL,

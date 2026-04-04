@@ -85,7 +85,10 @@ export async function searchRealm(
   realmUrl: string,
   query: Record<string, unknown>,
   options?: RealmFetchOptions,
-): Promise<{ data?: Record<string, unknown>[] } | undefined> {
+): Promise<
+  | { ok: true; data?: Record<string, unknown>[] }
+  | { ok: false; status: number; error: string }
+> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedUrl = ensureTrailingSlash(realmUrl);
   let searchUrl = `${normalizedUrl}_search`;
@@ -106,12 +109,24 @@ export async function searchRealm(
     });
 
     if (!response.ok) {
-      return undefined;
+      let body = await response.text();
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
     }
 
-    return (await response.json()) as { data?: Record<string, unknown>[] };
-  } catch {
-    return undefined;
+    let result = (await response.json()) as {
+      data?: Record<string, unknown>[];
+    };
+    return { ok: true, data: result.data };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -197,23 +212,26 @@ export async function runRealmCommand(
 }
 
 // ---------------------------------------------------------------------------
-// Card Read / Write
+// File Read / Write / Delete
 // ---------------------------------------------------------------------------
 
 /**
- * Read a card from a realm as card source JSON.
+ * Read a file from a realm using the card+source MIME type.
+ * Path should include the file extension (e.g. `Card/foo.json`, `my-card.gts`).
  */
-export async function readCardSource(
+export async function readFile(
   realmUrl: string,
-  cardPath: string,
+  path: string,
   options?: RealmFetchOptions,
 ): Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;
+  /** Raw text content for non-JSON files (e.g., .gts source). */
+  content?: string;
   error?: string;
 }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(cardPath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {
@@ -232,45 +250,14 @@ export async function readCardSource(
       };
     }
 
-    let document = (await response.json()) as LooseSingleCardDocument;
-    return { ok: true, document };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/**
- * Write a card to a realm using card source MIME type.
- * The path should include the `.json` extension.
- */
-export async function writeCardSource(
-  realmUrl: string,
-  cardPathWithExtension: string,
-  document: LooseSingleCardDocument,
-  options?: RealmFetchOptions,
-): Promise<{ ok: boolean; error?: string }> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(cardPathWithExtension, ensureTrailingSlash(realmUrl)).href;
-
-  try {
-    let response = await fetchImpl(url, {
-      method: 'POST',
-      headers: buildCardSourceHeaders(options?.authorization),
-      body: JSON.stringify(document, null, 2),
-    });
-
-    if (!response.ok) {
-      let body = await response.text();
-      return {
-        ok: false,
-        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-      };
+    let text = await response.text();
+    try {
+      let document = JSON.parse(text) as LooseSingleCardDocument;
+      return { ok: true, document };
+    } catch {
+      // Non-JSON content (e.g., .gts source files) — return as raw text
+      return { ok: true, content: text };
     }
-
-    return { ok: true };
   } catch (err) {
     return {
       ok: false,
@@ -280,17 +267,17 @@ export async function writeCardSource(
 }
 
 /**
- * Write a module (.gts, .ts) to a realm as raw source content.
- * Unlike writeCardSource, this sends the raw text — no JSON wrapping.
+ * Write a file to a realm using the card+source MIME type.
+ * Path should include the file extension. Content is sent as-is.
  */
-export async function writeModuleSource(
+export async function writeFile(
   realmUrl: string,
-  modulePath: string,
+  path: string,
   content: string,
   options?: RealmFetchOptions,
 ): Promise<{ ok: boolean; error?: string }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {
@@ -323,7 +310,7 @@ export async function writeModuleSource(
 /**
  * Delete a card or file from a realm.
  */
-export async function deleteCard(
+export async function deleteFile(
   realmUrl: string,
   cardPath: string,
   options?: RealmFetchOptions,
@@ -334,7 +321,10 @@ export async function deleteCard(
   try {
     let response = await fetchImpl(url, {
       method: 'DELETE',
-      headers: buildAuthHeaders(options?.authorization),
+      headers: buildAuthHeaders(
+        options?.authorization,
+        SupportedMimeType.CardSource,
+      ),
     });
 
     if (!response.ok) {
@@ -715,6 +705,33 @@ export async function waitForRealmReady(
     ready: false,
     error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
   };
+}
+
+/**
+ * Poll a specific realm file path until it exists (non-404), or the
+ * timeout is reached. Useful after writing a file to wait for the
+ * realm to finish processing it before reading it back.
+ *
+ * @returns true if the file was found, false on timeout.
+ */
+export async function waitForRealmFile(
+  realmUrl: string,
+  path: string,
+  options?: RealmFetchOptions & { timeoutMs?: number; pollMs?: number },
+): Promise<boolean> {
+  let timeoutMs = options?.timeoutMs ?? 30_000;
+  let pollMs = options?.pollMs ?? 300;
+  let startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    let result = await readFile(realmUrl, path, options);
+    if (result.ok) {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------

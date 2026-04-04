@@ -368,12 +368,15 @@ function buildToolResultsData(
 /**
  * Assemble the system prompt for a one-shot LLM call.
  * This is the same for all calls within a ticket.
+ *
+ * Uses the tool-use system prompt template (prompts/system.md). Tools are
+ * provided natively via the LLM API's tool definitions parameter, not
+ * embedded in the prompt text.
  */
 export function assembleSystemPrompt(
   options: AssembleSystemPromptOptions,
 ): string {
   let { context, loader } = options;
-  let actionSchema = loader.load('action-schema', {});
 
   let skills = context.skills.map((s: ResolvedSkill) => ({
     name: s.name,
@@ -381,25 +384,10 @@ export function assembleSystemPrompt(
     references: s.references ?? [],
   }));
 
-  let tools = (context.tools ?? []).map((t: ToolManifest) => ({
-    name: t.name,
-    description: t.description,
-    category: t.category,
-    outputFormat: t.outputFormat,
-    args: t.args.map((a) => ({
-      name: a.name,
-      type: a.type,
-      required: a.required,
-      description: a.description,
-    })),
-  }));
-
   return loader.load('system', {
-    actionSchema,
     targetRealmUrl: context.targetRealmUrl,
     testRealmUrl: context.testRealmUrl,
     skills,
-    tools,
   });
 }
 

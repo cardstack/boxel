@@ -8,6 +8,11 @@ import {
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
+  runFactoryImplement,
+  type ImplementConfig,
+  type ImplementResult,
+} from '../scripts/lib/factory-implement';
+import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
   type FactoryTargetRealmBootstrapResult,
@@ -25,6 +30,8 @@ export interface FactoryEntrypointOptions {
   targetRealmUrl: string | null;
   realmServerUrl: string | null;
   mode: FactoryEntrypointMode;
+  model?: string;
+  debug?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -47,6 +54,15 @@ export interface FactoryEntrypointBootstrapSummary {
   };
 }
 
+export interface FactoryEntrypointImplementSummary {
+  outcome: ImplementResult['outcome'];
+  iterations: number;
+  ticketId: string;
+  testRealmUrl: string;
+  message?: string;
+  toolCallCount: number;
+}
+
 export interface FactoryEntrypointSummary {
   command: 'factory:go';
   mode: FactoryEntrypointMode;
@@ -57,8 +73,9 @@ export interface FactoryEntrypointSummary {
   };
   bootstrap: FactoryEntrypointBootstrapSummary;
   actions: FactoryEntrypointAction[];
+  implement?: FactoryEntrypointImplementSummary;
   result: {
-    status: 'ready';
+    status: 'ready' | 'completed' | 'failed';
     nextStep: string;
   };
 }
@@ -76,6 +93,7 @@ export interface RunFactoryEntrypointDependencies {
     targetRealmUrl: string,
     options?: FactoryBootstrapOptions,
   ) => Promise<FactoryBootstrapResult>;
+  implement?: (config: ImplementConfig) => Promise<ImplementResult>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -89,8 +107,10 @@ export function getFactoryEntrypointUsage(): string {
     '  --target-realm-url <url>    Absolute URL for the target realm',
     '',
     'Options:',
-    '  --realm-server-url <url>   Explicit realm server URL for target realm bootstrap',
+    '  --realm-server-url <url>   Realm server URL (default: http://localhost:4201/)',
     '  --mode <mode>               One of: bootstrap, implement, resume',
+    '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
+    '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
     '',
     'Auth:',
@@ -98,8 +118,9 @@ export function getFactoryEntrypointUsage(): string {
     '  For public briefs, no auth setup is needed.',
     '  For private briefs, factory:go can authenticate via:',
     '    1. the active Boxel profile, or',
-    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD + REALM_SERVER_URL',
-    '  Target realm creation uses separate realm-server auth and post-create realm auth.',
+    '    2. MATRIX_URL + MATRIX_USERNAME + MATRIX_PASSWORD environment variables',
+    '  The realm server URL comes from --realm-server-url (default: http://localhost:4201/).',
+    '  It is never inferred from --target-realm-url or read from an environment variable.',
   ].join('\n');
 }
 
@@ -130,6 +151,12 @@ export function parseFactoryEntrypointArgs(
         mode: {
           type: 'string',
         },
+        model: {
+          type: 'string',
+        },
+        debug: {
+          type: 'boolean',
+        },
       },
     });
   } catch (error) {
@@ -153,12 +180,18 @@ export function parseFactoryEntrypointArgs(
       ? normalizeUrl(parsed.values['realm-server-url'], '--realm-server-url')
       : null;
   let mode = parseMode(parsed.values.mode);
+  let model =
+    typeof parsed.values.model === 'string'
+      ? parsed.values.model.trim() || undefined
+      : undefined;
 
   return {
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
     realmServerUrl,
     mode,
+    model,
+    debug: parsed.values.debug === true ? true : undefined,
   };
 }
 
@@ -205,7 +238,49 @@ export async function runFactoryEntrypoint(
     ).href,
   });
 
-  return buildFactoryEntrypointSummary(options, brief, targetRealm, artifacts);
+  let summary = buildFactoryEntrypointSummary(
+    options,
+    brief,
+    targetRealm,
+    artifacts,
+  );
+
+  // Run implement mode if requested
+  if (options.mode === 'implement') {
+    let implementFn = dependencies?.implement ?? runFactoryImplement;
+    let implementResult = await implementFn({
+      briefUrl: options.briefUrl,
+      targetRealmUrl: targetRealm.url,
+      realmServerUrl: targetRealm.serverUrl,
+      ownerUsername: targetRealm.ownerUsername,
+      authorization: targetRealm.authorization,
+      bootstrapResult: artifacts,
+      model: options.model,
+      debug: options.debug,
+      fetch: dependencies?.fetch,
+    });
+
+    summary.implement = {
+      outcome: implementResult.outcome,
+      iterations: implementResult.iterations,
+      ticketId: implementResult.ticketId,
+      testRealmUrl: implementResult.testRealmUrl,
+      message: implementResult.message,
+      toolCallCount: implementResult.toolCallLog.length,
+    };
+
+    let succeeded =
+      implementResult.outcome === 'tests_passed' ||
+      implementResult.outcome === 'done';
+    summary.result = {
+      status: succeeded ? 'completed' : 'failed',
+      nextStep: succeeded
+        ? 'advance-to-next-ticket'
+        : `implement-${implementResult.outcome}`,
+    };
+  }
+
+  return summary;
 }
 export function buildFactoryEntrypointSummary(
   options: FactoryEntrypointOptions,

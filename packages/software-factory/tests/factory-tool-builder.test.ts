@@ -66,6 +66,7 @@ function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
   return {
     targetRealmUrl: TARGET_REALM,
     testRealmUrl: TEST_REALM,
+    realmServerUrl: 'https://realms.example.test/',
     realmTokens: {
       [TARGET_REALM]: TARGET_TOKEN,
       [TEST_REALM]: TEST_TOKEN,
@@ -226,7 +227,7 @@ module('factory-tool-builder > write_file', function () {
     assert.strictEqual(requests[0].body, 'export default class MyCard {}');
   });
 
-  test('routes .ts file to writeModuleSource', async function (assert) {
+  test('routes .ts file to writeFile', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -264,7 +265,7 @@ module('factory-tool-builder > write_file', function () {
     assert.true(result.ok);
     assert.strictEqual(requests[0].url, `${TARGET_REALM}Card/1.json`);
     assert.strictEqual(requests[0].method, 'POST');
-    // writeModuleSource sends raw content as-is
+    // writeFile sends raw content as-is
     assert.strictEqual(requests[0].body, cardJson);
   });
 });

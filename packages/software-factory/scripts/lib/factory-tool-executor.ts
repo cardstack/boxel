@@ -5,10 +5,9 @@ import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
 import {
   ensureTrailingSlash,
-  readCardSource,
-  writeModuleSource,
-  deleteCard,
-  atomicOperation,
+  readFile,
+  writeFile,
+  deleteFile,
   searchRealm,
   createRealm,
   getServerSession,
@@ -347,15 +346,8 @@ export class ToolExecutor {
     toolName: string,
     toolArgs: Record<string, unknown>,
   ): void {
-    // realm-delete and realm-atomic with remove ops need extra care
+    // Extra validation for destructive realm operations
     if (toolName === 'realm-delete') {
-      let realmUrl = toolArgs['realm-url'];
-      if (typeof realmUrl === 'string') {
-        this.validateRealmTarget(toolName, realmUrl);
-      }
-    }
-
-    if (toolName === 'realm-atomic') {
       let realmUrl = toolArgs['realm-url'];
       if (typeof realmUrl === 'string') {
         this.validateRealmTarget(toolName, realmUrl);
@@ -436,7 +428,7 @@ export class ToolExecutor {
 
       switch (toolName) {
         case 'realm-read': {
-          let result = await readCardSource(
+          let result = await readFile(
             String(toolArgs['realm-url']),
             String(toolArgs['path']),
             fetchOptions,
@@ -447,7 +439,7 @@ export class ToolExecutor {
         }
 
         case 'realm-write': {
-          let result = await writeModuleSource(
+          let result = await writeFile(
             String(toolArgs['realm-url']),
             String(toolArgs['path']),
             String(toolArgs['content']),
@@ -459,24 +451,13 @@ export class ToolExecutor {
         }
 
         case 'realm-delete': {
-          let result = await deleteCard(
+          let result = await deleteFile(
             String(toolArgs['realm-url']),
             String(toolArgs['path']),
             fetchOptions,
           );
           ok = result.ok;
           output = ok ? result : { error: result.error };
-          break;
-        }
-
-        case 'realm-atomic': {
-          let result = await atomicOperation(
-            String(toolArgs['realm-url']),
-            String(toolArgs['operations']),
-            fetchOptions,
-          );
-          ok = result.ok;
-          output = ok ? result.response : { error: result.error };
           break;
         }
 
@@ -506,8 +487,10 @@ export class ToolExecutor {
             query,
             fetchOptions,
           );
-          ok = result !== undefined;
-          output = result ?? { error: 'Search failed' };
+          ok = result.ok;
+          output = result.ok
+            ? { data: result.data }
+            : { error: result.error, status: result.status };
           break;
         }
 
