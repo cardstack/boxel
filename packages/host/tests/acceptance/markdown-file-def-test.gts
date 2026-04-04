@@ -469,7 +469,8 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       },
       {
         timeout: 15000,
-        timeoutMessage: 'URL bar did not navigate to Pet/mango.json after click',
+        timeoutMessage:
+          'URL bar did not navigate to Pet/mango.json after click',
       },
     );
 
@@ -490,10 +491,14 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     assert
       .dom('[data-test-pet-atom]')
-      .exists('inline markdown card reference is restored after navigating back');
+      .exists(
+        'inline markdown card reference is restored after navigating back',
+      );
     assert
       .dom('[data-test-pet-embedded]')
-      .exists('block markdown card reference is restored after navigating back');
+      .exists(
+        'block markdown card reference is restored after navigating back',
+      );
   });
 
   test('interact mode shows overlays for markdown card references and clicking navigates', async function (assert) {
