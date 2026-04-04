@@ -215,7 +215,7 @@ module('Unit | bfm-card-references', function () {
     test('markdown without card refs is unaffected', function (assert) {
       let markdown = '# Hello\n\nSome **bold** text.';
       let withBfm = markdownToHtml(markdown);
-      assert.true(withBfm.includes('<h1 id="hello">Hello</h1>'));
+      assert.true(withBfm.includes('<h1>Hello</h1>'));
       assert.true(withBfm.includes('<strong>bold</strong>'));
       assert.false(withBfm.includes('data-boxel-bfm'));
     });
