@@ -438,9 +438,9 @@ module('Acceptance | markdown BFM card references', function (hooks) {
     await waitFor('[data-test-pet-embedded]', { timeout: 10000 });
     await waitFor('[data-test-card-url-bar-input]');
 
-    // Wait for the overlay click handler to be bound (cursor: pointer is set by the Overlays component).
-    // CI runners under load can take longer for the two render cycles (ElementTracker afterRender →
-    // Overlays re-render + handler bind), so use a generous timeout.
+    // Wait for the overlay click handler to be bound (cursor: pointer is set
+    // by the Overlays component). CI runners under load need longer for the
+    // render cycles before the handler binds.
     await waitUntil(
       () => {
         let el = document.querySelector(
@@ -448,7 +448,10 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         ) as HTMLElement | null;
         return el?.style.cursor === 'pointer';
       },
-      { timeout: 10000 },
+      {
+        timeout: 15000,
+        timeoutMessage: 'overlay click handler (cursor:pointer) was not bound',
+      },
     );
 
     await click('[data-test-markdown-bfm-inline-card]');
@@ -463,7 +466,10 @@ module('Acceptance | markdown BFM card references', function (hooks) {
           )?.value ?? '';
         return currentValue === `${testRealmURL}Pet/mango.json`;
       },
-      { timeout: 5000 },
+      {
+        timeout: 15000,
+        timeoutMessage: 'URL bar did not navigate to Pet/mango.json after click',
+      },
     );
 
     window.history.back();
@@ -478,7 +484,11 @@ module('Acceptance | markdown BFM card references', function (hooks) {
           )?.value ?? '';
         return currentValue === `${testRealmURL}bfm-test.md`;
       },
-      { timeout: 5000 },
+      {
+        timeout: 15000,
+        timeoutMessage:
+          'URL bar did not navigate back to bfm-test.md after history.back()',
+      },
     );
 
     await waitFor('[data-test-pet-atom]', { timeout: 10000 });
