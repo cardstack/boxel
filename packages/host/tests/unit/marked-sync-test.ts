@@ -11,7 +11,7 @@ module('Unit | marked-sync', function () {
     const result = markedSync(markdown);
 
     assert.true(
-      result.includes('<h1 id="hello">Hello</h1>'),
+      result.includes('<h1 id="user-content-hello">Hello</h1>'),
       'converts heading correctly (with auto-generated id)',
     );
     assert.true(
@@ -46,7 +46,7 @@ module('Unit | marked-sync', function () {
     const markdown = '# Hello <script>alert("XSS")</script>';
     const result = markdownToHtml(markdown);
 
-    assert.true(result.includes('id="hello-'), 'heading has auto-generated id');
+    assert.true(result.includes('id="user-content-hello-'), 'heading has auto-generated id');
     assert.true(
       result.includes('>Hello </h1>'),
       'heading content was preserved',
@@ -302,7 +302,7 @@ module('Unit | marked-sync', function () {
     const result = markedSync(markdown);
 
     assert.true(
-      result.includes('id="my-section-title"'),
+      result.includes('id="user-content-my-section-title"'),
       'heading has a slug-based id attribute',
     );
   });
@@ -346,7 +346,7 @@ module('Unit | marked-sync', function () {
     const result = markdownToHtml(markdown);
 
     assert.true(
-      result.includes('id="test-heading"'),
+      result.includes('id="user-content-test-heading"'),
       'heading ID survives DOMPurify sanitization',
     );
   });
