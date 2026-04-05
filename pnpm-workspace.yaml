@@ -180,6 +180,10 @@ catalog:
   macro-decorators: ^0.1.2
   magic-string: 0.25.9
   marked: ^12.0.1
+  marked-alert: ^2.1.2
+  marked-extended-tables: ^2.0.1
+  marked-footnote: ^1.4.0
+  marked-gfm-heading-id: ^3.2.0
   matrix-js-sdk: ^38.3.0
   mime-types: ^2.1.35
   moment: ^2.29.4
