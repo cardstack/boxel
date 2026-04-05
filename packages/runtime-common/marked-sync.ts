@@ -2,12 +2,33 @@ import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
 import { escapeHtml } from './helpers/html';
 import { bfmCardReferenceExtensions } from './bfm-card-references';
+import { markedKatexPlaceholder } from './bfm-math';
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+// These packages declare "type": "module" which causes TS1479 under Node16
+// module resolution (runtime-common lacks "type": "module"). Load via CJS.
+const markedAlert = require('marked-alert') as (
+  opts?: object,
+) => import('marked').MarkedExtension;
+const markedFootnote = require('marked-footnote') as (
+  opts?: object,
+) => import('marked').MarkedExtension;
+const markedExtendedTables =
+  require('marked-extended-tables/lib/index.cjs') as () => import('marked').MarkedExtension;
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
+import { gfmHeadingId } from 'marked-gfm-heading-id';
 import type * as _MonacoSDK from 'monaco-editor';
 type MonacoSDK = typeof _MonacoSDK;
 
 // Register BFM card reference extensions globally. This is additive and does
 // not conflict with the per-call renderer override in markedSync().
 marked.use({ extensions: bfmCardReferenceExtensions() });
+
+// Register community marked extensions for BFM layers 3+ (GFM enhancements).
+marked.use(gfmHeadingId({ prefix: 'user-content-' }));
+marked.use(markedAlert());
+marked.use(markedFootnote());
+marked.use(markedExtendedTables());
+marked.use(markedKatexPlaceholder());
 
 const DECORATIVE_BULLET_PATTERN =
   // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
@@ -101,6 +122,11 @@ export function markedSync(
     .use({
       renderer: {
         code(code, language = '') {
+          // Mermaid blocks are rendered client-side; emit a placeholder.
+          if (language === 'mermaid') {
+            return `<pre class="mermaid">${escapeHtml(code)}</pre>\n`;
+          }
+
           let highlighted = renderWithMonaco(code, language, options);
           if (highlighted) {
             return highlighted;

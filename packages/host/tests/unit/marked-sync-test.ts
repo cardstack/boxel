@@ -11,8 +11,8 @@ module('Unit | marked-sync', function () {
     const result = markedSync(markdown);
 
     assert.true(
-      result.includes('<h1>Hello</h1>'),
-      'converts heading correctly',
+      result.includes('<h1 id="user-content-hello">Hello</h1>'),
+      'converts heading correctly (with auto-generated id)',
     );
     assert.true(
       result.includes('<strong>Bold text</strong>'),
@@ -46,7 +46,14 @@ module('Unit | marked-sync', function () {
     const markdown = '# Hello <script>alert("XSS")</script>';
     const result = markdownToHtml(markdown);
 
-    assert.true(result.includes('<h1>Hello </h1>'), 'heading was preserved');
+    assert.true(
+      result.includes('id="user-content-hello-'),
+      'heading has auto-generated id',
+    );
+    assert.true(
+      result.includes('>Hello </h1>'),
+      'heading content was preserved',
+    );
   });
 
   test('markdownToHtml with sanitize=false', function (assert) {
@@ -54,7 +61,7 @@ module('Unit | marked-sync', function () {
     const result = markdownToHtml(markdown, { sanitize: false });
 
     assert.true(
-      result.includes('<h1>Hello <script>alert("XSS")</script></h1>'),
+      result.includes('<script>alert("XSS")</script></h1>'),
       'returns unsanitized HTML',
     );
   });
@@ -172,6 +179,178 @@ module('Unit | marked-sync', function () {
     assert.true(
       result.includes('<code>'),
       'escapes HTML tags within code fences tags',
+    );
+  });
+
+  // ── BFM Layer 3: GFM Alerts (marked-alert) ──
+
+  test('markedSync renders GFM note alert', function (assert) {
+    const markdown = '> [!NOTE]\n> This is a note.';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('markdown-alert'),
+      'output contains alert class',
+    );
+    assert.true(
+      result.includes('markdown-alert-note'),
+      'output contains note variant class',
+    );
+    assert.true(
+      result.includes('This is a note.'),
+      'alert content is rendered',
+    );
+  });
+
+  test('markedSync renders GFM warning alert', function (assert) {
+    const markdown = '> [!WARNING]\n> Be careful!';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('markdown-alert-warning'),
+      'output contains warning variant class',
+    );
+  });
+
+  // ── BFM Layer 3: Math / LaTeX (placeholder for lazy KaTeX) ──
+
+  test('markedSync renders inline math as placeholder', function (assert) {
+    const markdown = 'The formula $E = mc^2$ is famous.';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('class="math-placeholder"'),
+      'output contains math placeholder class',
+    );
+    assert.true(
+      result.includes('data-math="E = mc^2"'),
+      'placeholder carries math expression in data attribute',
+    );
+    assert.true(
+      result.includes('data-display="false"'),
+      'inline math has display=false',
+    );
+  });
+
+  test('markedSync renders block math as placeholder', function (assert) {
+    const markdown = '$$\nx^2 + y^2 = z^2\n$$';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('<div class="math-placeholder"'),
+      'block math uses a div placeholder',
+    );
+    assert.true(
+      result.includes('data-display="true"'),
+      'block math has display=true',
+    );
+  });
+
+  // ── BFM Layer 3: Mermaid diagram placeholder ──
+
+  test('markedSync renders mermaid code block as placeholder', function (assert) {
+    const markdown = '```mermaid\nflowchart TD\n    A --> B\n```';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('<pre class="mermaid">'),
+      'mermaid block uses mermaid class instead of data-code-language',
+    );
+    assert.true(
+      result.includes('flowchart TD'),
+      'mermaid source is preserved in placeholder',
+    );
+    assert.false(
+      result.includes('data-code-language'),
+      'mermaid block does not use code language attribute',
+    );
+  });
+
+  // ── BFM Layer 3: Footnotes (marked-footnote) ──
+
+  test('markedSync renders footnotes', function (assert) {
+    const markdown =
+      'Statement with a footnote[^1].\n\n[^1]: This is the footnote.';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('data-footnote-ref'),
+      'output contains footnote reference',
+    );
+    assert.true(
+      result.includes('This is the footnote.'),
+      'footnote content is rendered',
+    );
+  });
+
+  // ── BFM Layer 3: Extended Tables (marked-extended-tables) ──
+
+  test('markedSync renders tables with colspan', function (assert) {
+    const markdown = `
+| H1      | H2      | H3      |
+| ------- | ------- | ------- |
+| This spans three ||          |
+| A       | B       | C       |
+`;
+    const result = markedSync(markdown);
+
+    assert.true(result.includes('<table>'), 'table is rendered');
+    assert.true(result.includes('colspan'), 'colspan attribute is present');
+  });
+
+  // ── BFM Layer 3: Heading IDs (marked-gfm-heading-id) ──
+
+  test('markedSync adds id attributes to headings', function (assert) {
+    const markdown = '## My Section Title';
+    const result = markedSync(markdown);
+
+    assert.true(
+      result.includes('id="user-content-my-section-title"'),
+      'heading has a slug-based id attribute',
+    );
+  });
+
+  test('markdownToHtml preserves GFM alert markup through sanitization', function (assert) {
+    const markdown = '> [!NOTE]\n> Important info.';
+    const result = markdownToHtml(markdown);
+
+    assert.true(
+      result.includes('markdown-alert'),
+      'alert markup survives DOMPurify sanitization',
+    );
+  });
+
+  test('markdownToHtml preserves math placeholder through sanitization', function (assert) {
+    const markdown = 'Inline: $x^2$';
+    const result = markdownToHtml(markdown);
+
+    assert.true(
+      result.includes('math-placeholder'),
+      'math placeholder survives DOMPurify sanitization',
+    );
+    assert.true(
+      result.includes('data-math'),
+      'data-math attribute survives DOMPurify sanitization',
+    );
+  });
+
+  test('markdownToHtml preserves footnote markup through sanitization', function (assert) {
+    const markdown = 'Text[^1].\n\n[^1]: Footnote content.';
+    const result = markdownToHtml(markdown);
+
+    assert.true(
+      result.includes('Footnote content.'),
+      'footnote content survives DOMPurify sanitization',
+    );
+  });
+
+  test('markdownToHtml preserves heading IDs through sanitization', function (assert) {
+    const markdown = '## Test Heading';
+    const result = markdownToHtml(markdown);
+
+    assert.true(
+      result.includes('id="user-content-test-heading"'),
+      'heading ID survives DOMPurify sanitization',
     );
   });
 });

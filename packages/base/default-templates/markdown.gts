@@ -8,9 +8,12 @@ import { modifier } from 'ember-modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  extractMermaidBlocks,
   hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
+  processKatexPlaceholders,
+  replaceMermaidSvgs,
   resolveCardReference,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
@@ -102,19 +105,43 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     // control for styling/overflow behavior. Re-sanitizing the result was
     // adding avoidable DOMParser churn during prerender and acceptance tests.
     html = wrapTablesHtml(html);
-    // Strip text content from card-type BFM refs so there is no flash of raw
-    // URLs. The URL is preserved in the data attribute; the modifier will
-    // inject fallback text for refs that can't be resolved to a card.
+
+    // Post-process the HTML string to render math, mermaid, and strip card ref
+    // text. This must happen at the HTML-string level (not via imperative DOM
+    // mutation) so that Glimmer's autotracking sees the final content and does
+    // not overwrite it on re-render.
+    let hasCardRefs = html.includes('data-boxel-bfm-type="card"');
+    let katex = html.includes('math-placeholder') ? this.katexModule : null;
+    let mermaidSvgs = html.includes('<pre class="mermaid">')
+      ? this.mermaidSvgs
+      : null;
+
     if (
       typeof DOMParser !== 'undefined' &&
-      html.includes('data-boxel-bfm-type="card"')
+      (hasCardRefs || katex || (mermaidSvgs && mermaidSvgs.size))
     ) {
       let doc = new DOMParser().parseFromString(html, 'text/html');
-      doc
-        .querySelectorAll('[data-boxel-bfm-type="card"]')
-        .forEach((el) => (el.textContent = ''));
+
+      // Strip text content from card-type BFM refs so there is no flash of raw
+      // URLs. The URL is preserved in the data attribute; the modifier will
+      // inject fallback text for refs that can't be resolved to a card.
+      if (hasCardRefs) {
+        doc
+          .querySelectorAll('[data-boxel-bfm-type="card"]')
+          .forEach((el) => (el.textContent = ''));
+      }
+
+      if (katex) {
+        processKatexPlaceholders(doc, katex);
+      }
+
+      if (mermaidSvgs && mermaidSvgs.size) {
+        replaceMermaidSvgs(doc, mermaidSvgs);
+      }
+
       html = doc.body.innerHTML;
     }
+
     return htmlSafe(html);
   }
 
@@ -190,9 +217,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             ),
           )) {
             let url =
-              el.dataset.boxelBfmInlineRef ||
-              el.dataset.boxelBfmBlockRef ||
-              '';
+              el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
             if (
               !resolvedEls.has(el) &&
               el.childElementCount === 0 &&
@@ -256,6 +281,76 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       return () => observer.disconnect();
     },
   );
+
+  // ── KaTeX lazy loading ──
+  @tracked _katex: any = null;
+
+  get katexModule() {
+    if (this.isPrerenderContext) {
+      return null;
+    }
+    if (!this._katex) {
+      this._loadKatexTask.perform();
+    }
+    return this._katex;
+  }
+
+  _loadKatexTask = task({ drop: true }, async () => {
+    let loadKatex = (globalThis as any).__loadKatex;
+    if (typeof loadKatex !== 'function') {
+      return;
+    }
+    this._katex = await loadKatex();
+  });
+
+  // ── Mermaid lazy loading + pre-rendering ──
+  @tracked _mermaidSvgs = new Map<string, string>();
+  private _mermaidIdCounter = 0;
+
+  get mermaidSvgs() {
+    if (this.isPrerenderContext) {
+      return this._mermaidSvgs;
+    }
+    if (!this._mermaidSvgs.size) {
+      this._renderMermaidTask.perform();
+    }
+    return this._mermaidSvgs;
+  }
+
+  _renderMermaidTask = task({ drop: true }, async () => {
+    let content = this.args.content || '';
+    let blocks = extractMermaidBlocks(content);
+    if (!blocks.length) {
+      return;
+    }
+
+    let loadMermaid = (globalThis as any).__loadMermaid;
+    if (typeof loadMermaid !== 'function') {
+      return;
+    }
+
+    let mermaid = await loadMermaid();
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'default',
+    });
+
+    let svgs = new Map<string, string>();
+    for (let block of blocks) {
+      try {
+        let { svg } = await mermaid.render(
+          `mermaid-${++this._mermaidIdCounter}`,
+          block,
+        );
+        svgs.set(block, svg);
+      } catch {
+        // skip failed blocks
+      }
+    }
+
+    this._mermaidSvgs = svgs;
+  });
 
   getCardComponent = (card: BaseDef) => getComponent(card);
 
@@ -552,6 +647,27 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
         .markdown-content :deep(tr:not(:last-child) td) {
           border-bottom: 1px solid var(--md-border);
+        }
+
+        /* Mermaid diagrams */
+        .markdown-content :deep(pre.mermaid) {
+          background-color: transparent;
+          color: inherit;
+          text-align: center;
+          padding: var(--boxel-sp);
+          border-radius: var(--boxel-border-radius-xl);
+          overflow-x: auto;
+        }
+
+        .markdown-content :deep(pre.mermaid svg) {
+          max-width: 100%;
+          height: auto;
+        }
+
+        /* Mermaid error display */
+        .markdown-content :deep(pre.mermaid[data-processed='true'] .error-icon),
+        .markdown-content :deep(pre.mermaid #d .error-text) {
+          fill: var(--boxel-error-200, #b00020);
         }
 
         /* BFM references (card, file, etc.) */
