@@ -303,6 +303,16 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '',
             ':card[https://nonexistent.example/Card/missing]',
           ].join('\n'),
+          'mermaid-test.md': [
+            '# Mermaid Test',
+            '',
+            '```mermaid',
+            'flowchart TD',
+            '    A[Start] --> B{Decision}',
+            '    B -->|Yes| C[Result 1]',
+            '    B -->|No| D[Result 2]',
+            '```',
+          ].join('\n'),
         },
       }),
     );
@@ -538,5 +548,29 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         `[data-test-stack-card="${testRealmURL}Pet/jackie"] [data-test-card-format="isolated"]`,
       )
       .exists('clicking a block markdown card reference opens the target card');
+  });
+
+  test('mermaid code blocks are rendered as SVG diagrams', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}mermaid-test.md`,
+    });
+
+    // Wait for mermaid to lazy-load and render the diagram into an SVG.
+    await waitUntil(() => document.querySelector('pre.mermaid svg') !== null, {
+      timeout: 15000,
+      timeoutMessage: 'Mermaid diagram was not rendered as SVG within timeout',
+    });
+
+    assert
+      .dom('pre.mermaid svg')
+      .exists('mermaid code block is rendered as an SVG diagram');
+
+    assert
+      .dom('pre.mermaid')
+      .doesNotIncludeText(
+        'flowchart TD',
+        'raw mermaid source is replaced by rendered SVG',
+      );
   });
 });

@@ -190,9 +190,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             ),
           )) {
             let url =
-              el.dataset.boxelBfmInlineRef ||
-              el.dataset.boxelBfmBlockRef ||
-              '';
+              el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
             if (
               !resolvedEls.has(el) &&
               el.childElementCount === 0 &&
@@ -257,12 +255,58 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     },
   );
 
+  renderMermaidDiagrams = modifier(
+    (element: HTMLElement, _positional: unknown[]) => {
+      let mermaidNodes =
+        element.querySelectorAll<HTMLPreElement>('pre.mermaid');
+      if (!mermaidNodes.length) {
+        return;
+      }
+
+      let cancelled = false;
+
+      let render = async () => {
+        let loadMermaid = (globalThis as any).__loadMermaid;
+        if (typeof loadMermaid !== 'function') {
+          return;
+        }
+        try {
+          let mermaid = await loadMermaid();
+          if (cancelled) return;
+
+          mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            theme: 'default',
+          });
+
+          // mermaid.run() mutates the nodes in-place, replacing the <pre>
+          // text content with rendered SVG.
+          await mermaid.run({
+            nodes: Array.from(mermaidNodes),
+            suppressErrors: true,
+          });
+        } catch (error) {
+          console.error('[markdown] Mermaid rendering failed:', error);
+          // On failure the placeholder <pre> with source text remains visible.
+        }
+      };
+
+      scheduleOnce('afterRender', null, render);
+
+      return () => {
+        cancelled = true;
+      };
+    },
+  );
+
   getCardComponent = (card: BaseDef) => getComponent(card);
 
   <template>
     <div
       class='markdown-content'
       {{this.captureCardSlots this.renderedHtml @linkedCards}}
+      {{this.renderMermaidDiagrams this.renderedHtml}}
     >
       {{this.renderedHtml}}
     </div>
@@ -552,6 +596,27 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
         .markdown-content :deep(tr:not(:last-child) td) {
           border-bottom: 1px solid var(--md-border);
+        }
+
+        /* Mermaid diagrams */
+        .markdown-content :deep(pre.mermaid) {
+          background-color: transparent;
+          color: inherit;
+          text-align: center;
+          padding: var(--boxel-sp);
+          border-radius: var(--boxel-border-radius-xl);
+          overflow-x: auto;
+        }
+
+        .markdown-content :deep(pre.mermaid svg) {
+          max-width: 100%;
+          height: auto;
+        }
+
+        /* Mermaid error display */
+        .markdown-content :deep(pre.mermaid[data-processed='true'] .error-icon),
+        .markdown-content :deep(pre.mermaid #d .error-text) {
+          fill: var(--boxel-error-200, #b00020);
         }
 
         /* BFM references (card, file, etc.) */
