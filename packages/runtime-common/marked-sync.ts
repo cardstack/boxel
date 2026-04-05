@@ -6,10 +6,12 @@ import { markedKatexPlaceholder } from './bfm-math';
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 // These packages declare "type": "module" which causes TS1479 under Node16
 // module resolution (runtime-common lacks "type": "module"). Load via CJS.
-const markedAlert =
-  require('marked-alert') as (opts?: object) => import('marked').MarkedExtension;
-const markedFootnote =
-  require('marked-footnote') as (opts?: object) => import('marked').MarkedExtension;
+const markedAlert = require('marked-alert') as (
+  opts?: object,
+) => import('marked').MarkedExtension;
+const markedFootnote = require('marked-footnote') as (
+  opts?: object,
+) => import('marked').MarkedExtension;
 const markedExtendedTables =
   require('marked-extended-tables/lib/index.cjs') as () => import('marked').MarkedExtension;
 /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
