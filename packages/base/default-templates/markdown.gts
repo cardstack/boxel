@@ -255,90 +255,82 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     },
   );
 
+  private _renderMath = () => {
+    this._mathRenderPromise = this._doRenderMath();
+  };
+  private _mathRenderPromise: Promise<void> | undefined;
+
+  private async _doRenderMath() {
+    let element = this._contentElement;
+    if (!element) return;
+    let mathNodes = element.querySelectorAll<HTMLElement>('.math-placeholder');
+    if (!mathNodes.length) return;
+
+    let loadKatex = (globalThis as any).__loadKatex;
+    if (typeof loadKatex !== 'function') {
+      return;
+    }
+    try {
+      let katex = await loadKatex();
+      for (let el of Array.from(mathNodes)) {
+        if (!el.isConnected) continue;
+        let math = el.getAttribute('data-math');
+        if (!math) continue;
+        let displayMode = el.getAttribute('data-display') === 'true';
+        katex.render(math, el, {
+          displayMode,
+          throwOnError: false,
+        });
+      }
+    } catch (error) {
+      console.error('[markdown] KaTeX rendering failed:', error);
+    }
+  }
+
+  private _renderMermaid = () => {
+    this._mermaidRenderPromise = this._doRenderMermaid();
+  };
+  private _mermaidRenderPromise: Promise<void> | undefined;
+
+  private async _doRenderMermaid() {
+    let element = this._contentElement;
+    if (!element) return;
+    let mermaidNodes = element.querySelectorAll<HTMLPreElement>('pre.mermaid');
+    if (!mermaidNodes.length) return;
+
+    let loadMermaid = (globalThis as any).__loadMermaid;
+    if (typeof loadMermaid !== 'function') {
+      return;
+    }
+    try {
+      let mermaid = await loadMermaid();
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'default',
+      });
+      await mermaid.run({
+        nodes: Array.from(mermaidNodes),
+        suppressErrors: true,
+      });
+    } catch (error) {
+      console.error('[markdown] Mermaid rendering failed:', error);
+    }
+  }
+
+  private _contentElement: HTMLElement | null = null;
+
   renderMathExpressions = modifier(
     (element: HTMLElement, _positional: unknown[]) => {
-      let mathNodes =
-        element.querySelectorAll<HTMLElement>('.math-placeholder');
-      if (!mathNodes.length) {
-        return;
-      }
-
-      let cancelled = false;
-
-      let render = async () => {
-        let loadKatex = (globalThis as any).__loadKatex;
-        if (typeof loadKatex !== 'function') {
-          return;
-        }
-        try {
-          let katex = await loadKatex();
-          if (cancelled) return;
-
-          for (let el of Array.from(mathNodes)) {
-            let math = el.getAttribute('data-math');
-            if (!math) continue;
-            let displayMode = el.getAttribute('data-display') === 'true';
-            katex.render(math, el, {
-              displayMode,
-              throwOnError: false,
-            });
-          }
-        } catch (error) {
-          console.error('[markdown] KaTeX rendering failed:', error);
-          // On failure the placeholder with raw LaTeX source remains visible.
-        }
-      };
-
-      scheduleOnce('afterRender', null, render);
-
-      return () => {
-        cancelled = true;
-      };
+      this._contentElement = element;
+      scheduleOnce('afterRender', this, this._renderMath);
     },
   );
 
   renderMermaidDiagrams = modifier(
     (element: HTMLElement, _positional: unknown[]) => {
-      let mermaidNodes =
-        element.querySelectorAll<HTMLPreElement>('pre.mermaid');
-      if (!mermaidNodes.length) {
-        return;
-      }
-
-      let cancelled = false;
-
-      let render = async () => {
-        let loadMermaid = (globalThis as any).__loadMermaid;
-        if (typeof loadMermaid !== 'function') {
-          return;
-        }
-        try {
-          let mermaid = await loadMermaid();
-          if (cancelled) return;
-
-          mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: 'strict',
-            theme: 'default',
-          });
-
-          // mermaid.run() mutates the nodes in-place, replacing the <pre>
-          // text content with rendered SVG.
-          await mermaid.run({
-            nodes: Array.from(mermaidNodes),
-            suppressErrors: true,
-          });
-        } catch (error) {
-          console.error('[markdown] Mermaid rendering failed:', error);
-          // On failure the placeholder <pre> with source text remains visible.
-        }
-      };
-
-      scheduleOnce('afterRender', null, render);
-
-      return () => {
-        cancelled = true;
-      };
+      this._contentElement = element;
+      scheduleOnce('afterRender', this, this._renderMermaid);
     },
   );
 
