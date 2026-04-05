@@ -15,9 +15,7 @@ declare module '@babel/plugin-transform-typescript' {
 
 declare module 'marked-gfm-heading-id' {
   import type { MarkedExtension } from 'marked';
-  export function gfmHeadingId(options?: {
-    prefix?: string;
-  }): MarkedExtension;
+  export function gfmHeadingId(options?: { prefix?: string }): MarkedExtension;
   export interface HeadingData {
     level: number;
     text: string;
