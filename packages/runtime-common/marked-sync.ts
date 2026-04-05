@@ -5,9 +5,11 @@ import { bfmCardReferenceExtensions } from './bfm-card-references';
 import markedAlert from 'marked-alert';
 import markedFootnote from 'marked-footnote';
 import { markedKatexPlaceholder } from './bfm-math';
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 // marked-extended-tables's ESM export isn't resolved by webpack; load via CJS.
-// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-const markedExtendedTables = require('marked-extended-tables/lib/index.cjs') as () => import('marked').MarkedExtension;
+const markedExtendedTables =
+  require('marked-extended-tables/lib/index.cjs') as () => import('marked').MarkedExtension;
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 import { gfmHeadingId } from 'marked-gfm-heading-id';
 import type * as _MonacoSDK from 'monaco-editor';
 type MonacoSDK = typeof _MonacoSDK;

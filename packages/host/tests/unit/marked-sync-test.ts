@@ -46,9 +46,10 @@ module('Unit | marked-sync', function () {
     const markdown = '# Hello <script>alert("XSS")</script>';
     const result = markdownToHtml(markdown);
 
+    assert.true(result.includes('id="hello-'), 'heading has auto-generated id');
     assert.true(
-      result.includes('id="hello-') && result.includes('>Hello </h1>'),
-      'heading was preserved with auto-generated id',
+      result.includes('>Hello </h1>'),
+      'heading content was preserved',
     );
   });
 
@@ -290,14 +291,8 @@ module('Unit | marked-sync', function () {
 `;
     const result = markedSync(markdown);
 
-    assert.true(
-      result.includes('<table>'),
-      'table is rendered',
-    );
-    assert.true(
-      result.includes('colspan'),
-      'colspan attribute is present',
-    );
+    assert.true(result.includes('<table>'), 'table is rendered');
+    assert.true(result.includes('colspan'), 'colspan attribute is present');
   });
 
   // ── BFM Layer 3: Heading IDs (marked-gfm-heading-id) ──
@@ -337,8 +332,7 @@ module('Unit | marked-sync', function () {
   });
 
   test('markdownToHtml preserves footnote markup through sanitization', function (assert) {
-    const markdown =
-      'Text[^1].\n\n[^1]: Footnote content.';
+    const markdown = 'Text[^1].\n\n[^1]: Footnote content.';
     const result = markdownToHtml(markdown);
 
     assert.true(

@@ -252,7 +252,10 @@ module('Unit | bfm-card-references', function () {
         ),
         'has block ref',
       );
-      assert.true(html.includes('<h1 id="title">Title</h1>'), 'heading preserved');
+      assert.true(
+        html.includes('<h1 id="title">Title</h1>'),
+        'heading preserved',
+      );
     });
   });
 });
