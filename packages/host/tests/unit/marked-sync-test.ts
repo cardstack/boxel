@@ -46,7 +46,10 @@ module('Unit | marked-sync', function () {
     const markdown = '# Hello <script>alert("XSS")</script>';
     const result = markdownToHtml(markdown);
 
-    assert.true(result.includes('id="user-content-hello-'), 'heading has auto-generated id');
+    assert.true(
+      result.includes('id="user-content-hello-'),
+      'heading has auto-generated id',
+    );
     assert.true(
       result.includes('>Hello </h1>'),
       'heading content was preserved',
