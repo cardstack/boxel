@@ -262,16 +262,27 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
   private async _doRenderMath() {
     let element = this._contentElement;
-    if (!element) return;
+    if (!element) {
+      console.debug('[markdown] KaTeX: no content element');
+      return;
+    }
     let mathNodes = element.querySelectorAll<HTMLElement>('.math-placeholder');
-    if (!mathNodes.length) return;
+    if (!mathNodes.length) {
+      console.debug('[markdown] KaTeX: no .math-placeholder nodes found');
+      return;
+    }
 
     let loadKatex = (globalThis as any).__loadKatex;
     if (typeof loadKatex !== 'function') {
+      console.debug(
+        '[markdown] KaTeX: __loadKatex not available on globalThis',
+      );
       return;
     }
     try {
+      console.debug('[markdown] KaTeX: loading…');
       let katex = await loadKatex();
+      console.debug('[markdown] KaTeX: loaded, rendering', mathNodes.length);
       for (let el of Array.from(mathNodes)) {
         if (!el.isConnected) continue;
         let math = el.getAttribute('data-math');
@@ -294,16 +305,30 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
   private async _doRenderMermaid() {
     let element = this._contentElement;
-    if (!element) return;
+    if (!element) {
+      console.debug('[markdown] Mermaid: no content element');
+      return;
+    }
     let mermaidNodes = element.querySelectorAll<HTMLPreElement>('pre.mermaid');
-    if (!mermaidNodes.length) return;
+    if (!mermaidNodes.length) {
+      console.debug('[markdown] Mermaid: no pre.mermaid nodes found');
+      return;
+    }
 
     let loadMermaid = (globalThis as any).__loadMermaid;
     if (typeof loadMermaid !== 'function') {
+      console.debug(
+        '[markdown] Mermaid: __loadMermaid not available on globalThis',
+      );
       return;
     }
     try {
+      console.debug('[markdown] Mermaid: loading…');
       let mermaid = await loadMermaid();
+      console.debug(
+        '[markdown] Mermaid: loaded, rendering',
+        mermaidNodes.length,
+      );
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: 'strict',
@@ -322,6 +347,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
   renderMathExpressions = modifier(
     (element: HTMLElement, _positional: unknown[]) => {
+      console.debug('[markdown] math modifier triggered');
       this._contentElement = element;
       scheduleOnce('afterRender', this, this._renderMath);
     },
@@ -329,6 +355,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
   renderMermaidDiagrams = modifier(
     (element: HTMLElement, _positional: unknown[]) => {
+      console.debug('[markdown] mermaid modifier triggered');
       this._contentElement = element;
       scheduleOnce('afterRender', this, this._renderMermaid);
     },
