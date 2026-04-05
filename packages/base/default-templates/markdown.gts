@@ -8,16 +8,14 @@ import { modifier } from 'ember-modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  extractMermaidBlocks,
   hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
+  processKatexPlaceholders,
+  replaceMermaidSvgs,
   resolveCardReference,
 } from '@cardstack/runtime-common';
-import { processKatexPlaceholders } from '@cardstack/runtime-common/bfm-math-render';
-import {
-  extractMermaidBlocks,
-  replaceMermaidSvgs,
-} from '@cardstack/runtime-common/bfm-mermaid-render';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
 import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
