@@ -275,8 +275,8 @@ module('Unit | bfm-card-references', function () {
         'has block ref',
       );
       assert.true(
-        html.includes('<h1 id="title">Title</h1>'),
-        'heading preserved',
+        html.includes('<h1 id="user-content-title">Title</h1>'),
+        'heading preserved with id',
       );
     });
   });
