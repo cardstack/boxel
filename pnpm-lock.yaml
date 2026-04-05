@@ -474,6 +474,9 @@ catalogs:
     jsonwebtoken:
       specifier: 9.0.3
       version: 9.0.3
+    katex:
+      specifier: ^0.16.44
+      version: 0.16.44
     koa:
       specifier: ^2.14.1
       version: 2.16.3
@@ -2151,6 +2154,9 @@ importers:
       indefinite:
         specifier: 'catalog:'
         version: 2.5.2
+      katex:
+        specifier: 'catalog:'
+        version: 0.16.44
       loader.js:
         specifier: 'catalog:'
         version: 4.7.0

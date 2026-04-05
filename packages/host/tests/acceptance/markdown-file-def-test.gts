@@ -313,6 +313,15 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '    B -->|No| D[Result 2]',
             '```',
           ].join('\n'),
+          'math-test.md': [
+            '# Math Test',
+            '',
+            'The formula $E = mc^2$ is famous.',
+            '',
+            '$$',
+            'x^2 + y^2 = z^2',
+            '$$',
+          ].join('\n'),
         },
       }),
     );
@@ -571,6 +580,34 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       .doesNotIncludeText(
         'flowchart TD',
         'raw mermaid source is replaced by rendered SVG',
+      );
+  });
+
+  test('math placeholders are rendered with KaTeX', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}math-test.md`,
+    });
+
+    // Wait for KaTeX to lazy-load and render the math expressions.
+    await waitUntil(
+      () => document.querySelector('.math-placeholder .katex') !== null,
+      {
+        timeout: 15000,
+        timeoutMessage: 'KaTeX did not render math expressions within timeout',
+      },
+    );
+
+    assert
+      .dom('.math-placeholder .katex')
+      .exists('math placeholder is rendered with KaTeX');
+
+    // Inline math should not contain the raw LaTeX source as visible text
+    assert
+      .dom('.math-placeholder')
+      .doesNotIncludeText(
+        '$E = mc^2$',
+        'raw LaTeX source is replaced by rendered math',
       );
   });
 });

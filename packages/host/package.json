@@ -160,6 +160,7 @@
     "glimmer-scoped-css": "catalog:",
     "ignore": "catalog:",
     "indefinite": "catalog:",
+    "katex": "catalog:",
     "loader.js": "catalog:",
     "lodash": "catalog:",
     "loglevel": "catalog:",
