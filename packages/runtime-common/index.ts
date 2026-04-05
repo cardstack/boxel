@@ -243,6 +243,8 @@ export * from './catalog';
 export * from './commands';
 export * from './card-reference-resolver';
 export * from './bfm-card-references';
+export * from './bfm-math-render';
+export * from './bfm-mermaid-render';
 export * from './constants';
 export * from './helpers/const';
 export * from './document';
