@@ -50,4 +50,16 @@ declare module '@ember/component' {
 // incorporate
 import '../../runtime-common/global';
 
+declare module 'marked-gfm-heading-id' {
+  import type { MarkedExtension } from 'marked';
+  export function gfmHeadingId(options?: { prefix?: string }): MarkedExtension;
+  export interface HeadingData {
+    level: number;
+    text: string;
+    id: string;
+  }
+  export function getHeadingList(): HeadingData[];
+  export function resetHeadings(): void;
+}
+
 import './matrix-js-sdk';
