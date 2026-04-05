@@ -13,6 +13,11 @@ import {
   preloadMarkdownLanguages,
   resolveCardReference,
 } from '@cardstack/runtime-common';
+import { processKatexPlaceholders } from '@cardstack/runtime-common/bfm-math-render';
+import {
+  extractMermaidBlocks,
+  replaceMermaidSvgs,
+} from '@cardstack/runtime-common/bfm-mermaid-render';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
 import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
@@ -102,19 +107,43 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     // control for styling/overflow behavior. Re-sanitizing the result was
     // adding avoidable DOMParser churn during prerender and acceptance tests.
     html = wrapTablesHtml(html);
-    // Strip text content from card-type BFM refs so there is no flash of raw
-    // URLs. The URL is preserved in the data attribute; the modifier will
-    // inject fallback text for refs that can't be resolved to a card.
+
+    // Post-process the HTML string to render math, mermaid, and strip card ref
+    // text. This must happen at the HTML-string level (not via imperative DOM
+    // mutation) so that Glimmer's autotracking sees the final content and does
+    // not overwrite it on re-render.
+    let hasCardRefs = html.includes('data-boxel-bfm-type="card"');
+    let katex = html.includes('math-placeholder') ? this.katexModule : null;
+    let mermaidSvgs = html.includes('<pre class="mermaid">')
+      ? this.mermaidSvgs
+      : null;
+
     if (
       typeof DOMParser !== 'undefined' &&
-      html.includes('data-boxel-bfm-type="card"')
+      (hasCardRefs || katex || (mermaidSvgs && mermaidSvgs.size))
     ) {
       let doc = new DOMParser().parseFromString(html, 'text/html');
-      doc
-        .querySelectorAll('[data-boxel-bfm-type="card"]')
-        .forEach((el) => (el.textContent = ''));
+
+      // Strip text content from card-type BFM refs so there is no flash of raw
+      // URLs. The URL is preserved in the data attribute; the modifier will
+      // inject fallback text for refs that can't be resolved to a card.
+      if (hasCardRefs) {
+        doc
+          .querySelectorAll('[data-boxel-bfm-type="card"]')
+          .forEach((el) => (el.textContent = ''));
+      }
+
+      if (katex) {
+        processKatexPlaceholders(doc, katex);
+      }
+
+      if (mermaidSvgs && mermaidSvgs.size) {
+        replaceMermaidSvgs(doc, mermaidSvgs);
+      }
+
       html = doc.body.innerHTML;
     }
+
     return htmlSafe(html);
   }
 
@@ -255,111 +284,75 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     },
   );
 
-  private _renderMath = () => {
-    this._mathRenderPromise = this._doRenderMath();
-  };
-  private _mathRenderPromise: Promise<void> | undefined;
+  // ── KaTeX lazy loading ──
+  @tracked _katex: any = null;
 
-  private async _doRenderMath() {
-    let element = this._contentElement;
-    if (!element) {
-      console.debug('[markdown] KaTeX: no content element');
-      return;
+  get katexModule() {
+    if (this.isPrerenderContext) {
+      return null;
     }
-    let mathNodes = element.querySelectorAll<HTMLElement>('.math-placeholder');
-    if (!mathNodes.length) {
-      console.debug('[markdown] KaTeX: no .math-placeholder nodes found');
-      return;
+    if (!this._katex) {
+      this._loadKatexTask.perform();
     }
-
-    let loadKatex = (globalThis as any).__loadKatex;
-    if (typeof loadKatex !== 'function') {
-      console.debug(
-        '[markdown] KaTeX: __loadKatex not available on globalThis',
-      );
-      return;
-    }
-    try {
-      console.debug('[markdown] KaTeX: loading…');
-      let katex = await loadKatex();
-      console.debug('[markdown] KaTeX: loaded, rendering', mathNodes.length);
-      for (let el of Array.from(mathNodes)) {
-        if (!el.isConnected) continue;
-        let math = el.getAttribute('data-math');
-        if (!math) continue;
-        let displayMode = el.getAttribute('data-display') === 'true';
-        katex.render(math, el, {
-          displayMode,
-          throwOnError: false,
-        });
-      }
-    } catch (error) {
-      console.error('[markdown] KaTeX rendering failed:', error);
-    }
+    return this._katex;
   }
 
-  private _renderMermaid = () => {
-    this._mermaidRenderPromise = this._doRenderMermaid();
-  };
-  private _mermaidRenderPromise: Promise<void> | undefined;
-
-  private async _doRenderMermaid() {
-    let element = this._contentElement;
-    if (!element) {
-      console.debug('[markdown] Mermaid: no content element');
+  _loadKatexTask = task({ drop: true }, async () => {
+    let loadKatex = (globalThis as any).__loadKatex;
+    if (typeof loadKatex !== 'function') {
       return;
     }
-    let mermaidNodes = element.querySelectorAll<HTMLPreElement>('pre.mermaid');
-    if (!mermaidNodes.length) {
-      console.debug('[markdown] Mermaid: no pre.mermaid nodes found');
+    this._katex = await loadKatex();
+  });
+
+  // ── Mermaid lazy loading + pre-rendering ──
+  @tracked _mermaidSvgs = new Map<string, string>();
+  private _mermaidIdCounter = 0;
+
+  get mermaidSvgs() {
+    if (this.isPrerenderContext) {
+      return this._mermaidSvgs;
+    }
+    if (!this._mermaidSvgs.size) {
+      this._renderMermaidTask.perform();
+    }
+    return this._mermaidSvgs;
+  }
+
+  _renderMermaidTask = task({ drop: true }, async () => {
+    let content = this.args.content || '';
+    let blocks = extractMermaidBlocks(content);
+    if (!blocks.length) {
       return;
     }
 
     let loadMermaid = (globalThis as any).__loadMermaid;
     if (typeof loadMermaid !== 'function') {
-      console.debug(
-        '[markdown] Mermaid: __loadMermaid not available on globalThis',
-      );
       return;
     }
-    try {
-      console.debug('[markdown] Mermaid: loading…');
-      let mermaid = await loadMermaid();
-      console.debug(
-        '[markdown] Mermaid: loaded, rendering',
-        mermaidNodes.length,
-      );
-      mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: 'default',
-      });
-      await mermaid.run({
-        nodes: Array.from(mermaidNodes),
-        suppressErrors: true,
-      });
-    } catch (error) {
-      console.error('[markdown] Mermaid rendering failed:', error);
+
+    let mermaid = await loadMermaid();
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'default',
+    });
+
+    let svgs = new Map<string, string>();
+    for (let block of blocks) {
+      try {
+        let { svg } = await mermaid.render(
+          `mermaid-${++this._mermaidIdCounter}`,
+          block,
+        );
+        svgs.set(block, svg);
+      } catch {
+        // skip failed blocks
+      }
     }
-  }
 
-  private _contentElement: HTMLElement | null = null;
-
-  renderMathExpressions = modifier(
-    (element: HTMLElement, _positional: unknown[]) => {
-      console.debug('[markdown] math modifier triggered');
-      this._contentElement = element;
-      scheduleOnce('afterRender', this, this._renderMath);
-    },
-  );
-
-  renderMermaidDiagrams = modifier(
-    (element: HTMLElement, _positional: unknown[]) => {
-      console.debug('[markdown] mermaid modifier triggered');
-      this._contentElement = element;
-      scheduleOnce('afterRender', this, this._renderMermaid);
-    },
-  );
+    this._mermaidSvgs = svgs;
+  });
 
   getCardComponent = (card: BaseDef) => getComponent(card);
 
@@ -367,8 +360,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     <div
       class='markdown-content'
       {{this.captureCardSlots this.renderedHtml @linkedCards}}
-      {{this.renderMathExpressions this.renderedHtml}}
-      {{this.renderMermaidDiagrams this.renderedHtml}}
     >
       {{this.renderedHtml}}
     </div>

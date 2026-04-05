@@ -19,7 +19,7 @@ type MonacoSDK = typeof _MonacoSDK;
 marked.use({ extensions: bfmCardReferenceExtensions() });
 
 // Register community marked extensions for BFM layers 3+ (GFM enhancements).
-marked.use(gfmHeadingId());
+marked.use(gfmHeadingId({ prefix: 'user-content-' }));
 marked.use(markedAlert());
 marked.use(markedFootnote());
 marked.use(markedExtendedTables());
