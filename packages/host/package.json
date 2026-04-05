@@ -161,6 +161,7 @@
     "lodash": "catalog:",
     "loglevel": "catalog:",
     "matrix-js-sdk": "catalog:",
+    "mermaid": "catalog:",
     "moment": "catalog:",
     "moment-locales-webpack-plugin": "catalog:",
     "monaco-editor": "catalog:",
