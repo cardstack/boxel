@@ -1,3 +1,6 @@
+import Home from '@cardstack/boxel-icons/home';
+import Shapes from '@cardstack/boxel-icons/shapes';
+import type { IconComponent } from '@cardstack/boxel-ui/icons';
 import { array, fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -14,6 +17,12 @@ import BoxelSelect from './index.gts';
 
 interface Country {
   name: string;
+}
+
+interface SortOption {
+  icon: IconComponent;
+  label: string;
+  value: 'default' | 'hosted-only';
 }
 
 export default class BoxelSelectUsage extends Component {
@@ -36,11 +45,17 @@ export default class BoxelSelectUsage extends Component {
     { name: 'United Kingdom' },
   ] as Array<Country>;
 
+  @tracked items2: SortOption[] = [
+    { label: 'View All', icon: Shapes, value: 'default' },
+    { label: 'Hosted Only', icon: Home, value: 'hosted-only' },
+  ];
+
   get displayItems() {
     return this.items.map((item) => item.name);
   }
 
   @tracked selectedItem: Country | null = null;
+  @tracked selectedItem2: SortOption | undefined = this.items2[0];
   @tracked placeholder = 'Select Item';
   @tracked verticalPosition = 'auto' as const;
   @tracked variant:
@@ -84,6 +99,10 @@ export default class BoxelSelectUsage extends Component {
 
   @action onSelectItem(item: Country | null): void {
     this.selectedItem = item;
+  }
+
+  @action onSelectItem2(item: SortOption): void {
+    this.selectedItem2 = item;
   }
 
   <template>
@@ -313,6 +332,20 @@ export default class BoxelSelectUsage extends Component {
             <div>{{item.name}}</div>
           </BoxelSelect>
         </BoxelField>
+      </:example>
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Usage With Icons'>
+      <:example>
+        <BoxelSelect
+          @selected={{this.selectedItem2}}
+          @onChange={{this.onSelectItem2}}
+          @options={{this.items2}}
+          as |option|
+        >
+          <option.icon width='16' height='16' />
+          {{option.label}}
+        </BoxelSelect>
       </:example>
     </FreestyleUsage>
   </template>
