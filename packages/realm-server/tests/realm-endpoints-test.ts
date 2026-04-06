@@ -311,16 +311,11 @@ module(basename(__filename), function () {
       // The linkedCards relationship should be populated via query
       let linkedCards = json.data.relationships?.linkedCards;
       assert.ok(linkedCards, 'linkedCards relationship is present');
-      assert.ok(
-        linkedCards?.links?.search,
-        'linkedCards has a search link',
-      );
+      assert.ok(linkedCards?.links?.search, 'linkedCards has a search link');
 
       // Sideloaded included resources should contain the referenced cards
       assert.ok(json.included, 'response has included resources');
-      let includedIds = (json.included ?? []).map(
-        (r: { id: string }) => r.id,
-      );
+      let includedIds = (json.included ?? []).map((r: { id: string }) => r.id);
       assert.true(
         includedIds.some((id: string) => id.includes('hassan')),
         'included resources contain hassan card',
@@ -332,9 +327,16 @@ module(basename(__filename), function () {
 
       // Each included resource should be a card with proper structure
       for (let included of json.included ?? []) {
-        assert.strictEqual(included.type, 'card', 'included resource is a card');
+        assert.strictEqual(
+          included.type,
+          'card',
+          'included resource is a card',
+        );
         assert.ok(included.id, 'included resource has an id');
-        assert.ok(included.meta?.adoptsFrom, 'included resource has adoptsFrom');
+        assert.ok(
+          included.meta?.adoptsFrom,
+          'included resource has adoptsFrom',
+        );
       }
     });
 
@@ -351,7 +353,10 @@ module(basename(__filename), function () {
 
       let json = response.body;
       assert.strictEqual(json.data.type, 'file-meta');
-      assert.notOk(json.included, 'non-markdown file has no included resources');
+      assert.notOk(
+        json.included,
+        'non-markdown file has no included resources',
+      );
       assert.notOk(
         json.data.relationships?.linkedCards,
         'non-markdown file has no linkedCards relationship',
