@@ -12,6 +12,7 @@ import {
   markdownToHtml,
   preloadMarkdownLanguages,
   resolveCardReference,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
 import { CardContextConsumer } from '../field-component';
@@ -41,9 +42,9 @@ interface CardSlot {
 
 function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
   try {
-    return resolveCardReference(raw, baseUrl || undefined);
+    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
   } catch {
-    return raw;
+    return trimJsonExtension(raw);
   }
 }
 

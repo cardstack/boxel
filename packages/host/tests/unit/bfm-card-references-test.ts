@@ -44,6 +44,28 @@ module('Unit | bfm-card-references', function () {
       assert.deepEqual(urls, ['https://realm.example/docs/my-card']);
     });
 
+    test('strips .json extension from extracted URLs', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1.json]',
+        '',
+        '::card[https://example.com/cards/2.json]',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, [
+        'https://example.com/cards/1',
+        'https://example.com/cards/2',
+      ]);
+    });
+
+    test('deduplicates URLs that differ only by .json extension', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1]',
+        ':card[https://example.com/cards/1.json]',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
     test('deduplicates URLs', function (assert) {
       let markdown = [
         ':card[https://example.com/cards/1]',
