@@ -341,6 +341,7 @@ export default class BoxelSelectUsage extends Component {
           @selected={{this.selectedItem2}}
           @onChange={{this.onSelectItem2}}
           @options={{this.items2}}
+          aria-label={{this.placeholder}}
           as |option|
         >
           <option.icon width='16' height='16' />
