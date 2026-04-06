@@ -31,13 +31,33 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 ### Updating Project State
 
-- `update_project({ path, content })` — Update a Project card in the target realm (e.g., status, success criteria). Content must be valid card source JSON.
-- `update_ticket({ path, content })` — Update a Ticket card in the target realm (e.g., status, notes, acceptance criteria). Content must be valid card source JSON.
-- `create_knowledge({ path, content })` — Create or update a KnowledgeArticle card in the target realm. Content must be valid card source JSON.
+- `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. Pass field values directly as structured attributes (e.g., `{ projectStatus: "active", objective: "..." }`). The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
+- `update_ticket({ path, attributes, relationships? })` — Update a Ticket card. Same structured interface — pass field values (e.g., `{ status: "in_progress", summary: "..." }`).
+- `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface (e.g., `{ articleTitle: "Guide", content: "...", tags: ["deploy"] }`).
 
 ### Testing
 
 - `run_tests({ slug, specPaths, testNames?, projectCardUrl? })` — Execute Playwright tests against the target realm. Pulls test spec files from the realm, runs them via the Playwright harness, returns structured results (pass/fail counts, failure details with error messages and stack traces).
+
+### Running Host Commands
+
+- `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
+
+**Example — generate JSON schema for a card type:**
+
+```
+run_command({
+  command: "@cardstack/boxel-host/commands/get-card-type-schema/default",
+  commandInput: {
+    codeRef: {
+      module: "https://realm.example/darkfactory",
+      name: "Project"
+    }
+  }
+})
+```
+
+Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Parse `result` as JSON to get the schema with `attributes` and `relationships` properties.
 
 ### Control Flow
 

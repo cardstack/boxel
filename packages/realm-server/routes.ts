@@ -67,6 +67,7 @@ import {
   handleDeleteWebhookCommandRequest,
 } from './handlers/handle-webhook-commands';
 import handleWebhookReceiverRequest from './handlers/handle-webhook-receiver';
+import handleRunCommand from './handlers/handle-run-command';
 import { buildCreatePrerenderAuth } from './prerender/auth';
 
 export type CreateRoutesArgs = {
@@ -141,6 +142,11 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
   router.get('/_queue-status', handleQueueStatusRequest(args));
+  router.post(
+    '/_run-command',
+    jwtMiddleware(args.realmSecretSeed),
+    handleRunCommand(args),
+  );
   router.post('/_stripe-webhook', handleStripeWebhookRequest(args));
   router.post(
     '/_stripe-session',

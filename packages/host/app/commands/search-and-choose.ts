@@ -34,7 +34,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SearchAndChooseResult> {
     let {
       sourceContextCodeRef,
-      max = 2,
+      max = 1,
       additionalSystemPrompt,
       llmModel,
     } = input;
@@ -64,14 +64,20 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
 
     // 2. Prepare prompt content
     const summaries = this.formatCandidatesForPrompt(instances);
-    let systemPrompt = `You are an expert catalog curator. Select the most relevant 1 to ${max} ids representing ${candidateTypeCodeRef.name}. Output ONLY a JSON array of unique id strings. No commentary.`;
+    let systemPrompt =
+      max === 1
+        ? `Select the single most relevant id representing ${candidateTypeCodeRef.name}. Output ONLY a JSON array with exactly 1 id string. No commentary.`
+        : `Select the most relevant 1 to ${max} ids representing ${candidateTypeCodeRef.name}. Output ONLY a JSON array of unique id strings. No commentary.`;
     if (selectionContextCodeRef) {
       systemPrompt += ` Use the attached module source for "${selectionContextCodeRef.name}" (${selectionContextCodeRef.module}) as selection context.`;
     }
     if (additionalSystemPrompt && additionalSystemPrompt.trim()) {
       systemPrompt += ` ${additionalSystemPrompt.trim()}`;
     }
-    const userPrompt = `Options (id :: title):\n${summaries}\n\nRules:\n- Return a JSON array with 1 to ${max} ids.\n- No duplicates.\n- Only use ids from the list.\n- If nothing is relevant return [].`;
+    const userPrompt =
+      max === 1
+        ? `Options (id :: title):\n${summaries}\n\nRules:\n- Return a JSON array with exactly 1 id.\n- Only use ids from the list.\n- If nothing is relevant return [].`
+        : `Options (id :: title):\n${summaries}\n\nRules:\n- Return a JSON array with 1 to ${max} ids.\n- No duplicates.\n- Only use ids from the list.\n- If nothing is relevant return [].`;
 
     // 3. LLM selection
     const oneShot = new OneShotLlmRequestCommand(this.commandContext);
@@ -141,7 +147,13 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
   private formatCandidatesForPrompt(instances: any[]): string {
     return instances
       .filter((c) => c && c.id)
-      .map((c) => `${c.id} :: ${c.title || ''}`.trim())
+      .map((c) => {
+        const title = c.title || '';
+        const summary = c.cardInfo?.summary || '';
+        return summary
+          ? `${c.id} :: ${title} — ${summary}`.trim()
+          : `${c.id} :: ${title}`.trim();
+      })
       .join('\n');
   }
 }
