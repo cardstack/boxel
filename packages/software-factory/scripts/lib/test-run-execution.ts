@@ -226,22 +226,29 @@ function buildQunitTestPageHtml(opts: {
           // that we don't know here. Tests that need Matrix use mock-matrix.
         }
         let encoded = encodeURIComponent(JSON.stringify(config));
-        return tag.replace(/content="[^"]+"/,  `content="${encoded}"`);
+        return tag.replace(/content="[^"]+"/, `content="${encoded}"`);
       } catch {
         return tag;
       }
     });
 
   // Extract <script> and <link> tags, rewriting paths to absolute host URLs
-  let scriptTags = (testIndexHtml.match(/<script[^>]*src="[^"]*"[^>]*><\/script>/g) ?? [])
-    .filter((tag) => !tag.includes('testem.js') && !tag.includes('ember-cli-live-reload'))
+  let scriptTags = (
+    testIndexHtml.match(/<script[^>]*src="[^"]*"[^>]*><\/script>/g) ?? []
+  )
+    .filter(
+      (tag) =>
+        !tag.includes('testem.js') && !tag.includes('ember-cli-live-reload'),
+    )
     .map((tag) => tag.replace(/src="\/([^"]*)"/g, `src="${host}/$1"`));
 
-  let linkTags = (testIndexHtml.match(/<link[^>]*rel="stylesheet"[^>]*>/g) ?? [])
-    .map((tag) => tag.replace(/href="\/([^"]*)"/g, `href="${host}/$1"`));
+  let linkTags = (
+    testIndexHtml.match(/<link[^>]*rel="stylesheet"[^>]*>/g) ?? []
+  ).map((tag) => tag.replace(/href="\/([^"]*)"/g, `href="${host}/$1"`));
 
-  let moduleScripts = (testIndexHtml.match(/<script type="module">[^]*?<\/script>/g) ?? [])
-    .map((tag) => tag.replace(/from '\/([^']*)'/g, `from '${host}/$1'`));
+  let moduleScripts = (
+    testIndexHtml.match(/<script type="module">[^]*?<\/script>/g) ?? []
+  ).map((tag) => tag.replace(/from '\/([^']*)'/g, `from '${host}/$1'`));
 
   return `<!DOCTYPE html>
 <html>
@@ -401,15 +408,16 @@ export async function executeTestRunFromRealm(
   try {
     // Locate the host app's dist directory — contains tests/index.html and assets
     let hostDistDir =
-      options.hostDistDir ??
-      resolve(__dirname, '../../../host/dist');
+      options.hostDistDir ?? resolve(__dirname, '../../../host/dist');
 
     // Start a local server to serve both the test HTML page and the host's
     // dist assets. All asset references point to our server, so no external
     // host app is needed — fully hermetic.
-    let { url: testPageUrl, server, setHtml } = await startTestPageServer(
-      hostDistDir,
-    );
+    let {
+      url: testPageUrl,
+      server,
+      setHtml,
+    } = await startTestPageServer(hostDistDir);
     testPageServer = server;
 
     // Build HTML using our server URL for asset references.
@@ -422,12 +430,8 @@ export async function executeTestRunFromRealm(
     });
     setHtml(html);
 
-    console.error(
-      `[test-run-execution] Test page server at ${testPageUrl}`,
-    );
-    console.error(
-      `[test-run-execution] Host assets from: ${hostDistDir}`,
-    );
+    console.error(`[test-run-execution] Test page server at ${testPageUrl}`);
+    console.error(`[test-run-execution] Host assets from: ${hostDistDir}`);
     console.error(
       `[test-run-execution] Target realm: ${options.targetRealmUrl}`,
     );
@@ -442,9 +446,7 @@ export async function executeTestRunFromRealm(
       );
     });
     page.on('pageerror', (err) => {
-      console.error(
-        `[test-run-execution:browser] PAGE ERROR: ${err.message}`,
-      );
+      console.error(`[test-run-execution:browser] PAGE ERROR: ${err.message}`);
     });
     page.on('response', (response) => {
       if (response.status() >= 400) {
