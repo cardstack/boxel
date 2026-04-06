@@ -324,7 +324,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const result = await command.execute({
       candidateTypeCodeRef: params.candidateTypeCodeRef,
       sourceContextCodeRef: params.sourceContextCodeRef,
-      max: opts?.max ?? 2,
+      max: opts?.max,
       additionalSystemPrompt: opts?.additionalSystemPrompt,
     });
     return result.selectedCards ?? [];
@@ -489,8 +489,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
           module: `${this.catalogRealm}catalog-app/listing/license`,
           name: 'License',
         } as ResolvedCodeRef,
-      },
-      { max: 1 },
+      }
     );
     (listing as any).license = selected[0];
   }
