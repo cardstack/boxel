@@ -2685,6 +2685,7 @@ export class Realm {
         attributes[key] = value;
       }
     }
+    let relationships = fileEntry.resource?.relationships;
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -2692,6 +2693,9 @@ export class Realm {
         attributes: {
           ...attributes,
         },
+        ...(relationships && Object.keys(relationships).length > 0
+          ? { relationships }
+          : {}),
         meta: {
           adoptsFrom,
           realmInfo,
@@ -2700,6 +2704,15 @@ export class Realm {
         links: { self: fileURL },
       },
     };
+    // Sideload linked resources for file types with relationships or
+    // query-based link fields (e.g. MarkdownDef's linkedCards).
+    let included = await this.#realmIndexQueryEngine.loadLinksForResource(
+      doc.data,
+      { loadLinks: true },
+    );
+    if (included.length > 0) {
+      doc.included = included;
+    }
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {

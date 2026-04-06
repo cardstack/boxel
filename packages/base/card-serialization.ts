@@ -187,8 +187,8 @@ export function resourceFrom(
   if (doc == null) {
     return;
   }
-  let data: CardResource[];
-  if (isSingleCardDocument(doc)) {
+  let data: (CardResource | FileMetaResource)[];
+  if (isSingleCardDocument(doc) || isSingleFileMetaDocument(doc)) {
     if (resourceId === undefined) {
       return undefined;
     }
