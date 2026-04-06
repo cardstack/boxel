@@ -1,5 +1,6 @@
 import { escapeHtml } from './helpers/html';
 import { resolveCardReference } from './card-reference-resolver';
+import { trimJsonExtension } from './url';
 import type { TokenizerAndRendererExtension } from 'marked';
 
 // Regex patterns for stripping code before extraction.
@@ -49,13 +50,21 @@ export function extractBfmReferences(
     for (let match of stripped.matchAll(blockRe)) {
       let resolved = resolveUrl(match[1], baseUrl);
       if (resolved) {
-        matches.push({ index: match.index!, url: resolved, keyword });
+        matches.push({
+          index: match.index!,
+          url: trimJsonExtension(resolved),
+          keyword,
+        });
       }
     }
     for (let match of stripped.matchAll(inlineRe)) {
       let resolved = resolveUrl(match[1], baseUrl);
       if (resolved) {
-        matches.push({ index: match.index!, url: resolved, keyword });
+        matches.push({
+          index: match.index!,
+          url: trimJsonExtension(resolved),
+          keyword,
+        });
       }
     }
   }
