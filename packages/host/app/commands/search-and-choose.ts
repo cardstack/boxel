@@ -64,7 +64,6 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
 
     // 2. Prepare prompt content
     const summaries = this.formatCandidatesForPrompt(instances);
-    console.log('Summaries for SearchAndChooseCommand:\n', summaries);
     let systemPrompt =
       max === 1
         ? `Select the single most relevant id representing ${candidateTypeCodeRef.name}. Output ONLY a JSON array with exactly 1 id string. No commentary.`
