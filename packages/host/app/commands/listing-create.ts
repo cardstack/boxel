@@ -337,7 +337,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const name = await this.getStringPatch({
       codeRef,
       systemPrompt:
-        'You are an expert catalog curator. You read a Cardstack card/field definition source file and create a concise catalog listing title. Respond ONLY with the title text—no quotes, no JSON, no markdown, and no extra commentary.',
+        'You are a concise and accurate summarization system. You read a Cardstack card/field definition source file and create a concise catalog listing title. Respond ONLY with the title text—no quotes, no JSON, no markdown, and no extra commentary.',
       userPrompt: [
         `Generate a catalog listing title for the definition referenced by:`,
         `- module: ${codeRef.module}`,
@@ -358,7 +358,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const summary = await this.getStringPatch({
       codeRef,
       systemPrompt:
-        'You are an expert catalog curator. You read a Cardstack card/field definition source file and write a concise spec-style summary. Output ONLY the summary text—no quotes, no JSON, no markdown, and no extra commentary.',
+        'You are a concise and accurate summarization system. You read a Cardstack card/field definition source file and write a concise spec-style summary. Output ONLY the summary text—no quotes, no JSON, no markdown, and no extra commentary.',
       userPrompt: [
         `Generate a README-style catalog listing summary for the definition referenced by:`,
         `- module: ${codeRef.module}`,
@@ -483,14 +483,12 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }
 
   private async autoLinkLicense(listing: CardAPI.CardDef) {
-    const selected = await this.chooseCards(
-      {
-        candidateTypeCodeRef: {
-          module: `${this.catalogRealm}catalog-app/listing/license`,
-          name: 'License',
-        } as ResolvedCodeRef,
-      }
-    );
+    const selected = await this.chooseCards({
+      candidateTypeCodeRef: {
+        module: `${this.catalogRealm}catalog-app/listing/license`,
+        name: 'License',
+      } as ResolvedCodeRef,
+    });
     (listing as any).license = selected[0];
   }
 
@@ -507,9 +505,13 @@ export default class ListingCreateCommand extends HostBaseCommand<
         sourceContextCodeRef: codeRef,
       },
       {
+        max: 1,
         additionalSystemPrompt:
-          "Choose tags that best describe the card's nature or usage pattern." +
-          ' RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
+          'You are selecting from an existing list of catalog tags. ' +
+          "Choose the single best tag that describes the card's subject matter, use case, or domain. " +
+          'Prefer a specific descriptive tag over a broad organizational bucket. ' +
+          'Only select ids from the provided options. ' +
+          'Return [] if no tag clearly fits.',
       },
     );
     (listing as any).tags = selected;
@@ -528,8 +530,13 @@ export default class ListingCreateCommand extends HostBaseCommand<
         sourceContextCodeRef: codeRef,
       },
       {
+        max: 1,
         additionalSystemPrompt:
-          "Choose categories that best match the card's domain or purpose.",
+          'You are selecting from an existing list of catalog categories. ' +
+          "Choose the single best high-level category that matches the card's main purpose. " +
+          'Prefer broad organizing categories over keyword-style tags. ' +
+          'Only select ids from the provided options. ' +
+          'Return [] if no category clearly fits.',
       },
     );
     (listing as any).categories = selected;
