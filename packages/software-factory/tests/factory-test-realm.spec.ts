@@ -7,7 +7,11 @@ import {
   executeTestRunFromRealm,
   type TestRunRealmOptions,
 } from '../scripts/lib/factory-test-realm';
-import { readFile, writeFile } from '../scripts/lib/realm-operations';
+import {
+  readFile,
+  waitForRealmFile,
+  writeFile,
+} from '../scripts/lib/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -83,6 +87,22 @@ test.describe('factory-test-realm e2e', () => {
     );
     expect(writeResult.ok).toBe(true);
 
+    // Wait for the realm to index the file before running tests
+    let indexed = await waitForRealmFile(realmUrl, 'hello.test.gts', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+    expect(indexed).toBe(true);
+
+    // Verify the realm resolves the dotted filename: a request for
+    // "hello.test" (without .gts) must find "hello.test.gts" on disk.
+    let moduleUrl = `${realmUrl}hello.test`;
+    let moduleResponse = await fetch(moduleUrl, {
+      headers: { Accept: '*/*', Authorization: authorization },
+    });
+    expect(moduleResponse.status).toBe(200);
+
     let handle = await executeTestRunFromRealm({
       targetRealmUrl: realmUrl,
       testResultsModuleUrl,
@@ -142,6 +162,14 @@ test.describe('factory-test-realm e2e', () => {
     );
     expect(writeResult.ok).toBe(true);
 
+    // Wait for the realm to index the file before running tests
+    let indexed = await waitForRealmFile(realmUrl, 'hello-fail.test.gts', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+    expect(indexed).toBe(true);
+
     let handle = await executeTestRunFromRealm({
       targetRealmUrl: realmUrl,
       testResultsModuleUrl,
@@ -196,4 +224,5 @@ test.describe('factory-test-realm e2e', () => {
     expect(result.created).toBe(false);
     expect(result.error).toBeTruthy();
   });
+
 });

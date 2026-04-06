@@ -170,18 +170,21 @@ async function getNextSequenceNumber(
  * The realmURL query param tells live-test.js which realm to discover
  * .test.gts files from.
  */
-function buildQunitTestPageHtml(
-  hostAppUrl: string,
-  hostDistDir: string,
-  targetRealmUrl: string,
-  realmServerUrl: string,
-): string {
-  let host = hostAppUrl.replace(/\/$/, '');
-  // realmServerUrl is passed explicitly — never inferred from target realm URLs.
-  let realmServerBase = realmServerUrl.replace(/\/$/, '');
+function buildQunitTestPageHtml(opts: {
+  /** URL of our local server that serves static host dist assets */
+  assetServerUrl: string;
+  hostDistDir: string;
+  targetRealmUrl: string;
+  /** Browser-accessible URL of the realm server (compat proxy) */
+  realmProxyUrl: string;
+}): string {
+  let host = opts.assetServerUrl.replace(/\/$/, '');
+  // Ember config URLs must use the browser-accessible realm proxy,
+  // not the internal realm server port or our asset server.
+  let browserOrigin = opts.realmProxyUrl.replace(/\/$/, '');
 
   // Read the host's test index.html to extract its script and link tags
-  let testIndexPath = resolve(hostDistDir, 'tests', 'index.html');
+  let testIndexPath = resolve(opts.hostDistDir, 'tests', 'index.html');
   let testIndexHtml: string;
   try {
     testIndexHtml = readFileSync(testIndexPath, 'utf8');
@@ -207,16 +210,16 @@ function buildQunitTestPageHtml(
         let config = JSON.parse(decodeURIComponent(match[1]));
         // Rewrite realm-related URLs to the harness's realm server
         if (config.resolvedBaseRealmURL) {
-          config.resolvedBaseRealmURL = `${realmServerBase}/base/`;
+          config.resolvedBaseRealmURL = `${browserOrigin}/base/`;
         }
         if (config.resolvedSkillsRealmURL) {
-          config.resolvedSkillsRealmURL = `${realmServerBase}/skills/`;
+          config.resolvedSkillsRealmURL = `${browserOrigin}/skills/`;
         }
         if (config.resolvedOpenRouterRealmURL) {
-          config.resolvedOpenRouterRealmURL = `${realmServerBase}/openrouter/`;
+          config.resolvedOpenRouterRealmURL = `${browserOrigin}/openrouter/`;
         }
         if (config.realmServerURL) {
-          config.realmServerURL = `${realmServerBase}/`;
+          config.realmServerURL = `${browserOrigin}/`;
         }
         if (config.matrixURL) {
           // Keep matrixURL as-is — the harness Synapse is on a random port
@@ -409,13 +412,14 @@ export async function executeTestRunFromRealm(
     );
     testPageServer = server;
 
-    // Build HTML using our server URL for asset references
-    let html = buildQunitTestPageHtml(
-      testPageUrl,
+    // Build HTML using our server URL for asset references.
+    // realmProxyUrl = hostAppUrl = the compat proxy that the browser can reach.
+    let html = buildQunitTestPageHtml({
+      assetServerUrl: testPageUrl,
       hostDistDir,
-      options.targetRealmUrl,
-      options.realmServerUrl,
-    );
+      targetRealmUrl: options.targetRealmUrl,
+      realmProxyUrl: options.hostAppUrl,
+    });
     setHtml(html);
 
     console.error(

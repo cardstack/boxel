@@ -2350,11 +2350,11 @@ export class Realm {
 
     let start = Date.now();
     try {
-      let isNonExecutableFile =
-        hasExtension(localName) &&
-        !hasExecutableExtension(localName) &&
-        !localName.endsWith('.json');
-      let fallbackExtensions = isNonExecutableFile
+      // Always try executable extension fallbacks so that dotted filenames
+      // like "hello.test" resolve to "hello.test.gts". Only skip fallbacks
+      // when the URL already has an executable extension.
+      let alreadyHasExecutableExt = hasExecutableExtension(localName);
+      let fallbackExtensions = alreadyHasExecutableExt
         ? []
         : [...executableExtensions, '.json'];
       let handle = await this.getFileWithFallbacks(
@@ -2366,7 +2366,7 @@ export class Realm {
       }
 
       if (handle.path !== localName) {
-        if (isNonExecutableFile) {
+        if (alreadyHasExecutableExt) {
           return notFound(request, requestContext, `${localName} not found`);
         }
         let headers = {
