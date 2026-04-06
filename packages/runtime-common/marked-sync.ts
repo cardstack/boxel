@@ -1,4 +1,4 @@
-import { marked } from 'marked';
+import { Marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
 import { escapeHtml } from './helpers/html';
 import { bfmCardReferenceExtensions } from './bfm-card-references';
@@ -19,16 +19,53 @@ import { gfmHeadingId } from 'marked-gfm-heading-id';
 import type * as _MonacoSDK from 'monaco-editor';
 type MonacoSDK = typeof _MonacoSDK;
 
-// Register BFM card reference extensions globally. This is additive and does
-// not conflict with the per-call renderer override in markedSync().
-marked.use({ extensions: bfmCardReferenceExtensions() });
+// Use a dedicated Marked instance instead of the global singleton.
+// IMPORTANT: Do NOT call bfmMarked.use() inside markedSync() — each use()
+// call wraps the previous renderer in a new closure, creating an ever-growing
+// closure chain that leaks memory over many calls (e.g. during test runs).
+const bfmMarked = new Marked();
+
+// Register BFM card reference extensions.
+bfmMarked.use({ extensions: bfmCardReferenceExtensions() });
 
 // Register community marked extensions for BFM layers 3+ (GFM enhancements).
-marked.use(gfmHeadingId({ prefix: 'user-content-' }));
-marked.use(markedAlert());
-marked.use(markedFootnote());
-marked.use(markedExtendedTables());
-marked.use(markedKatexPlaceholder());
+bfmMarked.use(gfmHeadingId({ prefix: 'user-content-' }));
+bfmMarked.use(markedAlert());
+bfmMarked.use(markedFootnote());
+bfmMarked.use(markedExtendedTables());
+bfmMarked.use(markedKatexPlaceholder());
+
+// Per-call options for the code renderer. Set before each parse() call.
+// Safe because JS is single-threaded and parse() is synchronous.
+let _codeRenderOpts: {
+  escapeHtmlInCodeBlocks?: boolean;
+  enableMonacoSyntaxHighlighting?: boolean;
+  monacoTheme?: string;
+  monaco?: MonacoSDK | null;
+  tabSize?: number;
+} = {};
+
+// Register the code renderer ONCE to avoid closure chain accumulation.
+bfmMarked.use({
+  renderer: {
+    code(code: string, language = '') {
+      if (language === 'mermaid') {
+        return `<pre class="mermaid">${escapeHtml(code)}</pre>\n`;
+      }
+
+      let highlighted = renderWithMonaco(code, language, _codeRenderOpts);
+      if (highlighted) {
+        return highlighted;
+      }
+
+      if (_codeRenderOpts.escapeHtmlInCodeBlocks) {
+        return `<pre data-code-language="${escapeHtml(language)}">${escapeHtml(code)}</pre>`;
+      } else {
+        return `<pre data-code-language="${escapeHtml(language)}">${code}</pre>`;
+      }
+    },
+  },
+});
 
 const DECORATIVE_BULLET_PATTERN =
   // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
@@ -116,31 +153,10 @@ export function markedSync(
     tabSize?: number;
   } = DEFAULT_MARKED_SYNC_OPTIONS,
 ): string {
-  let options = { ...DEFAULT_MARKED_SYNC_OPTIONS, ...opts };
+  // Set per-call options for the code renderer (registered once above).
+  _codeRenderOpts = { ...DEFAULT_MARKED_SYNC_OPTIONS, ...opts };
 
-  return marked
-    .use({
-      renderer: {
-        code(code, language = '') {
-          // Mermaid blocks are rendered client-side; emit a placeholder.
-          if (language === 'mermaid') {
-            return `<pre class="mermaid">${escapeHtml(code)}</pre>\n`;
-          }
-
-          let highlighted = renderWithMonaco(code, language, options);
-          if (highlighted) {
-            return highlighted;
-          }
-
-          if (options.escapeHtmlInCodeBlocks) {
-            return `<pre data-code-language="${escapeHtml(language)}">${escapeHtml(code)}</pre>`;
-          } else {
-            return `<pre data-code-language="${escapeHtml(language)}">${code}</pre>`;
-          }
-        },
-      },
-    })
-    .parse(markdown, { async: false }) as string;
+  return bfmMarked.parse(markdown, { async: false }) as string;
 }
 
 const DEFAULT_OPTS = {
