@@ -169,27 +169,11 @@ function assertUsableHostDist(hostPackageDir: string): void {
     return;
   }
 
-  try {
-    let config = JSON.parse(decodeURIComponent(match[1]));
-    // Only reject Ember test builds where autoboot is explicitly disabled and
-    // the rootElement is #ember-testing. Development and production builds are
-    // both usable by the harness. This keeps worktree setups working without
-    // requiring a full production build pipeline.
-    if (
-      config?.APP?.autoboot === false &&
-      config?.APP?.rootElement === '#ember-testing'
-    ) {
-      throw new Error(
-        `Host dist at ${hostPackageDir}/dist is an Ember test build and cannot power the software-factory harness (autoboot=${String(config?.APP?.autoboot)}, rootElement=${String(
-          config?.APP?.rootElement,
-        )}). The harness needs a normal host app build so /_standby can boot. Run \`cd ${hostPackageDir} && mise exec -- pnpm build\` and retry.`,
-      );
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      throw error;
-    }
-  }
+  // Previously rejected Ember test builds (autoboot=false, rootElement=#ember-testing).
+  // Now accepted: the harness uses the main index.html for the app, and the
+  // QUnit live-test page at /tests/index.html for card test execution.
+  // Both development and test builds are usable.
+  void match; // config check removed — all build types accepted
 }
 
 async function loadSynapseModule() {

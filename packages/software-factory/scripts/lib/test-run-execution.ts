@@ -1,166 +1,18 @@
-import { spawnSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { createServer, type Server } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-import {
-  cancelAllIndexingJobs,
-  createRealm,
-  ensureTrailingSlash,
-  getRealmScopedAuth,
-  pullRealmFiles,
-  readFile,
-  searchRealm,
-  writeFile,
-} from './realm-operations';
+import { chromium } from '@playwright/test';
+
+import { ensureTrailingSlash, searchRealm } from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
-import { parseRunRealmTestsOutput } from './test-run-parsing';
+import { parseQunitResults } from './test-run-parsing';
 import type {
   ExecuteTestRunOptions,
-  RunRealmTestsOutput,
-  TestRunAttributes,
+  QunitResults,
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
-
-// ---------------------------------------------------------------------------
-// Test Artifacts Realm Management
-// ---------------------------------------------------------------------------
-
-/**
- * Ensure a test artifacts realm exists for the given project.
- * Reads the Project card's `testArtifactsRealmUrl` field. If already set,
- * returns it. Otherwise creates a new realm and saves the URL back to the card.
- */
-export async function ensureTestArtifactsRealm(
-  projectCardUrl: string,
-  options: {
-    authorization?: string;
-    serverToken?: string;
-    fetch?: typeof globalThis.fetch;
-    realmServerUrl: string;
-    targetRealmUrl: string;
-    matrixAuth: {
-      userId: string;
-      accessToken: string;
-      matrixUrl: string;
-    };
-  },
-): Promise<{
-  testArtifactsRealmUrl: string;
-  created: boolean;
-  error?: string;
-}> {
-  let fetchOptions = {
-    authorization: options.authorization,
-    fetch: options.fetch,
-  };
-
-  let readResult = await readFile(
-    new URL(projectCardUrl).origin + '/',
-    new URL(projectCardUrl).pathname.slice(1),
-    fetchOptions,
-  );
-
-  if (!readResult.ok || !readResult.document) {
-    return {
-      testArtifactsRealmUrl: '',
-      created: false,
-      error: `Failed to read Project card: ${readResult.error}`,
-    };
-  }
-
-  let existingUrl = readResult.document.data.attributes?.testArtifactsRealmUrl;
-  if (typeof existingUrl === 'string' && existingUrl.length > 0) {
-    return { testArtifactsRealmUrl: existingUrl, created: false };
-  }
-
-  // Derive the test artifacts realm name from the target realm endpoint.
-  // e.g. target realm "smoke-test-10" → artifacts realm "smoke-test-10-test-artifacts"
-  let targetSegments = new URL(options.targetRealmUrl).pathname
-    .split('/')
-    .filter(Boolean);
-  let targetEndpoint = targetSegments.at(-1) ?? 'project';
-  let realmName = `${targetEndpoint} Test Artifacts`;
-  let endpoint = `${targetEndpoint}-test-artifacts`;
-
-  let testArtifactsRealmUrl = '';
-  let created = false;
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    let tryEndpoint = attempt === 0 ? endpoint : `${endpoint}-${attempt + 1}`;
-    let result = await createRealm(options.realmServerUrl, {
-      name: realmName,
-      endpoint: tryEndpoint,
-      authorization: options.serverToken ?? options.authorization ?? '',
-      fetch: options.fetch,
-      matrixAuth: options.matrixAuth,
-    });
-
-    if (result.created) {
-      testArtifactsRealmUrl = result.realmUrl;
-      created = true;
-      break;
-    }
-
-    // 400 "already exists" → extract the existing realm URL from the error
-    // message and use it. The error format is:
-    // "realm 'http://.../{username}/{endpoint}/' already exists on this server"
-    if (result.error?.includes('already exists')) {
-      let urlMatch = result.error.match(/'(https?:\/\/[^']+)'/);
-      if (urlMatch) {
-        testArtifactsRealmUrl = urlMatch[1];
-        created = false;
-        break;
-      }
-      continue;
-    }
-
-    return {
-      testArtifactsRealmUrl: '',
-      created: false,
-      error: `Failed to create test artifacts realm: ${result.error}`,
-    };
-  }
-
-  if (!testArtifactsRealmUrl) {
-    return {
-      testArtifactsRealmUrl: '',
-      created: false,
-      error: 'Failed to create test artifacts realm after 5 attempts',
-    };
-  }
-
-  // Save the URL back to the Project card.
-  readResult.document.data.attributes = {
-    ...readResult.document.data.attributes,
-    testArtifactsRealmUrl,
-  };
-
-  let realmUrl = new URL(projectCardUrl).origin + '/';
-  let cardPath = new URL(projectCardUrl).pathname.slice(1);
-  let writeResult = await writeFile(
-    realmUrl,
-    `${cardPath}.json`,
-    JSON.stringify(readResult.document, null, 2),
-    fetchOptions,
-  );
-  if (!writeResult.ok) {
-    return {
-      testArtifactsRealmUrl: '',
-      created: false,
-      error: `Failed to persist testArtifactsRealmUrl to Project card: ${writeResult.error}`,
-    };
-  }
-
-  return { testArtifactsRealmUrl, created };
-}
 
 // ---------------------------------------------------------------------------
 // Resume Logic
@@ -206,7 +58,6 @@ export async function resolveTestRun(
     sequenceNumber,
     ticketURL: options.ticketURL,
     projectCardUrl: options.projectCardUrl,
-    specRef: options.specRef,
   });
 
   if (!createResult.created) {
@@ -252,7 +103,7 @@ async function findResumableTestRun(
         attributes?: {
           status?: string;
           sequenceNumber?: number;
-          specResults?: {
+          moduleResults?: {
             results?: { testName?: string; status?: string }[];
           }[];
         };
@@ -263,8 +114,8 @@ async function findResumableTestRun(
     return undefined;
   }
 
-  let pendingTests = (latest.attributes.specResults ?? [])
-    .flatMap((sr) => sr.results ?? [])
+  let pendingTests = (latest.attributes.moduleResults ?? [])
+    .flatMap((mr) => mr.results ?? [])
     .filter((r) => r.status === 'pending')
     .map((r) => r.testName ?? '');
 
@@ -304,12 +155,219 @@ async function getNextSequenceNumber(
 }
 
 // ---------------------------------------------------------------------------
+// QUnit Test Page
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the HTML for a self-contained QUnit test runner page.
+ *
+ * Reads the host app's tests/index.html to extract the script/link tags it
+ * uses (vendor.js, test-support.js, chunk files, etc.), then builds a page
+ * that loads QUnit independently and injects result-collection hooks. The
+ * page uses the host's compiled test bundles for Ember, test helpers, and
+ * the live-test infrastructure (test-helper.js → live-test.js).
+ *
+ * The realmURL query param tells live-test.js which realm to discover
+ * .test.gts files from.
+ */
+function buildQunitTestPageHtml(
+  hostAppUrl: string,
+  hostDistDir: string,
+  targetRealmUrl: string,
+  realmServerUrl: string,
+): string {
+  let host = hostAppUrl.replace(/\/$/, '');
+  // realmServerUrl is passed explicitly — never inferred from target realm URLs.
+  let realmServerBase = realmServerUrl.replace(/\/$/, '');
+
+  // Read the host's test index.html to extract its script and link tags
+  let testIndexPath = resolve(hostDistDir, 'tests', 'index.html');
+  let testIndexHtml: string;
+  try {
+    testIndexHtml = readFileSync(testIndexPath, 'utf8');
+  } catch {
+    throw new Error(
+      `Could not read host test page at ${testIndexPath}. ` +
+        `Ensure the host app has been built with test support.`,
+    );
+  }
+
+  // Extract and rewrite meta tags. The Ember config meta tag contains
+  // resolvedBaseRealmURL, resolvedSkillsRealmURL, realmServerURL, matrixURL,
+  // etc. that need to point to the harness's realm server, not the URLs
+  // from when the host was built.
+  let metaTags = (testIndexHtml.match(/<meta[^>]+>/g) ?? [])
+    .filter((tag) => !tag.includes('charset') && !tag.includes('viewport'))
+    .map((tag) => {
+      if (!tag.includes('config/environment')) return tag;
+      // Decode the Ember config, rewrite URLs, re-encode
+      let match = tag.match(/content="([^"]+)"/);
+      if (!match) return tag;
+      try {
+        let config = JSON.parse(decodeURIComponent(match[1]));
+        // Rewrite realm-related URLs to the harness's realm server
+        if (config.resolvedBaseRealmURL) {
+          config.resolvedBaseRealmURL = `${realmServerBase}/base/`;
+        }
+        if (config.resolvedSkillsRealmURL) {
+          config.resolvedSkillsRealmURL = `${realmServerBase}/skills/`;
+        }
+        if (config.resolvedOpenRouterRealmURL) {
+          config.resolvedOpenRouterRealmURL = `${realmServerBase}/openrouter/`;
+        }
+        if (config.realmServerURL) {
+          config.realmServerURL = `${realmServerBase}/`;
+        }
+        if (config.matrixURL) {
+          // Keep matrixURL as-is — the harness Synapse is on a random port
+          // that we don't know here. Tests that need Matrix use mock-matrix.
+        }
+        let encoded = encodeURIComponent(JSON.stringify(config));
+        return tag.replace(/content="[^"]+"/,  `content="${encoded}"`);
+      } catch {
+        return tag;
+      }
+    });
+
+  // Extract <script> and <link> tags, rewriting paths to absolute host URLs
+  let scriptTags = (testIndexHtml.match(/<script[^>]*src="[^"]*"[^>]*><\/script>/g) ?? [])
+    .filter((tag) => !tag.includes('testem.js') && !tag.includes('ember-cli-live-reload'))
+    .map((tag) => tag.replace(/src="\/([^"]*)"/g, `src="${host}/$1"`));
+
+  let linkTags = (testIndexHtml.match(/<link[^>]*rel="stylesheet"[^>]*>/g) ?? [])
+    .map((tag) => tag.replace(/href="\/([^"]*)"/g, `href="${host}/$1"`));
+
+  let moduleScripts = (testIndexHtml.match(/<script type="module">[^]*?<\/script>/g) ?? [])
+    .map((tag) => tag.replace(/from '\/([^']*)'/g, `from '${host}/$1'`));
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  ${metaTags.join('\n  ')}
+  <title>Software Factory Card Tests</title>
+  ${linkTags.join('\n  ')}
+</head>
+<body>
+  <div id="qunit"></div>
+  <div id="qunit-fixture">
+    <div id="ember-testing-container">
+      <div id="ember-testing"></div>
+    </div>
+  </div>
+
+  <script>
+    globalThis.process = { env: {}, version: '', cwd() { return '/'; } };
+
+    // -----------------------------------------------------------------------
+    // Result collection for Playwright extraction.
+    // Injected BEFORE QUnit loads so hooks are registered first.
+    // -----------------------------------------------------------------------
+    window.__qunitResults = { tests: [], runEnd: null };
+    window.addEventListener('load', function() {
+      if (typeof QUnit !== 'undefined') {
+        QUnit.on('testEnd', function(d) {
+          window.__qunitResults.tests.push({
+            name: d.name, module: d.module, status: d.status,
+            runtime: d.runtime,
+            errors: (d.errors || []).map(function(e) {
+              return { message: e.message, stack: e.stack };
+            }),
+          });
+        });
+        QUnit.on('runEnd', function(d) {
+          window.__qunitResults.runEnd = d;
+        });
+      }
+    });
+
+    // liveTest and realmURL params are passed directly in the page URL
+    // so test-helper.js sees them when it checks window.location.search.
+  </script>
+
+  ${moduleScripts.join('\n  ')}
+
+  <!-- Host app scripts (vendor, test-support, app, test chunks) -->
+  ${scriptTags.join('\n  ')}
+</body>
+</html>`;
+}
+
+/**
+ * Start a minimal HTTP server that serves:
+ * - / → our custom QUnit test page HTML
+ * - /assets/* → static files from the host's dist/assets/ directory
+ *
+ * Returns the server URL and a setter to update the HTML content
+ * (needed because the HTML references the server's own URL for assets).
+ */
+async function startTestPageServer(
+  hostDistDir: string,
+): Promise<{ url: string; server: Server; setHtml: (h: string) => void }> {
+  let mimeTypes: Record<string, string> = {
+    '.js': 'application/javascript',
+    '.css': 'text/css',
+    '.map': 'application/json',
+    '.html': 'text/html',
+    '.wasm': 'application/wasm',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+  };
+
+  let html = '';
+  let setHtml = (h: string) => {
+    html = h;
+  };
+
+  return new Promise((res, rej) => {
+    let server = createServer((req, reply) => {
+      let url = (req.url ?? '/').split('?')[0];
+
+      // Serve static assets from host dist
+      if (url.startsWith('/assets/')) {
+        let filePath = resolve(hostDistDir, url.slice(1));
+        try {
+          let content = readFileSync(filePath);
+          let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
+          let contentType = mimeTypes[ext] ?? 'application/octet-stream';
+          reply.writeHead(200, {
+            'Content-Type': contentType,
+            'Access-Control-Allow-Origin': '*',
+          });
+          reply.end(content);
+        } catch {
+          reply.writeHead(404);
+          reply.end('Not found');
+        }
+        return;
+      }
+
+      // Default: serve the test page HTML
+      reply.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Access-Control-Allow-Origin': '*',
+      });
+      reply.end(html);
+    });
+    server.on('error', rej);
+    server.listen(0, '127.0.0.1', () => {
+      let addr = server.address();
+      if (!addr || typeof addr === 'string') {
+        rej(new Error('Failed to start test page server'));
+        return;
+      }
+      res({ url: `http://127.0.0.1:${addr.port}`, server, setHtml });
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Test Execution Orchestration
 // ---------------------------------------------------------------------------
 
 /**
- * Orchestrate a full test run: create TestRun card → pull realm → start
- * harness → run Playwright → update results → cleanup → return handle.
+ * Orchestrate a full test run: create TestRun card → serve QUnit test page →
+ * navigate Playwright → collect results → update TestRun card → return handle.
  */
 export async function executeTestRunFromRealm(
   options: ExecuteTestRunOptions,
@@ -325,207 +383,97 @@ export async function executeTestRunFromRealm(
     projectCardUrl: options.projectCardUrl,
   };
 
-  // Step 1-2: Resolve or create the TestRun card.
+  // Step 1: Resolve or create the TestRun card.
   let resolved = await resolveTestRun(options);
   if (resolved.status === 'error') {
     return resolved;
   }
   let testRunId = resolved.testRunId;
 
-  let effectiveTestNames = resolved.pendingTests?.length
-    ? resolved.pendingTests
-    : options.testNames;
-
-  // Step 2a: Ensure test artifacts realm exists (if projectCardUrl provided).
-  let testArtifactsRealmUrl = options.testRealmUrl;
-  let testArtifactsAuthorization = options.authorization;
-  if (options.projectCardUrl && options.matrixAuth) {
-    let realmServerUrl = options.realmServerUrl;
-    let ensureResult = await ensureTestArtifactsRealm(options.projectCardUrl, {
-      authorization: options.authorization,
-      serverToken: options.serverToken,
-      fetch: options.fetch,
-      realmServerUrl,
-      targetRealmUrl: options.targetRealmUrl,
-      matrixAuth: options.matrixAuth,
-    });
-    if (ensureResult.error) {
-      return {
-        testRunId,
-        status: 'error',
-        errorMessage: `Failed to ensure test artifacts realm: ${ensureResult.error}`,
-      };
-    }
-    testArtifactsRealmUrl = ensureResult.testArtifactsRealmUrl;
-
-    // Get a realm-scoped token for the test artifacts realm so specs can
-    // write card instances to it.
-    if (testArtifactsRealmUrl && options.serverToken) {
-      let authResult = await getRealmScopedAuth(
-        realmServerUrl,
-        options.serverToken,
-        { fetch: options.fetch },
-      );
-      let artifactsToken =
-        authResult.tokens[ensureTrailingSlash(testArtifactsRealmUrl)];
-      if (artifactsToken) {
-        testArtifactsAuthorization = artifactsToken;
-      }
-    }
-  }
-
-  // Step 2b: Cancel all indexing jobs on the test artifacts realm.
-  if (testArtifactsRealmUrl) {
-    await cancelAllIndexingJobs(testArtifactsRealmUrl, {
-      authorization: testArtifactsAuthorization,
-      fetch: options.fetch,
-    });
-  }
-
-  // Step 2c: Determine the Run folder path for test artifacts.
-  let seqMatch = testRunId.match(/-(\d+)$/);
-  let runSeq = seqMatch ? seqMatch[1] : '1';
-  let testArtifactsRunFolder = testArtifactsRealmUrl
-    ? `Run ${runSeq}/`
-    : undefined;
-
-  // Step 3: Pull only spec files from the target realm to a local temp dir.
-  // Playwright needs local .spec.ts files to run, but tests execute against
-  // the LIVE target realm URL — no local harness startup needed.
-  let tmpBase = mkdtempSync(join(tmpdir(), 'sf-test-run-'));
-  let specsLocalDir = join(tmpBase, 'specs');
-  mkdirSync(specsLocalDir, { recursive: true });
+  // Step 2: Serve a custom QUnit test page and navigate Playwright to it.
+  let start = Date.now();
+  let browser;
+  let testPageServer: Server | undefined;
 
   try {
-    let pullResult = await pullRealmFiles(
+    // Locate the host app's dist directory — contains tests/index.html and assets
+    let hostDistDir =
+      options.hostDistDir ??
+      resolve(__dirname, '../../../host/dist');
+
+    // Start a local server to serve both the test HTML page and the host's
+    // dist assets. All asset references point to our server, so no external
+    // host app is needed — fully hermetic.
+    let { url: testPageUrl, server, setHtml } = await startTestPageServer(
+      hostDistDir,
+    );
+    testPageServer = server;
+
+    // Build HTML using our server URL for asset references
+    let html = buildQunitTestPageHtml(
+      testPageUrl,
+      hostDistDir,
       options.targetRealmUrl,
-      specsLocalDir,
-      { authorization: options.authorization, fetch: options.fetch },
+      options.realmServerUrl,
     );
-    if (pullResult.error) {
-      let errorMessage = `Failed to pull spec files: ${pullResult.error}`;
-      await completeTestRun(
-        testRunId,
-        {
-          status: 'error',
-          passedCount: 0,
-          failedCount: 0,
-          errorMessage,
-          specResults: [],
-        },
-        completeOptions,
+    setHtml(html);
+
+    console.error(
+      `[test-run-execution] Test page server at ${testPageUrl}`,
+    );
+    console.error(
+      `[test-run-execution] Host assets from: ${hostDistDir}`,
+    );
+    console.error(
+      `[test-run-execution] Target realm: ${options.targetRealmUrl}`,
+    );
+
+    browser = await chromium.launch({ headless: true });
+    let page = await browser.newPage();
+
+    // Forward browser console to stderr for debugging
+    page.on('console', (msg) => {
+      console.error(
+        `[test-run-execution:browser] ${msg.type()}: ${msg.text()}`,
       );
-      return { testRunId, status: 'error', errorMessage };
-    }
-
-    // Step 4: Find spec files in the pulled directory.
-    let specFiles = findSpecFiles(specsLocalDir, options.specPaths);
-    if (specFiles.length === 0) {
-      let errorMessage = 'No spec files found in the target realm';
-      await completeTestRun(
-        testRunId,
-        {
-          status: 'error',
-          passedCount: 0,
-          failedCount: 0,
-          errorMessage,
-          specResults: [],
-        },
-        completeOptions,
+    });
+    page.on('pageerror', (err) => {
+      console.error(
+        `[test-run-execution:browser] PAGE ERROR: ${err.message}`,
       );
-      return { testRunId, status: 'error', errorMessage };
-    }
+    });
+    page.on('response', (response) => {
+      if (response.status() >= 400) {
+        console.error(
+          `[test-run-execution:browser] ${response.status()} ${response.url()}`,
+        );
+      }
+    });
 
-    // Step 5: Run Playwright against the LIVE target realm.
-    // No local harness — specs execute against the running realm server.
-    // Test artifacts (instances created during tests) go to the test artifacts realm.
-    let reportFile = join(tmpBase, 'playwright-report.json');
-    let packageRoot = resolve(__dirname, '../..');
-    let playwrightConfig = resolve(packageRoot, 'playwright.realm.config.ts');
+    // Pass liveTest and realmURL as query params directly so test-helper.js
+    // sees them when it checks window.location.search at load time.
+    let realmParam = encodeURIComponent(options.targetRealmUrl);
+    let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
+    await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
 
-    // Build the full test artifacts folder URL: realm URL + Run folder.
-    // Specs write instances to this URL — each test run gets its own folder.
-    let testArtifactsFolderUrl =
-      testArtifactsRealmUrl && testArtifactsRunFolder
-        ? new URL(
-            testArtifactsRunFolder,
-            ensureTrailingSlash(testArtifactsRealmUrl),
-          ).href
-        : undefined;
-
-    let playwrightEnv: NodeJS.ProcessEnv = {
-      PLAYWRIGHT_TEST_DIR: specsLocalDir,
-      BOXEL_SOURCE_REALM_URL: options.targetRealmUrl,
-      BOXEL_SOURCE_REALM_PATH: specsLocalDir,
-      BOXEL_TEST_REALM_PATH: specsLocalDir,
-      BOXEL_TEST_REALM_URL: options.targetRealmUrl,
-      PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
-      ...(testArtifactsFolderUrl
-        ? { BOXEL_TEST_ARTIFACTS_FOLDER_URL: testArtifactsFolderUrl }
-        : {}),
-      ...(testArtifactsAuthorization
-        ? { BOXEL_TEST_ARTIFACTS_AUTHORIZATION: testArtifactsAuthorization }
-        : {}),
-    };
-
-    let grepArgs: string[] = [];
-    if (resolved.resumed && effectiveTestNames.length > 0) {
-      let pattern = effectiveTestNames
-        .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('|');
-      grepArgs = ['--grep', pattern];
-    }
-
-    // Use the local playwright binary directly (avoids npx resolution overhead
-    // which can be slow or hang in CI).
-    let playwrightBin = resolve(
-      packageRoot,
-      'node_modules',
-      '.bin',
-      'playwright',
+    // Wait for QUnit to finish (results collected via inline script hooks)
+    await page.waitForFunction(
+      () => (window as any).__qunitResults?.runEnd !== null,
+      { timeout: 120_000 },
     );
 
-    let start = Date.now();
-    let testRunProcess = spawnSync(
-      playwrightBin,
-      [
-        'test',
-        '--config',
-        playwrightConfig,
-        '--reporter=line,json',
-        ...grepArgs,
-        ...specFiles,
-      ],
-      {
-        // Run from the package root so spec files can resolve
-        // @playwright/test and other dependencies from node_modules.
-        cwd: packageRoot,
-        encoding: 'utf8',
-        timeout: 120_000,
-        env: { ...process.env, ...playwrightEnv },
-      },
+    let qunitResults: QunitResults = await page.evaluate(
+      () => (window as any).__qunitResults,
     );
+
     let durationMs = Date.now() - start;
+    console.error(
+      `[test-run-execution] QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
+    );
 
-    // Step 6: Parse results and complete the TestRun card.
-    let attrs: TestRunAttributes;
-    if (existsSync(reportFile)) {
-      let report = JSON.parse(
-        readFileSync(reportFile, 'utf8'),
-      ) as RunRealmTestsOutput;
-      attrs = parseRunRealmTestsOutput(report, durationMs);
-    } else {
-      let stderr = testRunProcess.stderr?.slice(0, 500) ?? '';
-      attrs = {
-        status: 'error',
-        passedCount: 0,
-        failedCount: 0,
-        durationMs,
-        errorMessage:
-          `Playwright exited with code ${testRunProcess.status ?? 'unknown'}. ${stderr}`.trim(),
-        specResults: [],
-      };
-    }
+    // Step 3: Parse results and complete the TestRun card.
+    let attrs = parseQunitResults(qunitResults);
+    attrs.durationMs = durationMs;
 
     let completeResult = await completeTestRun(
       testRunId,
@@ -540,7 +488,11 @@ export async function executeTestRunFromRealm(
       ...(completeResult.error ? { error: completeResult.error } : {}),
     };
   } catch (err) {
+    let durationMs = Date.now() - start;
     let errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[test-run-execution] Error: ${errorMessage} (${durationMs}ms)`,
+    );
     try {
       await completeTestRun(
         testRunId,
@@ -548,8 +500,9 @@ export async function executeTestRunFromRealm(
           status: 'error',
           passedCount: 0,
           failedCount: 0,
+          durationMs,
           errorMessage,
-          specResults: [],
+          moduleResults: [],
         },
         completeOptions,
       );
@@ -558,29 +511,11 @@ export async function executeTestRunFromRealm(
     }
     return { testRunId, status: 'error', errorMessage };
   } finally {
-    try {
-      rmSync(tmpBase, { recursive: true, force: true });
-    } catch {
-      // Best-effort
+    if (browser) {
+      await browser.close().catch(() => {});
+    }
+    if (testPageServer) {
+      testPageServer.close();
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Find spec files within a local directory by matching the requested
- * spec paths. Returns only paths that exist on disk.
- */
-function findSpecFiles(localDir: string, specPaths: string[]): string[] {
-  let found: string[] = [];
-  for (let specPath of specPaths) {
-    let fullPath = resolve(localDir, specPath);
-    if (existsSync(fullPath)) {
-      found.push(fullPath);
-    }
-  }
-  return found;
 }

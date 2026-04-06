@@ -3,7 +3,7 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { readFile, writeFile } from './realm-operations';
 import type {
   CreateTestRunOptions,
-  SpecResultData,
+  TestModuleResultData,
   TestResultEntryData,
   TestRunAttributes,
   TestRunRealmOptions,
@@ -27,7 +27,7 @@ export async function createTestRun(
     {
       sequenceNumber: seq,
       ticketURL: options.ticketURL,
-      specRef: options.specRef,
+      moduleRef: options.moduleRef,
       projectCardUrl: options.projectCardUrl,
     },
   );
@@ -83,7 +83,7 @@ export async function completeTestRun(
     status: attrs.status,
     completedAt: new Date().toISOString(),
     durationMs: attrs.durationMs,
-    specResults: attrs.specResults,
+    moduleResults: attrs.moduleResults,
   };
   if (attrs.errorMessage) {
     completionAttrs.errorMessage = attrs.errorMessage;
@@ -136,9 +136,9 @@ export function buildTestRunCardDocument(
     status: 'pending' as const,
   }));
 
-  let specResults: SpecResultData[] = [
+  let moduleResults: TestModuleResultData[] = [
     {
-      ...(options?.specRef ? { specRef: options.specRef } : {}),
+      ...(options?.moduleRef ? { moduleRef: options.moduleRef } : {}),
       results,
     },
   ];
@@ -147,7 +147,7 @@ export function buildTestRunCardDocument(
     sequenceNumber: options?.sequenceNumber ?? 1,
     runAt: new Date().toISOString(),
     status: 'running',
-    specResults,
+    moduleResults,
   };
 
   let relationships:
