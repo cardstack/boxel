@@ -14,13 +14,14 @@ import GitPullRequestIcon from '@cardstack/boxel-icons/git-pull-request';
 import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import CopyIcon from '@cardstack/boxel-icons/copy';
 import { Pill } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 import type { GithubEventCard } from '../github-event/github-event';
 import { HeaderSection } from './components/isolated/header-section';
 import { CiSection } from './components/isolated/ci-section';
 import { ReviewSection } from './components/isolated/review-section';
 import { MergeableSection } from './components/isolated/mergeable-section';
+import { PrCiStatusField } from './fields/ci-status-field';
+import { PrReviewStatusField } from './fields/review-status-field';
 
 import {
   renderPrActionLabel,
@@ -35,7 +36,6 @@ import {
   buildGithubEventCardRef,
   searchEventQuery,
   buildRealmHrefs,
-  pluralize,
 } from './utils';
 
 class IsolatedTemplate extends Component<typeof PrCard> {
@@ -353,55 +353,10 @@ class FittedTemplate extends Component<typeof PrCard> {
     );
   }
 
-  get checkRunEventQuery() {
-    return searchEventQuery(
-      this.githubEventCardRef,
-      this.args.model.branchName,
-      'check_run',
-    );
-  }
-
-  get checkSuiteEventQuery() {
-    return searchEventQuery(
-      this.githubEventCardRef,
-      this.args.model.branchName,
-      'check_suite',
-    );
-  }
-
-  get prReviewEventQuery() {
-    return searchEventQuery(
-      this.githubEventCardRef,
-      this.args.model.branchName,
-      'pull_request_review',
-    );
-  }
-
   // ── Live queries ──
   prEventData = this.args.context?.getCards(
     this,
     () => this.pullRequestEventQuery,
-    () => this.realmHrefs,
-    { isLive: true },
-  );
-
-  checkRunEventData = this.args.context?.getCards(
-    this,
-    () => this.checkRunEventQuery,
-    () => this.realmHrefs,
-    { isLive: true },
-  );
-
-  checkSuiteEventData = this.args.context?.getCards(
-    this,
-    () => this.checkSuiteEventQuery,
-    () => this.realmHrefs,
-    { isLive: true },
-  );
-
-  prReviewEventData = this.args.context?.getCards(
-    this,
-    () => this.prReviewEventQuery,
     () => this.realmHrefs,
     { isLive: true },
   );
@@ -447,85 +402,6 @@ class FittedTemplate extends Component<typeof PrCard> {
       this.latestPrEventInstance?.payload?.pull_request?.head?.ref ??
       null
     );
-  }
-
-  // ── CI ──
-  get ciItems() {
-    return buildCiItems(
-      this.checkRunEventData?.instances ?? [],
-      this.checkSuiteEventData?.instances ?? [],
-    );
-  }
-
-  get ciFailedCount() {
-    return this.ciItems.filter((i) => i.state === 'failure').length;
-  }
-
-  get ciSuccessCount() {
-    return this.ciItems.filter((i) => i.state === 'success').length;
-  }
-
-  get ciInProgressCount() {
-    return this.ciItems.filter((i) => i.state === 'in_progress').length;
-  }
-
-  get ciTotalCount() {
-    return this.ciItems.length;
-  }
-
-  get ciHeadline() {
-    if (this.ciTotalCount === 0) return null;
-    if (this.ciFailedCount > 0) return 'Some checks were not successful';
-    if (this.ciInProgressCount > 0) return 'Some checks are in progress';
-    return 'All checks have passed';
-  }
-
-  get ciSubtitle() {
-    if (this.ciTotalCount === 0) return null;
-    let parts: string[] = [];
-    if (this.ciFailedCount > 0) parts.push(`${this.ciFailedCount} failing`);
-    if (this.ciInProgressCount > 0)
-      parts.push(`${this.ciInProgressCount} in progress`);
-    if (this.ciSuccessCount > 0)
-      parts.push(`${this.ciSuccessCount} successful`);
-    let suffix = pluralize(this.ciTotalCount, 'check', 'checks');
-    return `${parts.join(', ')} ${suffix}`;
-  }
-
-  get ciDonutStyle() {
-    let success = this.ciSuccessCount;
-    let failed = this.ciFailedCount;
-    let total = this.ciTotalCount;
-    if (total === 0) return 'background: var(--muted-foreground, #656d76)';
-    let successPct = (success / total) * 100;
-    let failedPct = (failed / total) * 100;
-    let s1 = successPct;
-    let s2 = s1 + failedPct;
-    return `background: conic-gradient(var(--chart-1, #28a745) 0% ${s1}%, var(--destructive, #d73a49) ${s1}% ${s2}%, var(--chart-4, #dbab09) ${s2}% 100%)`;
-  }
-
-  // ── Reviews ──
-  get latestReviewByReviewer() {
-    return buildLatestReviewByReviewer(this.prReviewEventData?.instances ?? []);
-  }
-
-  get latestReviewState() {
-    return computeLatestReviewState(this.latestReviewByReviewer);
-  }
-
-  // ── Mergeability ──
-  get isClosed() {
-    let label = this.latestPrActionLabel;
-    return label === 'Closed' || label === 'Merged';
-  }
-
-  get isMergeBlocked() {
-    if (this.isClosed) return false;
-    if (this.latestPrActionLabel === 'Draft') return true;
-    if (this.ciItems.some((i) => i.state === 'failure')) return true;
-    if (this.ciItems.some((i) => i.state === 'in_progress')) return true;
-    if (this.latestReviewState !== 'approved') return true;
-    return false;
   }
 
   copyBranchName = async () => {
@@ -593,47 +469,10 @@ class FittedTemplate extends Component<typeof PrCard> {
       </header>
 
       {{! ── CI status row ── }}
-      {{#if this.ciHeadline}}
-        <div class='ci-status-row'>
-          <span class='ci-donut' style={{this.ciDonutStyle}}>
-            <span class='ci-donut-hole'></span>
-          </span>
-          <div class='ci-status-text'>
-            <span class='ci-headline'>{{this.ciHeadline}}</span>
-            <span class='ci-subtitle'>{{this.ciSubtitle}}</span>
-          </div>
-        </div>
-      {{/if}}
+      <@fields.ciStatus />
 
       {{! ── Review status row ── }}
-      {{#if (eq this.latestReviewState 'changes_requested')}}
-        <div class='review-status-row review-status-row--changes'>
-          <span class='review-status-label'>Changes Requested</span>
-          {{#if this.isMergeBlocked}}
-            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
-              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
-            </Pill>
-          {{/if}}
-        </div>
-      {{else if (eq this.latestReviewState 'approved')}}
-        <div class='review-status-row review-status-row--approved'>
-          <span class='review-status-label'>Approved</span>
-          {{#if this.isMergeBlocked}}
-            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
-              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
-            </Pill>
-          {{/if}}
-        </div>
-      {{else}}
-        <div class='review-status-row review-status-row--pending'>
-          <span class='review-status-label'>Pending Review</span>
-          {{#if this.isMergeBlocked}}
-            <Pill class='merge-blocked-pill' @pillBackgroundColor='#d73a49'>
-              <:default><span class='merge-blocked-label'>Merge blocked</span></:default>
-            </Pill>
-          {{/if}}
-        </div>
-      {{/if}}
+      <@fields.reviewStatus />
 
       {{#if @model.prSummary}}
         <@fields.prSummary />
@@ -775,101 +614,6 @@ class FittedTemplate extends Component<typeof PrCard> {
         height: 11px;
       }
 
-      /* ── CI status row ── */
-      .ci-status-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        background: var(--card, #ffffff);
-        border-bottom: 1px solid var(--border, var(--boxel-border-color));
-        min-width: 0;
-      }
-      .ci-donut {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .ci-donut-hole {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        background: var(--card, #ffffff);
-      }
-      .ci-status-text {
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 1px;
-      }
-      .ci-headline {
-        font-size: var(--boxel-font-sm);
-        font-weight: 600;
-        color: var(--foreground, #1f2328);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .ci-subtitle {
-        font-size: var(--boxel-font-xs);
-        color: var(--muted-foreground, #656d76);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      /* ── Review status row ── */
-      .review-status-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border-bottom: 1px solid var(--border, var(--boxel-border-color));
-      }
-      .review-status-row--changes {
-        background: color-mix(
-          in srgb,
-          var(--destructive, #d73a49) 5%,
-          var(--card, #ffffff)
-        );
-      }
-      .review-status-row--approved {
-        background: color-mix(
-          in srgb,
-          var(--chart-1, #28a745) 5%,
-          var(--card, #ffffff)
-        );
-      }
-      .review-status-row--pending {
-        background: color-mix(in srgb, #9a6700 8%, var(--card, #ffffff));
-      }
-      .review-status-label {
-        font-size: var(--boxel-font-sm);
-        font-weight: 600;
-      }
-      .review-status-row--changes .review-status-label {
-        color: var(--destructive, #d73a49);
-      }
-      .review-status-row--pending .review-status-label {
-        color: #9a6700;
-      }
-      .review-status-row--approved .review-status-label {
-        color: var(--chart-1, #28a745);
-      }
-      /* ── Merge blocked pill ── */
-      .merge-blocked-pill {
-        --boxel-pill-border-radius: 2em;
-      }
-      .merge-blocked-label {
-        font-size: 10px;
-        font-weight: 600;
-        color: #fff;
-        text-align: center;
-      }
       /* ── Summary ── */
       .pr-card :deep(.markdown-content) {
         padding: var(--boxel-sp-sm) var(--boxel-sp);
@@ -1089,6 +833,23 @@ export class PrCard extends CardDef {
   @field cardTitle = contains(StringField, {
     computeVia(this: PrCard) {
       return 'Pull request';
+    },
+  });
+
+  // === Status fields (computed from branchName) ===
+  @field ciStatus = contains(PrCiStatusField, {
+    computeVia(this: PrCard) {
+      let field = new PrCiStatusField();
+      field.branchName = this.branchName;
+      return field;
+    },
+  });
+
+  @field reviewStatus = contains(PrReviewStatusField, {
+    computeVia(this: PrCard) {
+      let field = new PrReviewStatusField();
+      field.branchName = this.branchName;
+      return field;
     },
   });
 

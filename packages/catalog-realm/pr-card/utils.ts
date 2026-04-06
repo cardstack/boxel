@@ -311,9 +311,12 @@ export function findLatestApprovedEvent(
 
 // ── Query Builders ───────────────────────────────────────────────────────
 
-export function buildGithubEventCardRef(moduleBaseUrl: string) {
+export function buildGithubEventCardRef(
+  moduleBaseUrl: string,
+  relativePath = '../github-event/github-event',
+) {
   return {
-    module: new URL('../github-event/github-event', moduleBaseUrl).href,
+    module: new URL(relativePath, moduleBaseUrl).href,
     name: 'GithubEventCard' as const,
   };
 }

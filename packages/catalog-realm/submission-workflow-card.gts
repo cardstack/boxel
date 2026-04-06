@@ -17,6 +17,8 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { Listing } from './catalog-app/listing/listing';
 import { PrCard } from './pr-card/pr-card';
+import { PrCiStatusField } from './pr-card/fields/ci-status-field';
+import { PrReviewStatusField } from './pr-card/fields/review-status-field';
 import type { GithubEventCard } from './github-event/github-event';
 
 import {
@@ -239,6 +241,25 @@ export class SubmissionWorkflowCard extends CardDef {
     },
   });
 
+  // ── Status fields (reuse PR card field components) ──
+  @field ciStatus = contains(PrCiStatusField, {
+    computeVia: function (this: SubmissionWorkflowCard) {
+      let bn = this.prCard?.branchName ?? this.branchName;
+      let f = new PrCiStatusField();
+      f.branchName = bn;
+      return f;
+    },
+  });
+
+  @field reviewStatus = contains(PrReviewStatusField, {
+    computeVia: function (this: SubmissionWorkflowCard) {
+      let bn = this.prCard?.branchName ?? this.branchName;
+      let f = new PrReviewStatusField();
+      f.branchName = bn;
+      return f;
+    },
+  });
+
   // ── Isolated: Full workflow view ──
 
   static isolated = class Isolated extends Component<typeof SubmissionWorkflowCard> {
@@ -248,7 +269,10 @@ export class SubmissionWorkflowCard extends CardDef {
     }
 
     get githubEventCardRef() {
-      return buildGithubEventCardRef(import.meta.url);
+      return buildGithubEventCardRef(
+        import.meta.url,
+        './github-event/github-event',
+      );
     }
 
     get prBranchName() {
@@ -340,19 +364,6 @@ export class SubmissionWorkflowCard extends CardDef {
       return this.ciItems.some((i) => i.state === 'in_progress');
     }
 
-    get ciSummary(): string {
-      let items = this.ciItems;
-      if (items.length === 0) return 'Waiting for checks';
-      let passed = items.filter((i) => i.state === 'success').length;
-      let failed = items.filter((i) => i.state === 'failure').length;
-      let running = items.filter((i) => i.state === 'in_progress').length;
-      let parts: string[] = [];
-      if (passed > 0) parts.push(`${passed} passed`);
-      if (failed > 0) parts.push(`${failed} failed`);
-      if (running > 0) parts.push(`${running} running`);
-      return `${parts.join(', ')} of ${items.length} checks`;
-    }
-
     // ── Review state ──
     get latestReviewByReviewer() {
       return buildLatestReviewByReviewer(this.prReviewEventData?.instances ?? []);
@@ -360,13 +371,6 @@ export class SubmissionWorkflowCard extends CardDef {
 
     get reviewState() {
       return computeLatestReviewState(this.latestReviewByReviewer);
-    }
-
-    get reviewLabel(): string {
-      let state = this.reviewState;
-      if (state === 'approved') return 'Approved';
-      if (state === 'changes_requested') return 'Changes Requested';
-      return 'Pending Review';
     }
 
     // ── Workflow resolution ──
@@ -482,10 +486,7 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{#if (eq step.key 'ci-checks')}}
                     {{#if @model.prCard}}
                       <div class='sw-step-detail'>
-                        <div class={{concat 'sw-detail-card ci ' (if this.ciAllPassed 'passed' (if this.ciHasFailure 'failed' 'pending'))}}>
-                          <span class='sw-detail-type'>CI Status</span>
-                          <span class='sw-detail-name'>{{this.ciSummary}}</span>
-                        </div>
+                        <@fields.ciStatus />
                       </div>
                     {{/if}}
                   {{/if}}
@@ -493,21 +494,7 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{#if (eq step.key 'reviewer-approve')}}
                     {{#if @model.prCard}}
                       <div class='sw-step-detail'>
-                        <div class={{concat 'sw-detail-card review ' this.reviewState}}>
-                          <span class='sw-detail-type'>Review Status</span>
-                          <span class='sw-detail-name'>{{this.reviewLabel}}</span>
-                        </div>
-                      </div>
-                    {{/if}}
-                  {{/if}}
-
-                  {{#if (eq step.key 'merge-catalog')}}
-                    {{#if this.isMerged}}
-                      <div class='sw-step-detail'>
-                        <div class='sw-detail-card merged'>
-                          <span class='sw-detail-type'>Status</span>
-                          <span class='sw-detail-name'>Merged into catalog</span>
-                        </div>
+                        <@fields.reviewStatus />
                       </div>
                     {{/if}}
                   {{/if}}
@@ -824,36 +811,6 @@ export class SubmissionWorkflowCard extends CardDef {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         }
 
-        .sw-detail-card {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          padding: 10px 14px;
-          border-radius: 10px;
-          border: 1px solid var(--c-border);
-          background: var(--c-surface);
-          max-width: 360px;
-        }
-        .sw-detail-card.ci.passed { border-left: 3px solid var(--c-success); }
-        .sw-detail-card.ci.failed { border-left: 3px solid var(--c-danger); }
-        .sw-detail-card.ci.pending { border-left: 3px solid #f59e0b; }
-        .sw-detail-card.review.approved { border-left: 3px solid var(--c-success); }
-        .sw-detail-card.review.changes_requested { border-left: 3px solid var(--c-danger); }
-        .sw-detail-card.review.pending { border-left: 3px solid #f59e0b; }
-        .sw-detail-card.merged { border-left: 3px solid var(--c-success); }
-
-        .sw-detail-type {
-          font-size: 9px;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--c-muted);
-        }
-        .sw-detail-name {
-          font-size: 13px;
-          font-weight: 600;
-          color: var(--c-text);
-        }
         /* ── Sidebar ── */
         .sw-sidebar {
           display: flex;
