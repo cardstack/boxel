@@ -508,7 +508,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
         sourceContextCodeRef: codeRef,
       },
       {
-        max: 2,
         additionalSystemPrompt:
           "Choose tags that best describe the card's nature or usage pattern." +
           ' RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
@@ -530,7 +529,6 @@ export default class ListingCreateCommand extends HostBaseCommand<
         sourceContextCodeRef: codeRef,
       },
       {
-        max: 2,
         additionalSystemPrompt:
           "Choose categories that best match the card's domain or purpose.",
       },

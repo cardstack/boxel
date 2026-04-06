@@ -34,7 +34,7 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SearchAndChooseResult> {
     let {
       sourceContextCodeRef,
-      max = 2,
+      max = 1,
       additionalSystemPrompt,
       llmModel,
     } = input;
