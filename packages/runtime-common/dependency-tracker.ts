@@ -1,5 +1,5 @@
 import { logger } from './log';
-import { executableExtensions, hasExecutableExtension } from './index';
+import { executableExtensions } from './index';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
@@ -68,7 +68,9 @@ function canonicalURL(url: string): string | undefined {
 }
 
 function hasPathExtension(url: string): boolean {
-  return hasExecutableExtension(url);
+  let lastSlash = url.lastIndexOf('/');
+  let segment = lastSlash !== -1 ? url.slice(lastSlash + 1) : url;
+  return segment.length > 0 && segment.includes('.');
 }
 
 function normalizeModuleURL(url: string): string | undefined {

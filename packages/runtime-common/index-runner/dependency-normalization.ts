@@ -1,4 +1,4 @@
-import { trimExecutableExtension, hasExecutableExtension } from '../index';
+import { trimExecutableExtension } from '../index';
 import {
   isRegisteredPrefix,
   resolveCardReference,
@@ -6,9 +6,8 @@ import {
 import { canonicalURL } from './dependency-url';
 
 export function isExtensionlessPath(url: URL): boolean {
-  // Only executable extensions (.gts, .ts, .js, .gjs) count as "having an
-  // extension". A dot in the filename (like "hello.test") is not an extension.
-  return !hasExecutableExtension(url.pathname);
+  let lastSegment = url.pathname.split('/').pop() ?? '';
+  return !lastSegment.includes('.');
 }
 
 export function normalizeStoredDependency(
