@@ -12,8 +12,9 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
 
-import { cleanupMonacoEditorModels } from './index';
 import { clearRemoteRealmCache } from './realm-server-mock/routes';
+
+import { cleanupMonacoEditorModels } from './index';
 
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
