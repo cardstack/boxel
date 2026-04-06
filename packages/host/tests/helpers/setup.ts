@@ -13,6 +13,7 @@ import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
 
 import { cleanupMonacoEditorModels } from './index';
+import { clearRemoteRealmCache } from './realm-server-mock/routes';
 
 function setupFetchDebugging(hooks: NestedHooks) {
   let originalFetch: typeof globalThis.fetch | undefined;
@@ -93,6 +94,7 @@ export function setupApplicationTest(hooks: NestedHooks) {
     )?.resetAll();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    clearRemoteRealmCache();
   });
 }
 
@@ -107,6 +109,7 @@ export function setupRenderingTest(hooks: NestedHooks) {
     )?.resetAll();
     cleanupMonacoEditorModels();
     clearHtmlComponentCache();
+    clearRemoteRealmCache();
   });
 }
 
