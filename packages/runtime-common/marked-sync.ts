@@ -6,14 +6,23 @@ import { markedKatexPlaceholder } from './bfm-math';
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 // These packages declare "type": "module" which causes TS1479 under Node16
 // module resolution (runtime-common lacks "type": "module"). Load via CJS.
-const markedAlert = require('marked-alert') as (
+// Unwrap .default for ESM default exports — webpack unwraps automatically but
+// esbuild (used by workspace-sync-cli) preserves the { default: fn } wrapper.
+type MarkedExtensionFactory = (
   opts?: object,
 ) => import('marked').MarkedExtension;
-const markedFootnote = require('marked-footnote') as (
-  opts?: object,
-) => import('marked').MarkedExtension;
-const markedExtendedTables =
-  require('marked-extended-tables/lib/index.cjs') as () => import('marked').MarkedExtension;
+function unwrapDefault<T>(mod: T | { default: T }): T {
+  return (mod as { default: T }).default ?? (mod as T);
+}
+const markedAlert = unwrapDefault(
+  require('marked-alert'),
+) as MarkedExtensionFactory;
+const markedFootnote = unwrapDefault(
+  require('marked-footnote'),
+) as MarkedExtensionFactory;
+const markedExtendedTables = unwrapDefault(
+  require('marked-extended-tables/lib/index.cjs'),
+) as () => import('marked').MarkedExtension;
 /* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
 import { gfmHeadingId } from 'marked-gfm-heading-id';
 import type * as _MonacoSDK from 'monaco-editor';
