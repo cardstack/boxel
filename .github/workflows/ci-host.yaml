@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, review_requested]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "packages/host/**"
       - "packages/base/**"
@@ -43,11 +43,9 @@ jobs:
             exit 0
           fi
 
-          OUTSTANDING_REVIEWER_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }} --jq '(.requested_reviewers | length) + (.requested_teams | length)')
-          EXISTING_REVIEW_COUNT=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews --paginate --jq 'length')
-          if [[ "$OUTSTANDING_REVIEWER_COUNT" -eq 0 && "$EXISTING_REVIEW_COUNT" -eq 0 ]]; then
+          if [[ "${{ github.event.pull_request.draft }}" == "true" ]]; then
             echo "percy_needed=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping Percy — no reviewers have been assigned yet. Percy snapshots are limited (10k/month), so they only run once a PR has entered review to avoid burning through the quota on work-in-progress PRs. Add a reviewer to trigger Percy."
+            echo "Skipping Percy — PR is a draft. Percy snapshots are limited (10k/month), so they only run once a PR is marked as ready for review to avoid burning through the quota on work-in-progress PRs."
             exit 0
           fi
 
@@ -82,6 +80,7 @@ jobs:
 
   live-test:
     name: Live Tests (realm)
+    if: github.event.action != 'ready_for_review'
     runs-on: ubuntu-latest
     needs: test-web-assets
     concurrency:
