@@ -1,0 +1,383 @@
+import { render, waitFor, settled } from '@ember/test-helpers';
+import { tracked } from '@glimmer/tracking';
+import { module, test } from 'qunit';
+
+import { setupRenderingTest } from '../../helpers/setup';
+
+// Import the prosemirror-context module directly from host — this is
+// the module that gets lazy-loaded in production via globalThis.__loadProseMirror.
+import pmContext from '@cardstack/host/lib/prosemirror-context';
+
+// We can't import ProseMirrorEditor from @cardstack/base (it's served
+// through the realm, not npm). Instead we render a thin wrapper that
+// exercises the same lazy-load path the real component uses.
+
+module('Integration | prosemirror-context', function (hooks) {
+  setupRenderingTest(hooks);
+
+  // ── Schema tests ──
+
+  test('schema has expected node types', function (assert) {
+    let { schema } = pmContext;
+    let nodeNames = Object.keys(schema.nodes);
+
+    assert.true(nodeNames.includes('doc'), 'has doc');
+    assert.true(nodeNames.includes('paragraph'), 'has paragraph');
+    assert.true(nodeNames.includes('heading'), 'has heading');
+    assert.true(nodeNames.includes('blockquote'), 'has blockquote');
+    assert.true(nodeNames.includes('code_block'), 'has code_block');
+    assert.true(nodeNames.includes('bullet_list'), 'has bullet_list');
+    assert.true(nodeNames.includes('ordered_list'), 'has ordered_list');
+    assert.true(nodeNames.includes('list_item'), 'has list_item');
+    assert.true(nodeNames.includes('horizontal_rule'), 'has horizontal_rule');
+    assert.true(nodeNames.includes('hard_break'), 'has hard_break');
+    assert.true(nodeNames.includes('text'), 'has text');
+    assert.true(nodeNames.includes('boxel_card_atom'), 'has boxel_card_atom');
+    assert.true(nodeNames.includes('boxel_card_block'), 'has boxel_card_block');
+  });
+
+  test('schema has expected mark types', function (assert) {
+    let { schema } = pmContext;
+    let markNames = Object.keys(schema.marks);
+
+    assert.true(markNames.includes('strong'), 'has strong');
+    assert.true(markNames.includes('em'), 'has em');
+    assert.true(markNames.includes('code'), 'has code');
+    assert.true(markNames.includes('link'), 'has link');
+  });
+
+  // ── Parse tests ──
+
+  test('parseMarkdown: heading', function (assert) {
+    let doc = pmContext.parseMarkdown('# Hello World');
+    let firstChild = doc.firstChild;
+    assert.strictEqual(firstChild?.type.name, 'heading', 'parses as heading');
+    assert.strictEqual(firstChild?.attrs.level, 1, 'heading level is 1');
+    assert.strictEqual(
+      firstChild?.textContent,
+      'Hello World',
+      'heading text content',
+    );
+  });
+
+  test('parseMarkdown: paragraph with inline formatting', function (assert) {
+    let doc = pmContext.parseMarkdown('Some **bold** and *italic* text.');
+    let para = doc.firstChild;
+    assert.strictEqual(para?.type.name, 'paragraph', 'parses as paragraph');
+
+    let hasStrong = false;
+    let hasEm = false;
+    para?.descendants((node) => {
+      if (node.isText) {
+        node.marks.forEach((mark) => {
+          if (mark.type.name === 'strong') hasStrong = true;
+          if (mark.type.name === 'em') hasEm = true;
+        });
+      }
+      return true;
+    });
+    assert.true(hasStrong, 'has strong mark');
+    assert.true(hasEm, 'has em mark');
+  });
+
+  test('parseMarkdown: bullet list', function (assert) {
+    let doc = pmContext.parseMarkdown('- Item one\n- Item two\n- Item three');
+    let list = doc.firstChild;
+    assert.strictEqual(
+      list?.type.name,
+      'bullet_list',
+      'parses as bullet_list',
+    );
+    assert.strictEqual(list?.childCount, 3, 'has 3 list items');
+  });
+
+  test('parseMarkdown: ordered list', function (assert) {
+    let doc = pmContext.parseMarkdown('1. First\n2. Second\n3. Third');
+    let list = doc.firstChild;
+    assert.strictEqual(
+      list?.type.name,
+      'ordered_list',
+      'parses as ordered_list',
+    );
+    assert.strictEqual(list?.childCount, 3, 'has 3 list items');
+  });
+
+  test('parseMarkdown: code block', function (assert) {
+    let doc = pmContext.parseMarkdown('```typescript\nconst x = 1;\n```');
+    let block = doc.firstChild;
+    assert.strictEqual(
+      block?.type.name,
+      'code_block',
+      'parses as code_block',
+    );
+    assert.strictEqual(
+      block?.textContent,
+      'const x = 1;',
+      'code block content',
+    );
+  });
+
+  test('parseMarkdown: blockquote', function (assert) {
+    let doc = pmContext.parseMarkdown('> This is a quote');
+    let bq = doc.firstChild;
+    assert.strictEqual(bq?.type.name, 'blockquote', 'parses as blockquote');
+    assert.strictEqual(
+      bq?.firstChild?.textContent,
+      'This is a quote',
+      'blockquote text content',
+    );
+  });
+
+  test('parseMarkdown: card atom inline', function (assert) {
+    let doc = pmContext.parseMarkdown(
+      'See :card[./Author/alice] for details.',
+    );
+    let para = doc.firstChild;
+    assert.strictEqual(para?.type.name, 'paragraph', 'wraps in paragraph');
+
+    let hasAtom = false;
+    para?.descendants((node) => {
+      if (node.type.name === 'boxel_card_atom') {
+        hasAtom = true;
+        assert.strictEqual(
+          node.attrs.cardId,
+          './Author/alice',
+          'card atom has correct cardId',
+        );
+      }
+      return true;
+    });
+    assert.true(hasAtom, 'contains card atom node');
+  });
+
+  test('parseMarkdown: card block', function (assert) {
+    let doc = pmContext.parseMarkdown('::card[./Author/alice]');
+    let block = doc.firstChild;
+    assert.strictEqual(
+      block?.type.name,
+      'boxel_card_block',
+      'parses as boxel_card_block',
+    );
+    assert.strictEqual(
+      block?.attrs.cardId,
+      './Author/alice',
+      'card block has correct cardId',
+    );
+  });
+
+  test('parseMarkdown: horizontal rule', function (assert) {
+    let doc = pmContext.parseMarkdown('Before\n\n---\n\nAfter');
+    let hasHr = false;
+    doc.descendants((node) => {
+      if (node.type.name === 'horizontal_rule') hasHr = true;
+      return true;
+    });
+    assert.true(hasHr, 'contains horizontal_rule node');
+  });
+
+  test('parseMarkdown: empty content', function (assert) {
+    let doc = pmContext.parseMarkdown('');
+    assert.strictEqual(doc.type.name, 'doc', 'returns a doc node');
+    assert.strictEqual(
+      doc.firstChild?.type.name,
+      'paragraph',
+      'has an empty paragraph',
+    );
+  });
+
+  // ── Serialize tests ──
+
+  test('serializeMarkdown: heading', function (assert) {
+    let doc = pmContext.parseMarkdown('# Hello World');
+    let result = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(result.trim(), '# Hello World');
+  });
+
+  test('serializeMarkdown: paragraph with formatting', function (assert) {
+    let doc = pmContext.parseMarkdown('Some **bold** and *italic* text.');
+    let result = pmContext.serializeMarkdown(doc);
+    assert.true(result.includes('**bold**'), 'preserves bold');
+    assert.true(result.includes('*italic*'), 'preserves italic');
+  });
+
+  test('serializeMarkdown: bullet list', function (assert) {
+    let doc = pmContext.parseMarkdown('- Item one\n- Item two');
+    let result = pmContext.serializeMarkdown(doc);
+    assert.true(result.includes('- Item one'), 'preserves first item');
+    assert.true(result.includes('- Item two'), 'preserves second item');
+  });
+
+  test('serializeMarkdown: code block', function (assert) {
+    let doc = pmContext.parseMarkdown('```\nconst x = 1;\n```');
+    let result = pmContext.serializeMarkdown(doc);
+    assert.true(result.includes('const x = 1;'), 'preserves code content');
+    assert.true(result.includes('```'), 'preserves code fences');
+  });
+
+  test('serializeMarkdown: blockquote', function (assert) {
+    let doc = pmContext.parseMarkdown('> This is a quote');
+    let result = pmContext.serializeMarkdown(doc);
+    assert.true(result.includes('> This is a quote'), 'preserves blockquote');
+  });
+
+  test('serializeMarkdown: card atom', function (assert) {
+    let doc = pmContext.parseMarkdown(
+      'See :card[./Author/alice] for details.',
+    );
+    let result = pmContext.serializeMarkdown(doc);
+    assert.true(
+      result.includes(':card[./Author/alice]'),
+      'preserves card atom syntax',
+    );
+  });
+
+  test('serializeMarkdown: card block', function (assert) {
+    let doc = pmContext.parseMarkdown('::card[./Author/alice]');
+    let result = pmContext.serializeMarkdown(doc);
+    assert.true(
+      result.includes('::card[./Author/alice]'),
+      'preserves card block syntax',
+    );
+  });
+
+  test('round-trip: complex document', function (assert) {
+    let input = [
+      '# Title',
+      '',
+      'A paragraph with **bold** and *italic*.',
+      '',
+      '- Item one',
+      '- Item two',
+      '',
+      '> A quote',
+      '',
+      '```',
+      'code here',
+      '```',
+      '',
+      '::card[./SomeCard/1]',
+    ].join('\n');
+
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+
+    assert.true(output.includes('# Title'), 'preserves heading');
+    assert.true(output.includes('**bold**'), 'preserves bold');
+    assert.true(output.includes('*italic*'), 'preserves italic');
+    assert.true(output.includes('- Item one'), 'preserves list');
+    assert.true(output.includes('> A quote'), 'preserves blockquote');
+    assert.true(output.includes('code here'), 'preserves code');
+    assert.true(
+      output.includes('::card[./SomeCard/1]'),
+      'preserves card block',
+    );
+  });
+
+  // ── EditorState / EditorView integration ──
+
+  test('EditorState can be created from parsed document', function (assert) {
+    let doc = pmContext.parseMarkdown('Hello world');
+    let state = pmContext.EditorState.create({ doc });
+
+    assert.ok(state, 'state is created');
+    assert.strictEqual(
+      state.doc.firstChild?.textContent,
+      'Hello world',
+      'state contains the parsed document',
+    );
+  });
+
+  test('EditorView mounts into a DOM element', async function (assert) {
+    let doc = pmContext.parseMarkdown('# Test Heading');
+    let state = pmContext.EditorState.create({
+      doc,
+      plugins: [
+        pmContext.keymap(pmContext.baseKeymap),
+        pmContext.history(),
+      ],
+    });
+
+    await render(<template><div id='pm-mount'></div></template>);
+
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    assert.ok(mountEl, 'mount element exists');
+
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    assert.ok(
+      mountEl.querySelector('.ProseMirror'),
+      'ProseMirror view mounts into element',
+    );
+    assert.ok(
+      mountEl.querySelector('.ProseMirror h1'),
+      'heading renders in the view',
+    );
+    assert.strictEqual(
+      mountEl.querySelector('.ProseMirror h1')?.textContent,
+      'Test Heading',
+      'heading text content is correct',
+    );
+
+    view.destroy();
+  });
+
+  test('EditorView renders card atom placeholder DOM', async function (assert) {
+    let doc = pmContext.parseMarkdown(
+      'See :card[./Author/alice] for details.',
+    );
+    let state = pmContext.EditorState.create({ doc });
+
+    await render(<template><div id='pm-mount'></div></template>);
+
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    assert.ok(
+      mountEl.querySelector('.boxel-card-atom'),
+      'card atom placeholder renders',
+    );
+
+    view.destroy();
+  });
+
+  test('EditorView renders card block placeholder DOM', async function (assert) {
+    let doc = pmContext.parseMarkdown('::card[./Author/alice]');
+    let state = pmContext.EditorState.create({ doc });
+
+    await render(<template><div id='pm-mount'></div></template>);
+
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    assert.ok(
+      mountEl.querySelector('.boxel-card-block'),
+      'card block placeholder renders',
+    );
+
+    view.destroy();
+  });
+
+  // ── Lazy-loading via globalThis (component pattern) ──
+
+  test('globalThis.__loadProseMirror loader works', async function (assert) {
+    let originalLoader = (globalThis as any).__loadProseMirror;
+
+    (globalThis as any).__loadProseMirror = async () => {
+      let mod = await import('@cardstack/host/lib/prosemirror-context');
+      return mod.default;
+    };
+
+    try {
+      let loadProseMirror = (globalThis as any).__loadProseMirror;
+      let pm = await loadProseMirror();
+
+      assert.ok(pm.schema, 'loaded context has schema');
+      assert.ok(pm.EditorState, 'loaded context has EditorState');
+      assert.ok(pm.EditorView, 'loaded context has EditorView');
+      assert.ok(pm.parseMarkdown, 'loaded context has parseMarkdown');
+      assert.ok(pm.serializeMarkdown, 'loaded context has serializeMarkdown');
+    } finally {
+      (globalThis as any).__loadProseMirror = originalLoader;
+    }
+  });
+});

@@ -15,6 +15,7 @@ import {
   linksToMany,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
+import ProseMirrorEditor from './prosemirror-editor';
 
 /**
  * A composite FieldDef that stores markdown content and exposes structured
@@ -85,8 +86,14 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
+    updateContent = (markdown: string) => {
+      this.args.model.content = markdown;
+    };
     <template>
-      <@fields.content />
+      <ProseMirrorEditor
+        @content={{@model.content}}
+        @onUpdate={{this.updateContent}}
+      />
     </template>
   };
 }

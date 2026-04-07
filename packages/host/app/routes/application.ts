@@ -41,6 +41,14 @@ export default class Application extends Route {
         let mod = await import('mermaid');
         return mod.default;
       };
+      // Lazy-load ProseMirror for WYSIWYG editing in RichMarkdownField.
+      // The base package's ProseMirrorEditor component calls this via globalThis.
+      (globalThis as any).__loadProseMirror ??= async () => {
+        let mod = await import(
+          '@cardstack/host/lib/prosemirror-context'
+        );
+        return mod.default;
+      };
     }
   }
 
@@ -50,6 +58,7 @@ export default class Application extends Route {
       delete (globalThis as any).__loadMonacoForMarkdown;
       delete (globalThis as any).__loadKatex;
       delete (globalThis as any).__loadMermaid;
+      delete (globalThis as any).__loadProseMirror;
     }
   }
 }
