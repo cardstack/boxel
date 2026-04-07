@@ -1564,6 +1564,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'hello.test.gts': {
+                links: {
+                  related: `${testRealmHref}hello.test.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'home.gts': {
                 links: {
                   related: `${testRealmHref}home.gts`,
