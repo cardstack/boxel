@@ -1,7 +1,7 @@
 import * as QUnit from 'qunit';
 
 /**
- * Discovers all .gts/.ts module URLs in a realm using the _mtimes endpoint,
+ * Discovers all *.test.gts module URLs in a realm using the _mtimes endpoint,
  * which returns a flat map of every file URL in the realm in one request.
  * Only modules that export a `runTests` function will actually register tests.
  *
@@ -12,15 +12,18 @@ async function discoverTestModules(realmURL) {
   const resp = await fetch(`${realmURL}_mtimes`, {
     headers: { Accept: 'application/vnd.api+json' },
   });
+  if (!resp.ok) {
+    throw new Error(
+      `Cannot access realm ${realmURL} (HTTP ${resp.status}). Check that the realm is publicly readable.`,
+    );
+  }
   const {
     data: {
       attributes: { mtimes },
     },
   } = await resp.json();
 
-  return Object.keys(mtimes)
-    .filter((url) => url.endsWith('.gts') || url.endsWith('.ts'))
-    .map((url) => url.replace(/\.(gts|ts)$/, ''));
+  return Object.keys(mtimes).filter((url) => url.endsWith('.test.gts'));
 }
 
 // eslint-disable-next-line ember/no-test-import-export
