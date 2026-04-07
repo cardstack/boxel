@@ -14,7 +14,9 @@ export function runTests() {
       let { HelloCard } = await loader.import(cardModuleUrl);
       let card = new HelloCard({ greeting: 'Hello from the test fixture!' });
       await renderCard(loader, card, 'isolated');
-      assert.dom('[data-test-greeting]').hasText('Hello from the test fixture!');
+      assert
+        .dom('[data-test-greeting]')
+        .hasText('Hello from the test fixture!');
     });
   });
 }
