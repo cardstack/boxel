@@ -11,7 +11,6 @@ import {
   type LocalPath,
   type LooseCardResource,
   type Prerenderer,
-  type RealmInfo,
   type RenderResponse,
   type RenderRouteOptions,
 } from '../index';
@@ -33,7 +32,6 @@ interface CardIndexerOptions {
   jobInfo: JobInfo;
   prerenderer: Prerenderer;
   consumeClearCacheForRender(): boolean;
-  ensureRealmInfo(): Promise<RealmInfo>;
   dependencyResolver: IndexRunnerDependencyManager;
   updateEntry(
     instanceURL: URL,
@@ -54,7 +52,6 @@ export async function performCardIndexing({
   jobInfo,
   prerenderer,
   consumeClearCacheForRender,
-  ensureRealmInfo,
   dependencyResolver,
   updateEntry,
   logWarn,
@@ -78,7 +75,6 @@ export async function performCardIndexing({
     });
 
     // we tack on data that can only be determined via access to underlying filesystem/DB
-    let realmInfo = await ensureRealmInfo();
     let serialized = renderResult?.serialized;
     if (serialized) {
       merge(serialized, {
@@ -86,7 +82,6 @@ export async function performCardIndexing({
           meta: {
             lastModified,
             resourceCreatedAt,
-            realmInfo: { ...realmInfo },
             realmURL: realmURL.href,
           },
         },

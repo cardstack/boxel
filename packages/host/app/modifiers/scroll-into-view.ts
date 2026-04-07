@@ -1,6 +1,6 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import Modifier from 'ember-modifier';
 

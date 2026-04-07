@@ -1291,36 +1291,39 @@ export default class Room extends Component<Signature> {
   });
 
   @action
-  private handleChatInputDragOver(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer)) {
+  private handleChatInputDragOver(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.isDropZoneActive = true;
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
+    if (dragEvent.dataTransfer) {
+      dragEvent.dataTransfer.dropEffect = 'copy';
     }
   }
 
   @action
-  private handleChatInputDragEnter(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer)) {
+  private handleChatInputDragEnter(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.dropZoneDragDepth++;
     this.isDropZoneActive = true;
   }
 
   @action
-  private handleChatInputDragLeave(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+  private handleChatInputDragLeave(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer) && !this.isDropZoneActive) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
     if (this.dropZoneDragDepth === 0) {
       this.isDropZoneActive = false;
@@ -1328,13 +1331,14 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private handleChatInputDrop(event: DragEvent) {
-    let files = Array.from(event.dataTransfer?.files ?? []);
+  private handleChatInputDrop(event: Event) {
+    let dragEvent = event as DragEvent;
+    let files = Array.from(dragEvent.dataTransfer?.files ?? []);
     if (!files.length) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.dropZoneDragDepth = 0;
     this.isDropZoneActive = false;
     this.attachLocalFilesTask.perform(files);

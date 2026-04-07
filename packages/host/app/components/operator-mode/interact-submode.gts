@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { concat, fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -773,6 +773,7 @@ export default class InteractSubmode extends Component {
                 }}
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
+                {{! @glint-expect-error: fn partial application loses async return type }}
                 @createCard={{fn this.createCard stackIndex}}
                 @viewCard={{fn this.viewCard stackIndex}}
                 @saveCard={{this.saveCard}}

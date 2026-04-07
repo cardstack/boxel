@@ -848,6 +848,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
     };
 
     // Get the current module URL for filtering and sorting
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     const moduleUrl = new URL('./story-board', import.meta.url).href;
 
     // Build and return the query object
@@ -899,6 +900,7 @@ class IsolatedStoryBoard extends Component<typeof StoryBoard> {
 
   private createCard = restartableTask(async () => {
     let ref = {
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       module: new URL('./story-board', import.meta.url).href,
       name: 'Story',
     };

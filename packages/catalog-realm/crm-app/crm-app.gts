@@ -109,21 +109,25 @@ const TASK_SORT_OPTIONS: SortOption[] = [
 
 const DEAL_CARD_REF = {
   name: 'Deal',
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('./deal', import.meta.url).href,
 };
 
 const ACCOUNT_CARD_REF = {
   name: 'Account',
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('./account', import.meta.url).href,
 };
 
 const TASK_CARD_REF = {
   name: 'CRMTask',
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('./task', import.meta.url).href,
 };
 
 const CONTACT_CARD_REF = {
   name: 'Contact',
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('./contact', import.meta.url).href,
 };
 

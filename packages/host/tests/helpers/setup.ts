@@ -1,4 +1,4 @@
-/* eslint-disable cardstack-host/wrapped-setup-helpers-only */
+/* eslint-disable @cardstack/host/wrapped-setup-helpers-only */
 // This is the one place we allow these to be used directly.
 
 import { settled } from '@ember/test-helpers';
@@ -9,6 +9,7 @@ import {
 } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 
+import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
 
 import { cleanupMonacoEditorModels } from './index';
@@ -91,6 +92,7 @@ export function setupApplicationTest(hooks: NestedHooks) {
       this.owner.lookup('service:reset') as ResetService | undefined
     )?.resetAll();
     cleanupMonacoEditorModels();
+    clearHtmlComponentCache();
   });
 }
 
@@ -104,6 +106,7 @@ export function setupRenderingTest(hooks: NestedHooks) {
       this.owner.lookup('service:reset') as ResetService | undefined
     )?.resetAll();
     cleanupMonacoEditorModels();
+    clearHtmlComponentCache();
   });
 }
 

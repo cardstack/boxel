@@ -62,15 +62,20 @@ const FACTORY_WORKFLOW_KEYWORDS = [
   'orchestrat',
 ];
 
-/** Map from CLI keyword to the specific skill it triggers. */
-const CLI_KEYWORD_TO_SKILL: Record<string, string> = {
-  sync: 'boxel-sync',
-  track: 'boxel-track',
-  watch: 'boxel-watch',
-  restore: 'boxel-restore',
-  repair: 'boxel-repair',
-  setup: 'boxel-setup',
-};
+/**
+ * CLI skills that depend on boxel CLI commands. These are excluded from the
+ * factory agent's tool registry (boxel-cli tools are not available until
+ * CS-10520 lands). They remain valid for human Claude Code sessions but
+ * should not be resolved for the factory execution loop.
+ */
+const CLI_ONLY_SKILLS: readonly string[] = [
+  'boxel-sync',
+  'boxel-track',
+  'boxel-watch',
+  'boxel-restore',
+  'boxel-repair',
+  'boxel-setup',
+];
 
 /**
  * Reference files in `boxel-development/references/` and the keywords that
@@ -91,7 +96,9 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'dev-defensive-programming.md': ['defensive', 'guard', 'error', 'safe'],
   'dev-external-libraries.md': ['library', 'external', 'third-party', 'npm'],
   'dev-command-development.md': ['command', 'action', 'invoke'],
-  'dev-spec-usage.md': ['spec', 'test', 'specification'],
+  'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
+  'dev-playwright-testing.md': ['test', 'playwright', 'spec.ts', 'verify'],
+  'dev-realm-search.md': ['search', 'query', 'filter', 'find', 'realm'],
   'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
 };
 
@@ -100,6 +107,9 @@ const ALWAYS_LOAD_REFERENCES: readonly string[] = [
   'dev-core-concept.md',
   'dev-technical-rules.md',
   'dev-quick-reference.md',
+  'dev-realm-search.md',
+  'dev-playwright-testing.md',
+  'dev-spec-usage.md',
 ];
 
 // ---------------------------------------------------------------------------
@@ -129,12 +139,16 @@ export class DefaultSkillResolver implements SkillResolver {
   /**
    * Determine which skills to load based on ticket and project context.
    *
-   * Resolution rules (from the plan):
+   * Resolution rules (from the phase-1 plan):
    * 1. boxel-development + boxel-file-structure — always loaded (common case)
    * 2. ember-best-practices — when ticket involves .gts component code
    * 3. software-factory-operations — for factory delivery workflow tickets
-   * 4. CLI skills — when ticket involves realm sync/workspace management
-   * 5. KnowledgeArticle tags can specify additional skills
+   * 4. KnowledgeArticle tags can specify additional skills
+   *
+   * CLI skills (boxel-sync, boxel-track, boxel-watch, boxel-restore,
+   * boxel-repair, boxel-setup) are excluded because the factory agent's
+   * tool registry does not include boxel-cli tools (deferred to CS-10520).
+   * These skills reference commands the agent cannot invoke.
    */
   resolve(ticket: TicketCard, project: ProjectCard): string[] {
     let ticketText = extractTicketText(ticket);
@@ -148,16 +162,6 @@ export class DefaultSkillResolver implements SkillResolver {
       skills.push('software-factory-operations');
     }
 
-    // Add specific CLI skills based on matched keywords
-    for (let [keyword, skillName] of Object.entries(CLI_KEYWORD_TO_SKILL)) {
-      if (
-        matchesAnyKeyword(ticketText, [keyword]) &&
-        !skills.includes(skillName)
-      ) {
-        skills.push(skillName);
-      }
-    }
-
     // Check for additional skills from knowledge articles on the project
     // and from related knowledge on the ticket itself.
     let additionalSkills = extractKnowledgeSkillTags(project, ticket);
@@ -167,7 +171,9 @@ export class DefaultSkillResolver implements SkillResolver {
       }
     }
 
-    return skills;
+    // Filter out CLI-only skills that reference boxel CLI commands the
+    // factory agent cannot invoke (tool registry excludes boxel-cli tools).
+    return skills.filter((s) => !CLI_ONLY_SKILLS.includes(s));
   }
 }
 

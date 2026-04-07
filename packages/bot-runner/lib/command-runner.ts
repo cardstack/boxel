@@ -3,6 +3,7 @@ import {
   logger,
   param,
   query,
+  toBranchName,
   userInitiatedPriority,
   type DBAdapter,
   type QueuePublisher,
@@ -11,12 +12,13 @@ import {
 import { enqueueRunCommandJob } from '@cardstack/runtime-common/jobs/run-command';
 import {
   CreateListingPRHandler,
-  type CreatedListingPRResult,
   type BotTriggerEventContent,
 } from './create-listing-pr-handler';
 import type { GitHubClient } from './github';
 
 const log = logger('bot-runner');
+const COLLECT_SUBMISSION_FILES_COMMAND =
+  '@cardstack/catalog/commands/collect-submission-files/default';
 const CREATE_PR_CARD_COMMAND =
   '@cardstack/catalog/commands/create-pr-card/default';
 const PATCH_CARD_INSTANCE_COMMAND =
@@ -74,43 +76,165 @@ export class CommandRunner {
       // TODO: This inline handling for 'pr-listing-create' is a workaround.
       // In the absence, user-based proxy request which allows user to register auth tokens with an external api call
       if (eventContent.type === 'pr-listing-create') {
-        let result = await this.enqueueRunCommand({
+        let workflowCardUrl =
+          typeof input.workflowCardUrl === 'string'
+            ? input.workflowCardUrl
+            : null;
+        let workflowCardRealm =
+          typeof input.workflowCardRealm === 'string'
+            ? input.workflowCardRealm
+            : null;
+        let listingId =
+          typeof input.listingId === 'string' ? input.listingId : null;
+        let listingName =
+          typeof input.listingName === 'string' ? input.listingName : null;
+        let roomId = typeof input.roomId === 'string' ? input.roomId : null;
+
+        if (!roomId) {
+          throw new Error(
+            'pr-listing-create trigger must include a valid roomId',
+          );
+        }
+        if (!listingId) {
+          throw new Error(
+            'pr-listing-create trigger must include a valid listingId',
+          );
+        }
+
+        let branchName = toBranchName(roomId, listingName ?? 'UntitledListing');
+
+        let effectiveWorkflowRealm = workflowCardRealm ?? realmURL;
+        let submissionRealm = new URL('/submissions/', realmURL).href;
+
+        // Step 1: Collect files — runs as USER in the LISTING realm
+        log.info('pr-listing-create: collecting files', {
+          listingId,
+          realmURL,
+        });
+        let filesResult = await this.enqueueRunCommand({
           runAs,
           realmURL,
-          command,
-          commandInput,
+          command: COLLECT_SUBMISSION_FILES_COMMAND,
+          commandInput: {
+            listingId,
+            listingRealm: realmURL,
+          },
         });
-        if (result.status !== 'ready') {
+
+        if (filesResult.status !== 'ready') {
           let errorMessage =
-            result.error && result.error.trim()
-              ? result.error
-              : `run-command returned status "${result.status}"`;
-          log.error('pr-listing-create run-command did not complete', {
+            filesResult.error && filesResult.error.trim()
+              ? filesResult.error
+              : `collect-submission-files returned status "${filesResult.status}"`;
+          log.error('pr-listing-create: collect files failed', {
             runAs,
-            status: result.status,
-            error: result.error,
-            realmURL,
-            command,
+            status: filesResult.status,
+            error: filesResult.error,
           });
           throw new Error(errorMessage);
         }
-        let { prResult, submissionCardUrl } = await this.createPR({
-          runAs,
-          eventContent,
-          result,
+
+        // Extract allFileContents from the result
+        let allFileContents = extractFileContents(filesResult.cardResultString);
+        log.info('pr-listing-create: files collected', {
+          fileCount: allFileContents.length,
         });
-        // TODO: createAndLinkPrCard must remain a separate step from CreateSubmissionCommand
-        // we need prResult (branchName) before we can issue the command
-        // solve the TODO for user-based proxy command first
-        if (prResult && submissionCardUrl) {
-          await this.createAndLinkPrCard({
+
+        // Build PR summary from available info
+        let listingSummary =
+          typeof input.listingSummary === 'string'
+            ? input.listingSummary.trim()
+            : '';
+        let prSummary = [
+          '## Summary',
+          ...(listingSummary ? [listingSummary, '', '---'] : []),
+          `- Listing Name: ${listingName ?? 'Untitled'}`,
+          `- Room ID: \`${roomId ?? ''}\``,
+          `- User ID: \`${runAs}\``,
+          `- Number of Files: ${allFileContents.length}`,
+          ...(workflowCardUrl
+            ? [`- Workflow Card: [${workflowCardUrl}](${workflowCardUrl})`]
+            : []),
+        ].join('\n');
+
+        // Step 2: Create PrCard — runs as SUBMISSION BOT in the SUBMISSIONS realm
+        let prCardResult = await this.enqueueRunCommand({
+          runAs: this.submissionBotUserId,
+          realmURL: submissionRealm,
+          command: CREATE_PR_CARD_COMMAND,
+          commandInput: {
+            realm: submissionRealm,
+            branchName,
+            submittedBy: runAs,
+            prSummary,
+            allFileContents,
+          },
+        });
+
+        if (prCardResult.status !== 'ready') {
+          let errorMessage =
+            prCardResult.error && prCardResult.error.trim()
+              ? prCardResult.error
+              : `create-pr-card returned status "${prCardResult.status}"`;
+          log.error('pr-listing-create: create-pr-card failed', {
             runAs,
-            realmURL,
-            submissionCardUrl,
-            prResult,
+            submissionBotUserId: this.submissionBotUserId,
+            submissionRealm,
+            branchName,
+            status: prCardResult.status,
+            error: prCardResult.error,
+            cardResultString: prCardResult.cardResultString ?? null,
+            fileCount: allFileContents.length,
+            inputPayloadSize: JSON.stringify(allFileContents).length,
+          });
+          throw new Error(errorMessage);
+        }
+
+        let prCardUrl = getCardUrl(prCardResult.cardResultString);
+        log.info('pr-listing-create: PrCard created', { prCardUrl });
+
+        // Step 3: Create the GitHub PR using file contents from the PrCard
+        await this.createListingPRHandler.ensureCreateListingBranch(
+          eventContent,
+        );
+        await this.createListingPRHandler.addContentsToCommit(
+          eventContent,
+          prCardResult,
+        );
+        let prResult = await this.createListingPRHandler.openCreateListingPR(
+          eventContent,
+          runAs,
+          prCardResult,
+          workflowCardUrl,
+        );
+
+        log.info('pr-listing-create: PR created', {
+          prNumber: prResult?.prNumber,
+          prUrl: prResult?.prUrl,
+        });
+
+        // Step 3: Link PrCard to workflow card
+        if (workflowCardUrl && prCardUrl) {
+          await this.enqueueRunCommand({
+            runAs,
+            realmURL: effectiveWorkflowRealm,
+            command: PATCH_CARD_INSTANCE_COMMAND,
+            commandInput: {
+              cardId: workflowCardUrl,
+              patch: {
+                relationships: {
+                  prCard: {
+                    links: {
+                      self: prCardUrl,
+                    },
+                  },
+                },
+              },
+            },
           });
         }
-        return result;
+
+        return prCardResult;
       }
 
       return await this.enqueueRunCommand({
@@ -158,79 +282,6 @@ export class CommandRunner {
     return await job.done;
   }
 
-  private async createPR({
-    runAs,
-    eventContent,
-    result,
-  }: {
-    runAs: string;
-    eventContent: BotTriggerEventContent;
-    result: RunCommandResponse;
-  }): Promise<{
-    prResult: CreatedListingPRResult | null;
-    submissionCardUrl: string | null;
-  }> {
-    let submissionCardUrl = getSubmissionCardUrl(result.cardResultString);
-    await this.createListingPRHandler.ensureCreateListingBranch(eventContent);
-    await this.createListingPRHandler.addContentsToCommit(eventContent, result);
-    let prResult = await this.createListingPRHandler.openCreateListingPR(
-      eventContent,
-      runAs,
-      result,
-      submissionCardUrl,
-    );
-    return { prResult, submissionCardUrl };
-  }
-
-  private async createAndLinkPrCard({
-    runAs,
-    realmURL,
-    submissionCardUrl,
-    prResult,
-  }: {
-    runAs: string;
-    realmURL: string;
-    submissionCardUrl: string;
-    prResult: CreatedListingPRResult;
-  }): Promise<void> {
-    let submissionRealm = new URL('/submissions/', realmURL).href;
-    let listingConcurrencyGroup = `command:${submissionRealm}:listing:${prResult.branchName}`;
-    let prCardResult = await this.enqueueRunCommand({
-      runAs: this.submissionBotUserId,
-      realmURL: submissionRealm,
-      command: CREATE_PR_CARD_COMMAND,
-      concurrencyGroup: listingConcurrencyGroup,
-      commandInput: {
-        realm: submissionRealm,
-        prNumber: prResult.prNumber,
-        prUrl: prResult.prUrl,
-        prTitle: prResult.prTitle,
-        branchName: prResult.branchName,
-        prSummary: prResult.summary ?? undefined,
-        submittedBy: runAs,
-      },
-    });
-
-    let prCardUrl = getCardUrl(prCardResult.cardResultString);
-    await this.enqueueRunCommand({
-      runAs,
-      realmURL,
-      command: PATCH_CARD_INSTANCE_COMMAND,
-      commandInput: {
-        cardId: submissionCardUrl,
-        patch: {
-          relationships: {
-            prCard: {
-              links: {
-                self: prCardUrl,
-              },
-            },
-          },
-        },
-      },
-    });
-  }
-
   private async getCommandsForRegistration(
     registrationId: string,
   ): Promise<{ type: string; command: string }[]> {
@@ -267,6 +318,25 @@ function getCardUrl(cardResultString?: string | null): string | null {
   }
 }
 
-function getSubmissionCardUrl(cardResultString?: string | null): string | null {
-  return getCardUrl(cardResultString);
+function extractFileContents(
+  cardResultString?: string | null,
+): { filename: string; contents: string }[] {
+  if (!cardResultString || !cardResultString.trim()) {
+    return [];
+  }
+  try {
+    let parsed = JSON.parse(cardResultString);
+    let items = parsed?.data?.attributes?.allFileContents;
+    if (!Array.isArray(items)) {
+      return [];
+    }
+    return items.filter(
+      (item: any) =>
+        item &&
+        typeof item.filename === 'string' &&
+        typeof item.contents === 'string',
+    );
+  } catch {
+    return [];
+  }
 }

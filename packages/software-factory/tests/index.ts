@@ -11,4 +11,8 @@ import './factory-test-realm.test';
 import './factory-tool-executor.test';
 import './factory-tool-executor.integration.test';
 import './factory-tool-registry.test';
+import './factory-context-builder.test';
+import './factory-tool-builder.test';
+import './factory-loop.test';
+import './factory-implement.test';
 import './realm-auth.test';

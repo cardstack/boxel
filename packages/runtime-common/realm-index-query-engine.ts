@@ -208,6 +208,7 @@ export class RealmIndexQueryEngine {
         doc.included = included;
       }
     }
+    await this.attachRealmInfo(doc);
     return doc;
   }
 
@@ -428,6 +429,7 @@ export class RealmIndexQueryEngine {
       }
     }
     relativizeDocument(doc, this.realmURL);
+    await this.attachRealmInfo(doc);
     return { type: 'doc', doc };
   }
 
@@ -768,6 +770,18 @@ export class RealmIndexQueryEngine {
           message,
         },
       };
+    }
+  }
+
+  private async attachRealmInfo(
+    doc: SingleCardDocument | LinkableCollectionDocument,
+  ): Promise<void> {
+    let realmInfo = await this.#realm.getRealmInfo();
+    let resources = Array.isArray(doc.data) ? doc.data : [doc.data];
+    for (let resource of [...resources, ...(doc.included ?? [])]) {
+      if (resource.meta?.realmURL === this.realmURL.href) {
+        resource.meta.realmInfo = realmInfo;
+      }
     }
   }
 

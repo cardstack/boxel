@@ -36,6 +36,15 @@ export interface SearchRealmOptions extends RealmFetchOptions {
   realmUrl: string;
 }
 
+export type RunCommandOptions = RealmFetchOptions;
+
+export interface RunCommandResponse {
+  status: 'ready' | 'error' | 'unusable';
+  /** Serialized command result (JSON string), or null. */
+  result?: string | null;
+  error?: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -76,7 +85,10 @@ export async function searchRealm(
   realmUrl: string,
   query: Record<string, unknown>,
   options?: RealmFetchOptions,
-): Promise<{ data?: Record<string, unknown>[] } | undefined> {
+): Promise<
+  | { ok: true; data?: Record<string, unknown>[] }
+  | { ok: false; status: number; error: string }
+> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedUrl = ensureTrailingSlash(realmUrl);
   let searchUrl = `${normalizedUrl}_search`;
@@ -97,33 +109,129 @@ export async function searchRealm(
     });
 
     if (!response.ok) {
-      return undefined;
+      let body = await response.text();
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
     }
 
-    return (await response.json()) as { data?: Record<string, unknown>[] };
-  } catch {
-    return undefined;
+    let result = (await response.json()) as {
+      data?: Record<string, unknown>[];
+    };
+    return { ok: true, data: result.data };
+  } catch (err) {
+    return {
+      ok: false,
+      status: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
 // ---------------------------------------------------------------------------
-// Card Read / Write
+// Run Command (prerenderer)
 // ---------------------------------------------------------------------------
 
 /**
- * Read a card from a realm as card source JSON.
+ * Execute a host command on the realm server via the `/_run-command`
+ * endpoint. The command is enqueued as a job and executed in the
+ * prerenderer's headless Chrome where the full card runtime (Loader,
+ * CardAPI, services) is available.
+ *
+ * The authenticated user is derived from the JWT in the Authorization
+ * header — no separate userId is needed.
  */
-export async function readCardSource(
+export async function runRealmCommand(
+  realmServerUrl: string,
   realmUrl: string,
-  cardPath: string,
+  command: string,
+  commandInput?: Record<string, unknown>,
+  options?: RunCommandOptions,
+): Promise<RunCommandResponse> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let url = `${ensureTrailingSlash(realmServerUrl)}_run-command`;
+
+  let body = {
+    data: {
+      type: 'run-command',
+      attributes: {
+        realmURL: realmUrl,
+        command,
+        commandInput: commandInput ?? null,
+      },
+    },
+  };
+
+  let headers: Record<string, string> = {
+    'Content-Type': 'application/vnd.api+json',
+    Accept: 'application/vnd.api+json',
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    return {
+      status: 'error',
+      error: `run-command fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (!response.ok) {
+    return {
+      status: 'error',
+      error: `run-command HTTP ${response.status}: ${await response.text().catch(() => '(no body)')}`,
+    };
+  }
+
+  let json = (await response.json()) as {
+    data?: {
+      attributes?: {
+        status?: string;
+        cardResultString?: string | null;
+        error?: string | null;
+      };
+    };
+  };
+
+  let attrs = json.data?.attributes;
+  return {
+    status: (attrs?.status as RunCommandResponse['status']) ?? 'error',
+    result: attrs?.cardResultString ?? null,
+    error: attrs?.error ?? null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// File Read / Write / Delete
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a file from a realm using the card+source MIME type.
+ * Path should include the file extension (e.g. `Card/foo.json`, `my-card.gts`).
+ */
+export async function readFile(
+  realmUrl: string,
+  path: string,
   options?: RealmFetchOptions,
 ): Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;
+  /** Raw text content for non-JSON files (e.g., .gts source). */
+  content?: string;
   error?: string;
 }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(cardPath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {
@@ -142,45 +250,14 @@ export async function readCardSource(
       };
     }
 
-    let document = (await response.json()) as LooseSingleCardDocument;
-    return { ok: true, document };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-/**
- * Write a card to a realm using card source MIME type.
- * The path should include the `.json` extension.
- */
-export async function writeCardSource(
-  realmUrl: string,
-  cardPathWithExtension: string,
-  document: LooseSingleCardDocument,
-  options?: RealmFetchOptions,
-): Promise<{ ok: boolean; error?: string }> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(cardPathWithExtension, ensureTrailingSlash(realmUrl)).href;
-
-  try {
-    let response = await fetchImpl(url, {
-      method: 'POST',
-      headers: buildCardSourceHeaders(options?.authorization),
-      body: JSON.stringify(document, null, 2),
-    });
-
-    if (!response.ok) {
-      let body = await response.text();
-      return {
-        ok: false,
-        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-      };
+    let text = await response.text();
+    try {
+      let document = JSON.parse(text) as LooseSingleCardDocument;
+      return { ok: true, document };
+    } catch {
+      // Non-JSON content (e.g., .gts source files) — return as raw text
+      return { ok: true, content: text };
     }
-
-    return { ok: true };
   } catch (err) {
     return {
       ok: false,
@@ -190,17 +267,17 @@ export async function writeCardSource(
 }
 
 /**
- * Write a module (.gts, .ts) to a realm as raw source content.
- * Unlike writeCardSource, this sends the raw text — no JSON wrapping.
+ * Write a file to a realm using the card+source MIME type.
+ * Path should include the file extension. Content is sent as-is.
  */
-export async function writeModuleSource(
+export async function writeFile(
   realmUrl: string,
-  modulePath: string,
+  path: string,
   content: string,
   options?: RealmFetchOptions,
 ): Promise<{ ok: boolean; error?: string }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let url = new URL(modulePath, ensureTrailingSlash(realmUrl)).href;
+  let url = new URL(path, ensureTrailingSlash(realmUrl)).href;
 
   try {
     let response = await fetchImpl(url, {
@@ -221,6 +298,173 @@ export async function writeModuleSource(
   } catch (err) {
     return {
       ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Card / File Delete
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete a card or file from a realm.
+ */
+export async function deleteFile(
+  realmUrl: string,
+  cardPath: string,
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let url = new URL(cardPath, ensureTrailingSlash(realmUrl)).href;
+
+  try {
+    let response = await fetchImpl(url, {
+      method: 'DELETE',
+      headers: buildAuthHeaders(
+        options?.authorization,
+        SupportedMimeType.CardSource,
+      ),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Atomic Batch Operations
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute a batch of operations atomically against a realm.
+ * Operations should be a JSON string of the `atomic:operations` array.
+ */
+export async function atomicOperation(
+  realmUrl: string,
+  operations: string,
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; response?: unknown; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmUrl);
+  let atomicUrl = `${normalizedUrl}_atomic`;
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSONAPI,
+    'Content-Type': SupportedMimeType.JSONAPI,
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  try {
+    let response = await fetchImpl(atomicUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ 'atomic:operations': JSON.parse(operations) }),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    let result = await response.json();
+    return { ok: true, response: result };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Realm Server Session
+// ---------------------------------------------------------------------------
+
+/**
+ * Obtain a realm server JWT by calling `_server-session`.
+ * Requires a Matrix OpenID token.
+ */
+export async function getServerSession(
+  realmServerUrl: string,
+  openidToken: string,
+  options?: { fetch?: typeof globalThis.fetch; authorization?: string },
+): Promise<{ token?: string; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSON,
+    'Content-Type': SupportedMimeType.JSON,
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  try {
+    let response = await fetchImpl(`${normalizedUrl}_server-session`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ access_token: openidToken }),
+    });
+
+    if (!response.ok) {
+      let body = await response.text();
+      return {
+        error: `_server-session returned HTTP ${response.status}: ${body.slice(0, 300)}`,
+      };
+    }
+
+    // The server session JWT is returned in the Authorization header
+    let authorizationHeader = response.headers.get('authorization');
+    if (authorizationHeader) {
+      return { token: authorizationHeader };
+    }
+
+    // Fallback: check response body
+    let bodyText = await response.text();
+    if (!bodyText.trim()) {
+      return {
+        error: '_server-session succeeded but no token was returned',
+      };
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(bodyText);
+    } catch {
+      return {
+        error: '_server-session succeeded but response body was not valid JSON',
+      };
+    }
+
+    let data = parsed as { token?: string };
+    if (typeof data.token === 'string' && data.token.length > 0) {
+      return { token: data.token };
+    }
+
+    return {
+      error: '_server-session succeeded but no token was returned',
+    };
+  } catch (err) {
+    return {
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -295,7 +539,7 @@ export async function createRealm(
     backgroundURL?: string;
     authorization: string;
     fetch?: typeof globalThis.fetch;
-    matrixAuth: {
+    matrixAuth?: {
       userId: string;
       accessToken: string;
       matrixUrl: string;
@@ -327,13 +571,15 @@ export async function createRealm(
       }),
     });
 
+    let matrixAuth = options.matrixAuth;
+
     if (response.ok) {
       let result = (await response.json()) as { data?: { id?: string } };
       let realmUrl = result.data?.id ?? '';
 
-      if (realmUrl) {
+      if (realmUrl && matrixAuth) {
         await addRealmToMatrixAccountData(
-          options.matrixAuth,
+          matrixAuth,
           ensureTrailingSlash(realmUrl),
           fetchImpl,
         );
@@ -354,11 +600,11 @@ export async function createRealm(
 
     // When the realm already exists, ensure it's still registered in the
     // user's Matrix account data so it appears in the Boxel dashboard.
-    if (body.includes('already exists')) {
+    if (body.includes('already exists') && matrixAuth) {
       let urlMatch = body.match(/'(https?:\/\/[^']+)'/);
       if (urlMatch) {
         await addRealmToMatrixAccountData(
-          options.matrixAuth,
+          matrixAuth,
           ensureTrailingSlash(urlMatch[1]),
           fetchImpl,
         );
@@ -459,6 +705,33 @@ export async function waitForRealmReady(
     ready: false,
     error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
   };
+}
+
+/**
+ * Poll a specific realm file path until it exists (non-404), or the
+ * timeout is reached. Useful after writing a file to wait for the
+ * realm to finish processing it before reading it back.
+ *
+ * @returns true if the file was found, false on timeout.
+ */
+export async function waitForRealmFile(
+  realmUrl: string,
+  path: string,
+  options?: RealmFetchOptions & { timeoutMs?: number; pollMs?: number },
+): Promise<boolean> {
+  let timeoutMs = options?.timeoutMs ?? 30_000;
+  let pollMs = options?.pollMs ?? 300;
+  let startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    let result = await readFile(realmUrl, path, options);
+    if (result.ok) {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+
+  return false;
 }
 
 // ---------------------------------------------------------------------------

@@ -27,6 +27,7 @@ export type PickerOption = {
 export interface PickerSignature {
   Args: {
     afterOptionsComponent?: ComponentLike<any>;
+    destination?: string;
     disableClientSideSearch?: boolean;
     disabled?: boolean;
     extra?: Record<string, unknown>;
@@ -385,6 +386,7 @@ export default class Picker extends Component<PickerSignature> {
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{this.renderInPlace}}
+      @destination={{@destination}}
       @matchTriggerWidth={{@matchTriggerWidth}}
       @searchEnabled={{false}}
       @closeOnSelect={{false}}

@@ -3,6 +3,8 @@ name: boxel-sync
 description: Use when deciding how to sync a Boxel workspace after local edits, server changes, or a restore, including choosing between interactive sync, `--prefer-local`, `--prefer-remote`, or `--prefer-newest`.
 ---
 
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.
+
 # Boxel Sync
 
 Smart bidirectional sync with context-aware conflict resolution.

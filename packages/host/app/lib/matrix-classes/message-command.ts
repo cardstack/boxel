@@ -1,6 +1,6 @@
 import { setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 

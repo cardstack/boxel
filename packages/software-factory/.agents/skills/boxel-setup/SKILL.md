@@ -3,6 +3,8 @@ name: boxel-setup
 description: Use for Boxel CLI onboarding, profile setup, verifying login, listing workspaces, switching profiles, or helping a new user perform their first sync.
 ---
 
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.
+
 # Boxel Setup
 
 Guide new users through Boxel CLI setup.

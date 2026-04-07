@@ -24,6 +24,7 @@ const testRealmOptions = {
   testRealmUrl: 'https://realms.example.test/user/personal-tests/',
   testResultsModuleUrl:
     'https://realms.example.test/software-factory/test-results',
+  realmServerUrl: 'https://realms.example.test/',
 };
 
 // ---------------------------------------------------------------------------

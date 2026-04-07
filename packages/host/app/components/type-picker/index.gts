@@ -16,6 +16,7 @@ interface Signature {
     isLoading?: boolean;
     isLoadingMore?: boolean;
     totalCount?: number;
+    destination?: string;
   };
   Blocks: {};
 }
@@ -63,6 +64,7 @@ export default class TypePicker extends Component<Signature> {
       @searchPlaceholder='Search for a type'
       @maxSelectedDisplay={{3}}
       @renderInPlace={{false}}
+      @destination={{@destination}}
       @matchTriggerWidth={{false}}
       @onSearchTermChange={{@onSearchChange}}
       @disableClientSideSearch={{this.hasServerSearch}}

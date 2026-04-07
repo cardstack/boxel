@@ -13,7 +13,7 @@ interface SpecPreviewBadgeSignature {
     spec?: Spec;
     numberOfInstances?: number;
     showCreateSpec: boolean;
-    createSpec: (event: MouseEvent) => void;
+    createSpec: (event: Event) => void;
     isCreateSpecInstanceRunning: boolean;
   };
 }

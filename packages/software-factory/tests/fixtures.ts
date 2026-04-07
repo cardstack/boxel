@@ -7,11 +7,14 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
+import type { RealmAction, RealmPermissions } from '@cardstack/runtime-common';
+
 import {
   defaultSupportMetadataFile,
   type PreparedTemplateMetadata,
   readSupportMetadata,
 } from '../src/runtime-metadata';
+import { buildRealmToken } from '../src/harness/shared';
 import { startHarnessPrerenderServer } from '../src/harness/support-services';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
@@ -26,7 +29,11 @@ type StartedFactoryRealm = {
     workerManagerPort: number;
   };
   cardURL(path: string): string;
-  authorizationHeaders(): Record<string, string>;
+  createBearerToken(user: string, permissions: RealmAction[]): string;
+  authorizationHeaders(
+    user?: string,
+    permissions?: RealmAction[],
+  ): Record<string, string>;
   stop(): Promise<void>;
 };
 
@@ -41,6 +48,7 @@ export type RealmServerMode = 'shared' | 'isolated';
 type FactoryRealmOptions = {
   realmDir: string;
   realmServerMode: RealmServerMode;
+  realmPermissions: RealmPermissions | undefined;
 };
 
 type FactoryRealmWorkerFixtures = {
@@ -63,7 +71,6 @@ type SharedRealmHandle = {
 type TestWorkerPortSet = {
   compatRealmServerPort: number;
   realmServerPort: number;
-  workerManagerPort: number;
   prerenderPort: number;
 };
 
@@ -166,14 +173,14 @@ async function isPortFree(port: number): Promise<boolean> {
 async function allocateTestWorkerPortSet(
   testWorkerIndex: number,
 ): Promise<TestWorkerPortSet> {
-  // Reserve one stable port block per Playwright testWorker. The isolated
-  // harness still restarts realm-server, worker-manager, compat proxy, and
-  // prerender between tests, but those services should come back on the same
-  // URLs for the lifetime of the testWorker. That keeps BOXEL_HOST_URL and the
-  // prerender standby target stable within a worker even when the realm stack
-  // itself is recreated per test. Include a per-process offset so concurrent
-  // Playwright runs with the same worker index do not all probe the same block
-  // first.
+  // Reserve one stable port block per Playwright testWorker for services whose
+  // URLs must remain constant across test restarts within the same worker:
+  // compat proxy and realm-server (for BOXEL_HOST_URL stability) and prerender
+  // (standby target). The worker-manager port is NOT pre-allocated here — it is
+  // dynamically assigned via findAvailablePort() each time a realm stack starts,
+  // since its URL does not need to be stable. Include a per-process offset so
+  // concurrent Playwright runs with the same worker index do not all probe the
+  // same block first.
   for (let attempt = 0; attempt < 100; attempt++) {
     let blockStart =
       testWorkerPortBase +
@@ -183,8 +190,7 @@ async function allocateTestWorkerPortSet(
     let candidate: TestWorkerPortSet = {
       compatRealmServerPort: blockStart,
       realmServerPort: blockStart + 1,
-      workerManagerPort: blockStart + 2,
-      prerenderPort: blockStart + 3,
+      prerenderPort: blockStart + 2,
     };
     let ports = Object.values(candidate);
     if (
@@ -230,6 +236,7 @@ async function startRealmProcess(
   realmDir = defaultRealmDir,
   testWorkerPortSet: TestWorkerPortSet,
   testWorkerPrerenderURL: string,
+  permissions?: RealmPermissions,
 ) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
   let metadataFile = join(tempDir, 'runtime.json');
@@ -282,9 +289,6 @@ async function startRealmProcess(
           testWorkerPortSet.compatRealmServerPort,
         ),
         SOFTWARE_FACTORY_REALM_PORT: String(testWorkerPortSet.realmServerPort),
-        SOFTWARE_FACTORY_WORKER_MANAGER_PORT: String(
-          testWorkerPortSet.workerManagerPort,
-        ),
         SOFTWARE_FACTORY_PRERENDER_PORT: String(
           testWorkerPortSet.prerenderPort,
         ),
@@ -304,6 +308,11 @@ async function startRealmProcess(
           ? {
               SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
                 preparedTemplate.templateRealmServerURL,
+            }
+          : {}),
+        ...(permissions
+          ? {
+              SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
             }
           : {}),
       },
@@ -387,9 +396,30 @@ async function startRealmProcess(
     cardURL(path: string) {
       return new URL(path, metadata.realmURL).href;
     },
-    authorizationHeaders() {
+    createBearerToken(user: string, perms: RealmAction[]) {
+      return buildRealmToken(
+        new URL(metadata.realmURL),
+        new URL(metadata.realmServerURL),
+        user,
+        perms,
+      );
+    },
+    authorizationHeaders(user?: string, perms?: RealmAction[]) {
+      if (!user && !perms) {
+        return { Authorization: `Bearer ${metadata.ownerBearerToken}` };
+      }
+      if (!perms) {
+        throw new Error(
+          'authorizationHeaders: permissions must be provided when a user is specified',
+        );
+      }
       return {
-        Authorization: `Bearer ${metadata.ownerBearerToken}`,
+        Authorization: `Bearer ${buildRealmToken(
+          new URL(metadata.realmURL),
+          new URL(metadata.realmServerURL),
+          user,
+          perms,
+        )}`,
       };
     },
     stop,
@@ -449,6 +479,10 @@ export const test = base.extend<
 >({
   realmDir: [defaultRealmDir, { option: true }],
   realmServerMode: ['shared', { option: true }],
+  realmPermissions: [
+    undefined as RealmPermissions | undefined,
+    { option: true },
+  ],
   testWorkerPortSet: [
     async ({ browserName: _browserName }, use, workerInfo) => {
       // These services are ephemeral per test, but we intentionally keep their
@@ -485,13 +519,14 @@ export const test = base.extend<
       browserName: _browserName,
       realmDir,
       realmServerMode,
+      realmPermissions: permissions,
       testWorkerPortSet,
       testWorkerPrerender,
     },
     use,
     testInfo,
   ) => {
-    if (realmServerMode === 'shared') {
+    if (realmServerMode === 'shared' && !permissions) {
       let key = sharedRealmKey(testInfo.workerIndex, testInfo.file, realmDir);
       let realm = await acquireSharedRealm(
         key,
@@ -511,6 +546,7 @@ export const test = base.extend<
       realmDir,
       testWorkerPortSet,
       testWorkerPrerender.url,
+      permissions,
     );
     try {
       await use(realm);

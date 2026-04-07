@@ -43,7 +43,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         {{@model.formattedAuthors}}
       </span>
       {{#if @model.datePublishedIsoTimestamp}}
-        <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+        <time class='date' datetime={{@model.datePublishedIsoTimestamp}}>
           {{@model.formattedDatePublished}}
         </time>
       {{/if}}
@@ -144,7 +144,7 @@ class FittedTemplate extends Component<typeof BlogPost> {
           <span class='byline'>{{@model.formattedAuthors}}</span>
         {{/if}}
         {{#if @model.datePublishedIsoTimestamp}}
-          <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+          <time class='date' datetime={{@model.datePublishedIsoTimestamp}}>
             {{@model.formattedDatePublished}}
           </time>
         {{/if}}
@@ -741,7 +741,7 @@ export class BlogPost extends CardDef {
             {{#if @model.datePublishedIsoTimestamp}}
               <li class='pub-date'>
                 Published on
-                <time timestamp={{@model.datePublishedIsoTimestamp}}>
+                <time datetime={{@model.datePublishedIsoTimestamp}}>
                   {{@model.formattedDatePublished}}
                 </time>
               </li>
@@ -749,7 +749,7 @@ export class BlogPost extends CardDef {
             {{#if @model.lastUpdatedIsoTimestamp}}
               <li class='last-updated-date'>
                 Last Updated on
-                <time timestamp={{@model.lastUpdatedIsoTimestamp}}>
+                <time datetime={{@model.lastUpdatedIsoTimestamp}}>
                   {{@model.formattedLastUpdated}}
                 </time>
               </li>

@@ -22,4 +22,4 @@ Tests must:
 - Verify card-specific behavior, field values, and relationships
 - Be runnable by the `run-realm-tests` tool
 
-Return only `create_test` actions.
+Use write_file to create test files, then call signal_done.

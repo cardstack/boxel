@@ -87,6 +87,10 @@ export class CardIdCard extends CardDef {
   @field cardId = contains(StringField);
 }
 
+export class CardTypeSchemaInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+}
+
 export class GetUserSystemCardResult extends CardDef {
   @field cardId = contains(StringField);
   @field isDefault = contains(BooleanField);
@@ -609,7 +613,8 @@ export class OneShotLLMRequestResult extends CardDef {
 
 // Select up to N cards of a given type using an LLM heuristic
 export class SearchAndChooseInput extends CardDef {
-  @field codeRef = contains(CodeRefField); // module + name of card type to search instances of
+  @field candidateTypeCodeRef = contains(CodeRefField); // module + name of card type whose instances should be searched as candidates
+  @field sourceContextCodeRef = contains(AbsoluteCodeRefField); // optional module + name whose source should guide selection
   @field max = contains(NumberField); // optional, default 2
   @field additionalSystemPrompt = contains(StringField); // optional extra hard rules
   @field llmModel = contains(StringField); // optional model override

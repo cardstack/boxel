@@ -114,8 +114,8 @@ export default class ItemButton extends Component<Signature> {
     this.args.onSubmit?.(this.selectPayload);
   }
 
-  @action handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
+  @action handleKeydown(event: Event) {
+    if ((event as KeyboardEvent).key === 'Enter') {
       if (this.args.multiSelect && !this.isNewCard) {
         // In multi-select, Enter just toggles for existing cards
         this.args.onSelect(this.selectPayload);
