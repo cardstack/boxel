@@ -58,6 +58,7 @@ import {
 import {
   ensureTrailingSlash,
   readFile,
+  waitForRealmFile,
   writeFile,
   type RealmFetchOptions,
 } from './realm-operations';
@@ -174,6 +175,7 @@ export async function runFactoryImplement(
   );
 
   let testResultsModuleUrl = `${new URL('software-factory/test-results', realmServerUrl).href}`;
+  let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
     realmServerUrl,
@@ -182,6 +184,7 @@ export async function runFactoryImplement(
     testResultsModuleUrl,
     fetch: fetchImpl,
     cardTypeSchemas,
+    hostAppUrl,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -224,7 +227,7 @@ export async function runFactoryImplement(
       authorization: config.authorization,
       fetch: fetchImpl,
       realmServerUrl,
-      hostAppUrl: config.hostAppUrl ?? realmServerUrl,
+      hostAppUrl,
     });
 
   // 7. Run the execution loop
@@ -482,6 +485,27 @@ function buildTestRunner(
         ],
         durationMs: 0,
       };
+    }
+
+    // Wait for written test files to be accessible in the realm before
+    // launching QUnit. Realm indexing is asynchronous, so newly written
+    // files may not appear in _mtimes immediately.
+    let testFilePaths = toolCallLog
+      .filter(
+        (entry) =>
+          entry.tool === 'write_file' &&
+          typeof entry.args.path === 'string' &&
+          entry.args.path.endsWith('.test.gts'),
+      )
+      .map((entry) => entry.args.path as string);
+
+    for (let testPath of testFilePaths) {
+      await waitForRealmFile(targetRealmUrl, testPath, {
+        authorization: runConfig.authorization,
+        fetch: runConfig.fetch,
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
     }
 
     let slug = deriveTicketSlug(ticket.id);
