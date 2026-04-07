@@ -456,22 +456,15 @@ export async function executeTestRunFromRealm(
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
 
-    // Forward browser console for diagnostics
-    page.on('console', (msg) => {
-      let text = msg.text();
-      if (
-        text.includes('[live-test]') ||
-        text.includes('[sf-qunit]') ||
-        text.includes('runTests') ||
-        text.includes('Error') ||
-        msg.type() === 'error'
-      ) {
-        console.error(`[browser] ${msg.type()}: ${text}`);
-      }
-    });
-    page.on('pageerror', (err) => {
-      console.error(`[browser] PAGE ERROR: ${err.message}`);
-    });
+    // Forward browser console when debug is enabled
+    if (options.debug) {
+      page.on('console', (msg) => {
+        console.error(`[browser] ${msg.type()}: ${msg.text()}`);
+      });
+      page.on('pageerror', (err) => {
+        console.error(`[browser] PAGE ERROR: ${err.message}`);
+      });
+    }
 
     // Intercept requests to the target realm and inject the Authorization
     // header. live-test.js fetches _mtimes and modules without auth, but

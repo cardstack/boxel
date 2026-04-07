@@ -138,4 +138,6 @@ export interface ExecuteTestRunOptions {
   hostAppUrl: string;
   /** Path to the host app's dist directory. Defaults to packages/host/dist. */
   hostDistDir?: string;
+  /** Log browser console output for debugging. */
+  debug?: boolean;
 }
