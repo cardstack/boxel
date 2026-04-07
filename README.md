@@ -145,7 +145,32 @@ Live reloads are not available in this mode, however, if you use start the serve
 
 #### Using `mise run dev`
 
-Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server. Here's what is spun up with `mise run dev`:
+Instead of running `mise run services:realm-server-base`, you can alternatively use `mise run dev` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. For faster startup, `mise run dev-minimal` skips experiments, catalog, homepage, and submission realms. Use the environment variable `WORKER_HIGH_PRIORITY_COUNT` to add additional workers that service only user initiated requests and `WORKER_ALL_PRIORITY_COUNT` to add workers that service all jobs (system or user initiated). By default there is 1 all priority worker for each realm server.
+
+##### Turbo mode
+
+Set `BOXEL_TURBO=true` to start the dev stack with higher parallelism:
+
+```bash
+BOXEL_TURBO=true mise run dev
+```
+
+This sets the following defaults (all individually overridable):
+
+| Variable                     | Normal | Turbo |
+| ---------------------------- | ------ | ----- |
+| `PRERENDER_COUNT`            | 1      | 3     |
+| `PRERENDER_PAGE_POOL_SIZE`   | 4      | 4     |
+| `WORKER_HIGH_PRIORITY_COUNT` | 0      | 4     |
+| `WORKER_ALL_PRIORITY_COUNT`  | 1      | 4     |
+
+To use turbo mode but override a specific value:
+
+```bash
+BOXEL_TURBO=true PRERENDER_COUNT=5 mise run dev
+```
+
+Here's what is spun up with `mise run dev`:
 
 | Port  | Description                                                                                   | `mise run dev` | `mise run services:realm-server-base` |
 | ----- | --------------------------------------------------------------------------------------------- | -------------- | ------------------------------------- |
@@ -192,6 +217,14 @@ To run individually from the repo root:
 
 Start the manager first, then the server. Both are automatically started as part of `mise run dev`.
 
+To run multiple prerender servers, set `PRERENDER_COUNT`:
+
+```bash
+PRERENDER_COUNT=3 mise run dev
+```
+
+Each additional server spawns its own headless Chrome on an OS-assigned port and registers with the manager via heartbeat. The manager spreads different realms across available servers.
+
 #### Pre-rendering Environment variables
 
 Prerender server:
@@ -199,8 +232,9 @@ Prerender server:
 - REALM_SECRET_SEED (required): Secret used to create session tokens for realms.
 - BOXEL_HOST_URL (optional): URL of the host app that serves the /render routes. Defaults to http://localhost:4200 in dev scripts.
 - PRERENDER_MANAGER_URL (optional): Base URL of the prerender manager to register with. Defaults to http://localhost:4222.
+- PRERENDER_COUNT (optional): Number of prerender server instances to start. Each gets its own headless Chrome. Default 1.
 - PRERENDER_PAGE_POOL_SIZE (optional): Max number of per-realm pages to keep open in the pool. Default 4.
-- PRERENDER_REALM_TAB_MAX (optional): Max number of tabs per realm per prerender server. Default 1 (clamped to PRERENDER_PAGE_POOL_SIZE).
+- PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to PRERENDER_PAGE_POOL_SIZE (i.e. a realm can use all available tabs).
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
