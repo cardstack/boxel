@@ -1,8 +1,13 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
 import { escapeHtml } from './helpers/html';
+import { bfmCardReferenceExtensions } from './bfm-card-references';
 import type * as _MonacoSDK from 'monaco-editor';
 type MonacoSDK = typeof _MonacoSDK;
+
+// Register BFM card reference extensions globally. This is additive and does
+// not conflict with the per-call renderer override in markedSync().
+marked.use({ extensions: bfmCardReferenceExtensions() });
 
 const DECORATIVE_BULLET_PATTERN =
   // eslint-disable-next-line no-misleading-character-class -- match pictographic symbols plus a few geometric glyphs not covered by the Unicode class
