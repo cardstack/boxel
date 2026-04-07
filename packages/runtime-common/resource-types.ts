@@ -1,6 +1,17 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
 import { resolveCardReference } from './card-reference-resolver';
+import type { Query } from './query';
+
+// Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
+// extracted during file prerendering so that file-meta responses can populate
+// query relationships without a runtime definition lookup (which would
+// deadlock when the request is served during card prerendering).
+export interface QueryFieldMeta {
+  type: 'linksTo' | 'linksToMany';
+  query: Query;
+  fieldOrCard: CodeRef;
+}
 
 export const CardResourceType = 'card';
 export const FileMetaResourceType = 'file-meta';
@@ -64,6 +75,7 @@ export type CardResourceMeta = Meta & {
 export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;
   realmURL?: string;
+  queryFieldDefs?: Record<string, QueryFieldMeta>;
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
