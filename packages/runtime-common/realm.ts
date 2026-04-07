@@ -86,7 +86,6 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
-  hasExtension,
 } from './index';
 import type { FromScratchResult } from './tasks/indexer';
 import { isCodeRef, visitModuleDeps } from './code-ref';
