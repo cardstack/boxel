@@ -466,6 +466,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         fetch: config.fetch,
         projectCardUrl: args.projectCardUrl as string | undefined,
         realmServerUrl: config.realmServerUrl,
+        forceNew: true,
       });
 
       return result;

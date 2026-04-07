@@ -501,6 +501,7 @@ function buildTestRunner(
         fetch: runConfig.fetch,
         realmServerUrl: runConfig.realmServerUrl,
         hostAppUrl: runConfig.hostAppUrl,
+        forceNew: true,
       });
 
       let durationMs = Date.now() - start;

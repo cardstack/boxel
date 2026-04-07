@@ -636,6 +636,51 @@ module('factory-test-realm > resolveTestRun', function () {
 
     assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-8');
   });
+
+  test('consecutive forceNew calls create separate TestRuns with incrementing sequences', async function (assert) {
+    // Simulates what happens during the factory loop: each iteration should
+    // create a new TestRun, not overwrite the previous one. This is a
+    // regression test for the bug where iterations shared a single TestRun.
+    let handle1 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(handle1.testRunId, 'Test Runs/my-ticket-1');
+    assert.false(handle1.resumed, 'first run is not resumed');
+
+    // Second call with forceNew — should get sequence 2, not resume sequence 1
+    let handle2 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([
+        {
+          id: 'Test Runs/my-ticket-1',
+          status: 'running',
+          sequenceNumber: 1,
+        },
+      ]),
+    });
+
+    assert.strictEqual(handle2.testRunId, 'Test Runs/my-ticket-2');
+    assert.false(handle2.resumed, 'second run is not resumed');
+    assert.notStrictEqual(
+      handle1.testRunId,
+      handle2.testRunId,
+      'each iteration gets its own TestRun',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
