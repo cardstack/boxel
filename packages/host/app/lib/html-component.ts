@@ -27,6 +27,10 @@ export type HTMLComponent = ComponentLike<{ Args: {}; Element: Element }>;
 
 const cache = new Map<string, TopElement>();
 
+export function clearHtmlComponentCache() {
+  cache.clear();
+}
+
 type TopElement = ComponentLike<{
   Args: { attrs: Record<string, string> };
   Element: Element;

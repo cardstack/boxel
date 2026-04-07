@@ -121,6 +121,48 @@ Phase 1 and phase 2 can coexist:
 
 The `FactoryTool[]` type from phase 1 carries forward unchanged. `AgentRunResult` may be simplified — in phase 2 the agent signals completion by updating the issue (tagging as blocked, marking done), so the orchestrator reads issue state rather than inspecting a return status. The agent just needs to exit; the orchestrator figures out what happened from the issue.
 
+## Refactor: request_clarification → Blocking Issue
+
+In phase 1, `request_clarification` is a pure control flow signal — the agent calls it, the loop returns `clarification_needed`, and the message appears in the JSON output. Nothing is persisted to the realm, so the clarification request is lost if the output isn't captured.
+
+In phase 2, `request_clarification` should create a **blocking issue** in the realm that signals to the outside world that human input is needed. This makes clarification requests durable, visible in the Boxel UI, and resolvable by a human through the normal issue workflow.
+
+### Proposed behavior
+
+When the agent calls `request_clarification`:
+
+1. Create a new issue in the target realm with:
+   - **type**: `clarification`
+   - **status**: `blocked`
+   - **summary**: a short description of what's needed (from the agent's message)
+   - **description**: full context — what the agent was working on, what it tried, and what specific input it needs from a human
+   - **blockedBy**: (none — this issue IS the blocker)
+   - **blocks**: the current issue the agent was working on (so the blocked issue can't resume until clarification is resolved)
+2. Update the current issue's status to `blocked` with a reference to the clarification issue
+3. The agent exits its turn
+
+The orchestrator then sees the current issue is `blocked` and moves on (or stops if no other unblocked issues exist).
+
+### Human resolution flow
+
+A human resolves the clarification by:
+
+1. Opening the clarification issue in Boxel
+2. Adding a response (e.g., updating the issue description with the answer, or adding a comment)
+3. Marking the clarification issue as `done`
+
+This automatically unblocks the dependent issue. On the next orchestrator iteration, the previously-blocked issue becomes eligible for execution. The agent picks it up, sees the resolved clarification issue in context, and continues.
+
+### Migration from phase 1
+
+In phase 1, the tool stays as-is (signal-only). The phase 2 refactor replaces the tool's `execute` function to:
+
+- Write the clarification issue to the realm via `writeCardSource`
+- Update the current issue's `blockedBy` field
+- Return the `CLARIFICATION_SIGNAL` (so the loop still exits correctly)
+
+The `LoopAgent` and `runFactoryLoop` signatures don't change — the signal mechanism is preserved, but now it has a durable side effect.
+
 ## Boxel-CLI Integration
 
 Phase 1 uses HTTP API calls (`realm-operations.ts`) as the primary realm I/O path. Boxel-cli exists and has profile-based auth, but its auth model isn't flexible enough for the factory's needs — specifically, obtaining auth tokens for newly created realms on the fly. Boxel-cli also lives in a separate repository (`cardstack/boxel-cli`), making it difficult to evolve in lockstep with factory requirements.

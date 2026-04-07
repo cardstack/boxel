@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import type { ComponentLike } from '@glint/template';
 
 export interface Signature {
@@ -5,3 +6,5 @@ export interface Signature {
 }
 
 export type Icon = ComponentLike<Signature>;
+
+export type IconComponent = TemplateOnlyComponent<Signature>;

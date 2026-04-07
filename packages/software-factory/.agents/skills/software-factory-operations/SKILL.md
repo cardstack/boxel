@@ -31,13 +31,34 @@ The agent has these tools during the execution loop. Use them by name — they a
 
 ### Updating Project State
 
-- `update_project({ path, content })` — Update a Project card in the target realm (e.g., status, success criteria). Content must be valid card source JSON.
-- `update_ticket({ path, content })` — Update a Ticket card in the target realm (e.g., status, notes, acceptance criteria). Content must be valid card source JSON.
-- `create_knowledge({ path, content })` — Create or update a KnowledgeArticle card in the target realm. Content must be valid card source JSON.
+- `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. The tool's parameters include a dynamic JSON schema describing available fields — use it to know valid field names and types. The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
+- `update_ticket({ path, attributes, relationships? })` — Update a Ticket card. Same structured interface with dynamic field schema in the tool parameters.
+- `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
+- `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `https://cardstack.com/base/spec#Spec`.
 
 ### Testing
 
 - `run_tests({ slug, specPaths, testNames?, projectCardUrl? })` — Execute Playwright tests against the target realm. Pulls test spec files from the realm, runs them via the Playwright harness, returns structured results (pass/fail counts, failure details with error messages and stack traces).
+
+### Running Host Commands
+
+- `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
+
+**Example — generate JSON schema for a card type:**
+
+```
+run_command({
+  command: "@cardstack/boxel-host/commands/get-card-type-schema/default",
+  commandInput: {
+    codeRef: {
+      module: "https://realm.example/darkfactory",
+      name: "Project"
+    }
+  }
+})
+```
+
+Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Parse `result` as JSON to get the schema with `attributes` and `relationships` properties.
 
 ### Control Flow
 
@@ -76,6 +97,76 @@ target-realm/
 └── Knowledge Articles/
     └── article-name.json            # KnowledgeArticle card
 ```
+
+## Writing Playwright Test Specs
+
+Test spec files live in `Tests/<ticket-slug>.spec.ts` in the target realm. The orchestrator pulls them locally and runs Playwright. The following environment variables are injected at runtime:
+
+| Variable                             | Description                                                    |
+| ------------------------------------ | -------------------------------------------------------------- |
+| `BOXEL_SOURCE_REALM_URL`             | Target realm URL (where card definitions live)                 |
+| `BOXEL_TEST_ARTIFACTS_FOLDER_URL`    | URL for writing test card instances (includes `Run N/` folder) |
+| `BOXEL_TEST_ARTIFACTS_AUTHORIZATION` | JWT for writing to the test artifacts realm                    |
+
+**Card instances created during tests must go in the test artifacts realm** (via `BOXEL_TEST_ARTIFACTS_FOLDER_URL`), never in the target realm. Each test run gets its own folder to prevent collision.
+
+### Example Spec
+
+```typescript
+import { expect, test } from '@playwright/test';
+
+test('sticky note renders title', async ({ request }) => {
+  let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
+  let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
+  let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
+
+  // Create an instance in the test artifacts realm
+  let response = await request.post(
+    artifactsFolderUrl + 'StickyNote/test-note.json',
+    {
+      headers: {
+        Accept: 'application/vnd.card+source',
+        'Content-Type': 'application/vnd.card+source',
+        Authorization: authorization,
+      },
+      data: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: { title: 'Test Note', body: 'Hello' },
+          meta: {
+            adoptsFrom: {
+              module: sourceRealmUrl + 'sticky-note',
+              name: 'StickyNote',
+            },
+          },
+        },
+      }),
+    },
+  );
+  expect(response.ok()).toBe(true);
+
+  // Read it back and verify
+  let readResponse = await request.get(
+    artifactsFolderUrl + 'StickyNote/test-note',
+    {
+      headers: {
+        Accept: 'application/vnd.card+source',
+        Authorization: authorization,
+      },
+    },
+  );
+  expect(readResponse.ok()).toBe(true);
+  let card = await readResponse.json();
+  expect(card.data.attributes.title).toBe('Test Note');
+});
+```
+
+### Key Points
+
+- The `adoptsFrom.module` must point to the card definition in the **source realm** (target realm URL + definition filename without extension)
+- Use `application/vnd.card+source` MIME type for both `Accept` and `Content-Type` headers
+- Use `data-test-*` attributes for DOM selectors when testing rendered output
+- Never use `networkidle` — use `domcontentloaded` plus element assertions
 
 ## Important Rules
 

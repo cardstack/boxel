@@ -42,8 +42,7 @@ import { executeTestRunFromRealm } from '../../scripts/lib/factory-test-realm';
 import {
   createRealm,
   getRealmScopedAuth,
-  writeCardSource,
-  writeModuleSource,
+  writeFile,
 } from '../../scripts/lib/realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -320,10 +319,10 @@ async function main() {
 
   // 1. Project card — represents this project in the testing phase.
   console.log('  Writing Projects/hello-world.json (Project card)...');
-  let projectResult = await writeCardSource(
+  let projectResult = await writeFile(
     targetRealmUrl,
     'Projects/hello-world.json',
-    buildProjectCard(realmServerUrl) as any,
+    JSON.stringify(buildProjectCard(realmServerUrl), null, 2),
     fetchOptions,
   );
   console.log(
@@ -335,7 +334,7 @@ async function main() {
 
   // 2. Card definition
   console.log('  Writing hello.gts (HelloCard definition)...');
-  let defResult = await writeModuleSource(
+  let defResult = await writeFile(
     targetRealmUrl,
     'hello.gts',
     HELLO_CARD_GTS,
@@ -347,10 +346,10 @@ async function main() {
 
   // 3. Spec card instance pointing to the card definition
   console.log('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
-  let specCardResult = await writeCardSource(
+  let specCardResult = await writeFile(
     targetRealmUrl,
     'Spec/hello-card.json',
-    HELLO_SPEC_CARD as any,
+    JSON.stringify(HELLO_SPEC_CARD, null, 2),
     fetchOptions,
   );
   console.log(
@@ -361,7 +360,7 @@ async function main() {
 
   // 5. Playwright test spec
   console.log('  Writing Tests/hello-smoke.spec.ts (Playwright spec)...');
-  let specResult = await writeModuleSource(
+  let specResult = await writeFile(
     targetRealmUrl,
     'Tests/hello-smoke.spec.ts',
     PLAYWRIGHT_SPEC,
@@ -377,7 +376,7 @@ async function main() {
   console.log(
     '  Writing Tests/hello-failing.spec.ts (deliberately failing spec)...',
   );
-  let failSpecResult = await writeModuleSource(
+  let failSpecResult = await writeFile(
     targetRealmUrl,
     'Tests/hello-failing.spec.ts',
     PLAYWRIGHT_FAILING_SPEC,
@@ -416,6 +415,7 @@ async function main() {
     projectCardUrl,
     matrixAuth: matrixAuthForRealm,
     serverToken,
+    realmServerUrl: matrixAuth.credentials.realmServerUrl,
   });
 
   console.log(`  TestRun ID:  ${handle.testRunId}`);

@@ -54,10 +54,13 @@ You previously invoked the following tools. Use these results to inform your imp
 
 # Instructions
 
-Implement this ticket. Return actions that:
+Implement this ticket:
 
-1. Create or update card definitions (.gts) and/or card instances (.json) in the target realm
-2. Create test specs (.spec.ts) in the target realm's `Tests/` folder that verify your implementation
-3. Use `invoke_tool` actions to inspect existing realm state before creating files
+1. Use search_realm and read_file to inspect existing realm state
+2. Use write_file to create or update card definitions (.gts) and/or card instances (.json) in the target realm
+3. Create a Catalog Spec card in the Spec/ folder for the top-level card (adoptsFrom https://cardstack.com/base/spec#Spec)
+4. Create at least one sample card instance and link it from the Catalog Spec via linkedExamples
+5. Use write_file to create Playwright test specs (.spec.ts) in the target realm's `Tests/` folder
+6. Call signal_done when all implementation and test files have been written
 
 Start with the smallest working implementation, then add the test.

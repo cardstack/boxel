@@ -648,6 +648,7 @@ export default class SearchContent extends Component<Signature> {
         overscroll-behavior: none;
         height: 100%;
         background-color: var(--boxel-light);
+        padding-right: var(--boxel-sp);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .search-sheet-content.compact {
