@@ -198,7 +198,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     contextOpts?: LookupContext,
   ): Promise<Definition | undefined> {
     let canonicalModuleURL = canonicalURL(codeRef.module);
-    let context = await this.buildLookupContext(canonicalModuleURL, contextOpts);
+    let context = await this.buildLookupContext(
+      canonicalModuleURL,
+      contextOpts,
+    );
     if (!context) {
       return undefined;
     }

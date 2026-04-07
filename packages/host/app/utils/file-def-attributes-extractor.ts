@@ -326,10 +326,9 @@ export class FileDefAttributesExtractor {
     klass: FileDefConstructor,
   ): Promise<Record<string, QueryFieldMeta> | undefined> {
     try {
-      let cardApiModule =
-        await this.#loaderService.loader.import<typeof CardAPI>(
-          'https://cardstack.com/base/card-api',
-        );
+      let cardApiModule = await this.#loaderService.loader.import<
+        typeof CardAPI
+      >('https://cardstack.com/base/card-api');
       let fields = getFieldDefinitions(
         cardApiModule,
         klass as unknown as typeof BaseDef,

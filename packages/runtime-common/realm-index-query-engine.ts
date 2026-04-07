@@ -266,8 +266,7 @@ export class RealmIndexQueryEngine {
     try {
       let definition: import('./definitions').Definition | undefined;
       if (opts?.cacheOnlyDefinitions) {
-        definition =
-          await this.#definitionLookup.lookupCachedDefinition(codeRef);
+        definition = await this.#definitionLookup.lookupCachedDefinition(codeRef);
         if (!definition) {
           return false;
         }
@@ -479,8 +478,7 @@ export class RealmIndexQueryEngine {
     }
     let definition: import('./definitions').Definition | undefined;
     if (opts?.cacheOnlyDefinitions) {
-      definition =
-        await this.#definitionLookup.lookupCachedDefinition(codeRef);
+      definition = await this.#definitionLookup.lookupCachedDefinition(codeRef);
       if (!definition) {
         return;
       }
