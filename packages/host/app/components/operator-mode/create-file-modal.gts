@@ -157,6 +157,7 @@ export default class CreateFileModal extends Component<Signature> {
           @size='medium'
           @isOpen={{this.isModalOpen}}
           @onClose={{this.onCancel}}
+          @isCloseDisabled={{this.isCreateRunning}}
           {{focusTrap
             isActive=this.isReady
             focusTrapOptions=(hash
@@ -312,6 +313,7 @@ export default class CreateFileModal extends Component<Signature> {
                     {{on 'click' this.onCancel}}
                     {{onKeyMod 'Escape'}}
                     @size='tall'
+                    @disabled={{this.isCreateRunning}}
                     data-test-cancel-create-file
                   >
                     Cancel
@@ -597,6 +599,9 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   @action private onCancel() {
+    if (this.isCreateRunning) {
+      return;
+    }
     this.currentRequest?.newFileDeferred.fulfill(undefined);
     this.clearState();
   }
@@ -721,7 +726,8 @@ export default class CreateFileModal extends Component<Signature> {
     return (
       this.createCardInstance.isRunning ||
       this.createDefinition.isRunning ||
-      this.createTextFile.isRunning
+      this.createTextFile.isRunning ||
+      this.duplicateCardInstance.isRunning
     );
   }
 

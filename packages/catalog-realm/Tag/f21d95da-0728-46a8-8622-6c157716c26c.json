@@ -9,11 +9,11 @@
     "type": "card",
     "attributes": {
       "name": "Poster",
-      "color": null,
+      "color": "#ff7f00",
       "cardInfo": {
         "notes": null,
         "name": "",
-        "summary": null,
+        "summary": "Cards designed for creating posters, flyers, promotional visuals, or any print-ready or display-ready graphical layouts.",
         "cardThumbnailURL": null
       }
     },

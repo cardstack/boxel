@@ -109,13 +109,14 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
 
   // Drawing functionality
   @action
-  startDrawing(event: MouseEvent) {
+  startDrawing(event: Event) {
+    let mouseEvent = event as MouseEvent;
     if (this.selectedTool === 'drawing') {
-      event.preventDefault();
-      event.stopPropagation();
+      mouseEvent.preventDefault();
+      mouseEvent.stopPropagation();
 
       // ¹⁰⁵ CRITICAL: Validate event originated from drawing layer
-      const drawingLayer = event.currentTarget as HTMLElement;
+      const drawingLayer = mouseEvent.currentTarget as HTMLElement;
       if (!drawingLayer || !drawingLayer.classList.contains('drawing-layer')) {
         return;
       }
@@ -127,8 +128,8 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       }
 
       const rect = canvas.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      const x = mouseEvent.clientX - rect.left;
+      const y = mouseEvent.clientY - rect.top;
 
       // Validate coordinates are within canvas bounds
       if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
@@ -141,7 +142,8 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   }
 
   @action
-  continueDrawing(event: MouseEvent) {
+  continueDrawing(event: Event) {
+    let mouseEvent = event as MouseEvent;
     // ¹⁰⁶ CRITICAL: Validate drawing state before processing any mouse events
     if (
       !this.isDrawing ||
@@ -151,8 +153,8 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
+    mouseEvent.preventDefault();
+    mouseEvent.stopPropagation();
 
     const canvas = document.getElementById('pdf-canvas') as HTMLCanvasElement;
     if (!canvas) {
@@ -162,8 +164,8 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
     }
 
     const rect = canvas.getBoundingClientRect();
-    let x = event.clientX - rect.left;
-    let y = event.clientY - rect.top;
+    let x = mouseEvent.clientX - rect.left;
+    let y = mouseEvent.clientY - rect.top;
 
     // ¹⁰⁷ Validate coordinates are not NaN
     if (isNaN(x) || isNaN(y)) {
@@ -888,12 +890,13 @@ class AnnotationIsolated extends Component<typeof AnnotationCard> {
   // Clear text selection
   // ¹⁰⁸ Handle mouse entering drawing area during external drag
   @action
-  handleMouseEnterWhileDrawing(event: MouseEvent) {
+  handleMouseEnterWhileDrawing(event: Event) {
+    let mouseEvent = event as MouseEvent;
     // If mouse enters the drawing area while button is pressed but no valid drawing state,
     // it means the drag started outside - ignore these events
-    if (event.buttons > 0 && !this.isDrawing) {
-      event.preventDefault();
-      event.stopPropagation();
+    if (mouseEvent.buttons > 0 && !this.isDrawing) {
+      mouseEvent.preventDefault();
+      mouseEvent.stopPropagation();
       return false;
     }
     return;

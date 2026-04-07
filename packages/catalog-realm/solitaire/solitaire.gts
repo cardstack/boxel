@@ -856,6 +856,7 @@ class IsolatedTemplate extends Component<typeof Solitaire> {
     const createdAt = new Date();
 
     const codeRef = {
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       module: new URL('../solitaire/solitaire', import.meta.url).href,
       name: 'Solitaire',
     };

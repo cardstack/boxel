@@ -236,7 +236,7 @@ Examples:
 
 **IMPORTANT:** "Spec" has two completely different meanings in the software factory:
 
-1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance adopting from `https://cardstack.com/base/spec#Spec`. This is a catalog entry describing a card. Example: `Spec/sticky-note.json`.
+1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance adopting from `@cardstack/base/spec#Spec`. This is a catalog entry describing a card. Example: `Spec/sticky-note.json`.
 
 2. **Playwright test file** (`Tests/` folder, `.spec.ts` files) — A TypeScript Playwright test file that runs browser-level verification. Example: `Tests/sticky-note.spec.ts`.
 

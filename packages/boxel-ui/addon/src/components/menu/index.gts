@@ -43,15 +43,8 @@ interface Signature {
 }
 
 export default class Menu extends Component<Signature> {
-  @action invokeMenuItemAction(
-    action: MenuAction,
-    e: Event | KeyboardEvent,
-  ): void {
+  @action invokeMenuItemAction(action: MenuAction, e: Event): void {
     e.preventDefault();
-
-    if (e.type === 'keypress' && (e as KeyboardEvent).key !== 'Enter') {
-      return;
-    }
     action();
     this.args.closeMenu?.();
   }
@@ -91,17 +84,12 @@ export default class Menu extends Component<Signature> {
                 data-test-boxel-menu-item-selected={{menuItem.checked}}
               >
                 {{! template-lint-disable require-context-role }}
-                <div
+                <button
+                  type='button'
                   class='boxel-menu__item__content'
                   role='menuitem'
-                  href='#'
                   data-test-boxel-menu-item-text={{menuItem.label}}
-                  tabindex='0'
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
-                  {{on
-                    'keypress'
-                    (fn this.invokeMenuItemAction menuItem.action)
-                  }}
                   disabled={{menuItem.disabled}}
                 >
                   <span class='menu-item'>
@@ -135,7 +123,7 @@ export default class Menu extends Component<Signature> {
                   >
                     <CheckMark class='checkmark' width='12' height='12' />
                   </span>
-                </div>
+                </button>
               </li>
             </:item>
           </MenuItemRenderer>
@@ -199,11 +187,15 @@ export default class Menu extends Component<Signature> {
         .boxel-menu__item > .boxel-menu__item__content {
           width: 100%;
           padding: var(--boxel-menu-item-content-padding);
-
           display: flex;
           justify-content: space-between;
           align-items: center;
           gap: 10px;
+          border: none;
+          background: none;
+          color: inherit;
+          font: inherit;
+          text-align: start;
         }
 
         .boxel-menu__item--disabled .boxel-menu__item__content {
@@ -272,10 +264,4 @@ export default class Menu extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    'Boxel::Menu': typeof Menu;
-  }
 }

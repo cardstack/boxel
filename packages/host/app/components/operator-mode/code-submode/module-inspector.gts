@@ -527,7 +527,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
   });
 
-  @action private async createSpec(event: MouseEvent) {
+  @action private async createSpec(event: Event) {
     event.stopPropagation();
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');

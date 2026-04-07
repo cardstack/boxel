@@ -368,11 +368,15 @@ export class MatrixClient {
     if (!this.access) {
       return false;
     }
-    let userId = await this.whoami();
-    if (userId === this.access.userId) {
-      return true;
+    try {
+      let userId = await this.whoami();
+      if (userId === this.access.userId) {
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
     }
-    return false;
   }
 
   async whoami() {

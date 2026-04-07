@@ -298,10 +298,12 @@ class AdventureIsolated extends Component<typeof Adventure> {
 
       const gmSkillId = new URL(
         './Skill/adventure-game-master',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         import.meta.url,
       ).href;
       const suggestionSkillId = new URL(
         './Skill/suggestion-action-helper',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         import.meta.url,
       ).href;
       const kickoffPrompt = `Let's begin the adventure`;

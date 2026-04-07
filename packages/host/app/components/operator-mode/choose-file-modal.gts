@@ -153,36 +153,39 @@ export default class ChooseFileModal extends Component<Signature> {
   }
 
   @action
-  private handleDragEnter(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer)) {
+  private handleDragEnter(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.dropZoneDragDepth++;
     this.isDropZoneActive = true;
   }
 
   @action
-  private handleDragOver(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer)) {
+  private handleDragOver(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.isDropZoneActive = true;
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
+    if (dragEvent.dataTransfer) {
+      dragEvent.dataTransfer.dropEffect = 'copy';
     }
   }
 
   @action
-  private handleDragLeave(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer) && !this.isDropZoneActive) {
+  private handleDragLeave(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer) && !this.isDropZoneActive) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.dropZoneDragDepth = Math.max(0, this.dropZoneDragDepth - 1);
     if (this.dropZoneDragDepth === 0) {
       this.isDropZoneActive = false;
@@ -190,18 +193,19 @@ export default class ChooseFileModal extends Component<Signature> {
   }
 
   @action
-  private handleDrop(event: DragEvent) {
-    if (!this.isFileDrag(event.dataTransfer)) {
+  private handleDrop(event: Event) {
+    let dragEvent = event as DragEvent;
+    if (!this.isFileDrag(dragEvent.dataTransfer)) {
       return;
     }
-    event.preventDefault();
-    event.stopPropagation();
+    dragEvent.preventDefault();
+    dragEvent.stopPropagation();
     this.dropZoneDragDepth = 0;
     this.isDropZoneActive = false;
     if (this.isUploadBusy) {
       return;
     }
-    let file = event.dataTransfer?.files?.[0];
+    let file = dragEvent.dataTransfer?.files?.[0];
     if (!file) {
       return;
     }
@@ -268,13 +272,14 @@ export default class ChooseFileModal extends Component<Signature> {
     this.selectedFile = file;
   }
 
-  @action private handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+  @action private handleKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
+    if (kbEvent.key === 'Escape') {
       this.pickTask.perform(undefined);
       return;
     }
-    if (event.key === 'Tab') {
-      this.trapFocus(event);
+    if (kbEvent.key === 'Tab') {
+      this.trapFocus(kbEvent);
     }
   }
 

@@ -491,8 +491,8 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   });
 
-  @action private handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+  @action private handleKeydown(event: Event) {
+    if ((event as KeyboardEvent).key === 'Escape') {
       this.cancelPick();
     }
   }

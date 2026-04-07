@@ -33,7 +33,7 @@ import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseCommandModule from '@cardstack/base/command';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 const log = logger('catalog:install');
 

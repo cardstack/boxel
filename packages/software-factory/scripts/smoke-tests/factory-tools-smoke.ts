@@ -253,6 +253,7 @@ async function main(): Promise<void> {
     {
       targetRealmUrl: 'https://realms.example.test/user/target/',
       testRealmUrl: 'https://realms.example.test/user/target-tests/',
+      realmServerUrl: 'https://realms.example.test/',
       realmTokens: {
         'https://realms.example.test/user/target/': 'Bearer target-jwt',
         'https://realms.example.test/user/target-tests/': 'Bearer test-jwt',
@@ -266,10 +267,10 @@ async function main(): Promise<void> {
   let toolNames = factoryTools.map((t) => t.name);
   console.log(`  Built ${factoryTools.length} tools:`);
   console.log(
-    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'update_ticket', 'create_knowledge', 'signal_done', 'request_clarification'].includes(n)).join(', ')}`,
+    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_ticket', 'create_knowledge'].includes(n)).join(', ')}`,
   );
   console.log(
-    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'update_ticket', 'create_knowledge', 'signal_done', 'request_clarification'].includes(n)).join(', ')}`,
+    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_ticket', 'create_knowledge'].includes(n)).join(', ')}`,
   );
   console.log('');
 

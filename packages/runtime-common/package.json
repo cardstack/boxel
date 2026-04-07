@@ -17,7 +17,7 @@
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@eslint/js": "catalog:",
-    "@glint/template": "1.3.0",
+    "@glint/template": "catalog:",
     "@lukeed/uuid": "catalog:",
     "@types/babel__core": "catalog:",
     "@types/babel__generator": "catalog:",
@@ -71,9 +71,6 @@
   },
   "devDependencies": {
     "@babel/core": "catalog:",
-    "@glint/core": "1.3.0",
-    "@glint/environment-ember-loose": "catalog:",
-    "@glint/environment-ember-template-imports": "1.3.0",
     "@types/dompurify": "catalog:",
     "@types/js-string-escape": "catalog:",
     "@types/mime-types": "catalog:",
@@ -84,7 +81,8 @@
     "dompurify": "catalog:",
     "ember-cli-htmlbars": "^6.3.0",
     "monaco-editor": "catalog:",
-    "statuses": "catalog:"
+    "statuses": "catalog:",
+    "@glint/ember-tsc": "catalog:"
   },
   "peerDependencies": {
     "@babel/core": "catalog:",
@@ -94,6 +92,6 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:js": "eslint . ",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:types": "glint"
+    "lint:types": "ember-tsc --noEmit"
   }
 }

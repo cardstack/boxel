@@ -843,7 +843,7 @@ export default class Workspace extends Component<Signature> {
     }
   }
 
-  @action toggleHostDropdown(event: MouseEvent) {
+  @action toggleHostDropdown(event: Event) {
     event.stopPropagation();
     if (!this.hasPublishedRealms) return;
     this.isHostDropdownOpen = !this.isHostDropdownOpen;

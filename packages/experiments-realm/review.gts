@@ -42,7 +42,7 @@ export class Review extends BlogPost {
           <div class='info'>
             <div class='byline'>{{@model.formattedAuthors}}</div>
             {{#if @model.datePublishedIsoTimestamp}}
-              <time class='date' timestamp={{@model.datePublishedIsoTimestamp}}>
+              <time class='date' datetime={{@model.datePublishedIsoTimestamp}}>
                 {{@model.formattedDatePublished}}
               </time>
             {{/if}}
@@ -164,7 +164,7 @@ export class Review extends BlogPost {
             {{#if @model.datePublishedIsoTimestamp}}
               <li class='pub-date'>
                 Published on
-                <time timestamp={{@model.datePublishedIsoTimestamp}}>
+                <time datetime={{@model.datePublishedIsoTimestamp}}>
                   {{this.formattedDatePublished}}
                 </time>
               </li>

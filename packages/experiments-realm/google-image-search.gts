@@ -111,8 +111,9 @@ export class GoogleImageSearch extends CardDef {
       }
     };
 
-    submitOnEnter = (event: KeyboardEvent) => {
-      if (event.key === 'Enter') {
+    submitOnEnter = (event: Event) => {
+      let kbEvent = event as KeyboardEvent;
+      if (kbEvent.key === 'Enter') {
         this.performSearch();
       }
     };

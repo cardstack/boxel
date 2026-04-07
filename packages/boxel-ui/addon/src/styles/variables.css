@@ -107,7 +107,7 @@
   --boxel-border-card: 1px solid rgba(0, 0, 0, 0.1);
 
   /* border-radius */
-  --boxel-border-radius-xxs: calc(
+  --boxel-border-radius-2xs: calc(
     var(--boxel-border-radius-xs) - 2.5px
   ); /* 1.5px */
   --boxel-border-radius-xs: calc(var(--boxel-border-radius-sm) - 2px); /* 4px */
@@ -117,7 +117,7 @@
   --boxel-border-radius-xl: calc(
     var(--boxel-border-radius-lg) + 3px
   ); /* 15px */
-  --boxel-border-radius-xxl: calc(
+  --boxel-border-radius-2xl: calc(
     var(--boxel-border-radius-xl) + 5px
   ); /* 20px */
 
@@ -245,11 +245,17 @@
   --boxel-form-control-dark-mode-placeholder-color: #acacac;
   --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
 
-  /* deprecated */
+  /* deprecated - Do Not Use */
   --boxel-sp-xxxl: var(--boxel-sp-3xl); /* xxxl is deprecated, use 3xl */
   --boxel-sp-xxl: var(--boxel-sp-2xl); /* xxl is deprecated, use 2xl */
   --boxel-sp-xxs: var(--boxel-sp-2xs); /* xxs is deprecated, use 2xs */
   --boxel-sp-xxxs: var(--boxel-sp-3xs); /* xxxs is deprecated, use 3xs */
+  --boxel-border-radius-xxs: var(
+    --boxel-border-radius-2xs
+  ); /* xxs is deprecated, use 2xs */
+  --boxel-border-radius-xxl: var(
+    --boxel-border-radius-2xl
+  ); /* xxl is deprecated, use 2xl */
 }
 
 /** Semantic CSS Variables for General Use */

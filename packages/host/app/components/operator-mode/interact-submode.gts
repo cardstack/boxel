@@ -769,6 +769,7 @@ export default class InteractSubmode extends Component {
                 }}
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
+                {{! @glint-expect-error: fn partial application loses async return type }}
                 @createCard={{fn this.createCard stackIndex}}
                 @viewCard={{fn this.viewCard stackIndex}}
                 @saveCard={{this.saveCard}}

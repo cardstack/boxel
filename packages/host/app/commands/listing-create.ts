@@ -12,6 +12,7 @@ import {
   isFieldDef,
   isResolvedCodeRef,
   cardIdToURL,
+  trimExecutableExtension,
 } from '@cardstack/runtime-common';
 import {
   loadCardDef,
@@ -73,7 +74,16 @@ export default class ListingCreateCommand extends HostBaseCommand<
   requireInputFields = ['codeRef', 'targetRealm'];
 
   private sanitizeModuleList(modulesToCreate: Iterable<string>) {
-    let uniqueModules = Array.from(new Set(modulesToCreate));
+    // Normalize to extensionless URLs before deduplication so that e.g.
+    // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
+    const seen = new Map<string, string>(); // normalized → original
+    for (const m of modulesToCreate) {
+      const normalized = trimExecutableExtension(new URL(m)).href;
+      if (!seen.has(normalized)) {
+        seen.set(normalized, m);
+      }
+    }
+    let uniqueModules = Array.from(seen.values());
     return uniqueModules.filter((dep) => {
       // Exclude scoped CSS requests
       if (isScopedCSSRequest(dep)) {
@@ -145,8 +155,8 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const backgroundWork = Promise.all([
       this.autoPatchName(listingCard, codeRef),
       this.autoPatchSummary(listingCard, codeRef),
-      this.autoLinkTag(listingCard),
-      this.autoLinkCategory(listingCard),
+      this.autoLinkTag(listingCard, codeRef),
+      this.autoLinkCategory(listingCard, codeRef),
       this.autoLinkLicense(listingCard),
       this.autoLinkExample(listingCard, codeRef, openCardIds),
       this.linkSpecs(
@@ -154,6 +164,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         targetRealm,
         firstOpenCardId ?? codeRef?.module,
         codeRef.module,
+        codeRef,
       ),
     ]).catch((error) => {
       console.warn('Background autopatch failed:', error);
@@ -215,6 +226,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     targetRealm: string,
     resourceUrl: string, // can be module or card instance id
     moduleUrl: string, // the module URL of the card type being listed
+    codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
     const resourceRealm =
       this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
@@ -257,15 +269,29 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
     if (sanitizedModules.length > 0) {
       const createSpecCommand = new CreateSpecCommand(this.commandContext);
+      const normalizedModuleUrl = trimExecutableExtension(
+        new URL(moduleUrl),
+      ).href;
       const specResults = await Promise.all(
-        sanitizedModules.map((module) =>
-          createSpecCommand
-            .execute({ module, targetRealm, autoGenerateReadme: true })
-            .catch((e) => {
-              console.warn('Failed to create spec(s) for', module, e);
-              return undefined;
-            }),
-        ),
+        sanitizedModules.map((module) => {
+          // For the main module, use the specific codeRef (with export name) so
+          // only the listed export gets a spec, not every export in the file.
+          // Normalize both sides before comparing — _dependencies can return
+          // URLs with executable extensions (e.g. .gts) while moduleUrl/codeRef.module
+          // is often extensionless, so a bare string comparison would create
+          // duplicate specs for the same source file.
+          const normalizedModule = trimExecutableExtension(
+            new URL(module),
+          ).href;
+          const input =
+            normalizedModule === normalizedModuleUrl
+              ? { codeRef, targetRealm, autoGenerateReadme: true }
+              : { module, targetRealm, autoGenerateReadme: true };
+          return createSpecCommand.execute(input).catch((e: unknown) => {
+            console.warn('Failed to create spec(s) for', module, e);
+            return undefined;
+          });
+        }),
       );
 
       specResults.forEach((result) => {
@@ -284,13 +310,20 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   // --- Linking helpers now use SearchAndChooseCommand ---
   private async chooseCards(
-    codeRef: ResolvedCodeRef,
-    opts?: { max?: number; additionalSystemPrompt?: string },
+    params: {
+      candidateTypeCodeRef: ResolvedCodeRef;
+      sourceContextCodeRef?: ResolvedCodeRef;
+    },
+    opts?: {
+      max?: number;
+      additionalSystemPrompt?: string;
+    },
   ) {
     const command = new SearchAndChooseCommand(this.commandContext);
     const result = await command.execute({
-      codeRef,
-      max: opts?.max ?? 2,
+      candidateTypeCodeRef: params.candidateTypeCodeRef,
+      sourceContextCodeRef: params.sourceContextCodeRef,
+      max: opts?.max,
       additionalSystemPrompt: opts?.additionalSystemPrompt,
     });
     return result.selectedCards ?? [];
@@ -303,7 +336,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const name = await this.getStringPatch({
       codeRef,
       systemPrompt:
-        'You are an expert catalog curator. You read a Cardstack card/field definition source file and create a concise catalog listing title. Respond ONLY with the title text—no quotes, no JSON, no markdown, and no extra commentary.',
+        'You are a concise and accurate summarization system. You read a Cardstack card/field definition source file and create a concise catalog listing title. Respond ONLY with the title text—no quotes, no JSON, no markdown, and no extra commentary.',
       userPrompt: [
         `Generate a catalog listing title for the definition referenced by:`,
         `- module: ${codeRef.module}`,
@@ -324,7 +357,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const summary = await this.getStringPatch({
       codeRef,
       systemPrompt:
-        'You are an expert catalog curator. You read a Cardstack card/field definition source file and write a concise spec-style summary. Output ONLY the summary text—no quotes, no JSON, no markdown, and no extra commentary.',
+        'You are a concise and accurate summarization system. You read a Cardstack card/field definition source file and write a concise spec-style summary. Output ONLY the summary text—no quotes, no JSON, no markdown, and no extra commentary.',
       userPrompt: [
         `Generate a README-style catalog listing summary for the definition referenced by:`,
         `- module: ${codeRef.module}`,
@@ -417,22 +450,25 @@ export default class ListingCreateCommand extends HostBaseCommand<
       uniqueById.size < MAX_EXAMPLES
     ) {
       try {
-        const searchAndChoose = new SearchAndChooseCommand(this.commandContext);
         const existingIds = Array.from(uniqueById.keys());
-        const result = await searchAndChoose.execute({
-          codeRef,
-          max: Math.max(1, MAX_EXAMPLES - existingIds.length),
-          additionalSystemPrompt: [
-            'Prefer examples that showcase common or high-impact use cases.',
-            existingIds.length
-              ? `Do not include any id already linked: ${existingIds.join(', ')}.`
-              : '',
-            'Return [] if nothing relevant is found.',
-          ]
-            .filter(Boolean)
-            .join(' '),
-        });
-        for (const card of result.selectedCards ?? []) {
+        const additionalExamples = await this.chooseCards(
+          {
+            candidateTypeCodeRef: codeRef,
+          },
+          {
+            max: Math.max(1, MAX_EXAMPLES - existingIds.length),
+            additionalSystemPrompt: [
+              'Prefer examples that showcase common or high-impact use cases.',
+              existingIds.length
+                ? `Do not include any id already linked: ${existingIds.join(', ')}.`
+                : '',
+              'Return [] if nothing relevant is found.',
+            ]
+              .filter(Boolean)
+              .join(' '),
+          },
+        );
+        for (const card of additionalExamples) {
           addCard(card as CardAPI.CardDef);
         }
       } catch (error) {
@@ -446,43 +482,64 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }
 
   private async autoLinkLicense(listing: CardAPI.CardDef) {
-    const selected = await this.chooseCards(
-      {
+    const selected = await this.chooseCards({
+      candidateTypeCodeRef: {
         module: `${this.catalogRealm}catalog-app/listing/license`,
         name: 'License',
       } as ResolvedCodeRef,
-      { max: 1 },
-    );
+    });
     (listing as any).license = selected[0];
   }
 
-  private async autoLinkTag(listing: CardAPI.CardDef) {
+  private async autoLinkTag(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+  ) {
     const selected = await this.chooseCards(
       {
-        module: `${this.catalogRealm}catalog-app/listing/tag`,
-        name: 'Tag',
-      } as ResolvedCodeRef,
+        candidateTypeCodeRef: {
+          module: `${this.catalogRealm}catalog-app/listing/tag`,
+          name: 'Tag',
+        } as ResolvedCodeRef,
+        sourceContextCodeRef: codeRef,
+      },
       {
-        max: 2,
+        max: 1,
         additionalSystemPrompt:
-          'RULE: Never select or return any id that contains the substring "stub" (case-insensitive). If all contain stub return [].',
+          'You are selecting from an existing list of catalog tags. ' +
+          "Choose the single best tag that describes the card's subject matter, use case, or domain. " +
+          'Prefer a specific descriptive tag over a broad organizational bucket. ' +
+          'Only select ids from the provided options. ' +
+          'Return [] if no tag clearly fits.',
       },
     );
     (listing as any).tags = selected;
   }
 
-  private async autoLinkCategory(listing: CardAPI.CardDef) {
+  private async autoLinkCategory(
+    listing: CardAPI.CardDef,
+    codeRef: ResolvedCodeRef,
+  ) {
     const selected = await this.chooseCards(
       {
-        module: `${this.catalogRealm}catalog-app/listing/category`,
-        name: 'Category',
-      } as ResolvedCodeRef,
-      { max: 2 },
+        candidateTypeCodeRef: {
+          module: `${this.catalogRealm}catalog-app/listing/category`,
+          name: 'Category',
+        } as ResolvedCodeRef,
+        sourceContextCodeRef: codeRef,
+      },
+      {
+        max: 1,
+        additionalSystemPrompt:
+          'You are selecting from an existing list of catalog categories. ' +
+          "Choose the single best high-level category that matches the card's main purpose. " +
+          'Prefer broad organizing categories over keyword-style tags. ' +
+          'Only select ids from the provided options. ' +
+          'Return [] if no category clearly fits.',
+      },
     );
     (listing as any).categories = selected;
   }
-
-  // Removed bespoke AI selection/parsing helpers in favor of SearchAndChooseCommand
 
   private async getStringPatch(opts: {
     systemPrompt: string;

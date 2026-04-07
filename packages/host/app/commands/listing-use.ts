@@ -18,7 +18,7 @@ import type RealmServerService from '../services/realm-server';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Skill } from '@cardstack/base/skill';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput

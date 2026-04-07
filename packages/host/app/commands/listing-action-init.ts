@@ -15,7 +15,7 @@ import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type * as BaseCommandModule from '@cardstack/base/command';
 
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingActionInitCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingActionInput

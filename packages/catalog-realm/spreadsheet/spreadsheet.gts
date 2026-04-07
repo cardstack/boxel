@@ -199,16 +199,17 @@ class SpreadsheetIsolated extends Component<typeof Spreadsheet> {
     this.isEditingDelimiter = false;
   };
 
-  handleDelimiterKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
+  handleDelimiterKeydown = (event: Event) => {
+    const keyEvent = event as KeyboardEvent;
+    if (keyEvent.key === 'Enter') {
+      keyEvent.preventDefault();
       this.saveDelimiterEdit();
-      (event.target as HTMLInputElement).blur();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
+      (keyEvent.target as HTMLInputElement).blur();
+    } else if (keyEvent.key === 'Escape') {
+      keyEvent.preventDefault();
       this.tempDelimiter = this.delimiter;
       this.isEditingDelimiter = false;
-      (event.target as HTMLInputElement).blur();
+      (keyEvent.target as HTMLInputElement).blur();
     }
   };
 

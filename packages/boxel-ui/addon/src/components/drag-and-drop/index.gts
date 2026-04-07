@@ -150,10 +150,8 @@ export default class DndKanbanBoard extends Component<
                     <div class='overlay'></div>
                     {{yield card column to='card'}}
                     <LoadingIndicator
-                      width='18'
-                      height='18'
                       @color='var(--boxel-light)'
-                      class='loader'
+                      class='loader loader--small'
                     />
                   {{else}}
                     {{yield card column to='card'}}
@@ -207,6 +205,9 @@ export default class DndKanbanBoard extends Component<
         left: 50%;
         transform: translate(-50%, -50%);
         z-index: calc(var(--draggable-overlay-z-index) + 1);
+      }
+      .draggable-card.is-loading > .loader--small {
+        --loading-indicator-size: 18px;
       }
       .draggable-card.is-on-target {
         transform: scale(0.95);

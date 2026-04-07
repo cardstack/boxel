@@ -1,19 +1,20 @@
 import { Command } from '@cardstack/runtime-common';
+
 import { CardDef, field, contains } from '@cardstack/base/card-api';
 import MarkdownField from '@cardstack/base/markdown';
 import StringField from '@cardstack/base/string';
-import NumberField from '@cardstack/base/number';
+import { JsonField } from '@cardstack/base/commands/search-card-result';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
+
+import { FileContentField } from '../fields/file-content';
 import { PrCard } from '../pr-card/pr-card';
 
 class CreatePrCardInput extends CardDef {
   @field realm = contains(StringField);
-  @field prNumber = contains(NumberField);
-  @field prUrl = contains(StringField);
-  @field prTitle = contains(StringField);
   @field branchName = contains(StringField);
-  @field prSummary = contains(MarkdownField);
   @field submittedBy = contains(StringField);
+  @field prSummary = contains(MarkdownField);
+  @field allFileContents = contains(JsonField);
 }
 
 export default class CreatePrCardCommand extends Command<
@@ -27,24 +28,23 @@ export default class CreatePrCardCommand extends Command<
   }
 
   protected async run(input: CreatePrCardInput): Promise<PrCard> {
-    let {
-      realm,
-      prNumber,
-      prUrl,
-      prTitle,
-      branchName,
-      prSummary,
-      submittedBy,
-    } = input;
+    let { realm, branchName, submittedBy, prSummary, allFileContents } = input;
+
+    let rawFiles = Array.isArray(allFileContents) ? allFileContents : [];
+    let fileContents = rawFiles.map(
+      (file: any) =>
+        new FileContentField({
+          filename: file.filename ?? file.path ?? '',
+          contents: file.contents ?? file.content ?? '',
+        }),
+    );
 
     let card = new PrCard({
-      prNumber,
-      prUrl,
-      prTitle,
       branchName,
-      prSummary,
       submittedBy,
+      prSummary,
       submittedAt: new Date(),
+      allFileContents: fileContents,
     });
 
     // Save the PR card to the submission realm

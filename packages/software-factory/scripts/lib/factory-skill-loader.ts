@@ -96,7 +96,9 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'dev-defensive-programming.md': ['defensive', 'guard', 'error', 'safe'],
   'dev-external-libraries.md': ['library', 'external', 'third-party', 'npm'],
   'dev-command-development.md': ['command', 'action', 'invoke'],
-  'dev-spec-usage.md': ['spec', 'test', 'specification'],
+  'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
+  'dev-playwright-testing.md': ['test', 'playwright', 'spec.ts', 'verify'],
+  'dev-realm-search.md': ['search', 'query', 'filter', 'find', 'realm'],
   'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
 };
 
@@ -105,6 +107,9 @@ const ALWAYS_LOAD_REFERENCES: readonly string[] = [
   'dev-core-concept.md',
   'dev-technical-rules.md',
   'dev-quick-reference.md',
+  'dev-realm-search.md',
+  'dev-playwright-testing.md',
+  'dev-spec-usage.md',
 ];
 
 // ---------------------------------------------------------------------------

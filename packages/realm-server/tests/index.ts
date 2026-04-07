@@ -171,6 +171,7 @@ import './server-endpoints/index-responses-test';
 import './server-endpoints/maintenance-endpoints-test';
 import './server-endpoints/queue-status-test';
 import './server-endpoints/realm-lifecycle-test';
+import './server-endpoints/run-command-endpoint-test';
 import './server-endpoints/search-test';
 import './server-endpoints/search-prerendered-test';
 import './server-config-test';
