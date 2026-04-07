@@ -3945,6 +3945,12 @@ class FallbackCardStore implements CardStore {
     _getRealms?: () => string[] | undefined,
     _opts?: any,
   ): StoreSearchResource<T> {
-    throw new Error('Method not implemented.');
+    return {
+      instances: [] as T[],
+      instancesByRealm: [],
+      isLoading: false,
+      meta: { page: { total: 0 } },
+      errors: undefined,
+    } as StoreSearchResource<T>;
   }
 }
