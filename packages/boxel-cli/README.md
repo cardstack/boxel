@@ -88,7 +88,7 @@ pnpm publish:npm    # Publish to npm registry
 ```bash
 # Build and test locally
 pnpm build
-node dist/boxel.js --help
+node dist/index.js --help
 
 # Test as installed package
 npm pack
@@ -101,7 +101,6 @@ boxel --help
 The package uses esbuild to create a standalone executable that bundles all dependencies:
 
 - **`boxel`** - Standalone executable for Boxel workspace management
-- **Library API** - Programmatic access via `@cardstack/boxel-cli`
 
 ## Requirements
 

@@ -1,44 +1,9 @@
 import { build } from 'esbuild';
 import { mkdirSync, chmodSync } from 'fs';
+import { builtinModules } from 'module';
 
-// Node.js built-in modules that should remain external
-const nodeBuiltins = [
-  'fs',
-  'path',
-  'url',
-  'crypto',
-  'os',
-  'stream',
-  'util',
-  'events',
-  'buffer',
-  'string_decoder',
-  'querystring',
-  'http',
-  'https',
-  'net',
-  'tls',
-  'zlib',
-  'worker_threads',
-  'child_process',
-  'cluster',
-  'dgram',
-  'dns',
-  'domain',
-  'readline',
-  'repl',
-  'tty',
-  'v8',
-  'vm',
-  'assert',
-  'constants',
-  'module',
-  'perf_hooks',
-  'process',
-  'punycode',
-  'timers',
-  'trace_events',
-];
+// Node.js built-in modules (bare and node:-prefixed) that should remain external
+const nodeBuiltins = builtinModules.flatMap((m) => [m, `node:${m}`]);
 
 const commonConfig = {
   bundle: true,
