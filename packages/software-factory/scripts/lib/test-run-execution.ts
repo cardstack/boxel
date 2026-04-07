@@ -322,6 +322,9 @@ async function startTestPageServer(
     '.wasm': 'application/wasm',
     '.svg': 'image/svg+xml',
     '.png': 'image/png',
+    '.woff2': 'font/woff2',
+    '.woff': 'font/woff',
+    '.ttf': 'font/ttf',
   };
 
   let html = '';
@@ -333,8 +336,8 @@ async function startTestPageServer(
     let server = createServer((req, reply) => {
       let url = (req.url ?? '/').split('?')[0];
 
-      // Serve static assets from host dist
-      if (url.startsWith('/assets/')) {
+      // Serve static files from host dist (assets, wasm, fonts, etc.)
+      if (url !== '/') {
         let filePath = resolve(hostDistDir, url.slice(1));
         try {
           let content = readFileSync(filePath);
