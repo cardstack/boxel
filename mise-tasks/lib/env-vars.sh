@@ -22,11 +22,24 @@ unset _ENV_VARS_DIR _REPO_ROOT
 
 export PGPORT="${PGPORT:-5435}"
 
+# Turbo mode: boost parallelism for local development.
+# All turbo defaults can be overridden individually.
+if [ "${BOXEL_TURBO:-}" = "true" ]; then
+  : "${PRERENDER_COUNT:=3}"
+  : "${PRERENDER_PAGE_POOL_SIZE:=4}"
+  : "${WORKER_HIGH_PRIORITY_COUNT:=4}"
+  : "${WORKER_ALL_PRIORITY_COUNT:=4}"
+fi
+
 # Prerender scaling
 export PRERENDER_COUNT="${PRERENDER_COUNT:-1}"
 export PRERENDER_PAGE_POOL_SIZE="${PRERENDER_PAGE_POOL_SIZE:-4}"
 export PRERENDER_AFFINITY_TAB_MAX="${PRERENDER_AFFINITY_TAB_MAX:-$PRERENDER_PAGE_POOL_SIZE}"
 export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
+
+# Worker scaling
+export WORKER_HIGH_PRIORITY_COUNT="${WORKER_HIGH_PRIORITY_COUNT:-0}"
+export WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-1}"
 
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   ENV_SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
