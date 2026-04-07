@@ -7,7 +7,12 @@
  * helpers used by the markdown component to lazily render those placeholders.
  */
 
-const MERMAID_FENCE_RE = new RegExp('```mermaid\\s*\\n([\\s\\S]*?)```', 'g');
+import DOMPurify from 'dompurify';
+
+const MERMAID_FENCE_RE = new RegExp(
+  '```mermaid[^\\S\\r\\n]*\\r?\\n([\\s\\S]*?)```',
+  'g',
+);
 
 /**
  * Extract mermaid code block contents from raw markdown source.
@@ -42,7 +47,11 @@ export function replaceMermaidSvgs(
     let code = el.textContent?.trim() || '';
     let svg = svgs.get(code);
     if (svg) {
-      el.innerHTML = svg;
+      // Mermaid SVG output is derived from user-authored markdown, so sanitize
+      // it before insertion to prevent XSS. USE_PROFILES allows SVG elements.
+      el.innerHTML = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true },
+      });
       el.setAttribute('data-processed', 'true');
     }
   }
