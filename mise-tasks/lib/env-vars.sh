@@ -22,9 +22,11 @@ unset _ENV_VARS_DIR _REPO_ROOT
 
 export PGPORT="${PGPORT:-5435}"
 
-# Prerender scaling: number of prerender server instances and manager multiplexing
+# Prerender scaling
 export PRERENDER_COUNT="${PRERENDER_COUNT:-1}"
-export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-$PRERENDER_COUNT}"
+export PRERENDER_PAGE_POOL_SIZE="${PRERENDER_PAGE_POOL_SIZE:-4}"
+export PRERENDER_AFFINITY_TAB_MAX="${PRERENDER_AFFINITY_TAB_MAX:-$PRERENDER_PAGE_POOL_SIZE}"
+export PRERENDER_MULTIPLEX="${PRERENDER_MULTIPLEX:-1}"
 
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   ENV_SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
