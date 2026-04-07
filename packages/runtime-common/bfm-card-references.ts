@@ -1,7 +1,7 @@
 import { escapeHtml } from './helpers/html';
 import { resolveCardReference } from './card-reference-resolver';
 import { trimJsonExtension } from './url';
-import { fittedFormatById } from './formats';
+import { FITTED_FORMATS } from './formats';
 import type { TokenizerAndRendererExtension } from 'marked';
 
 // Regex patterns for stripping code before extraction.
@@ -27,14 +27,17 @@ export interface BfmSizeSpec {
   height?: number;
 }
 
-// BFM shorthand aliases → canonical fitted format IDs
-const BFM_SIZE_ALIASES = new Map<string, { width: number; height: number }>();
-for (let [id, spec] of fittedFormatById) {
-  BFM_SIZE_ALIASES.set(id, { width: spec.width, height: spec.height });
+// Build a flat lookup from FITTED_FORMATS canonical IDs → dimensions
+const SIZE_CONSTANTS = new Map<string, { width: number; height: number }>();
+for (const group of FITTED_FORMATS) {
+  for (const spec of group.specs) {
+    SIZE_CONSTANTS.set(spec.id, { width: spec.width, height: spec.height });
+  }
 }
-BFM_SIZE_ALIASES.set('strip', BFM_SIZE_ALIASES.get('single-strip')!);
-BFM_SIZE_ALIASES.set('tile', BFM_SIZE_ALIASES.get('regular-tile')!);
-BFM_SIZE_ALIASES.set('grid-tile', BFM_SIZE_ALIASES.get('cardsgrid-tile')!);
+// BFM spec shorthand aliases → canonical IDs
+SIZE_CONSTANTS.set('strip', SIZE_CONSTANTS.get('single-strip')!);
+SIZE_CONSTANTS.set('tile', SIZE_CONSTANTS.get('regular-tile')!);
+SIZE_CONSTANTS.set('grid-tile', SIZE_CONSTANTS.get('cardsgrid-tile')!);
 
 /**
  * Parses a BFM size specifier (the part after `|` in `::card[url | spec]`).
@@ -53,7 +56,7 @@ export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
   }
 
   // Named size constant
-  let constant = BFM_SIZE_ALIASES.get(trimmed);
+  let constant = SIZE_CONSTANTS.get(trimmed);
   if (constant) {
     return { format: 'fitted', width: constant.width, height: constant.height };
   }
