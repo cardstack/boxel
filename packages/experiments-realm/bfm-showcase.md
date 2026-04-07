@@ -10,6 +10,42 @@ Block reference renders in embedded format:
 
 ::card[./Author/jane-doe]
 
+### Fitted Sizes
+
+A card rendered as a strip (250 x 40):
+
+::card[./Author/jane-doe | strip]
+
+A double-wide-strip (400 x 65):
+
+::card[./Author/jane-doe | double-wide-strip]
+
+A tile (250 x 170, the default fitted size):
+
+::card[./Author/jane-doe | tile]
+
+A compact-card (400 x 170):
+
+::card[./Author/jane-doe | compact-card]
+
+### Custom Dimensions
+
+Exact dimensions using WxH syntax (300 x 150):
+
+::card[./Author/jane-doe | 300x150]
+
+Height-only constraint (width fills container):
+
+::card[./Author/jane-doe | h:200]
+
+Percentage width (50%, auto height):
+
+::card[./Author/jane-doe | w:50%]
+
+### Isolated Format
+
+::card[./Author/jane-doe | isolated]
+
 ## GFM Alerts
 
 > [!NOTE]
@@ -89,7 +125,7 @@ The math rendering uses KaTeX[^2] for typesetting, while diagrams use Mermaid.js
 
 ## Heading IDs
 
-Each heading on this page has an auto-generated slug ID (inspect the DOM to see `id="user-content-bfm-showcase"`, `id="user-content-math--latex"`, etc.). These enable anchor links and table-of-contents navigation.
+Each heading on this page has an auto-generated slug ID (inspect the DOM to see `id="bfm-showcase"`, `id="math--latex"`, etc.). These enable anchor links and table-of-contents navigation.
 
 ## Code Blocks
 

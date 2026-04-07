@@ -2685,7 +2685,6 @@ export class Realm {
         attributes[key] = value;
       }
     }
-    let relationships = fileEntry.resource?.relationships;
     let doc: SingleFileMetaDocument = {
       data: {
         type: 'file-meta',
@@ -2693,9 +2692,6 @@ export class Realm {
         attributes: {
           ...attributes,
         },
-        ...(relationships && Object.keys(relationships).length > 0
-          ? { relationships }
-          : {}),
         meta: {
           adoptsFrom,
           realmInfo,
@@ -2707,22 +2703,6 @@ export class Realm {
         links: { self: fileURL },
       },
     };
-    // Sideload linked resources. Use cacheOnlyDefinitions to avoid triggering
-    // prerenderer calls for definition lookups—this prevents deadlocks when the
-    // file-meta response is served during card prerendering (which holds the
-    // prerender semaphore permit). When cacheOnlyDefinitions is set, loadLinks
-    // uses pre-extracted queryFieldDefs from the resource's meta (populated
-    // during file indexing) to discover query-based relationship fields.
-    let included = await this.#realmIndexQueryEngine.loadLinksForResource(
-      doc.data,
-      {
-        loadLinks: true,
-        cacheOnlyDefinitions: true,
-      },
-    );
-    if (included.length > 0) {
-      doc.included = included;
-    }
     return createResponse({
       body: JSON.stringify(doc, null, 2),
       init: {

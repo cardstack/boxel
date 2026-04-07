@@ -1,6 +1,7 @@
 import { escapeHtml } from './helpers/html';
 import { resolveCardReference } from './card-reference-resolver';
 import { trimJsonExtension } from './url';
+import { FITTED_FORMATS } from './formats';
 import type { TokenizerAndRendererExtension } from 'marked';
 
 // Regex patterns for stripping code before extraction.
@@ -16,6 +17,95 @@ function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+// ── BFM size spec parsing ──
+
+export interface BfmSizeSpec {
+  format: 'fitted' | 'isolated';
+  width?: number | string; // number = px, string = e.g. "50%"
+  height?: number;
+}
+
+// Build a flat lookup from FITTED_FORMATS canonical IDs → dimensions
+const SIZE_CONSTANTS = new Map<string, { width: number; height: number }>();
+for (const group of FITTED_FORMATS) {
+  for (const spec of group.specs) {
+    SIZE_CONSTANTS.set(spec.id, { width: spec.width, height: spec.height });
+  }
+}
+// BFM spec shorthand aliases → canonical IDs
+SIZE_CONSTANTS.set('strip', SIZE_CONSTANTS.get('single-strip')!);
+SIZE_CONSTANTS.set('tile', SIZE_CONSTANTS.get('regular-tile')!);
+SIZE_CONSTANTS.set('grid-tile', SIZE_CONSTANTS.get('cardsgrid-tile')!);
+
+/**
+ * Parses a BFM size specifier (the part after `|` in `::card[url | spec]`).
+ *
+ * Supported forms:
+ *  - Named constant: `strip`, `tile`, `compact-card`, etc.
+ *  - WxH:           `400x200`
+ *  - Explicit keys:  `w:400 h:200`, `h:300`, `w:50%`
+ *  - Isolated:       `isolated`
+ */
+export function parseBfmSizeSpec(specifier: string): BfmSizeSpec | null {
+  let trimmed = specifier.trim().toLowerCase();
+
+  if (trimmed === 'isolated') {
+    return { format: 'isolated' };
+  }
+
+  // Named size constant
+  let constant = SIZE_CONSTANTS.get(trimmed);
+  if (constant) {
+    return { format: 'fitted', width: constant.width, height: constant.height };
+  }
+
+  // WxH (e.g. "400x200")
+  let wxhMatch = trimmed.match(/^(\d+)\s*x\s*(\d+)$/);
+  if (wxhMatch) {
+    return {
+      format: 'fitted',
+      width: parseInt(wxhMatch[1], 10),
+      height: parseInt(wxhMatch[2], 10),
+    };
+  }
+
+  // Explicit key syntax: w:N, h:N, w:N%
+  let wMatch = trimmed.match(/\bw:(\d+)(%?)/);
+  let hMatch = trimmed.match(/\bh:(\d+)\b/);
+
+  if (wMatch || hMatch) {
+    let spec: BfmSizeSpec = { format: 'fitted' };
+    if (wMatch) {
+      spec.width =
+        wMatch[2] === '%' ? `${wMatch[1]}%` : parseInt(wMatch[1], 10);
+    }
+    if (hMatch) {
+      spec.height = parseInt(hMatch[1], 10);
+    }
+    return spec;
+  }
+
+  return null;
+}
+
+/**
+ * Splits the content between `[` and `]` in a BFM directive into the URL
+ * part and an optional size specifier (after `|`).
+ */
+function splitBfmContent(content: string): {
+  url: string;
+  specifier: string | undefined;
+} {
+  let pipeIndex = content.indexOf('|');
+  if (pipeIndex >= 0) {
+    return {
+      url: content.substring(0, pipeIndex).trim(),
+      specifier: content.substring(pipeIndex + 1).trim(),
+    };
+  }
+  return { url: content.trim(), specifier: undefined };
 }
 
 export interface BfmReference {
@@ -48,7 +138,8 @@ export function extractBfmReferences(
     let inlineRe = new RegExp(`(?<!:):${keyword}\\[([^\\]]+)\\]`, 'g');
 
     for (let match of stripped.matchAll(blockRe)) {
-      let resolved = resolveUrl(match[1], baseUrl);
+      let { url: rawUrl } = splitBfmContent(match[1]);
+      let resolved = resolveUrl(rawUrl, baseUrl);
       if (resolved) {
         matches.push({
           index: match.index!,
@@ -129,17 +220,35 @@ export function bfmExtensionsForKeyword(
         );
         let match = src.match(re);
         if (match) {
+          let { url, specifier } = splitBfmContent(match[1]);
           return {
             type: blockType,
             raw: match[0],
-            url: match[1],
+            url,
+            specifier,
           };
         }
         return undefined;
       },
       renderer(token) {
         let url = escapeHtml((token as any).url);
-        return `<div data-boxel-bfm-block-ref="${url}" data-boxel-bfm-type="${keyword}">${url}</div>\n`;
+        let specifier: string | undefined = (token as any).specifier;
+        let attrs = `data-boxel-bfm-block-ref="${url}" data-boxel-bfm-type="${keyword}"`;
+
+        if (specifier) {
+          let sizeSpec = parseBfmSizeSpec(specifier);
+          if (sizeSpec) {
+            attrs += ` data-boxel-bfm-format="${sizeSpec.format}"`;
+            if (sizeSpec.width !== undefined) {
+              attrs += ` data-boxel-bfm-width="${sizeSpec.width}"`;
+            }
+            if (sizeSpec.height !== undefined) {
+              attrs += ` data-boxel-bfm-height="${sizeSpec.height}"`;
+            }
+          }
+        }
+
+        return `<div ${attrs}>${url}</div>\n`;
       },
     },
     {
