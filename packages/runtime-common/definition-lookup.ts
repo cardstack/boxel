@@ -143,9 +143,10 @@ export function isFilterRefersToNonexistentTypeError(
 
 export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
-  // Like lookupDefinition but only reads from the database cache—never
-  // triggers a prerenderer call.  Returns undefined when the definition is
-  // not yet cached.
+  // Like lookupDefinition but does not trigger a prerenderer call or
+  // populate missing definitions. It may still perform lookup-context
+  // resolution (including remote visibility probing) before reading from the
+  // database cache. Returns undefined when the definition is not yet cached.
   lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
   ): Promise<Definition | undefined>;
