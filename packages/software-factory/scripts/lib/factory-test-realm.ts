@@ -5,16 +5,19 @@
  * - test-run-types.ts — shared type definitions
  * - test-run-parsing.ts — result parsing and formatting
  * - test-run-cards.ts — TestRun card lifecycle (create, complete, build)
- * - test-run-execution.ts — orchestration, resume logic, test artifacts realm
+ * - test-run-execution.ts — orchestration, resume logic
  */
 
 // Types
 export type {
   CreateTestRunOptions,
   ExecuteTestRunOptions,
+  QunitResults,
+  QunitRunSummary,
+  QunitTestResult,
   RunRealmTestsFailure,
   RunRealmTestsOutput,
-  SpecResultData,
+  TestModuleResultData,
   TestResultEntryData,
   TestRunAttributes,
   TestRunHandle,
@@ -22,11 +25,7 @@ export type {
 } from './test-run-types';
 
 // Parsing
-export {
-  formatTestResultSummary,
-  parseRunRealmTestsOutput,
-  parseToolResultOutput,
-} from './test-run-parsing';
+export { formatTestResultSummary, parseQunitResults } from './test-run-parsing';
 
 // Card lifecycle
 export {
@@ -36,8 +35,4 @@ export {
 } from './test-run-cards';
 
 // Execution & resume
-export {
-  ensureTestArtifactsRealm,
-  executeTestRunFromRealm,
-  resolveTestRun,
-} from './test-run-execution';
+export { executeTestRunFromRealm, resolveTestRun } from './test-run-execution';
