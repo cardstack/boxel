@@ -1,0 +1,49 @@
+#!/bin/sh
+#MISE description="Download pre-built boxel-icons from the latest CI run"
+
+set -eu
+
+ICONS_DIR="packages/boxel-icons"
+
+# Check if dist already exists and looks populated
+if [ -d "$ICONS_DIR/dist" ] && [ -d "$ICONS_DIR/declarations" ]; then
+  echo "boxel-icons dist/ and declarations/ already exist locally."
+  echo "To re-download, remove them first: rm -rf $ICONS_DIR/dist $ICONS_DIR/declarations"
+  exit 0
+fi
+
+echo "Downloading boxel-icons build from latest CI Lint run on main..."
+
+# Find the latest successful CI Lint run on main that has the artifact
+RUN_ID=$(gh run list \
+  --workflow ci-lint.yaml \
+  --branch main \
+  --status success \
+  --limit 1 \
+  --json databaseId \
+  --jq '.[0].databaseId')
+
+if [ -z "$RUN_ID" ]; then
+  echo "Error: No successful CI Lint run found on main."
+  echo "Falling back to local build..."
+  pnpm --dir "$ICONS_DIR" build
+  exit 0
+fi
+
+echo "Using CI Lint run #$RUN_ID"
+
+# Download the artifact into a temp directory, then move into place
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+if gh run download "$RUN_ID" --name boxel-icons-build --dir "$TMPDIR" 2>/dev/null; then
+  # gh run download preserves the path structure from upload
+  mv "$TMPDIR/packages/boxel-icons/dist" "$ICONS_DIR/dist"
+  mv "$TMPDIR/packages/boxel-icons/declarations" "$ICONS_DIR/declarations"
+  echo "Successfully downloaded boxel-icons build artifacts."
+else
+  echo "Artifact 'boxel-icons-build' not found in run #$RUN_ID."
+  echo "This artifact is only uploaded from main branch CI Lint runs."
+  echo "Falling back to local build..."
+  pnpm --dir "$ICONS_DIR" build
+fi
