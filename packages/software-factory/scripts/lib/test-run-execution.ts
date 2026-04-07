@@ -433,31 +433,12 @@ export async function executeTestRunFromRealm(
     });
     setHtml(html);
 
-    console.error(`[test-run-execution] Test page server at ${testPageUrl}`);
-    console.error(`[test-run-execution] Host assets from: ${hostDistDir}`);
     console.error(
-      `[test-run-execution] Target realm: ${options.targetRealmUrl}`,
+      `[test-run-execution] Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmUrl}`,
     );
 
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
-
-    // Forward browser console to stderr for debugging
-    page.on('console', (msg) => {
-      console.error(
-        `[test-run-execution:browser] ${msg.type()}: ${msg.text()}`,
-      );
-    });
-    page.on('pageerror', (err) => {
-      console.error(`[test-run-execution:browser] PAGE ERROR: ${err.message}`);
-    });
-    page.on('response', (response) => {
-      if (response.status() >= 400) {
-        console.error(
-          `[test-run-execution:browser] ${response.status()} ${response.url()}`,
-        );
-      }
-    });
 
     // Pass liveTest and realmURL as query params directly so test-helper.js
     // sees them when it checks window.location.search at load time.
