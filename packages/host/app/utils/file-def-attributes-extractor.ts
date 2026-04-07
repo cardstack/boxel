@@ -9,10 +9,13 @@ import {
   SupportedMimeType,
   type CodeRef,
   type FileMetaResource,
+  type QueryFieldMeta,
   type RenderError,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
 
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import type { createAuthErrorGuard } from './auth-error-guard';
@@ -197,10 +200,16 @@ export class FileDefAttributesExtractor {
         let typeCodeRefs = getTypes(klass);
         let types = typeCodeRefs.map((type) => internalKeyFor(type, undefined));
         let adoptsFrom = typeCodeRefs[0] ?? this.#fileDefCodeRef;
+        let queryFieldDefs = await this.extractQueryFieldDefs(klass);
         return {
           status: 'ready',
           searchDoc,
-          resource: buildFileResource(this.#fileURL, searchDoc, adoptsFrom),
+          resource: buildFileResource(
+            this.#fileURL,
+            searchDoc,
+            adoptsFrom,
+            queryFieldDefs,
+          ),
           types,
           deps,
           ...(error ? { error } : {}),
@@ -309,6 +318,43 @@ export class FileDefAttributesExtractor {
     }
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
+
+  // Extract query field definitions (linksTo/linksToMany with a query) from
+  // the FileDef class so they can be stored in the index and used at serve
+  // time without a runtime definition lookup.
+  private async extractQueryFieldDefs(
+    klass: FileDefConstructor,
+  ): Promise<Record<string, QueryFieldMeta> | undefined> {
+    try {
+      let cardApiModule = await this.#loaderService.loader.import<
+        typeof CardAPI
+      >('https://cardstack.com/base/card-api');
+      let fields = getFieldDefinitions(
+        cardApiModule,
+        klass as unknown as typeof BaseDef,
+      );
+      let result: Record<string, QueryFieldMeta> = {};
+      for (let [name, def] of Object.entries(fields)) {
+        if (
+          def.query &&
+          (def.type === 'linksTo' || def.type === 'linksToMany')
+        ) {
+          result[name] = {
+            type: def.type,
+            query: def.query,
+            fieldOrCard: def.fieldOrCard,
+          };
+        }
+      }
+      return Object.keys(result).length > 0 ? result : undefined;
+    } catch (err) {
+      console.warn(
+        `[file-extract] Failed to extract query field defs for ${this.#fileURL}:`,
+        err,
+      );
+      return undefined;
+    }
+  }
 }
 
 export function getTypes(klass: FileDefConstructor): CodeRef[] {
@@ -330,6 +376,7 @@ export function buildFileResource(
   fileURL: string,
   attributes: Record<string, any>,
   adoptsFrom: CodeRef,
+  queryFieldDefs?: Record<string, QueryFieldMeta>,
 ): FileMetaResource {
   let name = new URL(fileURL).pathname.split('/').pop() ?? fileURL;
   let baseAttributes = {
@@ -350,6 +397,7 @@ export function buildFileResource(
     attributes: mergedAttributes,
     meta: {
       adoptsFrom,
+      ...(queryFieldDefs ? { queryFieldDefs } : {}),
     },
     links: { self: fileURL },
   };

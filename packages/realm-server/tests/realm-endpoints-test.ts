@@ -295,6 +295,74 @@ module(basename(__filename), function () {
       );
     });
 
+    test('file meta for markdown with card references includes sideloaded linked cards', async function (assert) {
+      let response = await request
+        .get(`/card-refs.md`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let json = response.body;
+
+      // The linkedCards relationship should be populated via query
+      let linkedCards = json.data.relationships?.linkedCards;
+      assert.ok(linkedCards, 'linkedCards relationship is present');
+      assert.ok(linkedCards?.links?.search, 'linkedCards has a search link');
+
+      // Sideloaded included resources should contain the referenced cards
+      assert.ok(json.included, 'response has included resources');
+      let includedIds = (json.included ?? []).map((r: { id: string }) => r.id);
+      assert.true(
+        includedIds.some((id: string) => id.includes('hassan')),
+        'included resources contain hassan card',
+      );
+      assert.true(
+        includedIds.some((id: string) => id.includes('jade')),
+        'included resources contain jade card',
+      );
+
+      // Each included resource should be a card with proper structure
+      for (let included of json.included ?? []) {
+        assert.strictEqual(
+          included.type,
+          'card',
+          'included resource is a card',
+        );
+        assert.ok(included.id, 'included resource has an id');
+        assert.ok(
+          included.meta?.adoptsFrom,
+          'included resource has adoptsFrom',
+        );
+      }
+    });
+
+    test('file meta for non-markdown file does not include sideloaded resources', async function (assert) {
+      let response = await request
+        .get(`/person.gts`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let json = response.body;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.notOk(
+        json.included,
+        'non-markdown file has no included resources',
+      );
+      assert.notOk(
+        json.data.relationships?.linkedCards,
+        'non-markdown file has no linkedCards relationship',
+      );
+    });
+
     test('sets canonical path header for nested module requests', async function (assert) {
       let response = await request
         .get(`/nested/example`)
