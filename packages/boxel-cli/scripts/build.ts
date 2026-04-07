@@ -1,0 +1,96 @@
+import { build } from 'esbuild';
+import { mkdirSync, chmodSync } from 'fs';
+
+// Node.js built-in modules that should remain external
+const nodeBuiltins = [
+  'fs',
+  'path',
+  'url',
+  'crypto',
+  'os',
+  'stream',
+  'util',
+  'events',
+  'buffer',
+  'string_decoder',
+  'querystring',
+  'http',
+  'https',
+  'net',
+  'tls',
+  'zlib',
+  'worker_threads',
+  'child_process',
+  'cluster',
+  'dgram',
+  'dns',
+  'domain',
+  'readline',
+  'repl',
+  'tty',
+  'v8',
+  'vm',
+  'assert',
+  'constants',
+  'module',
+  'perf_hooks',
+  'process',
+  'punycode',
+  'timers',
+  'trace_events',
+];
+
+const commonConfig = {
+  bundle: true,
+  platform: 'node' as const,
+  target: 'node18',
+  format: 'cjs' as const,
+  external: nodeBuiltins,
+  sourcemap: false,
+  minify: true,
+  metafile: true,
+  logLevel: 'info' as const,
+  treeShaking: true,
+  define: {
+    'process.env.NODE_ENV': '"production"',
+  },
+  mainFields: ['module', 'main'],
+  conditions: ['import', 'require'],
+};
+
+async function buildCLI() {
+  mkdirSync('dist', { recursive: true });
+
+  console.log('Building CLI executables...');
+
+  try {
+    // Build CLI entry point
+    console.log('Building boxel...');
+    const cliResult = await build({
+      ...commonConfig,
+      entryPoints: ['src/index.ts'],
+      outfile: 'dist/boxel.js',
+      banner: {
+        js: '#!/usr/bin/env node',
+      },
+    });
+
+    // Make CLI file executable
+    console.log('Making CLI file executable...');
+    chmodSync('dist/boxel.js', 0o755);
+
+    console.log('Build complete!');
+
+    // Log bundle size
+    if (cliResult.metafile) {
+      const outputs = Object.values(cliResult.metafile.outputs);
+      const totalSize = outputs.reduce((sum, output) => sum + output.bytes, 0);
+      console.log(`\nBundle size: ${(totalSize / 1024).toFixed(1)} KB`);
+    }
+  } catch (error) {
+    console.error('Build failed:', error);
+    process.exit(1);
+  }
+}
+
+buildCLI();

@@ -1,21 +1,30 @@
 {
   "name": "@cardstack/boxel-cli",
   "version": "0.0.1",
-  "private": true,
+  "license": "MIT",
   "description": "CLI tools for Boxel workspace management",
+  "main": "./dist/index.js",
   "bin": {
-    "boxel": "./bin/boxel.js"
+    "boxel": "./dist/boxel.js"
   },
-  "scripts": {
-    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
-    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
-    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
-    "lint:js": "eslint . --report-unused-disable-directives --cache",
-    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
-    "lint:types": "ember-tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">= 18"
   },
+  "keywords": [
+    "boxel",
+    "cli",
+    "cardstack"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cardstack/boxel.git",
+    "directory": "packages/boxel-cli"
+  },
+  "author": "Cardstack",
   "dependencies": {
     "@aws-crypto/sha256-js": "catalog:",
     "commander": "^13.1.0",
@@ -25,21 +34,39 @@
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@glint/ember-tsc": "catalog:",
     "@types/node": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "concurrently": "catalog:",
+    "esbuild": "^0.19.0",
     "eslint": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "prettier": "catalog:",
-    "ts-node": "^10.9.2",
+    "ts-node": "^10.9.1",
+    "tsx": "^4.0.0",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
-  "engines": {
-    "node": ">= 18"
+  "scripts": {
+    "build": "pnpm clean && tsx scripts/build.ts",
+    "clean": "rm -rf dist/*",
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:types": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "version:patch": "npm version patch",
+    "version:minor": "npm version minor",
+    "version:major": "npm version major",
+    "publish:npm": "npm publish",
+    "publish:dry": "npm publish --dry-run"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
