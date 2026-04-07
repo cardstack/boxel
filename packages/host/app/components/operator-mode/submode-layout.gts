@@ -201,9 +201,7 @@ export default class SubmodeLayout extends Component<Signature> {
         let lastId = this.lastCardIdInRightMostStack;
         let codePath = lastId
           ? cardIdToURL(
-              this.lastStackItem?.type === 'file'
-                ? lastId
-                : lastId + '.json',
+              this.lastStackItem?.type === 'file' ? lastId : lastId + '.json',
             )
           : null;
         await this.operatorModeStateService.updateCodePath(codePath);
