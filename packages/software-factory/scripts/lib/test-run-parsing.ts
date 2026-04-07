@@ -29,12 +29,11 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
       moduleMap.set(moduleName, []);
     }
 
+    // Map QUnit statuses to terminal states. Skipped/todo are not failures
+    // and must not be 'pending' (which means "not yet executed" and would
+    // confuse resume logic and isComplete checks).
     let status: TestResultEntryData['status'] =
-      test.status === 'passed'
-        ? 'passed'
-        : test.status === 'failed'
-          ? 'failed'
-          : 'pending'; // skipped/todo -> pending
+      test.status === 'failed' ? 'failed' : 'passed';
 
     let entry: TestResultEntryData = {
       testName: test.name,

@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { normalize, resolve } from 'node:path';
 
 import { chromium } from '@playwright/test';
 
@@ -271,10 +271,12 @@ function buildQunitTestPageHtml(opts: {
 
     // -----------------------------------------------------------------------
     // Result collection for Playwright extraction.
-    // Injected BEFORE QUnit loads so hooks are registered first.
+    // Poll for QUnit to become available and attach hooks immediately,
+    // before QUnit.start() fires. This avoids a race where the 'load'
+    // event fires after QUnit has already started running tests.
     // -----------------------------------------------------------------------
     window.__qunitResults = { tests: [], runEnd: null };
-    window.addEventListener('load', function() {
+    (function attachQUnitHooks() {
       if (typeof QUnit !== 'undefined') {
         QUnit.on('testEnd', function(d) {
           window.__qunitResults.tests.push({
@@ -288,8 +290,10 @@ function buildQunitTestPageHtml(opts: {
         QUnit.on('runEnd', function(d) {
           window.__qunitResults.runEnd = d;
         });
+      } else {
+        setTimeout(attachQUnitHooks, 10);
       }
-    });
+    })();
 
     // liveTest and realmURL params are passed directly in the page URL
     // so test-helper.js sees them when it checks window.location.search.
@@ -338,7 +342,19 @@ async function startTestPageServer(
 
       // Serve static files from host dist (assets, wasm, fonts, etc.)
       if (url !== '/') {
-        let filePath = resolve(hostDistDir, url.slice(1));
+        let normalized = normalize(url.slice(1));
+        // Reject path traversal attempts (e.g., /../package.json)
+        if (normalized.startsWith('..') || normalized.startsWith('/')) {
+          reply.writeHead(403);
+          reply.end('Forbidden');
+          return;
+        }
+        let filePath = resolve(hostDistDir, normalized);
+        if (!filePath.startsWith(resolve(hostDistDir))) {
+          reply.writeHead(403);
+          reply.end('Forbidden');
+          return;
+        }
         try {
           let content = readFileSync(filePath);
           let ext = filePath.match(/\.[^.]+$/)?.[0] ?? '';
