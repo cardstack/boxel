@@ -465,7 +465,7 @@ export default class CreateListingModal extends Component<Signature> {
         flex-grow: 1;
         min-width: 0;
       }
-      .examples-field-container :deep(.content) {
+      .examples-field-container > :deep(.content) {
         align-self: start;
       }
       .realm-icon {
