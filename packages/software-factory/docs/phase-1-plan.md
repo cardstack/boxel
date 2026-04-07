@@ -38,6 +38,8 @@ The software factory uses three different realm roles that should stay distinct:
 
 Normal factory output should land in the target realm, not in `packages/software-factory/realm`. AI-generated QUnit test files and TestRun result cards live in the target realm (co-located with the implementation).
 
+**No test artifacts realm is needed.** QUnit tests use in-memory browser realms (`setupCardTest`), so test card instances never leave the browser during test execution. The only persistent test artifacts are the `.test.gts` source files and `TestRun` result cards, both of which live in the target realm.
+
 If we intentionally include output-like examples in the source realm, they should be clearly labeled as examples and live in an obviously non-canonical location such as `SampleOutput/` or `Examples/`.
 
 ## Package Boundary Rule
@@ -329,9 +331,26 @@ Target realm artifact structure (QUnit test files co-located with card definitio
 
 All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Spec/`.
 
+#### QUnit Test Page Architecture (CS-10599)
+
+The test executor serves a **custom QUnit test page** via a local HTTP server instead of relying on the host app's test page or the compat proxy. This is necessary because the host's test page has hardcoded config, and the compat proxy isn't designed for hermetic test harnesses where the realm server runs on random ports.
+
+How it works:
+
+1. **HTML extraction** — At runtime, reads `host/dist/tests/index.html` to extract all `<script>`, `<link>`, and `<meta>` tags (including chunk hashes that change with every build).
+2. **Asset URL rewriting** — Rewrites asset URLs to point at the local test server (e.g., `/assets/chunk.abc123.js` becomes `http://localhost:<port>/assets/chunk.abc123.js`).
+3. **Ember config rewriting** — Rewrites the Ember config meta tag (`<meta name="...config/environment">`) to inject the correct `resolvedBaseRealmURL`, `realmServerURL`, and other environment values pointing at the browser-accessible realm proxy URL. This is essential for the hermetic test harness where the realm server listens on random ports.
+4. **Static file serving** — Serves all files from `host/dist/` with correct MIME types (JS, CSS, WASM, fonts).
+5. **QUnit hook injection** — Injects `QUnit.on('testEnd')` and `QUnit.on('runEnd')` hooks into the page for result collection.
+6. **Query parameters** — Passes `?liveTest=true&realmURL=<targetRealm>` as query params so the live-test infrastructure discovers `.test.gts` files in the correct realm.
+
+**Private realm auth**: The live-test infrastructure (`live-test.js`) fetches `_mtimes` without auth headers. For private realms, the test executor uses Playwright's `page.route()` to intercept requests to the realm origin and inject the `Authorization` header at the network level.
+
+**Known limitation (CS-10650)**: The test page server requires a development or test host build. The Ember production build strips test assets (QUnit, test helpers, `testem.js`). This affects both the software factory and Code Mode card testing. The plan is to ship QUnit and test helpers as a lazy-loaded bundle in production builds.
+
 Implementation note:
 
-- the Playwright harness in `packages/software-factory` is reused to navigate to the host's QUnit live-test page, which discovers and runs `.test.gts` files
+- the Playwright harness in `packages/software-factory` is reused to run the custom QUnit test page
 - this gives the factory a real browser-level verification path for generated cards
 - the test harness output format should match what the agent needs to diagnose failures and iterate
 - QUnit test files are discovered automatically via `_mtimes` — no explicit spec path extraction is needed
@@ -713,7 +732,6 @@ interface AgentContext {
   skills: ResolvedSkill[]; // active skills for this ticket (see Skills Integration)
   testResults?: TestResult; // previous test run output (if iterating)
   targetRealmUrl: string;
-  testRealmUrl: string;
 }
 
 interface ResolvedSkill {
@@ -910,7 +928,6 @@ inspect existing state before making changes — do not guess.
 # Realms
 
 - Target realm: {{targetRealmUrl}}
-- Test realm: {{testRealmUrl}}
 
 # Skills
 
@@ -1577,7 +1594,7 @@ Bidirectional sync between local workspace and realm server.
 One-way upload from local to realm.
 
 - **Command**: `npx boxel push <local-dir> <realm-url> [--delete] [--dry-run]`
-- **Use by agent**: deploying generated files to target or test realm
+- **Use by agent**: deploying generated files to the target realm
 
 ##### `boxel pull`
 
@@ -1710,16 +1727,11 @@ let writeFileTool: FactoryTool = {
         description: 'Realm-relative file path with extension',
       },
       content: { type: 'string', description: 'File content' },
-      realm: {
-        type: 'string',
-        enum: ['target', 'test'],
-        description: 'Which realm to write to (default: target)',
-      },
     },
     required: ['path', 'content'],
   },
   execute: async (args) => {
-    let realmUrl = args.realm === 'test' ? testRealmUrl : targetRealmUrl;
+    let realmUrl = targetRealmUrl;
     let auth = realmTokens[realmUrl];
     // All files written via writeModuleSource with card+source MIME type.
     // The realm server accepts raw content as-is regardless of extension.
@@ -1772,7 +1784,7 @@ class ToolExecutor {
 
 The orchestrator enforces safety constraints on tool invocations:
 
-- tools can only target the target realm, test realm, or scratch realms — never the source realm
+- tools can only target the target realm or scratch realms — never the source realm
 - destructive operations (`--delete`, `realm-delete`, `realm-atomic` with `remove` ops) require the orchestrator to verify the target is a factory-managed realm
 - the agent cannot invoke arbitrary shell commands — only registered tools
 - tool execution has a configurable timeout (default: 60 seconds per invocation)
@@ -1976,7 +1988,7 @@ That is the smallest path to turning the current software-factory idea into some
 
 “Point at a brief, say go, and watch it enter the delivery loop.”
 
-## Implementation Findings
+## Implementation Findings from CS-10569
 
 The following findings emerged during the CS-10569 implementation (wire execution loop into `factory:go --mode implement`). They document decisions, surprises, and remaining work that the plan did not anticipate.
 
@@ -2019,3 +2031,42 @@ Card tool parameters (`update_project`, `update_ticket`, `create_knowledge`, `cr
 ### TestRun Failure Details
 
 When tests fail, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. Without this, the agent only sees “Tests failed” and can't diagnose the problem.
+
+## Implementation Findings from CS-10599
+
+The following findings emerged during the CS-10599 implementation (custom QUnit test page server, private realm auth, dotted filename resolution fixes). They document decisions, surprises, and remaining work.
+
+### Test Artifacts Realm Eliminated
+
+The original plan implied a separate test artifacts realm might be needed. In practice, QUnit tests use in-memory browser realms (`setupCardTest`), so test card instances never leave the browser during test execution. No test artifacts realm is needed. The only persistent test artifacts are `.test.gts` source files and `TestRun` result cards, both co-located in the target realm.
+
+### Custom QUnit Test Page Server
+
+The test executor serves a custom QUnit test page from a local HTTP server rather than navigating to the host app's test page or using the compat proxy. This was necessary because:
+
+- The host's test page has hardcoded Ember config values (realm URLs, server URLs) that don't match the hermetic test harness where the realm server runs on random ports
+- Chunk hashes in `host/dist/` change with every build, so the test page must be assembled dynamically by reading `host/dist/tests/index.html` at runtime
+- The custom page injects `QUnit.on('testEnd')` / `QUnit.on('runEnd')` hooks for result collection
+- The custom page rewrites the Ember config meta tag to inject browser-accessible realm proxy URLs
+
+Full architecture details are documented in Phase 5 above.
+
+### Private Realm Auth via Playwright Network Interception
+
+The live-test infrastructure (`live-test.js`) fetches `_mtimes` from the realm without auth headers. For private realms, this fails. The solution: the test executor uses Playwright's `page.route()` API to intercept all requests to the realm origin and inject the `Authorization` header at the network level. This is transparent to the live-test code running in the browser.
+
+### Dotted Filename Resolution Fix
+
+`getFileWithFallbacks()` in `stream.ts` checked for any dot in the filename to decide whether to skip extension fallbacks. This meant `hello.test` (from `hello.test.gts`) was treated as having an extension (`.test`), so it never tried appending `.gts`. The fix: only skip fallbacks for known executable extensions (`.gts`, `.ts`, `.js`, etc.). The same fix was applied to `fallbackHandle` in `realm.ts`. Filed CS-10649 for a similar pattern in the dependency tracker.
+
+### forceNew: true for Each Loop Iteration
+
+Each factory loop iteration must create a new `TestRun` card with `forceNew: true`, not overwrite the previous one. Without this, `resolveTestRun` found the existing running TestRun and resumed it instead of starting fresh, hiding the test history and preventing the orchestrator from seeing results for the current iteration.
+
+### Skipped/Todo Tests Need Proper Status (CS-10651)
+
+QUnit `skipped` and `todo` test statuses are currently mapped to `passed` to avoid confusing the resume logic, which treats anything non-passed as needing a rerun. This needs proper handling: a `skipped` status that is terminal (does not trigger reruns) but visually distinct from `passed`. Additionally, the orchestrator should reject TestRuns where all tests are skipped, since that indicates the test file didn't actually exercise anything.
+
+### Production Host Builds Strip Test Assets (CS-10650)
+
+The custom test page server requires a development or test host build. The Ember production build strips QUnit, test helpers, and `testem.js` from the output. This means the software factory cannot run tests against a production-built host. The plan is to ship QUnit and test helpers as a lazy-loaded bundle that survives production builds, benefiting both the factory and Code Mode's card testing support.
