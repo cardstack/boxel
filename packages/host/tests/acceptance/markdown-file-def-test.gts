@@ -303,6 +303,25 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '',
             ':card[https://nonexistent.example/Card/missing]',
           ].join('\n'),
+          'mermaid-test.md': [
+            '# Mermaid Test',
+            '',
+            '```mermaid',
+            'flowchart TD',
+            '    A[Start] --> B{Decision}',
+            '    B -->|Yes| C[Result 1]',
+            '    B -->|No| D[Result 2]',
+            '```',
+          ].join('\n'),
+          'math-test.md': [
+            '# Math Test',
+            '',
+            'The formula $E = mc^2$ is famous.',
+            '',
+            '$$',
+            'x^2 + y^2 = z^2',
+            '$$',
+          ].join('\n'),
         },
       }),
     );
@@ -538,5 +557,57 @@ module('Acceptance | markdown BFM card references', function (hooks) {
         `[data-test-stack-card="${testRealmURL}Pet/jackie"] [data-test-card-format="isolated"]`,
       )
       .exists('clicking a block markdown card reference opens the target card');
+  });
+
+  test('mermaid code blocks are rendered as SVG diagrams', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}mermaid-test.md`,
+    });
+
+    // Wait for mermaid to lazy-load and render the diagram into an SVG.
+    await waitUntil(() => document.querySelector('pre.mermaid svg') !== null, {
+      timeout: 15000,
+      timeoutMessage: 'Mermaid diagram was not rendered as SVG within timeout',
+    });
+
+    assert
+      .dom('pre.mermaid svg')
+      .exists('mermaid code block is rendered as an SVG diagram');
+
+    assert
+      .dom('pre.mermaid')
+      .doesNotIncludeText(
+        'flowchart TD',
+        'raw mermaid source is replaced by rendered SVG',
+      );
+  });
+
+  test('math placeholders are rendered with KaTeX', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}math-test.md`,
+    });
+
+    // Wait for KaTeX to lazy-load and render the math expressions.
+    await waitUntil(
+      () => document.querySelector('.math-placeholder .katex') !== null,
+      {
+        timeout: 15000,
+        timeoutMessage: 'KaTeX did not render math expressions within timeout',
+      },
+    );
+
+    assert
+      .dom('.math-placeholder .katex')
+      .exists('math placeholder is rendered with KaTeX');
+
+    // Inline math should not contain the raw LaTeX source as visible text
+    assert
+      .dom('.math-placeholder')
+      .doesNotIncludeText(
+        '$E = mc^2$',
+        'raw LaTeX source is replaced by rendered math',
+      );
   });
 });
