@@ -377,33 +377,43 @@ export default class SearchPanel extends Component<Signature> {
     // An empty array lets the Picker's ensureDefaultSelection() handle
     // selecting the built-in select-all option automatically.
     const prev = this._previousSelectedTypes;
+    const initialType = this.args.initialSelectedType;
     const hadSelectAll =
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
-
-    if (hadSelectAll) {
-      // If initialSelectedType is provided (e.g., from "Find Instances"),
-      // pre-select that type in the picker
-      const initialType = this.args.initialSelectedType;
-      if (initialType) {
-        const typeKey = internalKeyFor(initialType, undefined);
-        const matchingOption = optionsById.get(typeKey);
-        value.selected = matchingOption ? [matchingOption] : [];
+    if (initialType && prev.length === 0) {
+      // First launch with initialSelectedType (e.g., from "Find Instances").
+      // Only applied when prev is empty (first computation). After that,
+      // _previousSelectedTypes is always non-empty, preserving user's choice.
+      const typeKey = internalKeyFor(initialType, undefined);
+      const matchingOption = optionsById.get(typeKey);
+      if (matchingOption) {
+        value.selected = [matchingOption];
       } else {
-        // If baseFilter constrains to specific types and they exist in options,
-        // auto-select them instead of defaulting to "Any Type"
-        const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter);
-        const baseRefs =
-          baseTypeRefs
-            ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
-            .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
-        if (baseRefs.length > 0) {
-          const autoSelected = baseRefs
-            .filter((ref) => optionsById.has(ref))
-            .map((ref) => optionsById.get(ref)!);
-          value.selected = autoSelected.length > 0 ? autoSelected : [];
-        } else {
-          value.selected = [];
-        }
+        // Type summaries not yet loaded; create a synthetic option so the
+        // search query is type-constrained immediately.
+        value.selected = [
+          {
+            id: typeKey,
+            label: initialType.name,
+            type: 'option',
+          } as PickerOption,
+        ];
+      }
+    } else if (hadSelectAll) {
+      // If baseFilter constrains to specific types and they exist in options,
+      // auto-select them instead of defaulting to "Any Type"
+      const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter);
+      const baseRefs =
+        baseTypeRefs
+          ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
+          .map((r) => internalKeyFor(r.ref, undefined)) ?? [];
+      if (baseRefs.length > 0) {
+        const autoSelected = baseRefs
+          .filter((ref) => optionsById.has(ref))
+          .map((ref) => optionsById.get(ref)!);
+        value.selected = autoSelected.length > 0 ? autoSelected : [];
+      } else {
+        value.selected = [];
       }
     } else if (this._isLoadingTypes || this._isLoadingMoreTypes) {
       // Type summaries still loading — keep previous selections

@@ -565,7 +565,7 @@ module('Integration | operator-mode | ui', function (hooks) {
       .dom(`[data-test-search-sheet="search-results"]`)
       .exists('search sheet expands to results after type filter change');
 
-    // Verify type picker shows all available types (re-open picker after sheet expansion)
+    // Verify type picker shows all available types
     assert
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText('Any Type (', 'type picker shows total type count');

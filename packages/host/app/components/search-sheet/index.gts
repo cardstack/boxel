@@ -5,9 +5,9 @@ import { debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { modifier } from 'ember-modifier';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { modifier } from 'ember-modifier';
 
 import { trackedFunction } from 'reactiveweb/function';
 
@@ -75,6 +75,10 @@ const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
   return () =>
     element.removeEventListener('transitionend', handler as EventListener);
 });
+
+const BASE_FILTER: Filter = {
+  any: [{ type: baseCardRef }, { type: baseFieldRef }],
+};
 
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
@@ -182,10 +186,6 @@ export default class SearchSheet extends Component<Signature> {
     return this.sheetSize === 'prompt';
   }
 
-  private get baseFilter(): Filter {
-    return { any: [{ type: baseCardRef }, { type: baseFieldRef }] };
-  }
-
   private get searchKeyAsURL() {
     if (!this.searchKeyIsURL) {
       return undefined;
@@ -261,7 +261,7 @@ export default class SearchSheet extends Component<Signature> {
       {{else}}
         <SearchPanel
           @searchKey={{this.searchKey}}
-          @baseFilter={{this.baseFilter}}
+          @baseFilter={{BASE_FILTER}}
           @initialSelectedType={{this.initialSelectedType}}
           @onFilterChange={{@onFilterChange}}
           as |Bar Content joinedRealmURLs|

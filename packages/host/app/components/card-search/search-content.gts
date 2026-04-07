@@ -210,7 +210,7 @@ export default class SearchContent extends Component<Signature> {
     if (this.isSearchKeyEmpty || this.searchKeyIsURL) {
       return undefined;
     }
-    return this.args.searchKey;
+    return this.args.searchKey?.trim();
   }
 
   private get searchKeyAsURL() {
