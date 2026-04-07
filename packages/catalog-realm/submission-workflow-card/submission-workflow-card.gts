@@ -15,11 +15,11 @@ import { on } from '@ember/modifier';
 import { concat } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { Listing } from './catalog-app/listing/listing';
-import { PrCard } from './pr-card/pr-card';
-import { PrCiStatusField } from './pr-card/fields/ci-status-field';
-import { PrReviewStatusField } from './pr-card/fields/review-status-field';
-import type { GithubEventCard } from './github-event/github-event';
+import { Listing } from '../catalog-app/listing/listing';
+import { PrCard } from '../pr-card/pr-card';
+import { PrCiStatusField } from '../pr-card/fields/ci-status-field';
+import { PrReviewStatusField } from '../pr-card/fields/review-status-field';
+import type { GithubEventCard } from '../github-event/github-event';
 
 import {
   renderPrActionLabel,
@@ -29,11 +29,16 @@ import {
   buildGithubEventCardRef,
   searchEventQuery,
   buildRealmHrefs,
-} from './pr-card/utils';
+} from '../pr-card/utils';
 
 // ── Step status types ──
 
-type StepStatus = 'completed' | 'current' | 'upcoming' | 'blocked' | 'in-progress';
+type StepStatus =
+  | 'completed'
+  | 'current'
+  | 'upcoming'
+  | 'blocked'
+  | 'in-progress';
 
 interface ResolvedStep {
   key: string;
@@ -198,16 +203,38 @@ export class SubmissionParticipantField extends FieldDef {
         </div>
       </div>
       <style scoped>
-        .participant { display: flex; align-items: center; gap: 8px; }
-        .participant-avatar {
-          width: 28px; height: 28px; border-radius: 50%;
-          background: #1e293b; color: #fff;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 10px; font-weight: 800; flex-shrink: 0;
+        .participant {
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
-        .participant-info { display: flex; flex-direction: column; min-width: 0; }
-        .participant-name { font-size: 12px; font-weight: 600; color: #1e293b; }
-        .participant-role { font-size: 11px; color: #64748b; }
+        .participant-avatar {
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background: #1e293b;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: 800;
+          flex-shrink: 0;
+        }
+        .participant-info {
+          display: flex;
+          flex-direction: column;
+          min-width: 0;
+        }
+        .participant-name {
+          font-size: 12px;
+          font-weight: 600;
+          color: #1e293b;
+        }
+        .participant-role {
+          font-size: 11px;
+          color: #64748b;
+        }
       </style>
     </template>
   };
@@ -262,7 +289,9 @@ export class SubmissionWorkflowCard extends CardDef {
 
   // ── Isolated: Full workflow view ──
 
-  static isolated = class Isolated extends Component<typeof SubmissionWorkflowCard> {
+  static isolated = class Isolated extends Component<
+    typeof SubmissionWorkflowCard
+  > {
     // ── Realm & card ref for live queries ──
     get realmHrefs() {
       return buildRealmHrefs(this.args.model[realmURL]?.href);
@@ -271,29 +300,47 @@ export class SubmissionWorkflowCard extends CardDef {
     get githubEventCardRef() {
       return buildGithubEventCardRef(
         import.meta.url,
-        './github-event/github-event',
+        '../github-event/github-event',
       );
     }
 
     get prBranchName() {
-      return this.args.model.prCard?.branchName ?? this.args.model.branchName ?? null;
+      return (
+        this.args.model.prCard?.branchName ?? this.args.model.branchName ?? null
+      );
     }
 
     // ── Event queries ──
     get pullRequestEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'pull_request');
+      return searchEventQuery(
+        this.githubEventCardRef,
+        this.prBranchName,
+        'pull_request',
+      );
     }
 
     get checkRunEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'check_run');
+      return searchEventQuery(
+        this.githubEventCardRef,
+        this.prBranchName,
+        'check_run',
+      );
     }
 
     get checkSuiteEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'check_suite');
+      return searchEventQuery(
+        this.githubEventCardRef,
+        this.prBranchName,
+        'check_suite',
+      );
     }
 
     get prReviewEventQuery() {
-      return searchEventQuery(this.githubEventCardRef, this.prBranchName, 'pull_request_review');
+      return searchEventQuery(
+        this.githubEventCardRef,
+        this.prBranchName,
+        'pull_request_review',
+      );
     }
 
     // ── Live queries ──
@@ -332,7 +379,10 @@ export class SubmissionWorkflowCard extends CardDef {
 
     get prActionLabel() {
       let event = this.latestPrEvent;
-      return renderPrActionLabel(event?.action, event?.payload?.pull_request?.merged);
+      return renderPrActionLabel(
+        event?.action,
+        event?.payload?.pull_request?.merged,
+      );
     }
 
     get isMerged() {
@@ -353,7 +403,10 @@ export class SubmissionWorkflowCard extends CardDef {
     }
 
     get ciAllPassed() {
-      return this.ciItems.length > 0 && this.ciItems.every((i) => i.state === 'success');
+      return (
+        this.ciItems.length > 0 &&
+        this.ciItems.every((i) => i.state === 'success')
+      );
     }
 
     get ciHasFailure() {
@@ -366,7 +419,9 @@ export class SubmissionWorkflowCard extends CardDef {
 
     // ── Review state ──
     get latestReviewByReviewer() {
-      return buildLatestReviewByReviewer(this.prReviewEventData?.instances ?? []);
+      return buildLatestReviewByReviewer(
+        this.prReviewEventData?.instances ?? [],
+      );
     }
 
     get reviewState() {
@@ -390,19 +445,27 @@ export class SubmissionWorkflowCard extends CardDef {
 
     get overallStatusLabel(): string {
       switch (this.workflowState.overallStatus) {
-        case 'completed': return 'Completed';
-        case 'blocked': return 'Blocked';
-        case 'in-progress': return 'In Progress';
-        default: return 'Not Started';
+        case 'completed':
+          return 'Completed';
+        case 'blocked':
+          return 'Blocked';
+        case 'in-progress':
+          return 'In Progress';
+        default:
+          return 'Not Started';
       }
     }
 
     get overallStatusTone(): string {
       switch (this.workflowState.overallStatus) {
-        case 'completed': return 'success';
-        case 'blocked': return 'danger';
-        case 'in-progress': return 'active';
-        default: return 'neutral';
+        case 'completed':
+          return 'success';
+        case 'blocked':
+          return 'danger';
+        case 'in-progress':
+          return 'active';
+        default:
+          return 'neutral';
       }
     }
 
@@ -414,7 +477,9 @@ export class SubmissionWorkflowCard extends CardDef {
           <header class='sw-header'>
             <div class='sw-header-left'>
               <h1 class='sw-title'>{{@model.title}}</h1>
-              <span class={{concat 'sw-status-pill ' this.overallStatusTone}}>{{this.overallStatusLabel}}</span>
+              <span
+                class={{concat 'sw-status-pill ' this.overallStatusTone}}
+              >{{this.overallStatusLabel}}</span>
             </div>
             {{#if @model.submittedBy}}
               <span class='sw-submitted-by'>by {{@model.submittedBy}}</span>
@@ -428,7 +493,14 @@ export class SubmissionWorkflowCard extends CardDef {
                 <div class='sw-step-indicator'>
                   {{#if (eq step.status 'completed')}}
                     <div class='sw-step-icon completed'>
-                      <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'><polyline points='20 6 9 17 4 12'/></svg>
+                      <svg
+                        width='12'
+                        height='12'
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='3'
+                      ><polyline points='20 6 9 17 4 12' /></svg>
                     </div>
                   {{else if (eq step.status 'in-progress')}}
                     <div class='sw-step-icon in-progress'>
@@ -440,7 +512,19 @@ export class SubmissionWorkflowCard extends CardDef {
                     </div>
                   {{else if (eq step.status 'blocked')}}
                     <div class='sw-step-icon blocked'>
-                      <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+                      <svg
+                        width='12'
+                        height='12'
+                        viewBox='0 0 24 24'
+                        fill='none'
+                        stroke='currentColor'
+                        stroke-width='3'
+                      ><line x1='18' y1='6' x2='6' y2='18' /><line
+                          x1='6'
+                          y1='6'
+                          x2='18'
+                          y2='18'
+                        /></svg>
                     </div>
                   {{else}}
                     <div class='sw-step-icon upcoming'>
@@ -450,7 +534,9 @@ export class SubmissionWorkflowCard extends CardDef {
                   {{#if (eq idx (concat '' (concat '' 4)))}}
                     {{! last step, no connector }}
                   {{else}}
-                    <div class={{concat 'sw-step-connector ' step.status}}></div>
+                    <div
+                      class={{concat 'sw-step-connector ' step.status}}
+                    ></div>
                   {{/if}}
                 </div>
                 <div class='sw-step-content'>
@@ -512,7 +598,9 @@ export class SubmissionWorkflowCard extends CardDef {
               class={{concat 'sw-donut ' this.overallStatusTone}}
               style={{concat '--pct:' this.workflowState.progressPercent ';'}}
             >
-              <span class='sw-donut-pct'>{{this.workflowState.progressPercent}}%</span>
+              <span
+                class='sw-donut-pct'
+              >{{this.workflowState.progressPercent}}%</span>
               <span class='sw-donut-label'>complete</span>
             </div>
           </div>
@@ -524,18 +612,43 @@ export class SubmissionWorkflowCard extends CardDef {
               <div class={{concat 'sw-sidebar-step ' step.status}}>
                 {{#if (eq step.status 'completed')}}
                   <span class='sw-sidebar-icon completed'>
-                    <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'><polyline points='20 6 9 17 4 12'/></svg>
+                    <svg
+                      width='10'
+                      height='10'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      stroke-width='3'
+                    ><polyline points='20 6 9 17 4 12' /></svg>
                   </span>
                 {{else if (eq step.status 'in-progress')}}
-                  <span class='sw-sidebar-icon in-progress'><span class='sw-sidebar-spinner-small'></span></span>
+                  <span class='sw-sidebar-icon in-progress'><span
+                      class='sw-sidebar-spinner-small'
+                    ></span></span>
                 {{else if (eq step.status 'current')}}
-                  <span class='sw-sidebar-icon current'><span class='sw-sidebar-dot current'></span></span>
+                  <span class='sw-sidebar-icon current'><span
+                      class='sw-sidebar-dot current'
+                    ></span></span>
                 {{else if (eq step.status 'blocked')}}
                   <span class='sw-sidebar-icon blocked'>
-                    <svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'><line x1='18' y1='6' x2='6' y2='18'/><line x1='6' y1='6' x2='18' y2='18'/></svg>
+                    <svg
+                      width='10'
+                      height='10'
+                      viewBox='0 0 24 24'
+                      fill='none'
+                      stroke='currentColor'
+                      stroke-width='3'
+                    ><line x1='18' y1='6' x2='6' y2='18' /><line
+                        x1='6'
+                        y1='6'
+                        x2='18'
+                        y2='18'
+                      /></svg>
                   </span>
                 {{else}}
-                  <span class='sw-sidebar-icon upcoming'><span class='sw-sidebar-dot upcoming'></span></span>
+                  <span class='sw-sidebar-icon upcoming'><span
+                      class='sw-sidebar-dot upcoming'
+                    ></span></span>
                 {{/if}}
                 <span class='sw-sidebar-step-label'>{{step.label}}</span>
               </div>
@@ -593,7 +706,8 @@ export class SubmissionWorkflowCard extends CardDef {
           --c-danger: #ef4444;
           --c-active: #6366f1;
           --c-neutral: #94a3b8;
-          --font: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+          --font:
+            ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
           display: grid;
           grid-template-columns: minmax(0, 1fr) 280px;
@@ -644,10 +758,22 @@ export class SubmissionWorkflowCard extends CardDef {
           border-radius: 999px;
           flex-shrink: 0;
         }
-        .sw-status-pill.success { background: rgba(16, 185, 129, 0.12); color: var(--c-success); }
-        .sw-status-pill.danger { background: rgba(239, 68, 68, 0.1); color: var(--c-danger); }
-        .sw-status-pill.active { background: rgba(99, 102, 241, 0.1); color: var(--c-active); }
-        .sw-status-pill.neutral { background: var(--c-surface); color: var(--c-muted); }
+        .sw-status-pill.success {
+          background: rgba(16, 185, 129, 0.12);
+          color: var(--c-success);
+        }
+        .sw-status-pill.danger {
+          background: rgba(239, 68, 68, 0.1);
+          color: var(--c-danger);
+        }
+        .sw-status-pill.active {
+          background: rgba(99, 102, 241, 0.1);
+          color: var(--c-active);
+        }
+        .sw-status-pill.neutral {
+          background: var(--c-surface);
+          color: var(--c-muted);
+        }
 
         .sw-submitted-by {
           font-size: 12px;
@@ -740,11 +866,33 @@ export class SubmissionWorkflowCard extends CardDef {
           min-height: 20px;
           margin: 4px 0;
         }
-        .sw-step-connector.completed { background: var(--c-success); }
-        .sw-step-connector.current { background: linear-gradient(to bottom, var(--c-active), var(--c-border)); }
-        .sw-step-connector.in-progress { background: linear-gradient(to bottom, var(--c-active), var(--c-border)); }
-        .sw-step-connector.blocked { background: linear-gradient(to bottom, var(--c-danger), var(--c-border)); }
-        .sw-step-connector.upcoming { background: var(--c-border); }
+        .sw-step-connector.completed {
+          background: var(--c-success);
+        }
+        .sw-step-connector.current {
+          background: linear-gradient(
+            to bottom,
+            var(--c-active),
+            var(--c-border)
+          );
+        }
+        .sw-step-connector.in-progress {
+          background: linear-gradient(
+            to bottom,
+            var(--c-active),
+            var(--c-border)
+          );
+        }
+        .sw-step-connector.blocked {
+          background: linear-gradient(
+            to bottom,
+            var(--c-danger),
+            var(--c-border)
+          );
+        }
+        .sw-step-connector.upcoming {
+          background: var(--c-border);
+        }
 
         .sw-step-content {
           flex: 1;
@@ -784,8 +932,12 @@ export class SubmissionWorkflowCard extends CardDef {
           font-weight: 600;
           line-height: 1.4;
         }
-        .sw-step-status-detail.in-progress { color: var(--c-active); }
-        .sw-step-status-detail.blocked { color: var(--c-danger); }
+        .sw-step-status-detail.in-progress {
+          color: var(--c-active);
+        }
+        .sw-step-status-detail.blocked {
+          color: var(--c-danger);
+        }
 
         .sw-status-spinner-small {
           width: 12px;
@@ -835,18 +987,27 @@ export class SubmissionWorkflowCard extends CardDef {
           width: 110px;
           height: 110px;
           border-radius: 50%;
-          background: radial-gradient(closest-side, var(--c-bg) 72%, transparent 74%),
-                      conic-gradient(var(--ring) calc(var(--pct) * 1%), var(--track) 0);
+          background:
+            radial-gradient(closest-side, var(--c-bg) 72%, transparent 74%),
+            conic-gradient(var(--ring) calc(var(--pct) * 1%), var(--track) 0);
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
           box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
         }
-        .sw-donut.success { --ring: var(--c-success); }
-        .sw-donut.danger { --ring: var(--c-danger); }
-        .sw-donut.active { --ring: var(--c-active); }
-        .sw-donut.neutral { --ring: var(--c-neutral); }
+        .sw-donut.success {
+          --ring: var(--c-success);
+        }
+        .sw-donut.danger {
+          --ring: var(--c-danger);
+        }
+        .sw-donut.active {
+          --ring: var(--c-active);
+        }
+        .sw-donut.neutral {
+          --ring: var(--c-neutral);
+        }
 
         .sw-donut-pct {
           font-size: 20px;
@@ -892,10 +1053,20 @@ export class SubmissionWorkflowCard extends CardDef {
           justify-content: center;
           flex-shrink: 0;
         }
-        .sw-sidebar-icon.completed { background: var(--c-success); color: #fff; }
-        .sw-sidebar-icon.in-progress { background: var(--c-active); }
-        .sw-sidebar-icon.current { background: var(--c-active); }
-        .sw-sidebar-icon.blocked { background: var(--c-danger); color: #fff; }
+        .sw-sidebar-icon.completed {
+          background: var(--c-success);
+          color: #fff;
+        }
+        .sw-sidebar-icon.in-progress {
+          background: var(--c-active);
+        }
+        .sw-sidebar-icon.current {
+          background: var(--c-active);
+        }
+        .sw-sidebar-icon.blocked {
+          background: var(--c-danger);
+          color: #fff;
+        }
 
         .sw-sidebar-spinner-small {
           width: 8px;
@@ -905,15 +1076,21 @@ export class SubmissionWorkflowCard extends CardDef {
           border-radius: 50%;
           animation: stepSpin 0.8s linear infinite;
         }
-        .sw-sidebar-icon.upcoming { border: 2px solid var(--c-border); }
+        .sw-sidebar-icon.upcoming {
+          border: 2px solid var(--c-border);
+        }
 
         .sw-sidebar-dot {
           width: 6px;
           height: 6px;
           border-radius: 50%;
         }
-        .sw-sidebar-dot.current { background: #fff; }
-        .sw-sidebar-dot.upcoming { background: var(--c-border); }
+        .sw-sidebar-dot.current {
+          background: #fff;
+        }
+        .sw-sidebar-dot.upcoming {
+          background: var(--c-border);
+        }
 
         .sw-sidebar-step-label {
           font-size: 12px;
@@ -985,17 +1162,30 @@ export class SubmissionWorkflowCard extends CardDef {
 
         /* ── Animations ── */
         @keyframes stepSpin {
-          to { transform: rotate(360deg); }
+          to {
+            transform: rotate(360deg);
+          }
         }
         @keyframes stepPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(0.85); }
+          0%,
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(0.85);
+          }
         }
 
         /* ── Responsive ── */
         @media (max-width: 800px) {
-          .sw-layout { grid-template-columns: 1fr; }
-          .sw-sidebar { display: none; }
+          .sw-layout {
+            grid-template-columns: 1fr;
+          }
+          .sw-sidebar {
+            display: none;
+          }
         }
       </style>
     </template>
@@ -1003,7 +1193,9 @@ export class SubmissionWorkflowCard extends CardDef {
 
   // ── Fitted: Compact tile ──
 
-  static fitted = class Fitted extends Component<typeof SubmissionWorkflowCard> {
+  static fitted = class Fitted extends Component<
+    typeof SubmissionWorkflowCard
+  > {
     get hasListing() {
       return !!this.args.model.listing;
     }
@@ -1047,7 +1239,18 @@ export class SubmissionWorkflowCard extends CardDef {
         <div class='sw-fitted-subtitle'>{{this.listingName}}</div>
         {{#if @model.submittedBy}}
           <div class='sw-fitted-meta'>
-            <svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'/><circle cx='12' cy='7' r='4'/></svg>
+            <svg
+              width='12'
+              height='12'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              stroke-width='2'
+            ><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2' /><circle
+                cx='12'
+                cy='7'
+                r='4'
+              /></svg>
             {{@model.submittedBy}}
           </div>
         {{/if}}
@@ -1055,41 +1258,77 @@ export class SubmissionWorkflowCard extends CardDef {
 
       <style scoped>
         .sw-fitted {
-          width: 100%; height: 100%; box-sizing: border-box;
+          width: 100%;
+          height: 100%;
+          box-sizing: border-box;
           background: linear-gradient(160deg, #0f172a, #1e293b 55%, #312e81);
-          color: #e2e8f0; padding: 14px 16px;
-          display: flex; flex-direction: column;
-          font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+          color: #e2e8f0;
+          padding: 14px 16px;
+          display: flex;
+          flex-direction: column;
+          font-family:
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            'Segoe UI',
+            sans-serif;
           overflow: hidden;
         }
         .sw-fitted-top {
-          display: flex; align-items: center; justify-content: space-between;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
           margin-bottom: 8px;
         }
         .sw-fitted-status {
-          font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-          padding: 2px 7px; border-radius: 4px;
-          background: rgba(99, 102, 241, 0.18); color: #a5b4fc;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          padding: 2px 7px;
+          border-radius: 4px;
+          background: rgba(99, 102, 241, 0.18);
+          color: #a5b4fc;
         }
         .sw-fitted-ring {
-          --pct: 0; --ring-c: #6366f1; --track-c: rgba(255, 255, 255, 0.1);
-          width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
-          background: radial-gradient(closest-side, #0f172a 64%, transparent 66%),
-                      conic-gradient(var(--ring-c) calc(var(--pct) * 1%), var(--track-c) 0);
+          --pct: 0;
+          --ring-c: #6366f1;
+          --track-c: rgba(255, 255, 255, 0.1);
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          flex-shrink: 0;
+          background:
+            radial-gradient(closest-side, #0f172a 64%, transparent 66%),
+            conic-gradient(
+              var(--ring-c) calc(var(--pct) * 1%),
+              var(--track-c) 0
+            );
         }
         .sw-fitted-title {
-          font-size: 13px; font-weight: 700; color: #f1f5f9;
-          margin-bottom: 2px; line-height: 1.35;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          font-size: 13px;
+          font-weight: 700;
+          color: #f1f5f9;
+          margin-bottom: 2px;
+          line-height: 1.35;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .sw-fitted-subtitle {
-          font-size: 11px; color: rgba(255, 255, 255, 0.4);
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.4);
           margin-bottom: 8px;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .sw-fitted-meta {
-          display: flex; align-items: center; gap: 5px;
-          font-size: 11px; color: rgba(255, 255, 255, 0.35);
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 11px;
+          color: rgba(255, 255, 255, 0.35);
           margin-top: auto;
         }
       </style>
@@ -1098,7 +1337,9 @@ export class SubmissionWorkflowCard extends CardDef {
 
   // ── Embedded: Inline summary ──
 
-  static embedded = class Embedded extends Component<typeof SubmissionWorkflowCard> {
+  static embedded = class Embedded extends Component<
+    typeof SubmissionWorkflowCard
+  > {
     get listingName() {
       return this.args.model.listing?.name ?? 'No listing';
     }
@@ -1133,27 +1374,63 @@ export class SubmissionWorkflowCard extends CardDef {
 
       <style scoped>
         .sw-embed {
-          display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-          background: linear-gradient(135deg, #0f172a, #1e293b); color: #f1f5f9;
-          border-radius: 10px; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 14px;
+          background: linear-gradient(135deg, #0f172a, #1e293b);
+          color: #f1f5f9;
+          border-radius: 10px;
+          font-family:
+            ui-sans-serif,
+            system-ui,
+            -apple-system,
+            sans-serif;
         }
         .sw-embed-pill {
-          font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-          padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
-          background: rgba(99, 102, 241, 0.18); color: #a5b4fc;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          padding: 2px 6px;
+          border-radius: 4px;
+          flex-shrink: 0;
+          background: rgba(99, 102, 241, 0.18);
+          color: #a5b4fc;
         }
         .sw-embed-title {
-          font-size: 13px; font-weight: 700; flex: 1; min-width: 0;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          font-size: 13px;
+          font-weight: 700;
+          flex: 1;
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
-        .sw-embed-ring-wrap { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .sw-embed-ring-wrap {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-shrink: 0;
+        }
         .sw-embed-ring {
-          --pct: 0; --ring-c: #6366f1; --track-c: rgba(255, 255, 255, 0.1);
-          width: 20px; height: 20px; border-radius: 50%;
-          background: radial-gradient(closest-side, #0f172a 65%, transparent 67%),
-                      conic-gradient(var(--ring-c) calc(var(--pct) * 1%), var(--track-c) 0);
+          --pct: 0;
+          --ring-c: #6366f1;
+          --track-c: rgba(255, 255, 255, 0.1);
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background:
+            radial-gradient(closest-side, #0f172a 65%, transparent 67%),
+            conic-gradient(
+              var(--ring-c) calc(var(--pct) * 1%),
+              var(--track-c) 0
+            );
         }
-        .sw-embed-pct { font-size: 10px; color: rgba(255, 255, 255, 0.5); }
+        .sw-embed-pct {
+          font-size: 10px;
+          color: rgba(255, 255, 255, 0.5);
+        }
       </style>
     </template>
   };

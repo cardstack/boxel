@@ -104,7 +104,10 @@ module('timeline handler', () => {
   let createdBranches: unknown[] = [];
   let senderRegistrations: Record<string, PgPrimitive>[] = [];
   let submissionBotRegistrations: Record<string, PgPrimitive>[] = [];
-  let commandsByRegistrationId = new Map<string, Record<string, PgPrimitive>[]>();
+  let commandsByRegistrationId = new Map<
+    string,
+    Record<string, PgPrimitive>[]
+  >();
 
   dbAdapter = {
     kind: 'pg',
@@ -247,7 +250,8 @@ module('timeline handler', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/create-submission/default',
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -311,8 +315,8 @@ module('timeline handler', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      3,
-      'enqueues submission, PR-card, and submission patch run-command jobs for pr-listing-create',
+      2,
+      'enqueues collect-files and create-pr-card jobs for pr-listing-create',
     );
     assert.strictEqual(
       createdBranches.length,
@@ -384,7 +388,8 @@ module('timeline handler', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/create-submission/default',
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -397,7 +402,8 @@ module('timeline handler', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/create-submission/default',
+            command:
+              '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -453,8 +459,8 @@ module('timeline handler', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      2,
-      'current behavior enqueues once per matching registration',
+      4,
+      'current behavior enqueues collect-files + create-pr-card per matching registration',
     );
     assert.strictEqual(
       branchWrites.length,

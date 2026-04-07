@@ -30,27 +30,27 @@ export interface WebhookFilterHandler {
 }
 
 /**
- * Extract the realm URL from a Submission Card URL found in a PR body.
+ * Extract the realm URL from a Workflow Card URL found in a PR body.
  *
  * The PR body contains a line like:
- *   - Submission Card: [https://app.boxel.ai/user/realm/SubmissionCard/uuid](...)
+ *   - Workflow Card: [https://app.boxel.ai/user/realm/SubmissionWorkflowCard/uuid](...)
  *
- * The realm is everything before "SubmissionCard/" in that URL.
+ * The realm is everything before "SubmissionWorkflowCard/" in that URL.
  */
 export function extractRealmFromPrBody(
   prBody: string | undefined | null,
 ): string | null {
   if (!prBody) return null;
 
-  // Match the Submission Card URL in the PR body markdown link
-  let match = prBody.match(/- Submission Card: \[([^\]]+)\]/);
+  // Match the Workflow Card URL in the PR body markdown link
+  let match = prBody.match(/- Workflow Card: \[([^\]]+)\]/);
   if (!match) return null;
 
-  let submissionCardUrl = match[1];
-  let submissionCardIndex = submissionCardUrl.indexOf('SubmissionCard/');
-  if (submissionCardIndex === -1) return null;
+  let workflowCardUrl = match[1];
+  let workflowCardIndex = workflowCardUrl.indexOf('SubmissionWorkflowCard/');
+  if (workflowCardIndex === -1) return null;
 
-  return submissionCardUrl.slice(0, submissionCardIndex);
+  return workflowCardUrl.slice(0, workflowCardIndex);
 }
 
 /**
@@ -110,10 +110,7 @@ async function lookupRealmByBranchName(
       return rows[0].realm_url as string;
     }
   } catch (error) {
-    console.warn(
-      `Failed to look up realm for branch "${branchName}":`,
-      error,
-    );
+    console.warn(`Failed to look up realm for branch "${branchName}":`, error);
   }
   return null;
 }

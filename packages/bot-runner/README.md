@@ -111,7 +111,7 @@ flowchart TD
 [
   {
     "name": "create-listing-pr",
-    "command": "@cardstack/catalog/commands/create-submission-workflow/default",
+    "command": "@cardstack/catalog/commands/collect-submission-files/default",
     "filter": {
       "type": "matrix-event",
       "event_type": "app.boxel.bot-trigger",

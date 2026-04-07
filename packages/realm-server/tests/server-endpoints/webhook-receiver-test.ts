@@ -526,7 +526,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         pull_request: {
           number: 42,
           html_url: 'https://github.com/test/repo/pull/42',
-          body: '- Submission Card: [http://localhost:4201/user/realm/SubmissionCard/abc-123](http://localhost:4201/user/realm/SubmissionCard/abc-123)',
+          body: '- Workflow Card: [http://localhost:4201/user/realm/SubmissionWorkflowCard/abc-123](http://localhost:4201/user/realm/SubmissionWorkflowCard/abc-123)',
         },
         sender: { login: 'testuser' },
       });
@@ -618,7 +618,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         action: 'opened',
         pull_request: {
           number: 100,
-          body: '- Submission Card: [https://realms-staging.stack.cards/user/realm/SubmissionCard/abc-123](https://realms-staging.stack.cards/user/realm/SubmissionCard/abc-123)',
+          body: '- Workflow Card: [https://realms-staging.stack.cards/user/realm/SubmissionWorkflowCard/abc-123](https://realms-staging.stack.cards/user/realm/SubmissionWorkflowCard/abc-123)',
         },
       });
       let signature =
@@ -705,7 +705,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         action: 'opened',
         pull_request: {
           number: 200,
-          body: '- Submission Card: [https://app.boxel.ai/richard.tan/my-realm/SubmissionCard/def-456](https://app.boxel.ai/richard.tan/my-realm/SubmissionCard/def-456)',
+          body: '- Workflow Card: [https://app.boxel.ai/richard.tan/my-realm/SubmissionWorkflowCard/def-456](https://app.boxel.ai/richard.tan/my-realm/SubmissionWorkflowCard/def-456)',
         },
       });
       let signature =
@@ -786,7 +786,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
           },
         });
 
-      // Send event with no Submission Card in PR body
+      // Send event with no Workflow Card in PR body
       let payload = JSON.stringify({
         action: 'opened',
         pull_request: {
@@ -1051,7 +1051,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
   });
 
   module('extractRealmFromPrBody', function () {
-    test('extracts realm from production Submission Card URL', function (assert) {
+    test('extracts realm from production Workflow Card URL', function (assert) {
       let body = [
         '## Summary',
         'Some description',
@@ -1060,7 +1060,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         '- Room ID: `!IUlOGgAWjwfwemOykG:boxel.ai`',
         '- User ID: `@richard.tan:boxel.ai`',
         '- Number of Files: 1',
-        '- Submission Card: [https://app.boxel.ai/richard.tan/ric-test-1/SubmissionCard/f0028a1c-777a-4d34-9f93-8f02667484d5](https://app.boxel.ai/richard.tan/ric-test-1/SubmissionCard/f0028a1c-777a-4d34-9f93-8f02667484d5)',
+        '- Workflow Card: [https://app.boxel.ai/richard.tan/ric-test-1/SubmissionWorkflowCard/f0028a1c-777a-4d34-9f93-8f02667484d5](https://app.boxel.ai/richard.tan/ric-test-1/SubmissionWorkflowCard/f0028a1c-777a-4d34-9f93-8f02667484d5)',
       ].join('\n');
 
       assert.strictEqual(
@@ -1069,10 +1069,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
 
-    test('extracts realm from staging Submission Card URL', function (assert) {
+    test('extracts realm from staging Workflow Card URL', function (assert) {
       let body = [
         '## Summary',
-        '- Submission Card: [https://realms-staging.stack.cards/chuan16/pure-creativity/SubmissionCard/01166122-d67f-4950-a708-b451564b30cb](https://realms-staging.stack.cards/chuan16/pure-creativity/SubmissionCard/01166122-d67f-4950-a708-b451564b30cb)',
+        '- Workflow Card: [https://realms-staging.stack.cards/chuan16/pure-creativity/SubmissionWorkflowCard/01166122-d67f-4950-a708-b451564b30cb](https://realms-staging.stack.cards/chuan16/pure-creativity/SubmissionWorkflowCard/01166122-d67f-4950-a708-b451564b30cb)',
       ].join('\n');
 
       assert.strictEqual(
@@ -1081,10 +1081,10 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
 
-    test('extracts realm from local Submission Card URL', function (assert) {
+    test('extracts realm from local Workflow Card URL', function (assert) {
       let body = [
         '## Summary',
-        '- Submission Card: [http://localhost:4201/experiments/SubmissionCard/5e3c8a93-24b1-4143-958a-a65270110c52](http://localhost:4201/experiments/SubmissionCard/5e3c8a93-24b1-4143-958a-a65270110c52)',
+        '- Workflow Card: [http://localhost:4201/experiments/SubmissionWorkflowCard/5e3c8a93-24b1-4143-958a-a65270110c52](http://localhost:4201/experiments/SubmissionWorkflowCard/5e3c8a93-24b1-4143-958a-a65270110c52)',
       ].join('\n');
 
       assert.strictEqual(
@@ -1093,7 +1093,7 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
 
-    test('returns null when no Submission Card line exists', function (assert) {
+    test('returns null when no Workflow Card line exists', function (assert) {
       let body = '## Summary\nSome PR description without submission card';
       assert.strictEqual(extractRealmFromPrBody(body), null);
     });

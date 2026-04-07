@@ -15,6 +15,7 @@ import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
+import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecCommandModule from './create-specs';
 import * as CreateSubmissionWorkflowCommandModule from './create-submission-workflow';
 import * as FullReindexRealmCommandModule from './full-reindex-realm';
@@ -40,7 +41,6 @@ import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalCommandModule from './open-create-listing-modal';
-import * as OpenCreatePRModalCommandModule from './open-create-pr-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
@@ -265,8 +265,8 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     OpenCreateListingModalCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/open-create-pr-modal',
-    OpenCreatePRModalCommandModule,
+    '@cardstack/boxel-host/commands/create-and-open-submission-workflow-card',
+    CreateAndOpenSubmissionWorkflowCard,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-submission-workflow',
@@ -426,7 +426,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
   OpenCreateListingModalCommandModule.default,
-  OpenCreatePRModalCommandModule.default,
+  CreateAndOpenSubmissionWorkflowCard.default,
   CreateSubmissionWorkflowCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,

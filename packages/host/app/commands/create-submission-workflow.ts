@@ -86,7 +86,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         },
         meta: {
           adoptsFrom: {
-            module: `${this.catalogRealm}submission-workflow-card`,
+            module: `${this.catalogRealm}submission-workflow-card/submission-workflow-card`,
             name: 'SubmissionWorkflowCard',
           },
         },
