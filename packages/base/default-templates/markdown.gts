@@ -525,6 +525,45 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           margin-inline-end: var(--boxel-sp-xl);
         }
 
+        /* GFM Alerts / Admonitions (rendered by marked-alert) */
+        .markdown-content :deep(.markdown-alert) {
+          border-left: 3px solid var(--markdown-alert-color, var(--boxel-400));
+          border-radius: 0 6px 6px 0;
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
+          margin: var(--boxel-sp-xs) 0;
+        }
+        .markdown-content :deep(.markdown-alert-title) {
+          font-weight: 700;
+          color: var(--markdown-alert-color, inherit);
+          margin: 0;
+        }
+        .markdown-content :deep(.markdown-alert-title svg) {
+          display: none;
+        }
+        .markdown-content :deep(.markdown-alert p:not(.markdown-alert-title)) {
+          margin: var(--boxel-sp-4xs) 0 0;
+        }
+        .markdown-content :deep(.markdown-alert-note) {
+          --markdown-alert-color: #0969da;
+          background-color: #ddf4ff;
+        }
+        .markdown-content :deep(.markdown-alert-tip) {
+          --markdown-alert-color: #1a7f37;
+          background-color: #dcfce7;
+        }
+        .markdown-content :deep(.markdown-alert-important) {
+          --markdown-alert-color: #8250df;
+          background-color: #f5f0ff;
+        }
+        .markdown-content :deep(.markdown-alert-warning) {
+          --markdown-alert-color: #9a6700;
+          background-color: #fff8c5;
+        }
+        .markdown-content :deep(.markdown-alert-caution) {
+          --markdown-alert-color: #d1242f;
+          background-color: #ffebe9;
+        }
+
         /* Horizontal rule */
         .markdown-content :deep(hr) {
           border-bottom: none;
