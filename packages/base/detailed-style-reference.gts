@@ -10,6 +10,7 @@ import {
   NavSection,
   ThemeVisualizer,
   CssFieldEditor,
+  CardContainerCss,
   ResetButton,
 } from './default-templates/theme-dashboard';
 
@@ -98,6 +99,10 @@ class Isolated extends Component<typeof DetailedStyleReference> {
         return true;
       }
 
+      if (section.id === 'card-container-css') {
+        return Boolean(this.args.model.cssVariables);
+      }
+
       if (section.id === 'visual-dna') {
         return this.hasVisualDNAContent;
       }
@@ -128,10 +133,10 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
     return Boolean(
       model.colorPalette ||
-        model.typographySystem ||
-        model.geometricLanguage ||
-        model.materialVocabulary ||
-        model.wallpaperImages?.length,
+      model.typographySystem ||
+      model.geometricLanguage ||
+      model.materialVocabulary ||
+      model.wallpaperImages?.length,
     );
   }
 
@@ -217,6 +222,10 @@ class Isolated extends Component<typeof DetailedStyleReference> {
                   </div>
                 {{/if}}
               </div>
+            {{else if (eq section.id 'card-container-css')}}
+              {{#if @model.cssVariables}}
+                <CardContainerCss @cssVariables={{@model.cssVariables}} />
+              {{/if}}
             {{else if (eq section.id 'import-css')}}
               <CssFieldEditor @setCss={{@model.setCss}} />
             {{else if (eq section.id 'inspirations')}}

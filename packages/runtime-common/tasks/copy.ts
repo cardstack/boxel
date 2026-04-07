@@ -1,6 +1,6 @@
 import type { Task, WorkerArgs } from './index';
 
-import { jobIdentity, SupportedMimeType, type RealmInfo } from '../index';
+import { jobIdentity } from '../index';
 
 export { copy };
 
@@ -13,28 +13,15 @@ export interface CopyResult {
   invalidations: string[];
 }
 
-const copy: Task<CopyArgs, CopyResult> = ({
-  reportStatus,
-  log,
-  indexWriter,
-  getAuthedFetch,
-}) =>
+const copy: Task<CopyArgs, CopyResult> = ({ reportStatus, log, indexWriter }) =>
   async function (args) {
     let { jobInfo, realmURL, sourceRealmURL } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
     reportStatus(jobInfo, 'start');
-    let authedFetch = await getAuthedFetch(args);
-    let realmInfoResponse = await authedFetch(`${realmURL}_info`, {
-      method: 'QUERY',
-      headers: { Accept: SupportedMimeType.RealmInfo },
-    });
-    let realmInfo: RealmInfo = (await realmInfoResponse.json())?.data
-      ?.attributes;
-
     let batch = await indexWriter.createBatch(new URL(realmURL));
-    await batch.copyFrom(new URL(sourceRealmURL), realmInfo);
+    await batch.copyFrom(new URL(sourceRealmURL));
     let result = await batch.done();
     let invalidations = batch.invalidations;
     log.debug(

@@ -116,4 +116,6 @@ export interface ExecuteTestRunOptions {
   };
   /** Server-level JWT for obtaining realm-scoped auth for test artifacts realm. */
   serverToken?: string;
+  /** Realm server URL. Required — never inferred from targetRealmUrl. */
+  realmServerUrl: string;
 }

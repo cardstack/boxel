@@ -10,10 +10,7 @@ import {
   executeTestRunFromRealm,
   type TestRunRealmOptions,
 } from '../scripts/lib/factory-test-realm';
-import {
-  pullRealmFiles,
-  writeModuleSource,
-} from '../scripts/lib/realm-operations';
+import { pullRealmFiles, writeFile } from '../scripts/lib/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -60,7 +57,7 @@ test.describe('factory-test-realm e2e', () => {
     let authorization = authHeaders['Authorization'];
 
     // Write the spec to the realm via API — same path as the live system.
-    let writeResult = await writeModuleSource(
+    let writeResult = await writeFile(
       realmUrl,
       'Tests/hello-passing.spec.ts',
       PASSING_SPEC,
@@ -72,6 +69,7 @@ test.describe('factory-test-realm e2e', () => {
       targetRealmUrl: realmUrl,
       testRealmUrl: realmUrl,
       testResultsModuleUrl,
+      realmServerUrl: realm.realmServerURL.href,
       slug: 'hello-e2e',
       specPaths: ['Tests/hello-passing.spec.ts'],
       testNames: ['hello card renders greeting'],
@@ -95,7 +93,7 @@ test.describe('factory-test-realm e2e', () => {
     let authorization = authHeaders['Authorization'];
 
     // Write the deliberately failing spec via API.
-    let writeResult = await writeModuleSource(
+    let writeResult = await writeFile(
       realmUrl,
       'Tests/hello-failing.spec.ts',
       FAILING_SPEC,
@@ -107,6 +105,7 @@ test.describe('factory-test-realm e2e', () => {
       targetRealmUrl: realmUrl,
       testRealmUrl: realmUrl,
       testResultsModuleUrl,
+      realmServerUrl: realm.realmServerURL.href,
       slug: 'hello-fail',
       specPaths: ['Tests/hello-failing.spec.ts'],
       testNames: ['deliberately fails for testing'],
@@ -129,7 +128,7 @@ test.describe('factory-test-realm e2e', () => {
     let authorization = authHeaders['Authorization'];
 
     // Write a spec file to the realm via the API.
-    let writeResult = await writeModuleSource(
+    let writeResult = await writeFile(
       realmUrl,
       'Tests/hello-passing.spec.ts',
       PASSING_SPEC,

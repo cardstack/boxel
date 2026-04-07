@@ -89,7 +89,7 @@ The math rendering uses KaTeX[^2] for typesetting, while diagrams use Mermaid.js
 
 ## Heading IDs
 
-Each heading on this page has an auto-generated slug ID (inspect the DOM to see `id="bfm-showcase"`, `id="math--latex"`, etc.). These enable anchor links and table-of-contents navigation.
+Each heading on this page has an auto-generated slug ID (inspect the DOM to see `id="user-content-bfm-showcase"`, `id="user-content-math--latex"`, etc.). These enable anchor links and table-of-contents navigation.
 
 ## Code Blocks
 
