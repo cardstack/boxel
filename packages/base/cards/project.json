@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Project",
+      "cardDescription": "A collection of issues that are being worked on together",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/issue-tracker/issue",
+        "name": "Project"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
