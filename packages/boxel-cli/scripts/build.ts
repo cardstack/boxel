@@ -69,7 +69,7 @@ async function buildCLI() {
     const cliResult = await build({
       ...commonConfig,
       entryPoints: ['src/index.ts'],
-      outfile: 'dist/boxel.js',
+      outfile: 'dist/index.js',
       banner: {
         js: '#!/usr/bin/env node',
       },
@@ -77,7 +77,7 @@ async function buildCLI() {
 
     // Make CLI file executable
     console.log('Making CLI file executable...');
-    chmodSync('dist/boxel.js', 0o755);
+    chmodSync('dist/index.js', 0o755);
 
     console.log('Build complete!');
 

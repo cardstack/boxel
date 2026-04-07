@@ -5,7 +5,7 @@
   "description": "CLI tools for Boxel workspace management",
   "main": "./dist/index.js",
   "bin": {
-    "boxel": "./dist/boxel.js"
+    "boxel": "./dist/index.js"
   },
   "files": [
     "dist/**/*",
