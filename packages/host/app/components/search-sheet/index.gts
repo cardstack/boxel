@@ -4,8 +4,8 @@ import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
@@ -61,6 +61,20 @@ interface Signature {
   };
   Blocks: {};
 }
+
+// After the search sheet's height transition ends, dispatch a window resize
+// event so ember-basic-dropdown repositions any open wormholed dropdowns
+// (e.g. TypePicker, RealmPicker) whose trigger moved during the transition.
+const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
+  let handler = (event: TransitionEvent) => {
+    if (event.propertyName === 'height') {
+      window.dispatchEvent(new Event('resize'));
+    }
+  };
+  element.addEventListener('transitionend', handler as EventListener);
+  return () =>
+    element.removeEventListener('transitionend', handler as EventListener);
+});
 
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
@@ -227,6 +241,7 @@ export default class SearchSheet extends Component<Signature> {
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
+      {{repositionDropdownsOnTransitionEnd}}
       {{onClickOutside
         this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
