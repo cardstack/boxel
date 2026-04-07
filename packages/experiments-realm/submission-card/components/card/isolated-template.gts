@@ -19,7 +19,7 @@ import {
   buildLatestReviewByReviewer,
   computeLatestReviewState,
   searchEventQuery,
-} from '../../../pr-card/utils';
+} from '@cardstack/catalog/pr-card/utils';
 import type { SubmissionCard } from '../../submission-card';
 
 export class IsolatedTemplate extends Component<typeof SubmissionCard> {

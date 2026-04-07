@@ -31,6 +31,7 @@ export class PrReviewStatusField extends FieldDef {
 
     get githubEventCardRef() {
       return buildGithubEventCardRef(
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         import.meta.url,
         '../../github-event/github-event',
       );

@@ -9,10 +9,8 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import NumberField from 'https://cardstack.com/base/number';
-import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
 import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { Listing } from '../catalog-app/listing/listing';
@@ -90,7 +88,7 @@ const STEP_DEFINITIONS = [
 function resolveSubmissionWorkflowState(
   hasListing: boolean,
   hasPr: boolean,
-  prActionLabel: string | null,
+  _prActionLabel: string | null,
   ciAllPassed: boolean,
   ciHasFailure: boolean,
   ciInProgress: boolean,
@@ -299,6 +297,7 @@ export class SubmissionWorkflowCard extends CardDef {
 
     get githubEventCardRef() {
       return buildGithubEventCardRef(
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         import.meta.url,
         '../github-event/github-event',
       );
@@ -456,6 +455,10 @@ export class SubmissionWorkflowCard extends CardDef {
       }
     }
 
+    get lastStepIndex(): string {
+      return String(this.workflowState.steps.length - 1);
+    }
+
     get overallStatusTone(): string {
       switch (this.workflowState.overallStatus) {
         case 'completed':
@@ -531,7 +534,7 @@ export class SubmissionWorkflowCard extends CardDef {
                       <div class='sw-step-dot'></div>
                     </div>
                   {{/if}}
-                  {{#if (eq idx (concat '' (concat '' 4)))}}
+                  {{#if (eq idx this.lastStepIndex)}}
                     {{! last step, no connector }}
                   {{else}}
                     <div
@@ -563,8 +566,8 @@ export class SubmissionWorkflowCard extends CardDef {
 
                   {{#if (eq step.key 'create-pr')}}
                     {{#if @model.prCard}}
-                      <div class='sw-step-detail sw-fitted-card-container'>
-                        <@fields.prCard @format='fitted' />
+                      <div class='sw-step-detail sw-embedded-card-container'>
+                        <@fields.prCard @format='embedded' />
                       </div>
                     {{/if}}
                   {{/if}}
@@ -596,7 +599,7 @@ export class SubmissionWorkflowCard extends CardDef {
           <div class='sw-progress-section'>
             <div
               class={{concat 'sw-donut ' this.overallStatusTone}}
-              style={{concat '--pct:' this.workflowState.progressPercent ';'}}
+              style={{htmlSafe (concat '--pct:' this.workflowState.progressPercent ';')}}
             >
               <span
                 class='sw-donut-pct'
@@ -963,6 +966,14 @@ export class SubmissionWorkflowCard extends CardDef {
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         }
 
+        .sw-embedded-card-container {
+          max-width: 100%;
+          border-radius: 10px;
+          overflow: hidden;
+          border: 1px solid var(--c-border);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
         /* ── Sidebar ── */
         .sw-sidebar {
           display: flex;
@@ -1232,7 +1243,7 @@ export class SubmissionWorkflowCard extends CardDef {
           <span class='sw-fitted-status'>{{this.statusLabel}}</span>
           <div
             class='sw-fitted-ring'
-            style={{concat '--pct:' this.basicProgress ';'}}
+            style={{htmlSafe (concat '--pct:' this.basicProgress ';')}}
           ></div>
         </div>
         <div class='sw-fitted-title'>{{@model.title}}</div>
@@ -1366,7 +1377,7 @@ export class SubmissionWorkflowCard extends CardDef {
         <div class='sw-embed-ring-wrap'>
           <div
             class='sw-embed-ring'
-            style={{concat '--pct:' this.basicProgress ';'}}
+            style={{htmlSafe (concat '--pct:' this.basicProgress ';')}}
           ></div>
           <span class='sw-embed-pct'>{{this.basicProgress}}%</span>
         </div>

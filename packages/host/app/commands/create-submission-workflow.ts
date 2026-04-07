@@ -12,18 +12,16 @@ import SendBotTriggerEventCommand from './bot-requests/send-bot-trigger-event';
 import OpenInInteractModeCommand from './open-in-interact-mode';
 
 import type MatrixService from '../services/matrix-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
@@ -65,6 +63,13 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
       this.realm.realmOfURL(new URL(listingId))?.href ?? realm;
 
     // Step 1: Create the SubmissionWorkflowCard with listing linked
+    let catalogRealm = this.catalogRealm;
+    if (!catalogRealm) {
+      throw new Error(
+        'Cannot create submission workflow: catalog realm URL not found',
+      );
+    }
+
     let workflowDoc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -86,7 +91,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
         },
         meta: {
           adoptsFrom: {
-            module: `${this.catalogRealm}submission-workflow-card/submission-workflow-card`,
+            module: `${catalogRealm}submission-workflow-card/submission-workflow-card`,
             name: 'SubmissionWorkflowCard',
           },
         },

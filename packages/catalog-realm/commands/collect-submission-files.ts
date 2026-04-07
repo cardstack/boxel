@@ -90,8 +90,9 @@ export default class CollectSubmissionFilesCommand extends Command<
     })) as Listing;
 
     if (!listing) {
-      log.warn(`Listing not found: ${listingId}, skipping file collection`);
-      return [];
+      throw new Error(
+        `Listing not found: ${listingId}. Cannot collect submission files for a non-existent listing.`,
+      );
     }
 
     let examplesToSnapshot = listing.examples;

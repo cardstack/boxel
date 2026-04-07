@@ -40,14 +40,16 @@ Register (JSON:API):
 
 - POST `/_bot-registration`
 - Body:
+  ```json
   {
-  "data": {
-  "type": "bot-registration",
-  "attributes": {
-  "username": "@submissionbot:localhost"
+    "data": {
+      "type": "bot-registration",
+      "attributes": {
+        "username": "@submissionbot:localhost"
+      }
+    }
   }
-  }
-  }
+  ```
 - The request must be authenticated with a realm server JWT.
 - The `username` is the Matrix user id and must match the authenticated user id.
 
@@ -81,12 +83,14 @@ Unregister:
 
 - DELETE `/_bot-registration`
 - Body:
+  ```json
   {
-  "data": {
-  "type": "bot-registration",
-  "id": "<botRegistrationId>"
+    "data": {
+      "type": "bot-registration",
+      "id": "<botRegistrationId>"
+    }
   }
-  }
+  ```
 
 ## User Issuing Task
 

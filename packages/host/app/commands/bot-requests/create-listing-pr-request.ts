@@ -12,7 +12,7 @@ import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
 import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class CreateListingPRRequestCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput

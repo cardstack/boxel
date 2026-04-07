@@ -160,7 +160,7 @@ async function resolveOriginFromPayload(
 /**
  * Handler for GitHub webhook events. Supports filtering by event type
  * (from X-GitHub-Event header) and dynamically resolves the target realm
- * from the PR body's Submission Card URL or by looking up the PrCard.
+ * from the PR body's Workflow Card URL or by looking up the PrCard.
  */
 class GithubEventFilterHandler implements WebhookFilterHandler {
   async matches(

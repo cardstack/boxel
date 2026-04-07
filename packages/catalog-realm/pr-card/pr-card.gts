@@ -423,16 +423,18 @@ class FittedTemplate extends Component<typeof PrCard> {
               <span class='pr-number'>#{{this.prNumber}}</span>
             {{/if}}
           </p>
-          <a
-            href={{this.prUrl}}
-            target='_blank'
-            rel='noopener noreferrer'
-            class='pr-github-link'
-            title='Open PR on GitHub'
-            aria-label='Open PR on GitHub'
-          >
-            <ExternalLinkIcon class='pr-github-link-icon' />
-          </a>
+          {{#if this.prUrl}}
+            <a
+              href={{this.prUrl}}
+              target='_blank'
+              rel='noopener noreferrer'
+              class='pr-github-link'
+              title='Open PR on GitHub'
+              aria-label='Open PR on GitHub'
+            >
+              <ExternalLinkIcon class='pr-github-link-icon' />
+            </a>
+          {{/if}}
         </div>
 
         <div class='pr-meta'>

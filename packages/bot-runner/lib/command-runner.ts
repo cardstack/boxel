@@ -89,7 +89,19 @@ export class CommandRunner {
         let listingName =
           typeof input.listingName === 'string' ? input.listingName : null;
         let roomId = typeof input.roomId === 'string' ? input.roomId : null;
-        let branchName = toBranchName(roomId ?? '', listingName ?? 'Listing');
+
+        if (!roomId) {
+          throw new Error(
+            'pr-listing-create trigger must include a valid roomId',
+          );
+        }
+        if (!listingId) {
+          throw new Error(
+            'pr-listing-create trigger must include a valid listingId',
+          );
+        }
+
+        let branchName = toBranchName(roomId, listingName ?? 'UntitledListing');
 
         let effectiveWorkflowRealm = workflowCardRealm ?? realmURL;
         let submissionRealm = new URL('/submissions/', realmURL).href;

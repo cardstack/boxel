@@ -232,6 +232,7 @@ module('command runner', () => {
         userId: '@alice:localhost',
         input: {
           roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
           listingName: 'My Listing Name',
           listingSummary: 'My listing Summary',
           workflowCardUrl: submissionCardUrl,
@@ -407,6 +408,7 @@ module('command runner', () => {
         userId: '@alice:localhost',
         input: {
           roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
           listingName: 'My Listing',
         },
       },
@@ -506,6 +508,7 @@ module('command runner', () => {
           userId: '@alice:localhost',
           input: {
             roomId: '!abc123:localhost',
+            listingId: 'http://localhost:4201/test/Listing/1',
             listingName: 'My Listing',
           },
         },

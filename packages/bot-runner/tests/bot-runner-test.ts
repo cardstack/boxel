@@ -301,6 +301,7 @@ module('timeline handler', () => {
             type: 'pr-listing-create',
             input: {
               roomId: '!abc123:localhost',
+              listingId: 'http://localhost:4201/test/Listing/1',
               listingName: 'My Listing',
             },
             realm: 'http://localhost:4201/test/',
@@ -445,6 +446,7 @@ module('timeline handler', () => {
             type: 'pr-listing-create',
             input: {
               roomId: '!room-id:localhost',
+              listingId: 'http://localhost:4201/test/Listing/2',
               listingName: 'Dupe Test',
             },
             realm: 'http://localhost:4201/test/',
