@@ -575,6 +575,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         @card={{this.fileDefInstance}}
         @format={{@previewFormat}}
         @setFormat={{@setPreviewFormat}}
+        @viewCard={{this.viewCardInCodeSubmode}}
       />
     {{else if this.isFileDefLoading}}
       <div class='file-loading' data-test-file-preview-loading>

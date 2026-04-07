@@ -312,7 +312,9 @@ export default class Overlays extends Component<OverlaySignature> {
   protected getFormatForCard(
     renderedCard: RenderedCardForOverlayActions,
   ): Format {
-    // Default implementation - prefer stackItem.format if available, otherwise use direct format
+    if (renderedCard.format === 'data') {
+      return 'isolated';
+    }
     return (renderedCard.format || 'isolated') as Format;
   }
 

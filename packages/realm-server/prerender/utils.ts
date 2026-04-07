@@ -1045,7 +1045,14 @@ export async function withTimeout<T>(
   timeoutMs = cardRenderTimeout,
 ): Promise<T | RenderError> {
   let result = await Promise.race([
-    fn(),
+    fn().catch((err) => {
+      // Puppeteer's own TimeoutError (from waitForFunction/waitForSelector)
+      // should be treated the same as our outer timeout
+      if (err instanceof Error && err.name === 'TimeoutError') {
+        return { timeout: true } as { timeout: true };
+      }
+      throw err;
+    }),
     new Promise<{ timeout: true }>((r) =>
       setTimeout(() => {
         r({ timeout: true });

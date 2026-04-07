@@ -3548,7 +3548,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
 
     // assign the realm meta before we compute as computeds may be relying on this
-    if (isCardInstance(instance) && resource.id != null) {
+    if (!isFieldInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
     if (realmURLString && isFieldInstance(instance)) {
