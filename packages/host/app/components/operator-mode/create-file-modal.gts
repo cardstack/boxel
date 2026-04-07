@@ -47,6 +47,7 @@ import {
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
+import { cardIdToURL } from '@cardstack/runtime-common/card-reference-resolver';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
@@ -826,7 +827,12 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, spec?.id);
+    // Use spec.moduleHref which correctly resolves relative module paths
+    // via resolveCardReference (handles @cardstack/catalog/... prefix IDs).
+    // Without this, new URL(relativeModule, prefixId) throws "Invalid base URL".
+    let absoluteModule = spec?.moduleHref
+      ? new URL(spec.moduleHref)
+      : new URL(module);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -929,9 +935,7 @@ export class ${className} extends ${exportName} {
 
     let { ref } = (this.definitionClass ? this.definitionClass : spec)!; // we just checked above to make sure one of these exist
 
-    let relativeTo = spec
-      ? new URL(spec.id!) // only new cards are missing urls
-      : undefined;
+    let relativeTo = spec?.id ? cardIdToURL(spec.id) : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from. The server will make relative URL if appropriate after creation
