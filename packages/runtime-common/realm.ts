@@ -2700,15 +2700,25 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url,
+          ...(fileEntry.resource?.meta?.queryFieldDefs
+            ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
+            : {}),
         },
         links: { self: fileURL },
       },
     };
-    // Sideload linked resources for file types with relationships or
-    // query-based link fields (e.g. MarkdownDef's linkedCards).
+    // Sideload linked resources. Use cacheOnlyDefinitions to avoid triggering
+    // prerenderer calls for definition lookups—this prevents deadlocks when the
+    // file-meta response is served during card prerendering (which holds the
+    // prerender semaphore permit). When cacheOnlyDefinitions is set, loadLinks
+    // uses pre-extracted queryFieldDefs from the resource's meta (populated
+    // during file indexing) to discover query-based relationship fields.
     let included = await this.#realmIndexQueryEngine.loadLinksForResource(
       doc.data,
-      { loadLinks: true },
+      {
+        loadLinks: true,
+        cacheOnlyDefinitions: true,
+      },
     );
     if (included.length > 0) {
       doc.included = included;
