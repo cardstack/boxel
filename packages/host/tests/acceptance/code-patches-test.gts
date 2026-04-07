@@ -689,7 +689,9 @@ ${REPLACE_MARKER}
       },
     );
     // Intentionally not using await here to test the loading state of the button
-    let clickPromise = click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
+    let clickPromise = click(
+      '[data-test-ai-assistant-action-bar] [data-test-accept-all]',
+    );
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
       { timeout: 5000 },
