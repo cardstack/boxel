@@ -689,9 +689,10 @@ ${REPLACE_MARKER}
       },
     );
     // Intentionally not using await here to test the loading state of the button
-    click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
+    let clickPromise = click('[data-test-ai-assistant-action-bar] [data-test-accept-all]');
     await waitFor(
       '[data-test-ai-assistant-action-bar] [data-test-loading-indicator]',
+      { timeout: 5000 },
     );
     await waitUntil(
       () =>
@@ -711,7 +712,7 @@ ${REPLACE_MARKER}
           .querySelector('[data-test-ai-assistant-action-bar]')
           ?.textContent?.includes('Show Card'),
       {
-        timeout: 3000,
+        timeout: 5000,
         timeoutMessage: 'timed out waiting action bar to show Show Card',
       },
     );
@@ -739,6 +740,10 @@ ${REPLACE_MARKER}
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Skill/useful-commands"]`)
       .exists();
+
+    // Ensure the accept-all operation fully settles before navigating to code mode,
+    // avoiding overlapping expensive async operations that can exceed CI timeouts
+    await clickPromise;
 
     await visitOperatorMode({
       submode: 'code',
