@@ -28,11 +28,8 @@
       "@cardstack/host/tests/*": [
         "../host/tests/*"
       ],
-      "@cardstack/catalog/commands/*": [
-        "../catalog-realm/commands/*"
-      ],
       "@cardstack/catalog/*": [
-        "../catalog-realm/catalog-app/*"
+        "../catalog-realm/*"
       ]
     },
     "types": [

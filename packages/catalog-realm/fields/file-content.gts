@@ -5,18 +5,9 @@ import {
   contains,
   containsMany,
   field,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-
-import BotIcon from '@cardstack/boxel-icons/bot';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
-
-import { Listing } from '../catalog-app/listing/listing';
-import { PrCard } from '../pr-card/pr-card';
-
-import { FittedTemplate } from './components/card/fitted-template';
-import { IsolatedTemplate } from './components/card/isolated-template';
 
 export class FileContentField extends FieldDef {
   @field filename = contains(StringField);
@@ -165,24 +156,7 @@ export class FileContentField extends FieldDef {
   };
 }
 
-export class SubmissionCard extends CardDef {
-  static displayName = 'SubmissionCard';
-  static icon = BotIcon;
-
-  static fitted = FittedTemplate;
-  static isolated = IsolatedTemplate;
-
-  @field cardTitle = contains(StringField, {
-    computeVia: function (this: SubmissionCard) {
-      return (
-        this.listing?.name ?? this.listing?.cardTitle ?? 'Untitled Submission'
-      );
-    },
-  });
-  @field roomId = contains(StringField);
-  @field branchName = contains(StringField);
-  @field prCard = linksTo(() => PrCard);
-  @field listing = linksTo(() => Listing);
+export class FileCollectionResult extends CardDef {
+  static displayName = 'File Collection Result';
   @field allFileContents = containsMany(FileContentField);
 }
-

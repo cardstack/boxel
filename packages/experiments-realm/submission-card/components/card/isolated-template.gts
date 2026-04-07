@@ -19,7 +19,7 @@ import {
   buildLatestReviewByReviewer,
   computeLatestReviewState,
   searchEventQuery,
-} from '../../../pr-card/utils';
+} from '@cardstack/catalog/pr-card/utils';
 import type { SubmissionCard } from '../../submission-card';
 
 export class IsolatedTemplate extends Component<typeof SubmissionCard> {
@@ -47,10 +47,6 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
     return this.args.model.roomId;
   }
 
-  get prNumber() {
-    return this.args.model.prCard?.prNumber;
-  }
-
   get listingImage() {
     return this.args.model.listing?.images?.[0];
   }
@@ -76,11 +72,11 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
   }
 
   get prReviewEventQuery(): Query | undefined {
-    const prNumber = this.args.model.prCard?.prNumber;
-    if (!prNumber) return undefined;
+    const branchName = this.args.model.prCard?.branchName;
+    if (!branchName) return undefined;
     return searchEventQuery(
       this.githubEventCardRef,
-      prNumber,
+      branchName,
       'pull_request_review',
     );
   }
@@ -172,11 +168,7 @@ export class IsolatedTemplate extends Component<typeof SubmissionCard> {
                 {{on 'click' this.openPrCard}}
               >
                 <GitPullRequestIcon width='14' height='14' />
-                {{#if this.prNumber}}
-                  View PR #{{this.prNumber}}
-                {{else}}
-                  View PR
-                {{/if}}
+                View PR
               </BoxelButton>
             {{/if}}
           </div>

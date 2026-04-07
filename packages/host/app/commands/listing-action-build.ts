@@ -16,7 +16,7 @@ import UpdateRoomSkillsCommand from './update-room-skills';
 
 import type StoreService from '../services/store';
 
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingActionBuildCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingBuildInput

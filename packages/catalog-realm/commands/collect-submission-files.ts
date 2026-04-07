@@ -7,7 +7,6 @@ import {
   logger,
   planInstanceInstall,
   planModuleInstall,
-  toBranchName,
   type ListingPathResolver,
   type LooseSingleCardDocument,
   type Relationship,
@@ -19,72 +18,89 @@ import {
   CardDef,
   field,
   contains,
-  type CardDefConstructor,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import GetCardCommand from '@cardstack/boxel-host/commands/get-card';
 import ReadSourceCommand from '@cardstack/boxel-host/commands/read-source';
-import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import SerializeCardCommand from '@cardstack/boxel-host/commands/serialize-card';
 
 import type { Listing } from '../catalog-app/listing/listing';
 import {
   FileContentField,
-  SubmissionCard,
-} from '../submission-card/submission-card';
+  FileCollectionResult,
+} from '../fields/file-content';
 
-const log = logger('commands:create-submission');
+const log = logger('commands:collect-submission-files');
 
 interface FileWithContent {
   path: string;
   content: string;
 }
 
-class CreateSubmissionInput extends CardDef {
-  @field roomId = contains(StringField);
-  @field realm = contains(StringField);
+class CollectSubmissionFilesInput extends CardDef {
   @field listingId = contains(StringField);
+  @field listingRealm = contains(StringField);
 }
 
-export default class CreateSubmissionCommand extends Command<
-  typeof CreateSubmissionInput,
-  CardDefConstructor
+export default class CollectSubmissionFilesCommand extends Command<
+  typeof CollectSubmissionFilesInput,
+  typeof FileCollectionResult
 > {
-  description = 'Prepare submission data for a catalog listing';
+  description = 'Collect submission files from a catalog listing';
 
-  requireInputFields = ['roomId', 'realm', 'listingId'];
+  requireInputFields = ['listingId', 'listingRealm'];
 
   async getInputType() {
-    return CreateSubmissionInput;
+    return CollectSubmissionFilesInput;
   }
 
-  protected async run(input: CreateSubmissionInput): Promise<CardDef> {
-    let { listingId, realm, roomId } = input;
-    let realmUrl = new RealmPaths(new URL(realm)).url;
-    let getCardCommand = new GetCardCommand(this.commandContext);
-    let saveCardCommand = new SaveCardCommand(this.commandContext);
+  protected async run(
+    input: CollectSubmissionFilesInput,
+  ): Promise<FileCollectionResult> {
+    let { listingId, listingRealm } = input;
 
-    if (!listingId) {
-      throw new Error('Missing listingId for CreateSubmission');
+    if (!listingId || !listingRealm) {
+      throw new Error('Missing listingId or listingRealm');
     }
 
-    // Listing type is from catalog; base command cannot express that type
+    let files = await this.collectFiles(listingId, listingRealm);
+    log.debug(`Collected ${files.length} files for submission`);
+
+    return new FileCollectionResult({
+      allFileContents: files.map(
+        (file) =>
+          new FileContentField({
+            filename: file.path,
+            contents: file.content,
+          }),
+      ),
+    });
+  }
+
+  private async collectFiles(
+    listingId: string,
+    listingRealm: string,
+  ): Promise<FileWithContent[]> {
+    let realmUrl = new RealmPaths(new URL(listingRealm)).url;
+    let getCardCommand = new GetCardCommand(this.commandContext);
+    let readSourceCommand = new ReadSourceCommand(this.commandContext);
+
     const listing = (await getCardCommand.execute({
       cardId: listingId,
     })) as Listing;
+
     if (!listing) {
-      throw new Error(`Listing not found: ${listingId}`);
+      throw new Error(
+        `Listing not found: ${listingId}. Cannot collect submission files for a non-existent listing.`,
+      );
     }
 
-    // Expand examples to include related instances
     let examplesToSnapshot = listing.examples;
     if (listing.examples?.length) {
       examplesToSnapshot = await this.expandInstances(listing.examples);
     }
 
-    // Build the file plan from the listing
     const builder = new PlanBuilder(realmUrl, listing);
-
     builder
       .addIf(listing.specs?.length > 0, (resolver: ListingPathResolver) =>
         planModuleInstall(listing.specs ?? [], resolver),
@@ -100,47 +116,6 @@ export default class CreateSubmissionCommand extends Command<
       );
 
     const plan = builder.build();
-
-    let filesWithContent = await this.collectAndFetchFiles(
-      listing,
-      plan,
-      realmUrl,
-    );
-
-    log.debug(`Prepared submission with ${filesWithContent.length} files`);
-
-    if (!listing.name) {
-      throw new Error('Missing listing.name for CreateSubmission');
-    }
-    let branchName = toBranchName(roomId, listing.name);
-
-    let submission = new SubmissionCard({
-      listing,
-      roomId,
-      branchName,
-      allFileContents: filesWithContent.map(
-        (file) =>
-          new FileContentField({
-            filename: file.path,
-            contents: file.content,
-          }),
-      ),
-    });
-
-    await saveCardCommand.execute({
-      card: submission,
-      realm: realmUrl,
-    });
-
-    return submission;
-  }
-
-  private async collectAndFetchFiles(
-    listing: Listing,
-    plan: ReturnType<PlanBuilder['build']>,
-    realmUrl: string,
-  ): Promise<FileWithContent[]> {
-    let readSourceCommand = new ReadSourceCommand(this.commandContext);
 
     const toRepoRelativePath = (fullUrl: string, extension: string): string => {
       let path = fullUrl;
@@ -164,7 +139,6 @@ export default class CreateSubmissionCommand extends Command<
     const filesWithContent: FileWithContent[] = [];
     const seenPaths = new Set<string>();
 
-    // Add the listing instance JSON
     if (listing.id) {
       const path = toRepoRelativePath(listing.id, '.json');
       if (!seenPaths.has(path)) {
@@ -176,7 +150,6 @@ export default class CreateSubmissionCommand extends Command<
       }
     }
 
-    // Add module files (.gts)
     for (const moduleMeta of plan.modulesToInstall as CopyModuleMeta[]) {
       if (!moduleMeta?.sourceModule) {
         log.warn('Skipping module with missing sourceModule', moduleMeta);
@@ -192,7 +165,6 @@ export default class CreateSubmissionCommand extends Command<
       }
     }
 
-    // Add instance files (.json)
     for (const copyMeta of plan.instancesCopy as CopyInstanceMeta[]) {
       if (!copyMeta?.sourceCard?.id) {
         log.warn('Skipping instance with missing sourceCard', copyMeta);
@@ -212,7 +184,6 @@ export default class CreateSubmissionCommand extends Command<
     return filesWithContent;
   }
 
-  // Walk relationships by fetching linked cards and enqueueing their ids.
   private async expandInstances(instances: CardDef[]): Promise<CardDef[]> {
     let getCardCommand = new GetCardCommand(this.commandContext);
     let serializeCardCommand = new SerializeCardCommand(this.commandContext);
