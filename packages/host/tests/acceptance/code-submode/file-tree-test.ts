@@ -637,10 +637,11 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     if (!fileElement) {
       assert.ok(fileElement, 'file element should exist');
     } else {
-      assert.ok(
-        await elementIsVisible(fileElement),
-        'expected open file to be scrolled into view',
-      );
+      await waitUntil(async () => await elementIsVisible(fileElement), {
+        timeout: 2000,
+        timeoutMessage: 'expected open file to be scrolled into view',
+      });
+      assert.ok(true, 'expected open file to be scrolled into view');
     }
 
     await click('[data-test-directory="zzz/"]');
