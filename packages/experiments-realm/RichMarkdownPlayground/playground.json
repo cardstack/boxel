@@ -1,0 +1,30 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "RichMarkdownPlayground",
+        "module": "../rich-markdown-playground"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "name": "Rich Markdown Playground",
+        "summary": "Exercise the RichMarkdownField with its ProseMirror WYSIWYG editor.",
+        "cardThumbnailURL": null
+      },
+      "title": "Rich Markdown Playground",
+      "body": {
+        "content": "# Welcome to the Rich Markdown Playground\n\nThis card uses `RichMarkdownField` which provides a **ProseMirror WYSIWYG editor** in edit mode.\n\n## Features to Try\n\n### Inline Formatting\n\nYou can write **bold text**, *italic text*, and `inline code`.\n\n### Lists\n\n- Bullet list item one\n- Bullet list item two\n- Bullet list item three\n\n1. Ordered list first\n2. Ordered list second\n3. Ordered list third\n\n### Code Block\n\n```typescript\nimport { RichMarkdownField } from 'https://cardstack.com/base/rich-markdown';\n\nclass MyCard extends CardDef {\n  @field body = contains(RichMarkdownField);\n}\n```\n\n### Blockquote\n\n> The ProseMirror editor supports keyboard shortcuts like **Cmd+B** for bold, **Cmd+I** for italic, and **Cmd+Z** for undo.\n\n---\n\n### Card References\n\nInline card atom: :card[./Author/jane-doe]\n\nBlock card:\n\n::card[./Author/jane-doe]\n\nSwitch to **Edit** mode to try the WYSIWYG editor!"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
