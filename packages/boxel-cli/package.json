@@ -1,0 +1,45 @@
+{
+  "name": "@cardstack/boxel-cli",
+  "version": "0.0.1",
+  "private": true,
+  "description": "CLI tools for Boxel workspace management",
+  "bin": {
+    "boxel": "./bin/boxel.js"
+  },
+  "scripts": {
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/index.ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
+    "lint:types": "ember-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@aws-crypto/sha256-js": "catalog:",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "ignore": "catalog:"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "concurrently": "catalog:",
+    "eslint": "catalog:",
+    "eslint-plugin-n": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "prettier": "catalog:",
+    "ts-node": "^10.9.2",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">= 18"
+  }
+}
