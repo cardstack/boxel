@@ -456,10 +456,41 @@ export async function executeTestRunFromRealm(
     browser = await chromium.launch({ headless: true });
     let page = await browser.newPage();
 
-    // Pass liveTest and realmURL as query params directly so test-helper.js
-    // sees them when it checks window.location.search at load time.
+    // Forward browser console for diagnostics
+    page.on('console', (msg) => {
+      let text = msg.text();
+      if (
+        text.includes('[live-test]') ||
+        text.includes('[sf-qunit]') ||
+        text.includes('runTests') ||
+        text.includes('Error') ||
+        msg.type() === 'error'
+      ) {
+        console.error(`[browser] ${msg.type()}: ${text}`);
+      }
+    });
+    page.on('pageerror', (err) => {
+      console.error(`[browser] PAGE ERROR: ${err.message}`);
+    });
+
+    // Intercept requests to the target realm and inject the Authorization
+    // header. live-test.js fetches _mtimes and modules without auth, but
+    // private realms require it. Using page.route() injects auth at the
+    // network level before any page scripts run.
     let realmParam = encodeURIComponent(options.targetRealmUrl);
     let pageUrl = `${testPageUrl}?liveTest=true&realmURL=${realmParam}&hidepassed`;
+
+    if (options.authorization) {
+      let realmOrigin = new URL(options.targetRealmUrl).origin;
+      await page.route(`${realmOrigin}/**`, (route) => {
+        let headers = {
+          ...route.request().headers(),
+          Authorization: options.authorization!,
+        };
+        route.continue({ headers });
+      });
+    }
+
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
 
     // Wait for QUnit to finish (results collected via inline script hooks)
