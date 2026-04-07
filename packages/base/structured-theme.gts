@@ -23,6 +23,7 @@ import {
   CSSField,
   Theme,
   StringField,
+  getFields,
   type BaseDefComponent,
 } from './card-api';
 import ThemeVarField, {
@@ -33,12 +34,19 @@ import {
   NavSection,
   ThemeVisualizer,
   CssFieldEditor,
+  CardContainerCss,
   ResetButton,
   SimpleNavBar,
   type SectionSignature,
 } from './default-templates/theme-dashboard';
 
 export const GUIDE_SECTIONS = [
+  {
+    id: 'card-container-css',
+    navTitle: 'Card Container',
+    title: 'Card Container CSS',
+    fieldName: null,
+  },
   {
     id: 'import-css',
     navTitle: 'Import CSS',
@@ -88,6 +96,21 @@ const resetCssVariables = (field: ThemeVarField | undefined) => {
       continue;
     }
     (field as any)[fieldName] = null;
+  }
+};
+
+const resetTypographyVariables = (
+  typography: ThemeTypographyField | undefined,
+) => {
+  if (!typography) return;
+  let fields = getFields(typography);
+  if (!fields) return;
+  for (let fieldName of Object.keys(fields)) {
+    let subField = (typography as any)[fieldName];
+    if (!subField?.fieldEntries) continue;
+    for (let { name } of subField.fieldEntries) {
+      if (name && name !== 'sampleText') (subField as any)[name] = null;
+    }
   }
 };
 
@@ -164,7 +187,13 @@ class Isolated extends Component<typeof StructuredTheme> {
               @title={{if section.title section.title section.navTitle}}
               @hideSectionCounter={{true}}
             >
-              {{#if (eq section.id 'import-css')}}
+              {{#if (eq section.id 'card-container-css')}}
+                {{#if @model.cssVariables}}
+                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                {{else}}
+                  <p><em>No theme variables added</em></p>
+                {{/if}}
+              {{else if (eq section.id 'import-css')}}
                 <CssFieldEditor @setCss={{@model.setCss}} />
               {{else if section.fieldName}}
                 {{#let (get @fields section.fieldName) as |FieldContent|}}
@@ -276,6 +305,7 @@ export default class StructuredTheme extends Theme {
   resetCss = () => {
     resetCssVariables(this.rootVariables);
     resetCssVariables(this.darkModeVariables);
+    resetTypographyVariables(this.typography);
   };
 
   static isolated: BaseDefComponent = Isolated;
