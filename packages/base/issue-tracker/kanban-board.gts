@@ -7,10 +7,10 @@ import {
   field,
   contains,
   containsMany,
+  linksTo,
   linksToMany,
 } from '../card-api';
 import StringField from '../string';
-import NumberField from '../number';
 import { tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
 import { get } from '@ember/helper';
@@ -21,6 +21,7 @@ import { KanbanColumnField } from './kanban-column';
 import { KanbanPlane } from './kanban-plane';
 import { KanbanDragManager } from './kanban-drag';
 import { type KanbanPlacement, autoPlaceKanban } from './kanban-engine';
+import { Project, Issue } from './issue';
 
 // Chromeless modifier
 class Chromeless extends Modifier {
@@ -54,233 +55,241 @@ function placementsToKanban(fields: GridPlacementField[]): KanbanPlacement[] {
   }));
 }
 
-// ── KanbanCard ───────────────────────────────────────────────────────── //
+class Isolated extends Component<typeof KanbanBoard> {
+  @tracked selectedCardIndex: number | null = null;
+  dragManager: KanbanDragManager | null = null;
 
-export class KanbanCard extends CardDef {
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.initManager();
+  }
+
+  initManager(): void {
+    // ²⁰
+    this.dragManager = new KanbanDragManager({
+      placements: () => this.kanbanPlacements,
+      columnCount: () => this.args.model?.columns?.length ?? 4,
+      containerElement: () => null,
+      onChange: (newPlacements) => this.commitPlacements(newPlacements),
+      onSelect: (index) => {
+        this.selectedCardIndex = index;
+      },
+    });
+  }
+
+  get kanbanPlacements(): KanbanPlacement[] {
+    const fields = this.args.model?.placements;
+    if (!fields || fields.length === 0) {
+      const cardCount = this.args.model?.cards?.length ?? 0;
+      const colCount = this.args.model?.columns?.length ?? 4;
+      if (cardCount > 0) return autoPlaceKanban(cardCount, colCount);
+      return [];
+    }
+    return placementsToKanban(fields);
+  }
+
+  get manager(): KanbanDragManager {
+    // ²²
+    if (!this.dragManager) this.initManager();
+    return this.dragManager!;
+  }
+
+  get kanbanColumns(): KanbanColumnField[] {
+    return this.args.model?.columns ?? [];
+  }
+
+  get cardCount(): number {
+    return this.args.model?.cards?.length ?? 0;
+  }
+
+  // ── Persistence ──────────────────────────────────────────────────
+
+  commitPlacements = (newPlacements: KanbanPlacement[]): void => {
+    try {
+      const model = this.args.model;
+      if (!model) return;
+      const existingFields = model.placements as
+        | GridPlacementField[]
+        | undefined;
+
+      if (existingFields && existingFields.length > 0) {
+        for (const np of newPlacements) {
+          const existing = existingFields.find(
+            (f: GridPlacementField) => f.index === np.index,
+          );
+          if (existing) {
+            existing.col = np.column; // col = kanban column
+            existing.row = np.sortOrder; // row = sort position
+          }
+        }
+      } else {
+        const fields = newPlacements.map((p) => {
+          const f = new GridPlacementField();
+          f.index = p.index;
+          f.col = p.column;
+          f.row = p.sortOrder;
+          return f;
+        });
+        model.placements = fields;
+      }
+    } catch (e) {
+      console.error('Kanban: Failed to save placements', e);
+    }
+  };
+
+  // ── Template ─────────────────────────────────────────────────────
+
+  <template>
+    <div class='kanban-surface'>
+      <header class='kanban-toolbar'>
+        <div class='toolbar-left'>
+          <h2 class='kanban-title'>
+            <svg
+              width='18'
+              height='18'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              stroke-width='2'
+            >
+              <rect x='3' y='3' width='5' height='18' rx='1' />
+              <rect x='10' y='3' width='5' height='12' rx='1' />
+              <rect x='17' y='3' width='5' height='15' rx='1' />
+            </svg>
+            <@fields.cardTitle />
+          </h2>
+          <span class='card-count'>{{this.cardCount}} cards</span>
+        </div>
+      </header>
+
+      <div class='kanban-body'>
+        <KanbanPlane
+          @columns={{this.kanbanColumns}}
+          @placements={{this.kanbanPlacements}}
+          @manager={{this.manager}}
+          @interactive={{true}}
+        >
+          <:card as |placement|>
+            {{#let (get @fields.cards placement.index) as |CardField|}}
+              {{#if CardField}}
+                <div class='kanban-card-wrap' {{Chromeless}}>
+                  <CardField @format='fitted' />
+                </div>
+              {{else}}
+                <div class='card-placeholder'>Card {{placement.index}}</div>
+              {{/if}}
+            {{/let}}
+          </:card>
+          <:ghost as |dragIdx|>
+            {{#let (get @fields.cards dragIdx) as |CardField|}}
+              {{#if CardField}}
+                <div class='ghost-wrap' {{Chromeless}}>
+                  <CardField @format='fitted' />
+                </div>
+              {{/if}}
+            {{/let}}
+          </:ghost>
+        </KanbanPlane>
+      </div>
+    </div>
+
+    <style scoped>
+      .kanban-surface {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 100%;
+        background: #eceef1;
+        color: #1e293b;
+      }
+      .kanban-toolbar {
+        display: flex;
+        align-items: center;
+        padding: 10px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #fff;
+        flex-shrink: 0;
+      }
+      .toolbar-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .kanban-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      .card-count {
+        font-size: 12px;
+        color: #94a3b8;
+        padding: 2px 8px;
+        background: #f1f5f9;
+        border-radius: 4px;
+      }
+      .kanban-body {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .kanban-card-wrap {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: inherit;
+      }
+      .ghost-wrap {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: inherit;
+      }
+      .card-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        font-size: 12px;
+        color: #94a3b8;
+      }
+    </style>
+  </template>
+}
+
+// ── KanbanBoard ───────────────────────────────────────────────────────── //
+
+export class KanbanBoard extends CardDef {
   static displayName = 'Kanban Board';
   static icon = KanbanIcon;
   static prefersWideFormat = true;
 
   @field title = contains(StringField);
-  @field cards = linksToMany(CardDef);
+  @field project = linksTo(() => Project);
+  @field cards = linksToMany(Issue, {
+    computeVia: function (this: KanbanBoard) {
+      return this.project?.issues ?? [];
+    },
+  });
   @field columns = containsMany(KanbanColumnField);
   @field placements = containsMany(GridPlacementField); // reuse: col=column, row=sortOrder
 
   @field cardTitle = contains(StringField, {
-    computeVia: function (this: KanbanCard) {
+    computeVia: function (this: KanbanBoard) {
       return this.cardInfo?.name ?? this.title ?? 'Untitled Kanban';
     },
   });
 
   // ── Isolated ───────────────────────────────────────────────────────
 
-  static isolated = class Isolated extends Component<typeof KanbanCard> {
-    @tracked selectedCardIndex: number | null = null;
-    dragManager: KanbanDragManager | null = null;
-
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      this.initManager();
-    }
-
-    initManager(): void {
-      // ²⁰
-      this.dragManager = new KanbanDragManager({
-        placements: () => this.kanbanPlacements,
-        columnCount: () => this.args.model?.columns?.length ?? 4,
-        containerElement: () => null,
-        onChange: (newPlacements) => this.commitPlacements(newPlacements),
-        onSelect: (index) => {
-          this.selectedCardIndex = index;
-        },
-      });
-    }
-
-    get kanbanPlacements(): KanbanPlacement[] {
-      const fields = this.args.model?.placements;
-      if (!fields || fields.length === 0) {
-        const cardCount = this.args.model?.cards?.length ?? 0;
-        const colCount = this.args.model?.columns?.length ?? 4;
-        if (cardCount > 0) return autoPlaceKanban(cardCount, colCount);
-        return [];
-      }
-      return placementsToKanban(fields);
-    }
-
-    get manager(): KanbanDragManager {
-      // ²²
-      if (!this.dragManager) this.initManager();
-      return this.dragManager!;
-    }
-
-    get kanbanColumns(): KanbanColumnField[] {
-      return this.args.model?.columns ?? [];
-    }
-
-    get cardCount(): number {
-      return this.args.model?.cards?.length ?? 0;
-    }
-
-    // ── Persistence ──────────────────────────────────────────────────
-
-    // commitPlacements = (newPlacements: KanbanPlacement[]): void => { // ²³
-    //   try {
-    //     const model = this.args.model;
-    //     if (!model) return;
-    //     const existingFields = model.placements as GridPlacementField[] | undefined;
-
-    //     if (existingFields && existingFields.length > 0) {
-    //       for (const np of newPlacements) {
-    //         const existing = existingFields.find((f: GridPlacementField) => f.index === np.index);
-    //         if (existing) {
-    //           existing.col = np.column;   // col = kanban column
-    //           existing.row = np.sortOrder; // row = sort position
-    //         }
-    //       }
-    //     } else {
-    //       const fields = newPlacements.map(p => {
-    //         const f = new GridPlacementField();
-    //         f.index = p.index;
-    //         f.col = p.column;
-    //         f.row = p.sortOrder;
-    //         f.colSpan = 1;
-    //         f.rowSpan = 1;
-    //         f.format = 'fitted';
-    //         return f;
-    //       });
-    //       model.placements = fields;
-    //     }
-    //   } catch (e) {
-    //     console.error('Kanban: Failed to save placements', e);
-    //   }
-    // };
-
-    // ── Template ─────────────────────────────────────────────────────
-
-    <template>
-      <div class='kanban-surface'>
-        <header class='kanban-toolbar'>
-          <div class='toolbar-left'>
-            <h2 class='kanban-title'>
-              <svg
-                width='18'
-                height='18'
-                viewBox='0 0 24 24'
-                fill='none'
-                stroke='currentColor'
-                stroke-width='2'
-              >
-                <rect x='3' y='3' width='5' height='18' rx='1' />
-                <rect x='10' y='3' width='5' height='12' rx='1' />
-                <rect x='17' y='3' width='5' height='15' rx='1' />
-              </svg>
-              <@fields.cardTitle />
-            </h2>
-            <span class='card-count'>{{this.cardCount}} cards</span>
-          </div>
-        </header>
-
-        <div class='kanban-body'>
-          <KanbanPlane
-            @columns={{this.kanbanColumns}}
-            @placements={{this.kanbanPlacements}}
-            @manager={{this.manager}}
-            @interactive={{true}}
-          >
-            <:card as |placement|>
-              {{#let (get @fields.cards placement.index) as |CardField|}}
-                {{#if CardField}}
-                  <div class='kanban-card-wrap' {{Chromeless}}>
-                    <CardField @format='fitted' />
-                  </div>
-                {{else}}
-                  <div class='card-placeholder'>Card {{placement.index}}</div>
-                {{/if}}
-              {{/let}}
-            </:card>
-            <:ghost as |dragIdx|>
-              {{#let (get @fields.cards dragIdx) as |CardField|}}
-                {{#if CardField}}
-                  <div class='ghost-wrap' {{Chromeless}}>
-                    <CardField @format='fitted' />
-                  </div>
-                {{/if}}
-              {{/let}}
-            </:ghost>
-          </KanbanPlane>
-        </div>
-      </div>
-
-      <style scoped>
-        .kanban-surface {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          min-height: 100%;
-          background: #eceef1;
-          color: #1e293b;
-        }
-        .kanban-toolbar {
-          display: flex;
-          align-items: center;
-          padding: 10px 16px;
-          border-bottom: 1px solid #e2e8f0;
-          background: #fff;
-          flex-shrink: 0;
-        }
-        .toolbar-left {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-        .kanban-title {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          font-size: 14px;
-          font-weight: 600;
-          margin: 0;
-          letter-spacing: -0.01em;
-        }
-        .card-count {
-          font-size: 12px;
-          color: #94a3b8;
-          padding: 2px 8px;
-          background: #f1f5f9;
-          border-radius: 4px;
-        }
-        .kanban-body {
-          flex: 1;
-          min-height: 0;
-          overflow: hidden;
-        }
-        .kanban-card-wrap {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          border-radius: inherit;
-        }
-        .ghost-wrap {
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          border-radius: inherit;
-        }
-        .card-placeholder {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          font-size: 12px;
-          color: #94a3b8;
-        }
-      </style>
-    </template>
-  };
+  static isolated = Isolated;
 
   // ── Fitted ─────────────────────────────────────────────────────────
 
-  static fitted = class Fitted extends Component<typeof KanbanCard> {
+  static fitted = class Fitted extends Component<typeof KanbanBoard> {
     // ²⁶
     get colCount(): number {
       return this.args.model?.columns?.length ?? 0;
@@ -383,7 +392,7 @@ export class KanbanCard extends CardDef {
 
   // ── Embedded ───────────────────────────────────────────────────────
 
-  static embedded = class Embedded extends Component<typeof KanbanCard> {
+  static embedded = class Embedded extends Component<typeof KanbanBoard> {
     get cardCount(): number {
       return this.args.model?.cards?.length ?? 0;
     }

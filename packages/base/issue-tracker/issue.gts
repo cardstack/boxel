@@ -3,18 +3,13 @@ import {
   Component,
   field,
   contains,
-  linksTo,
+  // linksTo,
   linksToMany,
 } from '../card-api';
 import enumField from '../enum';
 import StringField from '../string';
 import DateField from '../date';
-import DateTimeField from '../datetime';
 import MarkdownField from '../markdown';
-import NumberField from '../number';
-
-import { AgentProfile } from './agent-profile';
-import { KnowledgeArticle } from './knowledge-article';
 
 import { Pill } from '@cardstack/boxel-ui/components';
 
@@ -83,16 +78,8 @@ export class Issue extends CardDef {
     enumField(StringField, { options: issueStatusOptions }),
   );
   @field priority = contains(IssuePriorityField);
-  @field project = linksTo(() => Project);
-  @field assignedAgent = linksTo(() => AgentProfile);
   @field relatedTickets = linksToMany(() => Issue);
-  @field relatedKnowledge = linksToMany(() => KnowledgeArticle);
-  @field acceptanceCriteria = contains(MarkdownField);
-  @field agentNotes = contains(MarkdownField);
-  @field estimatedHours = contains(NumberField);
-  @field actualHours = contains(NumberField);
-  @field createdAt = contains(DateTimeField);
-  @field updatedAt = contains(DateTimeField);
+  // @field project = linksTo(() => Project);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Issue) {
@@ -166,35 +153,15 @@ export class Issue extends CardDef {
             <@fields.project />
           </section>
         {{/if}}
-        {{#if @model.description}}
-          <section>
-            <h2>Description</h2>
-            <@fields.description />
-          </section>
-        {{/if}}
-        {{#if @model.acceptanceCriteria}}
-          <section>
-            <h2>Acceptance Criteria</h2>
-            <@fields.acceptanceCriteria />
-          </section>
-        {{/if}}
-        {{#if @model.agentNotes}}
-          <section>
-            <h2>Agent Notes</h2>
-            <@fields.agentNotes />
-          </section>
-        {{/if}}
-        {{#if @model.relatedKnowledge.length}}
-          <section>
-            <h2>Related Knowledge</h2>
-            <@fields.relatedKnowledge />
-          </section>
-        {{/if}}
+        <section>
+          <h2>Description</h2>
+          <@fields.description />
+        </section>
         {{#if @model.relatedTickets.length}}
-          <section>
+          <aside>
             <h2>Related Tickets</h2>
             <@fields.relatedTickets />
-          </section>
+          </aside>
         {{/if}}
       </article>
       <style scoped>
@@ -217,15 +184,13 @@ export class Project extends CardDef {
   static displayName = 'Project';
   static prefersWideFormat = true;
 
-  @field title = contains(StringField);
   @field projectCode = contains(StringField);
   @field projectStatus = contains(
     enumField(StringField, { options: projectStatusOptions }),
   );
-  @field deadline = contains(DateField);
-  @field objective = contains(MarkdownField);
-  @field scope = contains(MarkdownField);
-  @field technicalContext = contains(MarkdownField);
+  @field title = contains(StringField);
+  @field description = contains(MarkdownField);
+  @field dueDate = contains(DateField);
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -237,12 +202,6 @@ export class Project extends CardDef {
       },
     },
   });
-  @field knowledgeBase = linksToMany(() => KnowledgeArticle);
-  @field teamAgents = linksToMany(() => AgentProfile);
-  @field successCriteria = contains(MarkdownField);
-  @field risks = contains(MarkdownField);
-  @field testArtifactsRealmUrl = contains(StringField);
-  @field createdAt = contains(DateTimeField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Project) {
@@ -313,46 +272,14 @@ export class Project extends CardDef {
           </div>
           <h1><@fields.cardTitle /></h1>
         </header>
-        {{#if @model.objective}}
-          <section>
-            <h2>Objective</h2>
-            <@fields.objective />
-          </section>
-        {{/if}}
-        {{#if @model.scope}}
-          <section>
-            <h2>Scope</h2>
-            <@fields.scope />
-          </section>
-        {{/if}}
-        {{#if @model.technicalContext}}
-          <section>
-            <h2>Technical Context</h2>
-            <@fields.technicalContext />
-          </section>
-        {{/if}}
-        {{#if @model.successCriteria}}
-          <section>
-            <h2>Success Criteria</h2>
-            <@fields.successCriteria />
-          </section>
-        {{/if}}
-        {{#if @model.risks}}
-          <section>
-            <h2>Risks</h2>
-            <@fields.risks />
-          </section>
-        {{/if}}
+        <section>
+          <h2>Description</h2>
+          <@fields.description />
+        </section>
         {{#if @model.issues.length}}
           <section>
-            <h2>Tickets</h2>
+            <h2>Issues</h2>
             <@fields.issues />
-          </section>
-        {{/if}}
-        {{#if @model.knowledgeBase.length}}
-          <section>
-            <h2>Knowledge Base</h2>
-            <@fields.knowledgeBase />
           </section>
         {{/if}}
       </article>
