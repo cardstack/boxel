@@ -16,7 +16,7 @@ let log = logger('factory-entrypoint');
 async function main(): Promise<void> {
   try {
     if (wantsFactoryEntrypointHelp(process.argv.slice(2))) {
-      log.info(getFactoryEntrypointUsage());
+      console.log(getFactoryEntrypointUsage());
       return;
     }
 

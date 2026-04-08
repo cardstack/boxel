@@ -522,8 +522,8 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     writeSkill(tempDir, 'exists', '# Exists');
 
     let warnings: string[] = [];
-    let originalError = console.error;
-    console.error = (...args: unknown[]) => {
+    let originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
       warnings.push(args.map(String).join(' '));
     };
 
@@ -538,7 +538,7 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
         'logged a warning for missing skill',
       );
     } finally {
-      console.error = originalError;
+      console.warn = originalWarn;
     }
   });
 
@@ -846,8 +846,8 @@ module('factory-skill-loader > enforceSkillBudget', function () {
 
   test('drops low-priority skills when over budget', function (assert) {
     let warnings: string[] = [];
-    let originalError = console.error;
-    console.error = (...args: unknown[]) => {
+    let originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
       warnings.push(args.map(String).join(' '));
     };
 
@@ -877,13 +877,13 @@ module('factory-skill-loader > enforceSkillBudget', function () {
         'logged warning about dropped skill',
       );
     } finally {
-      console.error = originalError;
+      console.warn = originalWarn;
     }
   });
 
   test('sorts skills by priority before applying budget', function (assert) {
-    let originalError = console.error;
-    console.error = () => {}; // suppress warnings
+    let originalWarn = console.warn;
+    console.warn = () => {}; // suppress warnings
 
     try {
       let skills: ResolvedSkill[] = [
@@ -908,13 +908,13 @@ module('factory-skill-loader > enforceSkillBudget', function () {
         'second priority second',
       );
     } finally {
-      console.error = originalError;
+      console.warn = originalWarn;
     }
   });
 
   test('unknown skills get lowest priority', function (assert) {
-    let originalError = console.error;
-    console.error = () => {};
+    let originalWarn = console.warn;
+    console.warn = () => {};
 
     try {
       let skills: ResolvedSkill[] = [
@@ -931,7 +931,7 @@ module('factory-skill-loader > enforceSkillBudget', function () {
         'known skill kept over unknown',
       );
     } finally {
-      console.error = originalError;
+      console.warn = originalWarn;
     }
   });
 });
