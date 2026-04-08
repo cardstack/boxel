@@ -14,17 +14,11 @@ const tests = Object.freeze({
   },
 
   'cardTypeName strips .json extension before extracting': async (assert) => {
-    assert.strictEqual(
-      cardTypeName('./BlogPost/some-id.json'),
-      'BlogPost',
-    );
+    assert.strictEqual(cardTypeName('./BlogPost/some-id.json'), 'BlogPost');
   },
 
   'cardTypeName strips trailing slash': async (assert) => {
-    assert.strictEqual(
-      cardTypeName('https://example.com/Pet/mango/'),
-      'Pet',
-    );
+    assert.strictEqual(cardTypeName('https://example.com/Pet/mango/'), 'Pet');
   },
 
   'cardTypeName returns single segment as type name': async (assert) => {
