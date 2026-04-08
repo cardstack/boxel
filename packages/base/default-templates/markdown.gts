@@ -36,11 +36,14 @@ function wrapTablesHtml(html: string | null | undefined): string {
   return doc.body.innerHTML;
 }
 
+type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
+
 interface CardSlot {
   element: HTMLElement;
   card: CardDef;
-  format: 'atom' | 'embedded';
+  format: CardSlotFormat;
   kind: 'inline' | 'block';
+  style?: ReturnType<typeof htmlSafe>;
 }
 
 function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
@@ -196,11 +199,36 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             if (el.firstChild?.nodeType === Node.TEXT_NODE) {
               el.firstChild.remove();
             }
+
+            let bfmFormat = el.dataset.boxelBfmFormat;
+            let format: CardSlotFormat =
+              bfmFormat === 'fitted' || bfmFormat === 'isolated'
+                ? bfmFormat
+                : 'embedded';
+
+            let style: ReturnType<typeof htmlSafe> | undefined;
+            if (format === 'fitted') {
+              let w = el.dataset.boxelBfmWidth;
+              let h = el.dataset.boxelBfmHeight;
+              let parts: string[] = [];
+              if (w && /^\d+%$/.test(w)) {
+                parts.push(`width: ${w}`);
+              } else if (w && /^\d+$/.test(w)) {
+                parts.push(`width: ${w}px`);
+              }
+              if (h && /^\d+$/.test(h)) {
+                parts.push(`height: ${h}px`);
+              }
+              parts.push('overflow: hidden');
+              style = htmlSafe(parts.join('; '));
+            }
+
             slots.push({
               element: el,
               card,
-              format: 'embedded',
+              format,
               kind: 'block',
+              style,
             });
           }
         }
@@ -248,7 +276,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               current.element !== slot.element ||
               current.card !== slot.card ||
               current.format !== slot.format ||
-              current.kind !== slot.kind
+              current.kind !== slot.kind ||
+              String(current.style ?? '') !== String(slot.style ?? '')
             );
           });
 
@@ -384,7 +413,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               </span>
             {{else}}
               <div
-                class='markdown-bfm-card-slot markdown-bfm-card-slot--block'
+                class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                  {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                style={{slot.style}}
                 data-test-markdown-bfm-block-card
                 {{context.cardComponentModifier
                   card=slot.card
@@ -731,6 +762,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         .markdown-bfm-card-slot--block {
           display: block;
+        }
+
+        .markdown-bfm-card-slot--fitted {
+          border-radius: var(--boxel-border-radius);
         }
       }
     </style>

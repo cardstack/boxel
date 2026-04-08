@@ -61,8 +61,7 @@ function inlineKatex(): TokenizerAndRendererExtension {
     renderer(token) {
       let math = escapeHtml((token as any).text);
       let raw = escapeHtml((token as any).raw);
-      let display = (token as any).displayMode ? 'true' : 'false';
-      return `<span class="math-placeholder" data-math="${math}" data-display="${display}">${raw}</span>`;
+      return `<span class="math-placeholder" data-math="${math}" data-display="false">${raw}</span>`;
     },
   };
 }
