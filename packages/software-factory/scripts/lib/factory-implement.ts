@@ -730,7 +730,7 @@ const BASE_CARD_TYPES: { module: string; name: string }[] = [
 
 /**
  * Fetch JSON schemas for card types the factory uses. Includes both
- * DarkFactory types (Project, Issue, KnowledgeArticleData) from the target
+ * DarkFactory types (Project, Issue, KnowledgeArticle) from the target
  * realm and base types (Spec) from the base realm. Returns a Map
  * suitable for passing to ToolBuilderConfig.cardTypeSchemas.
  */
