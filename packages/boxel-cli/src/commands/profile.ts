@@ -1,13 +1,13 @@
 import * as readline from 'readline';
 import { Writable } from 'stream';
-import type { ProfileManager } from '../lib/profile-manager.js';
+import type { ProfileManager } from '../lib/profile-manager';
 import {
   getProfileManager,
   formatProfileBadge,
   getEnvironmentFromMatrixId,
   getEnvironmentShortLabel,
   getUsernameFromMatrixId,
-} from '../lib/profile-manager.js';
+} from '../lib/profile-manager';
 
 // ANSI color codes
 const FG_GREEN = '\x1b[32m';

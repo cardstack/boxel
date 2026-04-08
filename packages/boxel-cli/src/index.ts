@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { profileCommand } from './commands/profile.js';
+import { profileCommand } from './commands/profile';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
