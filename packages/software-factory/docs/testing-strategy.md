@@ -29,23 +29,17 @@ Rules:
 
 ## Realm Roles
 
-The testing strategy assumes four separate realm roles:
+The testing strategy assumes three separate realm roles:
 
 - source realm
   - `packages/software-factory/realm`
   - publishes shared modules, briefs, templates, and other software-factory inputs
 - target realm
   - the user-selected realm where the factory writes generated tickets, knowledge articles, and implementation artifacts
-- test artifacts realm
-  - a dedicated realm auto-created by the factory, named after the target realm (e.g., `my-project` → `my-project-test-artifacts`)
-  - receives only card instances created during test execution (test data), not specs or results
-  - each test run gets its own folder (`Run 1/`, `Run 2/`) to prevent collision between runs
-  - the URL is persisted on the Project card's `testArtifactsRealmUrl` field
-  - test specs live in the target realm's `Tests/` folder; TestRun result cards live in the target realm's `Test Runs/` folder
 - fixture realm
   - disposable test data used to verify source-realm publishing and target-realm behavior during development
 
-Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm. AI-generated test specs and TestRun cards belong in the target realm (co-located with the implementation). Only card instances created during test execution go to the test artifacts realm.
+Generated factory output should normally be asserted in target realms or disposable fixture realms, not written back into the source realm. AI-generated QUnit test files and TestRun cards belong in the target realm (co-located with the implementation).
 
 If the source realm includes output-like examples, they should be clearly labeled as samples rather than mixed into the canonical published tracker surface.
 
@@ -56,11 +50,11 @@ The factory requires the agent to produce tests alongside implementation code. T
 Flow per ticket:
 
 1. agent implements the card or feature in the target realm
-2. agent generates test specs in the target realm (`Tests/<ticket-slug>.spec.ts`)
-3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Test Runs/<slug>-<seq>.json`) with `status: running` and pre-populated `specResults` containing pending entries
-4. spec files are pulled from the target realm locally; Playwright runs them against the live target realm
-5. card instances created by specs during execution are written to the test artifacts realm (`Run <seq>/` folder) via `BOXEL_TEST_ARTIFACTS_FOLDER_URL`
-6. test results are parsed from the Playwright JSON report, grouped by spec (top-level Playwright suite) into `SpecResult` entries, and written back to the TestRun card's `specResults` field. Each SpecResult has a `specRef` (CodeRefField with `module` = suite title, `name` = "default") and its own `passedCount`/`failedCount` computeds. TestRun's `passedCount`/`failedCount` are rolled up across all SpecResults.
+2. agent generates QUnit test files co-located with card definitions (`.test.gts`)
+3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Test Runs/<slug>-<seq>.json`) with `status: running` and pre-populated `moduleResults` containing pending entries
+4. Playwright browser navigates to the host's QUnit live-test page which discovers and runs `.test.gts` files via `_mtimes`
+5. card instances created during test execution live in browser memory only
+6. test results are parsed from the QUnit test output, grouped by module into `TestModuleResult` entries, and written back to the TestRun card's `moduleResults` field. Each TestModuleResult has a `moduleRef` (CodeRefField with `module` = test module URL, `name` = "default") and its own `passedCount`/`failedCount` computeds. TestRun's `passedCount`/`failedCount` are rolled up across all TestModuleResults.
 7. if tests fail, the full test output (errors, stack traces) is available on the TestRun card and fed back to the agent
 8. agent iterates on implementation and/or tests until all tests pass
 9. passing TestRun cards serve as durable verification evidence for the ticket, linked to the Project card
@@ -238,7 +232,7 @@ Examples:
 
 1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance adopting from `@cardstack/base/spec#Spec`. This is a catalog entry describing a card. Example: `Spec/sticky-note.json`.
 
-2. **Playwright test file** (`Tests/` folder, `.spec.ts` files) — A TypeScript Playwright test file that runs browser-level verification. Example: `Tests/sticky-note.spec.ts`.
+2. **QUnit test file** (`.test.gts` files, co-located with card definitions) — A GTS file that exports a `runTests()` function containing QUnit test modules. The live-test infrastructure discovers these via `_mtimes` and runs them in the browser. Example: `sticky-note.test.gts` tests that StickyNote renders correctly.
 
 In tests, docs, and code, always use the qualified form. Never use bare "spec" without qualification.
 
@@ -254,8 +248,8 @@ The agent produces actions using these actual action types:
 
 - `create_file` — create a card definition (.gts) or card instance (.json) in a realm
 - `update_file` — replace the content of an existing file
-- `create_test` — create a Playwright test file in the target realm's `Tests/` folder
-- `update_test` — update an existing Playwright test file
+- `create_test` — create a QUnit test file co-located with card definitions (`.test.gts`)
+- `update_test` — update an existing QUnit test file
 - `update_ticket` — update the current ticket with notes or status changes
 - `create_knowledge` — create a knowledge article
 - `invoke_tool` — run a registered tool (search-realm, realm-read, etc.)
@@ -304,7 +298,7 @@ Suggested acceptance cases:
    - loop executes the first active ticket
    - one implementation artifact is created (card definition + card instance)
    - one Catalog Spec card is created in the `Spec/` folder
-   - one Playwright test file is created in the `Tests/` folder
+   - one QUnit test file is created co-located with the card definition (`.test.gts`)
    - one TestRun card is created in the `Test Runs/` folder with verification results
 
 3. Resume after partial progress

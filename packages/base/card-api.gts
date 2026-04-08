@@ -3548,7 +3548,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
 
     // assign the realm meta before we compute as computeds may be relying on this
-    if (isCardInstance(instance) && resource.id != null) {
+    if (!isFieldInstance(instance) && resource.id != null) {
       (instance as any)[meta] = resource.meta;
     }
     if (realmURLString && isFieldInstance(instance)) {
@@ -3945,6 +3945,12 @@ class FallbackCardStore implements CardStore {
     _getRealms?: () => string[] | undefined,
     _opts?: any,
   ): StoreSearchResource<T> {
-    throw new Error('Method not implemented.');
+    return {
+      instances: [] as T[],
+      instancesByRealm: [],
+      isLoading: false,
+      meta: { page: { total: 0 } },
+      errors: undefined,
+    } as StoreSearchResource<T>;
   }
 }

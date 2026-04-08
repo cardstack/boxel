@@ -1,4 +1,4 @@
-import { isNode, executableExtensions } from './index';
+import { isNode, executableExtensions, hasExecutableExtension } from './index';
 import type { FileRef } from './realm';
 import type { LocalPath } from './paths';
 
@@ -194,8 +194,10 @@ export async function getFileWithFallbacks(
   if (result) {
     return result;
   }
-  // if there is already an extension on the path, don't try fallbacks
-  if (path.split('/').pop()!.includes('.')) {
+  // Only skip fallbacks when the path already has an executable extension
+  // (e.g., .gts, .ts, .js). A dot in the filename (like "hello.test")
+  // must NOT prevent trying "hello.test.gts".
+  if (hasExecutableExtension(path)) {
     return undefined;
   }
 

@@ -21,6 +21,7 @@ import type * as RealmFieldModule from '@cardstack/base/realm';
 import type * as SkillModule from '@cardstack/base/skill';
 import type * as StringFieldModule from '@cardstack/base/string';
 import type * as SystemCardModule from '@cardstack/base/system-card';
+import type * as RichMarkdownModule from '@cardstack/base/rich-markdown';
 import type * as TextAreaFieldModule from '@cardstack/base/text-area';
 
 type StringField = (typeof StringFieldModule)['default'];
@@ -61,6 +62,9 @@ let TextAreaField: TextAreaField;
 
 type RealmField = (typeof RealmFieldModule)['default'];
 let RealmField: RealmField;
+
+type RichMarkdownField = (typeof RichMarkdownModule)['RichMarkdownField'];
+let RichMarkdownField: RichMarkdownField;
 
 type PhoneNumberField = (typeof PhoneNumberFieldModule)['default'];
 let PhoneNumberField: PhoneNumberField;
@@ -178,6 +182,12 @@ async function initialize() {
     await loader.import<typeof RealmFieldModule>(`${baseRealm.url}realm`)
   ).default;
 
+  RichMarkdownField = (
+    await loader.import<typeof RichMarkdownModule>(
+      `${baseRealm.url}rich-markdown`,
+    )
+  ).RichMarkdownField;
+
   PhoneNumberField = (
     await loader.import<typeof PhoneNumberFieldModule>(
       `${baseRealm.url}phone-number`,
@@ -266,6 +276,7 @@ export {
   MarkdownField,
   TextAreaField,
   RealmField,
+  RichMarkdownField,
   PhoneNumberField,
   CardsGrid,
   SystemCard,

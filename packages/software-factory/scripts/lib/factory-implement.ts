@@ -49,7 +49,7 @@ import {
   type ToolBuilderConfig,
   type ToolCallEntry,
 } from './factory-tool-builder';
-import { ToolExecutor, type ToolExecutorConfig } from './factory-tool-executor';
+import { ToolExecutor } from './factory-tool-executor';
 import {
   ToolRegistry,
   SCRIPT_TOOLS,
@@ -102,6 +102,8 @@ export interface ImplementConfig {
   agent?: LoopAgent;
   /** Override the test runner (injectable for testing). */
   testRunner?: TestRunner;
+  /** Host app URL for QUnit live-test page. Defaults to compat proxy URL. */
+  hostAppUrl?: string;
   /** Override Matrix auth (injectable for testing). */
   matrixAuth?: MatrixAuth;
   /** Override per-realm tokens (injectable for testing). */
@@ -118,8 +120,6 @@ export interface ImplementResult {
   message?: string;
   /** The ticket that was worked on. */
   ticketId: string;
-  /** The test realm URL used. */
-  testRealmUrl: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,13 +133,14 @@ export async function runFactoryImplement(
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let fetchImpl = config.fetch ?? globalThis.fetch;
 
+  // Derive the test-artifacts realm URL from the target realm URL.
+  // e.g., "http://localhost:4201/user/my-realm/" -> "http://localhost:4201/user/my-realm-test-artifacts/"
+  let testRealmUrl = targetRealmUrl.replace(/\/$/, '-test-artifacts/');
+
   // 1. Auth: get Matrix auth, server token, and per-realm JWTs
-  let { matrixAuth, serverToken, realmTokens } = await resolveAuth(config);
+  let { serverToken, realmTokens } = await resolveAuth(config);
 
-  // 2. Derive test realm URL from target realm
-  let testRealmUrl = deriveTestRealmUrl(targetRealmUrl);
-
-  // 3. Fetch card data from the realm
+  // 2. Fetch card data from the realm
   let fetchOptions: RealmFetchOptions = {
     authorization: config.authorization,
     fetch: fetchImpl,
@@ -150,7 +151,7 @@ export async function runFactoryImplement(
     fetchOptions,
   );
 
-  // 4. Build tool infrastructure
+  // 3. Build tool infrastructure
   let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
@@ -158,7 +159,7 @@ export async function runFactoryImplement(
     testRealmUrl,
     fetch: fetchImpl,
     authorization: config.authorization,
-  } satisfies ToolExecutorConfig);
+  });
 
   // Fetch card type schemas for typed tool parameters.
   // The _run-command targets the user's target realm (where they have
@@ -174,22 +175,16 @@ export async function runFactoryImplement(
   );
 
   let testResultsModuleUrl = `${new URL('software-factory/test-results', realmServerUrl).href}`;
+  let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
-    testRealmUrl,
     realmServerUrl,
     realmTokens,
     serverToken,
     testResultsModuleUrl,
     fetch: fetchImpl,
     cardTypeSchemas,
-    matrixAuth: matrixAuth
-      ? {
-          userId: matrixAuth.userId,
-          accessToken: matrixAuth.accessToken,
-          matrixUrl: matrixAuth.credentials.matrixUrl,
-        }
-      : undefined,
+    hostAppUrl,
   };
 
   let tools: FactoryTool[] = buildFactoryTools(
@@ -198,13 +193,13 @@ export async function runFactoryImplement(
     toolRegistry,
   );
 
-  // 5. Build context infrastructure
+  // 4. Build context infrastructure
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
     skillLoader: new SkillLoader(),
   });
 
-  // 6. Build agent
+  // 5. Build agent
   let model = resolveFactoryModel(config.model);
   let agent: LoopAgent =
     config.agent ??
@@ -215,9 +210,9 @@ export async function runFactoryImplement(
       debug: config.debug,
     } satisfies FactoryAgentConfig);
 
-  // 7. Set up test runner with a shared tool call log.
+  // 6. Set up test runner with a shared tool call log.
   // Wrap the agent to intercept tool calls so the TestRunner
-  // can find which spec files the agent wrote.
+  // can find which test files the agent wrote.
   let sharedToolCallLog: ToolCallEntry[] = [];
   let wrappedAgent: LoopAgent = {
     async run(ctx, t) {
@@ -226,25 +221,16 @@ export async function runFactoryImplement(
       return result;
     },
   };
-  let projectCardUrl = `${targetRealmUrl}${project.id}`;
   let testRunner: TestRunner =
     config.testRunner ??
-    buildTestRunner(targetRealmUrl, testRealmUrl, ticket, sharedToolCallLog, {
+    buildTestRunner(targetRealmUrl, ticket, sharedToolCallLog, {
       authorization: config.authorization,
-      serverToken,
-      matrixAuth: matrixAuth
-        ? {
-            userId: matrixAuth.userId,
-            accessToken: matrixAuth.accessToken,
-            matrixUrl: matrixAuth.credentials.matrixUrl,
-          }
-        : undefined,
       fetch: fetchImpl,
       realmServerUrl,
-      projectCardUrl,
+      hostAppUrl,
     });
 
-  // 8. Run the execution loop
+  // 7. Run the execution loop
   let loopResult = await runFactoryLoop({
     agent: wrappedAgent,
     contextBuilder,
@@ -258,7 +244,7 @@ export async function runFactoryImplement(
     maxIterations: config.maxIterations,
   });
 
-  // 9. Post-loop: update ticket status on success
+  // 8. Post-loop: update ticket status on success
   if (loopResult.outcome === 'tests_passed' || loopResult.outcome === 'done') {
     try {
       await updateTicketStatus(targetRealmUrl, ticket.id, 'done', fetchOptions);
@@ -279,7 +265,6 @@ export async function runFactoryImplement(
     testResults: loopResult.testResults,
     message: loopResult.message,
     ticketId: ticket.id,
-    testRealmUrl,
   };
 }
 
@@ -454,65 +439,39 @@ async function fetchCard(
 }
 
 // ---------------------------------------------------------------------------
-// Test realm URL derivation
-// ---------------------------------------------------------------------------
-
-/**
- * Derive the test realm URL from the target realm URL.
- * Convention: append "-test-artifacts" to the endpoint segment.
- * e.g., `http://localhost:4201/user/my-realm/` → `http://localhost:4201/user/my-realm-test-artifacts/`
- */
-function deriveTestRealmUrl(targetRealmUrl: string): string {
-  let parsed = new URL(targetRealmUrl);
-  let segments = parsed.pathname.split('/').filter(Boolean);
-
-  if (segments.length < 1) {
-    throw new Error(
-      `Cannot derive test realm URL from "${targetRealmUrl}": no path segments`,
-    );
-  }
-
-  let lastSegment = segments[segments.length - 1];
-  segments[segments.length - 1] = `${lastSegment}-test-artifacts`;
-
-  return ensureTrailingSlash(`${parsed.origin}/${segments.join('/')}/`);
-}
-
-// ---------------------------------------------------------------------------
 // Test runner builder
 // ---------------------------------------------------------------------------
 
 interface TestRunnerConfig {
   authorization?: string;
-  serverToken?: string;
-  matrixAuth?: { userId: string; accessToken: string; matrixUrl: string };
   fetch?: typeof globalThis.fetch;
   realmServerUrl: string;
-  projectCardUrl?: string;
+  hostAppUrl: string;
 }
 
 /**
- * Build a TestRunner that searches the target realm for Playwright spec files
- * in the Tests/ folder and executes them via executeTestRunFromRealm().
+ * Build a TestRunner that checks the tool call log for QUnit test files
+ * and executes them via executeTestRunFromRealm().
  *
- * Creates TestRun cards in the target realm's Test Runs/ folder, manages
- * the test artifacts realm, and returns structured TestResult for the
- * orchestrator's iterate-or-pass decision.
+ * Creates TestRun cards in the target realm's Test Runs/ folder and
+ * returns structured TestResult for the orchestrator's iterate-or-pass
+ * decision.
  */
 function buildTestRunner(
   targetRealmUrl: string,
-  testRealmUrl: string,
   ticket: TicketCard,
   toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {
   return async (): Promise<TestResult> => {
-    let specPaths = await findSpecPaths(targetRealmUrl, toolCallLog, {
-      authorization: runConfig.authorization,
-      fetch: runConfig.fetch,
-    });
+    let wroteTestFiles = toolCallLog.some(
+      (entry) =>
+        entry.tool === 'write_file' &&
+        typeof entry.args.path === 'string' &&
+        entry.args.path.endsWith('.test.gts'),
+    );
 
-    if (specPaths.length === 0) {
+    if (!wroteTestFiles) {
       return {
         status: 'failed',
         passedCount: 0,
@@ -521,11 +480,32 @@ function buildTestRunner(
           {
             testName: 'test-discovery',
             error:
-              'No Playwright test specs found in Tests/ folder. Every ticket must include at least one .spec.ts file.',
+              'No .test.gts test files found. Every ticket must include at least one test file.',
           },
         ],
         durationMs: 0,
       };
+    }
+
+    // Wait for written test files to be accessible in the realm before
+    // launching QUnit. Realm indexing is asynchronous, so newly written
+    // files may not appear in _mtimes immediately.
+    let testFilePaths = toolCallLog
+      .filter(
+        (entry) =>
+          entry.tool === 'write_file' &&
+          typeof entry.args.path === 'string' &&
+          entry.args.path.endsWith('.test.gts'),
+      )
+      .map((entry) => entry.args.path as string);
+
+    for (let testPath of testFilePaths) {
+      await waitForRealmFile(targetRealmUrl, testPath, {
+        authorization: runConfig.authorization,
+        fetch: runConfig.fetch,
+        pollMs: 300,
+        timeoutMs: 30_000,
+      });
     }
 
     let slug = deriveTicketSlug(ticket.id);
@@ -533,22 +513,19 @@ function buildTestRunner(
 
     try {
       console.error(
-        `[factory-implement] Running ${specPaths.length} test spec(s): ${specPaths.join(', ')}`,
+        `[factory-implement] Running test file(s) for ticket: ${slug}`,
       );
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
         testResultsModuleUrl: `${ensureTrailingSlash(runConfig.realmServerUrl)}software-factory/test-results`,
         slug,
-        specPaths,
         testNames: [],
         authorization: runConfig.authorization,
         fetch: runConfig.fetch,
-        testRealmUrl,
-        matrixAuth: runConfig.matrixAuth,
-        serverToken: runConfig.serverToken,
-        projectCardUrl: runConfig.projectCardUrl,
         realmServerUrl: runConfig.realmServerUrl,
+        hostAppUrl: runConfig.hostAppUrl,
+        forceNew: true,
       });
 
       let durationMs = Date.now() - start;
@@ -559,7 +536,7 @@ function buildTestRunner(
       if (handle.status === 'passed') {
         return {
           status: 'passed',
-          passedCount: specPaths.length,
+          passedCount: 1,
           failedCount: 0,
           failures: [],
           durationMs,
@@ -574,7 +551,7 @@ function buildTestRunner(
         return {
           status: 'failed',
           passedCount: 0,
-          failedCount: failures.length || specPaths.length,
+          failedCount: failures.length || 1,
           failures:
             failures.length > 0
               ? failures
@@ -623,62 +600,13 @@ function buildTestRunner(
   };
 }
 
-/**
- * Find Playwright spec file paths by inspecting the agent's tool call log
- * for write_file calls targeting Tests/*.spec.ts, then polling the realm
- * until each file is accessible (handles indexing delay).
- */
-async function findSpecPaths(
-  targetRealmUrl: string,
-  toolCallLog: ToolCallEntry[],
-  fetchOptions: RealmFetchOptions,
-): Promise<string[]> {
-  // Extract spec paths the agent wrote from the tool call log
-  let writtenSpecPaths = toolCallLog
-    .filter(
-      (entry) =>
-        entry.tool === 'write_file' &&
-        typeof entry.args.path === 'string' &&
-        entry.args.path.startsWith('Tests/') &&
-        entry.args.path.endsWith('.spec.ts'),
-    )
-    .map((entry) => entry.args.path as string);
-
-  if (writtenSpecPaths.length === 0) {
-    console.error(`[factory-implement] No spec files found in tool call log`);
-    return [];
-  }
-
-  // Wait for all spec files concurrently
-  let results = await Promise.all(
-    writtenSpecPaths.map(async (specPath) => {
-      let found = await waitForRealmFile(targetRealmUrl, specPath, {
-        ...fetchOptions,
-        pollMs: 300,
-      });
-      if (!found) {
-        console.error(
-          `[factory-implement] Spec file not found after polling: ${specPath}`,
-        );
-      }
-      return found ? specPath : null;
-    }),
-  );
-  let confirmedPaths = results.filter((p): p is string => p !== null);
-
-  console.error(
-    `[factory-implement] Confirmed ${confirmedPaths.length}/${writtenSpecPaths.length} spec(s): ${confirmedPaths.join(', ')}`,
-  );
-  return confirmedPaths;
-}
-
 // ---------------------------------------------------------------------------
 // TestRun failure extraction
 // ---------------------------------------------------------------------------
 
 /**
  * Read a TestRun card from the realm and extract failure details.
- * The TestRun card has specResults containing individual test results.
+ * The TestRun card has moduleResults containing individual test results.
  */
 async function readTestRunFailures(
   realmUrl: string,
@@ -704,7 +632,7 @@ async function readTestRunFailures(
     }
 
     let attrs = result.document.data.attributes as Record<string, unknown>;
-    let specResults = attrs.specResults as
+    let moduleResults = attrs.moduleResults as
       | {
           results?: {
             testName?: string;
@@ -715,12 +643,12 @@ async function readTestRunFailures(
         }[]
       | undefined;
 
-    if (!specResults) return [];
+    if (!moduleResults) return [];
 
     let failures: { testName: string; error: string; stackTrace?: string }[] =
       [];
-    for (let spec of specResults) {
-      for (let r of spec.results ?? []) {
+    for (let mod of moduleResults) {
+      for (let r of mod.results ?? []) {
         if (r.status === 'failed' || r.status === 'error') {
           failures.push({
             testName: r.testName ?? 'unknown',

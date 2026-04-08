@@ -263,6 +263,39 @@ module(basename(__filename), function () {
       });
     });
 
+    test('file meta for markdown with card references stores cardReferenceUrls', async function (assert) {
+      let response = await request
+        .get(`/card-refs.md`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let json = response.body;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}markdown-file-def`,
+        name: 'MarkdownDef',
+      });
+
+      let cardReferenceUrls = json.data.attributes?.cardReferenceUrls;
+      assert.ok(
+        Array.isArray(cardReferenceUrls),
+        'cardReferenceUrls attribute is present',
+      );
+      assert.true(
+        cardReferenceUrls.some((url: string) => url.includes('hassan')),
+        'cardReferenceUrls includes hassan',
+      );
+      assert.true(
+        cardReferenceUrls.some((url: string) => url.includes('jade')),
+        'cardReferenceUrls includes jade',
+      );
+    });
+
     test('sets canonical path header for nested module requests', async function (assert) {
       let response = await request
         .get(`/nested/example`)
@@ -1474,6 +1507,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'card-refs.md': {
+                links: {
+                  related: `${testRealmHref}card-refs.md`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'chess-gallery.gts': {
                 links: {
                   related: `${testRealmHref}chess-gallery.gts`,
@@ -1605,6 +1646,14 @@ module(basename(__filename), function () {
               'hassan.json': {
                 links: {
                   related: `${testRealmHref}hassan.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'hello.test.gts': {
+                links: {
+                  related: `${testRealmHref}hello.test.gts`,
                 },
                 meta: {
                   kind: 'file',

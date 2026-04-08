@@ -58,7 +58,6 @@ export interface FactoryEntrypointImplementSummary {
   outcome: ImplementResult['outcome'];
   iterations: number;
   ticketId: string;
-  testRealmUrl: string;
   message?: string;
   toolCallCount: number;
 }
@@ -264,7 +263,6 @@ export async function runFactoryEntrypoint(
       outcome: implementResult.outcome,
       iterations: implementResult.iterations,
       ticketId: implementResult.ticketId,
-      testRealmUrl: implementResult.testRealmUrl,
       message: implementResult.message,
       toolCallCount: implementResult.toolCallLog.length,
     };

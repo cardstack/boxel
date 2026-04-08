@@ -24,7 +24,7 @@ This document covers:
 
 ## Realm Roles
 
-The software factory uses four different realm roles that should stay distinct:
+The software factory uses three different realm roles that should stay distinct:
 
 - source realm
   - `packages/software-factory/realm`
@@ -32,17 +32,13 @@ The software factory uses four different realm roles that should stay distinct:
 - target realm
   - the user-specified realm passed to `factory:go`
   - receives the generated `Project`, `Ticket`, `KnowledgeArticle`, and implementation artifacts
-- test artifacts realm
-  - a dedicated realm auto-created by the factory, named after the target realm (e.g., `smoke-1` → `smoke-1-test-artifacts`)
-  - receives only card instances created during test execution (not specs or test results)
-  - each test run gets its own folder (`Run 1/`, `Run 2/`) to prevent collision between runs
-  - the test artifacts realm URL is persisted on the Project card's `testArtifactsRealmUrl` field
-  - specs live in the target realm's `Tests/` folder; TestRun cards live in the target realm's `Test Runs/` folder
 - fixture realm
   - disposable test input used only for development-time verification of the factory itself
   - may adopt from the public source realm but should not be treated as user output
 
-Normal factory output should land in the target realm, not in `packages/software-factory/realm`. AI-generated test specs and TestRun result cards live in the target realm (co-located with the implementation). Only card instances created during test execution (test data) go to the test artifacts realm.
+Normal factory output should land in the target realm, not in `packages/software-factory/realm`. AI-generated QUnit test files and TestRun result cards live in the target realm (co-located with the implementation).
+
+**No test artifacts realm is needed.** QUnit tests use in-memory browser realms (`setupCardTest`), so test card instances never leave the browser during test execution. The only persistent test artifacts are the `.test.gts` source files and `TestRun` result cards, both of which live in the target realm.
 
 If we intentionally include output-like examples in the source realm, they should be clearly labeled as examples and live in an obviously non-canonical location such as `SampleOutput/` or `Examples/`.
 
@@ -134,13 +130,12 @@ Required behavior:
 - require `MATRIX_USERNAME` so the target realm owner is explicit before bootstrap starts
 - infer the target realm server URL from the target realm URL by default, but allow an explicit override when the realm server lives under a subdirectory and the URL shape is ambiguous
 - create missing target realms through the realm server `/_create-realm` API rather than by creating local directories directly
-- create the companion test realm (`<target-realm-name>-tests`) through the same `/_create-realm` API
-- treat the successful `/_create-realm` responses for both realms as the readiness boundary
+- treat the successful `/_create-realm` response as the readiness boundary
 
 Minimum requirement:
 
 - the target realm must be self-contained enough that `Project`, `Ticket`, and `KnowledgeArticle` cards resolve locally
-- the test realm must be able to adopt from the target realm and execute tests against cards hosted there
+- the target realm must be self-contained enough that QUnit test files can exercise the cards hosted there
 
 ### Phase 3: Bootstrap Project Artifacts
 
@@ -167,9 +162,9 @@ Rules:
 
 1. **Catalog Spec card** (`Spec/` folder, `.json` files) — A card instance that adopts from `@cardstack/base/spec#Spec`. This is a **catalog entry** describing a card for inclusion in the Boxel catalog. It has fields like `ref` (CodeRef pointing to the card definition), `specType` (`'card'`|`'field'`|`'component'`), `readMe` (markdown description), `cardTitle`, and `cardDescription`. Example: `Spec/sticky-note.json` describes the StickyNote card.
 
-2. **Playwright test file** (`Tests/` folder, `.spec.ts` files) — A TypeScript Playwright test file that runs browser-level verification against the live realm. Example: `Tests/sticky-note.spec.ts` tests that StickyNote renders correctly.
+2. **QUnit test file** (`.test.gts` files, co-located with card definitions) — A GTS file that exports a `runTests()` function containing QUnit test modules. The live-test infrastructure discovers these via `_mtimes` and runs them in the browser. Example: `sticky-note.test.gts` tests that StickyNote renders correctly.
 
-Never use bare "spec" without qualification. Use **"Catalog Spec card"** for #1 and **"Playwright test file"** or **"test file"** for #2.
+Never use bare "spec" without qualification. Use **"Catalog Spec card"** for #1 and **"QUnit test file"** or **"test file"** for #2.
 
 ### Phase 4: Execution Loop
 
@@ -208,7 +203,7 @@ The agent is given tool functions and calls them directly during its LLM turn. T
    Agent: write_file({ path: "Spec/sticky-note.json", content: "{ \"data\": { ... } }", realm: "target" })
    → Tool returns: { ok: true }
 
-   Agent: write_file({ path: "Tests/sticky-note.spec.ts", content: "import { test, expect } ...", realm: "target" })
+   Agent: write_file({ path: "sticky-note.test.gts", content: "import { module, test } ...", realm: "target" })
    → Tool returns: { ok: true }
 
    Agent: signal_done()
@@ -216,11 +211,10 @@ The agent is given tool functions and calls them directly during its LLM turn. T
 
 3. Each tool call goes through safety middleware:
    - write_file writes raw content to the realm via card+source MIME type (path must include extension)
-   - realm selection: tool arg realm === 'test' → testRealmUrl, else → targetRealmUrl
    - auth: per-realm JWT from realmTokens[realmUrl]
 
 4. After agent signals done, orchestrator runs tests:
-   executeTestRunFromRealm({ targetRealmUrl, specPaths, ... })
+   executeTestRunFromRealm({ targetRealmUrl, ... })
 
 5. If tests fail: orchestrator reads TestRun card for failure details,
    builds TestResult, feeds into AgentContext.testResults,
@@ -279,7 +273,7 @@ Key fields:
 The agent must create at least one sample card instance for the top-level card. Sample instances serve as:
 
 - **Catalog examples** — linked from the Catalog Spec card via `linkedExamples`, they appear in the catalog as usage demonstrations
-- **Test fixtures** — Playwright test files can navigate to these instances to verify rendering
+- **Test fixtures** — QUnit test files can reference these instances to verify rendering
 
 Sample instances live in the target realm alongside other card instances (e.g., `StickyNote/welcome-note.json`). They should have realistic, meaningful attribute values — not empty or placeholder data.
 
@@ -291,7 +285,7 @@ The execution loop uses three distinct JWT levels:
 
 1. **Realm server JWT** (`serverToken`) — obtained via `matrixLogin()` + `getRealmServerToken()`. Used for server-level operations like `_create-realm` and `_realm-auth`.
 2. **Per-realm JWTs** (`realmTokens: Record<string, string>`) — obtained via `getRealmScopedAuth(realmServerUrl, serverToken)`. Each realm URL maps to its own JWT. Used for all realm reads/writes (`writeCardSource`, `writeModuleSource`, `readCardSource`, `searchRealm`).
-3. **Test artifacts realm JWT** — a per-realm JWT for the auto-created test artifacts realm, obtained separately after that realm is created. Handled internally by `executeTestRunFromRealm()`.
+3. **Target realm JWT for test execution** — a per-realm JWT for the target realm, used by `executeTestRunFromRealm()` to discover and run QUnit test files.
 
 Each tool's `execute` function looks up the correct per-realm JWT based on which realm the operation targets.
 
@@ -303,20 +297,20 @@ Card write tools (`update_project`, `update_ticket`, `create_knowledge`, `create
 
 Test generation rule:
 
-- the agent must produce at least one Playwright test file per ticket before a ticket can be marked as done
-- Playwright test files live in the target realm's `Tests/` folder (e.g., `Tests/<ticket-slug>.spec.ts`)
-- test artifacts include both the Playwright test source code and the structured test execution results (TestRun cards)
+- the agent must produce at least one QUnit test file per ticket before a ticket can be marked as done
+- QUnit test files are co-located with card definitions in the target realm (e.g., `<card-name>.test.gts`)
+- test artifacts include both the QUnit test source code and the structured test execution results (TestRun cards)
 - failed test output is the primary feedback signal that drives the implement-verify loop
 
 ### Phase 5: Verification
 
 > **Note (CS-10451 cancelled):** The dedicated verification policy ticket (CS-10451) was cancelled because hard-coding a verification gate in the orchestrator conflicts with the phase-2 direction (`phase-2-plan.md`). In phase 2, test execution is modeled as an issue type — the agent creates test issues during task breakdown, and the orchestrator treats them like any other issue. A hard-coded "must have tests" gate would need to be removed when phase 2 lands. For phase 1, the orchestrator runs tests after the agent signals done (orchestrator-owned test execution in `factory-loop.ts`), but enforcement of "at least one test per ticket" is left to the agent's prompt and skills rather than orchestrator code.
 
-Verification is mandatory. Every ticket must have AI-generated Playwright test files before it can be marked done.
+Verification is mandatory. Every ticket must have AI-generated QUnit test files before it can be marked done.
 
 Test generation policy:
 
-- the agent creates Playwright test files in the target realm's `Tests/` folder that exercise the cards and behavior implemented for the current ticket
+- the agent creates QUnit test files co-located with card definitions in the target realm that exercise the cards and behavior implemented for the current ticket
 - for Boxel card work, tests should at minimum verify that card instances render correctly in fitted, isolated, and embedded views
 - additional tests should cover card-specific behavior, field values, relationships, and interactions
 - the agent should start with the smallest meaningful test and expand coverage if the first test passes trivially
@@ -324,32 +318,42 @@ Test generation policy:
 Test execution policy:
 
 - the orchestrator owns test execution — the agent writes test files via `write_file` tool calls, and the orchestrator triggers test execution as a separate phase after the agent finishes its turn
-- Playwright test files are pulled from the target realm to a local temp directory, then run via Playwright against the live target realm
+- the Playwright browser navigates to the host's QUnit live-test page, which discovers `.test.gts` files via `_mtimes` and runs them in the browser
 - test results (pass/fail, error messages, stack traces) are saved as `TestRun` card instances in the target realm's `Test Runs/` folder
 - on failure, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (individual test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. The agent also has access to the `Test Runs/` folder via `search_realm` and `read_file` for historical test run analysis.
 - on success, the TestRun card serves as durable proof that the ticket was verified
 
-Target realm artifact structure (Playwright test files and results co-located with implementation):
+Target realm artifact structure (QUnit test files co-located with card definitions):
 
-- `Tests/<ticket-slug>.spec.ts` — the generated Playwright test source (in target realm)
+- `<card-name>.test.gts` — the generated QUnit test source (co-located with card definitions in target realm)
 - `Test Runs/<ticket-slug>-<seq>.json` — TestRun card instance with status, results, timing (in target realm)
 - `Spec/<card-name>.json` — Catalog Spec card for the top-level card (in target realm)
 
-Test artifacts realm (auto-created from project name, e.g., `Sticky Notes Test Artifacts`):
+All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Spec/`.
 
-- `Run 1/` — card instances created during test run 1
-- `Run 2/` — card instances created during test run 2
+#### QUnit Test Page Architecture (CS-10599)
 
-All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Tests/`, `Spec/`.
+The test executor serves a **custom QUnit test page** via a local HTTP server instead of relying on the host app's test page or the compat proxy. This is necessary because the host's test page has hardcoded config, and the compat proxy isn't designed for hermetic test harnesses where the realm server runs on random ports.
+
+How it works:
+
+1. **HTML extraction** — At runtime, reads `host/dist/tests/index.html` to extract all `<script>`, `<link>`, and `<meta>` tags (including chunk hashes that change with every build).
+2. **Asset URL rewriting** — Rewrites asset URLs to point at the local test server (e.g., `/assets/chunk.abc123.js` becomes `http://localhost:<port>/assets/chunk.abc123.js`).
+3. **Ember config rewriting** — Rewrites the Ember config meta tag (`<meta name="...config/environment">`) to inject the correct `resolvedBaseRealmURL`, `realmServerURL`, and other environment values pointing at the browser-accessible realm proxy URL. This is essential for the hermetic test harness where the realm server listens on random ports.
+4. **Static file serving** — Serves all files from `host/dist/` with correct MIME types (JS, CSS, WASM, fonts).
+5. **QUnit hook injection** — Injects `QUnit.on('testEnd')` and `QUnit.on('runEnd')` hooks into the page for result collection.
+6. **Query parameters** — Passes `?liveTest=true&realmURL=<targetRealm>` as query params so the live-test infrastructure discovers `.test.gts` files in the correct realm.
+
+**Private realm auth**: The live-test infrastructure (`live-test.js`) fetches `_mtimes` without auth headers. For private realms, the test executor uses Playwright's `page.route()` to intercept requests to the realm origin and inject the `Authorization` header at the network level.
+
+**Known limitation (CS-10650)**: The test page server requires a development or test host build. The Ember production build strips test assets (QUnit, test helpers, `testem.js`). This affects both the software factory and Code Mode card testing. The plan is to ship QUnit and test helpers as a lazy-loaded bundle in production builds.
 
 Implementation note:
 
-- the Playwright harness in `packages/software-factory` is reused to execute AI-generated Playwright test files
+- the Playwright harness in `packages/software-factory` is reused to run the custom QUnit test page
 - this gives the factory a real browser-level verification path for generated cards
 - the test harness output format should match what the agent needs to diagnose failures and iterate
-- the test artifacts realm is auto-created from the project name and its URL is persisted on the Project card (`testArtifactsRealmUrl` field)
-- before test execution, all indexing jobs (running + pending) are cancelled on the test artifacts realm via `_cancel-indexing-job` with `cancelPending: true`
-- spec file paths are extracted from the agent's tool call log (write_file calls to `Tests/*.spec.ts`) rather than scanning `_mtimes`. Each path is polled via `waitForRealmFile` (300ms interval, 30s timeout) to handle the indexing delay after the agent writes files to the realm
+- QUnit test files are discovered automatically via `_mtimes` — no explicit spec path extraction is needed
 
 ### Phase 6: Stop Conditions
 
@@ -403,9 +407,9 @@ The current behavior is described in prose, but not encoded as a decision engine
 
 With executable tool functions, the agent handles sequential tool calls naturally — it calls tools in order, sees results, and reacts. However, the execution loop still involves long-running operations like test execution (~10 minutes per run) that require special handling:
 
-1. Write test spec to the target realm `Tests/` folder (via `write_file`)
+1. Write QUnit test file co-located with card definitions in the target realm (via `write_file`)
 2. Write a `TestRun` card to the target realm `Test Runs/` folder (via `write_file`)
-3. Execute tests against the target realm (via `run-realm-tests`); any data created during execution is stored in the test artifacts realm
+3. Execute tests against the target realm (via `run-realm-tests`); the Playwright browser navigates to the QUnit live-test page
 4. Parse and save test results back to the `TestRun` card in the target realm
 5. Feed results back to the agent for the next iteration
 
@@ -526,8 +530,7 @@ Responsibilities:
 
 - validate the explicit target realm URL
 - create the target realm through `POST /_create-realm` when needed
-- create the companion test realm (`<target-realm-name>-tests`) through the same API
-- return both the target realm and test realm bootstrap results
+- return the target realm bootstrap result
 
 This isolates the realm bootstrapping concern from the orchestration logic.
 
@@ -595,11 +598,11 @@ For the first version, this does not need to be a general autonomous system. It 
 
 ### F. `scripts/lib/factory-test-realm.ts`
 
-Helper module for managing test execution and results in the test realm.
+Helper module for managing test execution and results.
 
 #### Key Design Decisions
 
-- **Test spec writing uses `write_file` tool calls** — no special mechanism. The agent writes test files to the target realm's `Tests/` folder via the same `write_file` tool used for implementation files.
+- **Test file writing uses `write_file` tool calls** — no special mechanism. The agent writes QUnit test files (`.test.gts`) co-located with card definitions via the same `write_file` tool used for implementation files.
 - **Test results are `TestRun` card instances**, not plain JSON files. A new card definition (`realm/test-results.gts`) defines `TestRun` (CardDef) and `TestResultEntry` (FieldDef).
 - **TestRun is created at start** with `status: running` and pre-populated `pending` result entries. The card ID is the primary handle returned to callers.
 - **Incremental updates**: Each test result is written to the card as it completes (pending → passed/failed), enabling precise resume after interruption.
@@ -620,10 +623,10 @@ Helper module for managing test execution and results in the test realm.
 - `TestRunStatusField` — enum: running, passed, failed, error
 - `TestResultStatusField` — enum: pending, passed, failed, error
 - `TestResultEntry` (FieldDef) — testName, status, message, stackTrace, durationMs
-- `SpecResult` (FieldDef) — specRef (CodeRefField), results (containsMany TestResultEntry), passedCount (computed), failedCount (computed)
-- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), status, passedCount (computed, rolled up from specResults), failedCount (computed, rolled up from specResults), durationMs, specResults (containsMany SpecResult), errorMessage, title (computed)
+- `TestModuleResult` (FieldDef) — moduleRef (CodeRefField), results (containsMany TestResultEntry), passedCount (computed), failedCount (computed)
+- `TestRun` (CardDef) — sequenceNumber, runAt, completedAt, ticket (linksTo), status, passedCount (computed, rolled up from moduleResults), failedCount (computed, rolled up from moduleResults), durationMs, moduleResults (containsMany TestModuleResult), errorMessage, title (computed)
 
-A TestRun contains multiple SpecResults, each grouping test results under a spec reference. The specRef's `module` field identifies the spec file (e.g., the Playwright suite title). Counts on TestRun are aggregated across all SpecResults.
+A TestRun contains multiple TestModuleResults, each grouping test results under a module reference. The moduleRef's `module` field identifies the test module (e.g., the QUnit module name). Counts on TestRun are aggregated across all TestModuleResults.
 
 #### Return Type
 
@@ -635,9 +638,9 @@ The orchestrator only needs the ID and pass/fail signal. On `error`, the `errorM
 
 #### Auth
 
-The caller provides an authenticated `fetch` via `createBoxelRealmFetch` from `src/realm-auth.ts` — the same pattern used in `factory-entrypoint.ts`. The test realm module itself does not handle Matrix credentials.
+The caller provides an authenticated `fetch` via `createBoxelRealmFetch` from `src/realm-auth.ts` — the same pattern used in `factory-entrypoint.ts`. The test execution module itself does not handle Matrix credentials.
 
-The test realm acts as durable verification evidence. Each ticket gets at least one test spec and one test result artifact. Failed test output is the primary feedback signal driving the implement-verify loop.
+TestRun cards in the target realm act as durable verification evidence. Each ticket gets at least one QUnit test file and one TestRun result card. Failed test output is the primary feedback signal driving the implement-verify loop.
 
 ## Implementation Backend Choice
 
@@ -729,7 +732,6 @@ interface AgentContext {
   skills: ResolvedSkill[]; // active skills for this ticket (see Skills Integration)
   testResults?: TestResult; // previous test run output (if iterating)
   targetRealmUrl: string;
-  testRealmUrl: string;
 }
 
 interface ResolvedSkill {
@@ -917,7 +919,7 @@ inspect existing state before making changes — do not guess.
 
 # Rules
 
-- Every ticket must include at least one test file (via write_file to Tests/).
+- Every ticket must include at least one QUnit test file (`.test.gts`, co-located with card definitions).
 - Use search_realm and read_file to inspect existing cards before creating files.
 - If you cannot proceed, call request_clarification with a description of what
   is blocked.
@@ -926,7 +928,6 @@ inspect existing state before making changes — do not guess.
 # Realms
 
 - Target realm: {{targetRealmUrl}}
-- Test realm: {{testRealmUrl}}
 
 # Skills
 
@@ -997,7 +998,7 @@ Implement this ticket. Return actions that:
 
 1. Use search_realm and read_file to inspect existing realm state
 2. Use write_file to create or update card definitions (.gts) and/or card instances (.json) in the target realm
-3. Use write_file to create test specs (.spec.ts) that verify your implementation
+3. Use write_file to create QUnit test files (.test.gts) that verify your implementation
 4. Call signal_done when complete
 
 Start with the smallest working implementation, then add the test.
@@ -1024,14 +1025,14 @@ You implemented the following files for ticket {{ticket.id}}:
 ```
 {{/each}}
 
-Now generate Playwright test specs that verify this implementation.
+Now generate QUnit test files that verify this implementation.
 
 Tests must:
-- Live in the test realm as `TestSpec/{{ticket.slug}}.spec.ts`
-- Import from the test fixtures and use the factory test harness
+- Be co-located with card definitions as `.test.gts` files in the target realm
+- Export a `runTests()` function containing QUnit test modules
 - Verify that card instances render correctly (fitted, isolated, embedded views)
 - Verify card-specific behavior, field values, and relationships
-- Be runnable by the `run-realm-tests` tool
+- Be discoverable by the live-test infrastructure via `_mtimes`
 
 Return only test file writes (via write_file).
 ```
@@ -1226,7 +1227,7 @@ Each `AgentExecutionLog` card captures every `agent.run()` call made for a ticke
 
 1. search_realm({ realm: "...", type_name: "StickyNote" }) → { data: [] } (12ms)
 2. write_file({ path: "sticky-note.gts", content: "...", realm: "target" }) → { ok: true } (45ms)
-3. write_file({ path: "Tests/sticky-note.spec.ts", content: "...", realm: "target" }) → { ok: true } (38ms)
+3. write_file({ path: "sticky-note.test.gts", content: "...", realm: "target" }) → { ok: true } (38ms)
 4. signal_done() → { ok: true }
 
 ### Test Results
@@ -1266,7 +1267,7 @@ The orchestrator creates and updates `AgentExecutionLog` cards during the execut
 3. **On ticket completion** — set `status: completed`, record `completedAt`
 4. **On failure/block** — set `status: failed` or `blocked`, record `errorSummary`
 
-The card is written to the **target realm** (not the test realm), because it's a project artifact that tracks the implementation process — it belongs alongside the Project, Ticket, and KnowledgeArticle cards.
+The card is written to the **target realm**, because it's a project artifact that tracks the implementation process — it belongs alongside the Project, Ticket, and KnowledgeArticle cards.
 
 #### Execution Logs and Resume
 
@@ -1300,7 +1301,7 @@ Project
 └── knowledgeBase (linksToMany → KnowledgeArticle)
 ```
 
-The `AgentExecutionLog` card fills the gap between the Ticket (what needs to be done) and the test results in the test realm (what was verified). It captures _how_ the agent got from one to the other — the full sequence of one-shot calls, actions, and results.
+The `AgentExecutionLog` card fills the gap between the Ticket (what needs to be done) and the test results (what was verified). It captures _how_ the agent got from one to the other — the full sequence of one-shot calls, actions, and results.
 
 ### Swapping Models
 
@@ -1391,7 +1392,7 @@ interface SkillResolver {
 }
 ```
 
-A default implementation loads `boxel-development` + `boxel-file-structure` for all Boxel card work, plus `ember-best-practices` when `.gts` files are involved. Within `boxel-development`, certain reference files are always loaded regardless of ticket content because they are needed on every ticket: `dev-realm-search.md` (query syntax and field discovery), `dev-playwright-testing.md` (test patterns, env vars, test artifacts realm), and `dev-spec-usage.md` (Catalog Spec card creation).
+A default implementation loads `boxel-development` + `boxel-file-structure` for all Boxel card work, plus `ember-best-practices` when `.gts` files are involved. Within `boxel-development`, certain reference files are always loaded regardless of ticket content because they are needed on every ticket: `dev-realm-search.md` (query syntax and field discovery), `dev-qunit-testing.md` (QUnit test patterns and live-test infrastructure), and `dev-spec-usage.md` (Catalog Spec card creation).
 
 #### Skill Loading
 
@@ -1593,7 +1594,7 @@ Bidirectional sync between local workspace and realm server.
 One-way upload from local to realm.
 
 - **Command**: `npx boxel push <local-dir> <realm-url> [--delete] [--dry-run]`
-- **Use by agent**: deploying generated files to target or test realm
+- **Use by agent**: deploying generated files to the target realm
 
 ##### `boxel pull`
 
@@ -1726,16 +1727,11 @@ let writeFileTool: FactoryTool = {
         description: 'Realm-relative file path with extension',
       },
       content: { type: 'string', description: 'File content' },
-      realm: {
-        type: 'string',
-        enum: ['target', 'test'],
-        description: 'Which realm to write to (default: target)',
-      },
     },
     required: ['path', 'content'],
   },
   execute: async (args) => {
-    let realmUrl = args.realm === 'test' ? testRealmUrl : targetRealmUrl;
+    let realmUrl = targetRealmUrl;
     let auth = realmTokens[realmUrl];
     // All files written via writeModuleSource with card+source MIME type.
     // The realm server accepts raw content as-is regardless of extension.
@@ -1788,7 +1784,7 @@ class ToolExecutor {
 
 The orchestrator enforces safety constraints on tool invocations:
 
-- tools can only target the target realm, test realm, or scratch realms — never the source realm
+- tools can only target the target realm or scratch realms — never the source realm
 - destructive operations (`--delete`, `realm-delete`, `realm-atomic` with `remove` ops) require the orchestrator to verify the target is a factory-managed realm
 - the agent cannot invoke arbitrary shell commands — only registered tools
 - tool execution has a configurable timeout (default: 60 seconds per invocation)
@@ -1858,19 +1854,18 @@ The first version of `factory:go` should do exactly this:
 
 1. fetch the brief
 2. ensure the target realm exists
-3. create the companion test realm
-4. create or reconcile starter project artifacts
-5. select the first actionable ticket
-6. print a structured execution bundle for the agent or next stage
+3. create or reconcile starter project artifacts
+4. select the first actionable ticket
+5. print a structured execution bundle for the agent or next stage
 
 If run in `--mode implement`, it should then:
 
-7. open the active ticket context
-8. perform one implementation cycle
-9. generate tests in the test realm for the implemented work
-10. execute tests via the test harness
-11. if tests fail, feed results back to the agent and return to step 8
-12. on test success, save results in the test realm and update ticket state
+6. open the active ticket context
+7. perform one implementation cycle
+8. generate QUnit test files co-located with card definitions in the target realm
+9. execute tests via the Playwright-driven QUnit live-test page
+10. if tests fail, feed results back to the agent and return to step 7
+11. on test success, save results as TestRun cards in the target realm and update ticket state
 
 It does not need to complete an entire multi-ticket product in version one. But it must complete the full implement → test → iterate cycle for at least one ticket.
 
@@ -1928,9 +1923,6 @@ Optional later additions:
   "targetRealm": {
     "url": "http://localhost:4201/hassan1/personal/"
   },
-  "testRealm": {
-    "url": "http://localhost:4201/hassan1/personal-tests/"
-  },
   "bootstrap": {
     "createdProject": "Project/sticky-note-mvp",
     "createdTickets": [
@@ -1944,8 +1936,8 @@ Optional later additions:
     "status": "in_progress"
   },
   "verification": {
-    "strategy": "test-realm",
-    "testRealmUrl": "http://localhost:4201/hassan1/personal-tests/"
+    "strategy": "qunit-live-test",
+    "targetRealmUrl": "http://localhost:4201/hassan1/personal/"
   }
 }
 ```
@@ -1962,22 +1954,21 @@ Brief intake should not assume public realm access.
 
 - a user can point to a brief URL and a target realm URL
 - the target realm ends up with a coherent project bootstrap
-- a companion test realm is created alongside the target realm
 - exactly one ticket becomes active
 - rerunning does not create duplicate starter artifacts
 - the flow can proceed directly into implementation work
 - the brief normalization output gives the AI enough context to choose thin-MVP vs broader-first-pass planning and request clarification or review tickets when needed
-- in `--mode implement`, the agent generates at least one test per ticket in the test realm
-- test execution results are saved as structured artifacts in the test realm
+- in `--mode implement`, the agent generates at least one QUnit test file per ticket, co-located with card definitions in the target realm
+- test execution results are saved as TestRun cards in the target realm
 - failed test output is fed back to the agent, driving an implement-verify loop until tests pass
 
 ## Recommended Delivery Order
 
-1. add target realm bootstrap helpers (including test realm creation)
+1. add target realm bootstrap helpers
 2. add brief fetch and normalization
 3. add idempotent project artifact bootstrap
 4. expose `factory:go`
-5. add test realm management and AI test generation module
+5. add QUnit test generation and execution module
 6. add one-ticket implementation mode with implement → test → iterate loop
 7. add stronger resume behavior
 
@@ -1988,17 +1979,16 @@ The missing piece is orchestration, not capability. The current project already 
 - a formal entrypoint
 - deterministic bootstrap rules
 - target realm preparation
-- a companion test realm for AI-generated tests
-- a test generation and execution loop that feeds results back to the agent
+- a QUnit test generation and execution loop that feeds results back to the agent
 - a minimal implementation loop that requires passing tests before advancing
 
-The test realm is central to the quality feedback loop. The agent writes code in the target realm, writes tests in the test realm, runs them via the test harness, and iterates until they pass. Test artifacts in the test realm serve as durable proof of verification and as the primary signal driving the agentic loop.
+QUnit test files are central to the quality feedback loop. The agent writes code and test files in the target realm, the orchestrator runs them via the Playwright-driven QUnit live-test page, and iterates until they pass. TestRun cards in the target realm serve as durable proof of verification and as the primary signal driving the agentic loop.
 
 That is the smallest path to turning the current software-factory idea into something that feels like:
 
 “Point at a brief, say go, and watch it enter the delivery loop.”
 
-## Implementation Findings
+## Implementation Findings from CS-10569
 
 The following findings emerged during the CS-10569 implementation (wire execution loop into `factory:go --mode implement`). They document decisions, surprises, and remaining work that the plan did not anticipate.
 
@@ -2007,7 +1997,7 @@ The following findings emerged during the CS-10569 implementation (wire executio
 The factory has been validated end-to-end against a live LLM (Claude Sonnet 4 via OpenRouter). Starting from the `sticky-note` brief, the factory:
 
 1. Bootstraps the target realm with Project, Tickets, and KnowledgeArticles
-2. The agent writes a card definition (`.gts`), sample instances, a Catalog Spec card, and Playwright test files
+2. The agent writes a card definition (`.gts`), sample instances, a Catalog Spec card, and QUnit test files
 3. The orchestrator discovers the test files, runs Playwright, and feeds failures back
 4. The agent self-corrects and the tests pass on the second iteration
 5. The ticket is marked done
@@ -2026,13 +2016,13 @@ Several components need to distinguish between the **source realm** (`software-f
 
 The `_run-command` endpoint requires the user to have permissions on the realm specified in the request body. For world-readable realms like `software-factory/`, any authenticated user has read access via the `*` wildcard in `realm_user_permissions`. When the source realm isn't accessible, `_run-command` can target the user's own realm while the `codeRef` module URL points to the source realm — the card loader resolves cross-realm module references.
 
-### Spec File Discovery Requires Polling
+### Test File Discovery Is Automatic
 
-After the agent writes test files to the realm, there's an indexing delay before the files are accessible. The orchestrator polls each spec file path via `readFile` (300ms interval, 30s timeout) using the `waitForRealmFile` utility. The spec paths are extracted from the agent's tool call log rather than scanning `_mtimes`.
+QUnit test files (`.test.gts`) are discovered automatically by the live-test infrastructure via `_mtimes`. No explicit spec path extraction or polling is needed — the Playwright browser navigates to the host's QUnit live-test page, which discovers and runs all `.test.gts` files in the realm.
 
 ### Skills Must Be Always-Loaded
 
-The plan described keyword-based skill resolution, but in practice the LLM needs search query guidance, Playwright test patterns, and Catalog Spec instructions on every ticket. These references (`dev-realm-search.md`, `dev-playwright-testing.md`, `dev-spec-usage.md`) are now always loaded regardless of ticket content. A future reorganization (CS-10597) should make the factory-agent skills self-contained.
+The plan described keyword-based skill resolution, but in practice the LLM needs search query guidance, QUnit test patterns, and Catalog Spec instructions on every ticket. These references (`dev-realm-search.md`, `dev-qunit-testing.md`, `dev-spec-usage.md`) are now always loaded regardless of ticket content. A future reorganization (CS-10597) should make the factory-agent skills self-contained.
 
 ### Dynamic Card Type Schemas
 
@@ -2041,3 +2031,42 @@ Card tool parameters (`update_project`, `update_ticket`, `create_knowledge`, `cr
 ### TestRun Failure Details
 
 When tests fail, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. Without this, the agent only sees “Tests failed” and can't diagnose the problem.
+
+## Implementation Findings from CS-10599
+
+The following findings emerged during the CS-10599 implementation (custom QUnit test page server, private realm auth, dotted filename resolution fixes). They document decisions, surprises, and remaining work.
+
+### Test Artifacts Realm Eliminated
+
+The original plan implied a separate test artifacts realm might be needed. In practice, QUnit tests use in-memory browser realms (`setupCardTest`), so test card instances never leave the browser during test execution. No test artifacts realm is needed. The only persistent test artifacts are `.test.gts` source files and `TestRun` result cards, both co-located in the target realm.
+
+### Custom QUnit Test Page Server
+
+The test executor serves a custom QUnit test page from a local HTTP server rather than navigating to the host app's test page or using the compat proxy. This was necessary because:
+
+- The host's test page has hardcoded Ember config values (realm URLs, server URLs) that don't match the hermetic test harness where the realm server runs on random ports
+- Chunk hashes in `host/dist/` change with every build, so the test page must be assembled dynamically by reading `host/dist/tests/index.html` at runtime
+- The custom page injects `QUnit.on('testEnd')` / `QUnit.on('runEnd')` hooks for result collection
+- The custom page rewrites the Ember config meta tag to inject browser-accessible realm proxy URLs
+
+Full architecture details are documented in Phase 5 above.
+
+### Private Realm Auth via Playwright Network Interception
+
+The live-test infrastructure (`live-test.js`) fetches `_mtimes` from the realm without auth headers. For private realms, this fails. The solution: the test executor uses Playwright's `page.route()` API to intercept all requests to the realm origin and inject the `Authorization` header at the network level. This is transparent to the live-test code running in the browser.
+
+### Dotted Filename Resolution Fix
+
+`getFileWithFallbacks()` in `stream.ts` checked for any dot in the filename to decide whether to skip extension fallbacks. This meant `hello.test` (from `hello.test.gts`) was treated as having an extension (`.test`), so it never tried appending `.gts`. The fix: only skip fallbacks for known executable extensions (`.gts`, `.ts`, `.js`, etc.). The same fix was applied to `fallbackHandle` in `realm.ts`. Filed CS-10649 for a similar pattern in the dependency tracker.
+
+### forceNew: true for Each Loop Iteration
+
+Each factory loop iteration must create a new `TestRun` card with `forceNew: true`, not overwrite the previous one. Without this, `resolveTestRun` found the existing running TestRun and resumed it instead of starting fresh, hiding the test history and preventing the orchestrator from seeing results for the current iteration.
+
+### Skipped/Todo Tests Need Proper Status (CS-10651)
+
+QUnit `skipped` and `todo` test statuses are currently mapped to `passed` to avoid confusing the resume logic, which treats anything non-passed as needing a rerun. This needs proper handling: a `skipped` status that is terminal (does not trigger reruns) but visually distinct from `passed`. Additionally, the orchestrator should reject TestRuns where all tests are skipped, since that indicates the test file didn't actually exercise anything.
+
+### Production Host Builds Strip Test Assets (CS-10650)
+
+The custom test page server requires a development or test host build. The Ember production build strips QUnit, test helpers, and `testem.js` from the output. This means the software factory cannot run tests against a production-built host. The plan is to ship QUnit and test helpers as a lazy-loaded bundle that survives production builds, benefiting both the factory and Code Mode's card testing support.

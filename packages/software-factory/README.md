@@ -1,126 +1,93 @@
 # Software Factory
 
-Local card-development harness for fast Boxel iteration.
+The software factory is an automated card-development system that takes a brief (a description of what card to build) and produces a working Boxel card — complete with card definition, sample instances, catalog spec, and QUnit tests — in a target realm.
 
-This package gives you a cached local realm fixture, an isolated realm server
-with harness-managed ports, and a Playwright loop that exercises cards in the
-real browser app shell.
+## How It Works
+
+The factory flow has four phases:
+
+1. **Intake** — Fetch a brief card from a source realm, normalize it into a structured representation
+2. **Bootstrap** — Create a target realm (if needed), populate it with a Project card, Knowledge Articles, and starter Tickets
+3. **Implementation** — An LLM agent picks up the active ticket and uses tool calls to write card definitions (`.gts`), sample instances (`.json`), catalog specs (`Spec/`), and QUnit test files (`.test.gts`) into the target realm
+4. **Verification** — The orchestrator runs QUnit tests via Playwright in a real browser, collects structured results into a TestRun card, and feeds failures back to the agent for iteration
+
+The agent iterates (implement → test → fix) until tests pass or max iterations are reached. The orchestrator (the "ralph loop") controls iteration count, test execution, and ticket selection deterministically — the LLM handles only the implementation work.
+
+### Realm Roles
+
+- **Source realm** (`packages/software-factory/realm/`) — publishes shared modules, card type definitions (Project, Ticket, KnowledgeArticle, TestRun), briefs, and templates. Never written to by the factory.
+- **Target realm** (user-specified) — receives all generated artifacts: card definitions, instances, specs, test files, and TestRun results.
+- **Fixture realm** (`test-fixtures/`) — disposable test input for development-time verification of the factory itself.
+
+### Target Realm Artifact Structure
+
+| Path                  | What it is                                                          |
+| --------------------- | ------------------------------------------------------------------- |
+| `Projects/`           | Project card with objective, scope, success criteria                |
+| `Tickets/`            | Ticket cards tracking implementation work                           |
+| `Knowledge Articles/` | Context articles derived from the brief                             |
+| `*.gts`               | Card definition files                                               |
+| `*.test.gts`          | Co-located QUnit test files                                         |
+| `CardName/`           | Sample card instances with realistic data                           |
+| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances |
+| `Test Runs/`          | TestRun cards with structured pass/fail results                     |
 
 ## Prerequisites
 
-This package is TypeScript-only. New scripts, tests, and package utilities
-should be written in `.ts`, not `.mjs`.
-
-Editor/type support for `.gts` files is provided through `glint` via this
-package's `tsconfig.json`, matching the realm-package pattern used elsewhere in
-the repo. Package linting currently runs `glint`, `eslint`, and `prettier`.
-
 - Docker running
-- Host app assets available at `http://localhost:4200/`
-  - use `cd packages/host && pnpm serve:dist`
-- Boxel icons server available at `http://localhost:4206/`
-  - use `cd packages/boxel-icons && pnpm serve`
-  - in a worktree where boxel-icons hasn't been built, symlink the dist from the main checkout:
-    `ln -s /path/to/boxel/packages/boxel-icons/dist packages/boxel-icons/dist`
-  - required before `cache:prepare` — the harness indexes cards that reference icon modules
+- `mise run dev-all` (starts realm server, host app, icons server, Postgres, Synapse)
+- Matrix credentials (username/password) for realm creation and auth
+- An [OpenRouter API key](https://openrouter.ai/keys) for the LLM agent (when running the full factory)
 
-The harness starts its own seeded test Postgres, Synapse, prerender server, and
-isolated realm server. By default it serves the test realm and base realm from
-the same fixed realm-server origin. The skills realm can be enabled when needed
-with `SOFTWARE_FACTORY_INCLUDE_SKILLS=1`.
+## Running the Factory
 
-For the software-factory Playwright flow, the isolated realm stack is
-self-contained and writes its actual runtime URLs and ports to harness metadata.
-The fixture realms use the placeholder origin `https://sf.boxel.test/`, which
-the harness rewrites to the live source-realm URL at startup. The Playwright
-flow does not require a separate external realm server on `http://localhost:4201/`.
+Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `http://localhost:4201/software-factory/Wiki/sticky-note`).
 
-## Commands
-
-- `pnpm cache:prepare`
-  - Builds or reuses the cached template database for `test-fixtures/darkfactory-adopter/`
-- `pnpm serve:support`
-  - Starts shared support services and prepares a reusable runtime context in the background
-- `pnpm serve:realm`
-  - Starts the isolated realm server for `/test/` on a dynamically assigned realm-server URL
-- `pnpm smoke:realm`
-  - Boots the isolated realm server, fetches `project-demo` as card JSON, and exits
-- `pnpm factory:go -- --brief-url <url> --target-realm-url <url>`
-  - Fetches and normalizes a brief, bootstraps the target realm, and prints a machine-readable run summary
-- `pnpm test`
-  - Runs package tests from `tests/*.test.ts` and `tests/*.spec.ts`
-- `pnpm test:node`
-  - Runs only Node-side `tests/*.test.ts`
-- `pnpm test:playwright`
-  - Runs the browser tests against the software-factory Playwright harness
-- `pnpm test:realm -- --realm-path ./realms/<project-realm>`
-  - Runs realm-hosted Playwright specs via the typed realm test runner
-- `pnpm boxel:session`
-  - Prints browser session/auth payloads for the active Boxel profile
-- `pnpm boxel:search -- --realm <realm-url> ...`
-  - Runs a typed `_search` query against a realm
-- `pnpm boxel:pick-ticket -- --realm <realm-url> ...`
-  - Finds candidate tracker tickets in a target realm
-
-All commands accept an optional realm directory argument:
-
-```bash
-pnpm cache:prepare ./my-realm
-pnpm serve:realm ./my-realm
-pnpm smoke:realm ./my-realm Person/example-card
-```
-
-## `factory:go`
-
-Usage:
-
-```bash
-pnpm factory:go -- \
-  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm-url http://localhost:4201/hassan/personal/ \
-  [--realm-server-url http://localhost:4201/] \
-  [--mode implement]
-```
-
-Parameters:
-
-- `--brief-url`
-  - Required. Absolute URL for the source brief card the factory should use as input.
-  - The command fetches card source JSON from this URL and includes normalized brief metadata in the summary.
-- `--target-realm-url`
-  - Required. Absolute URL for the target realm the factory should bootstrap and later populate.
-- `--realm-server-url`
-  - Optional. Explicit realm server URL for target-realm bootstrap when it cannot be inferred unambiguously from the target realm URL.
-- `--mode`
-  - Optional. One of `bootstrap`, `implement`, or `resume`. Defaults to `implement`.
-- `--help`
-  - Optional. Prints the command usage and exits.
-
-Auth:
-
-- `MATRIX_USERNAME` is required and determines the target realm owner.
-- If the brief is in a public realm, you do not need any auth setup.
-- If the brief is in a private realm, `factory:go` can authenticate using:
-  - the active Boxel profile in `~/.boxel-cli/profiles.json`
-  - `MATRIX_URL`, `MATRIX_USERNAME`, `MATRIX_PASSWORD`, and `REALM_SERVER_URL`
-- When the target realm does not exist yet, `factory:go` creates it with `POST /_create-realm`.
-- By default the target realm server URL is inferred from `--target-realm-url`, but `--realm-server-url` can override that when the realm server is mounted under a subdirectory.
-- The realm-server `/_create-realm` contract is the readiness boundary for bootstrap.
-
-Private brief with explicit Matrix username/password env:
+Set up credentials first (these persist in your shell session):
 
 ```bash
 export MATRIX_URL=http://localhost:8008/
-export MATRIX_USERNAME=factory
-read -s MATRIX_PASSWORD'?Matrix password: '
-export MATRIX_PASSWORD
-export REALM_SERVER_URL=http://localhost:4201/
+export MATRIX_USERNAME=your-username
+read -s 'MATRIX_PASSWORD?Matrix password: ' && export MATRIX_PASSWORD
+export OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
+
+Then run the factory:
+
+```bash
+cd packages/software-factory
 
 pnpm factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
-  --target-realm-url http://localhost:4201/factory/personal/ \
-  --realm-server-url http://localhost:4201/
+  --target-realm-url http://localhost:4201/your-username/my-test-realm/ \
+  --debug
 ```
+
+The `--debug` flag shows LLM prompts, tool calls and their results, and `console.log` output from QUnit tests as they run.
+
+### What to expect on the command line
+
+```
+[factory:go] mode=implement brief=http://localhost:4201/software-factory/Wiki/sticky-note
+[factory:go] Starting bootstrap + implement flow...
+[test-run-execution] Serving QUnit page at http://127.0.0.1:<port> for realm ...
+[test-run-execution] QUnit completed in <N>ms: <N> test(s)
+[factory-implement] Updated ticket status to done
+[factory:go] Implement complete: outcome=tests_passed iterations=<N> toolCalls=<N>
+```
+
+### What to expect in the Boxel host app (target realm)
+
+| Folder / File              | What it is                                                                |
+| -------------------------- | ------------------------------------------------------------------------- |
+| `Projects/`                | A Project card with the brief's objective and success criteria            |
+| `Tickets/`                 | Ticket cards — the active ticket should show status `done`                |
+| `Knowledge Articles/`      | Context articles derived from the brief                                   |
+| `*.gts`                    | Card definition file(s) for the implemented card                          |
+| `*.test.gts`               | Co-located QUnit test file(s)                                             |
+| `StickyNote/` (or similar) | Sample card instance(s) with realistic data                               |
+| `Spec/`                    | Catalog Spec card(s) linking to the card definition and sample instances  |
+| `Test Runs/`               | TestRun card(s) with structured pass/fail results grouped by QUnit module |
 
 ## Layout
 

@@ -34,13 +34,19 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  private get lastCardInRightMostStack() {
+  private get lastStackItem() {
     if (this.allStackItems.length <= 0) {
       return null;
     }
+    return this.allStackItems[this.allStackItems.length - 1];
+  }
 
-    return this.store.peek(this.allStackItems[this.allStackItems.length - 1].id)
-      ?.id;
+  private get lastCardInRightMostStack() {
+    let stackItem = this.lastStackItem;
+    if (!stackItem) {
+      return null;
+    }
+    return this.store.peek(stackItem.id)?.id;
   }
 
   protected async run(
@@ -52,10 +58,13 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
         await this.operatorModeStateService.updateCodePath(null);
         break;
       case Submodes.Code: {
+        let lastId = this.lastCardInRightMostStack;
         let codePath =
           input.codePath ??
-          (this.lastCardInRightMostStack
-            ? this.lastCardInRightMostStack + '.json'
+          (lastId
+            ? this.lastStackItem?.type === 'file'
+              ? lastId
+              : lastId + '.json'
             : null);
         let codeUrl = codePath ? new URL(codePath) : null;
         let currentSubmode = this.operatorModeStateService.state.submode;
