@@ -119,4 +119,6 @@ declare module '@ember/routing' {
 // incorporate
 import '../../runtime-common/global';
 
+import './marked-gfm-heading-id';
+
 import './matrix-js-sdk';

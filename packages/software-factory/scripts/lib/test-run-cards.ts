@@ -1,9 +1,9 @@
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import { readCardSource, writeCardSource } from './realm-operations';
+import { readFile, writeFile } from './realm-operations';
 import type {
   CreateTestRunOptions,
-  SpecResultData,
+  TestModuleResultData,
   TestResultEntryData,
   TestRunAttributes,
   TestRunRealmOptions,
@@ -27,15 +27,15 @@ export async function createTestRun(
     {
       sequenceNumber: seq,
       ticketURL: options.ticketURL,
-      specRef: options.specRef,
+      moduleRef: options.moduleRef,
       projectCardUrl: options.projectCardUrl,
     },
   );
 
-  let result = await writeCardSource(
+  let result = await writeFile(
     options.testRealmUrl,
     `${testRunId}.json`,
-    document,
+    JSON.stringify(document, null, 2),
     { authorization: options.authorization, fetch: options.fetch },
   );
 
@@ -61,13 +61,9 @@ export async function completeTestRun(
 
   // Retry the read — after a long spawnSync (Playwright), TCP connections
   // may be stale causing the first fetch to fail with "fetch failed".
-  let readResult: Awaited<ReturnType<typeof readCardSource>> | undefined;
+  let readResult: Awaited<ReturnType<typeof readFile>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await readCardSource(
-      options.testRealmUrl,
-      testRunId,
-      fetchOptions,
-    );
+    readResult = await readFile(options.testRealmUrl, testRunId, fetchOptions);
     if (readResult.ok && readResult.document) {
       break;
     }
@@ -87,7 +83,7 @@ export async function completeTestRun(
     status: attrs.status,
     completedAt: new Date().toISOString(),
     durationMs: attrs.durationMs,
-    specResults: attrs.specResults,
+    moduleResults: attrs.moduleResults,
   };
   if (attrs.errorMessage) {
     completionAttrs.errorMessage = attrs.errorMessage;
@@ -109,10 +105,10 @@ export async function completeTestRun(
     };
   }
 
-  let writeResult = await writeCardSource(
+  let writeResult = await writeFile(
     options.testRealmUrl,
     `${testRunId}.json`,
-    readResult.document,
+    JSON.stringify(readResult.document, null, 2),
     fetchOptions,
   );
 
@@ -140,9 +136,9 @@ export function buildTestRunCardDocument(
     status: 'pending' as const,
   }));
 
-  let specResults: SpecResultData[] = [
+  let moduleResults: TestModuleResultData[] = [
     {
-      ...(options?.specRef ? { specRef: options.specRef } : {}),
+      ...(options?.moduleRef ? { moduleRef: options.moduleRef } : {}),
       results,
     },
   ];
@@ -151,7 +147,7 @@ export function buildTestRunCardDocument(
     sequenceNumber: options?.sequenceNumber ?? 1,
     runAt: new Date().toISOString(),
     status: 'running',
-    specResults,
+    moduleResults,
   };
 
   let relationships:

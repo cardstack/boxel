@@ -252,7 +252,7 @@ async function main(): Promise<void> {
   let factoryTools = buildFactoryTools(
     {
       targetRealmUrl: 'https://realms.example.test/user/target/',
-      testRealmUrl: 'https://realms.example.test/user/target-tests/',
+      realmServerUrl: 'https://realms.example.test/',
       realmTokens: {
         'https://realms.example.test/user/target/': 'Bearer target-jwt',
         'https://realms.example.test/user/target-tests/': 'Bearer test-jwt',

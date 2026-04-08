@@ -215,6 +215,8 @@ module('factory-entrypoint integration', function () {
           briefUrl,
           '--target-realm-url',
           targetRealmUrl,
+          '--realm-server-url',
+          `${origin}/`,
           '--mode',
           'resume',
         ],
@@ -226,7 +228,6 @@ module('factory-entrypoint integration', function () {
             MATRIX_USERNAME: 'hassan',
             MATRIX_PASSWORD: 'secret',
             MATRIX_URL: origin,
-            REALM_SERVER_URL: `${origin}/`,
           },
         },
       );

@@ -36,7 +36,6 @@ import {
   isCardErrorJSONAPI,
   isListingDef,
   isListingInstance,
-  internalKeyFor,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -91,7 +90,7 @@ interface Signature {
     cardInstance: CardDef | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectDeclaration: (dec: ModuleDeclaration) => void;
-    openSearch: (term: string) => void;
+    openSearch: (term: string, typeRef?: ResolvedCodeRef) => void;
     goToDefinition: (
       codeRef: ResolvedCodeRef | undefined,
       localName: string | undefined,
@@ -421,11 +420,7 @@ export default class DetailPanel extends Component<Signature> {
       throw new Error(`bug: the selected declaration is not a card definition`);
     }
     let ref = this.selectedDeclarationAsCodeRef;
-    let refURL = internalKeyFor(
-      ref,
-      this.operatorModeStateService.state.codePath!,
-    );
-    this.args.openSearch(`carddef:${refURL}`);
+    this.args.openSearch('', ref);
   }
 
   @action private async createListing() {

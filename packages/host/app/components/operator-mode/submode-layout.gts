@@ -72,7 +72,7 @@ interface Signature {
     default: [
       {
         openSearchToPrompt: () => void;
-        openSearchToResults: (term: string) => void;
+        openSearchToResults: (term: string, typeRef?: ResolvedCodeRef) => void;
         updateSubmode: (submode: Submode) => void;
       },
     ];
@@ -122,7 +122,7 @@ export default class SubmodeLayout extends Component<Signature> {
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
-  declare private doSearch: (term: string) => void;
+  declare private doSearch: (term: string, typeRef?: ResolvedCodeRef) => void;
 
   @action
   private storeTopBarCenterElement(element: Element) {
@@ -173,12 +173,18 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  private get lastCardIdInRightMostStack() {
+  private get lastStackItem() {
     if (this.allStackItems.length <= 0) {
       return null;
     }
+    return this.allStackItems[this.allStackItems.length - 1];
+  }
 
-    let stackItem = this.allStackItems[this.allStackItems.length - 1];
+  private get lastCardIdInRightMostStack() {
+    let stackItem = this.lastStackItem;
+    if (!stackItem) {
+      return null;
+    }
     return this.store.peek(stackItem.id)?.id;
   }
 
@@ -191,13 +197,16 @@ export default class SubmodeLayout extends Component<Signature> {
       case Submodes.Interact:
         await this.operatorModeStateService.updateCodePath(null);
         break;
-      case Submodes.Code:
-        await this.operatorModeStateService.updateCodePath(
-          this.lastCardIdInRightMostStack
-            ? cardIdToURL(this.lastCardIdInRightMostStack + '.json')
-            : null,
-        );
+      case Submodes.Code: {
+        let lastId = this.lastCardIdInRightMostStack;
+        let codePath = lastId
+          ? cardIdToURL(
+              this.lastStackItem?.type === 'file' ? lastId : lastId + '.json',
+            )
+          : null;
+        await this.operatorModeStateService.updateCodePath(codePath);
         break;
+      }
       case Submodes.Host: {
         let currentSubmode = this.operatorModeStateService.state.submode;
 
@@ -305,6 +314,12 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchSheetMode = SearchSheetModes.SearchResults;
   }
 
+  @action private expandSearchOnFilterChange() {
+    if (this.searchSheetMode === SearchSheetModes.SearchPrompt) {
+      this.searchSheetMode = SearchSheetModes.SearchResults;
+    }
+  }
+
   @action private openSearchSheetToPrompt() {
     if (this.searchSheetMode === SearchSheetModes.Closed) {
       this.searchSheetMode = SearchSheetModes.SearchPrompt;
@@ -356,32 +371,36 @@ export default class SubmodeLayout extends Component<Signature> {
     this.searchElement.focus();
   }
   @action
-  private openSearchAndShowResults(term: string) {
-    this.doOpenSearchAndShowResults.perform(term);
+  private openSearchAndShowResults(term: string, typeRef?: ResolvedCodeRef) {
+    this.doOpenSearchAndShowResults.perform(term, typeRef);
   }
 
   @action
-  private setupSearch(doSearch: (term: string) => void) {
+  private setupSearch(
+    doSearch: (term: string, typeRef?: ResolvedCodeRef) => void,
+  ) {
     this.doSearch = doSearch;
   }
 
-  private doOpenSearchAndShowResults = restartableTask(async (term: string) => {
-    this.suppressSearchClose = true;
+  private doOpenSearchAndShowResults = restartableTask(
+    async (term: string, typeRef?: ResolvedCodeRef) => {
+      this.suppressSearchClose = true;
 
-    let wasClosed = this.searchSheetMode === SearchSheetModes.Closed;
-    this.searchSheetMode = SearchSheetModes.SearchResults;
-    this.searchElement?.focus();
-    if (wasClosed) {
-      this.args.onSearchSheetOpened?.();
-    }
-    this.doSearch(term);
+      let wasClosed = this.searchSheetMode === SearchSheetModes.Closed;
+      this.searchSheetMode = SearchSheetModes.SearchResults;
+      this.searchElement?.focus();
+      if (wasClosed) {
+        this.args.onSearchSheetOpened?.();
+      }
+      this.doSearch(term, typeRef);
 
-    // we need to prevent the onblur of the search sheet from triggering a
-    // search sheet close from the click that actually triggered the search
-    // sheet to show in the first place
-    await timeout(250);
-    this.suppressSearchClose = false;
-  });
+      // we need to prevent the onblur of the search sheet from triggering a
+      // search sheet close from the click that actually triggered the search
+      // sheet to show in the first place
+      await timeout(250);
+      this.suppressSearchClose = false;
+    },
+  );
 
   @tracked private isChooseSubscriptionPlanModalOpen = false;
 
@@ -472,6 +491,7 @@ export default class SubmodeLayout extends Component<Signature> {
               @onSearch={{this.expandSearchToShowResults}}
               @onCardSelect={{this.handleCardSelectFromSearch}}
               @onInputInsertion={{this.storeSearchElement}}
+              @onFilterChange={{this.expandSearchOnFilterChange}}
             />
           {{/if}}
           <AiAssistantToast

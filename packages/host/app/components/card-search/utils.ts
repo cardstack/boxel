@@ -28,19 +28,6 @@ export interface NewCardArgs {
   realmURL: string;
 }
 
-export function getCodeRefFromSearchKey(
-  searchKey: string,
-): ResolvedCodeRef | undefined {
-  if (searchKey.startsWith('carddef:')) {
-    let internalKey = searchKey.substring('carddef:'.length);
-    let parts = internalKey.split('/');
-    let name = parts.pop()!;
-    let module = parts.join('/');
-    return { module, name };
-  }
-  return undefined;
-}
-
 export function removeFileExtension(cardId: string | undefined) {
   return cardId?.replace(/\.[^/.]+$/, '');
 }
@@ -60,10 +47,6 @@ function isSearchKeyEmpty(searchKey: string): boolean {
 }
 
 function isURLSearchKey(searchKey: string): boolean {
-  const maybeType = getCodeRefFromSearchKey(searchKey);
-  if (maybeType) {
-    return false;
-  }
   try {
     new URL(searchKey);
     return true;
@@ -94,13 +77,11 @@ export function cardMatchesTypeRef(card: CardDef, typeRef: CodeRef): boolean {
 
 export function getFilterTypeRefs(
   baseFilter: Filter | undefined,
-  searchKey: string,
 ): TypeRefResult[] | undefined {
   if (baseFilter) {
     return getTypeRefsFromFilter(baseFilter);
   }
-  const ref = getCodeRefFromSearchKey(searchKey);
-  return ref ? [{ ref, negated: false }] : undefined;
+  return undefined;
 }
 
 export function filterCardsByTypeRefs(
@@ -124,14 +105,6 @@ export function filterCardsByTypeRefs(
     );
   }
   return filtered;
-}
-
-export function getSearchTerm(searchKey: string): string | undefined {
-  if (isSearchKeyEmpty(searchKey) || isURLSearchKey(searchKey)) {
-    return undefined;
-  }
-  const type = getCodeRefFromSearchKey(searchKey);
-  return type ? undefined : searchKey;
 }
 
 // Removes CardTypeFilter nodes from a filter tree.
@@ -216,14 +189,11 @@ export function buildSearchQuery(
       sort: activeSort.sort,
     };
   }
-  const type = getCodeRefFromSearchKey(searchKey);
-  const searchTerm = !type ? searchKey : undefined;
+  const searchTerm = searchKey?.trim() || undefined;
   return {
     filter: {
       every: [
-        {
-          ...(type ? { type } : { not: { type: specRef } }),
-        },
+        { not: { type: specRef } },
         ...(typeFilter ? [typeFilter] : []),
         ...(searchTerm ? [{ contains: { cardTitle: searchTerm } }] : []),
       ],

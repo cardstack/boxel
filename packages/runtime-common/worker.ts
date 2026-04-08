@@ -190,8 +190,15 @@ export class Worker {
         this.#realmServerMatrixUsername,
       )!;
 
-      if (!(await matrixClient.isTokenValid())) {
-        await matrixClient.login();
+      try {
+        if (!(await matrixClient.isTokenValid())) {
+          await matrixClient.login();
+        }
+      } catch (e) {
+        this.#log.warn(
+          `Failed to validate/refresh matrix token, proceeding without pre-authenticated token`,
+          e,
+        );
       }
     } else {
       matrixClient = new MatrixClient({

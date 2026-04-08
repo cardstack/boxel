@@ -86,7 +86,6 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
-  hasExtension,
 } from './index';
 import type { FromScratchResult } from './tasks/indexer';
 import { isCodeRef, visitModuleDeps } from './code-ref';
@@ -471,6 +470,7 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
+  #cachedRealmInfo: RealmInfo | null = null;
 
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
@@ -1160,6 +1160,11 @@ export class Realm {
     }
 
     if (addedFiles.length > 0 || updatedFiles.length > 0) {
+      if (
+        [...addedFiles, ...updatedFiles].some((f) => f.endsWith('.realm.json'))
+      ) {
+        this.#cachedRealmInfo = null;
+      }
       this.broadcastRealmEvent({
         eventName: 'update',
         ...(addedFiles.length ? { added: addedFiles } : {}),
@@ -2350,11 +2355,11 @@ export class Realm {
 
     let start = Date.now();
     try {
-      let isNonExecutableFile =
-        hasExtension(localName) &&
-        !hasExecutableExtension(localName) &&
-        !localName.endsWith('.json');
-      let fallbackExtensions = isNonExecutableFile
+      // Always try executable extension fallbacks so that dotted filenames
+      // like "hello.test" resolve to "hello.test.gts". Only skip fallbacks
+      // when the URL already has an executable extension.
+      let alreadyHasExecutableExt = hasExecutableExtension(localName);
+      let fallbackExtensions = alreadyHasExecutableExt
         ? []
         : [...executableExtensions, '.json'];
       let handle = await this.getFileWithFallbacks(
@@ -2366,7 +2371,7 @@ export class Realm {
       }
 
       if (handle.path !== localName) {
-        if (isNonExecutableFile) {
+        if (alreadyHasExecutableExt) {
           return notFound(request, requestContext, `${localName} not found`);
         }
         let headers = {
@@ -2690,6 +2695,9 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url,
+          ...(fileEntry.resource?.meta?.queryFieldDefs
+            ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
+            : {}),
         },
         links: { self: fileURL },
       },
@@ -4346,7 +4354,10 @@ export class Realm {
   }
 
   async getRealmInfo(): Promise<RealmInfo> {
-    return this.parseRealmInfo();
+    if (!this.#cachedRealmInfo) {
+      this.#cachedRealmInfo = await this.parseRealmInfo();
+    }
+    return this.#cachedRealmInfo;
   }
 
   private async parseRealmInfo(): Promise<RealmInfo> {
@@ -4478,6 +4489,7 @@ export class Realm {
     Object.assign(realmConfig, attributes);
     let serializedConfig = JSON.stringify(realmConfig, null, 2) + '\n';
     await this.write(realmConfigPath, serializedConfig);
+    this.#cachedRealmInfo = null;
 
     let realmInfo = await this.parseRealmInfo();
     let doc = {

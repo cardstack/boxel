@@ -9,7 +9,10 @@ import {
 } from 'ember-qunit';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 
+import { clearHtmlComponentCache } from '@cardstack/host/lib/html-component';
 import type ResetService from '@cardstack/host/services/reset';
+
+import { clearRemoteRealmCache } from './realm-server-mock/routes';
 
 import { cleanupMonacoEditorModels } from './index';
 
@@ -91,6 +94,8 @@ export function setupApplicationTest(hooks: NestedHooks) {
       this.owner.lookup('service:reset') as ResetService | undefined
     )?.resetAll();
     cleanupMonacoEditorModels();
+    clearHtmlComponentCache();
+    clearRemoteRealmCache();
   });
 }
 
@@ -104,6 +109,8 @@ export function setupRenderingTest(hooks: NestedHooks) {
       this.owner.lookup('service:reset') as ResetService | undefined
     )?.resetAll();
     cleanupMonacoEditorModels();
+    clearHtmlComponentCache();
+    clearRemoteRealmCache();
   });
 }
 

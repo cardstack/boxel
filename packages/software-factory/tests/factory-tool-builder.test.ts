@@ -65,7 +65,7 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
 function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
   return {
     targetRealmUrl: TARGET_REALM,
-    testRealmUrl: TEST_REALM,
+    realmServerUrl: 'https://realms.example.test/',
     realmTokens: {
       [TARGET_REALM]: TARGET_TOKEN,
       [TEST_REALM]: TEST_TOKEN,
@@ -226,7 +226,7 @@ module('factory-tool-builder > write_file', function () {
     assert.strictEqual(requests[0].body, 'export default class MyCard {}');
   });
 
-  test('routes .ts file to writeModuleSource', async function (assert) {
+  test('routes .ts file to writeFile', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -264,7 +264,7 @@ module('factory-tool-builder > write_file', function () {
     assert.true(result.ok);
     assert.strictEqual(requests[0].url, `${TARGET_REALM}Card/1.json`);
     assert.strictEqual(requests[0].method, 'POST');
-    // writeModuleSource sends raw content as-is
+    // writeFile sends raw content as-is
     assert.strictEqual(requests[0].body, cardJson);
   });
 });
@@ -288,24 +288,6 @@ module('factory-tool-builder > realm targeting and auth', function () {
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
   });
 
-  test('write_file to test realm uses test JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({
-      path: 'Tests/spec.ts',
-      content: 'test content',
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests[0].url, `${TEST_REALM}Tests/spec.ts`);
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-  });
-
   test('read_file uses correct JWT for target realm', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {
       data: { attributes: {} },
@@ -319,21 +301,6 @@ module('factory-tool-builder > realm targeting and auth', function () {
     await readTool.execute({ path: 'card.gts' });
 
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('read_file uses correct JWT for test realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {
-      data: { attributes: {} },
-    });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    await readTool.execute({ path: 'Tests/spec.ts', realm: 'test' });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
   });
 
   test('update_ticket uses target realm JWT', async function (assert) {
@@ -383,68 +350,6 @@ module('factory-tool-builder > realm targeting and auth', function () {
     });
 
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('search_realm uses correct JWT for test realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchTool = findTool(tools, 'search_realm');
-
-    await searchTool.execute({
-      query: { filter: { type: { name: 'TestRun' } } },
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-  });
-
-  test('write_file .json to test realm uses test JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let cardJson = JSON.stringify({
-      data: { type: 'card', attributes: { name: 'fixture' } },
-    });
-
-    await writeTool.execute({
-      path: 'Fixtures/card.json',
-      content: cardJson,
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-    assert.strictEqual(requests[0].url, `${TEST_REALM}Fixtures/card.json`);
-  });
-
-  test('different JWTs for actions targeting different realms', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({
-      path: 'card.gts',
-      content: 'content',
-      realm: 'target',
-    });
-    await writeTool.execute({
-      path: 'Tests/spec.ts',
-      content: 'test',
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests.length, 2);
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-    assert.strictEqual(requests[1].headers['Authorization'], TEST_TOKEN);
   });
 
   test('omits Authorization when token not found for realm', async function (assert) {
@@ -873,7 +778,6 @@ module('factory-tool-builder > run_tests', function () {
       properties?: Record<string, unknown>;
     };
     assert.true(params.required!.includes('slug'));
-    assert.true(params.required!.includes('specPaths'));
     assert.true('testNames' in params.properties!);
     assert.true('projectCardUrl' in params.properties!);
   });
@@ -891,11 +795,6 @@ module('factory-tool-builder > run_tests', function () {
       serverToken: 'Bearer server-jwt',
       testResultsModuleUrl:
         'https://realms.example.test/user/target/test-results',
-      matrixAuth: {
-        userId: '@factory:localhost',
-        accessToken: 'matrix-token',
-        matrixUrl: 'https://matrix.example.test/',
-      },
       executeTestRun: async (options: ExecuteTestRunOptions) => {
         capturedOptions = options;
         return mockHandle;
@@ -906,7 +805,6 @@ module('factory-tool-builder > run_tests', function () {
 
     let result = await runTestsTool.execute({
       slug: 'define-sticky-note',
-      specPaths: ['Tests/sticky-note.spec.ts'],
       testNames: ['renders fitted view'],
       projectCardUrl: 'https://realms.example.test/user/target/Project/mvp',
     });
@@ -918,20 +816,12 @@ module('factory-tool-builder > run_tests', function () {
       'https://realms.example.test/user/target/test-results',
     );
     assert.strictEqual(capturedOptions!.slug, 'define-sticky-note');
-    assert.deepEqual(capturedOptions!.specPaths, ['Tests/sticky-note.spec.ts']);
     assert.deepEqual(capturedOptions!.testNames, ['renders fitted view']);
     assert.strictEqual(capturedOptions!.authorization, TARGET_TOKEN);
-    assert.strictEqual(capturedOptions!.serverToken, 'Bearer server-jwt');
-    assert.strictEqual(capturedOptions!.testRealmUrl, TEST_REALM);
     assert.strictEqual(
       capturedOptions!.projectCardUrl,
       'https://realms.example.test/user/target/Project/mvp',
     );
-    assert.deepEqual(capturedOptions!.matrixAuth, {
-      userId: '@factory:localhost',
-      accessToken: 'matrix-token',
-      matrixUrl: 'https://matrix.example.test/',
-    });
 
     // Verify the result is passed through
     let handle = result as TestRunHandle;
@@ -955,7 +845,6 @@ module('factory-tool-builder > run_tests', function () {
 
     await runTestsTool.execute({
       slug: 'test-slug',
-      specPaths: ['Tests/test.spec.ts'],
     });
 
     assert.strictEqual(
@@ -980,7 +869,6 @@ module('factory-tool-builder > run_tests', function () {
 
     await runTestsTool.execute({
       slug: 'auth-test',
-      specPaths: ['Tests/auth.spec.ts'],
     });
 
     assert.strictEqual(

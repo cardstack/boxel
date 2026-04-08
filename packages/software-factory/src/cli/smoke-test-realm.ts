@@ -1,29 +1,30 @@
 /**
- * Smoke test for the factory test realm management.
+ * Smoke test for the factory test realm management (QUnit).
  *
  * Simulates the full factory workflow: implementation phase output followed
- * by the testing phase via executeTestRunFromRealm.
+ * by the testing phase via executeTestRunFromRealm with QUnit .test.gts files.
  *
- * Phase 1 — Simulate LLM implementation output:
+ * Phase 1 -- Simulate LLM implementation output:
  *   Writes to the target realm (what the LLM would have produced):
  *   1. A sample HelloCard definition (.gts)
  *   2. A Spec card instance pointing to the HelloCard definition
- *   3. A Playwright test spec in the Tests/ folder
+ *   3. A sample HelloCard instance (HelloCard/sample.json)
+ *   4. A QUnit test file (hello.test.gts) -- passing
+ *   5. A QUnit test file (hello-fail.test.gts) -- deliberately failing
  *
- * Phase 2 — Run the testing phase (both specs in a single TestRun):
- *   Calls executeTestRunFromRealm with both spec paths, which:
- *   - Creates a TestRun card (status: running) in the target realm's Test Runs/ folder
- *   - Pulls spec files from the target realm locally (Playwright needs local .spec.ts files)
- *   - Runs both Playwright specs against the live target realm (no local harness)
- *   - Any card instances created during spec execution land in the test artifacts realm
- *   - Completes the TestRun card with SpecResults grouped by spec file
- *   - The passing spec produces a SpecResult with passedCount=1
- *   - The failing spec produces a SpecResult with failedCount=1
+ * Phase 2 -- Run the testing phase via QUnit:
+ *   Calls executeTestRunFromRealm, which:
+ *   - Creates a TestRun card (status: running) in the target realm
+ *   - Launches a headless browser pointing at the host app QUnit page
+ *   - Collects QUnit results (testEnd / runEnd events)
+ *   - Completes the TestRun card with module results
+ *   - The passing test produces a result with passedCount=1
+ *   - The failing test produces a result with failedCount=1
  *   - The overall TestRun status is 'failed' (mixed results)
  *
  * Prerequisites:
  *
- *   Realm server authentication — one of:
+ *   Realm server authentication -- one of:
  *     a. Active Boxel CLI profile (`boxel profile add` then `boxel profile switch`)
  *     b. Environment variables: MATRIX_URL, MATRIX_USERNAME, MATRIX_PASSWORD
  *
@@ -38,16 +39,15 @@ import {
   matrixLogin,
   parseArgs,
 } from '../../scripts/lib/boxel';
-import { executeTestRunFromRealm } from '../../scripts/lib/factory-test-realm';
+import { executeTestRunFromRealm } from '../../scripts/lib/test-run-execution';
 import {
   createRealm,
   getRealmScopedAuth,
-  writeCardSource,
-  writeModuleSource,
+  writeFile,
 } from '../../scripts/lib/realm-operations';
 
 // ---------------------------------------------------------------------------
-// Sample LLM output — what the agent would produce in the implementation phase
+// Sample LLM output -- what the agent would produce in the implementation phase
 // ---------------------------------------------------------------------------
 
 const HELLO_CARD_GTS = `import {
@@ -92,108 +92,52 @@ const HELLO_SPEC_CARD = {
   },
 };
 
-function buildProjectCard(realmServerUrl: string) {
-  return {
-    data: {
-      type: 'card',
-      attributes: {
-        projectCode: 'HELLO-SMOKE',
-        projectName: 'Hello World Smoke Test',
-        projectStatus: 'active',
-        objective:
-          'Verify the factory test realm pipeline by creating a HelloCard and running Playwright specs against it.',
-        scope:
-          '## Scope\n\n- Create a HelloCard definition with a greeting field\n- Create a Spec card pointing to the definition\n- Write Playwright specs that create and verify HelloCard instances\n- Verify pass and fail paths produce correct TestRun cards',
-        technicalContext:
-          '## Technical Context\n\nThis is a smoke test project. The HelloCard has a single `greeting` field and renders it in an `<h1>` with `data-test-greeting`.',
-      },
-      meta: {
-        adoptsFrom: {
-          module: `${realmServerUrl}software-factory/darkfactory`,
-          name: 'Project',
-        },
-      },
-    },
-  };
+// The .test.gts files use import.meta.url to resolve the co-located card
+// definition, making them portable across realms.
+
+const HELLO_TEST_GTS = `import { module, test } from 'qunit';
+import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { renderCard } from '@cardstack/host/tests/helpers/render-component';
+import { getService } from '@universal-ember/test-support';
+
+let cardModuleUrl = new URL('./hello', import.meta.url).href;
+
+export function runTests() {
+  module('HelloCard', function (hooks) {
+    setupCardTest(hooks);
+
+    test('greeting renders in isolated view', async function (assert) {
+      let loader = getService('loader-service').loader;
+      let { HelloCard } = await loader.import(cardModuleUrl);
+      let card = new HelloCard({ greeting: 'Hello from smoke test' });
+      await renderCard(loader, card, 'isolated');
+      assert.dom('[data-test-greeting]').hasText('Hello from smoke test');
+    });
+  });
 }
-
-const PLAYWRIGHT_SPEC = `import { expect, test } from '@playwright/test';
-
-test('hello card renders greeting', async ({ request }) => {
-  let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
-  let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
-  let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
-
-  // Create a HelloCard instance in the test artifacts folder (Run N/).
-  let response = await request.post(artifactsFolderUrl + 'HelloCard/smoke-pass.json', {
-    headers: {
-      Accept: 'application/vnd.card+source',
-      'Content-Type': 'application/vnd.card+source',
-      Authorization: authorization,
-    },
-    data: JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: { greeting: 'Hello from smoke test' },
-        meta: {
-          adoptsFrom: { module: sourceRealmUrl + 'hello', name: 'HelloCard' },
-        },
-      },
-    }),
-  });
-  expect(response.ok()).toBe(true);
-
-  // Verify the card was created by reading it back.
-  let readResponse = await request.get(artifactsFolderUrl + 'HelloCard/smoke-pass', {
-    headers: {
-      Accept: 'application/vnd.card+source',
-      Authorization: authorization,
-    },
-  });
-  expect(readResponse.ok()).toBe(true);
-  let card = await readResponse.json();
-  expect(card.data.attributes.greeting).toBe('Hello from smoke test');
-});
 `;
 
-const PLAYWRIGHT_FAILING_SPEC = `import { expect, test } from '@playwright/test';
+const HELLO_FAILING_TEST_GTS = `import { module, test } from 'qunit';
+import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { renderCard } from '@cardstack/host/tests/helpers/render-component';
+import { getService } from '@universal-ember/test-support';
 
-test('hello card has wrong greeting (deliberately fails)', async ({ request }) => {
-  let sourceRealmUrl = process.env.BOXEL_SOURCE_REALM_URL!;
-  let artifactsFolderUrl = process.env.BOXEL_TEST_ARTIFACTS_FOLDER_URL!;
-  let authorization = process.env.BOXEL_TEST_ARTIFACTS_AUTHORIZATION!;
+let cardModuleUrl = new URL('./hello', import.meta.url).href;
 
-  // Create a HelloCard instance in the test artifacts folder.
-  let response = await request.post(artifactsFolderUrl + 'HelloCard/smoke-fail.json', {
-    headers: {
-      Accept: 'application/vnd.card+source',
-      'Content-Type': 'application/vnd.card+source',
-      Authorization: authorization,
-    },
-    data: JSON.stringify({
-      data: {
-        type: 'card',
-        attributes: { greeting: 'Hello from smoke test' },
-        meta: {
-          adoptsFrom: { module: sourceRealmUrl + 'hello', name: 'HelloCard' },
-        },
-      },
-    }),
+export function runTests() {
+  module('HelloCard Fail', function (hooks) {
+    setupCardTest(hooks);
+
+    test('deliberately fails - wrong greeting text', async function (assert) {
+      let loader = getService('loader-service').loader;
+      let { HelloCard } = await loader.import(cardModuleUrl);
+      let card = new HelloCard({ greeting: 'Hello from smoke test' });
+      await renderCard(loader, card, 'isolated');
+      // This assertion deliberately fails - the rendered text doesn't match
+      assert.dom('[data-test-greeting]').hasText('THIS TEXT DOES NOT EXIST');
+    });
   });
-  expect(response.ok()).toBe(true);
-
-  // Read the card back and check for text that doesn't exist (deliberately fails).
-  let readResponse = await request.get(artifactsFolderUrl + 'HelloCard/smoke-fail', {
-    headers: {
-      Accept: 'application/vnd.card+source',
-      Authorization: authorization,
-    },
-  });
-  expect(readResponse.ok()).toBe(true);
-  let card = await readResponse.json();
-  // This assertion is deliberately wrong:
-  expect(card.data.attributes.greeting).toBe('THIS TEXT DOES NOT EXIST');
-});
+}
 `;
 
 // ---------------------------------------------------------------------------
@@ -244,7 +188,7 @@ async function main() {
     process.env.REALM_SERVER_URL = realmServerUrl;
   }
 
-  console.log('=== Factory Test Realm Smoke Test ===\n');
+  console.log('=== Factory Test Realm Smoke Test (QUnit) ===\n');
   console.log(`Target realm: ${targetRealmUrl}`);
   console.log(`Realm server: ${realmServerUrl}`);
   console.log(`Test results module: ${testResultsModuleUrl}`);
@@ -318,24 +262,9 @@ async function main() {
     '--- Phase 1: Writing LLM implementation output to target realm ---\n',
   );
 
-  // 1. Project card — represents this project in the testing phase.
-  console.log('  Writing Projects/hello-world.json (Project card)...');
-  let projectResult = await writeCardSource(
-    targetRealmUrl,
-    'Projects/hello-world.json',
-    buildProjectCard(realmServerUrl) as any,
-    fetchOptions,
-  );
-  console.log(
-    projectResult.ok
-      ? '  ✓ Projects/hello-world.json'
-      : `  ✗ Projects/hello-world.json: ${projectResult.error}`,
-  );
-  let projectCardUrl = `${targetRealmUrl}Projects/hello-world`;
-
-  // 2. Card definition
+  // 1. Card definition
   console.log('  Writing hello.gts (HelloCard definition)...');
-  let defResult = await writeModuleSource(
+  let defResult = await writeFile(
     targetRealmUrl,
     'hello.gts',
     HELLO_CARD_GTS,
@@ -345,12 +274,12 @@ async function main() {
     defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
   );
 
-  // 3. Spec card instance pointing to the card definition
+  // 2. Spec card instance pointing to the card definition
   console.log('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
-  let specCardResult = await writeCardSource(
+  let specCardResult = await writeFile(
     targetRealmUrl,
     'Spec/hello-card.json',
-    HELLO_SPEC_CARD as any,
+    JSON.stringify(HELLO_SPEC_CARD, null, 2),
     fetchOptions,
   );
   console.log(
@@ -359,63 +288,54 @@ async function main() {
       : `  ✗ Spec/hello-card.json: ${specCardResult.error}`,
   );
 
-  // 5. Playwright test spec
-  console.log('  Writing Tests/hello-smoke.spec.ts (Playwright spec)...');
-  let specResult = await writeModuleSource(
+  // 3. QUnit passing test (imports HelloCard from the realm)
+  console.log('  Writing hello.test.gts (QUnit passing test)...');
+  let testResult = await writeFile(
     targetRealmUrl,
-    'Tests/hello-smoke.spec.ts',
-    PLAYWRIGHT_SPEC,
+    'hello.test.gts',
+    HELLO_TEST_GTS,
     fetchOptions,
   );
   console.log(
-    specResult.ok
-      ? '  ✓ Tests/hello-smoke.spec.ts'
-      : `  ✗ Tests/hello-smoke.spec.ts: ${specResult.error}`,
+    testResult.ok
+      ? '  ✓ hello.test.gts'
+      : `  ✗ hello.test.gts: ${testResult.error}`,
   );
 
-  // 4. Deliberately failing Playwright test spec
+  // 4. QUnit deliberately failing test (imports HelloCard from the realm)
   console.log(
-    '  Writing Tests/hello-failing.spec.ts (deliberately failing spec)...',
+    '  Writing hello-fail.test.gts (QUnit deliberately failing test)...',
   );
-  let failSpecResult = await writeModuleSource(
+  let failTestResult = await writeFile(
     targetRealmUrl,
-    'Tests/hello-failing.spec.ts',
-    PLAYWRIGHT_FAILING_SPEC,
+    'hello-fail.test.gts',
+    HELLO_FAILING_TEST_GTS,
     fetchOptions,
   );
   console.log(
-    failSpecResult.ok
-      ? '  ✓ Tests/hello-failing.spec.ts'
-      : `  ✗ Tests/hello-failing.spec.ts: ${failSpecResult.error}`,
+    failTestResult.ok
+      ? '  ✓ hello-fail.test.gts'
+      : `  ✗ hello-fail.test.gts: ${failTestResult.error}`,
   );
 
   // -------------------------------------------------------------------------
-  // Phase 2: Run both specs in a single TestRun
+  // Phase 2: Run QUnit tests via executeTestRunFromRealm
   // -------------------------------------------------------------------------
 
-  console.log('\n--- Phase 2: Running both specs in a single TestRun ---\n');
-
-  let matrixAuthForRealm = {
-    userId: matrixAuth.userId,
-    accessToken: matrixAuth.accessToken,
-    matrixUrl: matrixAuth.credentials.matrixUrl,
-  };
+  console.log(
+    '\n--- Phase 2: Running QUnit tests via executeTestRunFromRealm ---\n',
+  );
 
   let handle = await executeTestRunFromRealm({
     targetRealmUrl,
     testResultsModuleUrl,
     slug: 'hello-smoke',
-    specPaths: ['Tests/hello-smoke.spec.ts', 'Tests/hello-failing.spec.ts'],
-    testNames: [
-      'hello card renders greeting',
-      'hello card has wrong greeting (deliberately fails)',
-    ],
+    testNames: [],
     authorization,
     fetch: fetchImpl,
     forceNew: true,
-    projectCardUrl,
-    matrixAuth: matrixAuthForRealm,
-    serverToken,
+    realmServerUrl,
+    hostAppUrl: realmServerUrl,
   });
 
   console.log(`  TestRun ID:  ${handle.testRunId}`);
@@ -436,23 +356,23 @@ async function main() {
   console.log('\n--- Results ---\n');
 
   // The TestRun should have status 'failed' because it contains both a
-  // passing and a deliberately failing spec. The SpecResults inside should
-  // show one spec passed and one spec failed.
+  // passing and a deliberately failing QUnit test. The module results inside
+  // should show one test passed and one test failed.
   let expectedStatus = handle.status === 'failed';
 
   console.log(
-    `  TestRun status: ${expectedStatus ? '✓ failed (as expected — one spec passes, one fails)' : `✗ expected failed, got ${handle.status}`}`,
+    `  TestRun status: ${expectedStatus ? '✓ failed (as expected -- one test passes, one fails)' : `✗ expected failed, got ${handle.status}`}`,
   );
   console.log(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
 
   if (expectedStatus) {
     console.log(
-      '\n✓ Smoke test passed! Single TestRun contains both pass and fail spec results.',
+      '\n✓ Smoke test passed! TestRun contains both pass and fail QUnit results.',
     );
   } else {
     console.log('\n✗ Smoke test had unexpected results.');
     console.log(
-      `  Expected "failed" (mixed pass/fail specs) but got "${handle.status}"`,
+      `  Expected "failed" (mixed pass/fail QUnit tests) but got "${handle.status}"`,
     );
     process.exit(1);
   }

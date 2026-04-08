@@ -284,7 +284,6 @@ module('factory-tool-registry > built-in manifests', function () {
     assert.true(registry.has('realm-read'));
     assert.true(registry.has('realm-write'));
     assert.true(registry.has('realm-delete'));
-    assert.true(registry.has('realm-atomic'));
     assert.true(registry.has('realm-search'));
     assert.true(registry.has('realm-create'));
     assert.true(registry.has('realm-server-session'));

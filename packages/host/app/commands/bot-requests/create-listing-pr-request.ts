@@ -12,7 +12,7 @@ import SendBotTriggerEventCommand from './send-bot-trigger-event';
 
 import type MatrixService from '../../services/matrix-service';
 import type StoreService from '../../services/store';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class CreateListingPRRequestCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput
@@ -58,6 +58,8 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
       await this.matrixService.inviteUserToRoom(roomId, submissionBotId);
     }
 
+    let submittedBy = this.matrixService.userId ?? undefined;
+
     await new SendBotTriggerEventCommand(this.commandContext).execute({
       roomId,
       realm,
@@ -68,6 +70,7 @@ export default class CreateListingPRRequestCommand extends HostBaseCommand<
         listingId,
         ...(listingName ? { listingName } : {}),
         ...(listingSummary ? { listingSummary } : {}),
+        ...(submittedBy ? { submittedBy } : {}),
       },
     });
   }

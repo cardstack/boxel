@@ -174,13 +174,9 @@ function eventLastModified(event: any): number {
 function latestEventsByCheckId(
   events: any[],
   type: CiEventType,
-  prNumber: number | null | undefined,
 ): any[] {
   let latestById = new Map<string, any>();
   for (let event of events) {
-    if (!eventMatchesPrNumber(event, prNumber)) {
-      continue;
-    }
     const checkData =
       type === 'check_run'
         ? event?.payload?.check_run
@@ -201,14 +197,12 @@ function latestEventsByCheckId(
 export function buildCiItems(
   checkRunInstances: any[],
   checkSuiteInstances: any[],
-  prNumber: number | null | undefined,
 ): CiItem[] {
   let events: { event: any; type: CiEventType }[] = [];
 
   let latestSuites = latestEventsByCheckId(
     checkSuiteInstances,
     'check_suite',
-    prNumber,
   );
   for (let event of latestSuites) {
     events.push({ event, type: 'check_suite' });
@@ -217,7 +211,6 @@ export function buildCiItems(
   let latestRuns = latestEventsByCheckId(
     checkRunInstances,
     'check_run',
-    prNumber,
   );
   for (let event of latestRuns) {
     events.push({ event, type: 'check_run' });
@@ -318,23 +311,26 @@ export function findLatestApprovedEvent(
 
 // ── Query Builders ───────────────────────────────────────────────────────
 
-export function buildGithubEventCardRef(moduleBaseUrl: string) {
+export function buildGithubEventCardRef(
+  moduleBaseUrl: string,
+  relativePath = '../github-event/github-event',
+) {
   return {
-    module: new URL('../github-event/github-event', moduleBaseUrl).href,
+    module: new URL(relativePath, moduleBaseUrl).href,
     name: 'GithubEventCard' as const,
   };
 }
 
 export function searchEventQuery(
   cardRef: { module: string; name: string },
-  prNumber: number | null | undefined,
+  branchName: string | null | undefined,
   eventType: string,
 ): Query {
   return {
     filter: {
       on: cardRef,
       eq: {
-        prNumber: prNumber ?? null,
+        branchName: branchName ?? null,
         eventType,
       },
     },

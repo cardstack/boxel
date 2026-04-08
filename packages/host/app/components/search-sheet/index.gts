@@ -4,10 +4,10 @@ import type Owner from '@ember/owner';
 import { debounce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { modifier } from 'ember-modifier';
 
 import { trackedFunction } from 'reactiveweb/function';
 
@@ -20,10 +20,16 @@ import {
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { IconSearch } from '@cardstack/boxel-ui/icons';
 
+import {
+  type Filter,
+  type ResolvedCodeRef,
+  baseCardRef,
+  baseFieldRef,
+} from '@cardstack/runtime-common';
+
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import SearchPanel from '../card-search/panel';
-import { getCodeRefFromSearchKey } from '../card-search/utils';
 
 import type StoreService from '../../services/store';
 
@@ -42,19 +48,41 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     mode: SearchSheetMode;
-    onSetup: (doSearch: (term: string) => void) => void;
+    onSetup: (
+      doSearch: (term: string, typeRef?: ResolvedCodeRef) => void,
+    ) => void;
     onCancel: () => void;
     onFocus: () => void;
     onBlur: () => void;
     onSearch: (term: string) => void;
     onCardSelect: (cardId: string) => void;
     onInputInsertion?: (element: HTMLElement) => void;
+    onFilterChange?: () => void;
   };
   Blocks: {};
 }
 
+// After the search sheet's height transition ends, dispatch a window resize
+// event so ember-basic-dropdown repositions any open wormholed dropdowns
+// (e.g. TypePicker, RealmPicker) whose trigger moved during the transition.
+const repositionDropdownsOnTransitionEnd = modifier((element: Element) => {
+  let handler = (event: TransitionEvent) => {
+    if (event.propertyName === 'height') {
+      window.dispatchEvent(new Event('resize'));
+    }
+  };
+  element.addEventListener('transitionend', handler as EventListener);
+  return () =>
+    element.removeEventListener('transitionend', handler as EventListener);
+});
+
+const BASE_FILTER: Filter = {
+  any: [{ type: baseCardRef }, { type: baseFieldRef }],
+};
+
 export default class SearchSheet extends Component<Signature> {
   @tracked private searchKey = '';
+  @tracked private initialSelectedType: ResolvedCodeRef | undefined;
 
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
@@ -96,10 +124,6 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get searchKeyIsURL() {
-    let maybeType = getCodeRefFromSearchKey(this.searchKey);
-    if (maybeType) {
-      return false;
-    }
     try {
       new URL(this.searchKey);
       return true;
@@ -131,12 +155,14 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   @action
-  private doExternallyTriggeredSearch(term: string) {
+  private doExternallyTriggeredSearch(term: string, typeRef?: ResolvedCodeRef) {
     this.searchKey = term;
+    this.initialSelectedType = typeRef;
   }
 
   private resetState() {
     this.searchKey = '';
+    this.initialSelectedType = undefined;
   }
 
   @action private debouncedSetSearchKey(searchKey: string) {
@@ -216,6 +242,7 @@ export default class SearchSheet extends Component<Signature> {
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
+      {{repositionDropdownsOnTransitionEnd}}
       {{onClickOutside
         this.onBlur
         exceptSelector='.add-card-to-neighbor-stack,.boxel-picker__dropdown,.picker-before-options-with-search,.picker-option-row,.search-sheet-header,.search-sheet-section-header,.variant-default'
@@ -235,6 +262,9 @@ export default class SearchSheet extends Component<Signature> {
       {{else}}
         <SearchPanel
           @searchKey={{this.searchKey}}
+          @baseFilter={{BASE_FILTER}}
+          @initialSelectedType={{this.initialSelectedType}}
+          @onFilterChange={{@onFilterChange}}
           as |Bar Content joinedRealmURLs|
         >
           <Bar
