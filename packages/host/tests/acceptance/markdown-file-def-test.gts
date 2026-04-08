@@ -387,8 +387,6 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-fallback.md`,
     });
 
-    // Fallback Pill is only rendered after the modifier's second run
-    // (first run skips it while linkedCards is loading).
     await waitUntil(
       () =>
         document.querySelector(
