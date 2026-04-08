@@ -6,10 +6,23 @@ import type { RealmPermissions } from '@cardstack/runtime-common';
 
 import { startFactoryRealmServer } from '../harness';
 
+function parseCliArg(name: string): string | undefined {
+  let prefix = `--${name}=`;
+  let arg = process.argv.find((a) => a.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : undefined;
+}
+
+function parseCliNumber(name: string): number | undefined {
+  let value = parseCliArg(name);
+  return value != null ? Number(value) : undefined;
+}
+
 async function main(): Promise<void> {
+  // First positional arg is realmDir (skip --flags)
+  let positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   let realmDir = resolve(
     process.cwd(),
-    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+    positional[0] ?? 'test-fixtures/darkfactory-adopter',
   );
 
   if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
@@ -38,6 +51,9 @@ async function main(): Promise<void> {
       .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL
       ? new URL(process.env.SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL)
       : undefined,
+    realmServerPort: parseCliNumber('realmServerPort'),
+    compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
+    prerenderURL: parseCliArg('prerenderURL'),
   });
 
   let payload = {

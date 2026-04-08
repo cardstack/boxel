@@ -11,7 +11,6 @@ import {
   DEFAULT_MATRIX_SERVER_USERNAME,
   DEFAULT_PG_HOST,
   DEFAULT_PG_PORT,
-  DEFAULT_PRERENDER_PORT,
   CONFIGURED_HOST_URL,
   findAvailablePort,
   findHostDistPackageDir,
@@ -387,7 +386,7 @@ export async function startHarnessPrerenderServer(options: {
   url: string;
   stop(): Promise<void>;
 }> {
-  let port = options.port ?? DEFAULT_PRERENDER_PORT;
+  let port = options.port ?? 0;
   if (port === 0) {
     port = await findAvailablePort();
   }
@@ -406,6 +405,11 @@ export async function startHarnessPrerenderServer(options: {
         LOG_LEVELS:
           process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ??
           process.env.LOG_LEVELS,
+        // Prevent test harness prerender servers from registering with
+        // external prerender managers (e.g. the dev-all manager on :4222).
+        // Port 1 is privileged and unreachable — heartbeat fetches fail
+        // silently via the existing try/catch in prerender-app.ts.
+        PRERENDER_MANAGER_URL: 'http://127.0.0.1:1',
       },
     },
   );
