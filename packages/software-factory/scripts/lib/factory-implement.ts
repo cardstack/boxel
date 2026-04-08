@@ -532,9 +532,8 @@ function buildTestRunner(
 
       // Track the sequence number so the next iteration doesn't reuse it
       // even if the realm search index hasn't caught up yet.
-      let seqMatch = handle.testRunId.match(/-(\d+)$/);
-      if (seqMatch) {
-        lastSequenceNumber = parseInt(seqMatch[1], 10);
+      if (handle.sequenceNumber != null) {
+        lastSequenceNumber = handle.sequenceNumber;
       }
 
       let durationMs = Date.now() - start;

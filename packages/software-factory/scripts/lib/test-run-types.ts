@@ -51,6 +51,8 @@ export interface TestRunHandle {
   testRunId: string;
   status: 'running' | 'passed' | 'failed' | 'error';
   errorMessage?: string;
+  /** The sequence number assigned to this TestRun. */
+  sequenceNumber?: number;
 }
 
 /**

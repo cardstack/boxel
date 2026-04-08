@@ -45,6 +45,7 @@ export async function resolveTestRun(
   if (resumeResult) {
     return {
       testRunId: resumeResult.testRunId,
+      sequenceNumber: resumeResult.sequenceNumber,
       status: 'running',
       resumed: true,
       pendingTests: resumeResult.pendingTests,
@@ -66,6 +67,7 @@ export async function resolveTestRun(
   if (!createResult.created) {
     return {
       testRunId: createResult.testRunId,
+      sequenceNumber,
       status: 'error',
       errorMessage: `Failed to create TestRun: ${createResult.error}`,
       resumed: false,
@@ -74,6 +76,7 @@ export async function resolveTestRun(
 
   return {
     testRunId: createResult.testRunId,
+    sequenceNumber,
     status: 'running',
     resumed: false,
   };
@@ -423,6 +426,7 @@ export async function executeTestRunFromRealm(
     return resolved;
   }
   let testRunId = resolved.testRunId;
+  let sequenceNumber = resolved.sequenceNumber;
 
   // Step 2: Serve a custom QUnit test page and navigate Playwright to it.
   let start = Date.now();
@@ -518,6 +522,7 @@ export async function executeTestRunFromRealm(
 
     return {
       testRunId,
+      sequenceNumber,
       status: attrs.status,
       ...(attrs.errorMessage ? { errorMessage: attrs.errorMessage } : {}),
       ...(completeResult.error ? { error: completeResult.error } : {}),
@@ -544,7 +549,7 @@ export async function executeTestRunFromRealm(
     } catch {
       // Best-effort
     }
-    return { testRunId, status: 'error', errorMessage };
+    return { testRunId, sequenceNumber, status: 'error', errorMessage };
   } finally {
     if (browser) {
       await browser.close().catch(() => {});
