@@ -1268,11 +1268,11 @@ export class TestCard extends CardDef {
   });
 
   module('when a selected spec uses a prefix-form ref', function (hooks) {
-    hooks.beforeEach(function () {
+    hooks.before(function () {
       registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
     });
 
-    hooks.afterEach(function () {
+    hooks.after(function () {
       unregisterCardReferencePrefix(testPrefixRealmURL2);
     });
 
