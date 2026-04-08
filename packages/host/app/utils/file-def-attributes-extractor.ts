@@ -1,6 +1,7 @@
 import { isEqual } from 'lodash';
 
 import {
+  baseRealm,
   baseRef,
   CardError,
   identifyCard,
@@ -328,7 +329,7 @@ export class FileDefAttributesExtractor {
     try {
       let cardApiModule = await this.#loaderService.loader.import<
         typeof CardAPI
-      >('https://cardstack.com/base/card-api');
+      >(`${baseRealm.url}card-api`);
       let fields = getFieldDefinitions(
         cardApiModule,
         klass as unknown as typeof BaseDef,
