@@ -14,7 +14,8 @@ export type ContextButtonVariant =
   | 'ghost'
   | 'destructive'
   | 'highlight-icon'
-  | 'destructive-icon'; // 'highlight' is default
+  | 'destructive-icon'
+  | 'primary-dark'; // 'highlight' is default
 
 export const contextButtonVariants: ContextButtonVariant[] = [
   'highlight',
@@ -22,6 +23,7 @@ export const contextButtonVariants: ContextButtonVariant[] = [
   'ghost',
   'destructive',
   'destructive-icon',
+  'primary-dark',
 ];
 
 export type ContextButtonIcon =
@@ -138,6 +140,12 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
       .boxel-context-button--destructive-icon:hover {
         color: var(--destructive-foreground, var(--boxel-light-100));
         background-color: var(--destructive, var(--boxel-danger));
+      }
+
+      .boxel-context-button--primary-dark {
+        color: var(--primary, var(--boxel-highlight));
+        background-color: var(--primary-foreground, var(--boxel-700));
+        border: 1px solid var(--boxel-light-hover-35);
       }
 
       .boxel-context-button:disabled,
