@@ -6,9 +6,17 @@ const XunitReporter = require('testem/lib/reporters/xunit_reporter');
 const fs = require('fs');
 const path = require('path');
 
+const DEFAULT_REALM_URLS = ['http://localhost:4201/catalog/'];
+
+const realmURLs = process.env.REALM_URL
+  ? [process.env.REALM_URL]
+  : DEFAULT_REALM_URLS;
+
 const config = {
-  test_page:
-    'tests/index.html?liveTest=true&realmURL=http://localhost:4201/catalog/&hidepassed',
+  test_page: realmURLs.map(
+    (url) =>
+      `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed`,
+  ),
   disable_watching: true,
   browser_timeout: 120,
   browser_no_activity_timeout: 120,
