@@ -17,13 +17,13 @@ import {
 } from './factory-skill-loader';
 
 // ---------------------------------------------------------------------------
-// Issue relationship loader (Phase 2)
+// Issue relationship loader
 // ---------------------------------------------------------------------------
 
 /**
  * Loads related cards from an issue's relationships.
  *
- * The Phase 2 `buildForIssue()` method uses this to traverse the issue's
+ * The `buildForIssue()` method uses this to traverse the issue's
  * linksTo / linksToMany fields (project, relatedKnowledge, blockedBy)
  * without coupling ContextBuilder to the realm I/O layer.
  */
@@ -114,7 +114,7 @@ export class ContextBuilder {
   }
 
   /**
-   * Build agent context from the current issue (Phase 2 issue-driven loop).
+   * Build agent context from the current issue (issue-driven loop).
    *
    * Unlike `build()` which takes pre-loaded project/knowledge, this method
    * traverses issue relationships to load them automatically:

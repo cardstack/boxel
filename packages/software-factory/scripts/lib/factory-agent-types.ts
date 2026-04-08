@@ -112,7 +112,7 @@ export interface TestResult {
 }
 
 // ---------------------------------------------------------------------------
-// Validation types (Phase 2 — broader than TestResult)
+// Validation types (broader than TestResult)
 // ---------------------------------------------------------------------------
 
 /** Steps in the post-iteration validation pipeline. */
@@ -173,13 +173,13 @@ export interface AgentContext {
   iteration?: number;
   targetRealmUrl: string;
   testRealmUrl: string;
-  /** Validation results from the prior inner-loop iteration (Phase 2). */
+  /** Validation results from the prior inner-loop iteration. */
   validationResults?: ValidationResults;
-  /** Resolved clarification answers from previously-blocked issues (Phase 2). */
+  /** Resolved clarification answers from previously-blocked issues. */
   clarifications?: ClarificationAnswer[];
-  /** Brief URL for bootstrap issues (Phase 2). */
+  /** Brief URL for bootstrap issues. */
   briefUrl?: string;
-  /** Local workspace directory path (Phase 2). */
+  /** Local workspace directory path. */
   workspaceDir?: string;
 }
 
