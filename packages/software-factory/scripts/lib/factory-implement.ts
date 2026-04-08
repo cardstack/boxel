@@ -463,6 +463,7 @@ function buildTestRunner(
   toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {
+  let lastSequenceNumber = 0;
   return async (): Promise<TestResult> => {
     let wroteTestFiles = toolCallLog.some(
       (entry) =>
@@ -526,7 +527,15 @@ function buildTestRunner(
         realmServerUrl: runConfig.realmServerUrl,
         hostAppUrl: runConfig.hostAppUrl,
         forceNew: true,
+        lastSequenceNumber,
       });
+
+      // Track the sequence number so the next iteration doesn't reuse it
+      // even if the realm search index hasn't caught up yet.
+      let seqMatch = handle.testRunId.match(/-(\d+)$/);
+      if (seqMatch) {
+        lastSequenceNumber = parseInt(seqMatch[1], 10);
+      }
 
       let durationMs = Date.now() - start;
       console.error(

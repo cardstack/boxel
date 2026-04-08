@@ -423,6 +423,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
 }
 
 function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
+  let lastSequenceNumber = 0;
   return {
     name: 'run_tests',
     description: 'Execute QUnit card tests against the target realm',
@@ -467,7 +468,15 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         projectCardUrl: args.projectCardUrl as string | undefined,
         realmServerUrl: config.realmServerUrl,
         forceNew: true,
+        lastSequenceNumber,
       });
+
+      // Track the sequence number so subsequent calls don't reuse it
+      // even if the realm search index hasn't caught up yet.
+      let seqMatch = result.testRunId.match(/-(\d+)$/);
+      if (seqMatch) {
+        lastSequenceNumber = parseInt(seqMatch[1], 10);
+      }
 
       return result;
     },

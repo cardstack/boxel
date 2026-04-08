@@ -51,7 +51,10 @@ export async function resolveTestRun(
     };
   }
 
-  let sequenceNumber = await getNextSequenceNumber(realmOptions);
+  let sequenceNumber = await getNextSequenceNumber(
+    realmOptions,
+    options.lastSequenceNumber,
+  );
 
   let createResult = await createTestRun(options.slug, options.testNames, {
     ...realmOptions,
@@ -133,6 +136,7 @@ async function findResumableTestRun(
 
 async function getNextSequenceNumber(
   options: TestRunRealmOptions,
+  minSequenceNumber = 0,
 ): Promise<number> {
   let result = await searchRealm(
     options.testRealmUrl,
@@ -151,7 +155,8 @@ async function getNextSequenceNumber(
         | { attributes?: { sequenceNumber?: number } }
         | undefined)
     : undefined;
-  return (latest?.attributes?.sequenceNumber ?? 0) + 1;
+  let fromIndex = latest?.attributes?.sequenceNumber ?? 0;
+  return Math.max(fromIndex, minSequenceNumber) + 1;
 }
 
 // ---------------------------------------------------------------------------

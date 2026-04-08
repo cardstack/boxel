@@ -140,4 +140,11 @@ export interface ExecuteTestRunOptions {
   hostDistDir?: string;
   /** Log browser console output for debugging. */
   debug?: boolean;
+  /**
+   * Floor for the next sequence number. When the realm search index is stale
+   * (hasn't indexed the most recent TestRun yet), getNextSequenceNumber may
+   * return a number that was already used. Passing the last-used sequence
+   * number here guarantees the new TestRun gets at least lastSequenceNumber + 1.
+   */
+  lastSequenceNumber?: number;
 }
