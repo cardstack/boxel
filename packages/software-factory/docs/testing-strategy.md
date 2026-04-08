@@ -59,7 +59,7 @@ Flow per issue:
 8. agent iterates on implementation and/or tests until all tests pass
 9. passing TestRun cards serve as durable verification evidence for the issue, linked to the Project card
 
-This loop is the primary quality gate. A issue cannot be marked done without at least one passing TestRun in the target realm.
+This loop is the primary quality gate. An issue cannot be marked done without at least one passing TestRun in the target realm.
 
 ## Core Principle
 

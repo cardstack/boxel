@@ -308,7 +308,7 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
     path: 'Issues/tool-test-issue.json',
     attributes: {
       summary: 'Test issue for update_issue tool',
-      issueStatus: 'in_progress',
+      status: 'in_progress',
       priority: 'high',
     },
   })) as CardWriteResult;
@@ -323,7 +323,7 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
   expect(readResult.document!.data.attributes!.summary).toBe(
     'Test issue for update_issue tool',
   );
-  expect(readResult.document!.data.attributes!.issueStatus).toBe('in_progress');
+  expect(readResult.document!.data.attributes!.status).toBe('in_progress');
 });
 
 test('create_knowledge writes and reads back a knowledge article', async ({
