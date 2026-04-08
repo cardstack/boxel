@@ -22,6 +22,7 @@ import {
   baseFieldRef,
   baseRef,
   CardContextName,
+  codeRefFromInternalKey,
   GetCardCollectionContextName,
   internalKeyFor,
   isResolvedCodeRef,
@@ -59,11 +60,10 @@ interface Signature {
   Args: {
     searchKey: string;
     baseFilter?: Filter;
-    initialSelectedType?: ResolvedCodeRef;
-    availableRealmUrls?: string[];
-    consumingRealm?: URL;
-    preselectConsumingRealm?: boolean;
-    onFilterChange?: () => void;
+    initialSelectedTypes?: ResolvedCodeRef[];
+    initialSelectedRealms?: URL[];
+    onRealmChange?: (selectedRealms: URL[]) => void;
+    onTypeChange?: (selectedTypes: ResolvedCodeRef[]) => void;
   };
   Blocks: {
     default: [
@@ -110,30 +110,29 @@ export default class SearchPanel extends Component<Signature> {
   @consume(GetCardCollectionContextName)
   declare private getCardCollection: getCardCollection;
 
-  @tracked private selectedRealms: PickerOption[] = this.initialSelectedRealms;
+  @tracked private selectedRealms: PickerOption[] =
+    this.computeInitialSelectedRealms();
 
-  private get shouldPreselectConsumingRealm(): boolean {
-    return Boolean(this.args.preselectConsumingRealm);
-  }
-
-  private get initialSelectedRealms(): PickerOption[] {
-    let consumingRealm = this.args.consumingRealm;
-    if (!this.shouldPreselectConsumingRealm || !consumingRealm) {
+  private computeInitialSelectedRealms(): PickerOption[] {
+    let realmURLs = this.args.initialSelectedRealms;
+    if (!realmURLs || realmURLs.length === 0) {
       return [];
     }
-    let realmURL = consumingRealm.href;
-    let info = this.realm.info(realmURL);
-    let label = info?.name ?? realmURL;
-    let icon = info?.iconURL ?? undefined;
-    return [{ id: realmURL, icon, label, type: 'option' }];
+    return realmURLs.map((url) => {
+      let realmURL = url.href;
+      let info = this.realm.info(realmURL);
+      let label = info?.name ?? realmURL;
+      let icon = info?.iconURL ?? undefined;
+      return { id: realmURL, icon, label, type: 'option' as const };
+    });
   }
 
   private get initialFocusedSectionId(): string | null {
-    let consumingRealm = this.args.consumingRealm;
-    if (!this.shouldPreselectConsumingRealm || !consumingRealm) {
+    let realmURLs = this.args.initialSelectedRealms;
+    if (!realmURLs || realmURLs.length === 0) {
       return null;
     }
-    return `realm:${consumingRealm.href}`;
+    return `realm:${realmURLs[0].href}`;
   }
 
   @tracked private activeSort: SortOption = SORT_OPTIONS[0];
@@ -163,9 +162,7 @@ export default class SearchPanel extends Component<Signature> {
       (opt) => opt.type === 'select-all',
     );
     if (hasSelectAll || this.selectedRealms.length === 0) {
-      return (
-        this.args.availableRealmUrls ?? this.realmServer.availableRealmURLs
-      );
+      return this.realmServer.availableRealmURLs;
     }
     return this.selectedRealms.map((opt) => opt.id).filter(Boolean);
   }
@@ -229,16 +226,18 @@ export default class SearchPanel extends Component<Signature> {
         this._typesTotalCount = result.meta.page.total;
         this._hasMoreTypes = result.data.length < result.meta.page.total;
 
-        // If there are selected types (or an initialSelectedType) not yet in
+        // If there are selected types (or initialSelectedTypes) not yet in
         // the fetched results, keep fetching more pages until they're found.
         const selectedIds = new Set(
           this._previousSelectedTypes
             .filter((opt) => opt.type !== 'select-all')
             .map((opt) => opt.id),
         );
-        const initialType = this.args.initialSelectedType;
-        if (initialType) {
-          selectedIds.add(internalKeyFor(initialType, undefined));
+        const initialTypes = this.args.initialSelectedTypes;
+        if (initialTypes) {
+          for (const ref of initialTypes) {
+            selectedIds.add(internalKeyFor(ref, undefined));
+          }
         }
 
         if (selectedIds.size > 0 && this._hasMoreTypes) {
@@ -377,28 +376,30 @@ export default class SearchPanel extends Component<Signature> {
     // An empty array lets the Picker's ensureDefaultSelection() handle
     // selecting the built-in select-all option automatically.
     const prev = this._previousSelectedTypes;
-    const initialType = this.args.initialSelectedType;
+    const initialTypes = this.args.initialSelectedTypes;
     const hadSelectAll =
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
-    if (initialType && prev.length === 0) {
-      // First launch with initialSelectedType (e.g., from "Find Instances").
+    if (initialTypes && initialTypes.length > 0 && prev.length === 0) {
+      // First launch with initialSelectedTypes (e.g., from "Find Instances").
       // Only applied when prev is empty (first computation). After that,
       // _previousSelectedTypes is always non-empty, preserving user's choice.
-      const typeKey = internalKeyFor(initialType, undefined);
-      const matchingOption = optionsById.get(typeKey);
-      if (matchingOption) {
-        value.selected = [matchingOption];
-      } else {
-        // Type summaries not yet loaded; create a synthetic option so the
-        // search query is type-constrained immediately.
-        value.selected = [
-          {
+      const matched: PickerOption[] = [];
+      for (const ref of initialTypes) {
+        const typeKey = internalKeyFor(ref, undefined);
+        const matchingOption = optionsById.get(typeKey);
+        if (matchingOption) {
+          matched.push(matchingOption);
+        } else {
+          // Type summaries not yet loaded; create a synthetic option so the
+          // search query is type-constrained immediately.
+          matched.push({
             id: typeKey,
-            label: initialType.name,
+            label: ref.name,
             type: 'option',
-          } as PickerOption,
-        ];
+          } as PickerOption);
+        }
       }
+      value.selected = matched;
     } else if (hadSelectAll) {
       // If baseFilter constrains to specific types and they exist in options,
       // auto-select them instead of defaulting to "Any Type"
@@ -456,14 +457,21 @@ export default class SearchPanel extends Component<Signature> {
   @action
   private onRealmChange(selected: PickerOption[]) {
     this.selectedRealms = selected;
-    this.args.onFilterChange?.();
+    const realmURLs = selected
+      .filter((opt) => opt.type !== 'select-all')
+      .map((opt) => new URL(opt.id));
+    this.args.onRealmChange?.(realmURLs);
   }
 
   @action
   private onTypeChange(selected: PickerOption[]) {
     this._previousSelectedTypes = selected;
     this.typeFilter.selected = selected;
-    this.args.onFilterChange?.();
+    const types = selected
+      .filter((opt) => opt.type !== 'select-all')
+      .map((opt) => codeRefFromInternalKey(opt.id))
+      .filter((ref): ref is ResolvedCodeRef => ref !== undefined);
+    this.args.onTypeChange?.(types);
   }
 
   @action

@@ -111,9 +111,7 @@ export default class CardCatalogModal extends Component<Signature> {
           <SearchPanel
             @searchKey={{state.searchKey}}
             @baseFilter={{state.baseFilter}}
-            @availableRealmUrls={{state.availableRealmUrls}}
-            @consumingRealm={{state.consumingRealm}}
-            @preselectConsumingRealm={{state.preselectConsumingRealm}}
+            @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
             as |Bar Content|
           >
             <ModalContainer
@@ -240,6 +238,13 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private get state(): State | undefined {
     return this.stateStack[this.stateStack.length - 1];
+  }
+
+  private get initialSelectedRealmsForPanel(): URL[] | undefined {
+    if (!this.state?.preselectConsumingRealm || !this.state?.consumingRealm) {
+      return undefined;
+    }
+    return [this.state.consumingRealm];
   }
 
   private get offerToCreateArg() {
