@@ -32,6 +32,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
+  cardIdToURL,
   specRef,
   chooseCard,
   baseRealm,
@@ -47,7 +48,6 @@ import {
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
-import { cardIdToURL } from '@cardstack/runtime-common/card-reference-resolver';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardToRealmCommand from '@cardstack/host/commands/copy-card';
@@ -827,12 +827,14 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    // Use spec.moduleHref which correctly resolves relative module paths
-    // via resolveCardReference (handles @cardstack/catalog/... prefix IDs).
-    // Without this, new URL(relativeModule, prefixId) throws "Invalid base URL".
     let absoluteModule = spec?.moduleHref
       ? new URL(spec.moduleHref)
-      : new URL(module);
+      : new URL(
+          codeRefWithAbsoluteURL(
+            { module, name: exportName },
+            new URL(this.selectedRealmURL),
+          ).module,
+        );
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
