@@ -273,6 +273,234 @@ module('Integration | prosemirror-context', function (hooks) {
     );
   });
 
+  // ── Round-trip: standard markdown elements ──
+
+  test('round-trip: heading levels 1-6', function (assert) {
+    for (let level = 1; level <= 6; level++) {
+      let prefix = '#'.repeat(level);
+      let input = `${prefix} Heading Level ${level}`;
+      let doc = pmContext.parseMarkdown(input);
+      let output = pmContext.serializeMarkdown(doc);
+      assert.strictEqual(output, input, `h${level} round-trips`);
+    }
+  });
+
+  test('round-trip: plain paragraph', function (assert) {
+    let input = 'Just a plain paragraph.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: bold text', function (assert) {
+    let input = 'Some **bold** text.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: italic text', function (assert) {
+    let input = 'Some *italic* text.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: bold italic text', function (assert) {
+    let input = 'Some ***bold italic*** text.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: inline code', function (assert) {
+    let input = 'Use the `console.log` function.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: link', function (assert) {
+    let input = 'Visit [Example](https://example.com) for more.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: bullet list', function (assert) {
+    let input = '- First item\n- Second item\n- Third item';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: ordered list', function (assert) {
+    let input = '1. First item\n2. Second item\n3. Third item';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: ordered list with custom start', function (assert) {
+    let input = '5. Fifth item\n6. Sixth item';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: blockquote', function (assert) {
+    let input = '> This is a quoted paragraph.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: code block without language', function (assert) {
+    let input = '```\nconst x = 1;\n```';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: code block with language', function (assert) {
+    let input = '```typescript\nconst x: number = 1;\n```';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: horizontal rule', function (assert) {
+    let input = 'Before\n\n---\n\nAfter';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: multiple paragraphs', function (assert) {
+    let input = 'First paragraph.\n\nSecond paragraph.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: empty code block', function (assert) {
+    let input = '```\n```';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  // ── Round-trip: card references ──
+
+  test('round-trip: inline card with relative URL', function (assert) {
+    let input = 'See :card[./Author/alice] for details.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: inline card with absolute URL', function (assert) {
+    let input =
+      'See :card[https://example.com/Author/alice] for details.';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: block card with relative URL', function (assert) {
+    let input = '::card[./Author/alice]';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: block card with absolute URL', function (assert) {
+    let input = '::card[https://example.com/Author/alice]';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  // ── Round-trip: edge cases ──
+
+  test('round-trip: adjacent inline cards', function (assert) {
+    let input = ':card[./Author/alice]:card[./Author/bob]';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: card atom inside list item', function (assert) {
+    let input =
+      '- See :card[./Author/alice] here\n- And :card[./Author/bob] there';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: card block after heading', function (assert) {
+    let input = '# Authors\n\n::card[./Author/alice]';
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  test('round-trip: mixed content document', function (assert) {
+    let input = [
+      '# Document Title',
+      '',
+      'A paragraph with **bold**, *italic*, and `code`.',
+      '',
+      '- List item with :card[./Card/1]',
+      '- Another item',
+      '',
+      '> A blockquote',
+      '',
+      '```javascript',
+      'console.log("hello");',
+      '```',
+      '',
+      '::card[./SomeCard/1]',
+    ].join('\n');
+
+    let doc = pmContext.parseMarkdown(input);
+    let output = pmContext.serializeMarkdown(doc);
+    assert.strictEqual(output, input);
+  });
+
+  // ── Parse: label auto-derivation ──
+
+  test('parseMarkdown: card atom label derived from URL path', function (assert) {
+    let doc = pmContext.parseMarkdown('See :card[./Author/alice] here.');
+    let atom: any = null;
+    doc.descendants((node) => {
+      if (node.type.name === 'boxel_card_atom') atom = node;
+      return true;
+    });
+    assert.strictEqual(atom?.attrs.cardId, './Author/alice');
+    assert.strictEqual(
+      atom?.attrs.label,
+      'alice',
+      'label derived from last path segment',
+    );
+  });
+
+  test('parseMarkdown: card atom label from absolute URL', function (assert) {
+    let doc = pmContext.parseMarkdown(
+      ':card[https://example.com/Author/alice]',
+    );
+    let atom: any = null;
+    doc.descendants((node) => {
+      if (node.type.name === 'boxel_card_atom') atom = node;
+      return true;
+    });
+    assert.strictEqual(
+      atom?.attrs.label,
+      'alice',
+      'label derived from last URL segment',
+    );
+  });
+
   // ── EditorState / EditorView integration ──
 
   test('EditorState can be created from parsed document', function (assert) {

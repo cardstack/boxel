@@ -290,12 +290,16 @@ function parseInlineContent(text: string): ProseMirrorNode[] {
   let remaining = text;
 
   while (remaining.length > 0) {
-    // Link: [text](url)
-    let linkMatch = remaining.match(/^\[([^\]]+)\]\(([^)]+)\)/);
+    // Link: [text](url) or [text](url "title")
+    let linkMatch = remaining.match(
+      /^\[([^\]]+)\]\((\S+?)(?:\s+"([^"]*)")?\)/,
+    );
     if (linkMatch) {
+      let href = linkMatch[2];
+      let title = linkMatch[3] || null;
       nodes.push(
         schema.text(linkMatch[1], [
-          schema.marks.link.create({ href: linkMatch[2] }),
+          schema.marks.link.create({ href, title }),
         ]),
       );
       remaining = remaining.slice(linkMatch[0].length);
@@ -345,11 +349,20 @@ function parseInlineContent(text: string): ProseMirrorNode[] {
       continue;
     }
 
+    // Block card reference in inline context (::card[URL]) — treat as plain text
+    let blockCardInlineMatch = remaining.match(/^::card\[([^\]]+)\]/);
+    if (blockCardInlineMatch) {
+      nodes.push(schema.text(blockCardInlineMatch[0]));
+      remaining = remaining.slice(blockCardInlineMatch[0].length);
+      continue;
+    }
+
     // Card atom: :card[URL]
     let cardAtomMatch = remaining.match(/^:card\[([^\]]+)\]/);
     if (cardAtomMatch) {
       let cardId = cardAtomMatch[1].trim();
-      nodes.push(schema.nodes.boxel_card_atom.create({ cardId, label: cardId }));
+      let label = cardId.split('/').filter(Boolean).pop() || cardId;
+      nodes.push(schema.nodes.boxel_card_atom.create({ cardId, label }));
       remaining = remaining.slice(cardAtomMatch[0].length);
       continue;
     }
@@ -440,21 +453,51 @@ function parseMarkdown(text: string): ProseMirrorNode {
     }
 
     // Blockquote
-    if (line.startsWith('> ')) {
+    if (line.startsWith('> ') || line === '>') {
       let quoteLines: string[] = [];
-      while (i < lines.length && lines[i].startsWith('> ')) {
-        quoteLines.push(lines[i].slice(2));
+      while (
+        i < lines.length &&
+        (lines[i].startsWith('> ') || lines[i] === '>')
+      ) {
+        quoteLines.push(lines[i] === '>' ? '' : lines[i].slice(2));
         i++;
       }
-      let quoteContent = parseInlineContent(quoteLines.join('\n'));
-      blocks.push(
-        schema.node('blockquote', null, [
+      // Split into paragraphs on empty lines within the blockquote
+      let paragraphs: ProseMirrorNode[] = [];
+      let currentLines: string[] = [];
+      for (let ql of quoteLines) {
+        if (ql === '') {
+          if (currentLines.length > 0) {
+            let paraContent = parseInlineContent(currentLines.join(' '));
+            paragraphs.push(
+              schema.node(
+                'paragraph',
+                null,
+                paraContent.length ? paraContent : undefined,
+              ),
+            );
+            currentLines = [];
+          }
+        } else {
+          currentLines.push(ql);
+        }
+      }
+      if (currentLines.length > 0) {
+        let paraContent = parseInlineContent(currentLines.join(' '));
+        paragraphs.push(
           schema.node(
             'paragraph',
             null,
-            quoteContent.length ? quoteContent : undefined,
+            paraContent.length ? paraContent : undefined,
           ),
-        ]),
+        );
+      }
+      blocks.push(
+        schema.node(
+          'blockquote',
+          null,
+          paragraphs.length > 0 ? paragraphs : [schema.node('paragraph')],
+        ),
       );
       continue;
     }
@@ -524,22 +567,28 @@ function serializeInlineContent(node: ProseMirrorNode): string {
   node.forEach((child) => {
     if (child.isText) {
       let text = child.text || '';
-      child.marks.forEach((mark) => {
-        switch (mark.type.name) {
-          case 'strong':
-            text = `**${text}**`;
-            break;
-          case 'em':
-            text = `*${text}*`;
-            break;
-          case 'code':
-            text = `\`${text}\``;
-            break;
-          case 'link':
-            text = `[${text}](${mark.attrs.href})`;
-            break;
+      let marks = child.marks;
+      let hasStrong = marks.some((m) => m.type.name === 'strong');
+      let hasEm = marks.some((m) => m.type.name === 'em');
+      let hasCode = marks.some((m) => m.type.name === 'code');
+      let link = marks.find((m) => m.type.name === 'link');
+
+      if (hasCode) {
+        text = `\`${text}\``;
+      } else {
+        if (hasStrong && hasEm) {
+          text = `***${text}***`;
+        } else if (hasStrong) {
+          text = `**${text}**`;
+        } else if (hasEm) {
+          text = `*${text}*`;
         }
-      });
+      }
+      if (link) {
+        text = link.attrs.title
+          ? `[${text}](${link.attrs.href} "${link.attrs.title}")`
+          : `[${text}](${link.attrs.href})`;
+      }
       result += text;
     } else if (child.type.name === 'hard_break') {
       result += '  \n';
@@ -559,15 +608,24 @@ function serializeNode(node: ProseMirrorNode): string {
     case 'horizontal_rule':
       return '---';
     case 'blockquote': {
-      let quoteLines: string[] = [];
-      node.forEach((child) => {
-        quoteLines.push('> ' + serializeNode(child));
+      let parts: string[] = [];
+      node.forEach((child, _offset, idx) => {
+        if (idx > 0) {
+          parts.push('>');
+        }
+        let serialized = serializeNode(child);
+        for (let line of serialized.split('\n')) {
+          parts.push('> ' + line);
+        }
       });
-      return quoteLines.join('\n');
+      return parts.join('\n');
     }
     case 'code_block': {
       let info = node.attrs.info || '';
-      return `\`\`\`${info}\n${node.textContent}\n\`\`\``;
+      let content = node.textContent;
+      return content
+        ? `\`\`\`${info}\n${content}\n\`\`\``
+        : `\`\`\`${info}\n\`\`\``;
     }
     case 'bullet_list': {
       let items: string[] = [];
