@@ -111,6 +111,45 @@ export interface TestResult {
   durationMs: number;
 }
 
+// ---------------------------------------------------------------------------
+// Validation types (Phase 2 — broader than TestResult)
+// ---------------------------------------------------------------------------
+
+/** Steps in the post-iteration validation pipeline. */
+export type ValidationStep =
+  | 'parse'
+  | 'lint'
+  | 'evaluate'
+  | 'instantiate'
+  | 'test';
+
+export interface ValidationError {
+  file?: string;
+  message: string;
+  stackTrace?: string;
+}
+
+/** Result of a single validation step. */
+export interface ValidationStepResult {
+  step: ValidationStep;
+  passed: boolean;
+  files?: string[];
+  errors: ValidationError[];
+}
+
+/** Aggregated results from a full validation run (all steps). */
+export interface ValidationResults {
+  passed: boolean;
+  steps: ValidationStepResult[];
+}
+
+/** A resolved clarification answer from a previously-blocked issue. */
+export interface ClarificationAnswer {
+  issueId: string;
+  question: string;
+  answer: string;
+}
+
 export interface ToolResult {
   tool: string;
   exitCode: number;
@@ -134,6 +173,14 @@ export interface AgentContext {
   iteration?: number;
   targetRealmUrl: string;
   testRealmUrl: string;
+  /** Validation results from the prior inner-loop iteration (Phase 2). */
+  validationResults?: ValidationResults;
+  /** Resolved clarification answers from previously-blocked issues (Phase 2). */
+  clarifications?: ClarificationAnswer[];
+  /** Brief URL for bootstrap issues (Phase 2). */
+  briefUrl?: string;
+  /** Local workspace directory path (Phase 2). */
+  workspaceDir?: string;
 }
 
 export interface AgentAction {

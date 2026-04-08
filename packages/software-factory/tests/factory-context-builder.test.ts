@@ -5,12 +5,14 @@ import type {
   ProjectCard,
   ResolvedSkill,
   TestResult,
+  ValidationResults,
   IssueCard,
 } from '../scripts/lib/factory-agent';
 
 import {
   ContextBuilder,
   type ContextBuilderConfig,
+  type IssueRelationshipLoader,
 } from '../scripts/lib/factory-context-builder';
 
 import type {
@@ -69,6 +71,37 @@ class StubSkillLoader implements SkillLoaderInterface {
       }
     }
     return results;
+  }
+}
+
+class StubIssueRelationshipLoader implements IssueRelationshipLoader {
+  project: ProjectCard | undefined;
+  knowledge: KnowledgeArticle[];
+  blockedBy: IssueCard[];
+
+  constructor(opts?: {
+    project?: ProjectCard | null;
+    knowledge?: KnowledgeArticle[];
+    blockedBy?: IssueCard[];
+  }) {
+    this.project =
+      opts && 'project' in opts
+        ? (opts.project ?? undefined)
+        : { id: 'project-1', name: 'Sticky Notes' };
+    this.knowledge = opts?.knowledge ?? [];
+    this.blockedBy = opts?.blockedBy ?? [];
+  }
+
+  async loadProject(_issue: IssueCard): Promise<ProjectCard | undefined> {
+    return this.project;
+  }
+
+  async loadKnowledge(_issue: IssueCard): Promise<KnowledgeArticle[]> {
+    return this.knowledge;
+  }
+
+  async loadBlockedBy(_issue: IssueCard): Promise<IssueCard[]> {
+    return this.blockedBy;
   }
 }
 
@@ -464,3 +497,482 @@ module('factory-context-builder > core fields', function () {
     assert.deepEqual(ctx.knowledge, [], 'empty knowledge is fine');
   });
 });
+
+// ===========================================================================
+// Tests: buildForIssue (Phase 2)
+// ===========================================================================
+
+function makeIssueConfig(
+  loaderOpts?: ConstructorParameters<typeof StubIssueRelationshipLoader>[0],
+  configOverrides?: Partial<ContextBuilderConfig>,
+) {
+  let resolver = new StubSkillResolver();
+  let loader = new StubSkillLoader([
+    makeSkill('boxel-development'),
+    makeSkill('boxel-file-structure'),
+    makeSkill('ember-best-practices'),
+  ]);
+  let issueLoader = new StubIssueRelationshipLoader(loaderOpts);
+
+  return {
+    config: {
+      skillResolver: resolver,
+      skillLoader: loader,
+      issueLoader,
+      ...configOverrides,
+    } as ContextBuilderConfig,
+    resolver,
+    loader,
+    issueLoader,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Tests: buildForIssue — relationship traversal
+// ---------------------------------------------------------------------------
+
+module('factory-context-builder > buildForIssue > relationships', function () {
+  test('loads project from issue.project relationship', async function (assert) {
+    let project = makeProject({ id: 'proj-99', name: 'Todo App' });
+    let { config } = makeIssueConfig({ project });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(ctx.project.id, 'proj-99', 'project loaded from issue');
+    assert.strictEqual(ctx.project.name, 'Todo App');
+  });
+
+  test('loads knowledge from issue.relatedKnowledge', async function (assert) {
+    let knowledge = [
+      makeKnowledge({ id: 'ka-1', title: 'Card Basics' }),
+      makeKnowledge({ id: 'ka-2', title: 'Styling Guide' }),
+    ];
+    let { config } = makeIssueConfig({ knowledge });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(ctx.knowledge.length, 2, 'two knowledge articles');
+    assert.strictEqual(ctx.knowledge[0].id, 'ka-1');
+    assert.strictEqual(ctx.knowledge[1].id, 'ka-2');
+  });
+
+  test('includes resolved clarification answers for previously-blocked issues', async function (assert) {
+    let blockedBy: IssueCard[] = [
+      {
+        id: 'clarification-1',
+        issueType: 'clarification',
+        status: 'done',
+        summary: 'What color scheme should StickyNote use?',
+        description: 'Use yellow background with dark text.',
+      },
+      {
+        id: 'clarification-2',
+        issueType: 'clarification',
+        status: 'done',
+        summary: 'Should StickyNote support markdown?',
+        description: 'No, plain text only for now.',
+      },
+    ];
+    let { config } = makeIssueConfig({ blockedBy });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(ctx.clarifications?.length, 2, 'two clarifications');
+    assert.strictEqual(ctx.clarifications?.[0].issueId, 'clarification-1');
+    assert.strictEqual(
+      ctx.clarifications?.[0].question,
+      'What color scheme should StickyNote use?',
+    );
+    assert.strictEqual(
+      ctx.clarifications?.[0].answer,
+      'Use yellow background with dark text.',
+    );
+    assert.strictEqual(ctx.clarifications?.[1].issueId, 'clarification-2');
+  });
+
+  test('excludes non-clarification blockers and unresolved clarifications', async function (assert) {
+    let blockedBy: IssueCard[] = [
+      // Regular implementation issue (not a clarification) — should be excluded
+      {
+        id: 'impl-1',
+        issueType: 'feature',
+        status: 'done',
+        summary: 'Implement base card',
+        description: 'Create the base card definition',
+      },
+      // Clarification still blocked (not done) — should be excluded
+      {
+        id: 'clarification-pending',
+        issueType: 'clarification',
+        status: 'blocked',
+        summary: 'Pending question',
+        description: '',
+      },
+      // Resolved clarification — should be included
+      {
+        id: 'clarification-done',
+        issueType: 'clarification',
+        status: 'done',
+        summary: 'What icon to use?',
+        description: 'Use the sticky-note icon from Phosphor.',
+      },
+    ];
+    let { config } = makeIssueConfig({ blockedBy });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(
+      ctx.clarifications?.length,
+      1,
+      'only one resolved clarification',
+    );
+    assert.strictEqual(ctx.clarifications?.[0].issueId, 'clarification-done');
+  });
+
+  test('omits clarifications field when none exist', async function (assert) {
+    let { config } = makeIssueConfig({ blockedBy: [] });
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(
+      ctx.clarifications,
+      undefined,
+      'no clarifications field when empty',
+    );
+  });
+
+  test('throws when issue has no linked project', async function (assert) {
+    let { config } = makeIssueConfig({ project: null });
+    let builder = new ContextBuilder(config);
+
+    try {
+      await builder.buildForIssue({
+        issue: makeIssue({ id: 'orphan-issue' }),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+      });
+      assert.ok(false, 'should have thrown');
+    } catch (error) {
+      assert.ok(
+        (error as Error).message.includes('orphan-issue'),
+        'error mentions the issue id',
+      );
+      assert.ok(
+        (error as Error).message.includes('no linked project'),
+        'error explains the problem',
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: buildForIssue — validation results
+// ---------------------------------------------------------------------------
+
+module(
+  'factory-context-builder > buildForIssue > validation results',
+  function () {
+    test('includes validation results when provided (2nd+ inner-loop iteration)', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+      let validationResults: ValidationResults = {
+        passed: false,
+        steps: [
+          { step: 'parse', passed: true, errors: [] },
+          {
+            step: 'lint',
+            passed: false,
+            files: ['sticky-note.gts'],
+            errors: [
+              {
+                file: 'sticky-note.gts',
+                message: "Expected ';' after statement",
+              },
+            ],
+          },
+        ],
+      };
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue(),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+        validationResults,
+      });
+
+      assert.deepEqual(
+        ctx.validationResults,
+        validationResults,
+        'validation results included',
+      );
+      assert.strictEqual(
+        ctx.validationResults?.steps.length,
+        2,
+        'two validation steps',
+      );
+      assert.strictEqual(
+        ctx.validationResults?.steps[1].step,
+        'lint',
+        'lint step present',
+      );
+    });
+
+    test('omits validation results on first inner-loop iteration (none provided)', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue(),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+      });
+
+      assert.strictEqual(
+        ctx.validationResults,
+        undefined,
+        'no validation results on first iteration',
+      );
+    });
+
+    test('validation results include step name, file paths, error details', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+      let validationResults: ValidationResults = {
+        passed: false,
+        steps: [
+          {
+            step: 'evaluate',
+            passed: false,
+            files: ['sticky-note.gts'],
+            errors: [
+              {
+                file: 'sticky-note.gts',
+                message: 'Cannot find module ./base-card',
+                stackTrace: 'at ModuleLoader.load (loader.ts:42)',
+              },
+            ],
+          },
+          {
+            step: 'test',
+            passed: false,
+            files: ['sticky-note.test.gts'],
+            errors: [
+              {
+                file: 'sticky-note.test.gts',
+                message: 'Expected element to exist',
+              },
+            ],
+          },
+        ],
+      };
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue(),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+        validationResults,
+      });
+
+      let evalStep = ctx.validationResults?.steps[0];
+      assert.strictEqual(evalStep?.step, 'evaluate');
+      assert.deepEqual(evalStep?.files, ['sticky-note.gts']);
+      assert.strictEqual(
+        evalStep?.errors[0].stackTrace,
+        'at ModuleLoader.load (loader.ts:42)',
+      );
+
+      let testStep = ctx.validationResults?.steps[1];
+      assert.strictEqual(testStep?.step, 'test');
+      assert.strictEqual(
+        testStep?.errors[0].message,
+        'Expected element to exist',
+      );
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Tests: buildForIssue — skills
+// ---------------------------------------------------------------------------
+
+module('factory-context-builder > buildForIssue > skills', function () {
+  test('skill selection works based on issue content', async function (assert) {
+    let { config, resolver } = makeIssueConfig();
+    let builder = new ContextBuilder(config);
+    let issue = makeIssue({
+      description: 'Create a .gts card definition with ember components',
+    });
+    let project = makeProject({ id: 'project-1', name: 'Todo App' });
+    // Pre-set the project so the resolver gets it
+    (config.issueLoader as StubIssueRelationshipLoader).project = project;
+
+    await builder.buildForIssue({
+      issue,
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(resolver.calls.length, 1, 'resolver called once');
+    assert.strictEqual(
+      resolver.calls[0].issue,
+      issue,
+      'resolver received the issue',
+    );
+    assert.strictEqual(
+      resolver.calls[0].project,
+      project,
+      'resolver received the loaded project',
+    );
+  });
+
+  test('token budget enforcement still works with buildForIssue', async function (assert) {
+    let resolver = new StubSkillResolver([
+      'boxel-development',
+      'ember-best-practices',
+    ]);
+    let loader = new StubSkillLoader([
+      makeSkill('boxel-development', 'A'.repeat(36)), // 9 tokens
+      makeSkill('ember-best-practices', 'B'.repeat(36)), // 9 tokens
+    ]);
+    let issueLoader = new StubIssueRelationshipLoader();
+    let config: ContextBuilderConfig = {
+      skillResolver: resolver,
+      skillLoader: loader,
+      issueLoader,
+      maxSkillTokens: 10,
+    };
+    let builder = new ContextBuilder(config);
+
+    let ctx = await builder.buildForIssue({
+      issue: makeIssue(),
+      targetRealmUrl: 'https://example.test/target/',
+      testRealmUrl: 'https://example.test/target-test-artifacts/',
+    });
+
+    assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
+    assert.strictEqual(
+      ctx.skills[0].name,
+      'boxel-development',
+      'higher-priority skill kept',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: buildForIssue — bootstrap and context fields
+// ---------------------------------------------------------------------------
+
+module(
+  'factory-context-builder > buildForIssue > bootstrap and fields',
+  function () {
+    test('bootstrap issue context includes brief URL', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue({ issueType: 'bootstrap' }),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+        briefUrl: 'https://example.test/briefs/sticky-notes',
+      });
+
+      assert.strictEqual(
+        ctx.briefUrl,
+        'https://example.test/briefs/sticky-notes',
+        'briefUrl included for bootstrap issue',
+      );
+    });
+
+    test('omits briefUrl when not provided', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue(),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+      });
+
+      assert.strictEqual(ctx.briefUrl, undefined, 'no briefUrl');
+    });
+
+    test('includes workspaceDir when provided', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue(),
+        targetRealmUrl: 'https://example.test/target/',
+        testRealmUrl: 'https://example.test/target-test-artifacts/',
+        workspaceDir: '/tmp/factory-workspace',
+      });
+
+      assert.strictEqual(
+        ctx.workspaceDir,
+        '/tmp/factory-workspace',
+        'workspaceDir included',
+      );
+    });
+
+    test('includes realm URLs in context', async function (assert) {
+      let { config } = makeIssueConfig();
+      let builder = new ContextBuilder(config);
+
+      let ctx = await builder.buildForIssue({
+        issue: makeIssue(),
+        targetRealmUrl: 'https://example.test/my-realm/',
+        testRealmUrl: 'https://example.test/my-realm-test-artifacts/',
+      });
+
+      assert.strictEqual(ctx.targetRealmUrl, 'https://example.test/my-realm/');
+      assert.strictEqual(
+        ctx.testRealmUrl,
+        'https://example.test/my-realm-test-artifacts/',
+      );
+    });
+
+    test('throws when issueLoader is not configured', async function (assert) {
+      let { config } = makeConfig(); // no issueLoader
+      let builder = new ContextBuilder(config);
+
+      try {
+        await builder.buildForIssue({
+          issue: makeIssue(),
+          targetRealmUrl: 'https://example.test/target/',
+          testRealmUrl: 'https://example.test/target-test-artifacts/',
+        });
+        assert.ok(false, 'should have thrown');
+      } catch (error) {
+        assert.ok(
+          (error as Error).message.includes('issueLoader'),
+          'error mentions issueLoader',
+        );
+      }
+    });
+  },
+);
