@@ -11,7 +11,7 @@ The factory flow has four phases:
 3. **Implementation** — An LLM agent picks up the active ticket and uses tool calls to write card definitions (`.gts`), sample instances (`.json`), catalog specs (`Spec/`), and QUnit test files (`.test.gts`) into the target realm
 4. **Verification** — The orchestrator runs QUnit tests via Playwright in a real browser, collects structured results into a TestRun card, and feeds failures back to the agent for iteration
 
-The agent iterates (implement → test → fix) until tests pass or max iterations are reached. The orchestrator (the "ralph loop") controls iteration count, test execution, and issue selection deterministically — the LLM handles only the implementation work.
+The agent iterates (implement → test → fix) until tests pass or max iterations are reached. The orchestrator (the "ralph loop") controls iteration count, test execution, and ticket selection deterministically — the LLM handles only the implementation work.
 
 ### Realm Roles
 

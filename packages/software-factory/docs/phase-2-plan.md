@@ -4,7 +4,7 @@
 
 Phase 1 (`one-shot-factory-go-plan.md`) implements a fixed pipeline: intake → bootstrap → implement → test → iterate. This works for the first pass but hard-codes the loop structure and the relationship between implementation and testing.
 
-Phase 2 moves to an **issue-driven loop** aligned with the target architecture in `architecture.md`. The orchestrator becomes a thin scheduler that picks the next issue and delegates everything — including bootstrap, implementation, test creation, and test execution — to the agent via the issue tracking system.
+Phase 2 moves to an **issue-driven loop** aligned with the target architecture in `architecture.md`. The orchestrator becomes a thin scheduler that picks the next issue and delegates implementation work to the agent. The orchestrator owns validation (parse, lint, evaluate, instantiate, run tests) after every agent turn, feeding failures back so the agent can self-correct.
 
 ## Core Idea
 
@@ -13,7 +13,8 @@ The factory loop iterates over **issues in the project**, one at a time. Each is
 1. Select the next unblocked issue (based on ordering / dependency rules)
 2. Hand it to the agent
 3. Wait for the agent to exit
-4. Read updated issue state and repeat
+4. Run validation (parse, lint, evaluate, instantiate, run tests) — feed failures back as context
+5. Read updated issue state and repeat (inner loop) or advance to next issue (outer loop)
 
 The agent always exits the same way — the orchestrator reads the issue's updated status/tags to decide what happened. If the agent tagged the issue as blocked (e.g., needs human clarification), the orchestrator skips it and moves on. If the issue is marked done, the orchestrator advances. This keeps the agent's exit path uniform — it doesn't need a separate "blocked" signal in its return type, it just updates the issue and exits.
 
@@ -23,7 +24,7 @@ This makes the loop generic. It doesn't need to know whether an issue is "implem
 
 Issues need properties that let the orchestrator determine execution order. Possible fields (may use a combination):
 
-- **priority** — numeric or enum, lower = execute first
+- **priority** — enum (`high`, `medium`, `low`), high = execute first
 - **predecessors / blockedBy** — explicit dependency edges; an issue cannot start until its blockers are done
 - **order** — explicit sequence number for tie-breaking
 
@@ -31,7 +32,7 @@ The selection algorithm:
 
 1. Filter to issues with status `ready` or `in_progress`
 2. Exclude issues whose `blockedBy` list contains any non-completed issue
-3. Sort by priority (ascending), then by order (ascending)
+3. Sort by priority (high first, then medium, then low), then by order (ascending)
 4. Pick the first one
 
 Resume semantics: if an issue is already `in_progress`, it takes priority over `ready` issues (the factory was interrupted and should continue where it left off).
@@ -57,15 +58,15 @@ After each agent turn in the inner loop, the orchestrator runs these checks dete
 
 ### Handling Failures
 
-Any validation failure is captured as a **new issue** in the target realm with:
+Validation failures are fed back to the agent as context in the **next inner-loop iteration**. The orchestrator does not create fix issues for validation failures — it iterates with the failure details so the agent can self-correct. This mirrors Phase 1's approach (feed test results back, iterate) but with a broader validation pipeline.
 
-- `issueType`: `fix`
-- `status`: `ready`
-- `description`: structured failure details (error messages, stack traces, which files failed)
-- `blockedBy`: (none — ready for immediate pickup)
-- `priority`: high (fixes should be addressed before new implementation work)
+The inner loop continues until:
 
-The orchestrator does not retry the same issue or re-invoke the agent directly with failure context. Instead, it creates fix issues and lets the scheduler pick them up in the next iteration. This keeps the loop generic — the orchestrator never special-cases test failures.
+- The agent marks the issue as done (all validation passes)
+- The agent marks the issue as blocked (needs human input)
+- Max iterations are reached
+
+The agent always has the option to create new issues via tool calls if it determines that a failure requires separate work (e.g., "this card definition depends on another card that doesn't exist yet — creating a new issue for it"). But the orchestrator does not force this — the agent decides.
 
 ### What This Means for Task Breakdown
 
@@ -76,11 +77,11 @@ During task breakdown, the agent creates issues for implementation work:
 - "Write QUnit tests for StickyNote" (type: implement)
 - "Create Catalog Spec for StickyNote" (type: implement)
 
-The agent does **not** need to create "run tests" issues. Test execution happens automatically after every issue as part of validation. If tests fail, the orchestrator creates fix issues that the agent picks up next.
+The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
 
 ### Relationship to Phase 1
 
-Phase 1 calls this "testing" — the orchestrator runs tests after the agent signals done, feeds failures back, and iterates. Phase 2 generalizes this to a full validation pipeline (parse + lint + evaluate + instantiate + test) and models failures as new issues rather than inline iteration. The validation is still orchestrator-owned and deterministic — the agent never decides whether to run validation.
+Phase 1 calls this "testing" — the orchestrator runs tests after the agent signals done, feeds failures back, and iterates. Phase 2 generalizes this to a full validation pipeline (parse + lint + evaluate + instantiate + test) and feeds all failures back in the same way. The key evolution is that validation is broader (not just tests) and runs after every agent turn (not just when the agent signals done). The validation is still orchestrator-owned and deterministic — the agent never decides whether to run validation.
 
 ## Bootstrap as Part of the Agentic Loop
 
@@ -115,25 +116,24 @@ while (hasUnblockedIssues()) {
   let issue = pickNextIssue();
 
   // Inner loop: multiple iterations per issue
+  let validationResults = null;
   while (issue.status !== 'done' && issue.status !== 'blocked' && iterations < maxIterations) {
-    await agent.run(contextForIssue(issue), tools);
+    await agent.run(contextForIssue(issue, validationResults), tools);
     refreshIssueState(issue);
 
-    // Validation phase — runs after EVERY iteration, not just issue completion
-    let failures = await validate(targetRealm);  // parse, lint, evaluate, instantiate, run tests
-    if (failures.length > 0) {
-      await createFixIssues(failures);  // each failure becomes a new issue
-      break;  // stop iterating current issue — fix issues are picked up by the outer loop
-    }
+    // Validation phase — runs after EVERY iteration
+    validationResults = await validate(targetRealm);  // parse, lint, evaluate, instantiate, run tests
+    // Failures are fed back as context in the next iteration — agent self-corrects
+    // Agent can also create new issues via tool calls if it decides to
 
     iterations++;
   }
 }
 ```
 
-The agent signals progress by updating the issue — tagging it as blocked, marking it done, or leaving it in progress for another iteration. The orchestrator reads issue state from the realm after each agent turn, then runs validation. Validation failures become new issues that the scheduler picks up in subsequent iterations.
+The agent signals progress by updating the issue — tagging it as blocked, marking it done, or leaving it in progress for another iteration. The orchestrator reads issue state from the realm after each agent turn, then runs validation. Validation failures are fed back as context in the next inner-loop iteration so the agent can self-correct. The agent can also create new issues via tool calls if it determines a failure requires separate work.
 
-All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, validation, and fix-issue creation.
+All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, and validation.
 
 ## Schema Refinement: darkfactory.gts
 
