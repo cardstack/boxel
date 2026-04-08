@@ -44,7 +44,6 @@ export interface FactoryTool {
 
 export interface ToolBuilderConfig {
   targetRealmUrl: string;
-  testRealmUrl: string;
   /** Per-realm JWTs obtained via getRealmScopedAuth(). */
   realmTokens: Record<string, string>;
   /** Realm server JWT for server-level operations (_create-realm, _realm-auth, _server-session). */
@@ -53,17 +52,12 @@ export interface ToolBuilderConfig {
   testResultsModuleUrl?: string;
   /** Fetch implementation (injectable for testing). */
   fetch?: typeof globalThis.fetch;
-  /** Matrix auth for test realm creation (required for run_tests when project card is provided). */
-  matrixAuth?: {
-    userId: string;
-    accessToken: string;
-    matrixUrl: string;
-  };
   /** Override for executeTestRunFromRealm (injectable for testing). */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
-  /** Realm server URL for /_run-command calls (e.g., "http://localhost:4201/"). */
   /** Realm server URL. Required — never inferred from realm URLs. */
   realmServerUrl: string;
+  /** Host app URL for QUnit test runner. Defaults to realmServerUrl (compat proxy). */
+  hostAppUrl?: string;
   /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
   cardTypeSchemas?: Map<
     string,
@@ -173,7 +167,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
         content: { type: 'string', description: 'File content' },
         realm: {
           type: 'string',
-          enum: ['target', 'test'],
+          enum: ['target'],
           description: 'Which realm to write to (default: target)',
         },
       },
@@ -203,7 +197,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
         },
         realm: {
           type: 'string',
-          enum: ['target', 'test'],
+          enum: ['target'],
           description: 'Which realm to read from (default: target)',
         },
       },
@@ -232,7 +226,7 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
         },
         realm: {
           type: 'string',
-          enum: ['target', 'test'],
+          enum: ['target'],
           description: 'Which realm to search (default: target)',
         },
       },
@@ -431,11 +425,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
 function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'run_tests',
-    description:
-      'Execute Playwright tests against the target realm. Pulls test spec files from the realm, ' +
-      'runs them via the Playwright harness, and returns structured test results (pass/fail counts, ' +
-      'failure details with error messages and stack traces). Auth: per-realm JWT for target realm, ' +
-      'realm server token for test artifacts realm creation.',
+    description: 'Execute QUnit card tests against the target realm',
     parameters: {
       type: 'object',
       properties: {
@@ -444,17 +434,11 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
           description:
             'Ticket slug used to name the test run (e.g., "define-sticky-note-core")',
         },
-        specPaths: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Realm-relative paths to Playwright test files (e.g., ["Tests/sticky-note.spec.ts"])',
-        },
         testNames: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Specific test names to run (empty array runs all tests in the spec files)',
+            'Specific test names to run (empty array runs all discovered tests)',
         },
         projectCardUrl: {
           type: 'string',
@@ -462,7 +446,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
             'URL to the Project card (used to read/write testArtifactsRealmUrl)',
         },
       },
-      required: ['slug', 'specPaths'],
+      required: ['slug'],
     },
     execute: async (args) => {
       let targetRealmUrl = config.targetRealmUrl;
@@ -476,15 +460,13 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         targetRealmUrl,
         testResultsModuleUrl,
         slug: args.slug as string,
-        specPaths: args.specPaths as string[],
+        hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
         testNames: (args.testNames as string[]) ?? [],
         authorization,
         fetch: config.fetch,
         projectCardUrl: args.projectCardUrl as string | undefined,
-        testRealmUrl: config.testRealmUrl,
-        matrixAuth: config.matrixAuth,
-        serverToken: config.serverToken,
         realmServerUrl: config.realmServerUrl,
+        forceNew: true,
       });
 
       return result;
@@ -644,11 +626,8 @@ function buildRegisteredTool(
 
 function resolveRealmUrl(
   config: ToolBuilderConfig,
-  realm: string | undefined,
+  _realm: string | undefined,
 ): string {
-  if (realm === 'test') {
-    return config.testRealmUrl;
-  }
   return config.targetRealmUrl;
 }
 

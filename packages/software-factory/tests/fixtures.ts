@@ -22,6 +22,8 @@ type StartedFactoryRealm = {
   realmDir: string;
   realmURL: URL;
   realmServerURL: URL;
+  /** The host app URL served by the compat proxy (for QUnit live-test pages). */
+  hostAppUrl: string;
   ownerBearerToken: string;
   ports: {
     publicPort: number;
@@ -391,6 +393,7 @@ async function startRealmProcess(
     realmDir: metadata.realmDir,
     realmURL: new URL(metadata.realmURL),
     realmServerURL: new URL(metadata.realmServerURL),
+    hostAppUrl: `http://localhost:${metadata.ports.publicPort}`,
     ownerBearerToken: metadata.ownerBearerToken,
     ports: metadata.ports,
     cardURL(path: string) {

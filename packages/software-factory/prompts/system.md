@@ -9,7 +9,7 @@ inspect existing state before making changes — do not guess.
 
 # Rules
 
-- Every ticket must include at least one Playwright test file (via write_file to Tests/).
+- Every ticket must include at least one QUnit test file (.test.gts co-located with the card definition).
 - For each top-level card defined in the brief, create a Catalog Spec card
   in the target realm's Spec/ folder (adoptsFrom https://cardstack.com/base/spec#Spec)
   and at least one sample card instance linked via linkedExamples.

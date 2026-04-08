@@ -12,7 +12,6 @@ export interface RunRealmTestsOutput {
   sourceRealmUrl?: string;
   scratchPath?: string;
   scratchRealmUrl?: string;
-  specFiles?: string[];
   copiedFixtures?: string[];
   expected?: number;
   unexpected?: number;
@@ -44,7 +43,7 @@ export interface CreateTestRunOptions {
   sequenceNumber?: number;
   ticketURL?: string;
   projectCardUrl?: string;
-  specRef?: ResolvedCodeRef;
+  moduleRef?: ResolvedCodeRef;
 }
 
 /** The primary return type from test execution — the card ID + status signal. */
@@ -59,7 +58,7 @@ export interface TestRunHandle {
  * TestRun card definition in test-results.gts.
  *
  * Note: `passedCount` and `failedCount` are computed fields on the card
- * (derived from `specResults[].results`), but are included here for
+ * (derived from `moduleResults[].results`), but are included here for
  * convenience when building card documents and in test assertions.
  */
 export interface TestRunAttributes {
@@ -71,7 +70,7 @@ export interface TestRunAttributes {
   failedCount: number;
   durationMs?: number;
   errorMessage?: string;
-  specResults: SpecResultData[];
+  moduleResults: TestModuleResultData[];
 }
 
 /** Shape of a single test result entry within a TestRun card. */
@@ -83,10 +82,39 @@ export interface TestResultEntryData {
   durationMs?: number;
 }
 
-/** Shape of a spec result group within a TestRun card. */
-export interface SpecResultData {
-  specRef?: ResolvedCodeRef;
+/** Shape of a test module result group within a TestRun card. */
+export interface TestModuleResultData {
+  moduleRef?: ResolvedCodeRef;
   results: TestResultEntryData[];
+}
+
+// ---------------------------------------------------------------------------
+// QUnit Result Types (collected via browser-side QUnit.on callbacks)
+// ---------------------------------------------------------------------------
+
+export interface QunitTestResult {
+  name: string;
+  module: string;
+  status: 'passed' | 'failed' | 'skipped' | 'todo';
+  runtime: number;
+  errors: { message: string; stack?: string }[];
+}
+
+export interface QunitRunSummary {
+  status: 'passed' | 'failed';
+  testCounts: {
+    passed: number;
+    failed: number;
+    skipped: number;
+    todo: number;
+    total: number;
+  };
+  runtime: number;
+}
+
+export interface QunitResults {
+  tests: QunitTestResult[];
+  runEnd: QunitRunSummary | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,25 +125,19 @@ export interface ExecuteTestRunOptions {
   targetRealmUrl: string;
   testResultsModuleUrl: string;
   slug: string;
-  specPaths: string[];
   testNames: string[];
   authorization?: string;
   fetch?: typeof globalThis.fetch;
   forceNew?: boolean;
   ticketURL?: string;
-  specRef?: ResolvedCodeRef;
-  /** URL to the Project card — used to read/write testArtifactsRealmUrl. */
+  /** URL to the Project card — used for TestRun relationship. */
   projectCardUrl?: string;
-  /** Explicit test realm URL. If not set, derived from Project card. */
-  testRealmUrl?: string;
-  /** Matrix auth for realm creation (required when projectCardUrl is set). */
-  matrixAuth?: {
-    userId: string;
-    accessToken: string;
-    matrixUrl: string;
-  };
-  /** Server-level JWT for obtaining realm-scoped auth for test artifacts realm. */
-  serverToken?: string;
   /** Realm server URL. Required — never inferred from targetRealmUrl. */
   realmServerUrl: string;
+  /** URL of the host app served by the compat proxy (e.g., the realm server URL). */
+  hostAppUrl: string;
+  /** Path to the host app's dist directory. Defaults to packages/host/dist. */
+  hostDistDir?: string;
+  /** Log browser console output for debugging. */
+  debug?: boolean;
 }

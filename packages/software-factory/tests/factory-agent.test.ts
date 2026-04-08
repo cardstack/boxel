@@ -387,8 +387,8 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
       'system message mentions signal_done',
     );
     assert.ok(
-      messages[0].content.includes('write_file'),
-      'system message mentions write_file',
+      messages[0].content.includes('read_file'),
+      'system message mentions read_file',
     );
   });
 

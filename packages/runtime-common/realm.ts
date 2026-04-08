@@ -86,7 +86,6 @@ import {
   isBrowserTestEnv,
   type IndexedFile,
   PRERENDERED_HTML_FORMATS,
-  hasExtension,
 } from './index';
 import type { FromScratchResult } from './tasks/indexer';
 import { isCodeRef, visitModuleDeps } from './code-ref';
@@ -2356,11 +2355,11 @@ export class Realm {
 
     let start = Date.now();
     try {
-      let isNonExecutableFile =
-        hasExtension(localName) &&
-        !hasExecutableExtension(localName) &&
-        !localName.endsWith('.json');
-      let fallbackExtensions = isNonExecutableFile
+      // Always try executable extension fallbacks so that dotted filenames
+      // like "hello.test" resolve to "hello.test.gts". Only skip fallbacks
+      // when the URL already has an executable extension.
+      let alreadyHasExecutableExt = hasExecutableExtension(localName);
+      let fallbackExtensions = alreadyHasExecutableExt
         ? []
         : [...executableExtensions, '.json'];
       let handle = await this.getFileWithFallbacks(
@@ -2372,7 +2371,7 @@ export class Realm {
       }
 
       if (handle.path !== localName) {
-        if (isNonExecutableFile) {
+        if (alreadyHasExecutableExt) {
           return notFound(request, requestContext, `${localName} not found`);
         }
         let headers = {
@@ -2696,6 +2695,9 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url,
+          ...(fileEntry.resource?.meta?.queryFieldDefs
+            ? { queryFieldDefs: fileEntry.resource.meta.queryFieldDefs }
+            : {}),
         },
         links: { self: fileURL },
       },

@@ -197,10 +197,6 @@ module('factory-implement', function () {
       assert.strictEqual(result.outcome, 'tests_passed');
       assert.strictEqual(result.iterations, 1);
       assert.strictEqual(result.ticketId, 'Tickets/sticky-note-define-core');
-      assert.strictEqual(
-        result.testRealmUrl,
-        'http://localhost:4201/test-user/my-realm-test-artifacts/',
-      );
       assert.ok(result.toolCallLog.length >= 1);
       assert.strictEqual(agent.callCount, 1);
     });
@@ -264,10 +260,12 @@ module('factory-implement', function () {
         agent,
         targetRealmUrl: 'http://localhost:4201/hassan1/personal/',
       });
-      let result = await runFactoryImplement(config);
+      await runFactoryImplement(config);
 
+      // The agent context should have the derived test realm URL
+      let ctx = agent.receivedContexts[0];
       assert.strictEqual(
-        result.testRealmUrl,
+        ctx.testRealmUrl,
         'http://localhost:4201/hassan1/personal-test-artifacts/',
       );
     });
