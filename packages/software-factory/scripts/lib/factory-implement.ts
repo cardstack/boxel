@@ -252,10 +252,10 @@ export async function runFactoryImplement(
   if (loopResult.outcome === 'tests_passed' || loopResult.outcome === 'done') {
     try {
       await updateTicketStatus(targetRealmUrl, ticket.id, 'done', fetchOptions);
-      log.error('[factory-implement] Updated ticket status to done');
+      log.info('Updated ticket status to done');
     } catch (error) {
       log.warn(
-        `[factory-implement] Could not update ticket status: ${
+        `Could not update ticket status: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -409,9 +409,7 @@ async function fetchCardData(
       knowledge.push(card);
     } catch {
       // Non-fatal: knowledge articles are supplementary
-      log.warn(
-        `[factory-implement] Could not fetch knowledge article: ${ka.id}`,
-      );
+      log.warn(`Could not fetch knowledge article: ${ka.id}`);
     }
   }
 
@@ -516,7 +514,7 @@ function buildTestRunner(
     let start = Date.now();
 
     try {
-      log.error(`[factory-implement] Running test file(s) for ticket: ${slug}`);
+      log.info(`Running test file(s) for ticket: ${slug}`);
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
@@ -531,9 +529,7 @@ function buildTestRunner(
       });
 
       let durationMs = Date.now() - start;
-      log.error(
-        `[factory-implement] Test run complete: status=${handle.status} (${durationMs}ms)`,
-      );
+      log.info(`Test run complete: status=${handle.status} (${durationMs}ms)`);
 
       if (handle.status === 'passed') {
         return {
@@ -582,7 +578,7 @@ function buildTestRunner(
     } catch (error) {
       let durationMs = Date.now() - start;
       log.error(
-        `[factory-implement] Test execution error: ${
+        `Test execution error: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -774,7 +770,7 @@ async function loadDarkFactorySchemas(
       }
     } catch (error) {
       log.warn(
-        `[factory-implement] Could not fetch schema for ${cardName}: ${
+        `Could not fetch schema for ${cardName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -795,7 +791,7 @@ async function loadDarkFactorySchemas(
       }
     } catch (error) {
       log.warn(
-        `[factory-implement] Could not fetch schema for ${name}: ${
+        `Could not fetch schema for ${name}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

@@ -153,7 +153,7 @@ async function main(): Promise<void> {
       JSON.stringify(payload, null, 2),
     );
   }
-  log.info(JSON.stringify(payload, null, 2));
+  process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
 }
 
 main().catch((error: unknown) => {

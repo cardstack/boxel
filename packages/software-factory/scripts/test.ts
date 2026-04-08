@@ -1,10 +1,8 @@
-process.env.LOG_LEVELS = process.env.LOG_LEVELS || '*=error';
-// This should be first
-import '../src/setup-logger';
-
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { logger } from '../src/logger';
+import { configureLogger, logger } from '../src/logger';
+
+configureLogger(process.env.LOG_LEVELS || '*=error');
 
 let log = logger('test');
 

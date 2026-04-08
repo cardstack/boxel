@@ -2,11 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { logger } from '../../src/logger';
 import { formatErrorResponse } from '../../src/error-format';
 import { ensureTrailingSlash, SupportedMimeType } from './realm-operations';
-
-let log = logger('boxel');
 
 const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');
 
@@ -357,5 +354,5 @@ export function fieldPairs(
 }
 
 export function printJson(value: unknown): void {
-  log.info(JSON.stringify(value, null, 2));
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }

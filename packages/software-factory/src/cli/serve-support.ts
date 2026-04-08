@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   mkdirSync(sharedRuntimeDir, { recursive: true });
   writeSupportMetadata(payload);
 
-  log.info(JSON.stringify(payload, null, 2));
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 
   let stop = async () => {
     await support.stop();

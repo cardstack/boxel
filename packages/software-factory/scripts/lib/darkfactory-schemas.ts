@@ -88,7 +88,7 @@ export async function fetchCardTypeSchema(
     schemaCache.set(cacheKey, result);
     return result;
   } catch {
-    log.warn(`[darkfactory-schemas] Failed to parse schema for ${cacheKey}`);
+    log.warn(`Failed to parse schema for ${cacheKey}`);
     return undefined;
   }
 }

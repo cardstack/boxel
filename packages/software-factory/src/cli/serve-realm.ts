@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     );
   }
 
-  log.info(JSON.stringify(payload, null, 2));
+  process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
 
   let cleanExit = false;
   process.on('exit', () => {
@@ -97,6 +97,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  log.error(String(error));
+  if (error instanceof Error) {
+    log.error(error.stack ?? error.message);
+  } else {
+    log.error(String(error));
+  }
   process.exitCode = 1;
 });

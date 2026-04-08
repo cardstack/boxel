@@ -148,7 +148,6 @@ async function main(): Promise<void> {
         log.info(`  Dropped: [${dropped.map((d) => d.name).join(', ')}]`);
       }
     }
-
   }
 
   // Summary: list all discoverable skills

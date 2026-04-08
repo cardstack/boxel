@@ -50,6 +50,8 @@ async function main(): Promise<void> {
       log.error(getFactoryEntrypointUsage());
     } else if (error instanceof FactoryBriefError) {
       log.error(error.message);
+    } else if (error instanceof Error) {
+      log.error(error.stack ?? error.message);
     } else {
       log.error(String(error));
     }

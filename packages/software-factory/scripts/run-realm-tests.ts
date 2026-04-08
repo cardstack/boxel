@@ -17,9 +17,6 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import { getActiveProfile, parseArgs } from './lib/boxel';
 import { ensureTrailingSlash } from './lib/realm-operations';
-import { logger } from '../src/logger';
-
-let log = logger('run-realm-tests');
 
 type CommandOptions = {
   cwd?: string;
@@ -316,7 +313,7 @@ let summary = {
   failures,
 };
 
-log.info(JSON.stringify(summary, null, 2));
+process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
 if (testRun.status !== 0) {
   process.exit(testRun.status ?? 1);

@@ -234,7 +234,7 @@ export class SkillLoader implements SkillLoaderInterface {
         results.push(skill);
       } catch (error) {
         log.warn(
-          `[SkillLoader] Skipping unavailable skill "${name}": ${
+          `Skipping unavailable skill "${name}": ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
@@ -382,7 +382,7 @@ export function enforceSkillBudget(
 
     if (usedTokens + skillTokens > maxTokens) {
       log.warn(
-        `[SkillBudget] Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
+        `Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
           `would exceed budget of ${maxTokens} (used: ${usedTokens})`,
       );
       continue;
