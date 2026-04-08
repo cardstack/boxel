@@ -143,13 +143,6 @@ export interface ValidationResults {
   steps: ValidationStepResult[];
 }
 
-/** A resolved clarification answer from a previously-blocked issue. */
-export interface ClarificationAnswer {
-  issueId: string;
-  question: string;
-  answer: string;
-}
-
 export interface ToolResult {
   tool: string;
   exitCode: number;
@@ -175,12 +168,8 @@ export interface AgentContext {
   testRealmUrl: string;
   /** Validation results from the prior inner-loop iteration. */
   validationResults?: ValidationResults;
-  /** Resolved clarification answers from previously-blocked issues. */
-  clarifications?: ClarificationAnswer[];
   /** Brief URL for bootstrap issues. */
   briefUrl?: string;
-  /** Local workspace directory path. */
-  workspaceDir?: string;
 }
 
 export interface AgentAction {

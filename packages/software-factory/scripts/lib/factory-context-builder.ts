@@ -1,6 +1,5 @@
 import type {
   AgentContext,
-  ClarificationAnswer,
   IssueCard,
   KnowledgeArticle,
   ProjectCard,
@@ -24,13 +23,12 @@ import {
  * Loads related cards from an issue's relationships.
  *
  * The `buildForIssue()` method uses this to traverse the issue's
- * linksTo / linksToMany fields (project, relatedKnowledge, blockedBy)
+ * linksTo / linksToMany fields (project, relatedKnowledge)
  * without coupling ContextBuilder to the realm I/O layer.
  */
 export interface IssueRelationshipLoader {
   loadProject(issue: IssueCard): Promise<ProjectCard | undefined>;
   loadKnowledge(issue: IssueCard): Promise<KnowledgeArticle[]>;
-  loadBlockedBy(issue: IssueCard): Promise<IssueCard[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +118,6 @@ export class ContextBuilder {
    * traverses issue relationships to load them automatically:
    * - project from issue.project
    * - knowledge from issue.relatedKnowledge
-   * - resolved clarification answers from issue.blockedBy (done clarifications)
    *
    * Accepts optional validationResults from the prior inner-loop iteration
    * so the agent can self-correct on failures.
@@ -128,8 +125,6 @@ export class ContextBuilder {
   async buildForIssue(params: {
     issue: IssueCard;
     targetRealmUrl: string;
-    testRealmUrl: string;
-    workspaceDir?: string;
     validationResults?: ValidationResults;
     briefUrl?: string;
   }): Promise<AgentContext> {
@@ -139,13 +134,12 @@ export class ContextBuilder {
       );
     }
 
-    let { issue, targetRealmUrl, testRealmUrl } = params;
+    let { issue, targetRealmUrl } = params;
 
     // Step 1: Traverse issue relationships
-    let [project, knowledge, blockedByIssues] = await Promise.all([
+    let [project, knowledge] = await Promise.all([
       this.issueLoader.loadProject(issue),
       this.issueLoader.loadKnowledge(issue),
-      this.issueLoader.loadBlockedBy(issue),
     ]);
 
     if (!project) {
@@ -154,79 +148,34 @@ export class ContextBuilder {
       );
     }
 
-    // Step 2: Extract clarification answers from resolved blockedBy issues
-    let clarifications = extractClarifications(blockedByIssues);
-
-    // Step 3: Resolve and load skills
+    // Step 2: Resolve and load skills
     let skillNames = this.skillResolver.resolve(issue, project);
     let skills: ResolvedSkill[] = await this.skillLoader.loadAll(
       skillNames,
       issue,
     );
 
-    // Step 4: Enforce token budget if configured
+    // Step 3: Enforce token budget if configured
     skills = enforceSkillBudget(skills, this.maxSkillTokens);
 
-    // Step 5: Assemble the context
+    // Step 4: Assemble the context
     let context: AgentContext = {
       project,
       issue,
       knowledge,
       skills,
       targetRealmUrl,
-      testRealmUrl,
+      testRealmUrl: targetRealmUrl,
     };
 
     if (params.validationResults) {
       context.validationResults = params.validationResults;
     }
 
-    if (clarifications.length > 0) {
-      context.clarifications = clarifications;
-    }
-
     if (params.briefUrl) {
       context.briefUrl = params.briefUrl;
     }
 
-    if (params.workspaceDir) {
-      context.workspaceDir = params.workspaceDir;
-    }
-
     return context;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Extract clarification answers from resolved blockedBy issues.
- *
- * A clarification issue is one with issueType === 'clarification' and
- * status === 'done'. The question comes from the issue summary, and the
- * answer from the issue description.
- */
-function extractClarifications(
-  blockedByIssues: IssueCard[],
-): ClarificationAnswer[] {
-  let clarifications: ClarificationAnswer[] = [];
-
-  for (let blocked of blockedByIssues) {
-    if (
-      blocked.issueType === 'clarification' &&
-      blocked.status === 'done' &&
-      typeof blocked.summary === 'string' &&
-      typeof blocked.description === 'string'
-    ) {
-      clarifications.push({
-        issueId: blocked.id,
-        question: blocked.summary,
-        answer: blocked.description,
-      });
-    }
-  }
-
-  return clarifications;
 }

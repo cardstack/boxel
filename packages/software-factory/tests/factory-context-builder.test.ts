@@ -77,19 +77,16 @@ class StubSkillLoader implements SkillLoaderInterface {
 class StubIssueRelationshipLoader implements IssueRelationshipLoader {
   project: ProjectCard | undefined;
   knowledge: KnowledgeArticle[];
-  blockedBy: IssueCard[];
 
   constructor(opts?: {
     project?: ProjectCard | null;
     knowledge?: KnowledgeArticle[];
-    blockedBy?: IssueCard[];
   }) {
     this.project =
       opts && 'project' in opts
         ? (opts.project ?? undefined)
         : { id: 'project-1', name: 'Sticky Notes' };
     this.knowledge = opts?.knowledge ?? [];
-    this.blockedBy = opts?.blockedBy ?? [];
   }
 
   async loadProject(_issue: IssueCard): Promise<ProjectCard | undefined> {
@@ -98,10 +95,6 @@ class StubIssueRelationshipLoader implements IssueRelationshipLoader {
 
   async loadKnowledge(_issue: IssueCard): Promise<KnowledgeArticle[]> {
     return this.knowledge;
-  }
-
-  async loadBlockedBy(_issue: IssueCard): Promise<IssueCard[]> {
-    return this.blockedBy;
   }
 }
 
@@ -299,7 +292,6 @@ module('factory-context-builder > skill budget', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
@@ -540,7 +532,6 @@ module('factory-context-builder > buildForIssue > relationships', function () {
     let ctx = await builder.buildForIssue({
       issue: makeIssue(),
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.project.id, 'proj-99', 'project loaded from issue');
@@ -558,112 +549,11 @@ module('factory-context-builder > buildForIssue > relationships', function () {
     let ctx = await builder.buildForIssue({
       issue: makeIssue(),
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.knowledge.length, 2, 'two knowledge articles');
     assert.strictEqual(ctx.knowledge[0].id, 'ka-1');
     assert.strictEqual(ctx.knowledge[1].id, 'ka-2');
-  });
-
-  test('includes resolved clarification answers for previously-blocked issues', async function (assert) {
-    let blockedBy: IssueCard[] = [
-      {
-        id: 'clarification-1',
-        issueType: 'clarification',
-        status: 'done',
-        summary: 'What color scheme should StickyNote use?',
-        description: 'Use yellow background with dark text.',
-      },
-      {
-        id: 'clarification-2',
-        issueType: 'clarification',
-        status: 'done',
-        summary: 'Should StickyNote support markdown?',
-        description: 'No, plain text only for now.',
-      },
-    ];
-    let { config } = makeIssueConfig({ blockedBy });
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.buildForIssue({
-      issue: makeIssue(),
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-    });
-
-    assert.strictEqual(ctx.clarifications?.length, 2, 'two clarifications');
-    assert.strictEqual(ctx.clarifications?.[0].issueId, 'clarification-1');
-    assert.strictEqual(
-      ctx.clarifications?.[0].question,
-      'What color scheme should StickyNote use?',
-    );
-    assert.strictEqual(
-      ctx.clarifications?.[0].answer,
-      'Use yellow background with dark text.',
-    );
-    assert.strictEqual(ctx.clarifications?.[1].issueId, 'clarification-2');
-  });
-
-  test('excludes non-clarification blockers and unresolved clarifications', async function (assert) {
-    let blockedBy: IssueCard[] = [
-      // Regular implementation issue (not a clarification) — should be excluded
-      {
-        id: 'impl-1',
-        issueType: 'feature',
-        status: 'done',
-        summary: 'Implement base card',
-        description: 'Create the base card definition',
-      },
-      // Clarification still blocked (not done) — should be excluded
-      {
-        id: 'clarification-pending',
-        issueType: 'clarification',
-        status: 'blocked',
-        summary: 'Pending question',
-        description: '',
-      },
-      // Resolved clarification — should be included
-      {
-        id: 'clarification-done',
-        issueType: 'clarification',
-        status: 'done',
-        summary: 'What icon to use?',
-        description: 'Use the sticky-note icon from Phosphor.',
-      },
-    ];
-    let { config } = makeIssueConfig({ blockedBy });
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.buildForIssue({
-      issue: makeIssue(),
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-    });
-
-    assert.strictEqual(
-      ctx.clarifications?.length,
-      1,
-      'only one resolved clarification',
-    );
-    assert.strictEqual(ctx.clarifications?.[0].issueId, 'clarification-done');
-  });
-
-  test('omits clarifications field when none exist', async function (assert) {
-    let { config } = makeIssueConfig({ blockedBy: [] });
-    let builder = new ContextBuilder(config);
-
-    let ctx = await builder.buildForIssue({
-      issue: makeIssue(),
-      targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
-    });
-
-    assert.strictEqual(
-      ctx.clarifications,
-      undefined,
-      'no clarifications field when empty',
-    );
   });
 
   test('throws when issue has no linked project', async function (assert) {
@@ -674,7 +564,6 @@ module('factory-context-builder > buildForIssue > relationships', function () {
       await builder.buildForIssue({
         issue: makeIssue({ id: 'orphan-issue' }),
         targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
       });
       assert.ok(false, 'should have thrown');
     } catch (error) {
@@ -721,7 +610,6 @@ module(
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
         targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
         validationResults,
       });
 
@@ -749,7 +637,6 @@ module(
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
         targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
       });
 
       assert.strictEqual(
@@ -794,7 +681,6 @@ module(
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
         targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
         validationResults,
       });
 
@@ -834,7 +720,6 @@ module('factory-context-builder > buildForIssue > skills', function () {
     await builder.buildForIssue({
       issue,
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(resolver.calls.length, 1, 'resolver called once');
@@ -871,7 +756,6 @@ module('factory-context-builder > buildForIssue > skills', function () {
     let ctx = await builder.buildForIssue({
       issue: makeIssue(),
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.skills.length, 1, 'budget trimmed to one skill');
@@ -897,7 +781,6 @@ module(
       let ctx = await builder.buildForIssue({
         issue: makeIssue({ issueType: 'bootstrap' }),
         targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
         briefUrl: 'https://example.test/briefs/sticky-notes',
       });
 
@@ -915,45 +798,21 @@ module(
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
         targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
       });
 
       assert.strictEqual(ctx.briefUrl, undefined, 'no briefUrl');
     });
 
-    test('includes workspaceDir when provided', async function (assert) {
-      let { config } = makeIssueConfig();
-      let builder = new ContextBuilder(config);
-
-      let ctx = await builder.buildForIssue({
-        issue: makeIssue(),
-        targetRealmUrl: 'https://example.test/target/',
-        testRealmUrl: 'https://example.test/target-test-artifacts/',
-        workspaceDir: '/tmp/factory-workspace',
-      });
-
-      assert.strictEqual(
-        ctx.workspaceDir,
-        '/tmp/factory-workspace',
-        'workspaceDir included',
-      );
-    });
-
-    test('includes realm URLs in context', async function (assert) {
+    test('includes targetRealmUrl in context', async function (assert) {
       let { config } = makeIssueConfig();
       let builder = new ContextBuilder(config);
 
       let ctx = await builder.buildForIssue({
         issue: makeIssue(),
         targetRealmUrl: 'https://example.test/my-realm/',
-        testRealmUrl: 'https://example.test/my-realm-test-artifacts/',
       });
 
       assert.strictEqual(ctx.targetRealmUrl, 'https://example.test/my-realm/');
-      assert.strictEqual(
-        ctx.testRealmUrl,
-        'https://example.test/my-realm-test-artifacts/',
-      );
     });
 
     test('throws when issueLoader is not configured', async function (assert) {
@@ -964,7 +823,6 @@ module(
         await builder.buildForIssue({
           issue: makeIssue(),
           targetRealmUrl: 'https://example.test/target/',
-          testRealmUrl: 'https://example.test/target-test-artifacts/',
         });
         assert.ok(false, 'should have thrown');
       } catch (error) {
