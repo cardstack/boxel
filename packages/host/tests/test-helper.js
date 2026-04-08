@@ -3,7 +3,7 @@ import config from '@cardstack/host/config/environment';
 import * as QUnit from 'qunit';
 import { setApplication } from '@ember/test-helpers';
 import setupOperatorModeParametersMatchAssertion from '@cardstack/host/tests/helpers/operator-mode-parameters-match';
-import { start as examStart } from 'ember-exam/addon-test-support';
+import { start as examStart } from 'ember-exam/test-support';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
