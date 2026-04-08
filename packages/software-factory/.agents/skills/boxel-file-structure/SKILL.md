@@ -1,6 +1,7 @@
 ---
 name: boxel-file-structure
 description: Use when organizing files in a Boxel workspace, choosing filenames or directories for card definitions and instances, or validating JSON `adoptsFrom.module` paths and relationship links.
+category: reference
 ---
 
 # Boxel File Structure Rules

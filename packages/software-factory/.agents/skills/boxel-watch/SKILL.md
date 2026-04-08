@@ -1,6 +1,7 @@
 ---
 name: boxel-watch
 description: Use when starting or choosing settings for `boxel watch` to monitor remote Boxel changes, including active-development, quick-feedback, and background-monitoring intervals.
+category: cli
 ---
 
 > **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.

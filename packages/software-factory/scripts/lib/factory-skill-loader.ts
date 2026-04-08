@@ -24,6 +24,11 @@ const CHARS_PER_TOKEN = 4;
 /**
  * Priority order for skills. Lower index = higher priority.
  * Skills not in this list get appended at the end (lowest priority).
+ *
+ * Skill categories (defined in each skill's SKILL.md frontmatter):
+ *   - factory:   Skills for the automated factory execution loop (tool workflow, realm I/O)
+ *   - reference:  General Boxel development patterns (card definitions, file structure)
+ *   - cli:       CLI-only skills (excluded from factory — see CLI_ONLY_SKILLS)
  */
 const SKILL_PRIORITY: readonly string[] = [
   'boxel-development',
@@ -96,7 +101,8 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'dev-defensive-programming.md': ['defensive', 'guard', 'error', 'safe'],
   'dev-external-libraries.md': ['library', 'external', 'third-party', 'npm'],
   'dev-command-development.md': ['command', 'action', 'invoke'],
-  'dev-spec-usage.md': ['spec', 'catalog', 'specification'],
+  'dev-catalog-spec-instances.md': ['spec', 'catalog', 'specification'],
+  'dev-spectype-patterns.md': ['specType', 'spectype', 'card spec', 'field spec', 'component spec', 'command spec', 'app spec'],
   'dev-qunit-testing.md': ['test', 'qunit', 'test.gts', 'verify'],
   'dev-realm-search.md': ['search', 'query', 'filter', 'find', 'realm'],
   'dev-replicate-ai.md': ['replicate', 'ai', 'model', 'ml'],
@@ -109,7 +115,7 @@ const ALWAYS_LOAD_REFERENCES: readonly string[] = [
   'dev-quick-reference.md',
   'dev-realm-search.md',
   'dev-qunit-testing.md',
-  'dev-spec-usage.md',
+  'dev-catalog-spec-instances.md',
 ];
 
 // ---------------------------------------------------------------------------

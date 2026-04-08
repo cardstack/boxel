@@ -1,6 +1,7 @@
 ---
 name: boxel-development
 description: Use when working on Boxel card development, especially creating or editing `.gts` card definitions, `.json` card instances, Boxel commands, themes, queries, templates, or related Boxel patterns in a synced workspace. Read the targeted files in `references/` instead of loading broad guidance by default.
+category: reference
 ---
 
 # Boxel Development
@@ -47,8 +48,10 @@ These three files establish the data model, the `contains` vs `linksTo` rule, re
   `references/dev-external-libraries.md`
 - Command implementation:
   `references/dev-command-development.md`
-- Spec usage:
-  `references/dev-spec-usage.md`
+- Catalog Spec instances:
+  `references/dev-catalog-spec-instances.md`
+- Spec type patterns (imports, usage by specType):
+  `references/dev-spectype-patterns.md`
 - Replicate integration:
   `references/dev-replicate-ai.md`
 

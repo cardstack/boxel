@@ -1,6 +1,7 @@
 ---
 name: software-factory-operations
 description: Use when implementing cards in a target realm through the factory execution loop — covers the tool-use workflow for searching, writing, testing, and updating tickets via factory tools.
+category: factory
 ---
 
 # Software Factory Operations
@@ -95,45 +96,16 @@ target-realm/
     └── article-name.json            # KnowledgeArticle card
 ```
 
-## Writing QUnit Card Tests
+## Test Files
 
-Test files are `.test.gts` files co-located with card definitions in the target realm. Each test file exports a `runTests()` function that registers QUnit modules and tests.
+Test files (`.test.gts`) are co-located with card definitions in the target realm. Write them via `write_file` and execute them via `run_tests`.
 
-### Example Test
+- Write tests as `.test.gts` files co-located with the card definition (e.g., `sticky-note.gts` → `sticky-note.test.gts`)
+- Every ticket must have at least one test file
+- Use the `run_tests({ slug, testNames? })` tool to execute tests after calling `signal_done()`
+- If tests fail, read the failure output, fix the implementation or test, then call `signal_done()` again
 
-```typescript
-// sticky-note.test.gts — co-located with sticky-note.gts
-import { module, test } from 'qunit';
-import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { renderCard } from '@cardstack/host/tests/helpers/render-component';
-import { getService } from '@universal-ember/test-support';
-
-let cardModuleUrl = new URL('./sticky-note', import.meta.url).href;
-
-export function runTests() {
-  module('StickyNote', function (hooks) {
-    setupCardTest(hooks);
-
-    test('renders title in fitted view', async function (assert) {
-      let loader = getService('loader-service').loader;
-      let { StickyNote } = await loader.import(cardModuleUrl);
-      let note = new StickyNote({ title: 'Test Note', body: 'Hello' });
-      await renderCard(loader, note, 'fitted');
-      assert.dom('[data-test-title]').hasText('Test Note');
-    });
-  });
-}
-```
-
-### Key Points
-
-- Tests are `.test.gts` files co-located with the card definition (e.g., `sticky-note.gts` and `sticky-note.test.gts`)
-- Each test file must export a `runTests()` function
-- Use `import.meta.url` to resolve card definitions relative to the test file — never hardcode realm URLs
-- Use `setupCardTest(hooks)` for rendering context, then `renderCard(loader, card, format)` for DOM assertions
-- No external realm writes during tests — all test data lives in browser memory
-- Use `data-test-*` attributes for DOM selectors when testing rendered output
-- Use QUnit assertions: `assert.dom()`, `assert.strictEqual()`, `assert.ok()`
+For test file structure, imports, and QUnit assertion patterns, see the `dev-qunit-testing` reference (loaded automatically with the `boxel-development` skill).
 
 ## Important Rules
 
