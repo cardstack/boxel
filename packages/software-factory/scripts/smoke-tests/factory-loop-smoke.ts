@@ -13,10 +13,10 @@ import { parseArgs } from 'node:util';
 
 import type {
   AgentContext,
-  KnowledgeArticle,
-  ProjectCard,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
-  IssueCard,
+  IssueData,
 } from '../lib/factory-agent';
 
 import type { FactoryTool, ToolCallEntry } from '../lib/factory-tool-builder';
@@ -109,11 +109,10 @@ class MockLoopAgent implements LoopAgent {
 
 class StubContextBuilder implements ContextBuilderLike {
   async build(params: {
-    project: ProjectCard;
-    issue: IssueCard;
-    knowledge: KnowledgeArticle[];
+    project: ProjectData;
+    issue: IssueData;
+    knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    testRealmUrl: string;
     testResults?: TestResult;
   }): Promise<AgentContext> {
     return {
@@ -122,7 +121,6 @@ class StubContextBuilder implements ContextBuilderLike {
       knowledge: params.knowledge,
       skills: [],
       targetRealmUrl: params.targetRealmUrl,
-      testRealmUrl: params.testRealmUrl,
       testResults: params.testResults,
     };
   }
@@ -132,18 +130,18 @@ class StubContextBuilder implements ContextBuilderLike {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const PROJECT: ProjectCard = {
+const PROJECT: ProjectData = {
   id: 'Projects/sticky-notes',
   name: 'Sticky Notes MVP',
 };
 
-const ISSUE: IssueCard = {
+const ISSUE: IssueData = {
   id: 'Issues/define-sticky-note',
   title: 'Define StickyNote card',
   description: 'Create a .gts card definition for StickyNote.',
 };
 
-const KNOWLEDGE: KnowledgeArticle[] = [
+const KNOWLEDGE: KnowledgeArticleData[] = [
   { id: 'Knowledge/card-basics', title: 'Boxel Card Development Basics' },
 ];
 
@@ -189,7 +187,6 @@ function makeBaseConfig(
     issue: ISSUE,
     knowledge: KNOWLEDGE,
     targetRealmUrl: 'https://example.test/target/',
-    testRealmUrl: 'https://example.test/target-test-artifacts/',
     ...overrides,
   };
 }

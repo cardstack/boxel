@@ -1,12 +1,12 @@
 import { module, test } from 'qunit';
 
 import type {
-  KnowledgeArticle,
-  ProjectCard,
+  KnowledgeArticleData,
+  ProjectData,
   ResolvedSkill,
   TestResult,
   ValidationResults,
-  IssueCard,
+  IssueData,
 } from '../scripts/lib/factory-agent';
 
 import {
@@ -28,13 +28,13 @@ class StubSkillResolver implements SkillResolver {
   /** Pre-configured skill names returned by resolve(). */
   skillNames: string[];
   /** Records all (issue, project) pairs passed to resolve(). */
-  calls: { issue: IssueCard; project: ProjectCard }[] = [];
+  calls: { issue: IssueData; project: ProjectData }[] = [];
 
   constructor(skillNames: string[] = ['boxel-development']) {
     this.skillNames = skillNames;
   }
 
-  resolve(issue: IssueCard, project: ProjectCard): string[] {
+  resolve(issue: IssueData, project: ProjectData): string[] {
     this.calls.push({ issue, project });
     return this.skillNames;
   }
@@ -44,13 +44,13 @@ class StubSkillLoader implements SkillLoaderInterface {
   /** Map from skill name to the ResolvedSkill that load() returns. */
   private skillMap: Map<string, ResolvedSkill>;
   /** Records all loadAll() calls: [skillNames, issue]. */
-  loadAllCalls: { skillNames: string[]; issue?: IssueCard }[] = [];
+  loadAllCalls: { skillNames: string[]; issue?: IssueData }[] = [];
 
   constructor(skills: ResolvedSkill[] = []) {
     this.skillMap = new Map(skills.map((s) => [s.name, s]));
   }
 
-  async load(skillName: string, _issue?: IssueCard): Promise<ResolvedSkill> {
+  async load(skillName: string, _issue?: IssueData): Promise<ResolvedSkill> {
     let skill = this.skillMap.get(skillName);
     if (!skill) {
       throw new Error(`StubSkillLoader: unknown skill "${skillName}"`);
@@ -60,7 +60,7 @@ class StubSkillLoader implements SkillLoaderInterface {
 
   async loadAll(
     skillNames: string[],
-    issue?: IssueCard,
+    issue?: IssueData,
   ): Promise<ResolvedSkill[]> {
     this.loadAllCalls.push({ skillNames, issue });
     let results: ResolvedSkill[] = [];
@@ -75,12 +75,12 @@ class StubSkillLoader implements SkillLoaderInterface {
 }
 
 class StubIssueRelationshipLoader implements IssueRelationshipLoader {
-  project: ProjectCard | undefined;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData | undefined;
+  knowledge: KnowledgeArticleData[];
 
   constructor(opts?: {
-    project?: ProjectCard | null;
-    knowledge?: KnowledgeArticle[];
+    project?: ProjectData | null;
+    knowledge?: KnowledgeArticleData[];
   }) {
     this.project =
       opts && 'project' in opts
@@ -89,11 +89,11 @@ class StubIssueRelationshipLoader implements IssueRelationshipLoader {
     this.knowledge = opts?.knowledge ?? [];
   }
 
-  async loadProject(_issue: IssueCard): Promise<ProjectCard | undefined> {
+  async loadProject(_issue: IssueData): Promise<ProjectData | undefined> {
     return this.project;
   }
 
-  async loadKnowledge(_issue: IssueCard): Promise<KnowledgeArticle[]> {
+  async loadKnowledge(_issue: IssueData): Promise<KnowledgeArticleData[]> {
     return this.knowledge;
   }
 }
@@ -102,11 +102,11 @@ class StubIssueRelationshipLoader implements IssueRelationshipLoader {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
+function makeProject(overrides?: Partial<ProjectData>): ProjectData {
   return { id: 'project-1', name: 'Sticky Notes', ...overrides };
 }
 
-function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
+function makeIssue(overrides?: Partial<IssueData>): IssueData {
   return {
     id: 'issue-1',
     title: 'Implement StickyNote card',
@@ -116,8 +116,8 @@ function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
 }
 
 function makeKnowledge(
-  overrides?: Partial<KnowledgeArticle>,
-): KnowledgeArticle {
+  overrides?: Partial<KnowledgeArticleData>,
+): KnowledgeArticleData {
   return { id: 'ka-1', title: 'Boxel Card Basics', ...overrides };
 }
 
@@ -163,7 +163,6 @@ module('factory-context-builder > skill resolution', function () {
       issue,
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(resolver.calls.length, 1, 'resolve() called once');
@@ -199,7 +198,6 @@ module('factory-context-builder > skill resolution', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(loader.loadAllCalls.length, 1, 'loadAll() called once');
@@ -225,7 +223,6 @@ module('factory-context-builder > skill resolution', function () {
       issue,
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(
@@ -255,7 +252,6 @@ module('factory-context-builder > skill resolution', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.skills.length, 2, 'two skills in context');
@@ -322,7 +318,6 @@ module('factory-context-builder > skill budget', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.skills.length, 2, 'all skills included');
@@ -343,7 +338,6 @@ module('factory-context-builder > tools excluded', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(
@@ -368,7 +362,6 @@ module('factory-context-builder > test results', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.testResults, undefined, 'no testResults');
@@ -395,7 +388,7 @@ module('factory-context-builder > test results', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
+
       testResults,
     });
 
@@ -418,7 +411,7 @@ module('factory-context-builder > test results', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
+
       testResults,
     });
 
@@ -447,7 +440,6 @@ module('factory-context-builder > core fields', function () {
       issue,
       knowledge,
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.project, project, 'project passed through');
@@ -464,14 +456,9 @@ module('factory-context-builder > core fields', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/my-realm/',
-      testRealmUrl: 'https://example.test/my-realm-test-artifacts/',
     });
 
     assert.strictEqual(ctx.targetRealmUrl, 'https://example.test/my-realm/');
-    assert.strictEqual(
-      ctx.testRealmUrl,
-      'https://example.test/my-realm-test-artifacts/',
-    );
   });
 
   test('handles empty knowledge array', async function (assert) {
@@ -483,7 +470,6 @@ module('factory-context-builder > core fields', function () {
       issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.deepEqual(ctx.knowledge, [], 'empty knowledge is fine');

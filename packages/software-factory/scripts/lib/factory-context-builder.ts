@@ -1,8 +1,8 @@
 import type {
   AgentContext,
-  IssueCard,
-  KnowledgeArticle,
-  ProjectCard,
+  IssueData,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
   ValidationResults,
 } from './factory-agent';
@@ -27,8 +27,8 @@ import {
  * without coupling ContextBuilder to the realm I/O layer.
  */
 export interface IssueRelationshipLoader {
-  loadProject(issue: IssueCard): Promise<ProjectCard | undefined>;
-  loadKnowledge(issue: IssueCard): Promise<KnowledgeArticle[]>;
+  loadProject(issue: IssueData): Promise<ProjectData | undefined>;
+  loadKnowledge(issue: IssueData): Promise<KnowledgeArticleData[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,15 +71,14 @@ export class ContextBuilder {
    * 4. Return AgentContext (tools are provided separately as FactoryTool[])
    */
   async build(params: {
-    project: ProjectCard;
-    issue: IssueCard;
-    knowledge: KnowledgeArticle[];
+    project: ProjectData;
+    issue: IssueData;
+    knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    testRealmUrl: string;
     /** Test results from the previous iteration, if any. */
     testResults?: TestResult;
   }): Promise<AgentContext> {
-    let { project, issue, knowledge, targetRealmUrl, testRealmUrl } = params;
+    let { project, issue, knowledge, targetRealmUrl } = params;
 
     // Step 1: Resolve which skills are needed for this issue
     let skillNames = this.skillResolver.resolve(issue, project);
@@ -100,7 +99,6 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealmUrl,
-      testRealmUrl,
     };
 
     // Include test results when iterating after a failed test run
@@ -123,7 +121,7 @@ export class ContextBuilder {
    * so the agent can self-correct on failures.
    */
   async buildForIssue(params: {
-    issue: IssueCard;
+    issue: IssueData;
     targetRealmUrl: string;
     validationResults?: ValidationResults;
     briefUrl?: string;
@@ -165,7 +163,6 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealmUrl,
-      testRealmUrl: targetRealmUrl,
     };
 
     if (params.validationResults) {

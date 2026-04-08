@@ -314,7 +314,6 @@ export class ToolUseFactoryAgent implements LoopAgent {
 
     return this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
-      testRealmUrl: context.testRealmUrl,
       skills,
     });
   }

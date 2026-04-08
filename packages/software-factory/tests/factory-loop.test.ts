@@ -2,10 +2,10 @@ import { module, test } from 'qunit';
 
 import type {
   AgentContext,
-  KnowledgeArticle,
-  ProjectCard,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
-  IssueCard,
+  IssueData,
 } from '../scripts/lib/factory-agent';
 
 import type {
@@ -106,20 +106,18 @@ class MockFactoryAgent implements LoopAgent {
 
 class StubContextBuilder implements ContextBuilderLike {
   buildCalls: {
-    project: ProjectCard;
-    issue: IssueCard;
-    knowledge: KnowledgeArticle[];
+    project: ProjectData;
+    issue: IssueData;
+    knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    testRealmUrl: string;
     testResults?: TestResult;
   }[] = [];
 
   async build(params: {
-    project: ProjectCard;
-    issue: IssueCard;
-    knowledge: KnowledgeArticle[];
+    project: ProjectData;
+    issue: IssueData;
+    knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    testRealmUrl: string;
     testResults?: TestResult;
   }): Promise<AgentContext> {
     this.buildCalls.push(params);
@@ -129,7 +127,6 @@ class StubContextBuilder implements ContextBuilderLike {
       knowledge: params.knowledge,
       skills: [],
       targetRealmUrl: params.targetRealmUrl,
-      testRealmUrl: params.testRealmUrl,
       testResults: params.testResults,
     };
   }
@@ -139,17 +136,17 @@ class StubContextBuilder implements ContextBuilderLike {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
+function makeProject(overrides?: Partial<ProjectData>): ProjectData {
   return { id: 'project-1', name: 'Sticky Notes', ...overrides };
 }
 
-function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
+function makeIssue(overrides?: Partial<IssueData>): IssueData {
   return { id: 'issue-1', title: 'Implement StickyNote card', ...overrides };
 }
 
 function makeKnowledge(
-  overrides?: Partial<KnowledgeArticle>,
-): KnowledgeArticle {
+  overrides?: Partial<KnowledgeArticleData>,
+): KnowledgeArticleData {
   return { id: 'ka-1', ...overrides };
 }
 
@@ -218,7 +215,6 @@ function makeLoopConfig(
     issue: makeIssue(),
     knowledge: [makeKnowledge()],
     targetRealmUrl: 'https://example.test/target/',
-    testRealmUrl: 'https://example.test/target-test-artifacts/',
     ...overrides,
   };
 }
@@ -747,7 +743,6 @@ module('factory-loop > context threading', function () {
         agent,
         contextBuilder,
         targetRealmUrl: 'https://example.test/my-realm/',
-        testRealmUrl: 'https://example.test/my-realm-test-artifacts/',
         testRunner: makeTestRunner([
           makeFailingTestResult(),
           makePassingTestResult(),
@@ -763,14 +758,6 @@ module('factory-loop > context threading', function () {
     assert.strictEqual(
       contextBuilder.buildCalls[1].targetRealmUrl,
       'https://example.test/my-realm/',
-    );
-    assert.strictEqual(
-      contextBuilder.buildCalls[0].testRealmUrl,
-      'https://example.test/my-realm-test-artifacts/',
-    );
-    assert.strictEqual(
-      contextBuilder.buildCalls[1].testRealmUrl,
-      'https://example.test/my-realm-test-artifacts/',
     );
   });
 });

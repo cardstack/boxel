@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { IssueCard, ProjectCard, ResolvedSkill } from './factory-agent';
+import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -132,7 +132,7 @@ interface RawSkillData {
 // ---------------------------------------------------------------------------
 
 export interface SkillResolver {
-  resolve(issue: IssueCard, project: ProjectCard): string[];
+  resolve(issue: IssueData, project: ProjectData): string[];
 }
 
 export class DefaultSkillResolver implements SkillResolver {
@@ -150,7 +150,7 @@ export class DefaultSkillResolver implements SkillResolver {
    * tool registry does not include boxel-cli tools (deferred to CS-10520).
    * These skills reference commands the agent cannot invoke.
    */
-  resolve(issue: IssueCard, project: ProjectCard): string[] {
+  resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);
     let skills: string[] = ['boxel-development', 'boxel-file-structure'];
 
@@ -182,8 +182,8 @@ export class DefaultSkillResolver implements SkillResolver {
 // ---------------------------------------------------------------------------
 
 export interface SkillLoaderInterface {
-  load(skillName: string, issue?: IssueCard): Promise<ResolvedSkill>;
-  loadAll(skillNames: string[], issue?: IssueCard): Promise<ResolvedSkill[]>;
+  load(skillName: string, issue?: IssueData): Promise<ResolvedSkill>;
+  loadAll(skillNames: string[], issue?: IssueData): Promise<ResolvedSkill[]>;
 }
 
 export class SkillLoader implements SkillLoaderInterface {
@@ -210,7 +210,7 @@ export class SkillLoader implements SkillLoaderInterface {
    * only include issue-relevant files (always applied, not just with a budget).
    * Results are cached for the duration of the factory run.
    */
-  async load(skillName: string, issue?: IssueCard): Promise<ResolvedSkill> {
+  async load(skillName: string, issue?: IssueData): Promise<ResolvedSkill> {
     let raw = await this.loadRaw(skillName);
     return toResolvedSkill(raw, issue);
   }
@@ -221,7 +221,7 @@ export class SkillLoader implements SkillLoaderInterface {
    */
   async loadAll(
     skillNames: string[],
-    issue?: IssueCard,
+    issue?: IssueData,
   ): Promise<ResolvedSkill[]> {
     let results: ResolvedSkill[] = [];
 
@@ -415,7 +415,7 @@ export function estimateTokens(skill: ResolvedSkill): number {
  * using actual filenames — this happens on every load, not just when a
  * budget is enforced.
  */
-function toResolvedSkill(raw: RawSkillData, issue?: IssueCard): ResolvedSkill {
+function toResolvedSkill(raw: RawSkillData, issue?: IssueData): ResolvedSkill {
   let refs = raw.references;
 
   if (refs && raw.name === 'boxel-development' && issue) {
@@ -439,7 +439,7 @@ function toResolvedSkill(raw: RawSkillData, issue?: IssueCard): ResolvedSkill {
  */
 function filterBoxelDevelopmentRefs(
   refs: NamedReference[],
-  issue: IssueCard,
+  issue: IssueData,
 ): NamedReference[] {
   let issueText = extractIssueText(issue);
 
@@ -474,7 +474,7 @@ function filterBoxelDevelopmentRefs(
  * Concatenates known text fields (id, title, description, tags, labels, etc.)
  * into a single lowercase string for keyword matching.
  */
-export function extractIssueText(issue: IssueCard): string {
+export function extractIssueText(issue: IssueData): string {
   let parts: string[] = [issue.id];
 
   for (let key of [
@@ -518,8 +518,8 @@ export function extractIssueText(issue: IssueCard): string {
  * generic `knowledge` field for forward compatibility.
  */
 function extractKnowledgeSkillTags(
-  project: ProjectCard,
-  issue?: IssueCard,
+  project: ProjectData,
+  issue?: IssueData,
 ): string[] {
   let articles: unknown[] = [];
 

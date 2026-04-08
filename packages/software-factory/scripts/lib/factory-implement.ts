@@ -16,9 +16,9 @@
 import { resolve } from 'node:path';
 
 import type {
-  IssueCard,
-  KnowledgeArticle,
-  ProjectCard,
+  IssueData,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
 } from './factory-agent';
 import {
@@ -240,7 +240,6 @@ export async function runFactoryImplement(
     issue,
     knowledge,
     targetRealmUrl,
-    testRealmUrl,
     maxIterations: config.maxIterations,
   });
 
@@ -379,9 +378,9 @@ async function fetchCardData(
   bootstrapResult: FactoryBootstrapResult,
   fetchOptions: RealmFetchOptions,
 ): Promise<{
-  project: ProjectCard;
-  issue: IssueCard;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData;
+  issue: IssueData;
+  knowledge: KnowledgeArticleData[];
 }> {
   // Fetch the project card
   let project = await fetchCard(
@@ -398,7 +397,7 @@ async function fetchCardData(
   );
 
   // Fetch all knowledge articles
-  let knowledge: KnowledgeArticle[] = [];
+  let knowledge: KnowledgeArticleData[] = [];
   for (let ka of bootstrapResult.knowledgeArticles) {
     try {
       let card = await fetchCard(targetRealmUrl, ka.id, fetchOptions);
@@ -459,7 +458,7 @@ interface TestRunnerConfig {
  */
 function buildTestRunner(
   targetRealmUrl: string,
-  issue: IssueCard,
+  issue: IssueData,
   toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {
@@ -731,7 +730,7 @@ const BASE_CARD_TYPES: { module: string; name: string }[] = [
 
 /**
  * Fetch JSON schemas for card types the factory uses. Includes both
- * DarkFactory types (Project, Issue, KnowledgeArticle) from the target
+ * DarkFactory types (Project, Issue, KnowledgeArticleData) from the target
  * realm and base types (Spec) from the base realm. Returns a Map
  * suitable for passing to ToolBuilderConfig.cardTypeSchemas.
  */
