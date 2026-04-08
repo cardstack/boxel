@@ -14,7 +14,14 @@ function parseCliArg(name: string): string | undefined {
 
 function parseCliNumber(name: string): number | undefined {
   let value = parseCliArg(name);
-  return value != null ? Number(value) : undefined;
+  if (value == null) {
+    return undefined;
+  }
+  let parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`--${name} must be a valid number, received: ${value}`);
+  }
+  return parsed;
 }
 
 async function main(): Promise<void> {

@@ -407,8 +407,8 @@ export async function startHarnessPrerenderServer(options: {
           process.env.LOG_LEVELS,
         // Prevent test harness prerender servers from registering with
         // external prerender managers (e.g. the dev-all manager on :4222).
-        // Port 1 is privileged and unreachable — heartbeat fetches fail
-        // silently via the existing try/catch in prerender-app.ts.
+        // Port 1 is expected to be closed, so heartbeat fetches fail fast
+        // and are silently caught by the try/catch in prerender-app.ts.
         PRERENDER_MANAGER_URL: 'http://127.0.0.1:1',
       },
     },

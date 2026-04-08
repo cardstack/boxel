@@ -13,7 +13,7 @@ import type {
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
-import { findHostDistPackageDir } from '../../src/harness/shared';
+import { findHostDistPackageDir } from '../../src/host-dist';
 
 // ---------------------------------------------------------------------------
 // Resume Logic

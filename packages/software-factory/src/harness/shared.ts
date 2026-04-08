@@ -6,7 +6,7 @@ import {
 import { createHash } from 'node:crypto';
 import { createServer as createNetServer } from 'node:net';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 import jwt from 'jsonwebtoken';
 import '../setup-logger';
@@ -604,66 +604,13 @@ export function maybeRequire(specifier: string) {
   return undefined;
 }
 
-export function fileExists(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-}
-
-export function findRootRepoCheckoutDir(): string | undefined {
-  let result = spawnSync(
-    'git',
-    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-    {
-      cwd: workspaceRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    },
-  );
-
-  if (result.status !== 0) {
-    return undefined;
-  }
-
-  let commonDir = result.stdout.trim();
-  if (!commonDir.endsWith(`${join('.git')}`)) {
-    return undefined;
-  }
-
-  return dirname(commonDir);
-}
-
-export function findHostDistPackageDir(): string | undefined {
-  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  let rootRepoHostDir =
-    rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot
-      ? resolve(rootRepoCheckoutDir, 'packages', 'host')
-      : undefined;
-
-  let candidates = [
-    process.env.SOFTWARE_FACTORY_HOST_DIST_PACKAGE_DIR,
-    hostDir,
-    rootRepoHostDir,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => resolve(value));
-
-  let seen = new Set<string>();
-  for (let candidate of candidates) {
-    if (seen.has(candidate)) {
-      continue;
-    }
-    seen.add(candidate);
-
-    if (fileExists(join(candidate, 'dist', 'index.html'))) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
+// Re-export host dist utilities from the side-effect-free module so
+// existing harness consumers don't need to change their imports.
+export {
+  fileExists,
+  findRootRepoCheckoutDir,
+  findHostDistPackageDir,
+} from '../host-dist';
 
 export function browserPassword(username: string): string {
   let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');
