@@ -43,13 +43,20 @@ The agent iterates (implement → test → fix) until tests pass or max iteratio
 
 Make sure the prerequisites above are met, and that you have a brief card published in the software-factory realm (e.g., `http://localhost:4201/software-factory/Wiki/sticky-note`).
 
+Set up credentials first (these persist in your shell session):
+
+```bash
+export MATRIX_URL=http://localhost:8008/
+export MATRIX_USERNAME=your-username
+read -s 'MATRIX_PASSWORD?Matrix password: ' && export MATRIX_PASSWORD
+export OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
+
+Then run the factory:
+
 ```bash
 cd packages/software-factory
 
-MATRIX_URL=http://localhost:8008/ \
-MATRIX_USERNAME=your-username \
-MATRIX_PASSWORD=your-password \
-OPENROUTER_API_KEY=sk-or-v1-your-key-here \
 pnpm factory:go -- \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm-url http://localhost:4201/your-username/my-test-realm/ \

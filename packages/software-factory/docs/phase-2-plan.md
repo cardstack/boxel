@@ -123,6 +123,7 @@ while (hasUnblockedIssues()) {
     let failures = await validate(targetRealm);  // parse, lint, evaluate, instantiate, run tests
     if (failures.length > 0) {
       await createFixIssues(failures);  // each failure becomes a new issue
+      break;  // stop iterating current issue — fix issues are picked up by the outer loop
     }
 
     iterations++;
