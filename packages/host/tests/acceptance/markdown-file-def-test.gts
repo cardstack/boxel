@@ -302,6 +302,8 @@ module('Acceptance | markdown BFM card references', function (hooks) {
             '# Fallback Test',
             '',
             ':card[https://nonexistent.example/Card/missing]',
+            '',
+            '::card[https://nonexistent.example/BlogPost/gone]',
           ].join('\n'),
           'mermaid-test.md': [
             '# Mermaid Test',
@@ -385,20 +387,39 @@ module('Acceptance | markdown BFM card references', function (hooks) {
       codePath: `${testRealmURL}bfm-fallback.md`,
     });
 
-    // Fallback text is only injected after the modifier's second run
+    // Fallback Pill is only rendered after the modifier's second run
     // (first run skips it while linkedCards is loading).
     await waitUntil(
       () =>
-        document.querySelector('[data-boxel-bfm-inline-ref]')?.textContent ===
-        'https://nonexistent.example/Card/missing',
+        document.querySelector(
+          '[data-test-markdown-bfm-unresolved-inline]',
+        ) !== null,
       { timeout: 10000 },
     );
 
     assert
-      .dom('[data-boxel-bfm-inline-ref]')
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
       .hasText(
+        'Card',
+        'unresolvable inline reference shows Pill with type name',
+      );
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute(
+        'title',
         'https://nonexistent.example/Card/missing',
-        'unresolvable reference shows URL as fallback text',
+        'inline Pill title shows the raw URL',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .exists('block-level unresolved reference renders a Pill');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/BlogPost/gone',
+        'block Pill title shows the raw URL',
       );
   });
 

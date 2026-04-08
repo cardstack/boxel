@@ -5,9 +5,12 @@ import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 
+import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
+import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
+  cardTypeName,
   extractMermaidBlocks,
   hasCodeBlocks,
   markdownToHtml,
@@ -46,6 +49,13 @@ interface CardSlot {
   style?: ReturnType<typeof htmlSafe>;
 }
 
+interface UnresolvedSlot {
+  element: HTMLElement;
+  url: string;
+  typeName: string;
+  kind: 'inline' | 'block';
+}
+
 function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
   try {
     return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
@@ -63,6 +73,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 }> {
   @tracked monacoContextInternal: any = undefined;
   @tracked cardSlots: CardSlot[] = [];
+  @tracked unresolvedSlots: UnresolvedSlot[] = [];
   // Tracks whether the modifier has run at least once. On the first run,
   // linkedCards is likely still loading (empty []) so we skip fallback text
   // injection to avoid flashing raw URLs for cards that will soon resolve.
@@ -233,11 +244,10 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           }
         }
 
-        // Inject fallback text for unresolvable card refs. Text content was
-        // stripped from the HTML in renderedHtml to prevent flash, so the URL
-        // must be read from the data attribute. Only runs after the first
-        // modifier setup (showFallback) so we don't flash URLs while
-        // linkedCards is still loading.
+        // Build unresolved slots for card refs that could not be matched to a
+        // linkedCard. Only after the first modifier run (showFallback) so we
+        // don't show "not found" while linkedCards is still loading.
+        let unresolved: UnresolvedSlot[] = [];
         if (showFallback) {
           let resolvedEls = new Set(slots.map((s) => s.element));
           for (let el of Array.from(
@@ -247,17 +257,21 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           )) {
             let url =
               el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
-            if (
-              !resolvedEls.has(el) &&
-              el.childElementCount === 0 &&
-              el.textContent !== url
-            ) {
-              el.textContent = url;
+            if (!resolvedEls.has(el) && url) {
+              let kind: 'inline' | 'block' = el.dataset.boxelBfmInlineRef
+                ? 'inline'
+                : 'block';
+              unresolved.push({
+                element: el,
+                url,
+                typeName: cardTypeName(url),
+                kind,
+              });
             }
           }
         }
 
-        return slots;
+        return { resolved: slots, unresolved };
       };
 
       // Deferred via scheduleOnce to avoid Glimmer backtracking assertion.
@@ -266,7 +280,8 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       // re-render → observer fires again.
       let updateSlots = () => {
         pendingUpdate = false;
-        let nextSlots = collectSlots();
+        let { resolved: nextSlots, unresolved: nextUnresolved } =
+          collectSlots();
         let didChange =
           nextSlots.length !== this.cardSlots.length ||
           nextSlots.some((slot, index) => {
@@ -283,6 +298,21 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         if (didChange) {
           this.cardSlots = nextSlots;
+        }
+
+        let unresolvedDidChange =
+          nextUnresolved.length !== this.unresolvedSlots.length ||
+          nextUnresolved.some((slot, index) => {
+            let current = this.unresolvedSlots[index];
+            return (
+              !current ||
+              current.element !== slot.element ||
+              current.url !== slot.url
+            );
+          });
+
+        if (unresolvedDidChange) {
+          this.unresolvedSlots = nextUnresolved;
         }
       };
 
@@ -432,6 +462,32 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             {{/if}}
           {{/let}}
         </CardContextConsumer>
+      {{/in-element}}
+    {{/each}}
+    {{#each this.unresolvedSlots as |slot|}}
+      {{#in-element slot.element insertBefore=null}}
+        {{#if (eq slot.kind 'inline')}}
+          <Pill
+            @variant='muted'
+            @size='extra-small'
+            title={{slot.url}}
+            data-test-markdown-bfm-unresolved-inline
+          >
+            <:iconLeft><LinkOffIcon @width='12' @height='12' /></:iconLeft>
+            <:default>{{slot.typeName}}</:default>
+          </Pill>
+        {{else}}
+          <div
+            class='markdown-bfm-unresolved--block'
+            title={{slot.url}}
+            data-test-markdown-bfm-unresolved-block
+          >
+            <Pill @variant='muted' @size='small'>
+              <:iconLeft><LinkOffIcon @width='14' @height='14' /></:iconLeft>
+              <:default>{{slot.typeName}}</:default>
+            </Pill>
+          </div>
+        {{/if}}
       {{/in-element}}
     {{/each}}
     <style scoped>
@@ -766,6 +822,54 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
         .markdown-bfm-card-slot--fitted {
           border-radius: var(--boxel-border-radius);
+        }
+
+        /* Loading shimmer for card refs before content is rendered */
+        .markdown-content :deep([data-boxel-bfm-type='card']:empty) {
+          background-color: var(--boxel-light-200);
+          border-radius: var(--boxel-border-radius-sm);
+          position: relative;
+          overflow: hidden;
+        }
+        .markdown-content :deep([data-boxel-bfm-type='card']:empty::after) {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            var(--boxel-light-100),
+            transparent
+          );
+          animation: bfm-shimmer 1.6s linear 0.5s infinite;
+          transform: translateX(-100%);
+        }
+        /* Inline shimmer sizing */
+        .markdown-content :deep([data-boxel-bfm-inline-ref]:empty) {
+          display: inline-block;
+          width: 6em;
+          height: 1.2em;
+          vertical-align: middle;
+        }
+        /* Block shimmer sizing */
+        .markdown-content :deep([data-boxel-bfm-block-ref]:empty) {
+          display: block;
+          width: 100%;
+          height: 3em;
+        }
+        @keyframes bfm-shimmer {
+          0% {
+            transform: translateX(-200%);
+          }
+          100% {
+            transform: translateX(100%);
+          }
+        }
+
+        /* Unresolved block indicator */
+        .markdown-bfm-unresolved--block {
+          display: block;
+          margin: var(--boxel-sp-xxxs) 0;
         }
       }
     </style>

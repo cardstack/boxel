@@ -4,11 +4,11 @@ This document exercises the Boxel Flavored Markdown features added in the Layer 
 
 ## Card References
 
-Inline reference to an author: :card[./Author/alice-enwunder] — renders in atom format.
+Inline reference to an author: :card[./Author/aliceenwunder] — renders in atom format.
 
 Block reference renders in embedded format:
 
-::card[./Author/jane-doe]
+::card[./Author/janedoe]
 
 ### Fitted Sizes
 

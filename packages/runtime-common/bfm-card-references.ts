@@ -296,6 +296,32 @@ export function bfmCardReferenceExtensions(): TokenizerAndRendererExtension[] {
   return bfmExtensionsForKeyword('card');
 }
 
+/**
+ * Extracts a human-readable card type name from a card URL or path.
+ *
+ * Card URLs follow the pattern `<base>/<TypeName>/<id>`, so the type name is
+ * the second-to-last path segment. The last segment is typically a UUID or
+ * slug and is not human-readable.
+ *
+ * Examples:
+ *  - `https://example.com/Pet/a3b2c1d4-...` → `"Pet"`
+ *  - `./Author/jane-doe`                    → `"Author"`
+ *  - `./BlogPost/some-id.json`              → `"BlogPost"`
+ *  - `./Foo`                                → `"Foo"`
+ *  - `""`                                   → `"Card"`
+ */
+export function cardTypeName(url: string): string {
+  let cleaned = url.replace(/\/+$/, '').replace(/\.json$/, '');
+  let segments = cleaned.split('/').filter(Boolean);
+  if (segments.length >= 2) {
+    return segments[segments.length - 2];
+  }
+  if (segments.length === 1) {
+    return segments[0];
+  }
+  return 'Card';
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

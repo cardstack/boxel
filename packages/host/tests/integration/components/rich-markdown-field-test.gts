@@ -1,5 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { waitFor } from '@ember/test-helpers';
+import { waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -393,6 +393,72 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert
       .dom('[data-test-pet-embedded]')
       .hasText('Mango', 'block embedded shows the correct card');
+  });
+
+  test('unresolved card references render as muted Pill indicators', async function (assert) {
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'article.gts': { ArticleCard },
+        'article-unresolved.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline: :card[https://nonexistent.example/Pet/missing]\n\nBlock:\n\n::card[https://nonexistent.example/BlogPost/gone]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = await store.get<BaseDef>(
+      `${testRealmURL}article-unresolved`,
+    );
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitUntil(
+      () =>
+        document.querySelector(
+          '[data-test-markdown-bfm-unresolved-inline]',
+        ) !== null,
+      { timeout: 10_000 },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasText('Pet', 'inline unresolved ref shows type name in Pill');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/Pet/missing',
+        'inline Pill title shows the raw URL',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .exists('block unresolved ref renders a Pill');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/BlogPost/gone',
+        'block Pill title shows the raw URL',
+      );
   });
 
   test('linkedCards resolve when markdown uses relative card references', async function (assert) {
