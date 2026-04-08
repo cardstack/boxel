@@ -1,0 +1,69 @@
+import {
+  contains,
+  field,
+  CardDef,
+  Component,
+} from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+import RichMarkdownField from 'https://cardstack.com/base/rich-markdown';
+import TextIcon from '@cardstack/boxel-icons/text';
+
+export class RichMarkdownPlayground extends CardDef {
+  static displayName = 'Rich Markdown Playground';
+  static icon = TextIcon;
+
+  @field title = contains(StringField);
+  @field body = contains(RichMarkdownField);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article class='playground'>
+        <header>
+          <h1>{{@model.title}}</h1>
+        </header>
+        <section class='body'>
+          <@fields.body />
+        </section>
+      </article>
+
+      <style scoped>
+        .playground {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
+          padding: var(--boxel-sp-xl);
+          max-width: 800px;
+          margin: 0 auto;
+        }
+        header h1 {
+          margin: 0;
+          font-size: var(--boxel-font-lg);
+          font-weight: 700;
+        }
+        .body {
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius-lg);
+          padding: var(--boxel-sp-lg);
+          background: white;
+        }
+      </style>
+    </template>
+  };
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div class='embedded'>
+        <h3>{{@model.title}}</h3>
+        <@fields.body />
+      </div>
+      <style scoped>
+        .embedded {
+          padding: var(--boxel-sp);
+        }
+        .embedded h3 {
+          margin: 0 0 var(--boxel-sp-xs);
+        }
+      </style>
+    </template>
+  };
+}

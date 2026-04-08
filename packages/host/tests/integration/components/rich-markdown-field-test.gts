@@ -1,4 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
+import { waitFor } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -11,6 +12,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -22,6 +25,7 @@ import {
   setupBaseRealm,
   CardDef,
   Component,
+  StringField,
   RichMarkdownField,
   contains,
   field,
@@ -310,5 +314,163 @@ module('Integration | RichMarkdownField', function (hooks) {
       root.textContent!.includes('This is the footnote content'),
       'footnote content is present',
     );
+  });
+
+  test('linkedCards render inside the markdown when card is loaded from realm', async function (assert) {
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded><@fields.name /></div>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline ref: :card[${testRealmURL}Pet/mango]\n\nBlock ref:\n\n::card[${testRealmURL}Pet/mango]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = await store.get<BaseDef>(`${testRealmURL}article-1`);
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+
+    assert
+      .dom('[data-test-pet-atom]')
+      .exists('inline card reference renders the referenced card in atom format');
+    assert
+      .dom('[data-test-pet-atom]')
+      .hasText('Mango', 'inline atom shows the correct card');
+
+    assert
+      .dom('[data-test-pet-embedded]')
+      .exists('block card reference renders the referenced card in embedded format');
+    assert
+      .dom('[data-test-pet-embedded]')
+      .hasText('Mango', 'block embedded shows the correct card');
+  });
+
+  test('linkedCards resolve when markdown uses relative card references', async function (assert) {
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded><@fields.name /></div>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline ref: :card[./Pet/mango]\n\nBlock ref:\n\n::card[./Pet/mango]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = await store.get<BaseDef>(`${testRealmURL}article-1`);
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+
+    assert
+      .dom('[data-test-pet-atom]')
+      .exists('inline card reference with relative path renders the referenced card');
+    assert
+      .dom('[data-test-pet-atom]')
+      .hasText('Mango', 'inline atom shows the correct card');
+
+    assert
+      .dom('[data-test-pet-embedded]')
+      .exists('block card reference with relative path renders the referenced card');
+    assert
+      .dom('[data-test-pet-embedded]')
+      .hasText('Mango', 'block embedded shows the correct card');
   });
 });
