@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { normalize, resolve } from 'node:path';
+import { join, normalize, resolve } from 'node:path';
 
 import { chromium } from '@playwright/test';
 
@@ -13,6 +13,7 @@ import type {
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
+import { findHostDistPackageDir } from '../../src/harness/shared';
 
 // ---------------------------------------------------------------------------
 // Resume Logic
@@ -425,9 +426,15 @@ export async function executeTestRunFromRealm(
   let testPageServer: Server | undefined;
 
   try {
-    // Locate the host app's dist directory — contains tests/index.html and assets
+    // Locate the host app's dist directory — contains tests/index.html and assets.
+    // In worktrees, the local host/dist may not exist; fall back to the root
+    // repo checkout's host dist (same logic as the harness support services).
     let hostDistDir =
-      options.hostDistDir ?? resolve(__dirname, '../../../host/dist');
+      options.hostDistDir ??
+      join(
+        findHostDistPackageDir() ?? resolve(__dirname, '../../../host'),
+        'dist',
+      );
 
     // Start a local server to serve both the test HTML page and the host's
     // dist assets. All asset references point to our server, so no external
