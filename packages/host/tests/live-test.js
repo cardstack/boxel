@@ -25,7 +25,7 @@ async function discoverTestModules(realmURL) {
 
   return Object.keys(mtimes)
     .filter((url) => url.endsWith('.test.gts'))
-    .map((url) => url.slice(0, -'.test.gts'.length));
+    .map((url) => url.slice(0, -'.gts'.length));
 }
 
 // eslint-disable-next-line ember/no-test-import-export

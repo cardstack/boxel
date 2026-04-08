@@ -21,6 +21,6 @@ mise run test-services:host
 cd packages/host
 pnpm test:live
 
-# Or target a different single realm, such as experiments
+# Or target a specific realm via the REALM_URL env var (trailing slash optional)
 REALM_URL=http://localhost:4201/experiments/ pnpm test:live
 ```

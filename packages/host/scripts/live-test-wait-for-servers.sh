@@ -5,9 +5,16 @@ BASE_REALM_READY="http-get://localhost:4201/base/${READY_PATH}"
 SYNAPSE_URL="http://localhost:8008"
 SMTP_4_DEV_URL="http://localhost:5001"
 
-if [ -n "$1" ]; then
-  REALM_URL="$1"
-  REALM_HOST=$(echo "$REALM_URL" | sed 's|http://||')
+if [ -n "$REALM_URL" ]; then
+  REALM_HOST="$REALM_URL"
+  case "$REALM_HOST" in
+    http://*) REALM_HOST="${REALM_HOST#http://}" ;;
+    https://*) REALM_HOST="${REALM_HOST#https://}" ;;
+  esac
+  case "$REALM_HOST" in
+    */) ;;
+    *) REALM_HOST="${REALM_HOST}/" ;;
+  esac
   REALM_READY="http-get://${REALM_HOST}${READY_PATH}"
   READY_URLS="$BASE_REALM_READY|$REALM_READY|$SYNAPSE_URL|$SMTP_4_DEV_URL"
 else
