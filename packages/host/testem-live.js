@@ -14,7 +14,8 @@ const realmURLs = process.env.REALM_URL
 
 const config = {
   test_page: realmURLs.map(
-    (url) => `tests/index.html?liveTest=true&realmURL=${url}&hidepassed`,
+    (url) =>
+      `tests/index.html?liveTest=true&realmURL=${encodeURIComponent(url)}&hidepassed`,
   ),
   disable_watching: true,
   browser_timeout: 120,

@@ -1,6 +1,6 @@
 # Live Tests (Card-Based)
 
-Live tests run directly against a realm server. Test modules are `.gts` files inside a realm that export a `runTests()` function — they are auto-discovered via the realm's `_mtimes` endpoint.
+Live tests run directly against a realm server. Test modules are `*.test.gts` files inside a realm that export a `runTests()` function — files must follow this naming pattern to be auto-discovered via the realm's `_mtimes` endpoint.
 
 ## Run in Browser
 
@@ -17,10 +17,10 @@ Requires realm servers to be running (experiments + catalog). If you already hav
 # Terminal 1 — start realm servers if not already running
 mise run test-services:host
 
-# Terminal 2 — run all realm test suites (catalog + experiments)
+# Terminal 2 — run the default live test suite (catalog realm)
 cd packages/host
 pnpm test:live
 
-# Or target a single realm
+# Or target a different single realm, such as experiments
 REALM_URL=http://localhost:4201/experiments/ pnpm test:live
 ```
