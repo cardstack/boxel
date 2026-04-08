@@ -11,7 +11,7 @@ import {
   searchRealm,
   type SearchQuery,
   type SearchSort,
-} from './lib/boxel';
+} from '../src/boxel';
 import { logger } from '../src/logger';
 
 let log = logger('boxel-search');

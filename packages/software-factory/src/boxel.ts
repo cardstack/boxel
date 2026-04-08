@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-import { formatErrorResponse } from '../../src/error-format';
+import { formatErrorResponse } from './error-format';
 import { ensureTrailingSlash, SupportedMimeType } from './realm-operations';
 
 const PROFILES_FILE = join(homedir(), '.boxel-cli', 'profiles.json');

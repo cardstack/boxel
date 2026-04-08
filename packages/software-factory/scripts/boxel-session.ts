@@ -8,7 +8,7 @@ import {
   matrixLogin,
   parseArgs,
   printJson,
-} from './lib/boxel';
+} from '../src/boxel';
 import { logger } from '../src/logger';
 
 let log = logger('boxel-session');

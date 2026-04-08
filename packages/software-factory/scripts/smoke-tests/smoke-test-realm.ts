@@ -41,14 +41,14 @@ import {
   getRealmServerToken,
   matrixLogin,
   parseArgs,
-} from '../../scripts/lib/boxel';
-import { logger } from '../logger';
-import { executeTestRunFromRealm } from '../../scripts/lib/test-run-execution';
+} from '../../src/boxel';
+import { logger } from '../../src/logger';
+import { executeTestRunFromRealm } from '../../src/test-run-execution';
 import {
   createRealm,
   getRealmScopedAuth,
   writeFile,
-} from '../../scripts/lib/realm-operations';
+} from '../../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Sample LLM output -- what the agent would produce in the implementation phase

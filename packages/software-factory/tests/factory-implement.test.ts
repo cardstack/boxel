@@ -1,17 +1,17 @@
 import { module, test } from 'qunit';
 
-import type { AgentContext } from '../scripts/lib/factory-agent';
-import type { AgentRunResult, LoopAgent } from '../scripts/lib/factory-loop';
+import type { AgentContext } from '../src/factory-agent';
+import type { AgentRunResult, LoopAgent } from '../src/factory-loop';
 import type {
   FactoryTool,
   ToolCallEntry,
-} from '../scripts/lib/factory-tool-builder';
+} from '../src/factory-tool-builder';
 import type { FactoryBootstrapResult } from '../src/factory-bootstrap';
 
 import {
   runFactoryImplement,
   type ImplementConfig,
-} from '../scripts/lib/factory-implement';
+} from '../src/factory-implement';
 
 // ---------------------------------------------------------------------------
 // Mocks

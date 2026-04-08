@@ -19,15 +19,15 @@ import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
-} from '../lib/factory-tool-executor';
+} from '../../src/factory-tool-executor';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
   CLARIFICATION_SIGNAL,
   type DoneResult,
   type ClarificationResult,
-} from '../lib/factory-tool-builder';
-import { ToolRegistry } from '../lib/factory-tool-registry';
+} from '../../src/factory-tool-builder';
+import { ToolRegistry } from '../../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Helpers

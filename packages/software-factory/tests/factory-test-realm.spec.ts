@@ -6,12 +6,12 @@ import {
   createTestRun,
   executeTestRunFromRealm,
   type TestRunRealmOptions,
-} from '../scripts/lib/factory-test-realm';
+} from '../src/factory-test-realm';
 import {
   readFile,
   waitForRealmFile,
   writeFile,
-} from '../scripts/lib/realm-operations';
+} from '../src/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

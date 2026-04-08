@@ -9,7 +9,7 @@
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { createBoxelRealmFetch } from '../../src/realm-auth';
+import { createBoxelRealmFetch } from './realm-auth';
 
 import {
   OPENROUTER_CHAT_URL,

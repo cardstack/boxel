@@ -7,7 +7,7 @@ import {
   SCRIPT_TOOLS,
   ToolRegistry,
   type ToolManifest,
-} from '../scripts/lib/factory-tool-registry';
+} from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // ToolRegistry construction

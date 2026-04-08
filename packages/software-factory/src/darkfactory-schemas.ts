@@ -7,7 +7,7 @@
  * are always derived from the actual card definitions.
  */
 
-import { logger } from '../../src/logger';
+import { logger } from './logger';
 import type {
   ResolvedCodeRef,
   LooseSingleCardDocument,
