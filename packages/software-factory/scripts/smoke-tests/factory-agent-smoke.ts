@@ -47,13 +47,19 @@
  *   Falls back to FACTORY_DEFAULT_MODEL (anthropic/claude-sonnet-4)
  */
 
+// This should be first
+import '../../src/setup-logger';
+
 import { parseArgs } from 'node:util';
+import { logger } from '../../src/logger';
 
 import {
   OpenRouterFactoryAgent,
   resolveFactoryModel,
   type AgentContext,
 } from '../lib/factory-agent';
+
+let log = logger('factory-agent-smoke');
 
 async function main(): Promise<void> {
   let argv = process.argv.slice(2);
@@ -73,7 +79,7 @@ async function main(): Promise<void> {
 
   let realmServerUrl = values['realm-server-url'];
   if (!realmServerUrl) {
-    console.error(
+    log.error(
       'Usage: pnpm smoke:agent --realm-server-url <url> [--model <model>]',
     );
     process.exit(1);
@@ -85,9 +91,9 @@ async function main(): Promise<void> {
   }
 
   let model = resolveFactoryModel(values.model);
-  console.log(`Model: ${model}`);
-  console.log(`Realm server: ${realmServerUrl}`);
-  console.log();
+  log.info(`Model: ${model}`);
+  log.info(`Realm server: ${realmServerUrl}`);
+  log.info();
 
   let agent = new OpenRouterFactoryAgent({
     model,
@@ -113,18 +119,18 @@ async function main(): Promise<void> {
     testRealmUrl: 'https://example.test/user/target-tests/',
   };
 
-  console.log('Sending plan() request...');
-  console.log();
+  log.info('Sending plan() request...');
+  log.info();
 
   let actions = await agent.plan(context);
 
-  console.log(`Received ${actions.length} action(s):`);
-  console.log(JSON.stringify(actions, null, 2));
-  console.log();
-  console.log('Smoke test passed.');
+  log.info(`Received ${actions.length} action(s):`);
+  log.info(JSON.stringify(actions, null, 2));
+  log.info();
+  log.info('Smoke test passed.');
 }
 
 main().catch((err) => {
-  console.error('Smoke test failed:', err);
+  log.error('Smoke test failed:', err);
   process.exit(1);
 });

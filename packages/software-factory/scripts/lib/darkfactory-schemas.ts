@@ -7,6 +7,7 @@
  * are always derived from the actual card definitions.
  */
 
+import { logger } from '../../src/logger';
 import type {
   ResolvedCodeRef,
   LooseSingleCardDocument,
@@ -22,6 +23,8 @@ import {
 // ---------------------------------------------------------------------------
 // Runtime schema fetching
 // ---------------------------------------------------------------------------
+
+let log = logger('darkfactory-schemas');
 
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';
@@ -68,7 +71,7 @@ export async function fetchCardTypeSchema(
   );
 
   if (response.status !== 'ready' || !response.result) {
-    console.warn(
+    log.warn(
       `[darkfactory-schemas] Failed to fetch schema for ${cacheKey}: ${response.error ?? response.status}`,
     );
     return undefined;
@@ -85,7 +88,7 @@ export async function fetchCardTypeSchema(
     schemaCache.set(cacheKey, result);
     return result;
   } catch {
-    console.warn(
+    log.warn(
       `[darkfactory-schemas] Failed to parse schema for ${cacheKey}`,
     );
     return undefined;

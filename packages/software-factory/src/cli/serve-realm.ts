@@ -1,10 +1,16 @@
+// This should be first
+import '../setup-logger';
+
 import { readSupportContext } from '../runtime-metadata';
+import { logger } from '../logger';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { RealmPermissions } from '@cardstack/runtime-common';
 
 import { startFactoryRealmServer } from '../harness';
+
+let log = logger('serve-realm');
 
 async function main(): Promise<void> {
   let realmDir = resolve(
@@ -57,7 +63,7 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(JSON.stringify(payload, null, 2));
+  log.info(JSON.stringify(payload, null, 2));
 
   let cleanExit = false;
   process.on('exit', () => {
@@ -91,6 +97,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error);
+  log.error(String(error));
   process.exitCode = 1;
 });

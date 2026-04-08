@@ -34,11 +34,15 @@
  *     --target-realm-url <realm-url>
  */
 
+// This should be first
+import '../setup-logger';
+
 import {
   getRealmServerToken,
   matrixLogin,
   parseArgs,
 } from '../../scripts/lib/boxel';
+import { logger } from '../logger';
 import { executeTestRunFromRealm } from '../../scripts/lib/test-run-execution';
 import {
   createRealm,
@@ -144,6 +148,8 @@ export function runTests() {
 // Main
 // ---------------------------------------------------------------------------
 
+let log = logger('smoke-test-realm');
+
 async function main() {
   let args = parseArgs(process.argv.slice(2));
   let targetRealmUrl = (args['target-realm-url'] as string) ?? '';
@@ -151,14 +157,14 @@ async function main() {
   if (!targetRealmUrl) {
     let username = process.env.MATRIX_USERNAME;
     if (!username) {
-      console.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
-      console.error(
+      log.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
+      log.error(
         '\nRequires MATRIX_USERNAME and MATRIX_PASSWORD environment variables.',
       );
       process.exit(1);
     }
     targetRealmUrl = `http://localhost:4201/${username}/smoke-test-realm/`;
-    console.log(
+    log.info(
       `No --target-realm-url specified, using default: ${targetRealmUrl}\n`,
     );
   }
@@ -188,15 +194,15 @@ async function main() {
     process.env.REALM_SERVER_URL = realmServerUrl;
   }
 
-  console.log('=== Factory Test Realm Smoke Test (QUnit) ===\n');
-  console.log(`Target realm: ${targetRealmUrl}`);
-  console.log(`Realm server: ${realmServerUrl}`);
-  console.log(`Test results module: ${testResultsModuleUrl}`);
+  log.info('=== Factory Test Realm Smoke Test (QUnit) ===\n');
+  log.info(`Target realm: ${targetRealmUrl}`);
+  log.info(`Realm server: ${realmServerUrl}`);
+  log.info(`Test results module: ${testResultsModuleUrl}`);
 
   // Authenticate via Matrix to get a realm server JWT for realm creation
   let matrixAuth = await matrixLogin();
   let serverToken = await getRealmServerToken(matrixAuth);
-  console.log(`Auth: server token obtained\n`);
+  log.info(`Auth: server token obtained\n`);
 
   let fetchImpl = globalThis.fetch;
   let authorization: string | undefined = serverToken;
@@ -205,10 +211,10 @@ async function main() {
   // Phase 0: Ensure the target realm exists
   // -------------------------------------------------------------------------
 
-  console.log('--- Phase 0: Ensuring target realm exists ---\n');
+  log.info('--- Phase 0: Ensuring target realm exists ---\n');
 
   let realmDisplayName = realmEndpoint.replace(/-/g, ' ');
-  console.log(`  Creating realm: ${realmEndpoint}...`);
+  log.info(`  Creating realm: ${realmEndpoint}...`);
   let createResult = await createRealm(realmServerUrl, {
     name: realmDisplayName,
     endpoint: realmEndpoint,
@@ -221,19 +227,19 @@ async function main() {
   });
 
   if (createResult.created) {
-    console.log(`  Created: ${createResult.realmUrl}\n`);
+    log.info(`  Created: ${createResult.realmUrl}\n`);
   } else if (createResult.error?.includes('already exists')) {
-    console.log(`  Realm already exists.\n`);
+    log.info(`  Realm already exists.\n`);
   } else {
-    console.error(`  Failed to create realm: ${createResult.error}`);
+    log.error(`  Failed to create realm: ${createResult.error}`);
     process.exit(1);
   }
 
   // Get realm-scoped JWT now that the realm exists
-  console.log('  Authenticating with new realm...');
+  log.info('  Authenticating with new realm...');
   let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
   if (realmAuth.error) {
-    console.warn(
+    log.warn(
       `  Warning: could not get realm-scoped auth: ${realmAuth.error}`,
     );
   } else {
@@ -241,9 +247,9 @@ async function main() {
     let realmToken = realmAuth.tokens[targetRealmUrl];
     if (realmToken) {
       authorization = realmToken;
-      console.log('  Realm-scoped JWT obtained.\n');
+      log.info('  Realm-scoped JWT obtained.\n');
     } else {
-      console.warn(
+      log.warn(
         `  Warning: no token for ${targetRealmUrl} in realm-auth response\n`,
       );
     }
@@ -258,52 +264,52 @@ async function main() {
   // Phase 1: Simulate LLM implementation output
   // -------------------------------------------------------------------------
 
-  console.log(
+  log.info(
     '--- Phase 1: Writing LLM implementation output to target realm ---\n',
   );
 
   // 1. Card definition
-  console.log('  Writing hello.gts (HelloCard definition)...');
+  log.info('  Writing hello.gts (HelloCard definition)...');
   let defResult = await writeFile(
     targetRealmUrl,
     'hello.gts',
     HELLO_CARD_GTS,
     fetchOptions,
   );
-  console.log(
+  log.info(
     defResult.ok ? '  ✓ hello.gts' : `  ✗ hello.gts: ${defResult.error}`,
   );
 
   // 2. Spec card instance pointing to the card definition
-  console.log('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
+  log.info('  Writing Spec/hello-card.json (Spec card for HelloCard)...');
   let specCardResult = await writeFile(
     targetRealmUrl,
     'Spec/hello-card.json',
     JSON.stringify(HELLO_SPEC_CARD, null, 2),
     fetchOptions,
   );
-  console.log(
+  log.info(
     specCardResult.ok
       ? '  ✓ Spec/hello-card.json'
       : `  ✗ Spec/hello-card.json: ${specCardResult.error}`,
   );
 
   // 3. QUnit passing test (imports HelloCard from the realm)
-  console.log('  Writing hello.test.gts (QUnit passing test)...');
+  log.info('  Writing hello.test.gts (QUnit passing test)...');
   let testResult = await writeFile(
     targetRealmUrl,
     'hello.test.gts',
     HELLO_TEST_GTS,
     fetchOptions,
   );
-  console.log(
+  log.info(
     testResult.ok
       ? '  ✓ hello.test.gts'
       : `  ✗ hello.test.gts: ${testResult.error}`,
   );
 
   // 4. QUnit deliberately failing test (imports HelloCard from the realm)
-  console.log(
+  log.info(
     '  Writing hello-fail.test.gts (QUnit deliberately failing test)...',
   );
   let failTestResult = await writeFile(
@@ -312,7 +318,7 @@ async function main() {
     HELLO_FAILING_TEST_GTS,
     fetchOptions,
   );
-  console.log(
+  log.info(
     failTestResult.ok
       ? '  ✓ hello-fail.test.gts'
       : `  ✗ hello-fail.test.gts: ${failTestResult.error}`,
@@ -322,7 +328,7 @@ async function main() {
   // Phase 2: Run QUnit tests via executeTestRunFromRealm
   // -------------------------------------------------------------------------
 
-  console.log(
+  log.info(
     '\n--- Phase 2: Running QUnit tests via executeTestRunFromRealm ---\n',
   );
 
@@ -338,13 +344,13 @@ async function main() {
     hostAppUrl: realmServerUrl,
   });
 
-  console.log(`  TestRun ID:  ${handle.testRunId}`);
-  console.log(`  Status:      ${handle.status}`);
+  log.info(`  TestRun ID:  ${handle.testRunId}`);
+  log.info(`  Status:      ${handle.status}`);
   if (handle.errorMessage) {
-    console.log(`  Error:       ${handle.errorMessage}`);
+    log.info(`  Error:       ${handle.errorMessage}`);
   }
   if ((handle as unknown as Record<string, unknown>).error) {
-    console.log(
+    log.info(
       `  Complete error: ${(handle as unknown as Record<string, unknown>).error}`,
     );
   }
@@ -353,25 +359,25 @@ async function main() {
   // Results
   // -------------------------------------------------------------------------
 
-  console.log('\n--- Results ---\n');
+  log.info('\n--- Results ---\n');
 
   // The TestRun should have status 'failed' because it contains both a
   // passing and a deliberately failing QUnit test. The module results inside
   // should show one test passed and one test failed.
   let expectedStatus = handle.status === 'failed';
 
-  console.log(
+  log.info(
     `  TestRun status: ${expectedStatus ? '✓ failed (as expected -- one test passes, one fails)' : `✗ expected failed, got ${handle.status}`}`,
   );
-  console.log(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
+  log.info(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
 
   if (expectedStatus) {
-    console.log(
+    log.info(
       '\n✓ Smoke test passed! TestRun contains both pass and fail QUnit results.',
     );
   } else {
-    console.log('\n✗ Smoke test had unexpected results.');
-    console.log(
+    log.info('\n✗ Smoke test had unexpected results.');
+    log.info(
       `  Expected "failed" (mixed pass/fail QUnit tests) but got "${handle.status}"`,
     );
     process.exit(1);
@@ -379,6 +385,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  log.error(String(err));
   process.exit(1);
 });

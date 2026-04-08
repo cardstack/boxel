@@ -1,7 +1,13 @@
+// This should be first
+import '../setup-logger';
+
 import { resolve } from 'node:path';
 
 import { fetchRealmCardJson } from '../harness';
 import { readSupportContext } from '../runtime-metadata';
+import { logger } from '../logger';
+
+let log = logger('smoke-realm');
 
 async function main(): Promise<void> {
   let realmDir = resolve(
@@ -18,7 +24,7 @@ async function main(): Promise<void> {
   }
 
   let response = await fetchRealmCardJson(cardPath, { realmDir });
-  console.log(
+  log.info(
     JSON.stringify(
       {
         realmDir,
@@ -34,6 +40,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error);
+  log.error(String(error));
   process.exit(1);
 });

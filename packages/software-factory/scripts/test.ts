@@ -1,5 +1,12 @@
+process.env.LOG_LEVELS = process.env.LOG_LEVELS || '*=error';
+// This should be first
+import '../src/setup-logger';
+
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
+import { logger } from '../src/logger';
+
+let log = logger('test');
 
 const packageRoot = resolve(__dirname, '..');
 
@@ -9,7 +16,7 @@ type TestRunnerOptions = {
   headed: boolean;
 };
 
-const defaultNodeTestLogLevels = '*=info,prerenderer-chrome=none';
+const defaultNodeTestLogLevels = '*=error';
 
 function parseArgs(argv: string[]): TestRunnerOptions {
   let options: TestRunnerOptions = {
@@ -89,6 +96,6 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   let message = error instanceof Error ? error.message : String(error);
-  console.error(message);
+  log.error(message);
   process.exit(1);
 });

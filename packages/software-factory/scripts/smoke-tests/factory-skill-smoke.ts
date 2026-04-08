@@ -9,7 +9,11 @@
  *   pnpm smoke:skill --ticket-text "Create a .gts component with styling"
  */
 
+// This should be first
+import '../../src/setup-logger';
+
 import { parseArgs } from 'node:util';
+import { logger } from '../../src/logger';
 
 import {
   DefaultSkillResolver,
@@ -58,6 +62,8 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   },
 ];
 
+let log = logger('factory-skill-smoke');
+
 async function main(): Promise<void> {
   let { values } = parseArgs({
     args: process.argv.slice(2),
@@ -77,7 +83,7 @@ async function main(): Promise<void> {
     values['max-tokens'] !== undefined &&
     (maxTokens === undefined || !Number.isFinite(maxTokens) || maxTokens <= 0)
   ) {
-    console.error(
+    log.error(
       `Invalid value for --max-tokens: "${values['max-tokens']}". ` +
         'Please provide a positive numeric value.',
     );
@@ -90,7 +96,7 @@ async function main(): Promise<void> {
   let loader = new SkillLoader();
   let project: ProjectCard = { id: 'Projects/smoke-test' };
 
-  console.log('=== Skill Loader & Resolver Smoke Test ===\n');
+  log.info('=== Skill Loader & Resolver Smoke Test ===\n');
 
   // If custom ticket text is provided, use only that
   let tickets = customTicketText
@@ -107,22 +113,22 @@ async function main(): Promise<void> {
     : SAMPLE_TICKETS;
 
   for (let { label, ticket } of tickets) {
-    console.log(`--- ${label} ---`);
-    console.log(`  Ticket: ${ticket.title}`);
+    log.info(`--- ${label} ---`);
+    log.info(`  Ticket: ${ticket.title}`);
 
     // 1. Resolve
     let skillNames = resolver.resolve(ticket, project);
-    console.log(`  Resolved skills: [${skillNames.join(', ')}]`);
+    log.info(`  Resolved skills: [${skillNames.join(', ')}]`);
 
     // 2. Load (with ticket context for reference filtering)
     let skills = await loader.loadAll(skillNames, ticket);
-    console.log(`  Loaded: ${skills.length}/${skillNames.length} skills`);
+    log.info(`  Loaded: ${skills.length}/${skillNames.length} skills`);
 
     for (let skill of skills) {
       let tokens = estimateTokens(skill);
       let refCount = skill.references?.length ?? 0;
       let refNote = refCount > 0 ? ` + ${refCount} reference(s)` : '';
-      console.log(`    - ${skill.name}: ~${tokens} tokens${refNote}`);
+      log.info(`    - ${skill.name}: ~${tokens} tokens${refNote}`);
     }
 
     // 3. Budget enforcement
@@ -130,7 +136,7 @@ async function main(): Promise<void> {
       let budgeted = enforceSkillBudget(skills, maxTokens);
       let totalBefore = skills.reduce((s, sk) => s + estimateTokens(sk), 0);
       let totalAfter = budgeted.reduce((s, sk) => s + estimateTokens(sk), 0);
-      console.log(
+      log.info(
         `  Budget (${maxTokens} tokens): ` +
           `${budgeted.length}/${skills.length} skills kept ` +
           `(${totalAfter}/${totalBefore} tokens)`,
@@ -139,15 +145,15 @@ async function main(): Promise<void> {
         let dropped = skills.filter(
           (s) => !budgeted.find((b) => b.name === s.name),
         );
-        console.log(`  Dropped: [${dropped.map((d) => d.name).join(', ')}]`);
+        log.info(`  Dropped: [${dropped.map((d) => d.name).join(', ')}]`);
       }
     }
 
-    console.log();
+    log.info();
   }
 
   // Summary: list all discoverable skills
-  console.log('--- All discoverable skills ---');
+  log.info('--- All discoverable skills ---');
   let allSkillNames = [
     'boxel-development',
     'boxel-file-structure',
@@ -168,22 +174,22 @@ async function main(): Promise<void> {
     grandTotal += tokens;
     let refCount = skill.references?.length ?? 0;
     let refNote = refCount > 0 ? ` (${refCount} refs)` : '';
-    console.log(`  ${skill.name}: ~${tokens} tokens${refNote}`);
+    log.info(`  ${skill.name}: ~${tokens} tokens${refNote}`);
   }
   let missing = allSkillNames.filter(
     (n) => !allSkills.find((s) => s.name === n),
   );
   if (missing.length > 0) {
-    console.log(`  Not found: [${missing.join(', ')}]`);
+    log.info(`  Not found: [${missing.join(', ')}]`);
   }
-  console.log(
+  log.info(
     `  Total: ~${grandTotal} tokens across ${allSkills.length} skills`,
   );
 
-  console.log('\nSmoke test passed.');
+  log.info('\nSmoke test passed.');
 }
 
 main().catch((err) => {
-  console.error('Smoke test failed:', err);
+  log.error('Smoke test failed:', err);
   process.exit(1);
 });

@@ -1,3 +1,6 @@
+// This should be first
+import '../src/setup-logger';
+
 import {
   spawnSync,
   type SpawnSyncOptionsWithStringEncoding,
@@ -14,6 +17,9 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 
 import { getActiveProfile, parseArgs } from './lib/boxel';
 import { ensureTrailingSlash } from './lib/realm-operations';
+import { logger } from '../src/logger';
+
+let log = logger('run-realm-tests');
 
 type CommandOptions = {
   cwd?: string;
@@ -310,7 +316,7 @@ let summary = {
   failures,
 };
 
-console.log(JSON.stringify(summary, null, 2));
+log.info(JSON.stringify(summary, null, 2));
 
 if (testRun.status !== 0) {
   process.exit(testRun.status ?? 1);

@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
+import { logger } from '../../src/logger';
 import type { ProjectCard, ResolvedSkill, TicketCard } from './factory-agent';
 
 // ---------------------------------------------------------------------------
@@ -17,6 +18,8 @@ const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
  * shared skills like `ember-best-practices` that live outside the package.
  */
 const DEFAULT_FALLBACK_DIRS = [join(MONOREPO_ROOT, '.agents', 'skills')];
+
+let log = logger('factory-skill-loader');
 
 /** Approximate characters per token for budget estimation. */
 const CHARS_PER_TOKEN = 4;
@@ -230,7 +233,7 @@ export class SkillLoader implements SkillLoaderInterface {
         let skill = await this.load(name, ticket);
         results.push(skill);
       } catch (error) {
-        console.warn(
+        log.warn(
           `[SkillLoader] Skipping unavailable skill "${name}": ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -378,7 +381,7 @@ export function enforceSkillBudget(
     let skillTokens = estimateTokens(skill);
 
     if (usedTokens + skillTokens > maxTokens) {
-      console.warn(
+      log.warn(
         `[SkillBudget] Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
           `would exceed budget of ${maxTokens} (used: ${usedTokens})`,
       );
