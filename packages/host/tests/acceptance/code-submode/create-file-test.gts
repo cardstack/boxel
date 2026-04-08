@@ -252,10 +252,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
-  hooks.before(function () {
-    registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
-  });
-
   hooks.beforeEach(async function () {
     ({ adapter } = await withCachedRealmSetup(async () => {
       await setupAcceptanceTestRealm({
@@ -288,9 +284,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
     );
   });
 
-  hooks.after(function () {
-    unregisterCardReferencePrefix(testPrefixRealmURL2);
-  });
   module('when user has permissions to both test realms', function (hooks) {
     hooks.beforeEach(async function () {
       setRealmPermissions({
@@ -1274,52 +1267,64 @@ export class TestCard extends CardDef {
     });
   });
 
-  test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {
-    assert.expect(2);
-    await visitOperatorMode(`${baseRealm.url}card-api.gts`);
-    await openNewFileModal('Card Definition');
-    await click('[data-test-select-card-type]');
-    await waitFor('[data-test-card-catalog-modal]');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
-    );
-    await click(`[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor(`[data-test-selected-type="Animal"]`);
+  module('when a selected spec uses a prefix-form ref', function (hooks) {
+    hooks.beforeEach(function () {
+      registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
+    });
 
-    await fillIn('[data-test-display-name-field]', 'Test Card');
-    await fillIn('[data-test-file-name-field]', 'test-card');
+    hooks.afterEach(function () {
+      unregisterCardReferencePrefix(testPrefixRealmURL2);
+    });
 
-    let deferred = new Deferred<void>();
-    this.onSave((url, content) => {
-      if (typeof content !== 'string') {
-        throw new Error(`expected string save data`);
-      }
-      assert.strictEqual(
-        content,
-        `
+    test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {
+      assert.expect(2);
+      await visitOperatorMode(`${baseRealm.url}card-api.gts`);
+      await openNewFileModal('Card Definition');
+      await click('[data-test-select-card-type]');
+      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
+      );
+      await click(
+        `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
+      );
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor(`[data-test-selected-type="Animal"]`);
+
+      await fillIn('[data-test-display-name-field]', 'Test Card');
+      await fillIn('[data-test-file-name-field]', 'test-card');
+
+      let deferred = new Deferred<void>();
+      this.onSave((url, content) => {
+        if (typeof content !== 'string') {
+          throw new Error(`expected string save data`);
+        }
+        assert.strictEqual(
+          content,
+          `
 import { Animal } from '${testRealmURL2}animal';
 import { Component } from 'https://cardstack.com/base/card-api';
 export class TestCard extends Animal {
   static displayName = "Test Card";
 }`.trim(),
-        'The source uses the resolved absolute module URL',
-      );
-      assert.strictEqual(
-        url.href,
-        `${testRealmURL}test-card.gts`,
-        [
-          'Saved file URL should point to Test Workspace A',
-          `Expected: ${testRealmURL}test-card.gts`,
-          `Actual: ${url.href}`,
-        ].join('\n'),
-      );
-      deferred.fulfill();
-    });
+          'The source uses the resolved absolute module URL',
+        );
+        assert.strictEqual(
+          url.href,
+          `${testRealmURL}test-card.gts`,
+          [
+            'Saved file URL should point to Test Workspace A',
+            `Expected: ${testRealmURL}test-card.gts`,
+            `Actual: ${url.href}`,
+          ].join('\n'),
+        );
+        deferred.fulfill();
+      });
 
-    await click('[data-test-create-definition]');
-    await waitFor('[data-test-create-file-modal]', { count: 0 });
-    await deferred.promise;
+      await click('[data-test-create-definition]');
+      await waitFor('[data-test-create-file-modal]', { count: 0 });
+      await deferred.promise;
+    });
   });
 
   module(
