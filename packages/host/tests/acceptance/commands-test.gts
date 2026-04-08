@@ -683,8 +683,12 @@ module('Acceptance | Commands tests', function (hooks) {
         },
       ],
     });
-    // Click on the apply button
+    // Wait for message to render and for command processing drain to complete
+    // before clicking apply. The drain acquires a test waiter that blocks settled(),
+    // and running it concurrently with the heavy switch-to-code-mode command
+    // can exceed CI's browser_disconnect_timeout.
     await waitFor('[data-test-message-idx="0"]');
+    await settled();
     assert
       .dom('[data-test-message-idx="0"] .command-description')
       .containsText('Switching to code submode');
@@ -692,7 +696,7 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
 
     // check we're in code mode
-    await waitFor('[data-test-submode-switcher=code]');
+    await waitFor('[data-test-submode-switcher=code]', { timeout: 5000 });
     assert.dom('[data-test-submode-switcher=code]').exists();
 
     // verify that command result event was created correctly
@@ -704,6 +708,10 @@ module('Acceptance | Commands tests', function (hooks) {
             m.content.msgtype ===
             APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         ),
+      {
+        timeout: 5000,
+        timeoutMessage: 'timed out waiting for command result event',
+      },
     );
     let message = getRoomEvents(roomId).find(
       (m) =>
