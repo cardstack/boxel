@@ -2,11 +2,15 @@ import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   resolveCardReference,
   trimJsonExtension,
+  maybeRelativeURL,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from './card-api';
 import { CardContextConsumer } from './field-component';
@@ -47,7 +51,29 @@ interface ProseMirrorContext {
   createCardNodeViews: (
     onChange: (targets: CardNodeViewTarget[]) => void,
   ) => Record<string, any>;
+  createSlashCommandPlugin: (
+    onStateChange: (state: SlashCommandState | null) => void,
+    onSelectItem: (index: number) => void,
+    onNavigate: (direction: 'up' | 'down') => void,
+  ) => any;
+  slashCommandPluginKey: any;
 }
+
+interface SlashCommandState {
+  active: boolean;
+  query: string;
+  from: number;
+}
+
+interface SlashMenuItem {
+  id: string;
+  label: string;
+  description: string;
+}
+
+const SLASH_COMMANDS: SlashMenuItem[] = [
+  { id: 'card', label: 'Card', description: 'Insert a card reference' },
+];
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -63,12 +89,31 @@ function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
   }
 }
 
+function makeCardRef(cardUrl: string, baseUrl: string | null | undefined): string {
+  if (!baseUrl) return cardUrl;
+  try {
+    return maybeRelativeURL(new URL(cardUrl), new URL(baseUrl), undefined);
+  } catch {
+    return cardUrl;
+  }
+}
+
+function labelFromUrl(url: string): string {
+  let cleaned = trimJsonExtension(url);
+  let parts = cleaned.split('/');
+  return parts[parts.length - 1] || cleaned;
+}
+
 interface ProseMirrorEditorSignature {
   Args: {
     content: string | null;
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    getCards?: (
+      parent: object,
+      getQuery: () => Record<string, unknown> | undefined,
+    ) => { instances: CardDef[]; isLoading: boolean } | undefined;
   };
   Element: HTMLDivElement;
 }
@@ -81,6 +126,20 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
   // then flushed into the tracked property after rendering to avoid
   // Glimmer backtracking assertions.
   private _pendingTargets: CardNodeViewTarget[] = [];
+
+  // ── Slash command state ──────────────────────────────────────────────────
+  @tracked _slashState: SlashCommandState | null = null;
+  @tracked _slashMenuIndex = 0;
+  @tracked _menuCoords: { left: number; top: number } | null = null;
+
+  // Card search mode (after selecting /card)
+  @tracked _cardSearchMode = false;
+  @tracked _cardSearchText = '';
+  @tracked _cardSearchIndex = 0;
+
+  // Format picker (after selecting a card from search)
+  @tracked _formatPickerCardUrl: string | null = null;
+  @tracked _formatPickerCardTitle: string | null = null;
 
   get pm(): ProseMirrorContext | null {
     if (!this._pm) {
@@ -101,6 +160,288 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
   private lastExternalContent: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private _slotUpdatePending = false;
+
+  // ── Slash command logic ────────────────────────────────────────────────
+
+  get slashMenuActive(): boolean {
+    return this._slashState?.active === true && !this._cardSearchMode && !this._formatPickerCardUrl;
+  }
+
+  get filteredSlashCommands(): SlashMenuItem[] {
+    let query = (this._slashState?.query ?? '').toLowerCase();
+    if (!query) return SLASH_COMMANDS;
+    return SLASH_COMMANDS.filter((cmd) => cmd.id.startsWith(query));
+  }
+
+  get slashMenuStyle(): string {
+    let coords = this._menuCoords;
+    if (!coords) return 'display: none';
+    return `left: ${coords.left}px; top: ${coords.top}px;`;
+  }
+
+  private _updateMenuCoords() {
+    let view = this.editorView;
+    let state = this._slashState;
+    if (!view || !state) {
+      this._menuCoords = null;
+      return;
+    }
+    try {
+      let coords = view.coordsAtPos(state.from);
+      let editorRect = view.dom.closest('.prosemirror-editor')?.getBoundingClientRect();
+      if (editorRect) {
+        this._menuCoords = {
+          left: coords.left - editorRect.left,
+          top: coords.bottom - editorRect.top + 4,
+        };
+      }
+    } catch {
+      this._menuCoords = null;
+    }
+  }
+
+  private _handleSlashStateChange = (state: SlashCommandState | null) => {
+    if (!state?.active && this._slashState?.active) {
+      // Slash menu closing — if we're not in card search mode, clean up
+      if (!this._cardSearchMode && !this._formatPickerCardUrl) {
+        this._slashState = null;
+        this._menuCoords = null;
+        this._slashMenuIndex = 0;
+        return;
+      }
+    }
+    this._slashState = state;
+    this._slashMenuIndex = 0;
+    if (state?.active) {
+      this._updateMenuCoords();
+    } else if (!this._cardSearchMode && !this._formatPickerCardUrl) {
+      this._menuCoords = null;
+    }
+  };
+
+  private _handleSlashNavigate = (direction: 'up' | 'down') => {
+    if (this._cardSearchMode) {
+      let results = this.cardSearchResults;
+      let max = results.length;
+      if (max === 0) return;
+      if (direction === 'down') {
+        this._cardSearchIndex = (this._cardSearchIndex + 1) % max;
+      } else {
+        this._cardSearchIndex = (this._cardSearchIndex - 1 + max) % max;
+      }
+      return;
+    }
+    let items = this.filteredSlashCommands;
+    let max = items.length;
+    if (max === 0) return;
+    if (direction === 'down') {
+      this._slashMenuIndex = (this._slashMenuIndex + 1) % max;
+    } else {
+      this._slashMenuIndex = (this._slashMenuIndex - 1 + max) % max;
+    }
+  };
+
+  private _handleSlashSelect = (_index: number) => {
+    if (this._formatPickerCardUrl) {
+      // Enter in format picker defaults to block
+      this._insertCardWithFormat('block');
+      return;
+    }
+    if (this._cardSearchMode) {
+      let results = this.cardSearchResults;
+      let card = results[this._cardSearchIndex];
+      if (card) {
+        this._selectCardResult(card);
+      }
+      return;
+    }
+    let items = this.filteredSlashCommands;
+    let item = items[this._slashMenuIndex];
+    if (item) {
+      this._selectSlashCommand(item);
+    }
+  };
+
+  _selectSlashCommand = (cmd: SlashMenuItem) => {
+    if (cmd.id === 'card') {
+      // Delete the slash command text from the editor
+      let view = this.editorView;
+      let pm = this._pm;
+      let state = this._slashState;
+      if (view && pm && state) {
+        let pluginKey = pm.slashCommandPluginKey;
+        let tr = view.state.tr
+          .delete(state.from, view.state.selection.from)
+          .setMeta(pluginKey, null);
+        view.dispatch(tr);
+      }
+      this._cardSearchMode = true;
+      this._cardSearchText = '';
+      this._cardSearchIndex = 0;
+      // Focus the search input after render
+      scheduleOnce('afterRender', this, this._focusSearchInput);
+    }
+  };
+
+  private _focusSearchInput = () => {
+    let input = document.querySelector('[data-test-card-search-input]') as HTMLInputElement;
+    input?.focus();
+  };
+
+  // ── Card search ──────────────────────────────────────────────────────────
+
+  private _searchResourceCreated = false;
+  private _searchResource: { instances: CardDef[]; isLoading: boolean } | null = null;
+
+  get cardSearchResults(): CardDef[] {
+    if (!this._cardSearchMode) return [];
+    if (!this._searchResourceCreated) {
+      this._searchResourceCreated = true;
+      try {
+        let getCards = this.args.getCards;
+        if (typeof getCards === 'function') {
+          this._searchResource = getCards(
+            this,
+            () => {
+              let text = this._cardSearchText?.trim();
+              if (!text) return undefined;
+              return {
+                filter: { contains: { name: text } },
+                page: { size: 10 },
+              };
+            },
+          ) ?? null;
+        }
+      } catch {
+        // Card search not available
+      }
+    }
+    return this._searchResource?.instances ?? [];
+  }
+
+  get isSearchLoading(): boolean {
+    return this._searchResource?.isLoading ?? false;
+  }
+
+  _handleCardSearchInput = (event: Event) => {
+    this._cardSearchText = (event.target as HTMLInputElement).value;
+    this._cardSearchIndex = 0;
+  };
+
+  _handleCardSearchKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this._dismissCardSearch();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this._handleSlashNavigate('down');
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this._handleSlashNavigate('up');
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      // Check if the input looks like a URL
+      let text = this._cardSearchText.trim();
+      if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('./'))) {
+        this._formatPickerCardUrl = text;
+        this._formatPickerCardTitle = labelFromUrl(text);
+        this._cardSearchMode = false;
+        return;
+      }
+      // Otherwise select the highlighted search result
+      let results = this.cardSearchResults;
+      let card = results[this._cardSearchIndex];
+      if (card) {
+        this._selectCardResult(card);
+      }
+      return;
+    }
+  };
+
+  _selectCardResult = (card: CardDef) => {
+    if (!card.id) return;
+    this._formatPickerCardUrl = card.id;
+    this._formatPickerCardTitle = card.title ?? labelFromUrl(card.id);
+    this._cardSearchMode = false;
+  };
+
+  _dismissCardSearch = () => {
+    this._cardSearchMode = false;
+    this._cardSearchText = '';
+    this._cardSearchIndex = 0;
+    this._slashState = null;
+    this._menuCoords = null;
+    this.editorView?.focus();
+  };
+
+  // ── Card insertion ───────────────────────────────────────────────────────
+
+  _insertCardWithFormat = (format: string) => {
+    let cardUrl = this._formatPickerCardUrl;
+    if (!cardUrl) return;
+
+    let view = this.editorView;
+    let pm = this._pm;
+    if (!view || !pm) return;
+
+    let baseUrl = this.args.cardReferenceBaseUrl;
+    let ref = makeCardRef(cardUrl, baseUrl);
+
+    if (format === 'inline') {
+      let node = pm.schema.nodes.boxel_card_atom.create({
+        cardId: ref,
+        label: labelFromUrl(ref),
+      });
+      let { from } = view.state.selection;
+      let tr = view.state.tr.insert(from, node);
+      view.dispatch(tr);
+    } else {
+      let node = pm.schema.nodes.boxel_card_block.create({
+        cardId: ref,
+      });
+      let { from } = view.state.selection;
+      let $pos = view.state.doc.resolve(from);
+      // Insert after the current block
+      let insertPos = $pos.after($pos.depth);
+      let tr = view.state.tr.insert(insertPos, node);
+      view.dispatch(tr);
+    }
+
+    // Clean up all popup state
+    this._formatPickerCardUrl = null;
+    this._formatPickerCardTitle = null;
+    this._cardSearchMode = false;
+    this._cardSearchText = '';
+    this._slashState = null;
+    this._menuCoords = null;
+
+    view.focus();
+
+    // Trigger save immediately
+    let onUpdate = this.args.onUpdate;
+    if (onUpdate && pm) {
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+      }
+      let markdown = pm.serializeMarkdown(view.state.doc);
+      onUpdate(markdown);
+    }
+  };
+
+  _dismissFormatPicker = () => {
+    this._formatPickerCardUrl = null;
+    this._formatPickerCardTitle = null;
+    this._slashState = null;
+    this._menuCoords = null;
+    this.editorView?.focus();
+  };
 
   // ── Card slot resolution ───────────────────────────────────────────────
 
@@ -204,9 +545,16 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
         'Shift-Tab': liftListItem(schema.nodes.list_item),
       };
 
+      let slashPlugin = pm.createSlashCommandPlugin(
+        this._handleSlashStateChange,
+        this._handleSlashSelect,
+        this._handleSlashNavigate,
+      );
+
       let state = pm.EditorState.create({
         doc,
         plugins: [
+          slashPlugin,
           keymapPlugin(formatKeymap),
           keymapPlugin(listKeymap),
           keymapPlugin(baseKeymap),
@@ -325,6 +673,104 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
         ...attributes
       >
       </div>
+
+      {{! ── Slash command menu ── }}
+      {{#if this.slashMenuActive}}
+        <div
+          class='prosemirror-slash-menu'
+          style={{this.slashMenuStyle}}
+          data-test-slash-menu
+        >
+          {{#each this.filteredSlashCommands as |cmd index|}}
+            <button
+              class='prosemirror-slash-menu-item
+                {{if (eq index this._slashMenuIndex) "selected"}}'
+              data-test-slash-menu-item={{cmd.id}}
+              {{on 'mousedown' (fn this._selectSlashCommand cmd)}}
+            >
+              <span class='slash-menu-label'>{{cmd.label}}</span>
+              <span class='slash-menu-description'>{{cmd.description}}</span>
+            </button>
+          {{else}}
+            <div class='prosemirror-slash-menu-empty'>No matching commands</div>
+          {{/each}}
+        </div>
+      {{/if}}
+
+      {{! ── Card search popup ── }}
+      {{#if this._cardSearchMode}}
+        <div
+          class='prosemirror-card-search'
+          style={{this.slashMenuStyle}}
+          data-test-card-search
+        >
+          <input
+            class='prosemirror-card-search-input'
+            placeholder='Search cards or paste URL…'
+            value={{this._cardSearchText}}
+            data-test-card-search-input
+            {{on 'input' this._handleCardSearchInput}}
+            {{on 'keydown' this._handleCardSearchKeydown}}
+          />
+          {{#if this.isSearchLoading}}
+            <div class='prosemirror-card-search-loading'>Searching…</div>
+          {{/if}}
+          {{#if this.cardSearchResults.length}}
+            <div class='prosemirror-card-search-results' data-test-card-search-results>
+              {{#each this.cardSearchResults as |card index|}}
+                <button
+                  class='prosemirror-card-search-result
+                    {{if (eq index this._cardSearchIndex) "selected"}}'
+                  data-test-card-search-result
+                  {{on 'mousedown' (fn this._selectCardResult card)}}
+                >
+                  <span class='search-result-title'>{{card.title}}</span>
+                  {{#if card.id}}
+                    <span class='search-result-url'>{{card.id}}</span>
+                  {{/if}}
+                </button>
+              {{/each}}
+            </div>
+          {{/if}}
+        </div>
+      {{/if}}
+
+      {{! ── Format picker popup ── }}
+      {{#if this._formatPickerCardUrl}}
+        <div
+          class='prosemirror-format-picker'
+          style={{this.slashMenuStyle}}
+          data-test-format-picker
+        >
+          <span class='format-picker-label'>
+            Insert "{{this._formatPickerCardTitle}}" as:
+          </span>
+          <div class='format-picker-buttons'>
+            <button
+              class='format-picker-btn'
+              data-test-format-inline
+              {{on 'mousedown' (fn this._insertCardWithFormat 'inline')}}
+            >
+              Inline
+            </button>
+            <button
+              class='format-picker-btn format-picker-btn--primary'
+              data-test-format-block
+              {{on 'mousedown' (fn this._insertCardWithFormat 'block')}}
+            >
+              Block
+            </button>
+          </div>
+          <button
+            class='format-picker-dismiss'
+            data-test-format-picker-dismiss
+            {{on 'mousedown' this._dismissFormatPicker}}
+          >
+            Cancel
+          </button>
+        </div>
+      {{/if}}
+
       {{#each this.cardRenderTargets as |target|}}
         {{#in-element target.element insertBefore=null}}
           {{#if target.card}}
@@ -383,6 +829,7 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
           border: 1px solid var(--boxel-border-color, #c4c4c4);
           border-radius: var(--boxel-border-radius, 4px);
           cursor: text;
+          position: relative;
         }
 
         .prosemirror-editor :deep(.ProseMirror) {
@@ -533,6 +980,195 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
           justify-content: center;
           color: var(--boxel-400, #999);
           font-style: italic;
+        }
+
+        /* ── Slash command menu ── */
+        .prosemirror-slash-menu {
+          position: absolute;
+          z-index: 100;
+          background: var(--boxel-light, #fff);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+          min-width: 200px;
+          max-width: 300px;
+          padding: 4px;
+        }
+
+        .prosemirror-slash-menu-item {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          width: 100%;
+          padding: 8px 12px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          border-radius: var(--boxel-border-radius, 4px);
+          text-align: left;
+          font: inherit;
+        }
+
+        .prosemirror-slash-menu-item:hover,
+        .prosemirror-slash-menu-item.selected {
+          background: var(--boxel-highlight-hover, #e8f0fe);
+        }
+
+        .slash-menu-label {
+          font-weight: 600;
+          font-size: 0.9em;
+        }
+
+        .slash-menu-description {
+          font-size: 0.8em;
+          color: var(--boxel-400, #666);
+        }
+
+        .prosemirror-slash-menu-empty {
+          padding: 8px 12px;
+          color: var(--boxel-400, #666);
+          font-size: 0.85em;
+          font-style: italic;
+        }
+
+        /* ── Card search popup ── */
+        .prosemirror-card-search {
+          position: absolute;
+          z-index: 100;
+          background: var(--boxel-light, #fff);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+          min-width: 280px;
+          max-width: 400px;
+          padding: 8px;
+        }
+
+        .prosemirror-card-search-input {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          font: inherit;
+          font-size: 0.9em;
+          outline: none;
+          box-sizing: border-box;
+        }
+
+        .prosemirror-card-search-input:focus {
+          border-color: var(--boxel-highlight, #0078d4);
+          box-shadow: 0 0 0 1px var(--boxel-highlight, #0078d4);
+        }
+
+        .prosemirror-card-search-loading {
+          padding: 8px 4px;
+          color: var(--boxel-400, #666);
+          font-size: 0.85em;
+          font-style: italic;
+        }
+
+        .prosemirror-card-search-results {
+          margin-top: 4px;
+          max-height: 240px;
+          overflow-y: auto;
+        }
+
+        .prosemirror-card-search-result {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          width: 100%;
+          padding: 6px 10px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          border-radius: var(--boxel-border-radius, 4px);
+          text-align: left;
+          font: inherit;
+        }
+
+        .prosemirror-card-search-result:hover,
+        .prosemirror-card-search-result.selected {
+          background: var(--boxel-highlight-hover, #e8f0fe);
+        }
+
+        .search-result-title {
+          font-weight: 500;
+          font-size: 0.9em;
+        }
+
+        .search-result-url {
+          font-size: 0.75em;
+          color: var(--boxel-400, #666);
+          word-break: break-all;
+        }
+
+        /* ── Format picker popup ── */
+        .prosemirror-format-picker {
+          position: absolute;
+          z-index: 100;
+          background: var(--boxel-light, #fff);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+          padding: 12px;
+          min-width: 220px;
+        }
+
+        .format-picker-label {
+          display: block;
+          font-size: 0.85em;
+          color: var(--boxel-400, #666);
+          margin-bottom: 8px;
+          word-break: break-word;
+        }
+
+        .format-picker-buttons {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .format-picker-btn {
+          flex: 1;
+          padding: 6px 12px;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          background: var(--boxel-light, #fff);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.9em;
+        }
+
+        .format-picker-btn:hover {
+          background: var(--boxel-highlight-hover, #e8f0fe);
+        }
+
+        .format-picker-btn--primary {
+          background: var(--boxel-highlight, #0078d4);
+          color: white;
+          border-color: var(--boxel-highlight, #0078d4);
+        }
+
+        .format-picker-btn--primary:hover {
+          opacity: 0.9;
+        }
+
+        .format-picker-dismiss {
+          display: block;
+          width: 100%;
+          padding: 4px;
+          border: none;
+          background: transparent;
+          color: var(--boxel-400, #666);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.8em;
+          text-align: center;
+        }
+
+        .format-picker-dismiss:hover {
+          color: var(--boxel-dark, #333);
         }
       }
     </style>

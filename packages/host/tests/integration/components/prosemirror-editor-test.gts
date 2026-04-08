@@ -795,6 +795,282 @@ module('Integration | prosemirror-context', function (hooks) {
     nv.destroy();
   });
 
+  // ── Slash command plugin tests ──
+
+  test('createSlashCommandPlugin activates on "/" via setMeta', async function (assert) {
+    let doc = pmContext.parseMarkdown('');
+    let stateChanges: any[] = [];
+    let slashPlugin = pmContext.createSlashCommandPlugin(
+      (state: any) => { stateChanges.push(state); },
+      () => {},
+      () => {},
+    );
+    let state = pmContext.EditorState.create({
+      doc,
+      plugins: [slashPlugin],
+    });
+
+    await render(<template><div id='pm-mount'></div></template>);
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    // Activate via setMeta (simulates what handleTextInput does internally)
+    let from = view.state.selection.from;
+    let tr = view.state.tr
+      .insertText('/', from, from)
+      .setMeta(pmContext.slashCommandPluginKey, {
+        active: true,
+        query: '',
+        from,
+      });
+    view.dispatch(tr);
+
+    let pluginState = pmContext.slashCommandPluginKey.getState(view.state);
+    assert.ok(
+      pluginState?.active,
+      'slash command plugin activates via setMeta',
+    );
+    assert.strictEqual(
+      pluginState?.query,
+      '',
+      'query is empty after just "/"',
+    );
+
+    // The view callback should have been called
+    assert.ok(
+      stateChanges.length > 0,
+      'onStateChange callback was called',
+    );
+
+    view.destroy();
+  });
+
+  test('createSlashCommandPlugin tracks query as user types', async function (assert) {
+    let doc = pmContext.parseMarkdown('');
+    let slashPlugin = pmContext.createSlashCommandPlugin(
+      () => {},
+      () => {},
+      () => {},
+    );
+    let state = pmContext.EditorState.create({
+      doc,
+      plugins: [slashPlugin],
+    });
+
+    await render(<template><div id='pm-mount'></div></template>);
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    // Insert "/" and activate via setMeta
+    let from = view.state.selection.from;
+    let tr = view.state.tr
+      .insertText('/', from, from)
+      .setMeta(pmContext.slashCommandPluginKey, {
+        active: true,
+        query: '',
+        from,
+      });
+    view.dispatch(tr);
+
+    // Type "car" after the "/"
+    let pos = view.state.selection.from;
+    tr = view.state.tr.insertText('car', pos, pos);
+    view.dispatch(tr);
+
+    let pluginState = pmContext.slashCommandPluginKey.getState(view.state);
+    assert.strictEqual(
+      pluginState?.query,
+      'car',
+      'query tracks typed text after "/"',
+    );
+
+    view.destroy();
+  });
+
+  test('createSlashCommandPlugin deactivates on Escape', async function (assert) {
+    let doc = pmContext.parseMarkdown('');
+    let slashPlugin = pmContext.createSlashCommandPlugin(
+      () => {},
+      () => {},
+      () => {},
+    );
+    let state = pmContext.EditorState.create({
+      doc,
+      plugins: [slashPlugin],
+    });
+
+    await render(<template><div id='pm-mount'></div></template>);
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    // Insert "/" and activate
+    let from = view.state.selection.from;
+    let tr = view.state.tr
+      .insertText('/', from, from)
+      .setMeta(pmContext.slashCommandPluginKey, {
+        active: true,
+        query: '',
+        from,
+      });
+    view.dispatch(tr);
+
+    assert.ok(
+      pmContext.slashCommandPluginKey.getState(view.state)?.active,
+      'plugin is active before Escape',
+    );
+
+    // Simulate Escape key — ProseMirror's handleKeyDown fires on focus+dispatch
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    let pluginState = pmContext.slashCommandPluginKey.getState(view.state);
+    assert.notOk(
+      pluginState?.active,
+      'plugin deactivates after Escape',
+    );
+
+    view.destroy();
+  });
+
+  test('createSlashCommandPlugin calls onNavigate on ArrowUp/Down', async function (assert) {
+    let doc = pmContext.parseMarkdown('');
+    let navigations: string[] = [];
+    let slashPlugin = pmContext.createSlashCommandPlugin(
+      () => {},
+      () => {},
+      (direction: string) => { navigations.push(direction); },
+    );
+    let state = pmContext.EditorState.create({
+      doc,
+      plugins: [slashPlugin],
+    });
+
+    await render(<template><div id='pm-mount'></div></template>);
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    // Activate slash command
+    let from = view.state.selection.from;
+    let tr = view.state.tr
+      .insertText('/', from, from)
+      .setMeta(pmContext.slashCommandPluginKey, {
+        active: true,
+        query: '',
+        from,
+      });
+    view.dispatch(tr);
+
+    // Simulate ArrowDown and ArrowUp
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    }));
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowUp',
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    assert.deepEqual(
+      navigations,
+      ['down', 'up'],
+      'onNavigate called with correct directions',
+    );
+
+    view.destroy();
+  });
+
+  test('createSlashCommandPlugin calls onSelectItem on Enter', async function (assert) {
+    let doc = pmContext.parseMarkdown('');
+    let selections: number[] = [];
+    let slashPlugin = pmContext.createSlashCommandPlugin(
+      () => {},
+      (index: number) => { selections.push(index); },
+      () => {},
+    );
+    let state = pmContext.EditorState.create({
+      doc,
+      plugins: [slashPlugin],
+    });
+
+    await render(<template><div id='pm-mount'></div></template>);
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let view = new pmContext.EditorView(mountEl, { state });
+
+    // Activate slash command
+    let from = view.state.selection.from;
+    let tr = view.state.tr
+      .insertText('/', from, from)
+      .setMeta(pmContext.slashCommandPluginKey, {
+        active: true,
+        query: '',
+        from,
+      });
+    view.dispatch(tr);
+
+    // Simulate Enter
+    view.dom.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    assert.deepEqual(
+      selections,
+      [-1],
+      'onSelectItem called with -1 (select current item)',
+    );
+
+    view.destroy();
+  });
+
+  test('card node insertion creates correct inline node', function (assert) {
+    let doc = pmContext.parseMarkdown('Hello world');
+    let state = pmContext.EditorState.create({ doc });
+
+    // Insert an inline card atom at position 6 (after "Hello ")
+    let node = pmContext.schema.nodes.boxel_card_atom.create({
+      cardId: './Author/alice',
+      label: 'alice',
+    });
+    let tr = state.tr.insert(6, node);
+    let newState = state.apply(tr);
+    let markdown = pmContext.serializeMarkdown(newState.doc);
+
+    assert.ok(
+      markdown.includes(':card[./Author/alice]'),
+      'inline card reference serialized correctly',
+    );
+  });
+
+  test('card node insertion creates correct block node', function (assert) {
+    let doc = pmContext.parseMarkdown('Hello world');
+    let state = pmContext.EditorState.create({ doc });
+
+    // Insert a block card after the paragraph
+    let node = pmContext.schema.nodes.boxel_card_block.create({
+      cardId: './Post/1',
+    });
+    // Position after the paragraph end
+    let insertPos = state.doc.content.size;
+    let tr = state.tr.insert(insertPos, node);
+    let newState = state.apply(tr);
+    let markdown = pmContext.serializeMarkdown(newState.doc);
+
+    assert.ok(
+      markdown.includes('::card[./Post/1]'),
+      'block card reference serialized correctly',
+    );
+    assert.ok(
+      markdown.includes('Hello world'),
+      'original content preserved',
+    );
+  });
+
   // ── Lazy-loading via globalThis (component pattern) ──
 
   test('globalThis.__loadProseMirror loader works', async function (assert) {

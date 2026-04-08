@@ -11,7 +11,7 @@ import 'prosemirror-view/style/prosemirror.css';
 
 import { Schema } from 'prosemirror-model';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import { EditorState } from 'prosemirror-state';
+import { EditorState, Plugin, PluginKey } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
 import { baseKeymap, toggleMark, setBlockType, lift } from 'prosemirror-commands';
@@ -749,6 +749,141 @@ function createCardNodeViews(
   };
 }
 
+// ── Slash command plugin ───────────────────────────────────────────────────
+
+export interface SlashCommandState {
+  active: boolean;
+  query: string; // text after "/" (e.g., "car" when user typed "/car")
+  from: number; // document position of the "/" character
+}
+
+export interface SlashMenuItem {
+  id: string;
+  label: string;
+  description: string;
+}
+
+const slashCommandPluginKey = new PluginKey<SlashCommandState | null>(
+  'slashCommand',
+);
+
+function createSlashCommandPlugin(
+  onStateChange: (state: SlashCommandState | null) => void,
+  onSelectItem: (index: number) => void,
+  onNavigate: (direction: 'up' | 'down') => void,
+): Plugin {
+  return new Plugin<SlashCommandState | null>({
+    key: slashCommandPluginKey,
+    state: {
+      init() {
+        return null;
+      },
+      apply(tr, prev, _oldState, newState) {
+        let meta = tr.getMeta(slashCommandPluginKey);
+        if (meta !== undefined) {
+          return meta;
+        }
+        if (!prev) {
+          return null;
+        }
+        if (tr.docChanged || tr.selectionSet) {
+          // Re-derive state from document text
+          let { from: slashFrom } = prev;
+          let mappedFrom = tr.docChanged
+            ? tr.mapping.map(slashFrom)
+            : slashFrom;
+          let cursorPos = newState.selection.from;
+          if (cursorPos <= mappedFrom) {
+            return null;
+          }
+          try {
+            let $pos = tr.doc.resolve(cursorPos);
+            let startOfNode = $pos.start();
+            let offsetInNode = mappedFrom - startOfNode;
+            let cursorOffset = cursorPos - startOfNode;
+            if (offsetInNode < 0 || cursorOffset > $pos.parent.content.size) {
+              return null;
+            }
+            let text = $pos.parent.textBetween(offsetInNode, cursorOffset);
+            if (!text.startsWith('/') || /\s/.test(text.slice(1))) {
+              return null;
+            }
+            let next: SlashCommandState = {
+              active: true,
+              query: text.slice(1),
+              from: mappedFrom,
+            };
+            return next;
+          } catch {
+            return null;
+          }
+        }
+        return prev;
+      },
+    },
+    props: {
+      handleTextInput(view, from, _to, text) {
+        if (text !== '/') {
+          return false;
+        }
+        let $pos = view.state.doc.resolve(from);
+        let textBefore = $pos.parent.textBetween(0, $pos.parentOffset);
+        if (textBefore.length === 0 || /\s$/.test(textBefore)) {
+          // Schedule activation after the "/" is inserted
+          setTimeout(() => {
+            let tr = view.state.tr.setMeta(slashCommandPluginKey, {
+              active: true,
+              query: '',
+              from,
+            } satisfies SlashCommandState);
+            view.dispatch(tr);
+          }, 0);
+        }
+        return false;
+      },
+      handleKeyDown(view, event) {
+        let state = slashCommandPluginKey.getState(view.state);
+        if (!state?.active) {
+          return false;
+        }
+        if (event.key === 'Escape') {
+          // Dismiss and delete the slash text
+          let tr = view.state.tr
+            .delete(state.from, view.state.selection.from)
+            .setMeta(slashCommandPluginKey, null);
+          view.dispatch(tr);
+          return true;
+        }
+        if (event.key === 'ArrowUp') {
+          onNavigate('up');
+          return true;
+        }
+        if (event.key === 'ArrowDown') {
+          onNavigate('down');
+          return true;
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          onSelectItem(-1); // -1 means "select the currently highlighted item"
+          return true;
+        }
+        return false;
+      },
+    },
+    view() {
+      return {
+        update(view) {
+          let state = slashCommandPluginKey.getState(view.state);
+          onStateChange(state ?? null);
+        },
+        destroy() {
+          onStateChange(null);
+        },
+      };
+    },
+  });
+}
+
 // ── Exported context ───────────────────────────────────────────────────────
 
 export interface ProseMirrorContext {
@@ -771,6 +906,8 @@ export interface ProseMirrorContext {
   parseMarkdown: (text: string) => ProseMirrorNode;
   serializeMarkdown: (doc: ProseMirrorNode) => string;
   createCardNodeViews: typeof createCardNodeViews;
+  createSlashCommandPlugin: typeof createSlashCommandPlugin;
+  slashCommandPluginKey: typeof slashCommandPluginKey;
 }
 
 const prosemirrorContext: ProseMirrorContext = {
@@ -793,6 +930,8 @@ const prosemirrorContext: ProseMirrorContext = {
   parseMarkdown,
   serializeMarkdown,
   createCardNodeViews,
+  createSlashCommandPlugin,
+  slashCommandPluginKey,
 };
 
 export default prosemirrorContext;

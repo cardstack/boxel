@@ -16,6 +16,7 @@ import {
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
 import ProseMirrorEditor from './prosemirror-editor';
+import { CardContextConsumer } from './field-component';
 
 /**
  * A composite FieldDef that stores markdown content and exposes structured
@@ -101,12 +102,15 @@ export class RichMarkdownField extends FieldDef {
       }
     }
     <template>
-      <ProseMirrorEditor
-        @content={{@model.content}}
-        @onUpdate={{this.updateContent}}
-        @linkedCards={{this.linkedCards}}
-        @cardReferenceBaseUrl={{this.baseUrl}}
-      />
+      <CardContextConsumer as |context|>
+        <ProseMirrorEditor
+          @content={{@model.content}}
+          @onUpdate={{this.updateContent}}
+          @linkedCards={{this.linkedCards}}
+          @cardReferenceBaseUrl={{this.baseUrl}}
+          @getCards={{context.getCards}}
+        />
+      </CardContextConsumer>
     </template>
   };
 }
