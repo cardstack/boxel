@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import type {
   ProjectCard,
   ResolvedSkill,
-  TicketCard,
+  IssueCard,
 } from '../scripts/lib/factory-agent';
 import {
   DefaultSkillResolver,
@@ -15,7 +15,7 @@ import {
   SkillLoadError,
   enforceSkillBudget,
   estimateTokens,
-  extractTicketText,
+  extractIssueText,
 } from '../scripts/lib/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
@@ -70,11 +70,11 @@ function writeSkill(
   }
 }
 
-function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
+function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
   return {
-    id: 'Tickets/test-ticket',
-    title: 'Test ticket',
-    description: 'A test ticket for unit testing',
+    id: 'Issues/test-issue',
+    title: 'Test issue',
+    description: 'A test issue for unit testing',
     ...overrides,
   };
 }
@@ -93,10 +93,10 @@ function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
 module('factory-skill-loader > DefaultSkillResolver', function () {
   test('always includes boxel-development and boxel-file-structure', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({ description: 'Generic task with no keywords' });
+    let issue = makeIssue({ description: 'Generic task with no keywords' });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('boxel-development'),
@@ -108,14 +108,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('includes ember-best-practices when ticket mentions .gts', function (assert) {
+  test('includes ember-best-practices when issue mentions .gts', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Create a new card definition in .gts format',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('ember-best-practices'),
@@ -123,14 +123,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('includes ember-best-practices when ticket mentions component', function (assert) {
+  test('includes ember-best-practices when issue mentions component', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Build a new component for the dashboard',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('ember-best-practices'),
@@ -138,14 +138,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('includes ember-best-practices when ticket mentions CardDef', function (assert) {
+  test('includes ember-best-practices when issue mentions CardDef', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       title: 'Define a new CardDef for employees',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('ember-best-practices'),
@@ -153,14 +153,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('includes software-factory-operations for delivery workflow tickets', function (assert) {
+  test('includes software-factory-operations for delivery workflow issues', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Improve the factory delivery pipeline',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('software-factory-operations'),
@@ -168,14 +168,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('excludes CLI-only skills even when ticket mentions sync', function (assert) {
+  test('excludes CLI-only skills even when issue mentions sync', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Sync the workspace after local edits',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.false(
       skills.includes('boxel-sync'),
@@ -183,14 +183,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('excludes CLI-only skills even when ticket mentions restore', function (assert) {
+  test('excludes CLI-only skills even when issue mentions restore', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Restore workspace to a previous checkpoint',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.false(
       skills.includes('boxel-restore'),
@@ -198,14 +198,14 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('excludes all CLI-only skills even when ticket mentions multiple CLI operations', function (assert) {
+  test('excludes all CLI-only skills even when issue mentions multiple CLI operations', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Sync the workspace, track changes, and watch for updates',
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.false(skills.includes('boxel-sync'), 'boxel-sync excluded');
     assert.false(skills.includes('boxel-track'), 'boxel-track excluded');
@@ -214,7 +214,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
   test('excludes CLI-only skills even when added via knowledge article tags', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let project = makeProject({
       knowledge: [
         {
@@ -224,7 +224,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       ],
     });
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.false(
       skills.includes('boxel-sync'),
@@ -238,7 +238,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
   test('extracts additional skills from knowledge article tags', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let project = makeProject({
       knowledge: [
         {
@@ -248,7 +248,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       ],
     });
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('custom-skill'),
@@ -258,7 +258,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
   test('extracts additional skills from knowledge article skills array', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let project = makeProject({
       knowledge: [
         {
@@ -268,7 +268,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       ],
     });
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(skills.includes('extra-skill-a'), 'includes extra-skill-a');
     assert.true(skills.includes('extra-skill-b'), 'includes extra-skill-b');
@@ -276,7 +276,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
   test('reads skills from knowledgeBase field (Project schema)', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let project = makeProject({
       knowledgeBase: [
         {
@@ -286,7 +286,7 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       ],
     });
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('schema-skill'),
@@ -294,9 +294,9 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     );
   });
 
-  test('reads skills from relatedKnowledge field (Ticket schema)', function (assert) {
+  test('reads skills from relatedKnowledge field (Issue schema)', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       relatedKnowledge: [
         {
           id: 'Knowledge Articles/ticket-knowledge',
@@ -306,17 +306,17 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
     });
     let project = makeProject();
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     assert.true(
       skills.includes('ticket-skill'),
-      'includes skill from ticket relatedKnowledge',
+      'includes skill from issue relatedKnowledge',
     );
   });
 
   test('does not duplicate skills', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Create a .gts component with template patterns',
     });
     let project = makeProject({
@@ -328,20 +328,20 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
       ],
     });
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
     let devCount = skills.filter((s) => s === 'boxel-development').length;
     assert.strictEqual(devCount, 1, 'boxel-development appears only once');
   });
 
-  test('reads ticket text from title, description, tags, and labels', function (assert) {
-    let ticket = makeTicket({
+  test('reads issue text from title, description, tags, and labels', function (assert) {
+    let issue = makeIssue({
       title: 'Fix the component rendering',
       description: 'The template is broken',
       tags: ['ember', 'glimmer'],
       labels: [{ name: 'bug' }],
     });
 
-    let text = extractTicketText(ticket);
+    let text = extractIssueText(issue);
 
     assert.true(text.includes('fix the component rendering'));
     assert.true(text.includes('the template is broken'));
@@ -352,10 +352,10 @@ module('factory-skill-loader > DefaultSkillResolver', function () {
 
   test('handles project with no knowledge array', function (assert) {
     let resolver = new DefaultSkillResolver();
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let project = makeProject(); // no knowledge field
 
-    let skills = resolver.resolve(ticket, project);
+    let skills = resolver.resolve(issue, project);
 
     // Should still resolve the base skills without error
     assert.true(skills.includes('boxel-development'));
@@ -683,7 +683,7 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     }
   });
 
-  test('filters boxel-development references by ticket when loaded with ticket', async function (assert) {
+  test('filters boxel-development references by issue when loaded with issue', async function (assert) {
     // Set up a boxel-development skill with references matching the real structure
     writeSkill(tempDir, 'boxel-development', '# Boxel Development', {
       references: {
@@ -698,24 +698,24 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
 
     let loader = new SkillLoader(tempDir, []);
 
-    // Load WITHOUT ticket — should get all references
+    // Load WITHOUT issue — should get all references
     let allRefs = await loader.load('boxel-development');
     assert.strictEqual(
       allRefs.references!.length,
       6,
-      'all 6 references loaded without ticket',
+      'all 6 references loaded without issue',
     );
 
-    // Load WITH a styling ticket — should get always-load + styling only
+    // Load WITH a styling issue — should get always-load + styling only
     loader.clearCache();
-    let stylingTicket = makeTicket({
+    let stylingIssue = makeIssue({
       description: 'Fix the CSS styling on the card',
     });
-    let filtered = await loader.load('boxel-development', stylingTicket);
+    let filtered = await loader.load('boxel-development', stylingIssue);
 
     assert.true(
       filtered.references!.length < 6,
-      'fewer references with ticket filtering',
+      'fewer references with issue filtering',
     );
     // Always-load refs should be present
     assert.true(
@@ -736,7 +736,7 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
 
   test('reference filtering works without budget (no-budget path)', async function (assert) {
     // Verifies the P1 fix: callers that omit maxSkillTokens still get
-    // ticket-relevant references, not all 19. The filtering happens at load
+    // issue-relevant references, not all 19. The filtering happens at load
     // time, so enforceSkillBudget(skills, undefined) returns already-filtered
     // skills — no budget required.
     writeSkill(tempDir, 'boxel-development', '# Boxel Development', {
@@ -751,12 +751,12 @@ module('factory-skill-loader > SkillLoader', function (hooks) {
     });
 
     let loader = new SkillLoader(tempDir, []);
-    let ticket = makeTicket({
+    let issue = makeIssue({
       description: 'Fix the CSS styling on the card',
     });
 
-    // Load with ticket — filtering happens at load time
-    let skills = await loader.loadAll(['boxel-development'], ticket);
+    // Load with issue — filtering happens at load time
+    let skills = await loader.loadAll(['boxel-development'], issue);
     assert.strictEqual(skills.length, 1);
 
     // Pass through enforceSkillBudget with NO budget (undefined)
@@ -937,44 +937,44 @@ module('factory-skill-loader > enforceSkillBudget', function () {
 });
 
 // ---------------------------------------------------------------------------
-// Re-resolution on new ticket
+// Re-resolution on new issue
 // ---------------------------------------------------------------------------
 
-module('factory-skill-loader > re-resolution on new ticket', function () {
-  test('resolver produces different skills for different tickets', function (assert) {
+module('factory-skill-loader > re-resolution on new issue', function () {
+  test('resolver produces different skills for different issues', function (assert) {
     let resolver = new DefaultSkillResolver();
     let project = makeProject();
 
-    let ticket1 = makeTicket({
+    let issue1 = makeIssue({
       description: 'Create a .gts component for the landing page',
     });
-    let ticket2 = makeTicket({
+    let issue2 = makeIssue({
       description: 'Improve the factory delivery pipeline',
     });
 
-    let skills1 = resolver.resolve(ticket1, project);
-    let skills2 = resolver.resolve(ticket2, project);
+    let skills1 = resolver.resolve(issue1, project);
+    let skills2 = resolver.resolve(issue2, project);
 
     assert.true(
       skills1.includes('ember-best-practices'),
-      'ticket1 gets ember-best-practices',
+      'issue1 gets ember-best-practices',
     );
     assert.false(
       skills1.includes('software-factory-operations'),
-      'ticket1 does not get software-factory-operations',
+      'issue1 does not get software-factory-operations',
     );
 
     assert.true(
       skills2.includes('software-factory-operations'),
-      'ticket2 gets software-factory-operations',
+      'issue2 gets software-factory-operations',
     );
     assert.false(
       skills2.includes('ember-best-practices'),
-      'ticket2 does not get ember-best-practices',
+      'issue2 does not get ember-best-practices',
     );
   });
 
-  test('cache can be cleared between tickets for fresh loading', async function (assert) {
+  test('cache can be cleared between issues for fresh loading', async function (assert) {
     tempDir = createTempSkillsDir();
     writeSkill(tempDir, 'boxel-development', '# Dev v1');
 
@@ -982,7 +982,7 @@ module('factory-skill-loader > re-resolution on new ticket', function () {
     let first = await loader.load('boxel-development');
     assert.true(first.content.includes('Dev v1'));
 
-    // Simulate moving to a new ticket: clear cache, potentially new skill content
+    // Simulate moving to a new issue: clear cache, potentially new skill content
     writeSkill(tempDir, 'boxel-development', '# Dev v2');
     loader.clearCache();
 

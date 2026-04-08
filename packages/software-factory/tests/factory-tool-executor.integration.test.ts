@@ -214,7 +214,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
 
       let query = JSON.stringify({
         filter: {
-          type: { module: 'https://example.test/ticket', name: 'Ticket' },
+          type: { module: 'https://example.test/issue', name: 'Issue' },
         },
       });
 

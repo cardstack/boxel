@@ -100,8 +100,8 @@ async function main(): Promise<void> {
       title: 'Smoke Test Project',
       description: 'A trivial project used to verify the factory agent works.',
     },
-    ticket: {
-      id: 'Tickets/smoke-test-hello',
+    issue: {
+      id: 'Issues/smoke-test-hello',
       title: 'Create a hello-world card',
       description:
         'Create a simple HelloWorld card definition that renders "Hello, world!" in its fitted view.',

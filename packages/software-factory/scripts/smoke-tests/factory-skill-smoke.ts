@@ -6,7 +6,7 @@
  * Usage:
  *   pnpm smoke:skill
  *   pnpm smoke:skill --max-tokens 8000
- *   pnpm smoke:skill --ticket-text "Create a .gts component with styling"
+ *   pnpm smoke:skill --issue-text "Create a .gts component with styling"
  */
 
 import { parseArgs } from 'node:util';
@@ -17,21 +17,21 @@ import {
   enforceSkillBudget,
   estimateTokens,
 } from '../lib/factory-skill-loader';
-import type { ProjectCard, TicketCard } from '../lib/factory-agent';
+import type { ProjectCard, IssueCard } from '../lib/factory-agent';
 
-const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
+const SAMPLE_ISSUES: { label: string; issue: IssueCard }[] = [
   {
     label: 'Generic card work (base case)',
-    ticket: {
-      id: 'Tickets/generic',
+    issue: {
+      id: 'Issues/generic',
       title: 'Create a contact card',
       description: 'Build a contact card with name, email, and phone fields.',
     },
   },
   {
     label: '.gts component work (triggers ember-best-practices)',
-    ticket: {
-      id: 'Tickets/gts-component',
+    issue: {
+      id: 'Issues/gts-component',
       title: 'Build a dashboard component',
       description:
         'Create a .gts component for the dashboard with template and styling.',
@@ -39,18 +39,18 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   },
   {
     label: 'Factory workflow (triggers software-factory-operations)',
-    ticket: {
-      id: 'Tickets/factory-workflow',
+    issue: {
+      id: 'Issues/factory-workflow',
       title: 'Improve factory delivery pipeline',
       description:
-        'Update the factory orchestrator to handle multi-ticket workflows.',
+        'Update the factory orchestrator to handle multi-issue workflows.',
     },
   },
   {
     label:
       'Realm sync work (CLI skills excluded — no boxel-cli tools in registry)',
-    ticket: {
-      id: 'Tickets/sync-work',
+    issue: {
+      id: 'Issues/sync-work',
       title: 'Sync and restore workspace',
       description:
         'Sync local workspace changes to staging, then restore a checkpoint.',
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     args: process.argv.slice(2),
     options: {
       'max-tokens': { type: 'string' },
-      'ticket-text': { type: 'string' },
+      'issue-text': { type: 'string' },
     },
     strict: true,
     allowPositionals: true,
@@ -84,7 +84,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  let customTicketText = values['ticket-text'];
+  let customIssueText = values['issue-text'];
 
   let resolver = new DefaultSkillResolver();
   let loader = new SkillLoader();
@@ -92,30 +92,30 @@ async function main(): Promise<void> {
 
   console.log('=== Skill Loader & Resolver Smoke Test ===\n');
 
-  // If custom ticket text is provided, use only that
-  let tickets = customTicketText
+  // If custom issue text is provided, use only that
+  let issues = customIssueText
     ? [
         {
-          label: `Custom: "${customTicketText}"`,
-          ticket: {
-            id: 'Tickets/custom',
-            title: customTicketText,
-            description: customTicketText,
-          } as TicketCard,
+          label: `Custom: "${customIssueText}"`,
+          issue: {
+            id: 'Issues/custom',
+            title: customIssueText,
+            description: customIssueText,
+          } as IssueCard,
         },
       ]
-    : SAMPLE_TICKETS;
+    : SAMPLE_ISSUES;
 
-  for (let { label, ticket } of tickets) {
+  for (let { label, issue } of issues) {
     console.log(`--- ${label} ---`);
-    console.log(`  Ticket: ${ticket.title}`);
+    console.log(`  Issue: ${issue.title}`);
 
     // 1. Resolve
-    let skillNames = resolver.resolve(ticket, project);
+    let skillNames = resolver.resolve(issue, project);
     console.log(`  Resolved skills: [${skillNames.join(', ')}]`);
 
-    // 2. Load (with ticket context for reference filtering)
-    let skills = await loader.loadAll(skillNames, ticket);
+    // 2. Load (with issue context for reference filtering)
+    let skills = await loader.loadAll(skillNames, issue);
     console.log(`  Loaded: ${skills.length}/${skillNames.length} skills`);
 
     for (let skill of skills) {

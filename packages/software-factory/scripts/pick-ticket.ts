@@ -8,15 +8,15 @@ import {
   type SearchSort,
 } from './lib/boxel';
 
-type TicketStatus = 'backlog' | 'in_progress' | 'blocked' | 'review' | 'done';
-type TicketPriority = 'critical' | 'high' | 'medium' | 'low';
+type IssueStatus = 'backlog' | 'in_progress' | 'blocked' | 'review' | 'done';
+type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
 
-interface CompactTicket {
+interface CompactIssue {
   id: string;
-  ticketId: string | null;
+  issueId: string | null;
   summary: string | null;
-  status: TicketStatus | null;
-  priority: TicketPriority | null;
+  status: IssueStatus | null;
+  priority: IssuePriority | null;
   project: string | null;
 }
 
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
   let args = parseArgs(process.argv.slice(2));
   if (typeof args.realm !== 'string') {
     throw new Error(
-      'Usage: npm run boxel:pick-ticket -- --realm <realm-url> [--module <ticket-schema-module-url>]',
+      'Usage: npm run boxel:pick-ticket -- --realm <realm-url> [--module <issue-schema-module-url>]',
     );
   }
 
@@ -90,7 +90,7 @@ async function main(): Promise<void> {
     filter: {
       type: {
         module: moduleUrl,
-        name: 'Ticket',
+        name: 'Issue',
       },
       any: statusList.map((status) => ({
         eq: { status },
@@ -102,7 +102,7 @@ async function main(): Promise<void> {
         direction: 'asc',
         on: {
           module: moduleUrl,
-          name: 'Ticket',
+          name: 'Issue',
         },
       },
       {
@@ -110,7 +110,7 @@ async function main(): Promise<void> {
         direction: 'asc',
         on: {
           module: moduleUrl,
-          name: 'Ticket',
+          name: 'Issue',
         },
       },
     ],
@@ -131,9 +131,9 @@ async function main(): Promise<void> {
   }
 
   let results = await searchRealm({ realmUrl, jwt, query });
-  let compact: CompactTicket[] = (results.data ?? []).map((card) => ({
+  let compact: CompactIssue[] = (results.data ?? []).map((card) => ({
     id: card.id,
-    ticketId: stringAttribute(card, 'ticketId'),
+    issueId: stringAttribute(card, 'issueId'),
     summary: stringAttribute(card, 'summary'),
     status: enumAttribute(card, 'status', [
       'backlog',
@@ -153,7 +153,7 @@ async function main(): Promise<void> {
 
   printJson({
     count: compact.length,
-    tickets: compact,
+    issues: compact,
   });
 }
 

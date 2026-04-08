@@ -97,7 +97,7 @@ const SCRIPT_TOOLS: ToolManifest[] = [
         name: 'module',
         type: 'string',
         required: false,
-        description: 'Ticket schema module URL',
+        description: 'Issue schema module URL',
       },
     ],
   },

@@ -230,7 +230,7 @@ async function buildToolsForRealm(realm: {
       relationships?: Record<string, unknown>;
     }
   >();
-  for (let name of ['Project', 'Ticket', 'KnowledgeArticle']) {
+  for (let name of ['Project', 'Issue', 'KnowledgeArticle']) {
     let schema = await fetchCardTypeSchema(
       realm.realmServerURL.href,
       realm.realmURL.href,
@@ -297,18 +297,18 @@ test('update_project writes and reads back a project card', async ({
   );
 });
 
-test('update_ticket writes and reads back a ticket card', async ({ realm }) => {
+test('update_issue writes and reads back an issue card', async ({ realm }) => {
   let tools = await buildToolsForRealm(realm);
-  let updateTicket = tools.find((t) => t.name === 'update_ticket')!;
+  let updateIssue = tools.find((t) => t.name === 'update_issue')!;
   let readFile = tools.find((t) => t.name === 'read_file')!;
 
-  expect(updateTicket).toBeDefined();
+  expect(updateIssue).toBeDefined();
 
-  let writeResult = (await updateTicket.execute({
-    path: 'Tickets/tool-test-ticket.json',
+  let writeResult = (await updateIssue.execute({
+    path: 'Issues/tool-test-issue.json',
     attributes: {
-      summary: 'Test ticket for update_ticket tool',
-      ticketStatus: 'in_progress',
+      summary: 'Test issue for update_issue tool',
+      issueStatus: 'in_progress',
       priority: 'high',
     },
   })) as CardWriteResult;
@@ -316,16 +316,14 @@ test('update_ticket writes and reads back a ticket card', async ({ realm }) => {
   expect(writeResult.ok).toBe(true);
 
   let readResult = (await readFile.execute({
-    path: 'Tickets/tool-test-ticket.json',
+    path: 'Issues/tool-test-issue.json',
   })) as CardReadResult;
 
   expect(readResult.ok).toBe(true);
   expect(readResult.document!.data.attributes!.summary).toBe(
-    'Test ticket for update_ticket tool',
+    'Test issue for update_issue tool',
   );
-  expect(readResult.document!.data.attributes!.ticketStatus).toBe(
-    'in_progress',
-  );
+  expect(readResult.document!.data.attributes!.issueStatus).toBe('in_progress');
 });
 
 test('create_knowledge writes and reads back a knowledge article', async ({
@@ -393,7 +391,7 @@ test('create_catalog_spec writes and reads back a Spec card', async ({
 
 // ---------------------------------------------------------------------------
 // realm-search with pre-seeded fixture data
-// The darkfactory-adopter fixture has Project and Ticket cards with
+// The darkfactory-adopter fixture has Project and Issue cards with
 // distinct types — we search for each and verify the filter works.
 // ---------------------------------------------------------------------------
 
@@ -448,26 +446,26 @@ test.describe('realm-search with seeded fixture data', () => {
     ).toBe(true);
     let projectIds = (projectOutput.data ?? []).map((d) => d.id);
 
-    // Verify no Ticket cards leak into the Project results
-    let ticketResult = await executor.execute('realm-search', {
+    // Verify no Issue cards leak into the Project results
+    let issueResult = await executor.execute('realm-search', {
       'realm-url': realm.realmURL.href,
       query: JSON.stringify({
         filter: {
-          type: { module: darkfactoryModule, name: 'Ticket' },
+          type: { module: darkfactoryModule, name: 'Issue' },
         },
       }),
     });
-    expect(ticketResult.exitCode).toBe(0);
-    let ticketOutput = ticketResult.output as {
+    expect(issueResult.exitCode).toBe(0);
+    let issueOutput = issueResult.output as {
       data?: { id: string }[];
     };
-    let ticketIds = (ticketOutput.data ?? []).map((d) => d.id);
+    let issueIds = (issueOutput.data ?? []).map((d) => d.id);
 
-    // Project and Ticket result sets must be disjoint
-    for (let ticketId of ticketIds) {
+    // Project and Issue result sets must be disjoint
+    for (let issueId of issueIds) {
       expect(
-        projectIds.includes(ticketId),
-        `Ticket ${ticketId} should not appear in Project results`,
+        projectIds.includes(issueId),
+        `Issue ${issueId} should not appear in Project results`,
       ).toBe(false);
     }
   });

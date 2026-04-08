@@ -30,7 +30,7 @@ import {
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
     project: { id: 'Projects/test-project' },
-    ticket: { id: 'Tickets/test-ticket' },
+    issue: { id: 'Issues/test-issue' },
     knowledge: [],
     skills: [],
     tools: [],
@@ -87,7 +87,7 @@ module('factory-agent > validateAgentActions', function () {
         content: 'c',
         realm: 'test',
       },
-      { type: 'update_ticket', content: 'notes' },
+      { type: 'update_issue', content: 'notes' },
       { type: 'create_knowledge', path: 'k.md', content: 'c' },
       { type: 'invoke_tool', tool: 'search-realm' },
       { type: 'request_clarification', content: 'unclear' },
@@ -392,7 +392,7 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     );
   });
 
-  test('user message includes project and ticket context', function (assert) {
+  test('user message includes project and issue context', function (assert) {
     let agent = new OpenRouterFactoryAgent({
       model: 'anthropic/claude-sonnet-4',
       realmServerUrl: 'https://realms.example.test/',
@@ -400,8 +400,8 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
 
     let ctx = makeMinimalContext({
       project: { id: 'Projects/sticky-note', objective: 'Build sticky notes' },
-      ticket: {
-        id: 'Tickets/define-core',
+      issue: {
+        id: 'Issues/define-core',
         summary: 'Define core card',
         description: 'Create the StickyNote card.',
       },
@@ -409,12 +409,12 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     let messages = agent.buildMessages(ctx);
 
     assert.ok(
-      messages[1].content.includes('Tickets/define-core'),
-      'user message includes ticket ID',
+      messages[1].content.includes('Issues/define-core'),
+      'user message includes issue ID',
     );
     assert.ok(
       messages[1].content.includes('Define core card'),
-      'user message includes ticket summary',
+      'user message includes issue summary',
     );
   });
 
@@ -536,7 +536,7 @@ module('factory-agent > OpenRouterFactoryAgent.buildMessages', function () {
     let messages = agent.buildMessages(ctx);
 
     assert.ok(
-      messages[1].content.includes('Implement this ticket'),
+      messages[1].content.includes('Implement this issue'),
       'uses implement template',
     );
     assert.ok(

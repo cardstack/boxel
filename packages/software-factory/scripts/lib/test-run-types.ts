@@ -41,7 +41,7 @@ export interface TestRunRealmOptions {
 /** Additional options for creating a new TestRun card. */
 export interface CreateTestRunOptions {
   sequenceNumber?: number;
-  ticketURL?: string;
+  issueURL?: string;
   projectCardUrl?: string;
   moduleRef?: ResolvedCodeRef;
 }
@@ -129,7 +129,7 @@ export interface ExecuteTestRunOptions {
   authorization?: string;
   fetch?: typeof globalThis.fetch;
   forceNew?: boolean;
-  ticketURL?: string;
+  issueURL?: string;
   /** URL to the Project card — used for TestRun relationship. */
   projectCardUrl?: string;
   /** Realm server URL. Required — never inferred from targetRealmUrl. */

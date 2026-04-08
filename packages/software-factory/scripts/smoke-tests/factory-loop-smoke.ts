@@ -16,7 +16,7 @@ import type {
   KnowledgeArticle,
   ProjectCard,
   TestResult,
-  TicketCard,
+  IssueCard,
 } from '../lib/factory-agent';
 
 import type { FactoryTool, ToolCallEntry } from '../lib/factory-tool-builder';
@@ -110,7 +110,7 @@ class MockLoopAgent implements LoopAgent {
 class StubContextBuilder implements ContextBuilderLike {
   async build(params: {
     project: ProjectCard;
-    ticket: TicketCard;
+    issue: IssueCard;
     knowledge: KnowledgeArticle[];
     targetRealmUrl: string;
     testRealmUrl: string;
@@ -118,7 +118,7 @@ class StubContextBuilder implements ContextBuilderLike {
   }): Promise<AgentContext> {
     return {
       project: params.project,
-      ticket: params.ticket,
+      issue: params.issue,
       knowledge: params.knowledge,
       skills: [],
       targetRealmUrl: params.targetRealmUrl,
@@ -137,8 +137,8 @@ const PROJECT: ProjectCard = {
   name: 'Sticky Notes MVP',
 };
 
-const TICKET: TicketCard = {
-  id: 'Tickets/define-sticky-note',
+const ISSUE: IssueCard = {
+  id: 'Issues/define-sticky-note',
   title: 'Define StickyNote card',
   description: 'Create a .gts card definition for StickyNote.',
 };
@@ -186,7 +186,7 @@ function makeBaseConfig(
     tools: TOOLS,
     testRunner: makeTestRunner([]),
     project: PROJECT,
-    ticket: TICKET,
+    issue: ISSUE,
     knowledge: KNOWLEDGE,
     targetRealmUrl: 'https://example.test/target/',
     testRealmUrl: 'https://example.test/target-test-artifacts/',

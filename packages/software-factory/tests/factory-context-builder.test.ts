@@ -5,7 +5,7 @@ import type {
   ProjectCard,
   ResolvedSkill,
   TestResult,
-  TicketCard,
+  IssueCard,
 } from '../scripts/lib/factory-agent';
 
 import {
@@ -25,15 +25,15 @@ import type {
 class StubSkillResolver implements SkillResolver {
   /** Pre-configured skill names returned by resolve(). */
   skillNames: string[];
-  /** Records all (ticket, project) pairs passed to resolve(). */
-  calls: { ticket: TicketCard; project: ProjectCard }[] = [];
+  /** Records all (issue, project) pairs passed to resolve(). */
+  calls: { issue: IssueCard; project: ProjectCard }[] = [];
 
   constructor(skillNames: string[] = ['boxel-development']) {
     this.skillNames = skillNames;
   }
 
-  resolve(ticket: TicketCard, project: ProjectCard): string[] {
-    this.calls.push({ ticket, project });
+  resolve(issue: IssueCard, project: ProjectCard): string[] {
+    this.calls.push({ issue, project });
     return this.skillNames;
   }
 }
@@ -41,14 +41,14 @@ class StubSkillResolver implements SkillResolver {
 class StubSkillLoader implements SkillLoaderInterface {
   /** Map from skill name to the ResolvedSkill that load() returns. */
   private skillMap: Map<string, ResolvedSkill>;
-  /** Records all loadAll() calls: [skillNames, ticket]. */
-  loadAllCalls: { skillNames: string[]; ticket?: TicketCard }[] = [];
+  /** Records all loadAll() calls: [skillNames, issue]. */
+  loadAllCalls: { skillNames: string[]; issue?: IssueCard }[] = [];
 
   constructor(skills: ResolvedSkill[] = []) {
     this.skillMap = new Map(skills.map((s) => [s.name, s]));
   }
 
-  async load(skillName: string, _ticket?: TicketCard): Promise<ResolvedSkill> {
+  async load(skillName: string, _issue?: IssueCard): Promise<ResolvedSkill> {
     let skill = this.skillMap.get(skillName);
     if (!skill) {
       throw new Error(`StubSkillLoader: unknown skill "${skillName}"`);
@@ -58,9 +58,9 @@ class StubSkillLoader implements SkillLoaderInterface {
 
   async loadAll(
     skillNames: string[],
-    ticket?: TicketCard,
+    issue?: IssueCard,
   ): Promise<ResolvedSkill[]> {
-    this.loadAllCalls.push({ skillNames, ticket });
+    this.loadAllCalls.push({ skillNames, issue });
     let results: ResolvedSkill[] = [];
     for (let name of skillNames) {
       let skill = this.skillMap.get(name);
@@ -80,9 +80,9 @@ function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
   return { id: 'project-1', name: 'Sticky Notes', ...overrides };
 }
 
-function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
+function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
   return {
-    id: 'ticket-1',
+    id: 'issue-1',
     title: 'Implement StickyNote card',
     description: 'Create a .gts card definition for StickyNote',
     ...overrides,
@@ -126,15 +126,15 @@ function makeConfig(overrides?: Partial<ContextBuilderConfig>) {
 // ---------------------------------------------------------------------------
 
 module('factory-context-builder > skill resolution', function () {
-  test('resolves skills from ticket and project', async function (assert) {
+  test('resolves skills from issue and project', async function (assert) {
     let { config, resolver } = makeConfig();
     let builder = new ContextBuilder(config);
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let project = makeProject();
 
     await builder.build({
       project,
-      ticket,
+      issue,
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -142,9 +142,9 @@ module('factory-context-builder > skill resolution', function () {
 
     assert.strictEqual(resolver.calls.length, 1, 'resolve() called once');
     assert.strictEqual(
-      resolver.calls[0].ticket,
-      ticket,
-      'resolve() received the ticket',
+      resolver.calls[0].issue,
+      issue,
+      'resolve() received the issue',
     );
     assert.strictEqual(
       resolver.calls[0].project,
@@ -170,7 +170,7 @@ module('factory-context-builder > skill resolution', function () {
 
     await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -184,7 +184,7 @@ module('factory-context-builder > skill resolution', function () {
     );
   });
 
-  test('passes ticket to loadAll for reference filtering', async function (assert) {
+  test('passes issue to loadAll for reference filtering', async function (assert) {
     let resolver = new StubSkillResolver(['boxel-development']);
     let loader = new StubSkillLoader([makeSkill('boxel-development')]);
     let { config } = makeConfig({
@@ -192,20 +192,20 @@ module('factory-context-builder > skill resolution', function () {
       skillLoader: loader,
     });
     let builder = new ContextBuilder(config);
-    let ticket = makeTicket();
+    let issue = makeIssue();
 
     await builder.build({
       project: makeProject(),
-      ticket,
+      issue,
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(
-      loader.loadAllCalls[0].ticket,
-      ticket,
-      'loadAll() received the ticket for reference filtering',
+      loader.loadAllCalls[0].issue,
+      issue,
+      'loadAll() received the issue for reference filtering',
     );
   });
 
@@ -226,7 +226,7 @@ module('factory-context-builder > skill resolution', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -263,7 +263,7 @@ module('factory-context-builder > skill budget', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -294,7 +294,7 @@ module('factory-context-builder > skill budget', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -315,7 +315,7 @@ module('factory-context-builder > tools excluded', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -340,7 +340,7 @@ module('factory-context-builder > test results', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -367,7 +367,7 @@ module('factory-context-builder > test results', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -390,7 +390,7 @@ module('factory-context-builder > test results', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -410,23 +410,23 @@ module('factory-context-builder > test results', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-context-builder > core fields', function () {
-  test('includes project, ticket, and knowledge in context', async function (assert) {
+  test('includes project, issue, and knowledge in context', async function (assert) {
     let { config } = makeConfig();
     let builder = new ContextBuilder(config);
     let project = makeProject();
-    let ticket = makeTicket();
+    let issue = makeIssue();
     let knowledge = [makeKnowledge(), makeKnowledge({ id: 'ka-2' })];
 
     let ctx = await builder.build({
       project,
-      ticket,
+      issue,
       knowledge,
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',
     });
 
     assert.strictEqual(ctx.project, project, 'project passed through');
-    assert.strictEqual(ctx.ticket, ticket, 'ticket passed through');
+    assert.strictEqual(ctx.issue, issue, 'issue passed through');
     assert.strictEqual(ctx.knowledge, knowledge, 'knowledge passed through');
   });
 
@@ -436,7 +436,7 @@ module('factory-context-builder > core fields', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/my-realm/',
       testRealmUrl: 'https://example.test/my-realm-test-artifacts/',
@@ -455,7 +455,7 @@ module('factory-context-builder > core fields', function () {
 
     let ctx = await builder.build({
       project: makeProject(),
-      ticket: makeTicket(),
+      issue: makeIssue(),
       knowledge: [],
       targetRealmUrl: 'https://example.test/target/',
       testRealmUrl: 'https://example.test/target-test-artifacts/',

@@ -226,11 +226,11 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(doc.data.attributes!.sequenceNumber, 5);
   });
 
-  test('includes ticket relationship when ticketURL is provided', function (assert) {
+  test('includes issue relationship when issueURL is provided', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
-      { ticketURL: '../Ticket/define-sticky-note-core' },
+      { issueURL: '../Issues/define-sticky-note-core' },
     );
 
     let relationships = doc.data.relationships as Record<
@@ -238,8 +238,8 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       { links: { self: string | null } }
     >;
     assert.strictEqual(
-      relationships.ticket.links.self,
-      '../Ticket/define-sticky-note-core',
+      relationships.issue.links.self,
+      '../Issues/define-sticky-note-core',
     );
   });
 
@@ -260,13 +260,13 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     );
   });
 
-  test('includes both project and ticket relationships', function (assert) {
+  test('includes both project and issue relationships', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
       {
         projectCardUrl: 'http://localhost:4201/test/Projects/hello-world',
-        ticketURL: '../Ticket/implement-feature',
+        issueURL: '../Issues/implement-feature',
       },
     );
 
@@ -279,12 +279,12 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       'http://localhost:4201/test/Projects/hello-world',
     );
     assert.strictEqual(
-      relationships.ticket.links.self,
-      '../Ticket/implement-feature',
+      relationships.issue.links.self,
+      '../Issues/implement-feature',
     );
   });
 
-  test('omits relationships when no ticketURL or projectCardUrl', function (assert) {
+  test('omits relationships when no issueURL or projectCardUrl', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
@@ -526,7 +526,7 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
@@ -534,37 +534,37 @@ module('factory-test-realm > resolveTestRun', function () {
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-1');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-1');
   });
 
   test('creates new TestRun when most recent is completed', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-2', status: 'passed', sequenceNumber: 2 },
+        { id: 'Test Runs/my-issue-2', status: 'passed', sequenceNumber: 2 },
       ]),
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-3');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-3');
   });
 
   test('resumes most recent running TestRun by default', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A', 'test B'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
         {
-          id: 'Test Runs/my-ticket-2',
+          id: 'Test Runs/my-issue-2',
           status: 'running',
           sequenceNumber: 2,
           moduleResults: [
@@ -580,26 +580,26 @@ module('factory-test-realm > resolveTestRun', function () {
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-2');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-2');
   });
 
   test('ignores partial TestRun with forceNew: true', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-2', status: 'running', sequenceNumber: 2 },
+        { id: 'Test Runs/my-issue-2', status: 'running', sequenceNumber: 2 },
       ]),
     });
 
     assert.strictEqual(handle.status, 'running');
     // forceNew creates a new run with incremented sequence
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-3');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-3');
   });
 
   test('does NOT resume older partial TestRun when newer completed exists', async function (assert) {
@@ -608,33 +608,33 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-3', status: 'passed', sequenceNumber: 3 },
+        { id: 'Test Runs/my-issue-3', status: 'passed', sequenceNumber: 3 },
       ]),
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-4');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-4');
   });
 
   test('sequence numbers increment correctly', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-7', status: 'failed', sequenceNumber: 7 },
+        { id: 'Test Runs/my-issue-7', status: 'failed', sequenceNumber: 7 },
       ]),
     });
 
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-8');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-8');
   });
 
   test('consecutive forceNew calls create separate TestRuns with incrementing sequences', async function (assert) {
@@ -644,7 +644,7 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle1 = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
@@ -652,28 +652,28 @@ module('factory-test-realm > resolveTestRun', function () {
       fetch: buildMockSearchFetch([]),
     });
 
-    assert.strictEqual(handle1.testRunId, 'Test Runs/my-ticket-1');
+    assert.strictEqual(handle1.testRunId, 'Test Runs/my-issue-1');
     assert.false(handle1.resumed, 'first run is not resumed');
 
     // Second call with forceNew — should get sequence 2, not resume sequence 1
     let handle2 = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
       realmServerUrl: 'https://realms.example.test/',
       hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
         {
-          id: 'Test Runs/my-ticket-1',
+          id: 'Test Runs/my-issue-1',
           status: 'running',
           sequenceNumber: 1,
         },
       ]),
     });
 
-    assert.strictEqual(handle2.testRunId, 'Test Runs/my-ticket-2');
+    assert.strictEqual(handle2.testRunId, 'Test Runs/my-issue-2');
     assert.false(handle2.resumed, 'second run is not resumed');
     assert.notStrictEqual(
       handle1.testRunId,

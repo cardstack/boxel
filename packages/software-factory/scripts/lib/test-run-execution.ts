@@ -56,7 +56,7 @@ export async function resolveTestRun(
   let createResult = await createTestRun(options.slug, options.testNames, {
     ...realmOptions,
     sequenceNumber,
-    ticketURL: options.ticketURL,
+    issueURL: options.issueURL,
     projectCardUrl: options.projectCardUrl,
   });
 

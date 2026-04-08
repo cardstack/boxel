@@ -14,7 +14,7 @@ import { parseArgs } from 'node:util';
 import type {
   KnowledgeArticle,
   ProjectCard,
-  TicketCard,
+  IssueCard,
 } from '../lib/factory-agent';
 import { ContextBuilder } from '../lib/factory-context-builder';
 import {
@@ -62,29 +62,29 @@ const SAMPLE_KNOWLEDGE: KnowledgeArticle[] = [
   },
 ];
 
-const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
+const SAMPLE_ISSUES: { label: string; issue: IssueCard }[] = [
   {
     label: 'Card definition (.gts work)',
-    ticket: {
-      id: 'Tickets/define-sticky-note',
+    issue: {
+      id: 'Issues/define-sticky-note',
       title: 'Define StickyNote card',
       description:
         'Create a .gts card definition for StickyNote with title, body, and color fields. Include fitted and isolated views.',
     },
   },
   {
-    label: 'Factory workflow ticket',
-    ticket: {
-      id: 'Tickets/improve-orchestrator',
+    label: 'Factory workflow issue',
+    issue: {
+      id: 'Issues/improve-orchestrator',
       title: 'Improve factory delivery pipeline',
       description:
-        'Update the factory orchestrator to handle multi-ticket workflows with better error recovery.',
+        'Update the factory orchestrator to handle multi-issue workflows with better error recovery.',
     },
   },
   {
-    label: 'Minimal ticket (base case)',
-    ticket: {
-      id: 'Tickets/add-timestamps',
+    label: 'Minimal issue (base case)',
+    issue: {
+      id: 'Issues/add-timestamps',
       title: 'Add timestamp fields',
       description: 'Add createdAt and updatedAt fields to the card.',
     },
@@ -132,9 +132,9 @@ async function main(): Promise<void> {
   console.log('=== Context Builder Smoke Test ===');
   console.log('');
 
-  for (let { label, ticket } of SAMPLE_TICKETS) {
+  for (let { label, issue } of SAMPLE_ISSUES) {
     console.log(`--- ${label} ---`);
-    console.log(`  Ticket: ${ticket.title}`);
+    console.log(`  Issue: ${issue.title}`);
     console.log('');
 
     // -------------------------------------------------------------------
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
 
     let ctx = await builder.build({
       project: SAMPLE_PROJECT,
-      ticket,
+      issue,
       knowledge: SAMPLE_KNOWLEDGE,
       targetRealmUrl: 'https://example.test/user/target/',
       testRealmUrl: 'https://example.test/user/target-test-artifacts/',
@@ -151,7 +151,7 @@ async function main(): Promise<void> {
 
     console.log('  First pass (no test results):');
     check('project.id set', ctx.project.id === SAMPLE_PROJECT.id);
-    check('ticket.id set', ctx.ticket.id === ticket.id);
+    check('issue.id set', ctx.issue.id === issue.id);
     check(
       `knowledge: ${ctx.knowledge.length} article(s)`,
       ctx.knowledge.length === SAMPLE_KNOWLEDGE.length,
@@ -186,7 +186,7 @@ async function main(): Promise<void> {
 
     let ctxWithResults = await builder.build({
       project: SAMPLE_PROJECT,
-      ticket,
+      issue,
       knowledge: SAMPLE_KNOWLEDGE,
       targetRealmUrl: 'https://example.test/user/target/',
       testRealmUrl: 'https://example.test/user/target-test-artifacts/',
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
 
     let ctx = await builder.build({
       project: SAMPLE_PROJECT,
-      ticket: SAMPLE_TICKETS[0].ticket,
+      issue: SAMPLE_ISSUES[0].issue,
       knowledge: [],
       targetRealmUrl: 'https://example.test/user/target/',
       testRealmUrl: 'https://example.test/user/target-test-artifacts/',
