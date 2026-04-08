@@ -239,9 +239,7 @@ async function main() {
   log.info('  Authenticating with new realm...');
   let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
   if (realmAuth.error) {
-    log.warn(
-      `  Warning: could not get realm-scoped auth: ${realmAuth.error}`,
-    );
+    log.warn(`  Warning: could not get realm-scoped auth: ${realmAuth.error}`);
   } else {
     // Find the token for our target realm
     let realmToken = realmAuth.tokens[targetRealmUrl];

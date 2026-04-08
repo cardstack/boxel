@@ -149,7 +149,6 @@ async function main(): Promise<void> {
       }
     }
 
-    log.info();
   }
 
   // Summary: list all discoverable skills
@@ -182,9 +181,7 @@ async function main(): Promise<void> {
   if (missing.length > 0) {
     log.info(`  Not found: [${missing.join(', ')}]`);
   }
-  log.info(
-    `  Total: ~${grandTotal} tokens across ${allSkills.length} skills`,
-  );
+  log.info(`  Total: ~${grandTotal} tokens across ${allSkills.length} skills`);
 
   log.info('\nSmoke test passed.');
 }

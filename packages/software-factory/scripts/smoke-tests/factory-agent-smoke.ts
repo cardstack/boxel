@@ -93,8 +93,6 @@ async function main(): Promise<void> {
   let model = resolveFactoryModel(values.model);
   log.info(`Model: ${model}`);
   log.info(`Realm server: ${realmServerUrl}`);
-  log.info();
-
   let agent = new OpenRouterFactoryAgent({
     model,
     realmServerUrl,
@@ -120,13 +118,11 @@ async function main(): Promise<void> {
   };
 
   log.info('Sending plan() request...');
-  log.info();
 
   let actions = await agent.plan(context);
 
   log.info(`Received ${actions.length} action(s):`);
   log.info(JSON.stringify(actions, null, 2));
-  log.info();
   log.info('Smoke test passed.');
 }
 

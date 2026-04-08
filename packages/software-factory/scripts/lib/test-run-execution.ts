@@ -524,9 +524,7 @@ export async function executeTestRunFromRealm(
   } catch (err) {
     let durationMs = Date.now() - start;
     let errorMessage = err instanceof Error ? err.message : String(err);
-    log.error(
-      `[test-run-execution] Error: ${errorMessage} (${durationMs}ms)`,
-    );
+    log.error(`[test-run-execution] Error: ${errorMessage} (${durationMs}ms)`);
     try {
       await completeTestRun(
         testRunId,

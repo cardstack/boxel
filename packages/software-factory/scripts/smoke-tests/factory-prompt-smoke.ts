@@ -153,7 +153,6 @@ function printMessages(messages: { role: string; content: string }[]): void {
   for (let msg of messages) {
     log.info(`── [${msg.role.toUpperCase()}] ──────────────────────────`);
     log.info(msg.content);
-    log.info();
   }
 }
 

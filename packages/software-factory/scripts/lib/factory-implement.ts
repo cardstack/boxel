@@ -516,9 +516,7 @@ function buildTestRunner(
     let start = Date.now();
 
     try {
-      log.error(
-        `[factory-implement] Running test file(s) for ticket: ${slug}`,
-      );
+      log.error(`[factory-implement] Running test file(s) for ticket: ${slug}`);
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
