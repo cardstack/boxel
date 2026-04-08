@@ -98,12 +98,12 @@ target-realm/
 
 ## Test Files
 
-Test files (`.test.gts`) are co-located with card definitions in the target realm. Write them via `write_file` and execute them via `run_tests`.
+Test files (`.test.gts`) are co-located with card definitions in the target realm. Write them via `write_file`.
 
 - Write tests as `.test.gts` files co-located with the card definition (e.g., `sticky-note.gts` → `sticky-note.test.gts`)
 - Every ticket must have at least one test file
-- Use the `run_tests({ slug, testNames? })` tool to execute tests after calling `signal_done()`
-- If tests fail, read the failure output, fix the implementation or test, then call `signal_done()` again
+- Call `signal_done()` after all implementation and test files are written — the orchestrator triggers test execution automatically
+- If tests fail, the orchestrator feeds failure details back. Read the output, fix the implementation or test, then call `signal_done()` again
 
 For test file structure, imports, and QUnit assertion patterns, see the `dev-qunit-testing` reference (loaded automatically with the `boxel-development` skill).
 

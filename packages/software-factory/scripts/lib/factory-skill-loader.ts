@@ -105,6 +105,8 @@ const REFERENCE_KEYWORD_MAP: Record<string, string[]> = {
   'dev-spectype-patterns.md': [
     'specType',
     'spectype',
+    'spec type',
+    'spec-type',
     'card spec',
     'field spec',
     'component spec',
