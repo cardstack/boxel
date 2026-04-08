@@ -241,53 +241,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
     }
   });
 
-  test('realm-atomic sends correct POST to _atomic with JSON:API operations', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { ok: true });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
-        authorization: 'Bearer realm-jwt-for-user',
-      });
-
-      let ops = [
-        { op: 'add', href: './CardDef/new.gts', data: { type: 'module' } },
-        { op: 'remove', href: './Card/old.json' },
-      ];
-
-      let result = await executor.execute('realm-atomic', {
-        'realm-url': realmUrl,
-        operations: JSON.stringify(ops),
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_atomic');
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.JSONAPI,
-      );
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
-      );
-
-      let body = JSON.parse(captured!.body);
-      assert.deepEqual(body['atomic:operations'], ops);
-    } finally {
-      await stopServer(server);
-    }
-  });
-
   test('realm-auth sends correct POST to _realm-auth with Authorization header', async function (assert) {
     let captured: CapturedRequest | undefined;
 

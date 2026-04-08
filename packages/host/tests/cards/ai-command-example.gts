@@ -70,6 +70,7 @@ export class AiCommandExample extends CardDef {
         commands: [
           {
             codeRef: {
+              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
               module: import.meta.url,
               name: 'GetWeatherCommand',
             },

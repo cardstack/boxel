@@ -108,6 +108,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
+      submittedBy: '@testuser:localhost',
     });
 
     let membershipEvent = mockMatrixUtils.getRoomState(
@@ -176,6 +177,7 @@ module('Integration | commands | create-listing-pr-request', function (hooks) {
       realm: testRealmURL,
       listingId: `${testRealmURL}Listing/test-listing`,
       listingName: 'Some Listing',
+      submittedBy: '@testuser:localhost',
     });
 
     let membershipEvent = mockMatrixUtils.getRoomState(

@@ -1,6 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import FileCheck from '@cardstack/boxel-icons/file-check';

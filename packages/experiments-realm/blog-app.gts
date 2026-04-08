@@ -87,7 +87,7 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
             @vertical={{true}}
           >
             {{#if card.publishDate}}
-              <time timestamp={{toISOString card.publishDate}}>
+              <time datetime={{toISOString card.publishDate}}>
                 {{this.formattedDate card.publishDate}}
               </time>
             {{else}}
@@ -100,7 +100,7 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
             @vertical={{true}}
           >
             {{#if card.lastUpdated}}
-              <time timestamp={{toISOString card.lastUpdated}}>
+              <time datetime={{toISOString card.lastUpdated}}>
                 {{this.formattedDate card.lastUpdated}}
               </time>
             {{else}}
@@ -430,6 +430,7 @@ export class BlogApp extends CardDef {
       sort: [
         {
           on: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./blog-post', import.meta.url).href,
             name: 'BlogPost',
           },
@@ -465,6 +466,7 @@ export class BlogApp extends CardDef {
       sortOptions: BlogApp.sortOptionList,
       cardRef: {
         name: 'BlogPost',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./blog-post', import.meta.url).href,
       },
     },
@@ -475,6 +477,7 @@ export class BlogApp extends CardDef {
       createNewButtonText: 'Author',
       cardRef: {
         name: 'Author',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./author', import.meta.url).href,
       },
     },
@@ -485,6 +488,7 @@ export class BlogApp extends CardDef {
       createNewButtonText: 'Category',
       cardRef: {
         name: 'BlogCategory',
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('./blog-category', import.meta.url).href,
       },
     },

@@ -27,16 +27,19 @@ import type { Query } from '@cardstack/runtime-common';
 import { realmURL } from '@cardstack/runtime-common';
 
 const productSource = {
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('../online-product/online-product', import.meta.url).href,
   name: 'OnlineProduct',
 };
 
 const orderSource = {
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('../online-order/online-order', import.meta.url).href,
   name: 'OnlineOrder',
 };
 
 const customerSource = {
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('../online-customer/online-customer', import.meta.url).href,
   name: 'OnlineCustomer',
 };
@@ -50,6 +53,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('../online-product/online-product', import.meta.url)
             .href,
           name: 'OnlineProduct',
@@ -61,6 +65,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
   get searchedProductsQuery(): Query {
     const baseFilter = {
       type: {
+        // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
         module: new URL('../online-product/online-product', import.meta.url)
           .href,
         name: 'OnlineProduct',
@@ -76,6 +81,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     const searchTerm = this.searchTerm.trim().toLowerCase();
     const productModule = new URL(
       '../online-product/online-product',
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       import.meta.url,
     ).href;
 
@@ -112,6 +118,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('../online-order/online-order', import.meta.url).href,
           name: 'OnlineOrder',
         },
@@ -123,6 +130,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('../online-customer/online-customer', import.meta.url)
             .href,
           name: 'OnlineCustomer',
@@ -217,6 +225,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     await this.args.createCard?.(
       productSource,
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       new URL('./online-store', import.meta.url),
       {
         realmURL: this.realmURL,
@@ -248,6 +257,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     await this.args.createCard?.(
       orderSource,
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       new URL('./online-store', import.meta.url),
       {
         realmURL: this.realmURL,
@@ -278,6 +288,7 @@ class IsolatedTemplate extends Component<typeof OnlineStore> {
 
     await this.args.createCard?.(
       customerSource,
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       new URL('./online-store', import.meta.url),
       {
         realmURL: this.realmURL,

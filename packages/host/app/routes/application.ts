@@ -29,6 +29,18 @@ export default class Application extends Route {
         }
         return await route.monacoService.getMonacoContext();
       };
+      // Lazy-load KaTeX for math rendering in markdown content.
+      // The base package's markdown template calls this via globalThis.
+      (globalThis as any).__loadKatex ??= async () => {
+        let mod = await import('katex');
+        return mod.default;
+      };
+      // Lazy-load Mermaid.js for diagram rendering in markdown content.
+      // The base package's markdown template calls this via globalThis.
+      (globalThis as any).__loadMermaid ??= async () => {
+        let mod = await import('mermaid');
+        return mod.default;
+      };
     }
   }
 
@@ -36,6 +48,8 @@ export default class Application extends Route {
     super.willDestroy?.();
     if (typeof globalThis !== 'undefined') {
       delete (globalThis as any).__loadMonacoForMarkdown;
+      delete (globalThis as any).__loadKatex;
+      delete (globalThis as any).__loadMermaid;
     }
   }
 }

@@ -81,7 +81,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --port="${REALM_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALMS_ROOT}" \
-  --prerendererUrl="${PRERENDER_URL}" \
+  --prerendererUrl="${PRERENDER_MGR_URL}" \
   --migrateDB \
   $WORKER_MANAGER_ARG \
   \

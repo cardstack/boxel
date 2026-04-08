@@ -207,7 +207,7 @@ export class FeaturedImageField extends FieldDef {
         <div
           class='image'
           role='img'
-          alt={{@model.altText}}
+          aria-label={{@model.altText}}
           style={{setBackgroundImage @model.imageUrl}}
         />
       {{/if}}

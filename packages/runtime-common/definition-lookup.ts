@@ -143,6 +143,13 @@ export function isFilterRefersToNonexistentTypeError(
 
 export interface DefinitionLookup {
   lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition>;
+  // Like lookupDefinition but does not trigger a prerenderer call or
+  // populate missing definitions. It may still perform lookup-context
+  // resolution (including remote visibility probing) before reading from the
+  // database cache. Returns undefined when the definition is not yet cached.
+  lookupCachedDefinition(
+    codeRef: ResolvedCodeRef,
+  ): Promise<Definition | undefined>;
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmCache(realmURL: string): Promise<void>;
   clearAllModules(): Promise<void>;
@@ -185,6 +192,43 @@ export class CachingDefinitionLookup implements DefinitionLookup {
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     return await this.lookupDefinitionWithContext(codeRef);
+  }
+
+  async lookupCachedDefinition(
+    codeRef: ResolvedCodeRef,
+    contextOpts?: LookupContext,
+  ): Promise<Definition | undefined> {
+    let canonicalModuleURL = canonicalURL(codeRef.module);
+    let context = await this.buildLookupContext(
+      canonicalModuleURL,
+      contextOpts,
+    );
+    if (!context) {
+      return undefined;
+    }
+    let { cacheUserId, cacheScope, resolvedRealmURL } = context;
+
+    for (let candidateURL of this.populationCandidates(canonicalModuleURL)) {
+      let cached = await this.readFromDatabaseCache(
+        candidateURL,
+        cacheScope,
+        cacheUserId,
+        resolvedRealmURL,
+      );
+      if (cached) {
+        let canonicalCodeRef =
+          canonicalModuleURL === codeRef.module
+            ? codeRef
+            : { ...codeRef, module: canonicalModuleURL };
+        let moduleId = internalKeyFor(canonicalCodeRef, undefined);
+        let entry = cached.definitions[moduleId];
+        if (entry && 'definition' in entry) {
+          return entry.definition;
+        }
+        return undefined;
+      }
+    }
+    return undefined;
   }
 
   async getModuleCacheEntry(
@@ -1127,6 +1171,14 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async lookupDefinition(codeRef: ResolvedCodeRef): Promise<Definition> {
     return await this.#inner.lookupDefinitionForRealm(codeRef, this.#realm);
+  }
+
+  async lookupCachedDefinition(
+    codeRef: ResolvedCodeRef,
+  ): Promise<Definition | undefined> {
+    return await this.#inner.lookupCachedDefinition(codeRef, {
+      requestingRealm: this.#realm,
+    });
   }
 
   async invalidate(moduleURL: string): Promise<string[]> {

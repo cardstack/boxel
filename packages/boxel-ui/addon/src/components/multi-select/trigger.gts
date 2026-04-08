@@ -53,7 +53,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   @action
-  removeExcessItems(event: MouseEvent) {
+  removeExcessItems(event: Event) {
     event.stopPropagation();
     const newSelected = this.args.select.selected.slice(
       0,
@@ -64,7 +64,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   @action
-  removeItem(item: any, event?: MouseEvent) {
+  removeItem(item: any, event?: Event) {
     event?.stopPropagation();
     const newSelected = this.args.select.selected.filter(
       (i: any) => i !== item,
@@ -88,7 +88,8 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   @action
-  onClearAll() {
+  onClearAll(event: Event) {
+    event.stopPropagation();
     this.args.select.actions.select([]);
   }
 

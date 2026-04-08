@@ -97,7 +97,6 @@ module('Integration | helpers | formatNumber', function (hooks) {
 
     await render(
       <template>
-        {{! @glint-expect-error: invalid input type }}
         {{formatNumber (array 1 2 3) fallback='Array input'}}
       </template>,
     );

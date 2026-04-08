@@ -20,7 +20,7 @@ import CopyCardToRealmCommand from './copy-card';
 import SaveCardCommand from './save-card';
 
 import type RealmServerService from '../services/realm-server';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput

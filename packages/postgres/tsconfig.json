@@ -24,16 +24,28 @@
     "skipLibCheck": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "*": ["types/*"]
+      "https://cardstack.com/base/*": [
+        "../base/*"
+      ],
+      "@cardstack/boxel-ui": [
+        "../boxel-ui/addon"
+      ],
+      "@cardstack/boxel-ui/*": [
+        "../boxel-ui/addon/*"
+      ],
+      "*": [
+        "types/*"
+      ]
     },
-    "types": ["@cardstack/local-types"]
+    "types": [
+      "@cardstack/local-types"
+    ]
   },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  },
-  "include": ["../base/**/*", "./**/*"],
-  "exclude": ["../base/**/__boxel/**"]
+  "include": [
+    "../base/**/*",
+    "./**/*"
+  ],
+  "exclude": [
+    "../base/**/__boxel/**"
+  ]
 }

@@ -115,7 +115,7 @@ module('command runner', () => {
   test('handles pr-listing-create with branch, commit, and PR', async (assert) => {
     let publishedJobs: unknown[] = [];
     let submissionCardUrl =
-      'http://localhost:4201/submissions/SubmissionCard/abc-123';
+      'http://localhost:4201/submissions/SubmissionWorkflowCard/abc-123';
     let prCardUrl = 'http://localhost:4201/test/PrCard/pr-1';
     let queuePublisher: QueuePublisher = {
       publish: async (job: unknown) => {
@@ -150,6 +150,12 @@ module('command runner', () => {
                 id: prCardUrl,
                 attributes: {
                   prNumber: 1,
+                  allFileContents: [
+                    {
+                      filename: 'catalog/MyListing/listing.json',
+                      contents: '{"data":{"type":"card"}}',
+                    },
+                  ],
                 },
               },
             }),
@@ -190,7 +196,7 @@ module('command runner', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/create-submission/default',
+            command: '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -226,8 +232,10 @@ module('command runner', () => {
         userId: '@alice:localhost',
         input: {
           roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
           listingName: 'My Listing Name',
           listingSummary: 'My listing Summary',
+          workflowCardUrl: submissionCardUrl,
         },
       },
       'bot-registration-2',
@@ -236,24 +244,23 @@ module('command runner', () => {
     assert.strictEqual(
       publishedJobs.length,
       3,
-      'enqueues create-submission, create-pr-card, and patch-card-instance jobs',
+      'enqueues collect-files, create-pr-card, and patch-card-instance jobs',
     );
     assert.strictEqual(createdBranches.length, 1, 'creates branch');
     assert.strictEqual(branchWrites.length, 1, 'writes files to branch');
     assert.strictEqual(openedPRs.length, 1, 'opens pull request');
 
-    // Job 1 (create-submission) targets the user's realm — default concurrency group
+    // Job 1 (collect-files) targets the user's realm — default concurrency group
     assert.strictEqual(
       (publishedJobs[0] as { concurrencyGroup: string }).concurrencyGroup,
       'command:http://localhost:4201/test/',
-      'Job 1 (create-submission) uses default realm concurrency group',
+      'Job 1 (collect-files) uses default realm concurrency group',
     );
-    // Job 2 (create-pr-card) targets the shared submission realm — listing-scoped
-    // concurrency group so different listings can run in parallel
+    // Job 2 (create-pr-card) targets the shared submission realm — default concurrency group
     assert.strictEqual(
       (publishedJobs[1] as { concurrencyGroup: string }).concurrencyGroup,
-      `command:${SUBMISSION_REALM_URL}:listing:room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing-name`,
-      'Job 2 (create-pr-card) uses listing-scoped concurrency group',
+      `command:${SUBMISSION_REALM_URL}`,
+      'Job 2 (create-pr-card) uses submissions realm concurrency group',
     );
     // Job 3 (patch-card-instance) targets the user's realm — default concurrency group
     assert.strictEqual(
@@ -271,12 +278,15 @@ module('command runner', () => {
         command: '@cardstack/catalog/commands/create-pr-card/default',
         commandInput: {
           realm: SUBMISSION_REALM_URL,
-          prNumber: 1,
-          prUrl: 'https://example/pr/1',
-          prTitle: 'Add My Listing Name listing',
           branchName: 'room-IWFiYzEyMzpsb2NhbGhvc3Q/my-listing-name',
-          prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Submission Card: [${submissionCardUrl}](${submissionCardUrl})`,
           submittedBy: '@alice:localhost',
+          prSummary: `## Summary\nMy listing Summary\n\n---\n- Listing Name: My Listing Name\n- Room ID: \`!abc123:localhost\`\n- User ID: \`@alice:localhost\`\n- Number of Files: 1\n- Workflow Card: [${submissionCardUrl}](${submissionCardUrl})`,
+          allFileContents: [
+            {
+              filename: 'catalog/MyListing/listing.json',
+              contents: '{"data":{"type":"card"}}',
+            },
+          ],
         },
       },
       'enqueues PR card creation in submissions realm',
@@ -301,7 +311,7 @@ module('command runner', () => {
           },
         },
       },
-      'enqueues submission card patch in the user realm',
+      'enqueues workflow card patch in the user realm',
     );
     let prBody =
       (
@@ -309,11 +319,11 @@ module('command runner', () => {
       ).params.body?.toString() ?? '';
     assert.true(
       prBody.includes(`[${submissionCardUrl}](${submissionCardUrl})`),
-      'PR body includes submission card URL as markdown link',
+      'PR body includes workflow card URL as markdown link',
     );
   });
 
-  test('does not enqueue PR card creation when PR is not opened', async (assert) => {
+  test('does not enqueue patch job when PR already exists', async (assert) => {
     let publishedJobs: unknown[] = [];
     let queuePublisher: QueuePublisher = {
       publish: async (job: unknown) => {
@@ -324,7 +334,7 @@ module('command runner', () => {
             status: 'ready',
             cardResultString: JSON.stringify({
               data: {
-                id: 'http://localhost:4201/submissions/SubmissionCard/abc-123',
+                id: 'http://localhost:4201/submissions/SubmissionWorkflowCard/abc-123',
                 attributes: {
                   allFileContents: [
                     {
@@ -362,7 +372,7 @@ module('command runner', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/create-submission/default',
+            command: '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -398,6 +408,7 @@ module('command runner', () => {
         userId: '@alice:localhost',
         input: {
           roomId: '!abc123:localhost',
+          listingId: 'http://localhost:4201/test/Listing/1',
           listingName: 'My Listing',
         },
       },
@@ -406,8 +417,8 @@ module('command runner', () => {
 
     assert.strictEqual(
       publishedJobs.length,
-      1,
-      'only the submission command is enqueued when PR creation returns null',
+      2,
+      'collect-files and create-pr-card are enqueued, but no patch job since PR was not opened',
     );
   });
 
@@ -459,7 +470,7 @@ module('command runner', () => {
               event_type: 'app.boxel.bot-trigger',
               content_type: 'pr-listing-create',
             },
-            command: '@cardstack/catalog/commands/create-submission/default',
+            command: '@cardstack/catalog/commands/collect-submission-files/default',
           },
         ],
       ],
@@ -497,6 +508,7 @@ module('command runner', () => {
           userId: '@alice:localhost',
           input: {
             roomId: '!abc123:localhost',
+            listingId: 'http://localhost:4201/test/Listing/1',
             listingName: 'My Listing',
           },
         },

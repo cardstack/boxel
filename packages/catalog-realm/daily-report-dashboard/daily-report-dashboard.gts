@@ -17,6 +17,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
     return {
       filter: {
         on: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./daily-report', import.meta.url).href,
           name: 'DailyReport',
         },
@@ -29,6 +30,7 @@ class Isolated extends Component<typeof DailyReportDashboard> {
         {
           by: 'reportDate',
           on: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./daily-report', import.meta.url).href,
             name: 'DailyReport',
           },

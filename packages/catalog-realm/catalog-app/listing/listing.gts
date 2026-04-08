@@ -45,7 +45,7 @@ import { listingActions, isReady } from '../resources/listing-actions';
 import GetAllRealmMetasCommand from '@cardstack/boxel-host/commands/get-all-realm-metas';
 import ListingGenerateExampleCommand from '@cardstack/boxel-host/commands/listing-generate-example';
 import ListingUpdateSpecsCommand from '@cardstack/boxel-host/commands/listing-update-specs';
-import OpenCreatePRModalCommand from '@cardstack/boxel-host/commands/open-create-pr-modal';
+import CreateAndOpenSubmissionWorkflowCardCommand from '@cardstack/boxel-host/commands/create-and-open-submission-workflow-card';
 
 import { getMenuItems } from '@cardstack/runtime-common';
 
@@ -673,7 +673,7 @@ export class Listing extends CardDef {
     return {
       label: 'Make a PR',
       action: async () => {
-        await new OpenCreatePRModalCommand(params.commandContext).execute({
+        await new CreateAndOpenSubmissionWorkflowCardCommand(params.commandContext).execute({
           listingId: this.id,
           realm: this[realmURL]!.href,
           listingName: this.name,

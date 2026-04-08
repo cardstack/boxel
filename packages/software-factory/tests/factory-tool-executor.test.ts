@@ -371,35 +371,6 @@ module('factory-tool-executor > realm-api execution', function () {
     assert.strictEqual(result.exitCode, 0);
   });
 
-  test('realm-atomic makes POST to _atomic endpoint', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedBody: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let ops = [{ op: 'add', href: './Foo/bar.json', data: {} }];
-    let result = await executor.execute('realm-atomic', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      operations: JSON.stringify(ops),
-    });
-
-    assert.true(capturedUrl!.endsWith('_atomic'));
-    let body = JSON.parse(capturedBody!);
-    assert.deepEqual(body['atomic:operations'], ops);
-    assert.strictEqual(result.exitCode, 0);
-  });
-
   test('non-ok response produces exitCode 1', async function (assert) {
     let registry = new ToolRegistry();
     let config = makeConfig({
@@ -875,25 +846,6 @@ module('factory-tool-executor > auth header propagation', function () {
     await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
       query: '{}',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('realm-atomic sends realm JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-atomic', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      operations: '[]',
     });
 
     assert.strictEqual(

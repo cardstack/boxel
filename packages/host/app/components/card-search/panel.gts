@@ -16,6 +16,7 @@ import type { PickerOption } from '@cardstack/boxel-ui/components';
 
 import {
   type Filter,
+  type ResolvedCodeRef,
   type getCardCollection,
   baseCardRef,
   baseFieldRef,
@@ -58,9 +59,11 @@ interface Signature {
   Args: {
     searchKey: string;
     baseFilter?: Filter;
+    initialSelectedType?: ResolvedCodeRef;
     availableRealmUrls?: string[];
     consumingRealm?: URL;
     preselectConsumingRealm?: boolean;
+    onFilterChange?: () => void;
   };
   Blocks: {
     default: [
@@ -180,10 +183,7 @@ export default class SearchPanel extends Component<Signature> {
     const realmFiltered = cards.filter(
       (c) => c.id && realmURLs.some((url) => c.id.startsWith(url)),
     );
-    const typeRefs = getFilterTypeRefs(
-      this.args.baseFilter,
-      this.args.searchKey,
-    );
+    const typeRefs = getFilterTypeRefs(this.args.baseFilter);
     return filterCardsByTypeRefs(realmFiltered, typeRefs);
   }
 
@@ -229,13 +229,17 @@ export default class SearchPanel extends Component<Signature> {
         this._typesTotalCount = result.meta.page.total;
         this._hasMoreTypes = result.data.length < result.meta.page.total;
 
-        // If there are selected types not yet in the fetched results,
-        // keep fetching more pages until they're all found (or no more pages).
+        // If there are selected types (or an initialSelectedType) not yet in
+        // the fetched results, keep fetching more pages until they're found.
         const selectedIds = new Set(
           this._previousSelectedTypes
             .filter((opt) => opt.type !== 'select-all')
             .map((opt) => opt.id),
         );
+        const initialType = this.args.initialSelectedType;
+        if (initialType) {
+          selectedIds.add(internalKeyFor(initialType, undefined));
+        }
 
         if (selectedIds.size > 0 && this._hasMoreTypes) {
           while (this._hasMoreTypes) {
@@ -288,7 +292,7 @@ export default class SearchPanel extends Component<Signature> {
   });
 
   private get baseFilterCodeRefs(): Set<string> | undefined {
-    const typeRefs = getFilterTypeRefs(this.args.baseFilter, '');
+    const typeRefs = getFilterTypeRefs(this.args.baseFilter);
     if (!typeRefs || typeRefs.length === 0) {
       return undefined;
     }
@@ -373,13 +377,32 @@ export default class SearchPanel extends Component<Signature> {
     // An empty array lets the Picker's ensureDefaultSelection() handle
     // selecting the built-in select-all option automatically.
     const prev = this._previousSelectedTypes;
+    const initialType = this.args.initialSelectedType;
     const hadSelectAll =
       prev.length === 0 || prev.some((opt) => opt.type === 'select-all');
-
-    if (hadSelectAll) {
+    if (initialType && prev.length === 0) {
+      // First launch with initialSelectedType (e.g., from "Find Instances").
+      // Only applied when prev is empty (first computation). After that,
+      // _previousSelectedTypes is always non-empty, preserving user's choice.
+      const typeKey = internalKeyFor(initialType, undefined);
+      const matchingOption = optionsById.get(typeKey);
+      if (matchingOption) {
+        value.selected = [matchingOption];
+      } else {
+        // Type summaries not yet loaded; create a synthetic option so the
+        // search query is type-constrained immediately.
+        value.selected = [
+          {
+            id: typeKey,
+            label: initialType.name,
+            type: 'option',
+          } as PickerOption,
+        ];
+      }
+    } else if (hadSelectAll) {
       // If baseFilter constrains to specific types and they exist in options,
       // auto-select them instead of defaulting to "Any Type"
-      const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter, '');
+      const baseTypeRefs = getFilterTypeRefs(this.args.baseFilter);
       const baseRefs =
         baseTypeRefs
           ?.filter((r) => !r.negated && isResolvedCodeRef(r.ref))
@@ -433,12 +456,14 @@ export default class SearchPanel extends Component<Signature> {
   @action
   private onRealmChange(selected: PickerOption[]) {
     this.selectedRealms = selected;
+    this.args.onFilterChange?.();
   }
 
   @action
   private onTypeChange(selected: PickerOption[]) {
     this._previousSelectedTypes = selected;
     this.typeFilter.selected = selected;
+    this.args.onFilterChange?.();
   }
 
   @action

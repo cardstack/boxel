@@ -132,7 +132,7 @@ export default class Tooltip extends Component<Signature> {
   }
 
   @action
-  onMouseEnter(event: MouseEvent) {
+  onMouseEnter(event: Event) {
     this.triggerElement = event.currentTarget as HTMLElement;
     this.isHoverOnTrigger = true;
     this.startObservingTheme();

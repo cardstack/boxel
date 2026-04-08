@@ -24,4 +24,4 @@ NODE_NO_WARNINGS=1 \
 PGPORT=55436 \
 STRIPE_WEBHOOK_SECRET=stripe-webhook-secret \
 STRIPE_API_KEY=stripe-api-key \
-qunit --require ts-node/register/transpile-only "${JUNIT_REPORTER_ARGS[@]}" "$@" tests/index.ts
+qunit --require ts-node/register/transpile-only ${JUNIT_REPORTER_ARGS[@]+"${JUNIT_REPORTER_ARGS[@]}"} "$@" tests/index.ts

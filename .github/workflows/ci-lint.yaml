@@ -108,3 +108,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/workspace-sync-cli
+      - name: Lint Boxel CLI
+        if: ${{ !cancelled() }}
+        run: pnpm run lint
+        working-directory: packages/boxel-cli

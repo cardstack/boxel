@@ -29,9 +29,6 @@
     },
     "types": ["@cardstack/local-types", "node"]
   },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  },
   "include": [
     "../base/types/**/*.d.ts",
     "./scripts/**/*.ts",

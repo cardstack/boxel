@@ -3,6 +3,8 @@ name: boxel-track
 description: Use when starting or explaining `boxel track` for local file watching, automatic checkpoints, or optional real-time push with `--push` during Boxel development.
 ---
 
+> **Factory agent note:** This skill is for human Claude Code sessions only. The factory agent's tool registry does not include boxel-cli tools — all realm I/O uses `write_file`, `read_file`, and `search_realm` tools via the realm HTTP API.
+
 # Boxel Track
 
 Start `boxel track` to monitor local file changes and create checkpoints automatically.

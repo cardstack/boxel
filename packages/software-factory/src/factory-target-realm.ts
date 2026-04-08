@@ -259,7 +259,6 @@ function buildEnvRealmServerProfile(
   let matrixUrl = normalizeOptionalString(process.env.MATRIX_URL);
   let envUsername = normalizeOptionalString(process.env.MATRIX_USERNAME);
   let matrixPassword = normalizeOptionalString(process.env.MATRIX_PASSWORD);
-  let envRealmServerUrl = normalizeOptionalString(process.env.REALM_SERVER_URL);
 
   if (!matrixPassword) {
     return undefined;
@@ -285,25 +284,11 @@ function buildEnvRealmServerProfile(
     );
   }
 
-  let normalizedServerUrl = ensureTrailingSlash(envRealmServerUrl ?? serverUrl);
-
-  if (normalizedServerUrl !== serverUrl) {
-    throw new FactoryEntrypointUsageError(
-      `REALM_SERVER_URL "${normalizedServerUrl}" does not match target realm server "${serverUrl}"`,
-    );
-  }
-
-  if (!matrixPassword) {
-    throw new FactoryEntrypointUsageError(
-      'Target realm creation needs MATRIX_PASSWORD',
-    );
-  }
-
   return {
     profileId: null,
     username: normalizedUsername,
     matrixUrl: ensureTrailingSlash(matrixUrl),
-    realmServerUrl: normalizedServerUrl,
+    realmServerUrl: serverUrl,
     password: matrixPassword,
   };
 }
@@ -330,28 +315,17 @@ function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
   return normalizeUrl(explicitTargetRealmUrl, '--target-realm-url');
 }
 
+const DEFAULT_REALM_SERVER_URL = 'http://localhost:4201/';
+
 function resolveRealmServerUrl(
   explicitRealmServerUrl: string | null,
-  targetRealmUrl: string,
+  _targetRealmUrl: string,
 ): string {
   if (explicitRealmServerUrl) {
     return normalizeUrl(explicitRealmServerUrl, '--realm-server-url');
   }
 
-  let parsedTargetRealmUrl = new URL(targetRealmUrl);
-  let pathSegments = parsedTargetRealmUrl.pathname.split('/').filter(Boolean);
-
-  if (pathSegments.length < 2) {
-    throw new FactoryEntrypointUsageError(
-      `Target realm URL "${targetRealmUrl}" is missing an owner or endpoint segment`,
-    );
-  }
-
-  let serverPath = pathSegments.slice(0, -2).join('/');
-
-  return ensureTrailingSlash(
-    `${parsedTargetRealmUrl.origin}/${serverPath === '' ? '' : `${serverPath}/`}`,
-  );
+  return DEFAULT_REALM_SERVER_URL;
 }
 
 function extractEndpointFromRealmUrl(targetRealmUrl: string): string {

@@ -1,0 +1,595 @@
+import { module, test } from 'qunit';
+
+import {
+  extractCardReferenceUrls,
+  extractBfmReferences,
+  bfmCardReferenceExtensions,
+  bfmExtensionsForKeyword,
+  parseBfmSizeSpec,
+} from '@cardstack/runtime-common/bfm-card-references';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
+
+module('Unit | bfm-card-references', function () {
+  module('extractCardReferenceUrls', function () {
+    test('extracts inline card references', function (assert) {
+      let markdown = 'See :card[https://example.com/cards/1] for details.';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('extracts block card references', function (assert) {
+      let markdown = '::card[https://example.com/cards/1]\n';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('extracts both inline and block references', function (assert) {
+      let markdown = [
+        '::card[https://example.com/cards/1]',
+        '',
+        'Text with :card[https://example.com/cards/2] inline.',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, [
+        'https://example.com/cards/1',
+        'https://example.com/cards/2',
+      ]);
+    });
+
+    test('resolves relative URLs against base', function (assert) {
+      let markdown = ':card[./my-card]';
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://realm.example/docs/file.md',
+      );
+      assert.deepEqual(urls, ['https://realm.example/docs/my-card']);
+    });
+
+    test('strips .json extension from extracted URLs', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1.json]',
+        '',
+        '::card[https://example.com/cards/2.json]',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, [
+        'https://example.com/cards/1',
+        'https://example.com/cards/2',
+      ]);
+    });
+
+    test('deduplicates URLs that differ only by .json extension', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1]',
+        ':card[https://example.com/cards/1.json]',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('deduplicates URLs', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1]',
+        ':card[https://example.com/cards/1]',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('ignores references inside fenced code blocks', function (assert) {
+      let markdown = ['```', ':card[https://example.com/cards/1]', '```'].join(
+        '\n',
+      );
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, []);
+    });
+
+    test('ignores references inside inline code', function (assert) {
+      let markdown = 'Use `:card[url]` syntax.';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, []);
+    });
+
+    test('ignores references inside multi-backtick inline code', function (assert) {
+      let markdown = 'Use ``:card[https://example.com/cards/1]`` syntax.';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, []);
+    });
+
+    test('skips malformed URLs with empty base', function (assert) {
+      let markdown = ':card[not a valid url at all]';
+      let urls = extractCardReferenceUrls(markdown, '');
+      assert.deepEqual(urls, []);
+    });
+
+    test('returns empty array for markdown without references', function (assert) {
+      let markdown = '# Hello World\n\nNo card references here.';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, []);
+    });
+
+    test('returns empty array for empty markdown', function (assert) {
+      let urls = extractCardReferenceUrls('', 'https://base.com/');
+      assert.deepEqual(urls, []);
+    });
+  });
+
+  module('extractBfmReferences', function () {
+    test('extracts references for multiple keywords', function (assert) {
+      let markdown = [
+        ':card[https://example.com/cards/1]',
+        ':file[https://example.com/files/1]',
+      ].join('\n');
+      let refs = extractBfmReferences(markdown, 'https://base.com/', [
+        'card',
+        'file',
+      ]);
+      assert.deepEqual(refs, [
+        { url: 'https://example.com/cards/1', keyword: 'card' },
+        { url: 'https://example.com/files/1', keyword: 'file' },
+      ]);
+    });
+
+    test('deduplicates across keywords by URL', function (assert) {
+      let markdown = [
+        ':card[https://example.com/thing]',
+        ':file[https://example.com/thing]',
+      ].join('\n');
+      let refs = extractBfmReferences(markdown, 'https://base.com/', [
+        'card',
+        'file',
+      ]);
+      assert.strictEqual(refs.length, 1);
+      assert.strictEqual(refs[0].url, 'https://example.com/thing');
+    });
+  });
+
+  module('bfmCardReferenceExtensions', function () {
+    test('returns two extensions for card keyword', function (assert) {
+      let extensions = bfmCardReferenceExtensions();
+      assert.strictEqual(extensions.length, 2);
+      assert.strictEqual((extensions[0] as any).name, 'bfmCardBlock');
+      assert.strictEqual((extensions[1] as any).name, 'bfmCardInline');
+    });
+  });
+
+  module('bfmExtensionsForKeyword', function () {
+    test('generates extensions with keyword-specific names', function (assert) {
+      let extensions = bfmExtensionsForKeyword('file');
+      assert.strictEqual(extensions.length, 2);
+      assert.strictEqual((extensions[0] as any).name, 'bfmFileBlock');
+      assert.strictEqual((extensions[1] as any).name, 'bfmFileInline');
+    });
+  });
+
+  module('markdownToHtml with BFM syntax', function () {
+    test('inline card ref produces span placeholder with bfm attributes', function (assert) {
+      let markdown = 'See :card[https://example.com/cards/1] here.';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/cards/1"',
+        ),
+        'inline placeholder has ref data attribute',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-type="card"'),
+        'inline placeholder has type data attribute',
+      );
+      assert.true(
+        html.includes('<span data-boxel-bfm-inline-ref='),
+        'inline placeholder is a span element',
+      );
+    });
+
+    test('block card ref produces div placeholder with bfm attributes', function (assert) {
+      let markdown = '::card[https://example.com/cards/1]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/1"'),
+        'block placeholder has ref data attribute',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-type="card"'),
+        'block placeholder has type data attribute',
+      );
+      assert.true(
+        html.includes('<div data-boxel-bfm-block-ref='),
+        'block placeholder is a div element',
+      );
+    });
+
+    test('card refs inside code blocks are not processed', function (assert) {
+      let markdown = ['```', ':card[https://example.com/cards/1]', '```'].join(
+        '\n',
+      );
+      let html = markdownToHtml(markdown);
+      assert.false(
+        html.includes('data-boxel-bfm-inline-ref'),
+        'no card ref placeholder inside code block',
+      );
+    });
+
+    test('inline card ref inside inline code is not processed', function (assert) {
+      let markdown = 'Use `:card[url]` syntax.';
+      let html = markdownToHtml(markdown);
+      assert.false(
+        html.includes('data-boxel-bfm-inline-ref'),
+        'no card ref placeholder inside inline code',
+      );
+    });
+
+    test('DOMPurify preserves BFM placeholders', function (assert) {
+      let markdown =
+        'Text :card[https://example.com/cards/1] and more.\n\n::card[https://example.com/cards/2]\n';
+      let html = markdownToHtml(markdown, { sanitize: true });
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/cards/1"',
+        ),
+        'inline ref survives sanitization',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/2"'),
+        'block ref survives sanitization',
+      );
+    });
+
+    test('DOMPurify preserves BFM size data attributes', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | strip]\n';
+      let html = markdownToHtml(markdown, { sanitize: true });
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'format attribute survives sanitization',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-width="250"'),
+        'width attribute survives sanitization',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-height="40"'),
+        'height attribute survives sanitization',
+      );
+    });
+
+    test('markdown without card refs is unaffected', function (assert) {
+      let markdown = '# Hello\n\nSome **bold** text.';
+      let withBfm = markdownToHtml(markdown);
+      assert.true(withBfm.includes('<h1 id="user-content-hello">Hello</h1>'));
+      assert.true(withBfm.includes('<strong>bold</strong>'));
+      assert.false(withBfm.includes('data-boxel-bfm'));
+    });
+
+    test('HTML special chars in URLs are escaped in placeholders', function (assert) {
+      let markdown = ':card[https://example.com/cards/1&foo=<bar>]';
+      let html = markdownToHtml(markdown, { sanitize: false });
+      assert.true(
+        html.includes('&amp;foo=&lt;bar&gt;'),
+        'URL special chars are escaped',
+      );
+    });
+
+    test('mixed inline and block refs in a document', function (assert) {
+      let markdown = [
+        '# Title',
+        '',
+        'Intro text with :card[https://example.com/cards/inline] reference.',
+        '',
+        '::card[https://example.com/cards/block]',
+        '',
+        'More text.',
+      ].join('\n');
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-inline-ref="https://example.com/cards/inline"',
+        ),
+        'has inline ref',
+      );
+      assert.true(
+        html.includes(
+          'data-boxel-bfm-block-ref="https://example.com/cards/block"',
+        ),
+        'has block ref',
+      );
+      assert.true(
+        html.includes('<h1 id="user-content-title">Title</h1>'),
+        'heading preserved with id',
+      );
+    });
+
+    test('block ref with named size constant emits format and dimension attributes', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | strip]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/1"'),
+        'URL excludes the pipe and specifier',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format attribute',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-width="250"'),
+        'has width from strip constant',
+      );
+      assert.true(
+        html.includes('data-boxel-bfm-height="40"'),
+        'has height from strip constant',
+      );
+    });
+
+    test('block ref with WxH custom dimensions', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | 400x200]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="400"'), 'width=400');
+      assert.true(html.includes('data-boxel-bfm-height="200"'), 'height=200');
+    });
+
+    test('block ref with w:N h:N custom dimensions', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | w:400 h:200]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="400"'), 'width=400');
+      assert.true(html.includes('data-boxel-bfm-height="200"'), 'height=200');
+    });
+
+    test('block ref with h:N only (width fills container)', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | h:300]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'no width attribute (fills container)',
+      );
+      assert.true(html.includes('data-boxel-bfm-height="300"'), 'height=300');
+    });
+
+    test('block ref with w:N% percentage width', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | w:50%]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="fitted"'),
+        'has fitted format',
+      );
+      assert.true(html.includes('data-boxel-bfm-width="50%"'), 'width=50%');
+      assert.false(
+        html.includes('data-boxel-bfm-height'),
+        'no height attribute (auto height)',
+      );
+    });
+
+    test('block ref with isolated format', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | isolated]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-format="isolated"'),
+        'has isolated format',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'no width for isolated',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-height'),
+        'no height for isolated',
+      );
+    });
+
+    test('block ref without pipe has no format/size attributes', function (assert) {
+      let markdown = '::card[https://example.com/cards/1]\n';
+      let html = markdownToHtml(markdown);
+      assert.false(
+        html.includes('data-boxel-bfm-format'),
+        'no format attribute for plain block ref',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-width'),
+        'no width attribute for plain block ref',
+      );
+    });
+
+    test('block ref with unrecognized specifier emits no format attributes', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | nonsense]\n';
+      let html = markdownToHtml(markdown);
+      assert.true(
+        html.includes('data-boxel-bfm-block-ref="https://example.com/cards/1"'),
+        'URL is still parsed correctly',
+      );
+      assert.false(
+        html.includes('data-boxel-bfm-format'),
+        'no format for unrecognized specifier',
+      );
+    });
+  });
+
+  module('parseBfmSizeSpec', function () {
+    test('returns null for unrecognized specifiers', function (assert) {
+      assert.strictEqual(parseBfmSizeSpec('nonsense'), null);
+      assert.strictEqual(parseBfmSizeSpec(''), null);
+    });
+
+    test('parses isolated keyword', function (assert) {
+      let result = parseBfmSizeSpec('isolated');
+      assert.deepEqual(result, { format: 'isolated' });
+    });
+
+    test('parses isolated keyword case-insensitively', function (assert) {
+      let result = parseBfmSizeSpec('Isolated');
+      assert.deepEqual(result, { format: 'isolated' });
+    });
+
+    // Named size constants — Badges
+    test('parses small-badge', function (assert) {
+      let result = parseBfmSizeSpec('small-badge');
+      assert.deepEqual(result, { format: 'fitted', width: 150, height: 40 });
+    });
+
+    test('parses medium-badge', function (assert) {
+      let result = parseBfmSizeSpec('medium-badge');
+      assert.deepEqual(result, { format: 'fitted', width: 150, height: 65 });
+    });
+
+    test('parses large-badge', function (assert) {
+      let result = parseBfmSizeSpec('large-badge');
+      assert.deepEqual(result, { format: 'fitted', width: 150, height: 105 });
+    });
+
+    // Named size constants — Strips (both canonical and alias)
+    test('parses strip (alias for single-strip)', function (assert) {
+      let result = parseBfmSizeSpec('strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 40 });
+    });
+
+    test('parses single-strip (canonical)', function (assert) {
+      let result = parseBfmSizeSpec('single-strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 40 });
+    });
+
+    test('parses double-strip', function (assert) {
+      let result = parseBfmSizeSpec('double-strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 65 });
+    });
+
+    test('parses triple-strip', function (assert) {
+      let result = parseBfmSizeSpec('triple-strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 105 });
+    });
+
+    test('parses double-wide-strip', function (assert) {
+      let result = parseBfmSizeSpec('double-wide-strip');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 65 });
+    });
+
+    test('parses triple-wide-strip', function (assert) {
+      let result = parseBfmSizeSpec('triple-wide-strip');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 105 });
+    });
+
+    // Named size constants — Tiles (both canonical and alias)
+    test('parses tile (alias for regular-tile)', function (assert) {
+      let result = parseBfmSizeSpec('tile');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 170 });
+    });
+
+    test('parses regular-tile (canonical)', function (assert) {
+      let result = parseBfmSizeSpec('regular-tile');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 170 });
+    });
+
+    test('parses grid-tile (alias for cardsgrid-tile)', function (assert) {
+      let result = parseBfmSizeSpec('grid-tile');
+      assert.deepEqual(result, { format: 'fitted', width: 170, height: 250 });
+    });
+
+    test('parses small-tile', function (assert) {
+      let result = parseBfmSizeSpec('small-tile');
+      assert.deepEqual(result, { format: 'fitted', width: 150, height: 170 });
+    });
+
+    test('parses tall-tile', function (assert) {
+      let result = parseBfmSizeSpec('tall-tile');
+      assert.deepEqual(result, { format: 'fitted', width: 150, height: 275 });
+    });
+
+    test('parses large-tile', function (assert) {
+      let result = parseBfmSizeSpec('large-tile');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 275 });
+    });
+
+    // Named size constants — Cards
+    test('parses compact-card', function (assert) {
+      let result = parseBfmSizeSpec('compact-card');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 170 });
+    });
+
+    test('parses full-card', function (assert) {
+      let result = parseBfmSizeSpec('full-card');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 275 });
+    });
+
+    test('parses expanded-card', function (assert) {
+      let result = parseBfmSizeSpec('expanded-card');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 445 });
+    });
+
+    // Custom dimensions
+    test('parses WxH syntax', function (assert) {
+      let result = parseBfmSizeSpec('400x200');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 200 });
+    });
+
+    test('parses WxH with spaces', function (assert) {
+      let result = parseBfmSizeSpec('400 x 200');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 200 });
+    });
+
+    test('parses w:N h:N syntax', function (assert) {
+      let result = parseBfmSizeSpec('w:400 h:200');
+      assert.deepEqual(result, { format: 'fitted', width: 400, height: 200 });
+    });
+
+    test('parses h:N only', function (assert) {
+      let result = parseBfmSizeSpec('h:300');
+      assert.deepEqual(result, { format: 'fitted', height: 300 });
+    });
+
+    test('parses w:N% percentage width', function (assert) {
+      let result = parseBfmSizeSpec('w:50%');
+      assert.deepEqual(result, { format: 'fitted', width: '50%' });
+    });
+
+    test('named constants are case-insensitive', function (assert) {
+      let result = parseBfmSizeSpec('Strip');
+      assert.deepEqual(result, { format: 'fitted', width: 250, height: 40 });
+    });
+  });
+
+  module('extractCardReferenceUrls with pipe syntax', function () {
+    test('extracts URL from block ref with size specifier', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | strip]\n';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('extracts URL from block ref with custom dimensions', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | 400x200]\n';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('extracts URL from block ref with isolated', function (assert) {
+      let markdown = '::card[https://example.com/cards/1 | isolated]\n';
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+
+    test('resolves relative URL with size specifier', function (assert) {
+      let markdown = '::card[./my-card | tile]\n';
+      let urls = extractCardReferenceUrls(
+        markdown,
+        'https://realm.example/docs/file.md',
+      );
+      assert.deepEqual(urls, ['https://realm.example/docs/my-card']);
+    });
+
+    test('deduplicates same URL with different specifiers', function (assert) {
+      let markdown = [
+        '::card[https://example.com/cards/1 | strip]',
+        '::card[https://example.com/cards/1 | tile]',
+      ].join('\n');
+      let urls = extractCardReferenceUrls(markdown, 'https://base.com/');
+      assert.deepEqual(urls, ['https://example.com/cards/1']);
+    });
+  });
+});

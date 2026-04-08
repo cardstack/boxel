@@ -262,6 +262,39 @@ module(basename(__filename), function () {
       });
     });
 
+    test('file meta for markdown with card references stores cardReferenceUrls', async function (assert) {
+      let response = await request
+        .get(`/card-refs.md`)
+        .set('Accept', SupportedMimeType.FileMeta)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      let json = response.body;
+      assert.strictEqual(json.data.type, 'file-meta');
+      assert.deepEqual(json.data.meta?.adoptsFrom, {
+        module: `${baseRealm.url}markdown-file-def`,
+        name: 'MarkdownDef',
+      });
+
+      let cardReferenceUrls = json.data.attributes?.cardReferenceUrls;
+      assert.ok(
+        Array.isArray(cardReferenceUrls),
+        'cardReferenceUrls attribute is present',
+      );
+      assert.true(
+        cardReferenceUrls.some((url: string) => url.includes('hassan')),
+        'cardReferenceUrls includes hassan',
+      );
+      assert.true(
+        cardReferenceUrls.some((url: string) => url.includes('jade')),
+        'cardReferenceUrls includes jade',
+      );
+    });
+
     test('sets canonical path header for nested module requests', async function (assert) {
       let response = await request
         .get(`/nested/example`)
@@ -479,6 +512,51 @@ module(basename(__filename), function () {
           readJSONSync(realmConfigPath),
           { ...(initialConfig ?? {}), interactHome, hostHome },
           '.realm.json contains both updated properties',
+        );
+      });
+
+      test('card responses reflect updated realm config without re-indexing', async function (assert) {
+        // Fetch a card before updating realm config
+        let cardResponse = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(cardResponse.status, 200, 'HTTP 200 status');
+        assert.deepEqual(
+          cardResponse.body.data.meta.realmInfo,
+          testRealmInfo,
+          'card has original realmInfo before config change',
+        );
+
+        // Update the realm config
+        let patchResponse = await request
+          .patch('/_config')
+          .set('Accept', SupportedMimeType.JSON)
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              type: 'realm-config',
+              attributes: { name: 'Updated Realm Name' },
+            },
+          });
+        assert.strictEqual(patchResponse.status, 200, 'config patch succeeded');
+
+        // Fetch the same card again — realmInfo should reflect the new config
+        // without needing to re-index
+        let updatedCardResponse = await request
+          .get('/person-1')
+          .set('Accept', 'application/vnd.card+json');
+        assert.strictEqual(updatedCardResponse.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          updatedCardResponse.body.data.meta.realmInfo.name,
+          'Updated Realm Name',
+          'card realmInfo reflects updated realm name without re-indexing',
         );
       });
 
@@ -1428,6 +1506,14 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'card-refs.md': {
+                links: {
+                  related: `${testRealmHref}card-refs.md`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'chess-gallery.gts': {
                 links: {
                   related: `${testRealmHref}chess-gallery.gts`,
@@ -1559,6 +1645,14 @@ module(basename(__filename), function () {
               'hassan.json': {
                 links: {
                   related: `${testRealmHref}hassan.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'hello.test.gts': {
+                links: {
+                  related: `${testRealmHref}hello.test.gts`,
                 },
                 meta: {
                   kind: 'file',

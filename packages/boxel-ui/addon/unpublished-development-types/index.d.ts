@@ -1,11 +1,16 @@
 // Add any types here that you need for local development only.
 // These will *not* be published as part of your addon, so be careful that your published code does not rely on them!
 
-import '@glint/environment-ember-loose';
+import '@glint/ember-tsc/types';
 
-declare module '@glint/environment-ember-loose/registry' {
-  export default interface Registry {
-    // Add any registry entries from other addons here that your addon itself uses (in non-strict mode templates)
-    // See https://typed-ember.gitbook.io/glint/using-glint/ember/using-addons
+// Augment Glint's HTML element attributes with missing properties
+declare global {
+  // glimmer-scoped-css uses <style scoped> which isn't in Glint v2's type defs
+  interface HTMLStyleElementAttributes {
+    ['scoped']: string | boolean | null | undefined;
+  }
+  // Open Graph meta tags use <meta property="og:...">
+  interface HTMLMetaElementAttributes {
+    ['property']: string | null | undefined;
   }
 }

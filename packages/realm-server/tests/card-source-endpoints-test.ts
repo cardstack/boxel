@@ -349,6 +349,18 @@ module(basename(__filename), function () {
             'module JS is correct',
           );
         });
+
+        test('resolves dotted filenames without extension (e.g., hello.test -> hello.test.gts)', async function (assert) {
+          // Filenames with dots like "hello.test.gts" must be resolvable
+          // when requested without the .gts extension. The realm server must
+          // not treat ".test" as a file extension and skip the .gts fallback.
+          let response = await request.get('/hello.test');
+          assert.strictEqual(
+            response.status,
+            200,
+            'dotted filename resolves: GET /hello.test finds hello.test.gts',
+          );
+        });
       });
 
       module('permissioned realm', function (hooks) {

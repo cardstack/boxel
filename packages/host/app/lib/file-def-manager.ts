@@ -1,6 +1,6 @@
 import type Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import { md5 } from 'super-fast-md5';
 

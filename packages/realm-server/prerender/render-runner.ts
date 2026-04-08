@@ -28,6 +28,7 @@ import {
   type CaptureOptions,
   type ModuleCapture,
   type FileExtractCapture,
+  cardRenderTimeout,
   withTimeout,
   transitionTo,
   buildCommandRunnerURL,
@@ -524,7 +525,7 @@ export class RenderRunner {
                   cardResultString.length > 0 ? cardResultString : null,
               };
             },
-            {},
+            { timeout: opts?.timeoutMs ?? cardRenderTimeout },
             nonce,
           );
           try {

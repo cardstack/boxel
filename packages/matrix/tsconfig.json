@@ -23,14 +23,21 @@
     "experimentalDecorators": true,
     "strict": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
-      "*": ["types/*"]
+      "https://cardstack.com/base/*": [
+        "../base/*"
+      ],
+      "@cardstack/boxel-ui": [
+        "../boxel-ui/addon"
+      ],
+      "@cardstack/boxel-ui/*": [
+        "../boxel-ui/addon/*"
+      ],
+      "*": [
+        "types/*"
+      ]
     }
   },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  },
-  "include": ["./**/*"]
+  "include": [
+    "./**/*"
+  ]
 }

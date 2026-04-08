@@ -12,6 +12,7 @@ import type {
   LooseSingleFileMetaDocument,
   Meta,
   RuntimeDependencyTrackingContext,
+  SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
 import type { BaseDef, BaseDefConstructor, CardDef } from './card-api';
 import type { FileDef } from './file-api';
@@ -181,14 +182,14 @@ export function makeRelativeURL(
 }
 
 export function resourceFrom(
-  doc: CardDocument | undefined,
+  doc: CardDocument | SingleFileMetaDocument | undefined,
   resourceId: string | undefined,
 ): CardResource | FileMetaResource | undefined {
   if (doc == null) {
     return;
   }
-  let data: CardResource[];
-  if (isSingleCardDocument(doc)) {
+  let data: (CardResource | FileMetaResource)[];
+  if (isSingleCardDocument(doc) || isSingleFileMetaDocument(doc)) {
     if (resourceId === undefined) {
       return undefined;
     }

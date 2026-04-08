@@ -51,7 +51,7 @@ interface Signature {
     reasoning?: {
       content: string | null;
       isExpanded: boolean;
-      updateExpanded: (ev: MouseEvent | KeyboardEvent) => void;
+      updateExpanded: (ev: Event) => void;
     };
   };
   Blocks: {

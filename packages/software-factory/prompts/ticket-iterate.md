@@ -12,7 +12,7 @@ Description:
 
 # Previous Attempt (iteration {{iteration}})
 
-You previously produced the following actions for this ticket:
+In the previous iteration, you made the following tool calls:
 
 {{#each previousActions}}
 
@@ -26,7 +26,7 @@ You previously produced the following actions for this ticket:
 
 # Test Results
 
-The orchestrator applied your actions and ran tests. They failed.
+The orchestrator ran tests after your previous attempt. They failed.
 
 Status: {{testResults.status}}
 Passed: {{testResults.passedCount}}
@@ -68,12 +68,12 @@ Stack trace:
 
 # Instructions
 
-Fix the failing tests. You may:
+Fix the failing tests. You have the same tools available. You can:
 
-- Update implementation files (use `update_file` actions)
-- Update test specs (use `update_test` actions)
-- Invoke tools to inspect current realm state
+- Use read_file to inspect the current state of your implementation
+- Use write_file to update implementation or test files
+- Use search_realm to check what cards exist
 - If the test expectation is wrong, fix the test
 - If the implementation is wrong, fix the implementation
 
-Return the actions needed to make all tests pass.
+When done, call signal_done.

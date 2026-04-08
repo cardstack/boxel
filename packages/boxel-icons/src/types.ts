@@ -1,7 +1,7 @@
 import type { ComponentLike } from '@glint/template';
 
 export interface Signature {
-  Element: SVGElement;
+  Element: SVGSVGElement;
 }
 
 export type Icon = ComponentLike<Signature>;

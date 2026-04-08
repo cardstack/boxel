@@ -306,31 +306,34 @@ class Isolated extends Component<typeof GardenDesign> {
     return items;
   }
 
-  @action dragStart(ev: DragEvent) {
-    if (!ev.dataTransfer) {
+  @action dragStart(ev: Event) {
+    let dragEv = ev as DragEvent;
+    if (!dragEv.dataTransfer) {
       return;
     }
-    ev.dataTransfer.setData('text/plain', (ev.target as HTMLElement).id);
-    ev.dataTransfer.dropEffect = 'copy';
+    dragEv.dataTransfer.setData('text/plain', (dragEv.target as HTMLElement).id);
+    dragEv.dataTransfer.dropEffect = 'copy';
   }
 
-  @action dragStartFromGrid(ev: DragEvent) {
-    let id = (ev.target as HTMLElement)?.parentElement?.id;
-    if (!ev.dataTransfer || !id) {
+  @action dragStartFromGrid(ev: Event) {
+    let dragEv = ev as DragEvent;
+    let id = (dragEv.target as HTMLElement)?.parentElement?.id;
+    if (!dragEv.dataTransfer || !id) {
       return;
     }
-    ev.dataTransfer.setData('text/plain', id);
-    ev.dataTransfer.dropEffect = 'move';
+    dragEv.dataTransfer.setData('text/plain', id);
+    dragEv.dataTransfer.dropEffect = 'move';
   }
 
-  @action dragover(ev: DragEvent) {
+  @action dragover(ev: Event) {
     ev.preventDefault();
   }
 
-  @action dropItem(ev: DragEvent) {
+  @action dropItem(ev: Event) {
     ev.preventDefault();
-    let dropTargetId: string | undefined = (ev.target as HTMLElement).id;
-    let dragItemId: string | undefined = ev.dataTransfer?.getData('text/plain');
+    let dragEv = ev as DragEvent;
+    let dropTargetId: string | undefined = (dragEv.target as HTMLElement).id;
+    let dragItemId: string | undefined = dragEv.dataTransfer?.getData('text/plain');
 
     let dragItem;
     let maybeCurrentValue;
@@ -347,7 +350,7 @@ class Isolated extends Component<typeof GardenDesign> {
     }
     if (optionsMap.has(dropTargetId)) {
       // if the drop target has content, we need to get its grid location id
-      dropTargetId = (ev.target as HTMLElement)?.parentElement?.id;
+      dropTargetId = (dragEv.target as HTMLElement)?.parentElement?.id;
     }
     if (!dropTargetId || !this.gridMap.has(dropTargetId)) {
       if (maybeCurrentValue && dragItemId) {

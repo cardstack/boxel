@@ -7,6 +7,10 @@ import {
 } from '../factory-entrypoint';
 import { FactoryBriefError } from '../factory-brief';
 
+function log(message: string): void {
+  process.stderr.write(`[factory:go] ${message}\n`);
+}
+
 async function main(): Promise<void> {
   try {
     if (wantsFactoryEntrypointHelp(process.argv.slice(2))) {
@@ -15,7 +19,22 @@ async function main(): Promise<void> {
     }
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
+    log(`mode=${options.mode} brief=${options.briefUrl}`);
+
+    if (options.mode === 'implement') {
+      log('Starting bootstrap + implement flow...');
+    }
+
     let summary = await runFactoryEntrypoint(options);
+
+    if (summary.implement) {
+      log(
+        `Implement complete: outcome=${summary.implement.outcome} ` +
+          `iterations=${summary.implement.iterations} ` +
+          `toolCalls=${summary.implement.toolCallCount}`,
+      );
+    }
+
     let output = JSON.stringify(summary, null, 2) + '\n';
     if (!process.stdout.write(output)) {
       process.stdout.once('drain', () => process.exit(0));

@@ -649,15 +649,16 @@ class EmbeddedPostitNote extends Component<typeof PostitNote> {
   }
 
   @action
-  handleKeydown(event: KeyboardEvent) {
+  handleKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
     // ²²³ Handle keyboard shortcuts for contentEditable
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    if (kbEvent.key === 'Enter' && (kbEvent.ctrlKey || kbEvent.metaKey)) {
       // Ctrl/Cmd + Enter to save
-      event.preventDefault();
+      kbEvent.preventDefault();
       this.saveEdit();
-    } else if (event.key === 'Escape') {
+    } else if (kbEvent.key === 'Escape') {
       // Escape to cancel
-      event.preventDefault();
+      kbEvent.preventDefault();
       this.cancelEdit();
     }
   }
@@ -672,10 +673,11 @@ class EmbeddedPostitNote extends Component<typeof PostitNote> {
   }
 
   @action
-  handleDisplayKeydown(event: KeyboardEvent) {
+  handleDisplayKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
     // Provide keyboard access when the note is in display mode
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
+    if (kbEvent.key === 'Enter' || kbEvent.key === ' ') {
+      kbEvent.preventDefault();
       this.startEditing(event);
     }
   }
@@ -693,7 +695,7 @@ class EmbeddedPostitNote extends Component<typeof PostitNote> {
           <div
             class='note-content-editable'
             contenteditable='true'
-            placeholder='Enter your note...'
+            data-placeholder='Enter your note...'
             role='textbox'
             tabindex='0'
             {{on 'keydown' this.handleKeydown}}
@@ -825,7 +827,7 @@ class EmbeddedPostitNote extends Component<typeof PostitNote> {
       }
 
       .note-content-editable:empty::before {
-        content: attr(placeholder);
+        content: attr(data-placeholder);
         color: #9ca3af;
         font-style: italic;
         pointer-events: none;

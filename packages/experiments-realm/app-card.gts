@@ -246,6 +246,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
       if (!this.args.model.moduleId) {
         return;
       }
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       let loader: Loader = (import.meta as any).loader;
       module = await loader.import(this.args.model.moduleId);
     } catch (e) {

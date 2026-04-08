@@ -5,6 +5,7 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
+import * as emberRunloop from '@ember/runloop';
 import * as emberService from '@ember/service';
 
 import * as emberTemplate from '@ember/template';
@@ -90,6 +91,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
   virtualNetwork.shimModule('@ember/object', emberObject);
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
+  virtualNetwork.shimModule('@ember/runloop', emberRunloop);
   virtualNetwork.shimModule('@ember/service', emberService);
   virtualNetwork.shimModule('@ember/template', emberTemplate);
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
@@ -186,60 +188,26 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   shimHostCommands(virtualNetwork);
 }
 
-// Shims test-only module IDs into the virtual network as throwing stubs so
-// realm cards that colocate test imports can load in any environment without
-// executing test code. live-test.js overrides these at the loader level with
-// the real implementations when a test runner is present.
+// Shims test-only module IDs into the virtual network as empty fallbacks so
+// realm cards that co-locate test imports (e.g. *.test.gts) can load in any
+// environment without crashing. These are never actually called in production
+// — they just prevent import resolution errors.
+//
+// In live-test runs, live-test.js overrides these at the *realm loader* level
+// (via loader.shimModule) with the real implementations before importing test
+// modules. The loader-level shim takes precedence over this network-level
+// fallback, so the real helpers are used during test execution.
 export function shimModulesForLiveTests(virtualNetwork: VirtualNetwork) {
-  const windowQUnit = (globalThis as any).QUnit;
-
-  const testOnlyStub = (moduleId: string) =>
-    new Proxy(
-      {},
-      {
-        get: () => {
-          throw new Error(
-            `${moduleId} is only available in a test environment.`,
-          );
-        },
-      },
-    );
-
-  // Use real @ember/test-helpers only when QUnit is running; stub otherwise.
-  virtualNetwork.shimModule(
-    '@ember/test-helpers',
-    windowQUnit ? emberTestHelpers : testOnlyStub('@ember/test-helpers'),
-  );
-
-  // Always stub host test helpers here — live-test.js shimModule() on the
-  // realm loader overrides these with real implementations at test time.
-  virtualNetwork.shimModule(
-    '@cardstack/host/tests/helpers',
-    testOnlyStub('@cardstack/host/tests/helpers'),
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/host/tests/helpers/mock-matrix',
-    testOnlyStub('@cardstack/host/tests/helpers/mock-matrix'),
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/host/tests/helpers/setup',
-    testOnlyStub('@cardstack/host/tests/helpers/setup'),
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/host/tests/helpers/adapter',
-    testOnlyStub('@cardstack/host/tests/helpers/adapter'),
-  );
+  virtualNetwork.shimModule('@ember/test-helpers', emberTestHelpers);
+  virtualNetwork.shimModule('@cardstack/host/tests/helpers', {});
+  virtualNetwork.shimModule('@cardstack/host/tests/helpers/mock-matrix', {});
+  virtualNetwork.shimModule('@cardstack/host/tests/helpers/setup', {});
+  virtualNetwork.shimModule('@cardstack/host/tests/helpers/adapter', {});
   virtualNetwork.shimModule(
     '@cardstack/host/tests/helpers/render-component',
-    testOnlyStub('@cardstack/host/tests/helpers/render-component'),
+    {},
   );
-  virtualNetwork.shimModule(
-    '@cardstack/host/tests/helpers/base-realm',
-    testOnlyStub('@cardstack/host/tests/helpers/base-realm'),
-  );
-  virtualNetwork.shimModule(
-    '@universal-ember/test-support',
-    testOnlyStub('@universal-ember/test-support'),
-  );
-  virtualNetwork.shimModule('@ember/owner', testOnlyStub('@ember/owner'));
+  virtualNetwork.shimModule('@cardstack/host/tests/helpers/base-realm', {});
+  virtualNetwork.shimModule('@universal-ember/test-support', {});
+  virtualNetwork.shimModule('@ember/owner', {});
 }

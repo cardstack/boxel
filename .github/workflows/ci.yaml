@@ -24,6 +24,7 @@ jobs:
       ai-bot: ${{ steps.filter.outputs.ai-bot }}
       bot-runner: ${{ steps.filter.outputs.bot-runner }}
       eslint-plugin-boxel: ${{ steps.filter.outputs.eslint-plugin-boxel }}
+      eslint-plugin-cardstack-host: ${{ steps.filter.outputs.eslint-plugin-cardstack-host }}
       postgres-migrations: ${{ steps.filter.outputs.postgres-migrations }}
       boxel-icons: ${{ steps.filter.outputs.boxel-icons }}
       boxel-ui: ${{ steps.filter.outputs.boxel-ui }}
@@ -32,6 +33,7 @@ jobs:
       software-factory: ${{ steps.filter.outputs.software-factory }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
+      boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -71,6 +73,9 @@ jobs:
             eslint-plugin-boxel:
               - *shared
               - 'packages/eslint-plugin-boxel/**'
+            eslint-plugin-cardstack-host:
+              - *shared
+              - 'packages/eslint-plugin-cardstack-host/**'
             postgres-migrations:
               - 'packages/postgres/migrations/**'
             boxel-icons:
@@ -112,6 +117,9 @@ jobs:
             workspace-sync-cli:
               - *shared
               - 'packages/workspace-sync-cli/**'
+            boxel-cli:
+              - *shared
+              - 'packages/boxel-cli/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -194,6 +202,26 @@ jobs:
         run: |
           pnpm run update
           git diff --exit-code || (echo "::error::Generated files are out of date. Run 'pnpm run update' in packages/eslint-plugin-boxel and commit the result." && exit 1)
+
+  eslint-plugin-cardstack-host-test:
+    name: ESLint Plugin Cardstack Host Tests
+    needs: change-check
+    if: needs.change-check.outputs.eslint-plugin-cardstack-host == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: eslint-plugin-cardstack-host-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: ESLint Plugin Cardstack Host test suite
+        run: pnpm test
+        working-directory: packages/eslint-plugin-cardstack-host
+      - name: Check generated files are up to date
+        working-directory: packages/eslint-plugin-cardstack-host
+        run: |
+          pnpm run update
+          git diff --exit-code || (echo "::error::Generated files are out of date. Run 'pnpm run update' in packages/eslint-plugin-cardstack-host and commit the result." && exit 1)
 
   postgres-migration-test:
     name: Postgres Migration Test
@@ -796,6 +824,39 @@ jobs:
           name: workspace-sync-cli-test-services-log
           path: /tmp/test-services.log
           retention-days: 30
+
+  boxel-cli-build:
+    name: Boxel CLI Build
+    needs: change-check
+    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-cli-build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Build boxel-cli
+        run: pnpm build
+        working-directory: packages/boxel-cli
+
+  boxel-cli-test:
+    name: Boxel CLI Tests
+    needs: change-check
+    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-cli-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Build
+        run: pnpm build
+        working-directory: packages/boxel-cli
+      - name: Run tests
+        run: pnpm test
+        working-directory: packages/boxel-cli
 
   deploy:
     name: Deploy boxel to staging

@@ -1,6 +1,6 @@
 import type Owner from '@ember/owner';
 import Service from '@ember/service';
-import { inject as service } from '@ember/service';
+import { service } from '@ember/service';
 
 import type { ResolvedCodeRef, CodeRef } from '@cardstack/runtime-common';
 import {

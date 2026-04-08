@@ -46,6 +46,10 @@ type SearchableRealm = {
 
 const remoteRealmCache = new Map<string, SearchableRealm>();
 
+export function clearRemoteRealmCache() {
+  remoteRealmCache.clear();
+}
+
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
 
 function normalizeRoutePath(path: string): string {

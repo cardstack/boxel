@@ -227,6 +227,9 @@ module('Unit | query', function (hooks) {
             });
         }
       },
+      async lookupCachedDefinition(): Promise<undefined> {
+        return undefined;
+      },
       async invalidate(_realmURL: string): Promise<string[]> {
         // no-op for tests
         return [];

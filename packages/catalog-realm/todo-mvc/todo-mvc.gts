@@ -82,10 +82,11 @@ class TodoItemComponent extends GlimmerComponent<TodoItemComponentArgs> {
     this.isEditing = false;
   };
 
-  handleKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === 'Enter') {
+  handleKeyDown = (event: Event): void => {
+    let ke = event as KeyboardEvent;
+    if (ke.key === 'Enter') {
       this.saveEdit();
-    } else if (event.key === 'Escape') {
+    } else if (ke.key === 'Escape') {
       this.cancelEdit();
     }
   };
@@ -340,8 +341,9 @@ class IsolatedTemplate extends Component<typeof TodoMvc> {
   }
 
   // Event Handlers
-  addTodo = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && this.newTodoText.trim()) {
+  addTodo = (event: Event) => {
+    let ke = event as KeyboardEvent;
+    if (ke.key === 'Enter' && this.newTodoText.trim()) {
       const newTodo = new TodoItem({
         text: this.newTodoText.trim(),
         isCompleted: false,

@@ -141,18 +141,19 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
   }
 
   @action
-  handleOpenSiteButtonClick(event: MouseEvent) {
-    if (event.shiftKey) {
-      event.preventDefault();
-      event.stopPropagation();
+  handleOpenSiteButtonClick(event: Event) {
+    let mouseEvent = event as MouseEvent;
+    if (mouseEvent.shiftKey) {
+      mouseEvent.preventDefault();
+      mouseEvent.stopPropagation();
       this.isOpenSitePopoverOpen = !this.isOpenSitePopoverOpen;
       return;
     }
 
     // If there's no default URL, prevent navigation and show popover
     if (!this.defaultPublishedRealmURL) {
-      event.preventDefault();
-      event.stopPropagation();
+      mouseEvent.preventDefault();
+      mouseEvent.stopPropagation();
       this.isOpenSitePopoverOpen = true;
       return;
     }

@@ -55,7 +55,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-select-trigger-gap, var(--boxel-sp));
         padding: var(--boxel-sp-xs);
         font: var(--boxel-font-sm);
         font-family: inherit;
@@ -64,9 +64,10 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
         cursor: pointer;
       }
       .boxel-trigger-content {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xxs);
+        display: var(--boxel-select-trigger-content-display, flex);
+        flex-wrap: var(--boxel-select-trigger-content-wrap, wrap);
+        align-items: var(--boxel-select-trigger-content-align, center);
+        gap: var(--boxel-select-trigger-content-gap, var(--boxel-sp-2xs));
       }
       .boxel-trigger-placeholder {
         color: var(--boxel-450);

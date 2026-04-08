@@ -96,6 +96,7 @@ export class GenerateDailyReport extends Command<
 
       let prompt =
         'Generate daily report for the selected date from the attached activity log cards using the policy manual and update the attached daily report card';
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       let skillCardId = new URL('../Skill/daily-report-skill', import.meta.url)
         .href;
       let useCommand = new UseAiAssistantCommand(this.commandContext);

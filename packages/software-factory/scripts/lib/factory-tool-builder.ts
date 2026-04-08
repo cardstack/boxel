@@ -7,18 +7,22 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  LooseSingleCardDocument,
+  Relationship,
+} from '@cardstack/runtime-common';
 
 import type { ToolResult } from './factory-agent';
+import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
 import { executeTestRunFromRealm } from './test-run-execution';
 import type { ExecuteTestRunOptions, TestRunHandle } from './test-run-types';
 import {
-  writeModuleSource,
-  writeCardSource,
-  readCardSource,
+  writeFile,
+  readFile,
   searchRealm,
+  runRealmCommand,
   ensureTrailingSlash,
   type RealmFetchOptions,
 } from './realm-operations';
@@ -40,7 +44,6 @@ export interface FactoryTool {
 
 export interface ToolBuilderConfig {
   targetRealmUrl: string;
-  testRealmUrl: string;
   /** Per-realm JWTs obtained via getRealmScopedAuth(). */
   realmTokens: Record<string, string>;
   /** Realm server JWT for server-level operations (_create-realm, _realm-auth, _server-session). */
@@ -49,14 +52,20 @@ export interface ToolBuilderConfig {
   testResultsModuleUrl?: string;
   /** Fetch implementation (injectable for testing). */
   fetch?: typeof globalThis.fetch;
-  /** Matrix auth for test realm creation (required for run_tests when project card is provided). */
-  matrixAuth?: {
-    userId: string;
-    accessToken: string;
-    matrixUrl: string;
-  };
   /** Override for executeTestRunFromRealm (injectable for testing). */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
+  /** Realm server URL. Required — never inferred from realm URLs. */
+  realmServerUrl: string;
+  /** Host app URL for QUnit test runner. Defaults to realmServerUrl (compat proxy). */
+  hostAppUrl?: string;
+  /** Pre-fetched runtime schemas keyed by card name (e.g., "Project"). */
+  cardTypeSchemas?: Map<
+    string,
+    {
+      attributes: Record<string, unknown>;
+      relationships?: Record<string, unknown>;
+    }
+  >;
 }
 
 export interface ToolCallEntry {
@@ -99,12 +108,33 @@ export function buildFactoryTools(
     buildWriteFileTool(config),
     buildReadFileTool(config),
     buildSearchRealmTool(config),
-    buildUpdateTicketTool(config),
-    buildCreateKnowledgeTool(config),
     buildRunTestsTool(config),
+    buildRunCommandTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
+
+  // Card tools are only available when runtime schemas have been fetched.
+  let schemas = config.cardTypeSchemas;
+  let cardToolEntries: [string, string, () => FactoryTool][] = [
+    ['Project', 'update_project', () => buildUpdateProjectTool(config)],
+    ['Ticket', 'update_ticket', () => buildUpdateTicketTool(config)],
+    [
+      'KnowledgeArticle',
+      'create_knowledge',
+      () => buildCreateKnowledgeTool(config),
+    ],
+    ['Spec', 'create_catalog_spec', () => buildCreateCatalogSpecTool(config)],
+  ];
+  for (let [cardName, toolName, buildFn] of cardToolEntries) {
+    if (schemas?.has(cardName)) {
+      tools.push(buildFn());
+    } else {
+      console.warn(
+        `[factory-tool-builder] Omitting ${toolName} tool: no schema for ${cardName}`,
+      );
+    }
+  }
 
   // Add registered script/realm-api tools as FactoryTool wrappers.
   // Realm-api tools get the config so they can resolve per-realm JWTs.
@@ -125,7 +155,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'write_file',
     description:
-      'Write a file to a realm. The path must include the file extension.',
+      'Write a file to a realm. The path must include the file extension. Auth: per-realm JWT.',
     parameters: {
       type: 'object',
       properties: {
@@ -137,7 +167,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
         content: { type: 'string', description: 'File content' },
         realm: {
           type: 'string',
-          enum: ['target', 'test'],
+          enum: ['target'],
           description: 'Which realm to write to (default: target)',
         },
       },
@@ -148,7 +178,7 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
       let content = args.content as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return writeModuleSource(realmUrl, path, content, fetchOptions);
+      return writeFile(realmUrl, path, content, fetchOptions);
     },
   };
 }
@@ -156,7 +186,8 @@ function buildWriteFileTool(config: ToolBuilderConfig): FactoryTool {
 function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'read_file',
-    description: 'Read a file from a realm as card source JSON.',
+    description:
+      'Read a file from a realm as card source JSON. Auth: per-realm JWT.',
     parameters: {
       type: 'object',
       properties: {
@@ -166,7 +197,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
         },
         realm: {
           type: 'string',
-          enum: ['target', 'test'],
+          enum: ['target'],
           description: 'Which realm to read from (default: target)',
         },
       },
@@ -176,7 +207,7 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
       let path = args.path as string;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return readCardSource(realmUrl, path, fetchOptions);
+      return readFile(realmUrl, path, fetchOptions);
     },
   };
 }
@@ -184,7 +215,8 @@ function buildReadFileTool(config: ToolBuilderConfig): FactoryTool {
 function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'search_realm',
-    description: 'Search for cards in a realm using a structured query.',
+    description:
+      'Search for cards in a realm using a structured query. Auth: per-realm JWT.',
     parameters: {
       type: 'object',
       properties: {
@@ -194,7 +226,7 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
         },
         realm: {
           type: 'string',
-          enum: ['target', 'test'],
+          enum: ['target'],
           description: 'Which realm to search (default: target)',
         },
       },
@@ -204,86 +236,188 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
       let query = args.query as Record<string, unknown>;
       let realmUrl = resolveRealmUrl(config, args.realm as string | undefined);
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      return searchRealm(realmUrl, query, fetchOptions);
+      let result = await searchRealm(realmUrl, query, fetchOptions);
+      return result.ok ? { data: result.data } : { error: result.error };
+    },
+  };
+}
+
+/**
+ * Resolve the schema for a card type from the runtime cache.
+ * Only called when the card type is known to exist in cardTypeSchemas
+ * (callers check before building the tool).
+ */
+function resolveCardSchema(config: ToolBuilderConfig, cardName: string) {
+  let cached = config.cardTypeSchemas!.get(cardName)!;
+  return {
+    attributes: cached.attributes,
+    relationships: cached.relationships,
+  };
+}
+
+function buildCardToolParams(
+  pathDescription: string,
+  schema: {
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, unknown>;
+  },
+) {
+  let properties: Record<string, unknown> = {
+    path: { type: 'string', description: pathDescription },
+    attributes: schema.attributes,
+  };
+  if (schema.relationships) {
+    properties.relationships = schema.relationships;
+  }
+  return { type: 'object', properties, required: ['path', 'attributes'] };
+}
+
+function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Project');
+  return {
+    name: 'update_project',
+    description:
+      'Update a project card in the target realm (e.g., update status or success criteria). Auth: per-realm JWT.',
+    parameters: buildCardToolParams(
+      'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
+      schema,
+    ),
+    execute: async (args) => {
+      let path = args.path as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+      let document = buildCardDocument(
+        'Project',
+        realmUrl,
+        attributes,
+        relationships,
+      );
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }
 
 function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Ticket');
   return {
     name: 'update_ticket',
-    description: 'Update a ticket card in the target realm.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
-        },
-        content: {
-          type: 'string',
-          description: 'Card source JSON content',
-        },
-      },
-      required: ['path', 'content'],
-    },
+    description:
+      'Update a ticket card in the target realm. Auth: per-realm JWT.',
+    parameters: buildCardToolParams(
+      'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
+      schema,
+    ),
     execute: async (args) => {
       let path = args.path as string;
-      let content = args.content as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
-
-      let document: LooseSingleCardDocument;
-      try {
-        document = JSON.parse(content) as LooseSingleCardDocument;
-      } catch {
-        return {
-          ok: false,
-          error: `Failed to parse update_ticket content as JSON: ${path}`,
-        };
-      }
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      let document = buildCardDocument(
+        'Ticket',
+        realmUrl,
+        attributes,
+        relationships,
+      );
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
     },
   };
 }
 
 function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'KnowledgeArticle');
   return {
     name: 'create_knowledge',
     description:
-      'Create or update a knowledge article card in the target realm.',
-    parameters: {
-      type: 'object',
-      properties: {
-        path: {
-          type: 'string',
-          description:
-            'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
-        },
-        content: {
-          type: 'string',
-          description: 'Card source JSON content',
-        },
-      },
-      required: ['path', 'content'],
-    },
+      'Create or update a knowledge article card in the target realm. Auth: per-realm JWT.',
+    parameters: buildCardToolParams(
+      'Realm-relative path for the knowledge card (e.g., "Knowledge/deploy.json")',
+      schema,
+    ),
     execute: async (args) => {
       let path = args.path as string;
-      let content = args.content as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
+      let document = buildCardDocument(
+        'KnowledgeArticle',
+        realmUrl,
+        attributes,
+        relationships,
+      );
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
+        fetchOptions,
+      );
+    },
+  };
+}
 
-      let document: LooseSingleCardDocument;
-      try {
-        document = JSON.parse(content) as LooseSingleCardDocument;
-      } catch {
-        return {
-          ok: false,
-          error: `Failed to parse create_knowledge content as JSON: ${path}`,
+function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Spec');
+  return {
+    name: 'create_catalog_spec',
+    description:
+      "Create a Catalog Spec card in the target realm's Spec/ folder. " +
+      'This makes a card definition discoverable in the Boxel catalog. ' +
+      'Auth: per-realm JWT.',
+    parameters: buildCardToolParams(
+      'Realm-relative path for the Spec card (e.g., "Spec/sticky-note.json")',
+      schema,
+    ),
+    execute: async (args) => {
+      let path = args.path as string;
+      let attributes = args.attributes as Record<string, unknown>;
+      let relationships = args.relationships as
+        | Record<string, unknown>
+        | undefined;
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+      // Spec cards adopt from https://cardstack.com/base/spec, not darkfactory
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes,
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/spec',
+              name: 'Spec',
+            },
+          },
+        },
+      };
+      if (relationships && Object.keys(relationships).length > 0) {
+        doc.data.relationships = relationships as {
+          [fieldName: string]: Relationship | Relationship[];
         };
       }
-      return writeCardSource(realmUrl, path, document, fetchOptions);
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(doc, null, 2),
+        fetchOptions,
+      );
     },
   };
 }
@@ -291,10 +425,7 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
 function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'run_tests',
-    description:
-      'Execute Playwright tests against the target realm. Pulls test spec files from the realm, ' +
-      'runs them via the Playwright harness, and returns structured test results (pass/fail counts, ' +
-      'failure details with error messages and stack traces).',
+    description: 'Execute QUnit card tests against the target realm',
     parameters: {
       type: 'object',
       properties: {
@@ -303,17 +434,11 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
           description:
             'Ticket slug used to name the test run (e.g., "define-sticky-note-core")',
         },
-        specPaths: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Realm-relative paths to Playwright test files (e.g., ["Tests/sticky-note.spec.ts"])',
-        },
         testNames: {
           type: 'array',
           items: { type: 'string' },
           description:
-            'Specific test names to run (empty array runs all tests in the spec files)',
+            'Specific test names to run (empty array runs all discovered tests)',
         },
         projectCardUrl: {
           type: 'string',
@@ -321,7 +446,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
             'URL to the Project card (used to read/write testArtifactsRealmUrl)',
         },
       },
-      required: ['slug', 'specPaths'],
+      required: ['slug'],
     },
     execute: async (args) => {
       let targetRealmUrl = config.targetRealmUrl;
@@ -335,14 +460,13 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         targetRealmUrl,
         testResultsModuleUrl,
         slug: args.slug as string,
-        specPaths: args.specPaths as string[],
+        hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
         testNames: (args.testNames as string[]) ?? [],
         authorization,
         fetch: config.fetch,
         projectCardUrl: args.projectCardUrl as string | undefined,
-        testRealmUrl: config.testRealmUrl,
-        matrixAuth: config.matrixAuth,
-        serverToken: config.serverToken,
+        realmServerUrl: config.realmServerUrl,
+        forceNew: true,
       });
 
       return result;
@@ -382,6 +506,50 @@ function buildRequestClarificationTool(): FactoryTool {
         signal: CLARIFICATION_SIGNAL,
         message: args.message as string,
       } as ClarificationResult;
+    },
+  };
+}
+
+function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'run_command',
+    description:
+      'Execute a host command on the realm server via the prerenderer. ' +
+      'Commands run in browser context with full card runtime access. ' +
+      'Use "@cardstack/boxel-host/commands/<name>/default" as the command specifier. ' +
+      'Auth: realm server token.',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description:
+            'Command specifier (e.g., "@cardstack/boxel-host/commands/get-card-type-schema/default")',
+        },
+        commandInput: {
+          type: 'object',
+          description: 'Optional input for the command',
+        },
+      },
+      required: ['command'],
+    },
+    execute: async (args) => {
+      if (!config.serverToken) {
+        return {
+          status: 'error',
+          error: 'run_command requires serverToken in config',
+        };
+      }
+      return runRealmCommand(
+        config.realmServerUrl,
+        config.targetRealmUrl,
+        args.command as string,
+        args.commandInput as Record<string, unknown> | undefined,
+        {
+          authorization: config.serverToken,
+          fetch: config.fetch,
+        },
+      );
     },
   };
 }
@@ -458,11 +626,8 @@ function buildRegisteredTool(
 
 function resolveRealmUrl(
   config: ToolBuilderConfig,
-  realm: string | undefined,
+  _realm: string | undefined,
 ): string {
-  if (realm === 'test') {
-    return config.testRealmUrl;
-  }
   return config.targetRealmUrl;
 }
 

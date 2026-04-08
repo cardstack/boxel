@@ -3,7 +3,6 @@ import flatten from 'lodash/flatten';
 import flattenDeep from 'lodash/flattenDeep';
 import {
   type CardResource,
-  type RealmInfo,
   type JobInfo,
   jobIdentity,
   trimExecutableExtension,
@@ -198,7 +197,7 @@ export class Batch {
     return result;
   }
 
-  async copyFrom(sourceRealmURL: URL, destRealmInfo: RealmInfo): Promise<void> {
+  async copyFrom(sourceRealmURL: URL): Promise<void> {
     let columns: string[][] | undefined;
     let sources = (await this.#query([
       `SELECT * FROM boxel_index WHERE`,
@@ -236,7 +235,6 @@ export class Batch {
         entry.pristine_doc.meta = {
           ...entry.pristine_doc.meta,
           realmURL: this.realmURL.href,
-          realmInfo: destRealmInfo,
         };
       }
       entry.fitted_html = entry.fitted_html

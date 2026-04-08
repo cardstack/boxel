@@ -6,10 +6,11 @@ import {
   waitFor,
   fillIn,
   triggerEvent,
+  setupOnerror,
+  resetOnerror,
 } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
-import Ember from 'ember';
 
 function noop() {}
 
@@ -470,16 +471,12 @@ module('Integration | Component | picker', function (hooks) {
   });
 
   test('picker throws when select-all option is missing', async function (assert) {
-    let original = Ember.onerror;
-
-    Ember.onerror = (error) => {
+    setupOnerror((error: Error) => {
       assert.ok(
         /select-all option/i.test(error.message),
         'throws expected select-all option error',
       );
-      // swallow so it doesn't become a "global failure"
-      return true;
-    };
+    });
 
     try {
       await render(
@@ -493,7 +490,7 @@ module('Integration | Component | picker', function (hooks) {
         </template>,
       );
     } finally {
-      Ember.onerror = original;
+      resetOnerror();
     }
   });
 

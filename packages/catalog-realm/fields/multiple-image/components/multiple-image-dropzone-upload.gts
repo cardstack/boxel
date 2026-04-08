@@ -6,8 +6,8 @@ import UploadIcon from '@cardstack/boxel-icons/upload';
 interface MultipleImageDropzoneUploadArgs {
   Args: {
     onFileSelect: (event: Event) => void;
-    onDragOver: (event: DragEvent) => void;
-    onDrop: (event: DragEvent) => void;
+    onDragOver: (event: Event) => void;
+    onDrop: (event: Event) => void;
     maxFilesReached: boolean;
     currentCount: number;
     maxFiles: number;

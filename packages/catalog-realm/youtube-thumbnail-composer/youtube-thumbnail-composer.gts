@@ -196,7 +196,7 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
   }
 
   @action
-  handleBackgroundDoubleClick(event: MouseEvent) {
+  handleBackgroundDoubleClick(event: Event) {
     // Only switch to background tab if not clicking on an element
     const target = event.target as HTMLElement;
     if (
@@ -720,12 +720,10 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
   }
 
   @action
-  saveEditing(event?: MouseEvent) {
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-    }
+  saveEditing(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
 
     // Get the latest content from the contenteditable div
     const el = document.querySelector(
@@ -756,8 +754,9 @@ class Isolated extends Component<typeof YouTubeThumbnailComposer> {
   }
 
   @action
-  handleKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
+  handleKeyDown(event: Event) {
+    let ke = event as KeyboardEvent;
+    if (ke.key === 'Escape') {
       event.preventDefault();
       this.cancelEditing();
     }

@@ -102,31 +102,31 @@ export class TestResultEntry extends FieldDef {
   };
 }
 
-export class SpecResult extends FieldDef {
-  static displayName = 'Spec Result';
+export class TestModuleResult extends FieldDef {
+  static displayName = 'Test Module Result';
 
-  @field specRef = contains(CodeRefField);
+  @field moduleRef = contains(CodeRefField);
   @field results = containsMany(TestResultEntry);
 
   @field passedCount = contains(NumberField, {
-    computeVia: function (this: SpecResult) {
+    computeVia: function (this: TestModuleResult) {
       return (this.results ?? []).filter((r) => r.status === 'passed').length;
     },
   });
 
   @field failedCount = contains(NumberField, {
-    computeVia: function (this: SpecResult) {
+    computeVia: function (this: TestModuleResult) {
       return (this.results ?? []).filter(
         (r) => r.status === 'failed' || r.status === 'error',
       ).length;
     },
   });
 
-  get specName() {
-    return this.specRef?.module ?? 'default';
+  get moduleName() {
+    return this.moduleRef?.module ?? 'default';
   }
 
-  static embedded = class Embedded extends Component<typeof SpecResult> {
+  static embedded = class Embedded extends Component<typeof TestModuleResult> {
     get total() {
       return this.args.model.results?.length ?? 0;
     }
@@ -138,27 +138,27 @@ export class SpecResult extends FieldDef {
     }
 
     <template>
-      <div class='spec-result'>
-        <div class='spec-header'>
-          <span class='spec-name'>{{this.args.model.specName}}</span>
+      <div class='module-result'>
+        <div class='module-header'>
+          <span class='module-name'>{{this.args.model.moduleName}}</span>
           {{#if this.isComplete}}
-            <span class='spec-counts'>
+            <span class='module-counts'>
               {{this.args.model.passedCount}}/{{this.total}}
               passed
             </span>
           {{else}}
-            <span class='spec-counts'>running...</span>
+            <span class='module-counts'>running...</span>
           {{/if}}
         </div>
-        <div class='spec-entries'>
+        <div class='module-entries'>
           <@fields.results />
         </div>
       </div>
       <style scoped>
-        .spec-result {
+        .module-result {
           margin-bottom: 0.75rem;
         }
-        .spec-header {
+        .module-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -166,15 +166,15 @@ export class SpecResult extends FieldDef {
           border-bottom: 1px solid var(--boxel-200, #e5e7eb);
           margin-bottom: 0.25rem;
         }
-        .spec-name {
+        .module-name {
           font-weight: 600;
           font-size: 0.85rem;
         }
-        .spec-counts {
+        .module-counts {
           font-size: 0.8rem;
           color: var(--muted-foreground);
         }
-        .spec-entries {
+        .module-entries {
           padding-left: 0.5rem;
         }
       </style>
@@ -192,12 +192,12 @@ export class TestRun extends CardDef {
   @field ticket = linksTo(() => Ticket);
   @field status = contains(TestRunStatusField);
   @field durationMs = contains(NumberField);
-  @field specResults = containsMany(SpecResult);
+  @field moduleResults = containsMany(TestModuleResult);
   @field errorMessage = contains(StringField);
 
   @field passedCount = contains(NumberField, {
     computeVia: function (this: TestRun) {
-      return (this.specResults ?? []).reduce(
+      return (this.moduleResults ?? []).reduce(
         (sum, sr) => sum + (sr.passedCount ?? 0),
         0,
       );
@@ -206,7 +206,7 @@ export class TestRun extends CardDef {
 
   @field failedCount = contains(NumberField, {
     computeVia: function (this: TestRun) {
-      return (this.specResults ?? []).reduce(
+      return (this.moduleResults ?? []).reduce(
         (sum, sr) => sum + (sr.failedCount ?? 0),
         0,
       );
@@ -303,7 +303,7 @@ export class TestRun extends CardDef {
     }
 
     get failedResults() {
-      return (this.args.model.specResults ?? []).flatMap((sr) =>
+      return (this.args.model.moduleResults ?? []).flatMap((sr) =>
         (sr.results ?? []).filter(
           (r) => r.status === 'failed' || r.status === 'error',
         ),
@@ -371,10 +371,9 @@ export class TestRun extends CardDef {
           </section>
         {{/if}}
 
-        {{#if @model.specResults.length}}
+        {{#if @model.moduleResults.length}}
           <section>
-            <h2>Results by Spec</h2>
-            <@fields.specResults />
+            <@fields.moduleResults />
           </section>
         {{/if}}
       </article>

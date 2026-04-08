@@ -72,6 +72,8 @@ module('factory-entrypoint', function (hooks) {
       targetRealmUrl,
       realmServerUrl: 'https://realms.example.test/',
       mode: 'implement',
+      model: undefined,
+      debug: undefined,
     });
   });
 
@@ -166,11 +168,7 @@ module('factory-entrypoint', function (hooks) {
     assert.true(/--help/.test(usage));
     assert.true(/MATRIX_USERNAME is required/.test(usage));
     assert.true(/For public briefs, no auth setup is needed./.test(usage));
-    assert.true(
-      /MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD \+ REALM_SERVER_URL/.test(
-        usage,
-      ),
-    );
+    assert.true(/MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD/.test(usage));
     assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 
@@ -192,6 +190,14 @@ module('factory-entrypoint', function (hooks) {
           createdRealm: false,
         }),
         bootstrapArtifacts: async () => mockBootstrapResult,
+        implement: async () => ({
+          outcome: 'done' as const,
+          iterations: 1,
+          toolCallLog: [],
+          ticketId: 'Tickets/sticky-note-define-core',
+          testRealmUrl:
+            'https://realms.example.test/hassan/personal-test-artifacts/',
+        }),
         fetch: async (_input, init) => {
           assert.strictEqual(
             new Headers(init?.headers).get('Authorization'),
@@ -258,6 +264,14 @@ module('factory-entrypoint', function (hooks) {
           capturedDarkfactoryModuleUrl = options?.darkfactoryModuleUrl;
           return mockBootstrapResult;
         },
+        implement: async () => ({
+          outcome: 'done' as const,
+          iterations: 1,
+          toolCallLog: [],
+          ticketId: 'Tickets/sticky-note-define-core',
+          testRealmUrl:
+            'https://realms.example.test/app/hassan/personal-test-artifacts/',
+        }),
         fetch: async () =>
           new Response(
             JSON.stringify({

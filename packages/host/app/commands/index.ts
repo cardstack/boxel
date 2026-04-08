@@ -15,13 +15,16 @@ import * as CopyCardToStackCommandModule from './copy-card-to-stack';
 import * as CopyFileToRealmCommandModule from './copy-file-to-realm';
 import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
+import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecCommandModule from './create-specs';
+import * as CreateSubmissionWorkflowCommandModule from './create-submission-workflow';
 import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
 import * as GetCardCommandModule from './get-card';
+import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
@@ -38,7 +41,6 @@ import * as ListingUseCommandModule from './listing-use';
 import * as OneShotLlmRequestCommandModule from './one-shot-llm-request';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as OpenCreateListingModalCommandModule from './open-create-listing-modal';
-import * as OpenCreatePRModalCommandModule from './open-create-pr-modal';
 import * as OpenInInteractModeModule from './open-in-interact-mode';
 import * as OpenWorkspaceCommandModule from './open-workspace';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
@@ -263,8 +265,12 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     OpenCreateListingModalCommandModule,
   );
   virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/open-create-pr-modal',
-    OpenCreatePRModalCommandModule,
+    '@cardstack/boxel-host/commands/create-and-open-submission-workflow-card',
+    CreateAndOpenSubmissionWorkflowCard,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/create-submission-workflow',
+    CreateSubmissionWorkflowCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/open-workspace',
@@ -355,6 +361,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetCardCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-card-type-schema',
+    GetCardTypeSchemaCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-all-realm-metas',
     GetAllRealmMetasCommandModule,
   );
@@ -398,6 +408,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
   GetCardCommandModule.default,
+  GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
   InviteUserToRoomCommandModule.default,
@@ -415,7 +426,8 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   OneShotLlmRequestCommandModule.default,
   OpenAiAssistantRoomCommandModule.default,
   OpenCreateListingModalCommandModule.default,
-  OpenCreatePRModalCommandModule.default,
+  CreateAndOpenSubmissionWorkflowCard.default,
+  CreateSubmissionWorkflowCommandModule.default,
   OpenInInteractModeModule.default,
   OpenWorkspaceCommandModule.default,
   GenerateThemeExampleCommandModule.default,

@@ -10,7 +10,7 @@
     "experimentalDecorators": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "module": "es6",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "noEmit": true,
     "noEmitOnError": false,
@@ -26,15 +26,25 @@
     "target": "es2020",
     "traceResolution": false,
     "paths": {
-      "https://cardstack.com/base/*": ["../../base/*"],
-      "*": ["./src/types/*"],
-      "@cardstack/boxel-ui": ["./src"],
-      "@cardstack/boxel-ui/*": ["./src/*"]
+      "https://cardstack.com/base/*": [
+        "../../base/*"
+      ],
+      "*": [
+        "./src/types/*"
+      ],
+      "@cardstack/boxel-ui": [
+        "./src"
+      ],
+      "@cardstack/boxel-ui/*": [
+        "./src/*"
+      ]
     },
-    "typeRoots": ["./src/types"]
+    "types": [
+      "@cardstack/local-types"
+    ]
   },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  },
-  "include": ["src/**/*", "unpublished-development-types/**/*"]
+  "include": [
+    "src/**/*",
+    "unpublished-development-types/**/*"
+  ]
 }

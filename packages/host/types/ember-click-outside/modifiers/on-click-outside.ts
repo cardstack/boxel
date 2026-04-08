@@ -1,17 +1,16 @@
-declare module 'ember-click-outside/modifiers/on-click-outside' {
-  import Modifier from 'ember-modifier';
+import type { ModifierLike } from '@glint/template';
 
-  type Signature = {
-    Args: {
-      Named: {
-        capture?: any;
-        eventType?: any;
-        exceptSelector?: any;
-      };
-      Positional: any;
+interface OnClickOutsideSignature {
+  Element: HTMLElement;
+  Args: {
+    Named: {
+      capture?: boolean;
+      eventType?: string;
+      exceptSelector?: string;
     };
-    Element: HTMLElement;
+    Positional: [action: (event: Event) => void];
   };
-
-  export default class onClickOutside extends Modifier<Signature> {}
 }
+
+declare const onClickOutside: ModifierLike<OnClickOutsideSignature>;
+export default onClickOutside;

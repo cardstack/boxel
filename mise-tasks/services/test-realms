@@ -52,7 +52,7 @@ NODE_ENV=test \
   --realmsRootPath="${REALMS_TEST_ROOT}" \
   --matrixRegistrationSecretFile='../matrix/registration_secret.txt' \
   --migrateDB \
-  --prerendererUrl="${PRERENDER_URL}" \
+  --prerendererUrl="${PRERENDER_MGR_URL}" \
   $WORKER_MANAGER_ARG \
   $SERVICE_NAME_ARG \
   \

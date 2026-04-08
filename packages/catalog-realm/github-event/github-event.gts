@@ -38,4 +38,22 @@ export class GithubEventCard extends CardDef {
       return this.payload?.pull_request?.html_url ?? null;
     },
   });
+
+  @field branchName = contains(StringField, {
+    computeVia: function (this: GithubEventCard) {
+      if (this.payload?.pull_request !== undefined) {
+        return this.payload?.pull_request?.head?.ref ?? null;
+      }
+      if (this.payload?.check_run !== undefined) {
+        return this.payload?.check_run?.check_suite?.head_branch ?? null;
+      }
+      if (this.payload?.check_suite !== undefined) {
+        return this.payload?.check_suite?.head_branch ?? null;
+      }
+      if (this.payload?.review !== undefined) {
+        return this.payload?.pull_request?.head?.ref ?? null;
+      }
+      return null;
+    },
+  });
 }

@@ -33,7 +33,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
-import type { Listing } from '@cardstack/catalog/listing/listing';
+import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 const log = logger('catalog:install');
 

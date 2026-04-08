@@ -135,6 +135,7 @@ class IsolatedTemplate extends Component<typeof CommunicationLog> {
     return {
       filter: {
         type: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./post', import.meta.url).href,
           name: 'Post',
         },

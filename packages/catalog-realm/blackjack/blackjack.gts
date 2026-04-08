@@ -539,6 +539,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     const createdAt = new Date();
 
     const codeRef = {
+      // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
       module: new URL('../blackjack/blackjack', import.meta.url).href,
       name: 'BlackjackGame',
     };

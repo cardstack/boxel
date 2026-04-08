@@ -11,7 +11,7 @@ import { Pill, BoxelInput } from '@cardstack/boxel-ui/components';
 interface ChipSignature {
   Args: {
     label: string;
-    onDelete?: (event: MouseEvent) => void;
+    onDelete?: (event: Event) => void;
   };
   Element: HTMLElement;
 }
@@ -19,7 +19,7 @@ interface ChipSignature {
 // Chip Component
 class Chip extends GlimmerComponent<ChipSignature> {
   @action
-  handleDelete(event: MouseEvent) {
+  handleDelete(event: Event) {
     event.preventDefault();
     event.stopPropagation();
 

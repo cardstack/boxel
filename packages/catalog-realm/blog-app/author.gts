@@ -211,7 +211,7 @@ export class Author extends CardDef {
           class='thumbnail-image'
           style={{setBackgroundImage @model.cardThumbnailURL}}
           role={{if @model.cardThumbnailURL 'img'}}
-          alt={{if @model.cardThumbnailURL @model.cardTitle}}
+          aria-label={{if @model.cardThumbnailURL @model.cardTitle}}
         >
           {{#unless @model.cardThumbnailURL}}
             <UserIcon width='30' height='30' />
@@ -300,7 +300,7 @@ export class Author extends CardDef {
             class='author-thumbnail'
             style={{setBackgroundImage @model.cardThumbnailURL}}
             role='img'
-            alt={{@model.cardTitle}}
+            aria-label={{@model.cardTitle}}
           />
         {{else}}
           <UserIcon class='author-icon' width='20' height='20' />
@@ -345,7 +345,7 @@ export class Author extends CardDef {
           class={{cn 'author-thumbnail' is-icon=(not @model.cardThumbnailURL)}}
           style={{setBackgroundImage @model.cardThumbnailURL}}
           role={{if @model.cardThumbnailURL 'img'}}
-          alt={{if @model.cardThumbnailURL @model.cardTitle}}
+          aria-label={{if @model.cardThumbnailURL @model.cardTitle}}
         >
           {{#unless @model.cardThumbnailURL}}
             <UserIcon width='24' height='24' />

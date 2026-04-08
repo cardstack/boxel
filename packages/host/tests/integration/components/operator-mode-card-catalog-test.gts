@@ -237,14 +237,18 @@ module('Integration | operator-mode | card catalog', function (hooks) {
 
       await click('[data-test-realm-picker]');
       await click(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`);
-      assert.dom('[data-test-search-result]').exists({ count: 2 });
+      assert
+        .dom('[data-section-sid="recents"] [data-test-search-result]')
+        .exists({ count: 2 });
       assert
         .dom(`[data-test-search-result="${baseRealm.url}cards/skill"]`)
         .exists();
       assert.dom(`[data-test-search-result="${baseRealm.url}index"]`).exists();
 
       await click(`[data-test-boxel-picker-option-row="${testRealmURL}"]`);
-      assert.dom('[data-test-search-result]').exists({ count: 4 });
+      assert
+        .dom('[data-section-sid="recents"] [data-test-search-result]')
+        .exists({ count: 4 });
 
       // expand search sheet
       await fillIn(`[data-test-search-field]`, ' ');
@@ -253,12 +257,18 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       await click(
         '[data-test-realm-picker] [data-test-boxel-picker-remove-button]:nth-of-type(1)',
       );
-      assert.dom('[data-test-search-result]').exists({ count: 2 });
       assert
-        .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
+        .dom('[data-section-sid="recents"] [data-test-search-result]')
+        .exists({ count: 2 });
+      assert
+        .dom(
+          `[data-section-sid="recents"] [data-test-search-result="${testRealmURL}Pet/mango"]`,
+        )
         .exists();
       assert
-        .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+        .dom(
+          `[data-section-sid="recents"] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+        )
         .exists();
     });
 
@@ -284,39 +294,6 @@ module('Integration | operator-mode | card catalog', function (hooks) {
       assert
         .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
         .doesNotExist('Pet/mango is hidden when its realm is not selected');
-    });
-
-    test(`filters cards by type for "Find Instances" search`, async function (assert) {
-      let recentCardsService = getService('recent-cards-service');
-      recentCardsService.add(`${testRealmURL}Pet/mango`);
-      recentCardsService.add(`${testRealmURL}BoomPet/paper`); // BoomPet extends Pet
-      recentCardsService.add(`${testRealmURL}Person/fadhlan`);
-
-      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template><OperatorMode @onClose={{noop}} /></template>
-        },
-      );
-      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-      await click(`[data-test-open-search-field]`);
-
-      // Simulate searchForInstances for Person — carddef: prefix + absolute module/name key
-      await fillIn(
-        `[data-test-search-field]`,
-        `carddef:${testRealmURL}pet/Pet`,
-      );
-      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-
-      assert
-        .dom(`[data-test-recent-card-result="${testRealmURL}Pet/mango"]`)
-        .exists('Pet appears when searching for Pet instances');
-      assert
-        .dom(`[data-test-recent-card-result="${testRealmURL}BoomPet/paper"]`)
-        .exists('BoomPet appears when searching for Pet instances');
-      assert
-        .dom(`[data-test-recent-card-result="${testRealmURL}Person/fadhlan"]`)
-        .doesNotExist('non-Pet recent cards are filtered out');
     });
 
     test(`filters cards by type for card-picker`, async function (assert) {

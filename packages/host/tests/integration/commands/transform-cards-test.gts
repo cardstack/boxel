@@ -8,6 +8,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Command } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import type { SearchCardsByQueryCommand as SearchCardsByQueryCommandType } from '@cardstack/host/commands/search-cards';
 import TransformCardsCommand from '@cardstack/host/commands/transform-cards';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -258,8 +259,10 @@ module('Integration | commands | transform-cards', function (hooks) {
     });
 
     // Verify that all Person cards were transformed
-    let { SearchCardsByQueryCommand } =
-      await import('@cardstack/host/commands/search-cards');
+    let { SearchCardsByQueryCommand } = (await import(
+      // @ts-expect-error tsconfig paths not resolved for dynamic import()
+      '@cardstack/host/commands/search-cards'
+    )) as { SearchCardsByQueryCommand: typeof SearchCardsByQueryCommandType };
     let searchCommand = new SearchCardsByQueryCommand(
       commandService.commandContext,
     );

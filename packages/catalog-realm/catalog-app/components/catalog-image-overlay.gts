@@ -21,7 +21,7 @@ interface CatalogImageOverlaySignature {
 export class CatalogImageOverlay extends GlimmerComponent<CatalogImageOverlaySignature> {
   @action
   stopPropagationAndCall(callback: (() => void | Promise<void>) | undefined) {
-    return async (e: MouseEvent) => {
+    return async (e: Event) => {
       e.stopPropagation();
       if (callback) {
         await callback();

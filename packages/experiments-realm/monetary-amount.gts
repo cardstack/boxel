@@ -41,6 +41,7 @@ class Edit extends Component<typeof MonetaryAmount> {
       return {
         filter: {
           type: {
+            // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
             module: new URL('./asset', import.meta.url).href,
             name: 'Currency',
           },
@@ -48,6 +49,7 @@ class Edit extends Component<typeof MonetaryAmount> {
         sort: [
           {
             on: {
+              // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
               module: new URL('./asset', import.meta.url).href,
               name: 'Currency',
             },
@@ -56,6 +58,7 @@ class Edit extends Component<typeof MonetaryAmount> {
         ],
       };
     },
+    // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
     () => [new URL('./', import.meta.url).href],
   );
 

@@ -32,7 +32,7 @@ interface Signature {
     onInput?: (value: string) => void;
     onFocus?: (ev: Event) => void;
     onBlur?: (ev: Event) => void;
-    onKeyDown?: (ev: KeyboardEvent) => void;
+    onKeyDown?: (ev: Event) => void;
     onInputInsertion?: (element: HTMLElement) => void;
     selectedRealms: PickerOption[];
     onRealmChange: (selected: PickerOption[]) => void;
@@ -56,7 +56,7 @@ interface Signature {
 
 export default class SearchBar extends Component<Signature> {
   @action
-  handleKeyDown(ev: KeyboardEvent): void {
+  handleKeyDown(ev: Event): void {
     this.args.onKeyDown?.(ev);
   }
 
