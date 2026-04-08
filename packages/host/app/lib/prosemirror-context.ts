@@ -672,6 +672,83 @@ function serializeMarkdown(doc: ProseMirrorNode): string {
   return blocks.join('\n\n');
 }
 
+// ── Card nodeView factories ───────────────────────────────────────────────
+
+export interface CardNodeViewTarget {
+  element: HTMLElement;
+  cardId: string;
+  format: 'atom' | 'embedded';
+  kind: 'inline' | 'block';
+}
+
+function createCardNodeViews(
+  onChange: (targets: CardNodeViewTarget[]) => void,
+): Record<string, (node: ProseMirrorNode) => Record<string, unknown>> {
+  let targets: CardNodeViewTarget[] = [];
+
+  function notify() {
+    onChange([...targets]);
+  }
+
+  return {
+    boxel_card_atom(node: ProseMirrorNode) {
+      let dom = document.createElement('span');
+      dom.classList.add('boxel-card-atom-view');
+      dom.setAttribute('data-card-id', node.attrs.cardId);
+      dom.contentEditable = 'false';
+
+      let target: CardNodeViewTarget = {
+        element: dom,
+        cardId: node.attrs.cardId,
+        format: 'atom',
+        kind: 'inline',
+      };
+      targets.push(target);
+      notify();
+
+      return {
+        dom,
+        ignoreMutation: () => true,
+        destroy() {
+          let idx = targets.indexOf(target);
+          if (idx >= 0) {
+            targets.splice(idx, 1);
+          }
+          notify();
+        },
+      };
+    },
+
+    boxel_card_block(node: ProseMirrorNode) {
+      let dom = document.createElement('div');
+      dom.classList.add('boxel-card-block-view');
+      dom.setAttribute('data-card-id', node.attrs.cardId);
+      dom.contentEditable = 'false';
+
+      let target: CardNodeViewTarget = {
+        element: dom,
+        cardId: node.attrs.cardId,
+        format: 'embedded',
+        kind: 'block',
+      };
+      targets.push(target);
+      notify();
+
+      return {
+        dom,
+        ignoreMutation: () => true,
+        destroy() {
+          let idx = targets.indexOf(target);
+          if (idx >= 0) {
+            targets.splice(idx, 1);
+          }
+          notify();
+        },
+      };
+    },
+  };
+}
+
 // ── Exported context ───────────────────────────────────────────────────────
 
 export interface ProseMirrorContext {
@@ -693,6 +770,7 @@ export interface ProseMirrorContext {
   sinkListItem: typeof sinkListItem;
   parseMarkdown: (text: string) => ProseMirrorNode;
   serializeMarkdown: (doc: ProseMirrorNode) => string;
+  createCardNodeViews: typeof createCardNodeViews;
 }
 
 const prosemirrorContext: ProseMirrorContext = {
@@ -714,6 +792,7 @@ const prosemirrorContext: ProseMirrorContext = {
   sinkListItem,
   parseMarkdown,
   serializeMarkdown,
+  createCardNodeViews,
 };
 
 export default prosemirrorContext;

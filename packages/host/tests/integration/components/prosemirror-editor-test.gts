@@ -585,6 +585,216 @@ module('Integration | prosemirror-context', function (hooks) {
     view.destroy();
   });
 
+  // ── Card nodeView tests ──
+
+  test('createCardNodeViews registers atom targets', function (assert) {
+    let receivedTargets: any[] = [];
+    let nodeViews = pmContext.createCardNodeViews((targets: any[]) => {
+      receivedTargets = targets;
+    });
+
+    assert.ok(nodeViews.boxel_card_atom, 'has boxel_card_atom nodeView');
+    assert.ok(nodeViews.boxel_card_block, 'has boxel_card_block nodeView');
+
+    let atomNode = pmContext.schema.nodes.boxel_card_atom.create({
+      cardId: './Author/alice',
+      label: 'alice',
+    });
+    let nv = nodeViews.boxel_card_atom(atomNode);
+
+    assert.ok(nv.dom, 'nodeView has dom element');
+    assert.strictEqual(
+      nv.dom.tagName,
+      'SPAN',
+      'atom nodeView uses span element',
+    );
+    assert.strictEqual(
+      nv.dom.getAttribute('data-card-id'),
+      './Author/alice',
+      'dom has data-card-id attribute',
+    );
+    assert.strictEqual(
+      nv.dom.classList.contains('boxel-card-atom-view'),
+      true,
+      'dom has boxel-card-atom-view class',
+    );
+    assert.strictEqual(receivedTargets.length, 1, 'one target registered');
+    assert.strictEqual(
+      receivedTargets[0].cardId,
+      './Author/alice',
+      'target has correct cardId',
+    );
+    assert.strictEqual(
+      receivedTargets[0].format,
+      'atom',
+      'target has atom format',
+    );
+    assert.strictEqual(
+      receivedTargets[0].kind,
+      'inline',
+      'target has inline kind',
+    );
+
+    nv.destroy();
+    assert.strictEqual(
+      receivedTargets.length,
+      0,
+      'target unregistered on destroy',
+    );
+  });
+
+  test('createCardNodeViews registers block targets', function (assert) {
+    let receivedTargets: any[] = [];
+    let nodeViews = pmContext.createCardNodeViews((targets: any[]) => {
+      receivedTargets = targets;
+    });
+
+    let blockNode = pmContext.schema.nodes.boxel_card_block.create({
+      cardId: './Author/alice',
+    });
+    let nv = nodeViews.boxel_card_block(blockNode);
+
+    assert.ok(nv.dom, 'nodeView has dom element');
+    assert.strictEqual(
+      nv.dom.tagName,
+      'DIV',
+      'block nodeView uses div element',
+    );
+    assert.strictEqual(
+      nv.dom.getAttribute('data-card-id'),
+      './Author/alice',
+      'dom has data-card-id attribute',
+    );
+    assert.strictEqual(
+      receivedTargets.length,
+      1,
+      'one target registered',
+    );
+    assert.strictEqual(
+      receivedTargets[0].format,
+      'embedded',
+      'target has embedded format',
+    );
+    assert.strictEqual(
+      receivedTargets[0].kind,
+      'block',
+      'target has block kind',
+    );
+
+    nv.destroy();
+    assert.strictEqual(
+      receivedTargets.length,
+      0,
+      'target unregistered on destroy',
+    );
+  });
+
+  test('createCardNodeViews tracks multiple targets', function (assert) {
+    let receivedTargets: any[] = [];
+    let nodeViews = pmContext.createCardNodeViews((targets: any[]) => {
+      receivedTargets = targets;
+    });
+
+    let atom1 = pmContext.schema.nodes.boxel_card_atom.create({
+      cardId: './Card/1',
+      label: '1',
+    });
+    let atom2 = pmContext.schema.nodes.boxel_card_atom.create({
+      cardId: './Card/2',
+      label: '2',
+    });
+    let block1 = pmContext.schema.nodes.boxel_card_block.create({
+      cardId: './Card/3',
+    });
+
+    let nv1 = nodeViews.boxel_card_atom(atom1);
+    let nv2 = nodeViews.boxel_card_atom(atom2);
+    let nv3 = nodeViews.boxel_card_block(block1);
+
+    assert.strictEqual(receivedTargets.length, 3, 'three targets registered');
+
+    nv2.destroy();
+    assert.strictEqual(
+      receivedTargets.length,
+      2,
+      'two targets after destroying middle',
+    );
+    assert.strictEqual(
+      receivedTargets[0].cardId,
+      './Card/1',
+      'first target preserved',
+    );
+    assert.strictEqual(
+      receivedTargets[1].cardId,
+      './Card/3',
+      'third target preserved',
+    );
+
+    nv1.destroy();
+    nv3.destroy();
+    assert.strictEqual(receivedTargets.length, 0, 'all targets cleared');
+  });
+
+  test('EditorView with nodeViews renders card containers', async function (assert) {
+    let doc = pmContext.parseMarkdown(
+      'Text with :card[./Author/alice] and\n\n::card[./Post/1]',
+    );
+    let state = pmContext.EditorState.create({ doc });
+
+    await render(<template><div id='pm-mount'></div></template>);
+
+    let mountEl = document.querySelector('#pm-mount') as HTMLElement;
+    let targets: any[] = [];
+    let nodeViews = pmContext.createCardNodeViews((t: any[]) => {
+      targets = t;
+    });
+
+    let view = new pmContext.EditorView(mountEl, { state, nodeViews });
+
+    assert.ok(
+      mountEl.querySelector('.boxel-card-atom-view'),
+      'card atom nodeView container renders',
+    );
+    assert.ok(
+      mountEl.querySelector('.boxel-card-block-view'),
+      'card block nodeView container renders',
+    );
+    assert.strictEqual(targets.length, 2, 'two targets registered');
+    assert.strictEqual(
+      targets[0].cardId,
+      './Author/alice',
+      'atom target has correct cardId',
+    );
+    assert.strictEqual(
+      targets[1].cardId,
+      './Post/1',
+      'block target has correct cardId',
+    );
+
+    view.destroy();
+    assert.strictEqual(
+      targets.length,
+      0,
+      'targets cleared after view destroy',
+    );
+  });
+
+  test('nodeView ignoreMutation returns true', function (assert) {
+    let nodeViews = pmContext.createCardNodeViews(() => {});
+    let atomNode = pmContext.schema.nodes.boxel_card_atom.create({
+      cardId: './Card/1',
+      label: '1',
+    });
+    let nv = nodeViews.boxel_card_atom(atomNode);
+
+    assert.true(
+      nv.ignoreMutation(),
+      'ignoreMutation returns true to prevent ProseMirror from handling DOM mutations in card content',
+    );
+
+    nv.destroy();
+  });
+
   // ── Lazy-loading via globalThis (component pattern) ──
 
   test('globalThis.__loadProseMirror loader works', async function (assert) {

@@ -1,11 +1,30 @@
 import { task } from 'ember-concurrency';
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
+import { scheduleOnce } from '@ember/runloop';
+
+import {
+  resolveCardReference,
+  trimJsonExtension,
+} from '@cardstack/runtime-common';
+import { type BaseDef, type CardDef, getComponent } from './card-api';
+import { CardContextConsumer } from './field-component';
 
 // The ProseMirrorContext type is defined in the host app's lazy-loaded module.
 // We only use it as a type here — the actual module is loaded at runtime via
 // globalThis.__loadProseMirror.
+interface CardNodeViewTarget {
+  element: HTMLElement;
+  cardId: string;
+  format: 'atom' | 'embedded';
+  kind: 'inline' | 'block';
+}
+
+interface CardRenderTarget extends CardNodeViewTarget {
+  card: CardDef | null;
+}
+
 interface ProseMirrorContext {
   schema: any;
   EditorState: any;
@@ -25,20 +44,43 @@ interface ProseMirrorContext {
   sinkListItem: (itemType: any) => any;
   parseMarkdown: (text: string) => any;
   serializeMarkdown: (doc: any) => string;
+  createCardNodeViews: (
+    onChange: (targets: CardNodeViewTarget[]) => void,
+  ) => Record<string, any>;
 }
 
 const SAVE_DEBOUNCE_MS = 500;
+
+function isInline(kind: string): boolean {
+  return kind === 'inline';
+}
+
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  try {
+    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+  } catch {
+    return trimJsonExtension(raw);
+  }
+}
 
 interface ProseMirrorEditorSignature {
   Args: {
     content: string | null;
     onUpdate: (markdown: string) => void;
+    linkedCards?: CardDef[] | null;
+    cardReferenceBaseUrl?: string | null;
   };
   Element: HTMLDivElement;
 }
 
 export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEditorSignature> {
   @tracked _pm: ProseMirrorContext | null = null;
+  @tracked _nodeViewTargets: CardNodeViewTarget[] = [];
+
+  // Non-tracked staging area — updated synchronously by nodeView callbacks,
+  // then flushed into the tracked property after rendering to avoid
+  // Glimmer backtracking assertions.
+  private _pendingTargets: CardNodeViewTarget[] = [];
 
   get pm(): ProseMirrorContext | null {
     if (!this._pm) {
@@ -58,6 +100,50 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
   private editorView: any = null;
   private lastExternalContent: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private _slotUpdatePending = false;
+
+  // ── Card slot resolution ───────────────────────────────────────────────
+
+  @cached
+  get cardRenderTargets(): CardRenderTarget[] {
+    let targets = this._nodeViewTargets;
+    let linkedCards = this.args.linkedCards;
+    let baseUrl = this.args.cardReferenceBaseUrl;
+
+    let cardsByUrl = new Map<string, CardDef>();
+    if (linkedCards?.length) {
+      for (let card of linkedCards) {
+        if (card?.id) {
+          cardsByUrl.set(card.id, card);
+        }
+      }
+    }
+
+    return targets.map((target) => {
+      let resolved = resolveUrl(target.cardId, baseUrl);
+      return {
+        ...target,
+        card: cardsByUrl.get(resolved) ?? null,
+      };
+    });
+  }
+
+  private _handleTargetChange = (targets: CardNodeViewTarget[]) => {
+    this._pendingTargets = targets;
+    if (!this._slotUpdatePending) {
+      this._slotUpdatePending = true;
+      scheduleOnce('afterRender', this, this._applyTargets);
+    }
+  };
+
+  _applyTargets = () => {
+    this._slotUpdatePending = false;
+    this._nodeViewTargets = this._pendingTargets;
+  };
+
+  getCardComponent = (card: BaseDef) => getComponent(card);
+
+  // ── Editor lifecycle ───────────────────────────────────────────────────
 
   mountEditor = modifier(
     (element: HTMLElement, _positional: unknown[]) => {
@@ -128,8 +214,11 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
         ],
       });
 
+      let nodeViews = pm.createCardNodeViews(this._handleTargetChange);
+
       let view = new pm.EditorView(element, {
         state,
+        nodeViews,
         dispatchTransaction: (tr: any) => {
           let newState = view.state.apply(tr);
           view.updateState(newState);
@@ -236,6 +325,51 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
         ...attributes
       >
       </div>
+      {{#each this.cardRenderTargets as |target|}}
+        {{#in-element target.element insertBefore=null}}
+          {{#if target.card}}
+            <CardContextConsumer as |context|>
+              {{#let (this.getCardComponent target.card) as |CardComponent|}}
+                {{#if (isInline target.kind)}}
+                  <span
+                    class='prosemirror-card-slot prosemirror-card-slot--inline'
+                    data-test-prosemirror-card-slot-inline
+                    {{context.cardComponentModifier
+                      card=target.card
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    <CardComponent
+                      @format={{target.format}}
+                      @displayContainer={{false}}
+                    />
+                  </span>
+                {{else}}
+                  <div
+                    class='prosemirror-card-slot prosemirror-card-slot--block'
+                    data-test-prosemirror-card-slot-block
+                    {{context.cardComponentModifier
+                      card=target.card
+                      format='data'
+                      fieldType=undefined
+                      fieldName=undefined
+                    }}
+                  >
+                    <CardComponent
+                      @format={{target.format}}
+                      @displayContainer={{false}}
+                    />
+                  </div>
+                {{/if}}
+              {{/let}}
+            </CardContextConsumer>
+          {{else}}
+            <span class='prosemirror-card-fallback'>{{target.cardId}}</span>
+          {{/if}}
+        {{/in-element}}
+      {{/each}}
     {{else}}
       <div class='prosemirror-editor-loading' data-test-prosemirror-loading>
         Loading editor…
@@ -308,7 +442,7 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
           margin: var(--boxel-sp, 16px) 0;
         }
 
-        /* Card node placeholders */
+        /* Card node placeholders (fallback when nodeViews are not active) */
         .prosemirror-editor :deep(.boxel-card-atom) {
           display: inline-flex;
           align-items: center;
@@ -332,6 +466,61 @@ export default class ProseMirrorEditor extends GlimmerComponent<ProseMirrorEdito
         }
 
         .prosemirror-editor :deep(.card-block-id) {
+          font-size: 0.85em;
+          color: var(--boxel-400, #666);
+          word-break: break-all;
+        }
+
+        /* NodeView card containers */
+        .prosemirror-editor :deep(.boxel-card-atom-view) {
+          display: inline;
+          user-select: none;
+        }
+
+        .prosemirror-editor :deep(.boxel-card-block-view) {
+          display: block;
+          margin: var(--boxel-sp-xs, 4px) 0;
+          user-select: none;
+        }
+
+        /* Card slot wrappers rendered via {{in-element}} */
+        .prosemirror-editor :deep(.prosemirror-card-slot) {
+          contain: layout style paint;
+        }
+
+        .prosemirror-editor :deep(.prosemirror-card-slot--inline) {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background-color: var(--boxel-100, #f0f0f0);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          padding: 1px 6px;
+          font-size: 0.85em;
+          cursor: pointer;
+        }
+
+        .prosemirror-editor :deep(.prosemirror-card-slot--block) {
+          display: block;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          overflow: hidden;
+        }
+
+        /* Selection highlight for atom nodes */
+        .prosemirror-editor :deep(.boxel-card-atom-view.ProseMirror-selectednode),
+        .prosemirror-editor :deep(.boxel-card-block-view.ProseMirror-selectednode) {
+          outline: 2px solid var(--boxel-highlight, #0078d4);
+          border-radius: var(--boxel-border-radius, 4px);
+        }
+
+        /* Fallback for unresolved card references */
+        .prosemirror-editor :deep(.prosemirror-card-fallback) {
+          display: inline-block;
+          padding: 1px 6px;
+          background-color: var(--boxel-100, #f0f0f0);
+          border: 1px dashed var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
           font-size: 0.85em;
           color: var(--boxel-400, #666);
           word-break: break-all;

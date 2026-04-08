@@ -89,10 +89,23 @@ export class RichMarkdownField extends FieldDef {
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
+    get baseUrl(): string | null {
+      return this.args.model?.[relativeTo]?.href ?? null;
+    }
+    get linkedCards(): CardDef[] | null {
+      try {
+        return this.args.model?.linkedCards ?? null;
+      } catch {
+        // linksToMany query may fail in environments without a full card store
+        return null;
+      }
+    }
     <template>
       <ProseMirrorEditor
         @content={{@model.content}}
         @onUpdate={{this.updateContent}}
+        @linkedCards={{this.linkedCards}}
+        @cardReferenceBaseUrl={{this.baseUrl}}
       />
     </template>
   };
