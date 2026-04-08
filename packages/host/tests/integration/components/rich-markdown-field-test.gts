@@ -373,7 +373,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
 
     let store = getService('store');
-    let article = await store.get<BaseDef>(`${testRealmURL}article-1`);
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
     await store.loaded();
 
     await renderCard(loader, article, 'isolated');
@@ -382,28 +382,28 @@ module('Integration | RichMarkdownField', function (hooks) {
 
     assert
       .dom('[data-test-pet-atom]')
-      .exists('inline card reference renders the referenced card in atom format');
+      .exists(
+        'inline card reference renders the referenced card in atom format',
+      );
     assert
       .dom('[data-test-pet-atom]')
       .hasText('Mango', 'inline atom shows the correct card');
 
     assert
       .dom('[data-test-pet-embedded]')
-      .exists('block card reference renders the referenced card in embedded format');
+      .exists(
+        'block card reference renders the referenced card in embedded format',
+      );
     assert
       .dom('[data-test-pet-embedded]')
       .hasText('Mango', 'block embedded shows the correct card');
 
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
-      .doesNotExist(
-        'no unresolved Pill remains after card resolves (inline)',
-      );
+      .doesNotExist('no unresolved Pill remains after card resolves (inline)');
     assert
       .dom('[data-test-markdown-bfm-unresolved-block]')
-      .doesNotExist(
-        'no unresolved Pill remains after card resolves (block)',
-      );
+      .doesNotExist('no unresolved Pill remains after card resolves (block)');
   });
 
   test('card references show loading shimmer before linkedCards resolves, not broken Pills', async function (assert) {
@@ -458,32 +458,44 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
 
     let store = getService('store');
-    let article = await store.get<BaseDef>(`${testRealmURL}article-1`);
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
     await store.loaded();
 
     await renderCard(loader, article, 'isolated');
 
-    // Immediately after render, the card ref element should be empty (shimmer)
-    // — NOT showing an unresolved Pill.
+    // Use a MutationObserver to detect if an unresolved Pill *ever* appears
+    // during the loading→resolved transition. This catches regressions where
+    // a deferred timer prematurely enables unresolved Pills, even if the flash
+    // is too brief for a point-in-time assertion to catch.
+    let unresolvedPillEverAppeared = false;
+    let testRoot = document.querySelector('#ember-testing')!;
+    let testObserver = new MutationObserver(() => {
+      if (
+        testRoot.querySelector('[data-test-markdown-bfm-unresolved-inline]')
+      ) {
+        unresolvedPillEverAppeared = true;
+      }
+    });
+    testObserver.observe(testRoot, { childList: true, subtree: true });
+
     let inlineRef = document.querySelector('[data-boxel-bfm-inline-ref]');
     assert.ok(inlineRef, 'card ref element exists in the DOM');
-    assert
-      .dom('[data-test-markdown-bfm-unresolved-inline]')
-      .doesNotExist(
-        'no broken Pill flashes while linkedCards is still loading',
-      );
 
     // Wait for the card to resolve
     await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
 
+    testObserver.disconnect();
+
+    assert.false(
+      unresolvedPillEverAppeared,
+      'no broken Pill flashed during the loading→resolved transition',
+    );
     assert
       .dom('[data-test-pet-atom]')
       .hasText('Mango', 'card resolves correctly');
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
-      .doesNotExist(
-        'no unresolved Pill after card resolves',
-      );
+      .doesNotExist('no unresolved Pill after card resolves');
   });
 
   test('unresolved card references render as muted Pill indicators', async function (assert) {
@@ -514,18 +526,17 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
 
     let store = getService('store');
-    let article = await store.get<BaseDef>(
+    let article = (await store.get(
       `${testRealmURL}article-unresolved`,
-    );
+    )) as BaseDef;
     await store.loaded();
 
     await renderCard(loader, article, 'isolated');
 
     await waitUntil(
       () =>
-        document.querySelector(
-          '[data-test-markdown-bfm-unresolved-inline]',
-        ) !== null,
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
       { timeout: 10_000 },
     );
 
@@ -609,7 +620,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
 
     let store = getService('store');
-    let article = await store.get<BaseDef>(`${testRealmURL}article-1`);
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
     await store.loaded();
 
     await renderCard(loader, article, 'isolated');
@@ -618,27 +629,27 @@ module('Integration | RichMarkdownField', function (hooks) {
 
     assert
       .dom('[data-test-pet-atom]')
-      .exists('inline card reference with relative path renders the referenced card');
+      .exists(
+        'inline card reference with relative path renders the referenced card',
+      );
     assert
       .dom('[data-test-pet-atom]')
       .hasText('Mango', 'inline atom shows the correct card');
 
     assert
       .dom('[data-test-pet-embedded]')
-      .exists('block card reference with relative path renders the referenced card');
+      .exists(
+        'block card reference with relative path renders the referenced card',
+      );
     assert
       .dom('[data-test-pet-embedded]')
       .hasText('Mango', 'block embedded shows the correct card');
 
     assert
       .dom('[data-test-markdown-bfm-unresolved-inline]')
-      .doesNotExist(
-        'no unresolved Pill remains after card resolves (inline)',
-      );
+      .doesNotExist('no unresolved Pill remains after card resolves (inline)');
     assert
       .dom('[data-test-markdown-bfm-unresolved-block]')
-      .doesNotExist(
-        'no unresolved Pill remains after card resolves (block)',
-      );
+      .doesNotExist('no unresolved Pill remains after card resolves (block)');
   });
 });

@@ -312,7 +312,7 @@ export function bfmCardReferenceExtensions(): TokenizerAndRendererExtension[] {
  */
 export function cardTypeName(url: string): string {
   let cleaned = url.replace(/\/+$/, '').replace(/\.json$/, '');
-  let segments = cleaned.split('/').filter(Boolean);
+  let segments = cleaned.split('/').filter((s) => s && s !== '.');
   if (segments.length >= 2) {
     return segments[segments.length - 2];
   }

@@ -389,9 +389,8 @@ module('Acceptance | markdown BFM card references', function (hooks) {
 
     await waitUntil(
       () =>
-        document.querySelector(
-          '[data-test-markdown-bfm-unresolved-inline]',
-        ) !== null,
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
       { timeout: 10000 },
     );
 

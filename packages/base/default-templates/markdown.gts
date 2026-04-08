@@ -79,8 +79,9 @@ export default class MarkDownTemplate extends GlimmerComponent<{
   @tracked renderSlots: RenderSlot[] = [];
   // On the first modifier run linkedCards is likely still loading (empty [])
   // so we skip unresolved Pills to avoid flashing them for refs that will
-  // soon resolve. On subsequent runs showFallback is true. A deferred timer
-  // handles the in-app-navigation case where the modifier may only run once.
+  // soon resolve. On subsequent runs showFallback is true. For in-app
+  // navigation where linkedCards is already cached, we detect this by
+  // checking linkedCards.length > 0 on the first run.
   private _modifierHasRun = false;
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
@@ -169,7 +170,13 @@ export default class MarkDownTemplate extends GlimmerComponent<{
       let linkedCards = this.args.linkedCards;
       let baseUrl = this.args.cardReferenceBaseUrl;
       let pendingUpdate = false;
-      let showFallback = this._modifierHasRun;
+      // On the very first modifier run linkedCards is likely still loading
+      // (empty []) so we skip unresolved Pills to avoid flashing them for
+      // refs that will soon resolve. On subsequent runs (linkedCards changed)
+      // showFallback is true. We also enable it immediately if linkedCards
+      // already has data (in-app navigation with cached results).
+      let showFallback =
+        this._modifierHasRun || (linkedCards != null && linkedCards.length > 0);
       this._modifierHasRun = true;
 
       let collectSlots = (): RenderSlot[] => {
@@ -319,18 +326,6 @@ export default class MarkDownTemplate extends GlimmerComponent<{
 
       scheduleUpdate();
 
-      // When the modifier only runs once (e.g. in-app navigation where
-      // linkedCards is already resolved), the showFallback flag stays false.
-      // Schedule a deferred update that enables it so unresolvable refs
-      // eventually show their Pill indicator.
-      let deferredFallbackTimer: ReturnType<typeof setTimeout> | undefined;
-      if (!showFallback) {
-        deferredFallbackTimer = setTimeout(() => {
-          showFallback = true;
-          scheduleUpdate();
-        }, 0);
-      }
-
       // MutationObserver re-collects slots when the DOM is reconstructed
       // (e.g. after browser back-navigation rebuilds the element's children).
       if (typeof MutationObserver === 'undefined') {
@@ -343,12 +338,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         subtree: true,
       });
 
-      return () => {
-        observer.disconnect();
-        if (deferredFallbackTimer !== undefined) {
-          clearTimeout(deferredFallbackTimer);
-        }
-      };
+      return () => observer.disconnect();
     },
   );
 
@@ -481,7 +471,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               title={{slot.url}}
               data-test-markdown-bfm-unresolved-inline
             >
-              <:iconLeft><LinkOffIcon @width='12' @height='12' /></:iconLeft>
+              <:iconLeft><LinkOffIcon width='12' height='12' /></:iconLeft>
               <:default>{{slot.typeName}}</:default>
             </Pill>
           {{else}}
@@ -491,7 +481,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
               data-test-markdown-bfm-unresolved-block
             >
               <Pill @variant='muted' @size='small'>
-                <:iconLeft><LinkOffIcon @width='14' @height='14' /></:iconLeft>
+                <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
                 <:default>{{slot.typeName}}</:default>
               </Pill>
             </div>
