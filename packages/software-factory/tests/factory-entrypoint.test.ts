@@ -195,8 +195,6 @@ module('factory-entrypoint', function (hooks) {
           iterations: 1,
           toolCallLog: [],
           issueId: 'Issues/sticky-note-define-core',
-          testRealmUrl:
-            'https://realms.example.test/hassan/personal-test-artifacts/',
         }),
         fetch: async (_input, init) => {
           assert.strictEqual(
@@ -269,8 +267,6 @@ module('factory-entrypoint', function (hooks) {
           iterations: 1,
           toolCallLog: [],
           issueId: 'Issues/sticky-note-define-core',
-          testRealmUrl:
-            'https://realms.example.test/app/hassan/personal-test-artifacts/',
         }),
         fetch: async () =>
           new Response(

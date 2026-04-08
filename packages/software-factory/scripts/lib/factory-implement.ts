@@ -133,10 +133,6 @@ export async function runFactoryImplement(
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let fetchImpl = config.fetch ?? globalThis.fetch;
 
-  // Derive the test-artifacts realm URL from the target realm URL.
-  // e.g., "http://localhost:4201/user/my-realm/" -> "http://localhost:4201/user/my-realm-test-artifacts/"
-  let testRealmUrl = targetRealmUrl.replace(/\/$/, '-test-artifacts/');
-
   // 1. Auth: get Matrix auth, server token, and per-realm JWTs
   let { serverToken, realmTokens } = await resolveAuth(config);
 
@@ -156,7 +152,6 @@ export async function runFactoryImplement(
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
-    testRealmUrl,
     fetch: fetchImpl,
     authorization: config.authorization,
   });

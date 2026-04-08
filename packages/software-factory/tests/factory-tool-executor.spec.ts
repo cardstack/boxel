@@ -38,7 +38,6 @@ test('realm-read fetches .realm.json from the test realm', async ({
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    testRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
@@ -57,7 +56,6 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    testRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
@@ -87,7 +85,6 @@ test('realm-write creates a card and realm-read retrieves it', async ({
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    testRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
@@ -133,7 +130,6 @@ test('realm-delete removes a card from the test realm', async ({ realm }) => {
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    testRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
@@ -184,7 +180,6 @@ test('unregistered tool is rejected without reaching the server', async ({
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    testRealmUrl: realm.realmURL.href,
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
@@ -211,7 +206,6 @@ async function buildToolsForRealm(realm: {
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    testRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     authorization: `Bearer ${realm.ownerBearerToken}`,
   });
@@ -408,7 +402,6 @@ test.describe('realm-search with seeded fixture data', () => {
     let executor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
       authorization: `Bearer ${realm.ownerBearerToken}`,
     });
@@ -493,7 +486,6 @@ test.describe('realm-search on a private realm', () => {
     let ownerExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
       authorization: `Bearer ${realm.ownerBearerToken}`,
     });
@@ -537,7 +529,6 @@ test.describe('realm-search on a private realm', () => {
     let noAuthExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
       // No authorization — simulates unauthenticated access
     });
@@ -556,7 +547,6 @@ test.describe('realm-search on a private realm', () => {
     let unauthorizedExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
       authorization: `Bearer ${unauthorizedToken}`,
     });
@@ -638,7 +628,6 @@ test.describe('realm-create against a live realm server', () => {
     let sessionExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
     });
 
@@ -659,7 +648,6 @@ test.describe('realm-create against a live realm server', () => {
     let createExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
       authorization: serverJwt,
     });
@@ -689,7 +677,6 @@ test.describe('realm-create against a live realm server', () => {
     let verifyExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: newRealmUrl,
-      testRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
       authorization: newRealmToken,
     });

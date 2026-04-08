@@ -215,7 +215,7 @@ test.describe('factory-test-realm e2e', () => {
 
   test('error path: unreachable realm returns error immediately', async () => {
     let options: TestRunRealmOptions = {
-      testRealmUrl: 'http://localhost:1/',
+      targetRealmUrl: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
       fetch: globalThis.fetch,
     };

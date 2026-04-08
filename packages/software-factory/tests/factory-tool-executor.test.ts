@@ -24,7 +24,6 @@ function makeConfig(
   return {
     packageRoot: '/fake/software-factory',
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     ...overrides,
   };
 }

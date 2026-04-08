@@ -31,7 +31,7 @@ export interface RunRealmTestsFailure {
 
 /** Realm connection options for TestRun card operations. */
 export interface TestRunRealmOptions {
-  testRealmUrl: string;
+  targetRealmUrl: string;
   /** URL to the test-results module in the source realm. Required, never inferred. */
   testResultsModuleUrl: string;
   authorization?: string;

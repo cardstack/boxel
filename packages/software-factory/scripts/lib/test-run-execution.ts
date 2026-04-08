@@ -32,7 +32,7 @@ export async function resolveTestRun(
   options: ExecuteTestRunOptions,
 ): Promise<TestRunHandle & { resumed: boolean; pendingTests?: string[] }> {
   let realmOptions: TestRunRealmOptions = {
-    testRealmUrl: options.targetRealmUrl,
+    targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
     authorization: options.authorization,
     fetch: options.fetch,
@@ -79,10 +79,10 @@ export async function resolveTestRun(
 async function findResumableTestRun(
   options: TestRunRealmOptions,
 ): Promise<ResumableTestRun | undefined> {
-  let testRealmUrl = ensureTrailingSlash(options.testRealmUrl);
+  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
 
   let result = await searchRealm(
-    options.testRealmUrl,
+    options.targetRealmUrl,
     {
       filter: {
         on: { module: options.testResultsModuleUrl, name: 'TestRun' },
@@ -120,8 +120,8 @@ async function findResumableTestRun(
     .map((r) => r.testName ?? '');
 
   let cardId = latest.id ?? '';
-  let relativePath = cardId.startsWith(testRealmUrl)
-    ? cardId.slice(testRealmUrl.length)
+  let relativePath = cardId.startsWith(targetRealmUrl)
+    ? cardId.slice(targetRealmUrl.length)
     : cardId;
 
   return {
@@ -135,7 +135,7 @@ async function getNextSequenceNumber(
   options: TestRunRealmOptions,
 ): Promise<number> {
   let result = await searchRealm(
-    options.testRealmUrl,
+    options.targetRealmUrl,
     {
       filter: {
         on: { module: options.testResultsModuleUrl, name: 'TestRun' },
@@ -402,7 +402,7 @@ export async function executeTestRunFromRealm(
   options: ExecuteTestRunOptions,
 ): Promise<TestRunHandle> {
   let realmOptions: TestRunRealmOptions = {
-    testRealmUrl: options.targetRealmUrl,
+    targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
     authorization: options.authorization,
     fetch: options.fetch,

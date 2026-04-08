@@ -33,7 +33,7 @@ export async function createTestRun(
   );
 
   let result = await writeFile(
-    options.testRealmUrl,
+    options.targetRealmUrl,
     `${testRunId}.json`,
     JSON.stringify(document, null, 2),
     { authorization: options.authorization, fetch: options.fetch },
@@ -63,7 +63,11 @@ export async function completeTestRun(
   // may be stale causing the first fetch to fail with "fetch failed".
   let readResult: Awaited<ReturnType<typeof readFile>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await readFile(options.testRealmUrl, testRunId, fetchOptions);
+    readResult = await readFile(
+      options.targetRealmUrl,
+      testRunId,
+      fetchOptions,
+    );
     if (readResult.ok && readResult.document) {
       break;
     }
@@ -106,7 +110,7 @@ export async function completeTestRun(
   }
 
   let writeResult = await writeFile(
-    options.testRealmUrl,
+    options.targetRealmUrl,
     `${testRunId}.json`,
     JSON.stringify(readResult.document, null, 2),
     fetchOptions,
