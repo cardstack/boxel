@@ -18,11 +18,6 @@
           "self": "../Projects/demo-project"
         }
       },
-      "assignedAgent": {
-        "links": {
-          "self": "../Agent Profiles/demo-agent"
-        }
-      },
       "relatedKnowledge.0": {
         "links": {
           "self": "../Knowledge Articles/agent-onboarding"

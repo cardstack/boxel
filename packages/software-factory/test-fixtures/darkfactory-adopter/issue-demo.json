@@ -18,11 +18,6 @@
           "self": "./project-demo"
         }
       },
-      "assignedAgent": {
-        "links": {
-          "self": "./agent-demo"
-        }
-      },
       "relatedKnowledge.0": {
         "links": {
           "self": "./knowledge-article-demo"

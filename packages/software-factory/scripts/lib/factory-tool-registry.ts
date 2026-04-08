@@ -63,45 +63,6 @@ const SCRIPT_TOOLS: ToolManifest[] = [
     ],
   },
   {
-    name: 'pick-ticket',
-    description: 'Find tickets by status, priority, project, or agent.',
-    category: 'script',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm',
-        type: 'string',
-        required: true,
-        description: 'Target realm URL',
-      },
-      {
-        name: 'status',
-        type: 'string',
-        required: false,
-        description:
-          'Comma-separated status filter (default: backlog,in_progress,review)',
-      },
-      {
-        name: 'project',
-        type: 'string',
-        required: false,
-        description: 'Filter by project ID',
-      },
-      {
-        name: 'agent',
-        type: 'string',
-        required: false,
-        description: 'Filter by assigned agent ID',
-      },
-      {
-        name: 'module',
-        type: 'string',
-        required: false,
-        description: 'Issue schema module URL',
-      },
-    ],
-  },
-  {
     name: 'get-session',
     description:
       'Generate authenticated browser session tokens for realm access.',

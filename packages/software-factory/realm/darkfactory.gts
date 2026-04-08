@@ -250,7 +250,6 @@ export class Issue extends CardDef {
   @field status = contains(IssueStatusField);
   @field priority = contains(IssuePriorityField);
   @field project = linksTo(() => Project);
-  @field assignedAgent = linksTo(() => AgentProfile);
   @field blockedBy = linksToMany(() => Issue);
   @field relatedKnowledge = linksToMany(() => KnowledgeArticle);
   @field acceptanceCriteria = contains(MarkdownField);

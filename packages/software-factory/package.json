@@ -5,7 +5,6 @@
   "license": "MIT",
   "description": "Software Factory workspace package",
   "scripts": {
-    "boxel:pick-ticket": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/pick-ticket.ts",
     "boxel:search": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-search.ts",
     "boxel:session": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-session.ts",
     "cache:prepare": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/cache-realm.ts",
