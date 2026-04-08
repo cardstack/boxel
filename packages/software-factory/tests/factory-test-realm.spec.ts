@@ -7,11 +7,7 @@ import {
   executeTestRunFromRealm,
   type TestRunRealmOptions,
 } from '../src/factory-test-realm';
-import {
-  readFile,
-  waitForRealmFile,
-  writeFile,
-} from '../src/realm-operations';
+import { readFile, waitForRealmFile, writeFile } from '../src/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),

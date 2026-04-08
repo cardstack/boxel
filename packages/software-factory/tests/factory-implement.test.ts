@@ -2,10 +2,7 @@ import { module, test } from 'qunit';
 
 import type { AgentContext } from '../src/factory-agent';
 import type { AgentRunResult, LoopAgent } from '../src/factory-loop';
-import type {
-  FactoryTool,
-  ToolCallEntry,
-} from '../src/factory-tool-builder';
+import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
 import type { FactoryBootstrapResult } from '../src/factory-bootstrap';
 
 import {

@@ -13,10 +13,7 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import {
-  ToolExecutor,
-  ToolNotFoundError,
-} from '../src/factory-tool-executor';
+import { ToolExecutor, ToolNotFoundError } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
 import { buildFactoryTools } from '../src/factory-tool-builder';
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';

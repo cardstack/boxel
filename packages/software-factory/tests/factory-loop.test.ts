@@ -8,10 +8,7 @@ import type {
   TicketCard,
 } from '../src/factory-agent';
 
-import type {
-  FactoryTool,
-  ToolCallEntry,
-} from '../src/factory-tool-builder';
+import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
 
 import {
   runFactoryLoop,

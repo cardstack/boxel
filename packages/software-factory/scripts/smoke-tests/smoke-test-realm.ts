@@ -37,11 +37,7 @@
 // This should be first
 import '../setup-logger';
 
-import {
-  getRealmServerToken,
-  matrixLogin,
-  parseArgs,
-} from '../../src/boxel';
+import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
 import { executeTestRunFromRealm } from '../../src/test-run-execution';
 import {
