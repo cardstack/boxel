@@ -33,6 +33,7 @@ jobs:
       software-factory: ${{ steps.filter.outputs.software-factory }}
       vscode-boxel-tools: ${{ steps.filter.outputs.vscode-boxel-tools }}
       workspace-sync-cli: ${{ steps.filter.outputs.workspace-sync-cli }}
+      boxel-cli: ${{ steps.filter.outputs.boxel-cli }}
       # Force all tests to run when on ci-bisect* branches
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
@@ -116,6 +117,9 @@ jobs:
             workspace-sync-cli:
               - *shared
               - 'packages/workspace-sync-cli/**'
+            boxel-cli:
+              - *shared
+              - 'packages/boxel-cli/**'
       - name: Force run all jobs on ci-bisect branches
         id: force-run-all
         shell: bash
@@ -820,6 +824,39 @@ jobs:
           name: workspace-sync-cli-test-services-log
           path: /tmp/test-services.log
           retention-days: 30
+
+  boxel-cli-build:
+    name: Boxel CLI Build
+    needs: change-check
+    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-cli-build-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Build boxel-cli
+        run: pnpm build
+        working-directory: packages/boxel-cli
+
+  boxel-cli-test:
+    name: Boxel CLI Tests
+    needs: change-check
+    if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-cli-test-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Build
+        run: pnpm build
+        working-directory: packages/boxel-cli
+      - name: Run tests
+        run: pnpm test
+        working-directory: packages/boxel-cli
 
   deploy:
     name: Deploy boxel to staging
