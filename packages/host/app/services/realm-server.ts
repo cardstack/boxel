@@ -20,6 +20,7 @@ import {
   testRealmURL,
   type RealmInfo,
   type JWTPayload,
+  isRegisteredPrefix,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -275,6 +276,12 @@ export default class RealmServerService extends Service {
     }
   }
 
+  // Filter out prefix-form realm URLs (e.g. @cardstack/base/) which are
+  // not valid HTTP URLs and don't need federated auth.
+  resolveRealmUrls(realms: string[]): string[] {
+    return realms.filter((r) => !isRegisteredPrefix(r));
+  }
+
   getRealmServersForRealms(realms: string[]) {
     let testRealmOrigin = isTesting()
       ? new URL(testRealmURL).origin
@@ -292,6 +299,9 @@ export default class RealmServerService extends Service {
     let realmServerURLs = new Set<string>();
 
     for (let realmURL of realms) {
+      if (isRegisteredPrefix(realmURL)) {
+        continue; // prefix-form realm (e.g. @cardstack/base/) — no auth needed
+      }
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
       if (
         testRealmOrigin &&
@@ -458,7 +468,12 @@ export default class RealmServerService extends Service {
       return { data: [], publicReadableRealms: new Set() };
     }
 
-    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let uniqueRealmUrls = Array.from(
+      new Set(this.resolveRealmUrls(realmUrls)),
+    );
+    if (uniqueRealmUrls.length === 0) {
+      return { data: [], publicReadableRealms: new Set() };
+    }
     let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.assertOwnRealmServer(realmServerURLs);
@@ -522,7 +537,12 @@ export default class RealmServerService extends Service {
       return { data: [], meta: { page: { total: 0 } } };
     }
 
-    let uniqueRealmUrls = Array.from(new Set(realmUrls));
+    let uniqueRealmUrls = Array.from(
+      new Set(this.resolveRealmUrls(realmUrls)),
+    );
+    if (uniqueRealmUrls.length === 0) {
+      return { data: [], meta: { page: { total: 0 } } };
+    }
     let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
     // TODO remove this assertion after multi-realm server/federated identity is supported
     this.assertOwnRealmServer(realmServerURLs);

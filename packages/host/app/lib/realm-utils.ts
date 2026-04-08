@@ -1,4 +1,8 @@
-import { cardIdToURL, RealmPaths } from '@cardstack/runtime-common';
+import {
+  cardIdToURL,
+  isRegisteredPrefix,
+  RealmPaths,
+} from '@cardstack/runtime-common';
 
 /**
  * Normalizes realm URLs by ensuring they have trailing slashes and
@@ -12,9 +16,11 @@ import { cardIdToURL, RealmPaths } from '@cardstack/runtime-common';
  * // Returns: ['http://localhost:4201/test/', 'http://localhost:4201/demo/']
  */
 export function normalizeRealms(realms: string[]): string[] {
-  return realms.map((r) => {
-    return new RealmPaths(new URL(r)).url;
-  });
+  return realms
+    .filter((r) => !isRegisteredPrefix(r))
+    .map((r) => {
+      return new RealmPaths(new URL(r)).url;
+    });
 }
 
 /**
