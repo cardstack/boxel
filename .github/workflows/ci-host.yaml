@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "packages/host/**"
       - "packages/base/**"
@@ -42,6 +43,12 @@ jobs:
             exit 0
           fi
 
+          if [[ "${{ github.event.pull_request.draft }}" == "true" ]]; then
+            echo "percy_needed=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Percy — PR is a draft. Percy snapshots are limited (10k/month), so they only run once a PR is marked as ready for review to avoid burning through the quota on work-in-progress PRs."
+            exit 0
+          fi
+
           CHANGED_FILES=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files --paginate --jq '.[].filename')
 
           percy_needed=false
@@ -73,6 +80,7 @@ jobs:
 
   live-test:
     name: Live Tests (realm)
+    if: github.event.action != 'ready_for_review'
     runs-on: ubuntu-latest
     needs: test-web-assets
     concurrency:
