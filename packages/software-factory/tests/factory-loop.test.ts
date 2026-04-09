@@ -6,12 +6,9 @@ import type {
   ProjectCard,
   TestResult,
   TicketCard,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 
-import type {
-  FactoryTool,
-  ToolCallEntry,
-} from '../scripts/lib/factory-tool-builder';
+import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
 
 import {
   runFactoryLoop,
@@ -21,7 +18,7 @@ import {
   type FactoryLoopConfig,
   type LoopAgent,
   type TestRunner,
-} from '../scripts/lib/factory-loop';
+} from '../src/factory-loop';
 
 // ---------------------------------------------------------------------------
 // Mock agent

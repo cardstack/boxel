@@ -15,7 +15,7 @@
 
 import { resolve } from 'node:path';
 
-import { logger } from '../../src/logger';
+import { logger } from './logger';
 
 import type {
   KnowledgeArticle,
@@ -67,7 +67,7 @@ import {
 import { executeTestRunFromRealm } from './test-run-execution';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
 
-import type { FactoryBootstrapResult } from '../../src/factory-bootstrap';
+import type { FactoryBootstrapResult } from './factory-bootstrap';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -75,7 +75,7 @@ import type { FactoryBootstrapResult } from '../../src/factory-bootstrap';
 
 let log = logger('factory-implement');
 
-const PACKAGE_ROOT = resolve(__dirname, '../..');
+const PACKAGE_ROOT = resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Types

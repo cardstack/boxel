@@ -8,7 +8,7 @@ import type {
   ProjectCard,
   ResolvedSkill,
   TicketCard,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 import {
   DefaultSkillResolver,
   SkillLoader,
@@ -16,7 +16,7 @@ import {
   enforceSkillBudget,
   estimateTokens,
   extractTicketText,
-} from '../scripts/lib/factory-skill-loader';
+} from '../src/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
 // Test helpers

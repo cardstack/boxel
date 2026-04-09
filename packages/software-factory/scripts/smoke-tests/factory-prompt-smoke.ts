@@ -18,7 +18,7 @@ import '../../src/setup-logger';
 import { parseArgs } from 'node:util';
 import { logger } from '../../src/logger';
 
-import type { AgentAction, AgentContext } from '../lib/factory-agent';
+import type { AgentAction, AgentContext } from '../../src/factory-agent';
 
 import {
   assembleImplementPrompt,
@@ -27,7 +27,7 @@ import {
   assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
-} from '../lib/factory-prompt-loader';
+} from '../../src/factory-prompt-loader';
 
 // ---------------------------------------------------------------------------
 // Sample data

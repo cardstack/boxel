@@ -57,7 +57,7 @@ import {
   OpenRouterFactoryAgent,
   resolveFactoryModel,
   type AgentContext,
-} from '../lib/factory-agent';
+} from '../../src/factory-agent';
 
 let log = logger('factory-agent-smoke');
 

@@ -6,17 +6,17 @@ import type {
   ResolvedSkill,
   TestResult,
   TicketCard,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 
 import {
   ContextBuilder,
   type ContextBuilderConfig,
-} from '../scripts/lib/factory-context-builder';
+} from '../src/factory-context-builder';
 
 import type {
   SkillLoaderInterface,
   SkillResolver,
-} from '../scripts/lib/factory-skill-loader';
+} from '../src/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
 // Test doubles

@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { normalize, resolve } from 'node:path';
 
-import { logger } from '../../src/logger';
+import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
 
@@ -440,7 +440,7 @@ export async function executeTestRunFromRealm(
   try {
     // Locate the host app's dist directory — contains tests/index.html and assets
     let hostDistDir =
-      options.hostDistDir ?? resolve(__dirname, '../../../host/dist');
+      options.hostDistDir ?? resolve(__dirname, '../../host/dist');
 
     // Start a local server to serve both the test HTML page and the host's
     // dist assets. All asset references point to our server, so no external

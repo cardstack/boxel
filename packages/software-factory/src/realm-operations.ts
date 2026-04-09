@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { logger } from '../../src/logger';
+import { logger } from './logger';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {

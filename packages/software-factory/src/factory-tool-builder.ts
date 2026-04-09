@@ -7,7 +7,7 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
-import { logger } from '../../src/logger';
+import { logger } from './logger';
 import type {
   LooseSingleCardDocument,
   Relationship,

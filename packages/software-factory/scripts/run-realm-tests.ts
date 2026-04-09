@@ -15,8 +15,8 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
-import { getActiveProfile, parseArgs } from './lib/boxel';
-import { ensureTrailingSlash } from './lib/realm-operations';
+import { getActiveProfile, parseArgs } from '../src/boxel';
+import { ensureTrailingSlash } from '../src/realm-operations';
 
 type CommandOptions = {
   cwd?: string;

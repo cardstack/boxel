@@ -19,13 +19,13 @@ import type {
   KnowledgeArticle,
   ProjectCard,
   TicketCard,
-} from '../lib/factory-agent';
-import { ContextBuilder } from '../lib/factory-context-builder';
+} from '../../src/factory-agent';
+import { ContextBuilder } from '../../src/factory-context-builder';
 import {
   DefaultSkillResolver,
   estimateTokens,
   SkillLoader,
-} from '../lib/factory-skill-loader';
+} from '../../src/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -7,7 +7,7 @@ import type { ProjectCard, ResolvedSkill, TicketCard } from './factory-agent';
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '../..');
+const PACKAGE_ROOT = resolve(__dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
 

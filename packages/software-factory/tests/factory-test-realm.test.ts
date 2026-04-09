@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import type { TestResult } from '../scripts/lib/factory-agent';
+import type { TestResult } from '../src/factory-agent';
 import {
   buildTestRunCardDocument,
   completeTestRun,
@@ -11,8 +11,8 @@ import {
   parseQunitResults,
   resolveTestRun,
   type TestRunAttributes,
-} from '../scripts/lib/factory-test-realm';
-import { pullRealmFiles } from '../scripts/lib/realm-operations';
+} from '../src/factory-test-realm';
+import { pullRealmFiles } from '../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
