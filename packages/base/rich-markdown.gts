@@ -16,6 +16,8 @@ import {
   linksToMany,
 } from './card-api';
 import MarkdownTemplate from './default-templates/markdown';
+import CodeMirrorEditor from './codemirror-editor';
+import { CardContextConsumer } from './field-component';
 
 /**
  * A composite FieldDef that stores markdown content and exposes structured
@@ -95,8 +97,30 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
+    updateContent = (markdown: string) => {
+      this.args.model.content = markdown;
+    };
+    get baseUrl(): string | null {
+      return this.args.model?.[relativeTo]?.href ?? null;
+    }
+    get linkedCards(): CardDef[] | null {
+      try {
+        return this.args.model?.linkedCards ?? null;
+      } catch {
+        // linksToMany query may fail in environments without a full card store
+        return null;
+      }
+    }
     <template>
-      <@fields.content />
+      <CardContextConsumer as |context|>
+        <CodeMirrorEditor
+          @content={{@model.content}}
+          @onUpdate={{this.updateContent}}
+          @linkedCards={{this.linkedCards}}
+          @cardReferenceBaseUrl={{this.baseUrl}}
+          @getCards={{context.getCards}}
+        />
+      </CardContextConsumer>
     </template>
   };
 }
