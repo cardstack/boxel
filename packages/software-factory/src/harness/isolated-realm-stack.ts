@@ -19,7 +19,6 @@ import {
   baseRealmDir,
   baseRealmURLFor,
   captureProcessLogs,
-  CONFIGURED_PRERENDER_URL,
   createProcessExitPromise,
   DEFAULT_MATRIX_SERVER_USERNAME,
   DEFAULT_PG_HOST,
@@ -27,7 +26,6 @@ import {
   DEFAULT_PG_PORT,
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
-  DEFAULT_REALM_SERVER_PORT,
   findAvailablePort,
   FIXTURE_SOURCE_REALM_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
@@ -277,6 +275,8 @@ export async function startIsolatedRealmStack({
   fullIndexOnStartup,
   additionalRealms,
   workerManagerPort: explicitWorkerManagerPort,
+  realmServerPort: explicitRealmServerPort,
+  prerenderURL: explicitPrerenderURL,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -290,6 +290,13 @@ export async function startIsolatedRealmStack({
    *  picking one dynamically. This lets callers know the port upfront (e.g.
    *  for progress monitoring via /_indexing-status). */
   workerManagerPort?: number;
+  /** When provided, the realm-server will listen on this port instead of
+   *  picking one dynamically. */
+  realmServerPort?: number;
+  /** When provided, reuse this existing prerender server URL instead of
+   *  starting a new one. The Playwright harness keeps prerender alive for
+   *  the lifetime of a testWorker and passes its URL here. */
+  prerenderURL?: string;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
   let testRealmDir = join(rootDir, 'test');
@@ -298,9 +305,9 @@ export async function startIsolatedRealmStack({
   let actualWorkerManagerPort =
     explicitWorkerManagerPort ?? (await findAvailablePort());
   let actualRealmServerPort =
-    DEFAULT_REALM_SERVER_PORT === 0
-      ? await findAvailablePort()
-      : DEFAULT_REALM_SERVER_PORT;
+    explicitRealmServerPort && explicitRealmServerPort !== 0
+      ? explicitRealmServerPort
+      : await findAvailablePort();
   let actualRealmServerURL = withPort(realmServerURL, actualRealmServerPort);
   let actualRealmPath = realmRelativePath(realmURL, realmServerURL);
   let actualRealmURL = realmURLWithinServer(
@@ -360,12 +367,12 @@ export async function startIsolatedRealmStack({
   // lifetime of a Playwright testWorker even though the realm stack itself is
   // recreated per test. When provided, reuse that long-lived prerender URL so
   // we only restart realm-server and worker-manager here.
-  let prerender = CONFIGURED_PRERENDER_URL
+  let prerender = explicitPrerenderURL
     ? undefined
     : await startHarnessPrerenderServer({
         boxelHostURL: realmServerURL.href.replace(/\/$/, ''),
       });
-  let prerenderURL = CONFIGURED_PRERENDER_URL?.href ?? prerender?.url;
+  let prerenderURL = explicitPrerenderURL ?? prerender?.url;
   if (!prerenderURL) {
     throw new Error(
       'Unable to determine prerender URL for isolated realm stack',

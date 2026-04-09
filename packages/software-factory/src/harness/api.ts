@@ -77,6 +77,7 @@ export async function startFactoryGlobalContext(
     let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
       realmURL: options.realmURL,
       realmServerURL: options.realmServerURL,
+      compatRealmServerPort: options.compatRealmServerPort,
     });
     let support = await startFactorySupportServices();
     try {
@@ -125,6 +126,7 @@ export async function ensureFactoryRealmTemplate(
     let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
       realmURL: options.realmURL ?? contextRealmURL,
       realmServerURL: options.realmServerURL ?? contextRealmServerURL,
+      compatRealmServerPort: options.compatRealmServerPort,
     });
     let permissions = options.permissions ?? DEFAULT_PERMISSIONS;
     let fixtureHash = hashRealmFixture(realmDir);
@@ -356,6 +358,7 @@ export async function startFactoryRealmServer(
     let { realmURL, realmServerURL } = await resolveFactoryRealmLocation({
       realmURL: options.realmURL ?? contextRealmURL,
       realmServerURL: options.realmServerURL ?? contextRealmServerURL,
+      compatRealmServerPort: options.compatRealmServerPort,
     });
     let templateDatabaseName = options.templateDatabaseName;
     let databaseName = runtimeDatabaseName();
@@ -448,6 +451,8 @@ export async function startFactoryRealmServer(
         context,
         migrateDB: false,
         fullIndexOnStartup: false,
+        realmServerPort: options.realmServerPort,
+        prerenderURL: options.prerenderURL,
       });
     } catch (error) {
       let cleanupError: unknown;
