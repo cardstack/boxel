@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import type { TestResult } from '../scripts/lib/factory-agent';
+import type { TestResult } from '../src/factory-agent';
 import {
   buildTestRunCardDocument,
   completeTestRun,
@@ -11,8 +11,8 @@ import {
   parseQunitResults,
   resolveTestRun,
   type TestRunAttributes,
-} from '../scripts/lib/factory-test-realm';
-import { pullRealmFiles } from '../scripts/lib/realm-operations';
+} from '../src/factory-test-realm';
+import { pullRealmFiles } from '../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -679,6 +679,64 @@ module('factory-test-realm > resolveTestRun', function () {
       handle1.testRunId,
       handle2.testRunId,
       'each iteration gets its own TestRun',
+    );
+  });
+
+  test('lastSequenceNumber prevents reuse when realm index is stale', async function (assert) {
+    // Simulates the real-world bug: the realm search index hasn't indexed
+    // the TestRun created in the previous iteration, so the search returns
+    // stale data. Without lastSequenceNumber, getNextSequenceNumber would
+    // return 1 again and overwrite the first TestRun.
+    let handle1 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(handle1.testRunId, 'Test Runs/my-ticket-1');
+
+    // Second call — search index is STALE (still returns empty), but
+    // lastSequenceNumber=1 prevents reusing sequence 1.
+    let handle2 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      lastSequenceNumber: 1,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(
+      handle2.testRunId,
+      'Test Runs/my-ticket-2',
+      'uses lastSequenceNumber as floor even when index returns nothing',
+    );
+
+    // Third call — index still stale, lastSequenceNumber=2
+    let handle3 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      lastSequenceNumber: 2,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(
+      handle3.testRunId,
+      'Test Runs/my-ticket-3',
+      'continues incrementing from lastSequenceNumber floor',
     );
   });
 });

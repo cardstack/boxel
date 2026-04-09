@@ -11,7 +11,7 @@ import {
   runFactoryImplement,
   type ImplementConfig,
   type ImplementResult,
-} from '../scripts/lib/factory-implement';
+} from './factory-implement';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,

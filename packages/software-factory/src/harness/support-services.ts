@@ -2,6 +2,8 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { logger } from '../logger';
+
 import {
   boxelIconsDir,
   browserPassword,
@@ -29,6 +31,7 @@ import {
 } from './shared';
 import { canConnectToPg } from './database';
 
+let log = logger('support-services');
 let preparePgPromise: Promise<void> | undefined;
 
 function hostStartupLooksLikePortContention(logs: string): boolean {
@@ -415,10 +418,10 @@ export async function startHarnessPrerenderServer(options: {
   );
 
   child.stdout?.on('data', (data: Buffer) => {
-    console.log(`prerender: ${data.toString()}`);
+    log.info(`prerender: ${data.toString()}`);
   });
   child.stderr?.on('data', (data: Buffer) => {
-    console.error(`prerender: ${data.toString()}`);
+    log.error(`prerender: ${data.toString()}`);
   });
 
   let exitPromise = new Promise<never>((_, reject) => {
