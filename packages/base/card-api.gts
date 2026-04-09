@@ -2958,6 +2958,7 @@ export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field name = contains(StringField);
   @field summary = contains(StringField);
+  @field cardThumbnail = linksTo(ImageDef);
   @field cardThumbnailURL = contains(MaybeBase64Field);
   @field theme = linksTo(() => Theme);
   @field notes = contains(MarkdownField);
@@ -3001,7 +3002,7 @@ export class CardDef extends BaseDef {
   // to use it directly now (or wait until a better image field comes along)
   @field cardThumbnailURL = contains(MaybeBase64Field, {
     computeVia: function (this: CardDef) {
-      return this.cardInfo.cardThumbnailURL;
+      return this.cardInfo.cardThumbnail?.url ?? this.cardInfo.cardThumbnailURL;
     },
   });
   static displayName = 'Card';
