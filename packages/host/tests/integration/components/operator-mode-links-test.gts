@@ -154,7 +154,6 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-add-new="spec"]').exists();
 
     await click('[data-test-add-new="spec"]');
-    await this.pauseTest();
     await waitFor(
       `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
