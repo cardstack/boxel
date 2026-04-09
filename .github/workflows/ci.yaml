@@ -842,7 +842,7 @@ jobs:
 
   boxel-cli-test:
     name: Boxel CLI Tests
-    needs: change-check
+    needs: [change-check, test-web-assets]
     if: needs.change-check.outputs.boxel-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     concurrency:
@@ -851,11 +851,29 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
       - name: Build
         run: pnpm build
         working-directory: packages/boxel-cli
-      - name: Run tests
-        run: pnpm test
+      - name: Run unit tests
+        run: pnpm test:unit
+        working-directory: packages/boxel-cli
+      - name: Start test services
+        run: mise run test-services:realm-server | tee -a /tmp/server.log &
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Run integration tests
+        run: pnpm test:integration
         working-directory: packages/boxel-cli
 
   deploy:
