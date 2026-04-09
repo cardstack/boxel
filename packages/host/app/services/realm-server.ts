@@ -21,6 +21,7 @@ import {
   type RealmInfo,
   type JWTPayload,
   isRegisteredPrefix,
+  cardIdToURL,
 } from '@cardstack/runtime-common';
 import {
   joinDMRoom,
@@ -276,8 +277,9 @@ export default class RealmServerService extends Service {
     }
   }
 
-  // Filter out prefix-form realm URLs (e.g. @cardstack/base/) which are
-  // not valid HTTP URLs and don't need federated auth.
+  // Filter out prefix-form realm URLs (e.g. @cardstack/base/) from
+  // federated requests. These realms are served locally and don't need
+  // to be fetched via the federated endpoint.
   resolveRealmUrls(realms: string[]): string[] {
     return realms.filter((r) => !isRegisteredPrefix(r));
   }
