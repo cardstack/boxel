@@ -363,10 +363,14 @@ test.describe('Room creation', () => {
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
     let newRoom: string | undefined;
+    // Poll without using getRoomId, which blocks on waitFor('[data-test-room-settled]')
+    // and can consume the entire waitUntil budget in a single attempt
     await waitUntil(async () => {
       try {
-        let roomId = await getRoomId(page);
-        if (roomId !== room1 && roomId !== room2 && roomId !== room3) {
+        let roomEl = page.locator('[data-test-room]');
+        if ((await roomEl.count()) === 0) return false;
+        let roomId = await roomEl.getAttribute('data-test-room');
+        if (roomId && roomId !== room1 && roomId !== room2 && roomId !== room3) {
           newRoom = roomId;
           return true;
         }
