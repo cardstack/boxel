@@ -25,7 +25,12 @@ import {
 } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxTree } from '@codemirror/language';
-import { EditorState, StateEffect, type Extension } from '@codemirror/state';
+import {
+  EditorState,
+  StateEffect,
+  StateField,
+  type Extension,
+} from '@codemirror/state';
 import {
   EditorView,
   Decoration,
@@ -115,14 +120,13 @@ function isInsideCode(state: EditorState, from: number, to: number): boolean {
 // ── Build card decorations from document text ───────────────────────────────
 
 function buildCardDecorations(
-  view: EditorView,
+  state: EditorState,
   cursorLine: number,
-): { decorations: DecorationSet; targets: CardWidgetTarget[] } {
+): DecorationSet {
   let widgets: { from: number; to: number; widget: CardWidget }[] = [];
   let marks: { from: number; to: number; className: string }[] = [];
-  let targets: CardWidgetTarget[] = [];
 
-  let doc = view.state.doc;
+  let doc = state.doc;
   let text = doc.toString();
 
   // Block cards: ::card[URL]
@@ -131,7 +135,7 @@ function buildCardDecorations(
   while ((match = BLOCK_CARD_RE.exec(text)) !== null) {
     let from = match.index;
     let to = from + match[0].length;
-    if (isInsideCode(view.state, from, to)) continue;
+    if (isInsideCode(state, from, to)) continue;
 
     let cardId = match[1].trim();
     let pipeIdx = cardId.indexOf('|');
@@ -164,7 +168,7 @@ function buildCardDecorations(
   while ((match = INLINE_CARD_RE.exec(text)) !== null) {
     let from = match.index;
     let to = from + match[0].length;
-    if (isInsideCode(view.state, from, to)) continue;
+    if (isInsideCode(state, from, to)) continue;
 
     let cardId = match[1].trim();
 
@@ -180,14 +184,10 @@ function buildCardDecorations(
     widgets.push({ from: to, to, widget });
   }
 
-  // Build decoration set (must be sorted by position)
+  // Build decoration set
   let allDecorations: { from: number; to: number; value: Decoration }[] = [];
 
   for (let m of marks) {
-    // CM6 plugins cannot provide mark decorations that span line breaks
-    let slice = doc.sliceString(m.from, m.to);
-    if (slice.includes('\n')) continue;
-
     allDecorations.push({
       from: m.from,
       to: m.to,
@@ -196,8 +196,6 @@ function buildCardDecorations(
   }
 
   for (let w of widgets) {
-    // All widgets are inline point decorations — block styling is via CSS.
-    // CM6 disallows block widget decorations from plugins.
     allDecorations.push({
       from: w.from,
       to: w.to,
@@ -208,43 +206,48 @@ function buildCardDecorations(
     });
   }
 
-  // Sort by from position, then by to position
-  allDecorations.sort((a, b) => a.from - b.from || a.to - b.to);
-
-  let decoSet = Decoration.set(
+  return Decoration.set(
     allDecorations.map((d) => d.value.range(d.from, d.to)),
+    true, // let CM6 sort
   );
-
-  // Collect targets from widgets that will be rendered
-  for (let w of widgets) {
-    targets.push({
-      element: null as unknown as HTMLElement, // filled in after DOM render
-      cardId: w.widget.cardId,
-      format: w.widget.kind === 'inline' ? 'atom' : 'embedded',
-      kind: w.widget.kind,
-    });
-  }
-
-  return { decorations: decoSet, targets };
 }
 
-// ── Card decoration ViewPlugin ──────────────────────────────────────────────
+// ── Card decoration StateField ─────────────────────────────────────────────
+// Decorations are provided via a StateField (not a ViewPlugin) so that
+// block-level widgets and marks that touch line boundaries are allowed.
+// CM6 restricts plugin-provided decorations from replacing line breaks,
+// but state-field decorations have no such restriction.
 
-function createCardDecorationPlugin(
+function createCardDecorationField(): StateField<DecorationSet> {
+  return StateField.define<DecorationSet>({
+    create(state) {
+      let cursorLine = state.doc.lineAt(state.selection.main.head).number;
+      return buildCardDecorations(state, cursorLine);
+    },
+    update(decos, tr) {
+      if (tr.docChanged || tr.selection) {
+        let cursorLine = tr.state.doc.lineAt(
+          tr.state.selection.main.head,
+        ).number;
+        return buildCardDecorations(tr.state, cursorLine);
+      }
+      return decos;
+    },
+    provide: (f) => EditorView.decorations.from(f),
+  });
+}
+
+// ── Card target notification ViewPlugin ────────────────────────────────────
+// Separate plugin that only observes DOM changes and collects widget targets.
+// It does NOT provide decorations, so it's not subject to the line-break
+// restriction.
+
+function createCardTargetNotifier(
   onChange: (targets: CardWidgetTarget[]) => void,
-): ViewPlugin<{
-  decorations: DecorationSet;
-}> {
+): ViewPlugin<Record<string, never>> {
   return ViewPlugin.fromClass(
     class {
-      decorations: DecorationSet;
-
       constructor(view: EditorView) {
-        let cursorLine = view.state.doc.lineAt(
-          view.state.selection.main.head,
-        ).number;
-        let result = buildCardDecorations(view, cursorLine);
-        this.decorations = result.decorations;
         this.notifyTargets(view);
       }
 
@@ -254,11 +257,6 @@ function createCardDecorationPlugin(
           update.selectionSet ||
           update.viewportChanged
         ) {
-          let cursorLine = update.state.doc.lineAt(
-            update.state.selection.main.head,
-          ).number;
-          let result = buildCardDecorations(update.view, cursorLine);
-          this.decorations = result.decorations;
           this.notifyTargets(update.view);
         }
       }
@@ -285,9 +283,6 @@ function createCardDecorationPlugin(
           onChange(targets);
         });
       }
-    },
-    {
-      decorations: (v) => v.decorations,
     },
   );
 }
@@ -387,7 +382,8 @@ export interface CreateEditorStateOptions {
 function createEditorState(options: CreateEditorStateOptions): EditorState {
   let { content, onDocChange, onCardTargetsChange, onOpenCardSearch } = options;
 
-  let cardPlugin = createCardDecorationPlugin(onCardTargetsChange);
+  let cardField = createCardDecorationField();
+  let targetNotifier = createCardTargetNotifier(onCardTargetsChange);
   let slashSource = createSlashCommandSource(onOpenCardSearch);
 
   let extensions: Extension[] = [
@@ -395,7 +391,8 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     markdownKeymap,
-    cardPlugin,
+    cardField,
+    targetNotifier,
     autocompletion({
       override: [slashSource],
       defaultKeymap: true,

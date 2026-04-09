@@ -458,6 +458,143 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  // ── Complex document rendering (regression for line-break decoration error) ──
+
+  test('complex document with mixed card refs, code blocks, and formatting renders without error', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      // This content matches the RichMarkdownPlayground instance and exercises
+      // inline card refs, block card refs, fenced code blocks, inline code
+      // containing :card[URL] syntax, and various markdown formatting.
+      let content = [
+        '# Welcome to Rich Markdown',
+        '',
+        'This is a **playground** for the `RichMarkdownField` with its CodeMirror editor.',
+        '',
+        '## Features',
+        '',
+        '- Markdown syntax highlighting',
+        '- Card embedding via `:card[URL]` syntax',
+        '- Slash commands for inserting cards',
+        '- Keyboard shortcuts (Mod-B, Mod-I, Mod-`)',
+        '',
+        '## Card References',
+        '',
+        'Inline card reference: :card[./Author/alice]',
+        '',
+        'Block card reference:',
+        '',
+        '::card[./Author/jane-doe]',
+        '',
+        '## Code Block',
+        '',
+        '```typescript',
+        "let greeting = 'Hello, world!';",
+        'console.log(greeting);',
+        '```',
+        '',
+        '> This is a blockquote with some *italic* text.',
+        '',
+        '---',
+        '',
+        '1. First ordered item',
+        '2. Second ordered item',
+        '3. Third ordered item',
+      ].join('\n');
+
+      let state = cmContext.createEditorState({
+        content,
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      // This is the critical line — the old ViewPlugin approach threw
+      // "RangeError: Decorations that replace line breaks may not be
+      // specified via plugins" here.
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      assert.ok(
+        element.querySelector('.cm-editor'),
+        'editor renders without throwing',
+      );
+
+      // Wait for target notification
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      // Should have both inline and block targets
+      let inlineTarget = targets.find((t) => t.kind === 'inline');
+      let blockTarget = targets.find((t) => t.kind === 'block');
+      assert.ok(inlineTarget, 'inline card ref produces a widget target');
+      assert.ok(blockTarget, 'block card ref produces a widget target');
+      assert.strictEqual(
+        inlineTarget?.cardId,
+        './Author/alice',
+        'inline target has correct cardId',
+      );
+      assert.strictEqual(
+        blockTarget?.cardId,
+        './Author/jane-doe',
+        'block target has correct cardId',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test(':card[URL] inside inline code backticks is not decorated', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'Use `:card[URL]` syntax to embed cards.\n\nReal ref: :card[./Author/alice]',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      // Only the real ref outside backticks should produce a target
+      assert.strictEqual(
+        targets.length,
+        1,
+        'only one widget target (the real card ref, not the one in backticks)',
+      );
+      assert.strictEqual(
+        targets[0]?.cardId,
+        './Author/alice',
+        'target is from the real card ref',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   // ── Lazy loading ──
 
   test('globalThis.__loadCodeMirror returns context with expected exports', async function (assert) {
