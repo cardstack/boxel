@@ -311,8 +311,19 @@ export function bfmCardReferenceExtensions(): TokenizerAndRendererExtension[] {
  *  - `""`                                   → `"Card"`
  */
 export function cardTypeName(url: string): string {
-  let cleaned = url.replace(/\/+$/, '').replace(/\.json$/, '');
-  let segments = cleaned.split('/').filter((s) => s && s !== '.');
+  let path = url;
+
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    // Not an absolute URL; treat as a path/reference string.
+  }
+
+  let cleaned = path
+    .split(/[?#]/, 1)[0]
+    .replace(/\/+$/, '')
+    .replace(/\.json$/, '');
+  let segments = cleaned.split('/').filter((s) => s && s !== '.' && s !== '..');
   if (segments.length >= 2) {
     return segments[segments.length - 2];
   }

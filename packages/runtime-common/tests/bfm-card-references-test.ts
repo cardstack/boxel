@@ -35,6 +35,35 @@ const tests = Object.freeze({
       'Pet',
     );
   },
+
+  'cardTypeName filters out .. segments in relative paths': async (assert) => {
+    assert.strictEqual(cardTypeName('../Pet/some-id'), 'Pet');
+  },
+
+  'cardTypeName returns last segment for relative .. with single name':
+    async (assert) => {
+      assert.strictEqual(cardTypeName('../Pet'), 'Pet');
+    },
+
+  'cardTypeName strips query string from URL': async (assert) => {
+    assert.strictEqual(
+      cardTypeName('https://example.com/Pet/abc?v=1'),
+      'Pet',
+    );
+  },
+
+  'cardTypeName strips fragment from URL': async (assert) => {
+    assert.strictEqual(
+      cardTypeName('https://example.com/Pet/abc#section'),
+      'Pet',
+    );
+  },
+
+  'cardTypeName handles absolute URL with single path segment': async (
+    assert,
+  ) => {
+    assert.strictEqual(cardTypeName('https://example.com/Pet'), 'Pet');
+  },
 } as SharedTests<{}>);
 
 export default tests;
