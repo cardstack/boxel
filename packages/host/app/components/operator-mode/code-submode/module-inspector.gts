@@ -147,7 +147,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return state;
     }
     let loader = this.loaderService.loader;
-    let relativeTo = new URL(this.operatorModeStateService.realmURL);
+    let relativeTo = cardIdToURL(this.operatorModeStateService.realmURL);
     runWhileActive(on, async (isActive) => {
       try {
         let cardDef = await loadCardDef(codeRef, {

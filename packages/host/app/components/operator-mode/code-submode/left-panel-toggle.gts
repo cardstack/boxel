@@ -105,7 +105,7 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
   };
 
   private get downloadFilename() {
-    return fallbackDownloadName(new URL(this.args.realmURL));
+    return fallbackDownloadName(cardIdToURL(this.args.realmURL));
   }
 
   downloadRealm = async (event: Event) => {

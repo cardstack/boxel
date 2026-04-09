@@ -12,7 +12,7 @@ import {
 import { MenuItem, and, not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
-import { RealmPaths } from '@cardstack/runtime-common';
+import { RealmPaths, cardIdToURL } from '@cardstack/runtime-common';
 
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
@@ -188,7 +188,7 @@ export default class RealmDropdown extends Component<Signature> {
       selectedRealm = this.realms.find(
         (realm) =>
           realm.path ===
-          new RealmPaths(new URL(this.args.selectedRealmURL!)).url,
+          new RealmPaths(cardIdToURL(this.args.selectedRealmURL!)).url,
       );
     }
     if (selectedRealm) {

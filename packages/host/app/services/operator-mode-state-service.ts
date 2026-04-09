@@ -1144,7 +1144,7 @@ export default class OperatorModeStateService extends Service {
       url: codePath!.href,
       onStateChange: (state: FileResource['state']) => {
         if (state === 'ready') {
-          this.cachedRealmURL = new URL(this.readyFile.realmURL);
+          this.cachedRealmURL = cardIdToURL(this.readyFile.realmURL);
           this.updateOpenDirsForNestedPath();
         }
 

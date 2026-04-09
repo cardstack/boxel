@@ -9,6 +9,8 @@ import { Resource } from 'ember-modify-based-class-resource';
 import {
   logger,
   SupportedMimeType,
+  isRegisteredPrefix,
+  cardIdToURL,
   type Relationship,
 } from '@cardstack/runtime-common';
 
@@ -53,7 +55,10 @@ export class DirectoryResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { relativePath, realmURL } = named;
-    let directoryURL = new URL(relativePath, realmURL).href;
+    let resolvedRealmURL = isRegisteredPrefix(realmURL)
+      ? cardIdToURL(realmURL).href
+      : realmURL;
+    let directoryURL = new URL(relativePath, resolvedRealmURL).href;
     if (this.directoryURL === directoryURL) {
       return;
     }
@@ -83,7 +88,10 @@ export class DirectoryResource extends Resource<Args> {
               ...('removed' in event ? event.removed! : []),
             ];
             let shouldRefresh = filePaths.some((fp) => {
-              let fileURL = new URL(fp, event.realmURL).href;
+              let eventRealmURL = isRegisteredPrefix(event.realmURL)
+                ? cardIdToURL(event.realmURL).href
+                : event.realmURL;
+              let fileURL = new URL(fp, eventRealmURL).href;
               let segments = fileURL.split('/');
               segments.pop();
               let fileDir = segments.join('/') + '/';

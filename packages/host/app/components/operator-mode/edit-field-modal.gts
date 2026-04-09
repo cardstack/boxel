@@ -242,7 +242,7 @@ export default class EditFieldModal extends Component<Signature> {
         outgoingRelativeTo: new URL(
           this.operatorModeStateService.state.codePath!,
         ),
-        outgoingRealmURL: new URL(this.args.file.realmURL),
+        outgoingRealmURL: cardIdToURL(this.args.file.realmURL),
         addFieldAtIndex,
       });
     } catch (error) {
