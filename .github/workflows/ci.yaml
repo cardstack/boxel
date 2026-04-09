@@ -872,9 +872,6 @@ jobs:
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
-      - name: Prepare test PostgreSQL
-        run: bash tests/scripts/prepare-test-pg.sh
-        working-directory: packages/realm-server
       - name: Run integration tests
         run: pnpm test:integration
         working-directory: packages/boxel-cli
