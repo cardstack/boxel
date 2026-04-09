@@ -195,7 +195,9 @@ export class RealmIssueStore implements IssueStore {
     );
 
     if (!result.ok) {
-      log.info(`Failed to list issues: ${result.error}`);
+      log.warn(
+        `Failed to list issues from realm (${result.status}): ${result.error}`,
+      );
       return [];
     }
 
@@ -229,6 +231,47 @@ export class RealmIssueStore implements IssueStore {
 // ---------------------------------------------------------------------------
 
 /**
+ * Extract card IDs from a Boxel linksToMany relationship.
+ *
+ * Boxel encodes linksToMany with dotted keys:
+ *   "blockedBy.0": { links: { self: "../Issues/abc" } }
+ *   "blockedBy.1": { links: { self: "../Issues/def" } }
+ *
+ * The card ID is extracted from the last path segment of the link URL.
+ */
+function extractLinksToManyIds(
+  relationships: Record<string, unknown> | undefined,
+  fieldName: string,
+): string[] {
+  if (!relationships) {
+    return [];
+  }
+
+  let ids: string[] = [];
+  let prefix = `${fieldName}.`;
+
+  for (let [key, value] of Object.entries(relationships)) {
+    if (!key.startsWith(prefix)) continue;
+
+    let rel = value as { links?: { self?: string | null } } | undefined;
+    let linkUrl = rel?.links?.self;
+    if (typeof linkUrl === 'string' && linkUrl.length > 0) {
+      // Extract card ID from URL — last path segment
+      // e.g. "../Issues/abc" → "Issues/abc", "https://realm/Issues/abc" → "Issues/abc"
+      let lastSlash = linkUrl.lastIndexOf('/');
+      let secondLastSlash = linkUrl.lastIndexOf('/', lastSlash - 1);
+      if (secondLastSlash >= 0) {
+        ids.push(linkUrl.slice(secondLastSlash + 1));
+      } else {
+        ids.push(linkUrl);
+      }
+    }
+  }
+
+  return ids;
+}
+
+/**
  * Map a JSON:API card response to a SchedulableIssue.
  * Extracts scheduling fields from the card's attributes, falling back
  * to safe defaults for any missing fields.
@@ -239,15 +282,14 @@ function mapCardToSchedulableIssue(
   let attrs = (card.attributes ?? card) as Record<string, unknown>;
   let id = (card.id ?? attrs.id ?? '') as string;
 
-  // Extract blockedBy IDs from relationship links
-  let blockedBy: string[] = [];
-  let rels = card.relationships as Record<string, unknown> | undefined;
-  if (rels?.blockedBy) {
-    let blockedByRel = rels.blockedBy as { data?: { id: string }[] };
-    if (Array.isArray(blockedByRel.data)) {
-      blockedBy = blockedByRel.data.map((d) => d.id);
-    }
-  }
+  // Extract blockedBy IDs from relationship links.
+  // Boxel uses dotted keys for linksToMany: "blockedBy.0", "blockedBy.1", etc.
+  // Each has { links: { self: "../Issues/some-id" } } where the last path
+  // segment is the card ID.
+  let blockedBy = extractLinksToManyIds(
+    card.relationships as Record<string, unknown> | undefined,
+    'blockedBy',
+  );
 
   return {
     id,
