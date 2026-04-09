@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import type { ToolResult } from '../scripts/lib/factory-agent';
+import type { ToolResult } from '../src/factory-agent';
 import {
   ToolExecutor,
   ToolNotFoundError,
@@ -10,9 +10,9 @@ import {
   ToolTimeoutError,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
-} from '../scripts/lib/factory-tool-executor';
+} from '../src/factory-tool-executor';
 import { iconURLFor } from '@cardstack/runtime-common/realm-display-defaults';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import { ToolRegistry } from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -24,7 +24,6 @@ function makeConfig(
   return {
     packageRoot: '/fake/software-factory',
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     ...overrides,
   };
 }
@@ -134,22 +133,6 @@ module('factory-tool-executor > source realm protection', function () {
     let result = await executor.execute('realm-read', {
       'realm-url': 'https://realms.example.test/user/target/',
       path: 'CardDef/my-card.gts',
-    });
-
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('allows tool targeting test realm', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      sourceRealmUrl: 'https://realms.example.test/user/source/',
-      fetch: createMockFetch(200, { data: [] }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/target-tests/',
-      path: 'Test/spec.ts',
     });
 
     assert.strictEqual(result.exitCode, 0);
@@ -363,40 +346,11 @@ module('factory-tool-executor > realm-api execution', function () {
 
     let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      query: JSON.stringify({ filter: { type: { name: 'Ticket' } } }),
+      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
     });
 
     assert.strictEqual(capturedMethod, 'QUERY');
     assert.true(capturedUrl!.endsWith('_search'));
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('realm-atomic makes POST to _atomic endpoint', async function (assert) {
-    let capturedUrl: string | undefined;
-    let capturedBody: string | undefined;
-
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        capturedUrl = String(input);
-        capturedBody = typeof init?.body === 'string' ? init.body : undefined;
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { 'Content-Type': SupportedMimeType.JSON },
-        });
-      }) as typeof globalThis.fetch,
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let ops = [{ op: 'add', href: './Foo/bar.json', data: {} }];
-    let result = await executor.execute('realm-atomic', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      operations: JSON.stringify(ops),
-    });
-
-    assert.true(capturedUrl!.endsWith('_atomic'));
-    let body = JSON.parse(capturedBody!);
-    assert.deepEqual(body['atomic:operations'], ops);
     assert.strictEqual(result.exitCode, 0);
   });
 
@@ -875,25 +829,6 @@ module('factory-tool-executor > auth header propagation', function () {
     await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
       query: '{}',
-    });
-
-    assert.strictEqual(
-      getCapturedHeaders()!.get('Authorization'),
-      'Bearer realm-jwt-abc',
-    );
-  });
-
-  test('realm-atomic sends realm JWT in Authorization header', async function (assert) {
-    let { fetch, getCapturedHeaders } = createHeaderCapturingFetch();
-    let registry = new ToolRegistry();
-    let executor = new ToolExecutor(
-      registry,
-      makeConfig({ authorization: 'Bearer realm-jwt-abc', fetch }),
-    );
-
-    await executor.execute('realm-atomic', {
-      'realm-url': 'https://realms.example.test/user/target/',
-      operations: '[]',
     });
 
     assert.strictEqual(

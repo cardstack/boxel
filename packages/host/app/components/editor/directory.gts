@@ -7,14 +7,11 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { velcro } from 'ember-velcro';
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  BoxelDropdown,
-  ContextButton,
-  Menu,
-  type BoxelDropdownAPI,
-} from '@cardstack/boxel-ui/components';
+import { ContextButton, Menu } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { DropdownArrowDown, IconTrash } from '@cardstack/boxel-ui/icons';
@@ -107,29 +104,18 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
-    {{#if @onDeleteFile}}
-      <BoxelDropdown
-        @registerAPI={{this.registerDropdownApi}}
-        @onClose={{this.clearFileMenu}}
-        @contentClass='file-tree-context-menu'
+    {{#if this.menuTriggerEl}}
+      <div
+        class='file-tree-context-menu'
+        {{velcro this.menuTriggerEl placement='bottom-start' strategy='fixed'}}
+        {{onClickOutside this.closeMenu exceptSelector='.file-menu-trigger'}}
       >
-        <:trigger as |bindings|>
-          <button
-            type='button'
-            class='file-tree-menu-anchor'
-            aria-hidden='true'
-            tabindex='-1'
-            {{bindings}}
-          ></button>
-        </:trigger>
-        <:content as |dd|>
-          <Menu
-            class='file-tree-context-menu-list'
-            @items={{this.menuItems}}
-            @closeMenu={{dd.close}}
-          />
-        </:content>
-      </BoxelDropdown>
+        <Menu
+          class='file-tree-context-menu-list'
+          @items={{this.menuItems}}
+          @closeMenu={{this.closeMenu}}
+        />
+      </div>
     {{/if}}
     <style scoped>
       .level {
@@ -184,14 +170,9 @@ export default class Directory extends Component<Args> {
       .file-row:focus-within .file-menu-trigger {
         visibility: visible;
       }
-      .file-tree-menu-anchor {
-        position: fixed;
-        width: 0;
-        height: 0;
-        padding: 0;
-        border: 0;
-        opacity: 0;
-        pointer-events: none;
+
+      .file-tree-context-menu {
+        z-index: var(--boxel-layer-floating-button);
       }
 
       .directory {
@@ -231,15 +212,14 @@ export default class Directory extends Component<Args> {
   );
 
   @tracked private selectedFile?: LocalPath;
+  @tracked private menuTriggerEl?: HTMLElement;
   private openDirs: TrackedArray<LocalPath> = new TrackedArray();
-  private dropdownApi?: BoxelDropdownAPI;
   private menuEntryPath?: LocalPath;
-
   constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     registerDestructor(this, () => {
-      this.dropdownApi = undefined;
       this.menuEntryPath = undefined;
+      this.menuTriggerEl = undefined;
     });
   }
 
@@ -278,11 +258,6 @@ export default class Directory extends Component<Args> {
     return openDirs.includes(dirPath);
   }
 
-  @action
-  private registerDropdownApi(api: BoxelDropdownAPI) {
-    this.dropdownApi = api;
-  }
-
   private get menuItems() {
     if (!this.menuEntryPath) {
       return [];
@@ -298,8 +273,9 @@ export default class Directory extends Component<Args> {
   }
 
   @action
-  private clearFileMenu() {
+  private closeMenu() {
     this.menuEntryPath = undefined;
+    this.menuTriggerEl = undefined;
   }
 
   @action
@@ -309,8 +285,12 @@ export default class Directory extends Component<Args> {
     }
     e.preventDefault();
     e.stopPropagation();
+    if (this.menuTriggerEl === e.currentTarget) {
+      this.closeMenu();
+      return;
+    }
     this.menuEntryPath = entryPath;
-    this.dropdownApi?.actions.open(e);
+    this.menuTriggerEl = e.currentTarget as HTMLElement;
   }
 
   @action

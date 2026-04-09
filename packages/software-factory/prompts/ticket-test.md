@@ -1,6 +1,6 @@
 # Test Generation
 
-You implemented the following files for ticket {{ticket.id}}:
+You implemented the following files for issue {{issue.id}}:
 
 {{#each implementedFiles}}
 
@@ -12,14 +12,14 @@ You implemented the following files for ticket {{ticket.id}}:
 
 {{/each}}
 
-Now generate Playwright test specs that verify this implementation.
+Now generate QUnit test files that verify this implementation.
 
 Tests must:
 
-- Live in the target realm's `Tests/` folder as `Tests/{ticket-slug}.spec.ts`
-- Import from the test fixtures and use the factory test harness
+- Be co-located with the card definition as `{card-name}.test.gts`
+- Export a `runTests()` function that registers QUnit modules and tests
 - Verify that card instances render correctly (fitted, isolated, embedded views)
 - Verify card-specific behavior, field values, and relationships
-- Be runnable by the `run-realm-tests` tool
+- Keep all test data in browser memory — no external realm writes
 
-Return only `create_test` actions.
+Use write_file to create test files, then call signal_done.

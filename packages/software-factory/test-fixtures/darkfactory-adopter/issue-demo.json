@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "issueId": "DF-1",
+      "summary": "Verify public DarkFactory adoption",
+      "description": "Render tracker cards from an adopter realm using the public software-factory module URL.",
+      "issueType": "task",
+      "status": "in_progress",
+      "priority": "high",
+      "acceptanceCriteria": "- [x] Project resolves from public module\n- [x] Issue resolves from public module\n- [x] Knowledge article link renders",
+      "createdAt": "2026-03-16T11:00:00.000Z",
+      "updatedAt": "2026-03-16T12:00:00.000Z"
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "./project-demo"
+        }
+      },
+      "relatedKnowledge.0": {
+        "links": {
+          "self": "./knowledge-article-demo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://sf.boxel.test/darkfactory",
+        "name": "Issue"
+      }
+    }
+  }
+}

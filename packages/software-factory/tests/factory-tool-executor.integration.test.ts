@@ -3,8 +3,8 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { ToolExecutor } from '../scripts/lib/factory-tool-executor';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import { ToolExecutor } from '../src/factory-tool-executor';
+import { ToolRegistry } from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Test server helpers
@@ -90,7 +90,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: 'Bearer realm-jwt-for-user',
       });
 
@@ -129,7 +128,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: 'Bearer realm-jwt-for-user',
       });
 
@@ -173,7 +171,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: 'Bearer realm-jwt-for-user',
       });
 
@@ -208,13 +205,12 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: 'Bearer realm-jwt-for-user',
       });
 
       let query = JSON.stringify({
         filter: {
-          type: { module: 'https://example.test/ticket', name: 'Ticket' },
+          type: { module: 'https://example.test/issue', name: 'Issue' },
         },
       });
 
@@ -241,53 +237,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
     }
   });
 
-  test('realm-atomic sends correct POST to _atomic with JSON:API operations', async function (assert) {
-    let captured: CapturedRequest | undefined;
-
-    let { server, origin } = await startTestServer((req, respond) => {
-      captured = req;
-      respond(200, { ok: true });
-    });
-
-    try {
-      let registry = new ToolRegistry();
-      let realmUrl = `${origin}/user/target/`;
-      let executor = new ToolExecutor(registry, {
-        packageRoot: '/fake',
-        targetRealmUrl: realmUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
-        authorization: 'Bearer realm-jwt-for-user',
-      });
-
-      let ops = [
-        { op: 'add', href: './CardDef/new.gts', data: { type: 'module' } },
-        { op: 'remove', href: './Card/old.json' },
-      ];
-
-      let result = await executor.execute('realm-atomic', {
-        'realm-url': realmUrl,
-        operations: JSON.stringify(ops),
-      });
-
-      assert.strictEqual(result.exitCode, 0);
-      assert.strictEqual(captured!.method, 'POST');
-      assert.strictEqual(captured!.url, '/user/target/_atomic');
-      assert.strictEqual(
-        captured!.headers['content-type'],
-        SupportedMimeType.JSONAPI,
-      );
-      assert.strictEqual(
-        captured!.headers.authorization,
-        'Bearer realm-jwt-for-user',
-      );
-
-      let body = JSON.parse(captured!.body);
-      assert.deepEqual(body['atomic:operations'], ops);
-    } finally {
-      await stopServer(server);
-    }
-  });
-
   test('realm-auth sends correct POST to _realm-auth with Authorization header', async function (assert) {
     let captured: CapturedRequest | undefined;
 
@@ -301,7 +250,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: 'Bearer realm-server-jwt-xyz',
       });
 
@@ -336,7 +284,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: 'Bearer realm-server-jwt-minted',
       });
 
@@ -388,7 +335,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
-        testRealmUrl: `${origin}/user/target-tests/`,
       });
 
       let result = await executor.execute('realm-server-session', {
@@ -448,7 +394,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let sessionExecutor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: serverUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
       });
 
       let sessionResult = await sessionExecutor.execute(
@@ -467,7 +412,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       let createExecutor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: serverUrl,
-        testRealmUrl: `${origin}/user/target-tests/`,
         authorization: jwt,
       });
 
@@ -513,7 +457,6 @@ module('factory-tool-executor integration > safety constraints', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
-        testRealmUrl: `${origin}/user/target-tests/`,
       });
 
       try {
@@ -548,7 +491,6 @@ module('factory-tool-executor integration > safety constraints', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
-        testRealmUrl: `${origin}/user/target-tests/`,
         sourceRealmUrl: sourceUrl,
       });
 
@@ -583,7 +525,6 @@ module('factory-tool-executor integration > safety constraints', function () {
       let executor = new ToolExecutor(registry, {
         packageRoot: '/fake',
         targetRealmUrl: `${origin}/user/target/`,
-        testRealmUrl: `${origin}/user/target-tests/`,
       });
 
       try {

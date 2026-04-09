@@ -1,13 +1,27 @@
 import { task } from 'ember-concurrency';
+import { scheduleOnce } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
+import { modifier } from 'ember-modifier';
+
+import { Pill } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
+  cardTypeName,
+  extractMermaidBlocks,
   hasCodeBlocks,
   markdownToHtml,
   preloadMarkdownLanguages,
+  processKatexPlaceholders,
+  replaceMermaidSvgs,
+  resolveCardReference,
+  trimJsonExtension,
 } from '@cardstack/runtime-common';
+import { type BaseDef, type CardDef, getComponent } from '../card-api';
+import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {
   if (!html) return '';
   // Fast path when there are no tables to wrap.
@@ -25,10 +39,50 @@ function wrapTablesHtml(html: string | null | undefined): string {
   return doc.body.innerHTML;
 }
 
+type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
+
+interface ResolvedSlot {
+  element: HTMLElement;
+  card: CardDef;
+  format: CardSlotFormat;
+  kind: 'inline' | 'block';
+  style?: ReturnType<typeof htmlSafe>;
+}
+
+interface UnresolvedSlot {
+  element: HTMLElement;
+  url: string;
+  typeName: string;
+  kind: 'inline' | 'block';
+}
+
+type RenderSlot =
+  | (ResolvedSlot & { card: CardDef })
+  | (UnresolvedSlot & { card?: undefined });
+
+function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
+  try {
+    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+  } catch {
+    return trimJsonExtension(raw);
+  }
+}
+
 export default class MarkDownTemplate extends GlimmerComponent<{
-  Args: { content: string | null };
+  Args: {
+    content: string | null;
+    linkedCards?: CardDef[] | null;
+    cardReferenceBaseUrl?: string | null;
+  };
 }> {
   @tracked monacoContextInternal: any = undefined;
+  @tracked renderSlots: RenderSlot[] = [];
+  // On the first modifier run linkedCards is likely still loading (empty [])
+  // so we skip unresolved Pills to avoid flashing them for refs that will
+  // soon resolve. On subsequent runs showFallback is true. For in-app
+  // navigation where linkedCards is already cached, we detect this by
+  // checking linkedCards.length > 0 on the first run.
+  private _modifierHasRun = false;
   get isPrerenderContext() {
     return Boolean((globalThis as any).__boxelRenderContext);
   }
@@ -70,11 +124,371 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     // reparses that sanitized HTML so it can add wrapper divs around tables we
     // control for styling/overflow behavior. Re-sanitizing the result was
     // adding avoidable DOMParser churn during prerender and acceptance tests.
-    return htmlSafe(wrapTablesHtml(html));
+    html = wrapTablesHtml(html);
+
+    // Post-process the HTML string to render math, mermaid, and strip card ref
+    // text. This must happen at the HTML-string level (not via imperative DOM
+    // mutation) so that Glimmer's autotracking sees the final content and does
+    // not overwrite it on re-render.
+    let hasCardRefs = html.includes('data-boxel-bfm-type="card"');
+    let katex = html.includes('math-placeholder') ? this.katexModule : null;
+    let mermaidSvgs = html.includes('<pre class="mermaid">')
+      ? this.mermaidSvgs
+      : null;
+
+    if (
+      typeof DOMParser !== 'undefined' &&
+      (hasCardRefs || katex || (mermaidSvgs && mermaidSvgs.size))
+    ) {
+      let doc = new DOMParser().parseFromString(html, 'text/html');
+
+      // Strip text content from card-type BFM refs so there is no flash of raw
+      // URLs. The URL is preserved in the data attribute; the modifier will
+      // inject fallback text for refs that can't be resolved to a card.
+      if (hasCardRefs) {
+        doc
+          .querySelectorAll('[data-boxel-bfm-type="card"]')
+          .forEach((el) => (el.textContent = ''));
+      }
+
+      if (katex) {
+        processKatexPlaceholders(doc, katex);
+      }
+
+      if (mermaidSvgs && mermaidSvgs.size) {
+        replaceMermaidSvgs(doc, mermaidSvgs);
+      }
+
+      html = doc.body.innerHTML;
+    }
+
+    return htmlSafe(html);
   }
 
+  captureCardSlots = modifier(
+    (element: HTMLElement, _positional: unknown[]) => {
+      let linkedCards = this.args.linkedCards;
+      let baseUrl = this.args.cardReferenceBaseUrl;
+      let pendingUpdate = false;
+      // On the very first modifier run linkedCards is likely still loading
+      // (empty []) so we skip unresolved Pills to avoid flashing them for
+      // refs that will soon resolve. On subsequent runs (linkedCards changed)
+      // showFallback is true. We also enable it immediately if linkedCards
+      // already has data (in-app navigation with cached results).
+      let showFallback =
+        this._modifierHasRun || (linkedCards != null && linkedCards.length > 0);
+      this._modifierHasRun = true;
+
+      let collectSlots = (): RenderSlot[] => {
+        let cardsByUrl = new Map<string, CardDef>();
+        if (linkedCards?.length) {
+          for (let card of linkedCards) {
+            if (card?.id) {
+              cardsByUrl.set(card.id, card);
+            }
+          }
+        }
+
+        let slots: RenderSlot[] = [];
+        let resolvedEls = new Set<HTMLElement>();
+
+        for (let el of Array.from(
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-inline-ref][data-boxel-bfm-type="card"]',
+          ),
+        )) {
+          let rawUrl = el.dataset.boxelBfmInlineRef;
+          if (!rawUrl) continue;
+          let resolved = resolveUrl(rawUrl, baseUrl);
+          let card = cardsByUrl.get(resolved);
+          if (card) {
+            resolvedEls.add(el);
+            slots.push({ element: el, card, format: 'atom', kind: 'inline' });
+          }
+        }
+
+        for (let el of Array.from(
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-block-ref][data-boxel-bfm-type="card"]',
+          ),
+        )) {
+          let rawUrl = el.dataset.boxelBfmBlockRef;
+          if (!rawUrl) continue;
+          let resolved = resolveUrl(rawUrl, baseUrl);
+          let card = cardsByUrl.get(resolved);
+          if (card) {
+            let bfmFormat = el.dataset.boxelBfmFormat;
+            let format: CardSlotFormat =
+              bfmFormat === 'fitted' || bfmFormat === 'isolated'
+                ? bfmFormat
+                : 'embedded';
+
+            let style: ReturnType<typeof htmlSafe> | undefined;
+            if (format === 'fitted') {
+              let w = el.dataset.boxelBfmWidth;
+              let h = el.dataset.boxelBfmHeight;
+              let parts: string[] = [];
+              if (w && /^\d+%$/.test(w)) {
+                parts.push(`width: ${w}`);
+              } else if (w && /^\d+$/.test(w)) {
+                parts.push(`width: ${w}px`);
+              }
+              if (h && /^\d+$/.test(h)) {
+                parts.push(`height: ${h}px`);
+              }
+              parts.push('overflow: hidden');
+              style = htmlSafe(parts.join('; '));
+            }
+
+            resolvedEls.add(el);
+            slots.push({
+              element: el,
+              card,
+              format,
+              kind: 'block',
+              style,
+            });
+          }
+        }
+
+        // Build unresolved slots for card refs that could not be matched to a
+        // linkedCard. Skipped on the first modifier run (showFallback=false)
+        // to avoid flashing Pills while linkedCards is still loading.
+        if (!showFallback) return slots;
+        for (let el of Array.from(
+          element.querySelectorAll<HTMLElement>(
+            '[data-boxel-bfm-type="card"]',
+          ),
+        )) {
+          let url =
+            el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
+          if (!resolvedEls.has(el) && url) {
+            let kind: 'inline' | 'block' = el.dataset.boxelBfmInlineRef
+              ? 'inline'
+              : 'block';
+            slots.push({
+              element: el,
+              url,
+              typeName: cardTypeName(url),
+              kind,
+            });
+          }
+        }
+
+        return slots;
+      };
+
+      // Deferred via scheduleOnce to avoid Glimmer backtracking assertion.
+      // The didChange guard prevents an infinite loop: MutationObserver fires
+      // when #in-element renders cards → collectSlots → set cardSlots →
+      // re-render → observer fires again.
+      let updateSlots = () => {
+        pendingUpdate = false;
+        let nextSlots = collectSlots();
+        let didChange =
+          nextSlots.length !== this.renderSlots.length ||
+          nextSlots.some((slot, index) => {
+            let current = this.renderSlots[index];
+            if (!current || current.element !== slot.element) return true;
+            if (current.kind !== slot.kind) return true;
+            // Resolved ↔ unresolved transition
+            if (!!current.card !== !!slot.card) return true;
+            if (current.card && slot.card) {
+              return (
+                current.card !== slot.card ||
+                (current as ResolvedSlot).format !==
+                  (slot as ResolvedSlot).format ||
+                String((current as ResolvedSlot).style ?? '') !==
+                  String((slot as ResolvedSlot).style ?? '')
+              );
+            }
+            if (!current.card && !slot.card) {
+              return (
+                (current as UnresolvedSlot).url !==
+                (slot as UnresolvedSlot).url
+              );
+            }
+            return false;
+          });
+
+        if (didChange) {
+          this.renderSlots = nextSlots;
+        }
+      };
+
+      let scheduleUpdate = () => {
+        if (pendingUpdate) {
+          return;
+        }
+        pendingUpdate = true;
+        scheduleOnce('afterRender', this, updateSlots);
+      };
+
+      scheduleUpdate();
+
+      // MutationObserver re-collects slots when the DOM is reconstructed
+      // (e.g. after browser back-navigation rebuilds the element's children).
+      if (typeof MutationObserver === 'undefined') {
+        return;
+      }
+
+      let observer = new MutationObserver(scheduleUpdate);
+      observer.observe(element, {
+        childList: true,
+        subtree: true,
+      });
+
+      return () => observer.disconnect();
+    },
+  );
+
+  // ── KaTeX lazy loading ──
+  @tracked _katex: any = null;
+
+  get katexModule() {
+    if (this.isPrerenderContext) {
+      return null;
+    }
+    if (!this._katex) {
+      this._loadKatexTask.perform();
+    }
+    return this._katex;
+  }
+
+  _loadKatexTask = task({ drop: true }, async () => {
+    let loadKatex = (globalThis as any).__loadKatex;
+    if (typeof loadKatex !== 'function') {
+      return;
+    }
+    this._katex = await loadKatex();
+  });
+
+  // ── Mermaid lazy loading + pre-rendering ──
+  @tracked _mermaidSvgs = new Map<string, string>();
+  private _mermaidIdCounter = 0;
+
+  get mermaidSvgs() {
+    if (this.isPrerenderContext) {
+      return this._mermaidSvgs;
+    }
+    if (!this._mermaidSvgs.size) {
+      this._renderMermaidTask.perform();
+    }
+    return this._mermaidSvgs;
+  }
+
+  _renderMermaidTask = task({ drop: true }, async () => {
+    let content = this.args.content || '';
+    let blocks = extractMermaidBlocks(content);
+    if (!blocks.length) {
+      return;
+    }
+
+    let loadMermaid = (globalThis as any).__loadMermaid;
+    if (typeof loadMermaid !== 'function') {
+      return;
+    }
+
+    let mermaid = await loadMermaid();
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'default',
+    });
+
+    let svgs = new Map<string, string>();
+    for (let block of blocks) {
+      try {
+        let { svg } = await mermaid.render(
+          `mermaid-${++this._mermaidIdCounter}`,
+          block,
+        );
+        svgs.set(block, svg);
+      } catch {
+        // skip failed blocks
+      }
+    }
+
+    this._mermaidSvgs = svgs;
+  });
+
+  getCardComponent = (card: BaseDef) => getComponent(card);
+
   <template>
-    <div class='markdown-content'>{{this.renderedHtml}}</div>
+    <div
+      class='markdown-content'
+      {{this.captureCardSlots this.renderedHtml @linkedCards}}
+    >
+      {{this.renderedHtml}}
+    </div>
+    {{#each this.renderSlots key="element" as |slot|}}
+      {{#in-element slot.element insertBefore=null}}
+        {{#if slot.card}}
+          <CardContextConsumer as |context|>
+            {{#let (this.getCardComponent slot.card) as |CardComponent|}}
+              {{#if (eq slot.kind 'inline')}}
+                <span
+                  class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
+                  data-test-markdown-bfm-inline-card
+                  {{context.cardComponentModifier
+                    card=slot.card
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                >
+                  <CardComponent
+                    @format={{slot.format}}
+                    @displayContainer={{false}}
+                  />
+                </span>
+              {{else}}
+                <div
+                  class='markdown-bfm-card-slot markdown-bfm-card-slot--block
+                    {{if slot.style "markdown-bfm-card-slot--fitted"}}'
+                  style={{slot.style}}
+                  data-test-markdown-bfm-block-card
+                  {{context.cardComponentModifier
+                    card=slot.card
+                    format='data'
+                    fieldType=undefined
+                    fieldName=undefined
+                  }}
+                >
+                  <CardComponent
+                    @format={{slot.format}}
+                    @displayContainer={{false}}
+                  />
+                </div>
+              {{/if}}
+            {{/let}}
+          </CardContextConsumer>
+        {{else}}
+          {{#if (eq slot.kind 'inline')}}
+            <Pill
+              @variant='muted'
+              @size='extra-small'
+              title={{slot.url}}
+              data-test-markdown-bfm-unresolved-inline
+            >
+              <:iconLeft><LinkOffIcon width='12' height='12' /></:iconLeft>
+              <:default>{{slot.typeName}}</:default>
+            </Pill>
+          {{else}}
+            <div
+              class='markdown-bfm-unresolved--block'
+              title={{slot.url}}
+              data-test-markdown-bfm-unresolved-block
+            >
+              <Pill @variant='muted' @size='small'>
+                <:iconLeft><LinkOffIcon width='14' height='14' /></:iconLeft>
+                <:default>{{slot.typeName}}</:default>
+              </Pill>
+            </div>
+          {{/if}}
+        {{/if}}
+      {{/in-element}}
+    {{/each}}
     <style scoped>
       @layer baseComponent {
         .markdown-content {
@@ -195,6 +609,45 @@ export default class MarkDownTemplate extends GlimmerComponent<{
           font-style: italic;
           margin-inline-start: var(--boxel-sp-xl);
           margin-inline-end: var(--boxel-sp-xl);
+        }
+
+        /* GFM Alerts / Admonitions (rendered by marked-alert) */
+        .markdown-content :deep(.markdown-alert) {
+          border-left: 3px solid var(--markdown-alert-color, var(--boxel-400));
+          border-radius: 0 6px 6px 0;
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
+          margin: var(--boxel-sp-xs) 0;
+        }
+        .markdown-content :deep(.markdown-alert-title) {
+          font-weight: 700;
+          color: var(--markdown-alert-color, inherit);
+          margin: 0;
+        }
+        .markdown-content :deep(.markdown-alert-title svg) {
+          display: none;
+        }
+        .markdown-content :deep(.markdown-alert p:not(.markdown-alert-title)) {
+          margin: var(--boxel-sp-4xs) 0 0;
+        }
+        .markdown-content :deep(.markdown-alert-note) {
+          --markdown-alert-color: #0969da;
+          background-color: #ddf4ff;
+        }
+        .markdown-content :deep(.markdown-alert-tip) {
+          --markdown-alert-color: #1a7f37;
+          background-color: #dcfce7;
+        }
+        .markdown-content :deep(.markdown-alert-important) {
+          --markdown-alert-color: #8250df;
+          background-color: #f5f0ff;
+        }
+        .markdown-content :deep(.markdown-alert-warning) {
+          --markdown-alert-color: #9a6700;
+          background-color: #fff8c5;
+        }
+        .markdown-content :deep(.markdown-alert-caution) {
+          --markdown-alert-color: #d1242f;
+          background-color: #ffebe9;
         }
 
         /* Horizontal rule */
@@ -320,6 +773,102 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         }
         .markdown-content :deep(tr:not(:last-child) td) {
           border-bottom: 1px solid var(--md-border);
+        }
+
+        /* Mermaid diagrams */
+        .markdown-content :deep(pre.mermaid) {
+          background-color: transparent;
+          color: inherit;
+          text-align: center;
+          padding: var(--boxel-sp);
+          border-radius: var(--boxel-border-radius-xl);
+          overflow-x: auto;
+        }
+
+        .markdown-content :deep(pre.mermaid svg) {
+          max-width: 100%;
+          height: auto;
+        }
+
+        /* Mermaid error display */
+        .markdown-content :deep(pre.mermaid[data-processed='true'] .error-icon),
+        .markdown-content :deep(pre.mermaid #d .error-text) {
+          fill: var(--boxel-error-200, #b00020);
+        }
+
+        /* BFM references (card, file, etc.) */
+        .markdown-content :deep([data-boxel-bfm-inline-ref]) {
+          display: inline;
+        }
+
+        .markdown-content :deep([data-boxel-bfm-block-ref]) {
+          display: block;
+          margin: var(--boxel-sp) 0;
+        }
+
+        .markdown-bfm-card-slot {
+          max-width: 100%;
+        }
+
+        .markdown-bfm-card-slot--inline {
+          display: inline-flex;
+          vertical-align: middle;
+        }
+
+        .markdown-bfm-card-slot--block {
+          display: block;
+        }
+
+        .markdown-bfm-card-slot--fitted {
+          border-radius: var(--boxel-border-radius);
+        }
+
+        /* Loading shimmer for card refs before content is rendered */
+        .markdown-content :deep([data-boxel-bfm-type='card']:empty) {
+          background-color: var(--boxel-light-200);
+          border-radius: var(--boxel-border-radius-sm);
+          position: relative;
+          overflow: hidden;
+        }
+        .markdown-content :deep([data-boxel-bfm-type='card']:empty::after) {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            var(--boxel-light-100),
+            transparent
+          );
+          animation: bfm-shimmer 1.6s linear 0.5s infinite;
+          transform: translateX(-100%);
+        }
+        /* Inline shimmer sizing */
+        .markdown-content :deep([data-boxel-bfm-inline-ref]:empty) {
+          display: inline-block;
+          width: 6em;
+          height: 1.2em;
+          vertical-align: middle;
+        }
+        /* Block shimmer sizing */
+        .markdown-content :deep([data-boxel-bfm-block-ref]:empty) {
+          display: block;
+          width: 100%;
+          height: 3em;
+        }
+        @keyframes bfm-shimmer {
+          0% {
+            transform: translateX(-200%);
+          }
+          100% {
+            transform: translateX(100%);
+          }
+        }
+
+        /* Unresolved block indicator */
+        .markdown-bfm-unresolved--block {
+          display: block;
+          margin: var(--boxel-sp-xxxs) 0;
         }
       }
     </style>

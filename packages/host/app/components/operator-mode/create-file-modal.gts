@@ -32,6 +32,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
+  cardIdToURL,
   specRef,
   chooseCard,
   baseRealm,
@@ -158,6 +159,7 @@ export default class CreateFileModal extends Component<Signature> {
           @size='medium'
           @isOpen={{this.isModalOpen}}
           @onClose={{this.onCancel}}
+          @isCloseDisabled={{this.isCreateRunning}}
           {{focusTrap
             isActive=this.isReady
             focusTrapOptions=(hash
@@ -313,6 +315,7 @@ export default class CreateFileModal extends Component<Signature> {
                     {{on 'click' this.onCancel}}
                     {{onKeyMod 'Escape'}}
                     @size='tall'
+                    @disabled={{this.isCreateRunning}}
                     data-test-cancel-create-file
                   >
                     Cancel
@@ -598,6 +601,9 @@ export default class CreateFileModal extends Component<Signature> {
   }
 
   @action private onCancel() {
+    if (this.isCreateRunning) {
+      return;
+    }
     this.currentRequest?.newFileDeferred.fulfill(undefined);
     this.clearState();
   }
@@ -722,7 +728,8 @@ export default class CreateFileModal extends Component<Signature> {
     return (
       this.createCardInstance.isRunning ||
       this.createDefinition.isRunning ||
-      this.createTextFile.isRunning
+      this.createTextFile.isRunning ||
+      this.duplicateCardInstance.isRunning
     );
   }
 
@@ -820,7 +827,16 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, spec?.id);
+    const absoluteModuleHref = (
+      codeRefWithAbsoluteURL(
+        {
+          module: spec?.moduleHref ?? module,
+          name: exportName,
+        },
+        new URL(this.selectedRealmURL),
+      ) as ResolvedCodeRef
+    ).module;
+    const absoluteModule = new URL(absoluteModuleHref);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -923,9 +939,7 @@ export class ${className} extends ${exportName} {
 
     let { ref } = (this.definitionClass ? this.definitionClass : spec)!; // we just checked above to make sure one of these exist
 
-    let relativeTo = spec
-      ? new URL(spec.id!) // only new cards are missing urls
-      : undefined;
+    let relativeTo = spec?.id ? cardIdToURL(spec.id) : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
     // definition comes from. The server will make relative URL if appropriate after creation

@@ -93,7 +93,7 @@ module('create-listing-pr handler', () => {
     );
     assert.false(
       openedCall.params.body?.toString().includes('Submission Card'),
-      'summary body omits submission card URL when not provided',
+      'summary body omits workflow card URL when not provided',
     );
     assert.true(
       openedCall.params.body?.toString().includes('My listing Summary\n\n---'),
@@ -101,7 +101,7 @@ module('create-listing-pr handler', () => {
     );
   });
 
-  test('includes submission card URL as a markdown link when provided', async (assert) => {
+  test('includes workflow card URL as a markdown link when provided', async (assert) => {
     let opened: { params: unknown }[] = [];
     let githubClient: GitHubClient = {
       openPullRequest: async (params) => {
@@ -124,8 +124,8 @@ module('create-listing-pr handler', () => {
       },
     };
 
-    let submissionCardUrl =
-      'http://localhost:4201/submissions/SubmissionCard/abc-123';
+    let workflowCardUrl =
+      'http://localhost:4201/submissions/SubmissionWorkflowCard/abc-123';
 
     let handler = new CreateListingPRHandler(githubClient);
     let result = await handler.openCreateListingPR(
@@ -135,7 +135,7 @@ module('create-listing-pr handler', () => {
         status: 'ready',
         cardResultString: JSON.stringify({
           data: {
-            id: submissionCardUrl,
+            id: workflowCardUrl,
             attributes: {
               allFileContents: [
                 { filename: 'catalog/Listing/listing.json', contents: '{}' },
@@ -144,20 +144,20 @@ module('create-listing-pr handler', () => {
           },
         }),
       },
-      submissionCardUrl,
+      workflowCardUrl,
     );
     assert.strictEqual(result?.prNumber, 2, 'returns PR metadata when opened');
     assert.true(
-      result?.summary?.includes(`[${submissionCardUrl}](${submissionCardUrl})`) ??
+      result?.summary?.includes(`[${workflowCardUrl}](${workflowCardUrl})`) ??
         false,
-      'returns summary including the submission card URL',
+      'returns summary including the workflow card URL',
     );
 
     assert.strictEqual(opened.length, 1, 'opens exactly one PR');
     let body = (opened[0] as { params: Record<string, unknown> }).params.body?.toString() ?? '';
     assert.true(
-      body.includes(`[${submissionCardUrl}](${submissionCardUrl})`),
-      'summary body includes submission card URL as a markdown link',
+      body.includes(`[${workflowCardUrl}](${workflowCardUrl})`),
+      'summary body includes workflow card URL as a markdown link',
     );
   });
 

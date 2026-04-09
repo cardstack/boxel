@@ -226,9 +226,10 @@ export default class IndexedFileTree extends Component<Signature> {
   }
 
   @action
-  private handleKeydown(event: KeyboardEvent) {
-    const key = event.key;
-    const nav = event.currentTarget as HTMLElement;
+  private handleKeydown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
+    const key = kbEvent.key;
+    const nav = kbEvent.currentTarget as HTMLElement;
 
     switch (key) {
       case 'ArrowDown': {
@@ -338,9 +339,9 @@ export default class IndexedFileTree extends Component<Signature> {
         // Type-ahead: single printable characters, no modifier combos
         if (
           key.length !== 1 ||
-          event.ctrlKey ||
-          event.metaKey ||
-          event.altKey
+          kbEvent.ctrlKey ||
+          kbEvent.metaKey ||
+          kbEvent.altKey
         ) {
           break;
         }

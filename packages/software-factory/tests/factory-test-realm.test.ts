@@ -2,311 +2,167 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import type { TestResult } from '../scripts/lib/factory-agent';
+import type { TestResult } from '../src/factory-agent';
 import {
   buildTestRunCardDocument,
   completeTestRun,
   createTestRun,
   formatTestResultSummary,
-  parseRunRealmTestsOutput,
-  parseToolResultOutput,
+  parseQunitResults,
   resolveTestRun,
-  type RunRealmTestsOutput,
   type TestRunAttributes,
-} from '../scripts/lib/factory-test-realm';
-import { pullRealmFiles } from '../scripts/lib/realm-operations';
+} from '../src/factory-test-realm';
+import { pullRealmFiles } from '../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
 
 const testRealmOptions = {
-  testRealmUrl: 'https://realms.example.test/user/personal-tests/',
+  targetRealmUrl: 'https://realms.example.test/user/personal-tests/',
   testResultsModuleUrl:
     'https://realms.example.test/software-factory/test-results',
+  realmServerUrl: 'https://realms.example.test/',
 };
 
 // ---------------------------------------------------------------------------
-// parseRunRealmTestsOutput — returns TestRunAttributes directly
+// parseQunitResults — converts QUnit browser results to TestRunAttributes
 // ---------------------------------------------------------------------------
 
-module('factory-test-realm > parseRunRealmTestsOutput', function () {
-  test('parses all-passing output into TestRunAttributes', function (assert) {
-    let output: RunRealmTestsOutput = {
-      expected: 3,
-      unexpected: 0,
-      skipped: 0,
-      failures: [],
-    };
-
-    let attrs = parseRunRealmTestsOutput(output, 1500);
-
-    assert.strictEqual(attrs.status, 'passed');
-    assert.strictEqual(attrs.passedCount, 3);
-    assert.strictEqual(attrs.failedCount, 0);
-    assert.strictEqual(attrs.specResults.length, 0);
-    assert.strictEqual(attrs.durationMs, 1500);
-  });
-
-  test('parses output with failures', function (assert) {
-    let output: RunRealmTestsOutput = {
-      expected: 2,
-      unexpected: 1,
-      failures: [
+module('factory-test-realm > parseQunitResults', function () {
+  test('all-passing results', function (assert) {
+    let results = parseQunitResults({
+      tests: [
         {
-          title: 'sticky-note > renders fitted view',
-          outcome: 'unexpected',
-          error: 'Expected element to be visible',
+          name: 'test A',
+          module: 'Module1',
+          status: 'passed',
+          runtime: 100,
+          errors: [],
+        },
+        {
+          name: 'test B',
+          module: 'Module1',
+          status: 'passed',
+          runtime: 200,
+          errors: [],
         },
       ],
-    };
-
-    let attrs = parseRunRealmTestsOutput(output, 3200);
-
-    assert.strictEqual(attrs.status, 'failed');
-    assert.strictEqual(attrs.passedCount, 2);
-    assert.strictEqual(attrs.failedCount, 1);
-    assert.strictEqual(attrs.specResults.length, 1);
-    assert.strictEqual(attrs.specResults[0].results.length, 1);
-    assert.strictEqual(
-      attrs.specResults[0].results[0].testName,
-      'sticky-note > renders fitted view',
-    );
-    assert.strictEqual(attrs.specResults[0].results[0].status, 'failed');
-    assert.strictEqual(
-      attrs.specResults[0].results[0].message,
-      'Expected element to be visible',
-    );
-    assert.strictEqual(attrs.specResults[0].results[0].stackTrace, undefined);
+      runEnd: {
+        status: 'passed',
+        testCounts: { passed: 2, failed: 0, skipped: 0, todo: 0, total: 2 },
+        runtime: 300,
+      },
+    });
+    assert.strictEqual(results.status, 'passed');
+    assert.strictEqual(results.passedCount, 2);
+    assert.strictEqual(results.failedCount, 0);
+    assert.strictEqual(results.moduleResults.length, 1);
+    assert.strictEqual(results.moduleResults[0].moduleRef?.module, 'Module1');
   });
 
-  test('splits error message from stack trace', function (assert) {
-    let output: RunRealmTestsOutput = {
-      expected: 0,
-      unexpected: 1,
-      failures: [
+  test('mixed pass/fail results', function (assert) {
+    let results = parseQunitResults({
+      tests: [
         {
-          title: 'test > fails',
-          outcome: 'unexpected',
-          error:
-            'Expect received to be true\n    at Object.<anonymous> (/tests/my.spec.ts:10:5)\n    at processTicksAndRejections',
+          name: 'passing',
+          module: 'Mod',
+          status: 'passed',
+          runtime: 50,
+          errors: [],
+        },
+        {
+          name: 'failing',
+          module: 'Mod',
+          status: 'failed',
+          runtime: 100,
+          errors: [{ message: 'Expected true', stack: 'at test.js:5' }],
         },
       ],
-    };
+      runEnd: {
+        status: 'failed',
+        testCounts: { passed: 1, failed: 1, skipped: 0, todo: 0, total: 2 },
+        runtime: 150,
+      },
+    });
+    assert.strictEqual(results.status, 'failed');
+    assert.strictEqual(results.passedCount, 1);
+    assert.strictEqual(results.failedCount, 1);
+  });
 
-    let attrs = parseRunRealmTestsOutput(output, 800);
+  test('groups by module name', function (assert) {
+    let results = parseQunitResults({
+      tests: [
+        {
+          name: 'A',
+          module: 'Alpha',
+          status: 'passed',
+          runtime: 10,
+          errors: [],
+        },
+        {
+          name: 'B',
+          module: 'Beta',
+          status: 'passed',
+          runtime: 20,
+          errors: [],
+        },
+      ],
+      runEnd: {
+        status: 'passed',
+        testCounts: { passed: 2, failed: 0, skipped: 0, todo: 0, total: 2 },
+        runtime: 30,
+      },
+    });
+    assert.strictEqual(results.moduleResults.length, 2);
+    assert.strictEqual(results.moduleResults[0].moduleRef?.module, 'Alpha');
+    assert.strictEqual(results.moduleResults[1].moduleRef?.module, 'Beta');
+  });
 
-    assert.strictEqual(
-      attrs.specResults[0].results[0].message,
-      'Expect received to be true',
-    );
+  test('null runEnd returns error', function (assert) {
+    let results = parseQunitResults({ tests: [], runEnd: null });
+    assert.strictEqual(results.status, 'error');
     assert.true(
-      attrs.specResults[0].results[0].stackTrace?.includes(
-        'Object.<anonymous>',
-      ),
+      Boolean(results.errorMessage && results.errorMessage.includes('runEnd')),
     );
   });
 
-  test('returns error status for empty output', function (assert) {
-    let attrs = parseRunRealmTestsOutput({}, 0);
-
-    assert.strictEqual(attrs.status, 'error');
-    assert.strictEqual(attrs.passedCount, 0);
-    assert.strictEqual(attrs.failedCount, 0);
+  test('empty tests returns error', function (assert) {
+    let results = parseQunitResults({
+      tests: [],
+      runEnd: {
+        status: 'passed',
+        testCounts: { passed: 0, failed: 0, skipped: 0, todo: 0, total: 0 },
+        runtime: 0,
+      },
+    });
+    assert.strictEqual(results.status, 'error');
   });
 
-  test('returns failed when unexpected > 0 even with no failure details', function (assert) {
-    let attrs = parseRunRealmTestsOutput(
-      { expected: 1, unexpected: 2, failures: [] },
-      500,
-    );
-
-    assert.strictEqual(attrs.status, 'failed');
-    assert.strictEqual(attrs.failedCount, 2);
-  });
-
-  test('handles multiple failures', function (assert) {
-    let output: RunRealmTestsOutput = {
-      expected: 1,
-      unexpected: 3,
-      failures: [
-        { title: 'test A', outcome: 'unexpected', error: 'error A' },
-        { title: 'test B', outcome: 'unexpected', error: 'error B' },
-        { title: 'test C', outcome: 'unexpected', error: 'error C' },
+  test('extracts error message and stack trace', function (assert) {
+    let results = parseQunitResults({
+      tests: [
+        {
+          name: 'fails',
+          module: 'M',
+          status: 'failed',
+          runtime: 10,
+          errors: [
+            { message: 'assertion failed', stack: 'at line 42\nat line 99' },
+          ],
+        },
       ],
-    };
-
-    let attrs = parseRunRealmTestsOutput(output, 2000);
-
-    assert.strictEqual(attrs.specResults.length, 1);
-    assert.strictEqual(attrs.specResults[0].results.length, 3);
-    assert.strictEqual(attrs.specResults[0].results[0].testName, 'test A');
-    assert.strictEqual(attrs.specResults[0].results[2].testName, 'test C');
-  });
-
-  test('truncates stack traces to 500 chars', function (assert) {
-    let longError = 'Error\n    at ' + 'x'.repeat(700);
-    let output: RunRealmTestsOutput = {
-      expected: 0,
-      unexpected: 1,
-      failures: [{ title: 'test', outcome: 'unexpected', error: longError }],
-    };
-
-    let attrs = parseRunRealmTestsOutput(output, 100);
+      runEnd: {
+        status: 'failed',
+        testCounts: { passed: 0, failed: 1, skipped: 0, todo: 0, total: 1 },
+        runtime: 10,
+      },
+    });
+    let entry = results.moduleResults[0].results[0];
+    assert.strictEqual(entry.message, 'assertion failed');
     assert.true(
-      (attrs.specResults[0].results[0].stackTrace?.length ?? 0) <= 500,
+      Boolean(entry.stackTrace && entry.stackTrace.includes('at line 42')),
     );
-  });
-
-  test('parses Playwright JSON report with passing tests into results', function (assert) {
-    let report = {
-      stats: { expected: 2, unexpected: 0 },
-      suites: [
-        {
-          specs: [
-            {
-              title: 'hello card renders greeting',
-              ok: true,
-              tests: [{ results: [{ status: 'passed', duration: 1200 }] }],
-            },
-            {
-              title: 'hello card shows title',
-              ok: true,
-              tests: [{ results: [{ status: 'passed', duration: 800 }] }],
-            },
-          ],
-        },
-      ],
-    } as unknown as RunRealmTestsOutput;
-
-    let attrs = parseRunRealmTestsOutput(report, 2500);
-
-    assert.strictEqual(attrs.status, 'passed');
-    assert.strictEqual(attrs.specResults.length, 1);
-    let results = attrs.specResults[0].results;
-    assert.strictEqual(results.length, 2);
-    assert.strictEqual(results[0].testName, 'hello card renders greeting');
-    assert.strictEqual(results[0].status, 'passed');
-    assert.strictEqual(results[0].durationMs, 1200);
-    assert.strictEqual(results[1].testName, 'hello card shows title');
-    assert.strictEqual(results[1].status, 'passed');
-    assert.strictEqual(attrs.passedCount, 2);
-    assert.strictEqual(attrs.failedCount, 0);
-  });
-
-  test('parses Playwright JSON report with mixed pass/fail results', function (assert) {
-    let report = {
-      stats: { expected: 1, unexpected: 1 },
-      suites: [
-        {
-          specs: [
-            {
-              title: 'passes',
-              ok: true,
-              tests: [{ results: [{ status: 'passed', duration: 500 }] }],
-            },
-            {
-              title: 'fails',
-              ok: false,
-              tests: [
-                {
-                  results: [
-                    {
-                      status: 'failed',
-                      duration: 300,
-                      errors: [{ message: 'Expected true to be false' }],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    } as unknown as RunRealmTestsOutput;
-
-    let attrs = parseRunRealmTestsOutput(report, 1000);
-
-    assert.strictEqual(attrs.status, 'failed');
-    assert.strictEqual(attrs.specResults.length, 1);
-    let results = attrs.specResults[0].results;
-    assert.strictEqual(results.length, 2);
-    assert.strictEqual(results[0].status, 'passed');
-    assert.strictEqual(results[1].status, 'failed');
-    assert.strictEqual(results[1].message, 'Expected true to be false');
-    assert.strictEqual(attrs.passedCount, 1);
-    assert.strictEqual(attrs.failedCount, 1);
-  });
-
-  test('parses Playwright JSON report with nested suites', function (assert) {
-    let report = {
-      stats: { expected: 1, unexpected: 0 },
-      suites: [
-        {
-          suites: [
-            {
-              specs: [
-                {
-                  title: 'nested test',
-                  ok: true,
-                  tests: [{ results: [{ status: 'passed', duration: 100 }] }],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    } as unknown as RunRealmTestsOutput;
-
-    let attrs = parseRunRealmTestsOutput(report, 200);
-
-    assert.strictEqual(attrs.specResults.length, 1);
-    let results = attrs.specResults[0].results;
-    assert.strictEqual(results.length, 1);
-    assert.strictEqual(results[0].testName, 'nested test');
-    assert.strictEqual(results[0].status, 'passed');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// parseToolResultOutput — returns TestRunAttributes
-// ---------------------------------------------------------------------------
-
-module('factory-test-realm > parseToolResultOutput', function () {
-  test('handles normal run-realm-tests JSON output', function (assert) {
-    let output = { expected: 5, unexpected: 0, failures: [] };
-    let attrs = parseToolResultOutput(output, 4000);
-
-    assert.strictEqual(attrs.status, 'passed');
-    assert.strictEqual(attrs.passedCount, 5);
-  });
-
-  test('handles tool error output with errorMessage', function (assert) {
-    let output = { error: 'HTTP 500', body: 'Internal server error' };
-    let attrs = parseToolResultOutput(output, 100);
-
-    assert.strictEqual(attrs.status, 'error');
-    assert.true(attrs.errorMessage?.includes('HTTP 500'));
-    assert.strictEqual(attrs.specResults[0].results[0].status, 'error');
-  });
-
-  test('handles unparseable raw output', function (assert) {
-    let attrs = parseToolResultOutput({ raw: 'some garbage stdout' }, 200);
-
-    assert.strictEqual(attrs.status, 'error');
-    assert.true(attrs.errorMessage?.includes('Unparseable'));
-  });
-
-  test('handles unexpected output type', function (assert) {
-    let attrs = parseToolResultOutput('just a string', 100);
-
-    assert.strictEqual(attrs.status, 'error');
-    assert.true(attrs.errorMessage?.includes('Unexpected'));
-  });
-
-  test('handles null output', function (assert) {
-    let attrs = parseToolResultOutput(null, 100);
-    assert.strictEqual(attrs.status, 'error');
   });
 });
 
@@ -333,17 +189,17 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(adoptsFrom.name, 'TestRun');
   });
 
-  test('pre-populates specResults with pending entries', function (assert) {
+  test('pre-populates moduleResults with pending entries', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A', 'test B', 'test C'],
       testRealmOptions.testResultsModuleUrl,
     );
 
-    let specResults = doc.data.attributes!.specResults as {
+    let moduleResults = doc.data.attributes!.moduleResults as {
       results: { testName: string; status: string }[];
     }[];
-    assert.strictEqual(specResults.length, 1);
-    let results = specResults[0].results;
+    assert.strictEqual(moduleResults.length, 1);
+    let results = moduleResults[0].results;
     assert.strictEqual(results.length, 3);
     assert.strictEqual(results[0].testName, 'test A');
     assert.strictEqual(results[0].status, 'pending');
@@ -370,11 +226,11 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(doc.data.attributes!.sequenceNumber, 5);
   });
 
-  test('includes ticket relationship when ticketURL is provided', function (assert) {
+  test('includes issue relationship when issueURL is provided', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
-      { ticketURL: '../Ticket/define-sticky-note-core' },
+      { issueURL: '../Issues/define-sticky-note-core' },
     );
 
     let relationships = doc.data.relationships as Record<
@@ -382,8 +238,8 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       { links: { self: string | null } }
     >;
     assert.strictEqual(
-      relationships.ticket.links.self,
-      '../Ticket/define-sticky-note-core',
+      relationships.issue.links.self,
+      '../Issues/define-sticky-note-core',
     );
   });
 
@@ -404,13 +260,13 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     );
   });
 
-  test('includes both project and ticket relationships', function (assert) {
+  test('includes both project and issue relationships', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
       {
         projectCardUrl: 'http://localhost:4201/test/Projects/hello-world',
-        ticketURL: '../Ticket/implement-feature',
+        issueURL: '../Issues/implement-feature',
       },
     );
 
@@ -423,12 +279,12 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
       'http://localhost:4201/test/Projects/hello-world',
     );
     assert.strictEqual(
-      relationships.ticket.links.self,
-      '../Ticket/implement-feature',
+      relationships.issue.links.self,
+      '../Issues/implement-feature',
     );
   });
 
-  test('omits relationships when no ticketURL or projectCardUrl', function (assert) {
+  test('omits relationships when no issueURL or projectCardUrl', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
@@ -437,20 +293,20 @@ module('factory-test-realm > buildTestRunCardDocument', function () {
     assert.strictEqual(doc.data.relationships, undefined);
   });
 
-  test('includes specRef in specResults when provided', function (assert) {
+  test('includes moduleRef in moduleResults when provided', function (assert) {
     let doc = buildTestRunCardDocument(
       ['test A'],
       testRealmOptions.testResultsModuleUrl,
-      { specRef: { module: './test-spec', name: 'default' } },
+      { moduleRef: { module: './test-spec', name: 'default' } },
     );
 
-    let specResults = doc.data.attributes!.specResults as {
-      specRef?: { module: string; name: string };
+    let moduleResults = doc.data.attributes!.moduleResults as {
+      moduleRef?: { module: string; name: string };
       results: unknown[];
     }[];
-    assert.strictEqual(specResults.length, 1);
-    assert.strictEqual(specResults[0].specRef?.module, './test-spec');
-    assert.strictEqual(specResults[0].specRef?.name, 'default');
+    assert.strictEqual(moduleResults.length, 1);
+    assert.strictEqual(moduleResults[0].moduleRef?.module, './test-spec');
+    assert.strictEqual(moduleResults[0].moduleRef?.name, 'default');
   });
 });
 
@@ -545,7 +401,7 @@ module('factory-test-realm > completeTestRun', function () {
           sequenceNumber: 1,
           passedCount: 0,
           failedCount: 0,
-          specResults: [],
+          moduleResults: [],
         },
         meta: {
           adoptsFrom: {
@@ -578,7 +434,7 @@ module('factory-test-realm > completeTestRun', function () {
       passedCount: 3,
       failedCount: 0,
       durationMs: 1500,
-      specResults: [],
+      moduleResults: [],
     };
 
     let result = await completeTestRun(
@@ -604,7 +460,7 @@ module('factory-test-realm > completeTestRun', function () {
       passedCount: 1,
       failedCount: 0,
       durationMs: 100,
-      specResults: [],
+      moduleResults: [],
     };
 
     let result = await completeTestRun('Test Runs/missing-1', attrs, {
@@ -627,7 +483,7 @@ module('factory-test-realm > resolveTestRun', function () {
       id: string;
       status: string;
       sequenceNumber: number;
-      specResults?: {
+      moduleResults?: {
         results?: { testName: string; status: string }[];
       }[];
     }[],
@@ -646,7 +502,7 @@ module('factory-test-realm > resolveTestRun', function () {
               attributes: {
                 status: tr.status,
                 sequenceNumber: tr.sequenceNumber,
-                specResults: tr.specResults ?? [],
+                moduleResults: tr.moduleResults ?? [],
               },
             })),
           }),
@@ -670,45 +526,48 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
-      specPaths: ['TestSpec/my-ticket.spec.ts'],
+      slug: 'my-issue',
       testNames: ['test A'],
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([]),
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-1');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-1');
   });
 
   test('creates new TestRun when most recent is completed', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
-      specPaths: ['TestSpec/my-ticket.spec.ts'],
+      slug: 'my-issue',
       testNames: ['test A'],
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-2', status: 'passed', sequenceNumber: 2 },
+        { id: 'Test Runs/my-issue-2', status: 'passed', sequenceNumber: 2 },
       ]),
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-3');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-3');
   });
 
   test('resumes most recent running TestRun by default', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
-      specPaths: ['TestSpec/my-ticket.spec.ts'],
+      slug: 'my-issue',
       testNames: ['test A', 'test B'],
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
         {
-          id: 'Test Runs/my-ticket-2',
+          id: 'Test Runs/my-issue-2',
           status: 'running',
           sequenceNumber: 2,
-          specResults: [
+          moduleResults: [
             {
               results: [
                 { testName: 'test A', status: 'passed' },
@@ -721,25 +580,26 @@ module('factory-test-realm > resolveTestRun', function () {
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-2');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-2');
   });
 
   test('ignores partial TestRun with forceNew: true', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
-      specPaths: ['TestSpec/my-ticket.spec.ts'],
+      slug: 'my-issue',
       testNames: ['test A'],
       forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-2', status: 'running', sequenceNumber: 2 },
+        { id: 'Test Runs/my-issue-2', status: 'running', sequenceNumber: 2 },
       ]),
     });
 
     assert.strictEqual(handle.status, 'running');
     // forceNew creates a new run with incremented sequence
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-3');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-3');
   });
 
   test('does NOT resume older partial TestRun when newer completed exists', async function (assert) {
@@ -748,31 +608,136 @@ module('factory-test-realm > resolveTestRun', function () {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
-      specPaths: ['TestSpec/my-ticket.spec.ts'],
+      slug: 'my-issue',
       testNames: ['test A'],
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-3', status: 'passed', sequenceNumber: 3 },
+        { id: 'Test Runs/my-issue-3', status: 'passed', sequenceNumber: 3 },
       ]),
     });
 
     assert.strictEqual(handle.status, 'running');
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-4');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-4');
   });
 
   test('sequence numbers increment correctly', async function (assert) {
     let handle = await resolveTestRun({
       ...testRealmOptions,
       targetRealmUrl: 'https://realms.example.test/user/personal/',
-      slug: 'my-ticket',
-      specPaths: ['TestSpec/my-ticket.spec.ts'],
+      slug: 'my-issue',
       testNames: ['test A'],
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
       fetch: buildMockSearchFetch([
-        { id: 'Test Runs/my-ticket-7', status: 'failed', sequenceNumber: 7 },
+        { id: 'Test Runs/my-issue-7', status: 'failed', sequenceNumber: 7 },
       ]),
     });
 
-    assert.strictEqual(handle.testRunId, 'Test Runs/my-ticket-8');
+    assert.strictEqual(handle.testRunId, 'Test Runs/my-issue-8');
+  });
+
+  test('consecutive forceNew calls create separate TestRuns with incrementing sequences', async function (assert) {
+    // Simulates what happens during the factory loop: each iteration should
+    // create a new TestRun, not overwrite the previous one. This is a
+    // regression test for the bug where iterations shared a single TestRun.
+    let handle1 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-issue',
+      testNames: ['test A'],
+      forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(handle1.testRunId, 'Test Runs/my-issue-1');
+    assert.false(handle1.resumed, 'first run is not resumed');
+
+    // Second call with forceNew — should get sequence 2, not resume sequence 1
+    let handle2 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-issue',
+      testNames: ['test A'],
+      forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([
+        {
+          id: 'Test Runs/my-issue-1',
+          status: 'running',
+          sequenceNumber: 1,
+        },
+      ]),
+    });
+
+    assert.strictEqual(handle2.testRunId, 'Test Runs/my-issue-2');
+    assert.false(handle2.resumed, 'second run is not resumed');
+    assert.notStrictEqual(
+      handle1.testRunId,
+      handle2.testRunId,
+      'each iteration gets its own TestRun',
+    );
+  });
+
+  test('lastSequenceNumber prevents reuse when realm index is stale', async function (assert) {
+    // Simulates the real-world bug: the realm search index hasn't indexed
+    // the TestRun created in the previous iteration, so the search returns
+    // stale data. Without lastSequenceNumber, getNextSequenceNumber would
+    // return 1 again and overwrite the first TestRun.
+    let handle1 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(handle1.testRunId, 'Test Runs/my-ticket-1');
+
+    // Second call — search index is STALE (still returns empty), but
+    // lastSequenceNumber=1 prevents reusing sequence 1.
+    let handle2 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      lastSequenceNumber: 1,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(
+      handle2.testRunId,
+      'Test Runs/my-ticket-2',
+      'uses lastSequenceNumber as floor even when index returns nothing',
+    );
+
+    // Third call — index still stale, lastSequenceNumber=2
+    let handle3 = await resolveTestRun({
+      ...testRealmOptions,
+      targetRealmUrl: 'https://realms.example.test/user/personal/',
+      slug: 'my-ticket',
+      testNames: ['test A'],
+      forceNew: true,
+      lastSequenceNumber: 2,
+      realmServerUrl: 'https://realms.example.test/',
+      hostAppUrl: 'https://realms.example.test/',
+      fetch: buildMockSearchFetch([]),
+    });
+
+    assert.strictEqual(
+      handle3.testRunId,
+      'Test Runs/my-ticket-3',
+      'continues incrementing from lastSequenceNumber floor',
+    );
   });
 });
 

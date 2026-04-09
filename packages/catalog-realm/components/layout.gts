@@ -63,7 +63,7 @@ export const TitleGroup: TemplateOnlyComponent<TitleGroupSignature> = <template>
           class='image-container thumbnail'
           style={{setBackgroundImage @thumbnailURL}}
           role='img'
-          alt={{@title}}
+          aria-label={{@title}}
         />
       {{else if @icon}}
         <div class='image-container'>

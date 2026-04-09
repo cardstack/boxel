@@ -9,11 +9,11 @@
     "type": "card",
     "attributes": {
       "name": "Theme",
-      "color": null,
+      "color": "#ff009d",
       "cardInfo": {
         "notes": null,
         "name": null,
-        "summary": null,
+        "summary": "Visual themes and styling cards that customize the appearance and color scheme of the Boxel workspace or other cards.",
         "cardThumbnailURL": null
       }
     },

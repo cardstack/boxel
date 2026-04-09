@@ -1,7 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { expect, test } from './fixtures';
 
@@ -9,11 +6,8 @@ import {
   createTestRun,
   executeTestRunFromRealm,
   type TestRunRealmOptions,
-} from '../scripts/lib/factory-test-realm';
-import {
-  pullRealmFiles,
-  writeModuleSource,
-} from '../scripts/lib/realm-operations';
+} from '../src/factory-test-realm';
+import { readFile, waitForRealmFile, writeFile } from '../src/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -21,37 +15,58 @@ const fixtureRealmDir = resolve(
   'test-realm-runner',
 );
 
-// Spec content written to the realm via the API — same path as the live system.
-const PASSING_SPEC = `import { expect, test } from '@playwright/test';
+// QUnit test content written to the realm via the API — same path as the live system.
+// Uses import.meta.url to resolve the co-located hello.gts card definition,
+// making the tests portable across realms.
+const PASSING_TEST_GTS = `import { module, test } from 'qunit';
+import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { renderCard } from '@cardstack/host/tests/helpers/render-component';
+import { getService } from '@universal-ember/test-support';
 
-test('hello card renders greeting', async ({ page }) => {
-  let realmUrl = process.env.BOXEL_SOURCE_REALM_URL;
-  await page.goto(\`\${realmUrl}HelloCard/sample\`);
-  await expect(page.locator('[data-test-greeting]')).toBeVisible({
-    timeout: 30_000,
+let cardModuleUrl = new URL('./hello', import.meta.url).href;
+
+export function runTests() {
+  module('HelloCard', function (hooks) {
+    setupCardTest(hooks);
+
+    test('greeting renders in isolated view', async function (assert) {
+      let loader = getService('loader-service').loader;
+      let { HelloCard } = await loader.import(cardModuleUrl);
+      let card = new HelloCard({ greeting: 'Hello from smoke test' });
+      await renderCard(loader, card, 'isolated');
+      assert.dom('[data-test-greeting]').hasText('Hello from smoke test');
+    });
   });
-  await expect(page.locator('[data-test-greeting]')).toContainText('Hello');
-});
+}
 `;
 
-const FAILING_SPEC = `import { expect, test } from '@playwright/test';
+const FAILING_TEST_GTS = `import { module, test } from 'qunit';
+import { setupCardTest } from '@cardstack/host/tests/helpers';
+import { renderCard } from '@cardstack/host/tests/helpers/render-component';
+import { getService } from '@universal-ember/test-support';
 
-test('deliberately fails for testing', async ({ page }) => {
-  let realmUrl = process.env.BOXEL_SOURCE_REALM_URL;
-  await page.goto(\`\${realmUrl}HelloCard/sample\`);
-  // This assertion is deliberately wrong — it checks for text that doesn't exist.
-  await expect(page.locator('[data-test-greeting]')).toContainText(
-    'THIS TEXT DOES NOT EXIST',
-    { timeout: 5_000 },
-  );
-});
+let cardModuleUrl = new URL('./hello', import.meta.url).href;
+
+export function runTests() {
+  module('HelloCard Fail', function (hooks) {
+    setupCardTest(hooks);
+
+    test('deliberately fails - wrong greeting text', async function (assert) {
+      let loader = getService('loader-service').loader;
+      let { HelloCard } = await loader.import(cardModuleUrl);
+      let card = new HelloCard({ greeting: 'Hello from smoke test' });
+      await renderCard(loader, card, 'isolated');
+      assert.dom('[data-test-greeting]').hasText('THIS TEXT DOES NOT EXIST');
+    });
+  });
+}
 `;
 
 test.use({ realmDir: fixtureRealmDir });
 test.use({ realmServerMode: 'isolated' });
 
 test.describe('factory-test-realm e2e', () => {
-  test('executeTestRunFromRealm runs specs against the harness and completes the TestRun', async ({
+  test('executeTestRunFromRealm runs QUnit tests against the harness and completes the TestRun', async ({
     realm,
   }) => {
     let realmUrl = realm.realmURL.href;
@@ -59,34 +74,74 @@ test.describe('factory-test-realm e2e', () => {
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
 
-    // Write the spec to the realm via API — same path as the live system.
-    let writeResult = await writeModuleSource(
+    // Write the QUnit test to the realm via API — same path as the live system.
+    let writeResult = await writeFile(
       realmUrl,
-      'Tests/hello-passing.spec.ts',
-      PASSING_SPEC,
+      'hello.test.gts',
+      PASSING_TEST_GTS,
       { authorization },
     );
     expect(writeResult.ok).toBe(true);
 
+    // Wait for the realm to index the file before running tests
+    let indexed = await waitForRealmFile(realmUrl, 'hello.test.gts', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+    expect(indexed).toBe(true);
+
+    // Verify the realm resolves the dotted filename: a request for
+    // "hello.test" (without .gts) must find "hello.test.gts" on disk.
+    let moduleUrl = `${realmUrl}hello.test`;
+    let moduleResponse = await fetch(moduleUrl, {
+      headers: { Accept: '*/*', Authorization: authorization },
+    });
+    expect(moduleResponse.status).toBe(200);
+
     let handle = await executeTestRunFromRealm({
       targetRealmUrl: realmUrl,
-      testRealmUrl: realmUrl,
       testResultsModuleUrl,
+      realmServerUrl: realm.realmServerURL.href,
       slug: 'hello-e2e',
-      specPaths: ['Tests/hello-passing.spec.ts'],
-      testNames: ['hello card renders greeting'],
+      testNames: [],
       authorization,
       fetch: globalThis.fetch,
+      hostAppUrl: realm.hostAppUrl,
     });
 
-    // The function should complete (not hang) and return a final status.
-    // The handle is the source of truth — card persistence is verified
-    // by unit tests separately.
+    // Handle assertions
     expect(handle.testRunId).toContain('Test Runs/hello-e2e');
-    expect(['passed', 'failed', 'error']).toContain(handle.status);
+    expect(handle.status).toBe('passed');
+    expect(handle.errorMessage).toBeUndefined();
+
+    // Read the TestRun card back and verify its persisted state
+    let testRunCard = await readFile(realmUrl, handle.testRunId, {
+      authorization,
+    });
+    expect(testRunCard.ok).toBe(true);
+    let attrs = testRunCard.document?.data.attributes;
+    expect(attrs?.status).toBe('passed');
+    expect(attrs?.sequenceNumber).toBe(1);
+    expect(attrs?.completedAt).toBeTruthy();
+    expect(attrs?.durationMs).toBeGreaterThan(0);
+
+    // Verify moduleResults contain the passing test
+    let moduleResults = attrs?.moduleResults as
+      | {
+          moduleRef?: { module?: string };
+          results?: { testName?: string; status?: string }[];
+        }[]
+      | undefined;
+    expect(moduleResults).toBeTruthy();
+    expect(moduleResults!.length).toBeGreaterThan(0);
+
+    let allResults = moduleResults!.flatMap((mr) => mr.results ?? []);
+    expect(allResults.length).toBeGreaterThan(0);
+    expect(allResults.every((r) => r.status === 'passed')).toBe(true);
   });
 
-  test('failure path: deliberately failing spec produces status: failed with details', async ({
+  test('failure path: deliberately failing QUnit test produces status: failed with details', async ({
     realm,
   }) => {
     let realmUrl = realm.realmURL.href;
@@ -94,79 +149,69 @@ test.describe('factory-test-realm e2e', () => {
     let authHeaders = realm.authorizationHeaders();
     let authorization = authHeaders['Authorization'];
 
-    // Write the deliberately failing spec via API.
-    let writeResult = await writeModuleSource(
+    // Write the deliberately failing QUnit test via API.
+    let writeResult = await writeFile(
       realmUrl,
-      'Tests/hello-failing.spec.ts',
-      FAILING_SPEC,
+      'hello-fail.test.gts',
+      FAILING_TEST_GTS,
       { authorization },
     );
     expect(writeResult.ok).toBe(true);
+
+    // Wait for the realm to index the file before running tests
+    let indexed = await waitForRealmFile(realmUrl, 'hello-fail.test.gts', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+    expect(indexed).toBe(true);
 
     let handle = await executeTestRunFromRealm({
       targetRealmUrl: realmUrl,
-      testRealmUrl: realmUrl,
       testResultsModuleUrl,
+      realmServerUrl: realm.realmServerURL.href,
       slug: 'hello-fail',
-      specPaths: ['Tests/hello-failing.spec.ts'],
-      testNames: ['deliberately fails for testing'],
+      testNames: [],
       authorization,
       fetch: globalThis.fetch,
+      hostAppUrl: realm.hostAppUrl,
     });
 
+    // Handle assertions
     expect(handle.testRunId).toContain('Test Runs/hello-fail');
-    // The spec deliberately fails — status should be 'failed' or 'error'
-    // (error if Playwright couldn't produce a report, failed if it did).
-    expect(['failed', 'error']).toContain(handle.status);
-    expect(handle.status).not.toBe('passed');
-  });
+    expect(handle.status).toBe('failed');
 
-  test('pullRealmFiles downloads spec files written via the API', async ({
-    realm,
-  }) => {
-    let realmUrl = realm.realmURL.href;
-    let authHeaders = realm.authorizationHeaders();
-    let authorization = authHeaders['Authorization'];
-
-    // Write a spec file to the realm via the API.
-    let writeResult = await writeModuleSource(
-      realmUrl,
-      'Tests/hello-passing.spec.ts',
-      PASSING_SPEC,
-      { authorization },
-    );
-    expect(writeResult.ok).toBe(true);
-
-    let tmpDir = mkdtempSync(join(tmpdir(), 'pull-test-'));
-    let result = await pullRealmFiles(realmUrl, tmpDir, {
+    // Read the TestRun card back and verify its persisted state
+    let testRunCard = await readFile(realmUrl, handle.testRunId, {
       authorization,
     });
+    expect(testRunCard.ok).toBe(true);
+    let attrs = testRunCard.document?.data.attributes;
+    expect(attrs?.status).toBe('failed');
+    expect(attrs?.sequenceNumber).toBe(1);
+    expect(attrs?.completedAt).toBeTruthy();
+    expect(attrs?.durationMs).toBeGreaterThan(0);
 
-    expect(result.error).toBeUndefined();
-    expect(result.files.length).toBeGreaterThan(0);
+    // Verify moduleResults contain the failing test with error details
+    let moduleResults = attrs?.moduleResults as
+      | {
+          moduleRef?: { module?: string };
+          results?: { testName?: string; status?: string; message?: string }[];
+        }[]
+      | undefined;
+    expect(moduleResults).toBeTruthy();
+    expect(moduleResults!.length).toBeGreaterThan(0);
 
-    // Verify the spec was pulled and contains raw TypeScript.
-    let specPath = join(tmpDir, 'Tests', 'hello-passing.spec.ts');
-    expect(existsSync(specPath)).toBe(true);
-
-    let content = readFileSync(specPath, 'utf8');
-    expect(content).toContain('import');
-    expect(content).toContain('test(');
-    // Must NOT be JSON-wrapped — raw source only.
-    expect(content).not.toContain('"data"');
-    expect(content).not.toContain('"type": "module"');
-
-    // Also verify .gts files loaded from the fixture are raw source.
-    let gtsPath = join(tmpDir, 'hello.gts');
-    expect(existsSync(gtsPath)).toBe(true);
-    let gtsContent = readFileSync(gtsPath, 'utf8');
-    expect(gtsContent).toContain('CardDef');
-    expect(gtsContent).not.toContain('"data"');
+    let failedResults = moduleResults!
+      .flatMap((mr) => mr.results ?? [])
+      .filter((r) => r.status === 'failed');
+    expect(failedResults.length).toBeGreaterThan(0);
+    expect(failedResults[0].message).toBeTruthy();
   });
 
   test('error path: unreachable realm returns error immediately', async () => {
     let options: TestRunRealmOptions = {
-      testRealmUrl: 'http://localhost:1/',
+      targetRealmUrl: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
       fetch: globalThis.fetch,
     };

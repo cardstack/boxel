@@ -42,12 +42,12 @@ const mockBootstrapResult: FactoryBootstrapResult = {
       status: 'created',
     },
   ],
-  tickets: [
-    { id: 'Tickets/sticky-note-define-core', status: 'created' },
-    { id: 'Tickets/sticky-note-design-views', status: 'created' },
-    { id: 'Tickets/sticky-note-add-integration', status: 'created' },
+  issues: [
+    { id: 'Issues/sticky-note-define-core', status: 'created' },
+    { id: 'Issues/sticky-note-design-views', status: 'created' },
+    { id: 'Issues/sticky-note-add-integration', status: 'created' },
   ],
-  activeTicket: { id: 'Tickets/sticky-note-define-core', status: 'created' },
+  activeIssue: { id: 'Issues/sticky-note-define-core', status: 'created' },
 };
 
 module('factory-entrypoint', function (hooks) {
@@ -72,6 +72,8 @@ module('factory-entrypoint', function (hooks) {
       targetRealmUrl,
       realmServerUrl: 'https://realms.example.test/',
       mode: 'implement',
+      model: undefined,
+      debug: undefined,
     });
   });
 
@@ -138,12 +140,12 @@ module('factory-entrypoint', function (hooks) {
       ],
     );
     assert.strictEqual(summary.bootstrap.projectId, 'Projects/sticky-note-mvp');
-    assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
+    assert.strictEqual(summary.bootstrap.issueIds.length, 3);
     assert.strictEqual(
-      summary.bootstrap.activeTicket.id,
-      'Tickets/sticky-note-define-core',
+      summary.bootstrap.activeIssue.id,
+      'Issues/sticky-note-define-core',
     );
-    assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
+    assert.strictEqual(summary.bootstrap.activeIssue.status, 'created');
     assert.deepEqual(summary.result, {
       status: 'ready',
       nextStep: 'bootstrap-target-realm',
@@ -166,11 +168,7 @@ module('factory-entrypoint', function (hooks) {
     assert.true(/--help/.test(usage));
     assert.true(/MATRIX_USERNAME is required/.test(usage));
     assert.true(/For public briefs, no auth setup is needed./.test(usage));
-    assert.true(
-      /MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD \+ REALM_SERVER_URL/.test(
-        usage,
-      ),
-    );
+    assert.true(/MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD/.test(usage));
     assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 
@@ -192,6 +190,12 @@ module('factory-entrypoint', function (hooks) {
           createdRealm: false,
         }),
         bootstrapArtifacts: async () => mockBootstrapResult,
+        implement: async () => ({
+          outcome: 'done' as const,
+          iterations: 1,
+          toolCallLog: [],
+          issueId: 'Issues/sticky-note-define-core',
+        }),
         fetch: async (_input, init) => {
           assert.strictEqual(
             new Headers(init?.headers).get('Authorization'),
@@ -258,6 +262,12 @@ module('factory-entrypoint', function (hooks) {
           capturedDarkfactoryModuleUrl = options?.darkfactoryModuleUrl;
           return mockBootstrapResult;
         },
+        implement: async () => ({
+          outcome: 'done' as const,
+          iterations: 1,
+          toolCallLog: [],
+          issueId: 'Issues/sticky-note-define-core',
+        }),
         fetch: async () =>
           new Response(
             JSON.stringify({

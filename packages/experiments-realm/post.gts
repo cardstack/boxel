@@ -11,6 +11,7 @@ import TextAreaField from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
+// @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
 let imageURL = new URL('./green-mango.png', import.meta.url).href;
 
 class BasicField extends FieldDef {

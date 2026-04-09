@@ -28,8 +28,8 @@ interface FactoryEntrypointIntegrationSummary {
   bootstrap: {
     projectId: string;
     knowledgeArticleIds: string[];
-    ticketIds: string[];
-    activeTicket: { id: string; status: string };
+    issueIds: string[];
+    activeIssue: { id: string; status: string };
   };
   result: Record<string, string>;
 }
@@ -215,6 +215,8 @@ module('factory-entrypoint integration', function () {
           briefUrl,
           '--target-realm-url',
           targetRealmUrl,
+          '--realm-server-url',
+          `${origin}/`,
           '--mode',
           'resume',
         ],
@@ -226,7 +228,6 @@ module('factory-entrypoint integration', function () {
             MATRIX_USERNAME: 'hassan',
             MATRIX_PASSWORD: 'secret',
             MATRIX_URL: origin,
-            REALM_SERVER_URL: `${origin}/`,
           },
         },
       );
@@ -255,15 +256,15 @@ module('factory-entrypoint integration', function () {
         summary.bootstrap.projectId,
         'Projects/sticky-note-mvp',
       );
-      assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
+      assert.strictEqual(summary.bootstrap.issueIds.length, 3);
       assert.strictEqual(
-        summary.bootstrap.activeTicket.id,
-        'Tickets/sticky-note-define-core',
+        summary.bootstrap.activeIssue.id,
+        'Issues/sticky-note-define-core',
       );
-      assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
+      assert.strictEqual(summary.bootstrap.activeIssue.status, 'created');
       assert.deepEqual(summary.result, {
         status: 'ready',
-        nextStep: 'bootstrap-and-select-active-ticket',
+        nextStep: 'bootstrap-and-select-active-issue',
       });
     } finally {
       await new Promise<void>((resolvePromise, reject) =>

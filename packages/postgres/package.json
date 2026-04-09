@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
     "concurrently": "catalog:",
     "sql-parser-cst": "catalog:"
   },
@@ -28,6 +29,6 @@
     "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:migrations": "node ./scripts/lint-migrations.js",
-    "lint:glint": "glint"
+    "lint:types": "ember-tsc --noEmit"
   }
 }

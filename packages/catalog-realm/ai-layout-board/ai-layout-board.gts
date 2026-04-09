@@ -448,8 +448,9 @@ class Isolated extends Component<typeof AILayoutBoard> {
 
   // Handle Delete key for deleting selected items
   @action
-  handleKeyDown(event: KeyboardEvent) {
-    const target = event.target as HTMLElement | null;
+  handleKeyDown(event: Event) {
+    let kbEvent = event as KeyboardEvent;
+    const target = kbEvent.target as HTMLElement | null;
     const isEditable =
       target &&
       (target.tagName === 'INPUT' ||
@@ -458,7 +459,7 @@ class Isolated extends Component<typeof AILayoutBoard> {
 
     if (isEditable) return;
 
-    if (event.key === 'Delete' || event.key === 'Backspace') {
+    if (kbEvent.key === 'Delete' || kbEvent.key === 'Backspace') {
       if (this.selectedItemIds.length > 0) {
         event.preventDefault();
         this.deleteSelectedItems();

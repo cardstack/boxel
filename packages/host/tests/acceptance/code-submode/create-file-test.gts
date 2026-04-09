@@ -9,7 +9,12 @@ import {
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, Deferred } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  Deferred,
+  registerCardReferencePrefix,
+  unregisterCardReferencePrefix,
+} from '@cardstack/runtime-common';
 
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
@@ -36,6 +41,8 @@ import type { TestRealmAdapter } from '../../helpers/adapter';
 
 const testRealmURL2 = 'http://test-realm/test2/';
 const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
+
+const testPrefixRealmURL2 = `@test-realm/test2/`;
 
 const files: Record<string, any> = {
   '.realm.json': {
@@ -179,6 +186,32 @@ const filesB: Record<string, any> = {
         adoptsFrom: {
           module: 'https://cardstack.com/base/cards-grid',
           name: 'CardsGrid',
+        },
+      },
+    },
+  },
+  'animal.gts': `
+    import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+    import StringField from "https://cardstack.com/base/string";
+
+    export class Animal extends CardDef {
+      static displayName = 'Animal';
+      @field name = contains(StringField);
+    }
+  `,
+  'spec/animal.json': {
+    data: {
+      type: 'card',
+      attributes: {
+        cardTitle: 'Animal',
+        cardDescription: 'Spec for Animal',
+        specType: 'card',
+        ref: { module: '@test-realm/test2/animal', name: 'Animal' },
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/spec',
+          name: 'Spec',
         },
       },
     },
@@ -878,6 +911,66 @@ export class TestCard extends Person {
         .doesNotExist('changing a field should clear the error');
     });
 
+    test<TestContextWithSave>('modal cannot be dismissed while creation is in progress (CS-10557)', async function (assert) {
+      await visitOperatorMode();
+      await openNewFileModal('Card Definition');
+      await fillIn('[data-test-display-name-field]', 'Dismiss Test Card');
+      await fillIn('[data-test-file-name-field]', 'dismiss-test-card');
+
+      // Mount a network handler that blocks the save POST request
+      // so we can attempt to dismiss the modal while creation is in-flight
+      let saveDeferred = new Deferred<void>();
+      let postIntercepted = false;
+      getService('network').mount(
+        async (req: Request) => {
+          if (
+            req.method === 'POST' &&
+            req.url.includes('dismiss-test-card.gts')
+          ) {
+            postIntercepted = true;
+            await saveDeferred.promise;
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+
+      // Click Create without awaiting - the task will be blocked by our handler
+      let createClickPromise = click('[data-test-create-definition]');
+
+      // Wait for the POST to be intercepted (task is now mid-creation)
+      await waitUntil(() => postIntercepted, {
+        timeout: 10000,
+        timeoutMessage: 'Timed out waiting for save POST to be intercepted',
+      });
+
+      // Attempt to dismiss the modal while creation is in-flight using raw
+      // DOM click (we can't use ember's click helper here because it awaits
+      // settled, which won't resolve while the creation task is blocked)
+      let cancelBtn = document.querySelector('[data-test-cancel-create-file]');
+      if (!cancelBtn) {
+        throw new Error(
+          'Could not find [data-test-cancel-create-file] button while creation is in progress',
+        );
+      }
+      (cancelBtn as HTMLElement).click();
+
+      // Modal should still be open because creation is in progress
+      assert
+        .dom('[data-test-create-file-modal]')
+        .exists('modal stays open during creation');
+
+      // Let the save complete
+      this.onSave(() => {});
+      saveDeferred.fulfill();
+      await createClickPromise;
+
+      // After creation completes, the modal closes normally
+      assert
+        .dom('[data-test-create-file-modal]')
+        .doesNotExist('modal closes after creation completes');
+    });
+
     test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
       assert.expect(3);
       await visitOperatorMode();
@@ -1171,6 +1264,66 @@ export class TestCard extends CardDef {
         expectedSrc,
         'the source exists at the correct location',
       );
+    });
+  });
+
+  module('when a selected spec uses a prefix-form ref', function (hooks) {
+    hooks.before(function () {
+      registerCardReferencePrefix(testPrefixRealmURL2, testRealmURL2);
+    });
+
+    hooks.after(function () {
+      unregisterCardReferencePrefix(testPrefixRealmURL2);
+    });
+
+    test<TestContextWithSave>('can create new card definition in workspace A that extends a card from workspace B via prefix-form ref', async function (assert) {
+      assert.expect(2);
+      await visitOperatorMode(`${baseRealm.url}card-api.gts`);
+      await openNewFileModal('Card Definition');
+      await click('[data-test-select-card-type]');
+      await waitFor('[data-test-card-catalog-modal]');
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
+      );
+      await click(
+        `[data-test-card-catalog-item="${testRealmURL2}spec/animal"]`,
+      );
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor(`[data-test-selected-type="Animal"]`);
+
+      await fillIn('[data-test-display-name-field]', 'Test Card');
+      await fillIn('[data-test-file-name-field]', 'test-card');
+
+      let deferred = new Deferred<void>();
+      this.onSave((url, content) => {
+        if (typeof content !== 'string') {
+          throw new Error(`expected string save data`);
+        }
+        assert.strictEqual(
+          content,
+          `
+import { Animal } from '${testRealmURL2}animal';
+import { Component } from 'https://cardstack.com/base/card-api';
+export class TestCard extends Animal {
+  static displayName = "Test Card";
+}`.trim(),
+          'The source uses the resolved absolute module URL',
+        );
+        assert.strictEqual(
+          url.href,
+          `${testRealmURL}test-card.gts`,
+          [
+            'Saved file URL should point to Test Workspace A',
+            `Expected: ${testRealmURL}test-card.gts`,
+            `Actual: ${url.href}`,
+          ].join('\n'),
+        );
+        deferred.fulfill();
+      });
+
+      await click('[data-test-create-definition]');
+      await waitFor('[data-test-create-file-modal]', { count: 0 });
+      await deferred.promise;
     });
   });
 

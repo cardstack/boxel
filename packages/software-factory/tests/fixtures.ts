@@ -7,11 +7,14 @@ import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test as base, expect } from '@playwright/test';
 
+import type { RealmAction, RealmPermissions } from '@cardstack/runtime-common';
+
 import {
   defaultSupportMetadataFile,
   type PreparedTemplateMetadata,
   readSupportMetadata,
 } from '../src/runtime-metadata';
+import { buildRealmToken } from '../src/harness/shared';
 import { startHarnessPrerenderServer } from '../src/harness/support-services';
 import { buildBrowserState, installBrowserState } from './helpers/browser-auth';
 
@@ -19,6 +22,8 @@ type StartedFactoryRealm = {
   realmDir: string;
   realmURL: URL;
   realmServerURL: URL;
+  /** The host app URL served by the compat proxy (for QUnit live-test pages). */
+  hostAppUrl: string;
   ownerBearerToken: string;
   ports: {
     publicPort: number;
@@ -26,7 +31,11 @@ type StartedFactoryRealm = {
     workerManagerPort: number;
   };
   cardURL(path: string): string;
-  authorizationHeaders(): Record<string, string>;
+  createBearerToken(user: string, permissions: RealmAction[]): string;
+  authorizationHeaders(
+    user?: string,
+    permissions?: RealmAction[],
+  ): Record<string, string>;
   stop(): Promise<void>;
 };
 
@@ -41,6 +50,7 @@ export type RealmServerMode = 'shared' | 'isolated';
 type FactoryRealmOptions = {
   realmDir: string;
   realmServerMode: RealmServerMode;
+  realmPermissions: RealmPermissions | undefined;
 };
 
 type FactoryRealmWorkerFixtures = {
@@ -228,6 +238,7 @@ async function startRealmProcess(
   realmDir = defaultRealmDir,
   testWorkerPortSet: TestWorkerPortSet,
   testWorkerPrerenderURL: string,
+  permissions?: RealmPermissions,
 ) {
   let tempDir = mkdtempSync(join(tmpdir(), 'software-factory-realm-'));
   let metadataFile = join(tempDir, 'runtime.json');
@@ -267,7 +278,14 @@ async function startRealmProcess(
 
   let child = spawn(
     tsNodeBin,
-    ['--transpileOnly', 'src/cli/serve-realm.ts', realmDir],
+    [
+      '--transpileOnly',
+      'src/cli/serve-realm.ts',
+      realmDir,
+      `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
+      `--realmServerPort=${testWorkerPortSet.realmServerPort}`,
+      `--prerenderURL=${testWorkerPrerenderURL}`,
+    ],
     {
       cwd: packageRoot,
       detached: true,
@@ -276,14 +294,6 @@ async function startRealmProcess(
         NODE_NO_WARNINGS: '1',
         SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
         SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
-        SOFTWARE_FACTORY_COMPAT_REALM_PORT: String(
-          testWorkerPortSet.compatRealmServerPort,
-        ),
-        SOFTWARE_FACTORY_REALM_PORT: String(testWorkerPortSet.realmServerPort),
-        SOFTWARE_FACTORY_PRERENDER_PORT: String(
-          testWorkerPortSet.prerenderPort,
-        ),
-        SOFTWARE_FACTORY_PRERENDER_URL: testWorkerPrerenderURL,
         ...(supportMetadata?.context
           ? {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),
@@ -299,6 +309,11 @@ async function startRealmProcess(
           ? {
               SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL:
                 preparedTemplate.templateRealmServerURL,
+            }
+          : {}),
+        ...(permissions
+          ? {
+              SOFTWARE_FACTORY_PERMISSIONS: JSON.stringify(permissions),
             }
           : {}),
       },
@@ -377,14 +392,36 @@ async function startRealmProcess(
     realmDir: metadata.realmDir,
     realmURL: new URL(metadata.realmURL),
     realmServerURL: new URL(metadata.realmServerURL),
+    hostAppUrl: `http://localhost:${metadata.ports.publicPort}`,
     ownerBearerToken: metadata.ownerBearerToken,
     ports: metadata.ports,
     cardURL(path: string) {
       return new URL(path, metadata.realmURL).href;
     },
-    authorizationHeaders() {
+    createBearerToken(user: string, perms: RealmAction[]) {
+      return buildRealmToken(
+        new URL(metadata.realmURL),
+        new URL(metadata.realmServerURL),
+        user,
+        perms,
+      );
+    },
+    authorizationHeaders(user?: string, perms?: RealmAction[]) {
+      if (!user && !perms) {
+        return { Authorization: `Bearer ${metadata.ownerBearerToken}` };
+      }
+      if (!perms) {
+        throw new Error(
+          'authorizationHeaders: permissions must be provided when a user is specified',
+        );
+      }
       return {
-        Authorization: `Bearer ${metadata.ownerBearerToken}`,
+        Authorization: `Bearer ${buildRealmToken(
+          new URL(metadata.realmURL),
+          new URL(metadata.realmServerURL),
+          user,
+          perms,
+        )}`,
       };
     },
     stop,
@@ -444,6 +481,10 @@ export const test = base.extend<
 >({
   realmDir: [defaultRealmDir, { option: true }],
   realmServerMode: ['shared', { option: true }],
+  realmPermissions: [
+    undefined as RealmPermissions | undefined,
+    { option: true },
+  ],
   testWorkerPortSet: [
     async ({ browserName: _browserName }, use, workerInfo) => {
       // These services are ephemeral per test, but we intentionally keep their
@@ -480,13 +521,14 @@ export const test = base.extend<
       browserName: _browserName,
       realmDir,
       realmServerMode,
+      realmPermissions: permissions,
       testWorkerPortSet,
       testWorkerPrerender,
     },
     use,
     testInfo,
   ) => {
-    if (realmServerMode === 'shared') {
+    if (realmServerMode === 'shared' && !permissions) {
       let key = sharedRealmKey(testInfo.workerIndex, testInfo.file, realmDir);
       let realm = await acquireSharedRealm(
         key,
@@ -506,6 +548,7 @@ export const test = base.extend<
       realmDir,
       testWorkerPortSet,
       testWorkerPrerender.url,
+      permissions,
     );
     try {
       await use(realm);

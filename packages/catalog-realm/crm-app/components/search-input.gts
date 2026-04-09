@@ -32,7 +32,8 @@ export class SearchInput extends Component<Signature> {
     this.debouncedSetSearchKey(searchKey);
   }
 
-  @action private onSearchInputKeyDown(e: KeyboardEvent) {
+  @action private onSearchInputKeyDown(event: Event) {
+    let e = event as KeyboardEvent;
     if (e.key === 'Escape') {
       this.onCancel();
       (e.target as HTMLInputElement)?.blur?.();

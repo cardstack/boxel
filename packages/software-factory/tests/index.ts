@@ -14,4 +14,5 @@ import './factory-tool-registry.test';
 import './factory-context-builder.test';
 import './factory-tool-builder.test';
 import './factory-loop.test';
+import './factory-implement.test';
 import './realm-auth.test';

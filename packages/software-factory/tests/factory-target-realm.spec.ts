@@ -81,7 +81,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         '--realm-server-url',
         realmServerURL,
         '--mode',
-        'implement',
+        'bootstrap',
       ],
       {
         cwd: packageRoot,
@@ -90,7 +90,6 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
           MATRIX_USERNAME: targetUsername,
           MATRIX_PASSWORD: targetPassword,
           MATRIX_URL: matrixURL,
-          REALM_SERVER_URL: realmServerURL,
         },
         timeoutMs: 120_000,
       },
@@ -106,21 +105,21 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       targetRealm: { url: string; ownerUsername: string };
       bootstrap: {
         projectId: string;
-        ticketIds: string[];
+        issueIds: string[];
         knowledgeArticleIds: string[];
-        activeTicket: { id: string; status: string };
+        activeIssue: { id: string; status: string };
       };
     };
 
     expect(summary.command).toBe('factory:go');
     expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
     expect(summary.bootstrap.projectId).toBe('Projects/sticky-note-mvp');
-    expect(summary.bootstrap.ticketIds).toHaveLength(3);
+    expect(summary.bootstrap.issueIds).toHaveLength(3);
     expect(summary.bootstrap.knowledgeArticleIds).toHaveLength(2);
-    expect(summary.bootstrap.activeTicket.id).toBe(
-      'Tickets/sticky-note-define-core',
+    expect(summary.bootstrap.activeIssue.id).toBe(
+      'Issues/sticky-note-define-core',
     );
-    expect(summary.bootstrap.activeTicket.status).toBe('created');
+    expect(summary.bootstrap.activeIssue.status).toBe('created');
 
     // Verify the project card actually exists in the newly created target realm
     // by authenticating as the target user who owns the realm

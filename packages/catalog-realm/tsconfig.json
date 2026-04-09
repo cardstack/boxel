@@ -18,18 +18,26 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "es2022",
+    "module": "node16",
     "strict": true,
     "experimentalDecorators": true,
     "paths": {
-      "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/host/tests/*": ["../host/tests/*"],
-      "@cardstack/boxel-host/commands/*": ["../host/app/commands/*"]
+      "https://cardstack.com/base/*": [
+        "../base/*"
+      ],
+      "@cardstack/host/tests/*": [
+        "../host/tests/*"
+      ],
+      "@cardstack/boxel-host/commands/*": [
+        "../host/app/commands/*"
+      ]
     },
-    "types": ["@cardstack/local-types"]
+    "types": [
+      "@cardstack/local-types"
+    ]
   },
-  "include": ["**/*.ts", "**/*.gts"],
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"]
-  }
+  "include": [
+    "**/*.ts",
+    "**/*.gts"
+  ]
 }

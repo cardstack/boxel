@@ -39,7 +39,7 @@ NODE_ENV=development \
   --port="${REALM_BASE_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --realmsRootPath="${REALM_BASE_ROOT}" \
-  --prerendererUrl="${PRERENDER_URL}" \
+  --prerendererUrl="${PRERENDER_MGR_URL}" \
   --migrateDB \
   $WORKER_MANAGER_ARG \
   \

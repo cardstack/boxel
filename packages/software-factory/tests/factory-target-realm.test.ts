@@ -36,7 +36,11 @@ module('factory-target-realm', function (hooks) {
     });
 
     assert.strictEqual(resolution.url, targetRealmUrl);
-    assert.strictEqual(resolution.serverUrl, 'https://realms.example.test/');
+    assert.strictEqual(
+      resolution.serverUrl,
+      'http://localhost:4201/',
+      'defaults to localhost when --realm-server-url is not provided',
+    );
     assert.strictEqual(resolution.ownerUsername, 'hassan');
   });
 
@@ -155,11 +159,10 @@ module('factory-target-realm', function (hooks) {
     process.env.MATRIX_URL = 'https://matrix.example.test/';
     process.env.MATRIX_USERNAME = 'hassan';
     process.env.MATRIX_PASSWORD = 'secret';
-    process.env.REALM_SERVER_URL = 'https://realms.example.test/';
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
-      realmServerUrl: null,
+      realmServerUrl: 'https://realms.example.test/',
     });
 
     let accountDataUrl =
@@ -327,11 +330,10 @@ module('factory-target-realm', function (hooks) {
     process.env.MATRIX_URL = 'https://matrix.example.test/';
     process.env.MATRIX_USERNAME = 'hassan';
     process.env.MATRIX_PASSWORD = 'secret';
-    process.env.REALM_SERVER_URL = 'https://realms.example.test/';
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
-      realmServerUrl: null,
+      realmServerUrl: 'https://realms.example.test/',
     });
 
     globalThis.fetch = (async (input, init) => {

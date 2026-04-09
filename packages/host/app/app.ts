@@ -10,6 +10,7 @@ import './lib/glint-embroider-workaround';
 import '@cardstack/boxel-ui/styles/global.css';
 import '@cardstack/boxel-ui/styles/fonts.css';
 import '@cardstack/boxel-ui/styles/variables.css';
+import 'katex/dist/katex.min.css';
 
 export default class App extends Application {
   modulePrefix = config.modulePrefix;

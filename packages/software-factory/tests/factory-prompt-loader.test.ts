@@ -9,9 +9,9 @@ import {
   FilePromptLoader,
   interpolate,
   PromptTemplateNotFoundError,
-} from '../scripts/lib/factory-prompt-loader';
+} from '../src/factory-prompt-loader';
 
-import type { AgentAction, AgentContext } from '../scripts/lib/factory-agent';
+import type { AgentAction, AgentContext } from '../src/factory-agent';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -20,12 +20,11 @@ import type { AgentAction, AgentContext } from '../scripts/lib/factory-agent';
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
     project: { id: 'Projects/test-project' },
-    ticket: { id: 'Tickets/test-ticket' },
+    issue: { id: 'Issues/test-issue' },
     knowledge: [],
     skills: [],
     tools: [],
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     ...overrides,
   };
 }
@@ -41,10 +40,10 @@ module('factory-prompt-loader > interpolate > simple variables', function () {
   });
 
   test('replaces dot-path variables', function (assert) {
-    let result = interpolate('ID: {{ticket.id}}', {
-      ticket: { id: 'Ticket/123' },
+    let result = interpolate('ID: {{issue.id}}', {
+      issue: { id: 'Issue/123' },
     });
-    assert.strictEqual(result, 'ID: Ticket/123');
+    assert.strictEqual(result, 'ID: Issue/123');
   });
 
   test('replaces deeply nested dot paths', function (assert) {
@@ -175,9 +174,9 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
   });
 
   test('supports dot-path conditions', function (assert) {
-    let template = '{{#if ticket.checklist}}has checklist{{/if}}';
+    let template = '{{#if issue.checklist}}has checklist{{/if}}';
     let result = interpolate(template, {
-      ticket: { checklist: ['step 1'] },
+      issue: { checklist: ['step 1'] },
     });
     assert.strictEqual(result, 'has checklist');
   });
@@ -190,18 +189,25 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
 module('factory-prompt-loader > FilePromptLoader', function () {
   test('loads and interpolates a template', function (assert) {
     let loader = new FilePromptLoader();
-    let result = loader.load('action-schema', {});
+    let result = loader.load('system', {
+      targetRealmUrl: 'https://example.test/target/',
+      skills: [],
+    });
     assert.ok(
-      result.includes('create_file'),
-      'action schema contains create_file',
+      result.includes('signal_done'),
+      'system prompt contains signal_done',
     );
-    assert.ok(result.includes('done'), 'action schema contains done');
+    assert.ok(result.includes('read_file'), 'system prompt contains read_file');
   });
 
   test('caches templates on subsequent loads', function (assert) {
     let loader = new FilePromptLoader();
-    let first = loader.load('action-schema', {});
-    let second = loader.load('action-schema', {});
+    let vars = {
+      targetRealmUrl: 'https://example.test/target/',
+      skills: [],
+    };
+    let first = loader.load('system', vars);
+    let second = loader.load('system', vars);
     assert.strictEqual(first, second, 'returns identical string from cache');
   });
 
@@ -216,9 +222,13 @@ module('factory-prompt-loader > FilePromptLoader', function () {
 
   test('clearCache allows reloading', function (assert) {
     let loader = new FilePromptLoader();
-    let first = loader.load('action-schema', {});
+    let vars = {
+      targetRealmUrl: 'https://example.test/target/',
+      skills: [],
+    };
+    let first = loader.load('system', vars);
     loader.clearCache();
-    let second = loader.load('action-schema', {});
+    let second = loader.load('system', vars);
     assert.strictEqual(first, second, 'content is the same after cache clear');
   });
 });
@@ -228,7 +238,7 @@ module('factory-prompt-loader > FilePromptLoader', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-prompt-loader > assembleSystemPrompt', function () {
-  test('includes role and output format', function (assert) {
+  test('includes role and tool-use rules', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext();
     let result = assembleSystemPrompt({ context: ctx, loader });
@@ -238,9 +248,10 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
       'includes role description',
     );
     assert.ok(
-      result.includes('JSON array'),
-      'includes output format instruction',
+      result.includes('signal_done'),
+      'includes signal_done instruction',
     );
+    assert.ok(result.includes('read_file'), 'includes read_file instruction');
   });
 
   test('includes realm URLs', function (assert) {
@@ -254,16 +265,19 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     );
   });
 
-  test('includes action schema', function (assert) {
+  test('includes Catalog Spec instructions', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext();
     let result = assembleSystemPrompt({ context: ctx, loader });
 
     assert.ok(
-      result.includes('create_file'),
-      'action schema is interpolated into system prompt',
+      result.includes('Catalog Spec'),
+      'includes Catalog Spec instructions',
     );
-    assert.ok(result.includes('invoke_tool'), 'includes invoke_tool action');
+    assert.ok(
+      result.includes('linkedExamples'),
+      'includes linkedExamples instruction',
+    );
   });
 
   test('includes skills when present', function (assert) {
@@ -284,34 +298,6 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     assert.ok(result.includes('ref-guide.md'), 'includes skill references');
   });
 
-  test('includes tools when present', function (assert) {
-    let loader = new FilePromptLoader();
-    let ctx = makeMinimalContext({
-      tools: [
-        {
-          name: 'search-realm',
-          description: 'Search for cards in a realm',
-          category: 'script',
-          args: [
-            {
-              name: 'query',
-              type: 'string',
-              required: true,
-              description: 'Search query',
-            },
-          ],
-          outputFormat: 'json',
-        },
-      ],
-    });
-    let result = assembleSystemPrompt({ context: ctx, loader });
-
-    assert.ok(result.includes('search-realm'), 'includes tool name');
-    assert.ok(result.includes('Search for cards'), 'includes tool description');
-    assert.ok(result.includes('query'), 'includes tool arg name');
-    assert.ok(result.includes('required'), 'includes arg required status');
-  });
-
   test('omits skills section when no skills', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({ skills: [] });
@@ -320,15 +306,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
     assert.notOk(result.includes('# Skill:'), 'no skill section when empty');
   });
 
-  test('omits tools section when no tools', function (assert) {
-    let loader = new FilePromptLoader();
-    let ctx = makeMinimalContext({ tools: [] });
-    let result = assembleSystemPrompt({ context: ctx, loader });
-
-    assert.notOk(result.includes('# Tool:'), 'no tool section when empty');
-  });
-
-  test('snapshot: system prompt with sample skills and tools', function (assert) {
+  test('snapshot: system prompt with sample skills', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       skills: [
@@ -342,50 +320,21 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
           references: ['test-patterns.md'],
         },
       ],
-      tools: [
-        {
-          name: 'search-realm',
-          description: 'Search cards',
-          category: 'script',
-          args: [
-            {
-              name: 'query',
-              type: 'string',
-              required: true,
-              description: 'Search query',
-            },
-          ],
-          outputFormat: 'json',
-        },
-        {
-          name: 'run-tests',
-          description: 'Run Playwright tests',
-          category: 'script',
-          args: [],
-          outputFormat: 'text',
-        },
-      ],
     });
     let result = assembleSystemPrompt({ context: ctx, loader });
 
     // Verify structural elements are present and correctly ordered
     let roleIdx = result.indexOf('# Role');
-    let outputIdx = result.indexOf('# Output Format');
     let rulesIdx = result.indexOf('# Rules');
     let realmsIdx = result.indexOf('# Realms');
     let skill1Idx = result.indexOf('# Skill: boxel-development');
     let skill2Idx = result.indexOf('# Skill: testing-guide');
-    let tool1Idx = result.indexOf('# Tool: search-realm');
-    let tool2Idx = result.indexOf('# Tool: run-tests');
 
     assert.ok(roleIdx >= 0, 'has Role section');
-    assert.ok(outputIdx > roleIdx, 'Output Format after Role');
-    assert.ok(rulesIdx > outputIdx, 'Rules after Output Format');
+    assert.ok(rulesIdx > roleIdx, 'Rules after Role');
     assert.ok(realmsIdx > rulesIdx, 'Realms after Rules');
     assert.ok(skill1Idx > realmsIdx, 'first skill after Realms');
     assert.ok(skill2Idx > skill1Idx, 'second skill after first');
-    assert.ok(tool1Idx > skill2Idx, 'first tool after skills');
-    assert.ok(tool2Idx > tool1Idx, 'second tool after first');
 
     // Verify content of skill references
     assert.ok(
@@ -400,7 +349,7 @@ module('factory-prompt-loader > assembleSystemPrompt', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-prompt-loader > assembleImplementPrompt', function () {
-  test('includes project and ticket context', function (assert) {
+  test('includes project and issue context', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       project: {
@@ -408,8 +357,8 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
         objective: 'Build a sticky note card app',
         successCriteria: ['Card renders', 'Tests pass'],
       },
-      ticket: {
-        id: 'Tickets/define-core',
+      issue: {
+        id: 'Issues/define-core',
         summary: 'Define the core StickyNote card',
         status: 'in-progress',
         priority: 'high',
@@ -424,12 +373,12 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       'project objective',
     );
     assert.ok(result.includes('Card renders'), 'success criteria');
-    assert.ok(result.includes('Tickets/define-core'), 'ticket ID');
+    assert.ok(result.includes('Issues/define-core'), 'issue ID');
     assert.ok(
       result.includes('Define the core StickyNote card'),
-      'ticket summary',
+      'issue summary',
     );
-    assert.ok(result.includes('StickyNote CardDef'), 'ticket description');
+    assert.ok(result.includes('StickyNote CardDef'), 'issue description');
   });
 
   test('includes knowledge articles', function (assert) {
@@ -455,21 +404,21 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
     let result = assembleImplementPrompt({ context: ctx, loader });
 
     assert.ok(
-      result.includes('Implement this ticket'),
+      result.includes('Implement this issue'),
       'has implementation instructions',
     );
-    assert.ok(result.includes('invoke_tool'), 'mentions invoke_tool');
+    assert.ok(result.includes('signal_done'), 'mentions signal_done');
   });
 
   test('includes checklist when present', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
-      ticket: {
-        id: 'Tickets/test',
+      issue: {
+        id: 'Issues/test',
         summary: 'Test',
         status: 'open',
         priority: 'medium',
-        description: 'Test ticket',
+        description: 'Test issue',
         checklist: ['Step 1', 'Step 2'],
       },
     });
@@ -508,7 +457,7 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
       'includes tool output data',
     );
     assert.ok(
-      result.includes('Implement this ticket'),
+      result.includes('Implement this issue'),
       'still includes implementation instructions',
     );
   });
@@ -530,15 +479,15 @@ module('factory-prompt-loader > assembleImplementPrompt', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-prompt-loader > assembleIteratePrompt', function () {
-  test('includes ticket context and previous actions', function (assert) {
+  test('includes issue context and previous actions', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       project: {
         id: 'Projects/test',
         objective: 'Test objective',
       },
-      ticket: {
-        id: 'Tickets/define-core',
+      issue: {
+        id: 'Issues/define-core',
         summary: 'Define core card',
         description: 'Create the card definition.',
       },
@@ -579,9 +528,9 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
       loader,
     });
 
-    // Ticket context
-    assert.ok(result.includes('Tickets/define-core'), 'includes ticket ID');
-    assert.ok(result.includes('Define core card'), 'includes ticket summary');
+    // Issue context
+    assert.ok(result.includes('Issues/define-core'), 'includes issue ID');
+    assert.ok(result.includes('Define core card'), 'includes issue summary');
 
     // Previous actions
     assert.ok(result.includes('iteration 2'), 'includes iteration number');
@@ -695,13 +644,13 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     );
   });
 
-  test('is self-contained: includes project, ticket, actions, test results', function (assert) {
+  test('is self-contained: includes project, issue, actions, test results', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       project: { id: 'Projects/app', objective: 'Build the app' },
-      ticket: {
-        id: 'Tickets/t1',
-        summary: 'First ticket',
+      issue: {
+        id: 'Issues/t1',
+        summary: 'First issue',
         description: 'Do the thing.',
       },
       testResults: {
@@ -734,9 +683,9 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
 
     // All required sections are present
     assert.ok(result.includes('Build the app'), 'project context');
-    assert.ok(result.includes('Tickets/t1'), 'ticket ID');
-    assert.ok(result.includes('First ticket'), 'ticket summary');
-    assert.ok(result.includes('Do the thing'), 'ticket description');
+    assert.ok(result.includes('Issues/t1'), 'issue ID');
+    assert.ok(result.includes('First issue'), 'issue summary');
+    assert.ok(result.includes('Do the thing'), 'issue description');
     assert.ok(result.includes('iteration 3'), 'iteration number');
     assert.ok(result.includes('card.gts'), 'previous action');
     assert.ok(result.includes('error-a'), 'test failure 1');
@@ -750,10 +699,10 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
 // ---------------------------------------------------------------------------
 
 module('factory-prompt-loader > assembleTestPrompt', function () {
-  test('includes ticket and implemented files', function (assert) {
+  test('includes issue and implemented files', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
-      ticket: { id: 'Tickets/t1', summary: 'Test ticket' },
+      issue: { id: 'Issues/t1', summary: 'Test issue' },
     });
 
     let result = assembleTestPrompt({
@@ -768,17 +717,14 @@ module('factory-prompt-loader > assembleTestPrompt', function () {
       loader,
     });
 
-    assert.ok(result.includes('Tickets/t1'), 'includes ticket ID');
+    assert.ok(result.includes('Issues/t1'), 'includes issue ID');
     assert.ok(result.includes('sticky-note.gts'), 'includes file path');
     assert.ok(
       result.includes('export class StickyNote'),
       'includes file content',
     );
     assert.ok(result.includes('target realm'), 'includes realm');
-    assert.ok(
-      result.includes('create_test'),
-      'instructs to return create_test',
-    );
+    assert.ok(result.includes('signal_done'), 'instructs to call signal_done');
   });
 });
 
@@ -804,13 +750,13 @@ module('factory-prompt-loader > buildOneShotMessages', function () {
 module(
   'factory-prompt-loader > one-shot message assembly integration',
   function () {
-    test('first pass: [system, ticket-implement]', function (assert) {
+    test('first pass: [system, issue-implement]', function (assert) {
       let loader = new FilePromptLoader();
       let ctx = makeMinimalContext({
         project: { id: 'Projects/app', objective: 'Build app' },
-        ticket: {
-          id: 'Tickets/t1',
-          summary: 'First ticket',
+        issue: {
+          id: 'Issues/t1',
+          summary: 'First issue',
           status: 'open',
           priority: 'high',
           description: 'Implement the feature.',
@@ -827,18 +773,18 @@ module(
 
       // System has agent role
       assert.ok(messages[0].content.includes('software factory agent'));
-      // User has ticket
-      assert.ok(messages[1].content.includes('Tickets/t1'));
+      // User has issue
+      assert.ok(messages[1].content.includes('Issues/t1'));
       assert.ok(messages[1].content.includes('Implement the feature'));
     });
 
-    test('iteration pass: [system, ticket-iterate]', function (assert) {
+    test('iteration pass: [system, issue-iterate]', function (assert) {
       let loader = new FilePromptLoader();
       let ctx = makeMinimalContext({
         project: { id: 'Projects/app', objective: 'Build app' },
-        ticket: {
-          id: 'Tickets/t1',
-          summary: 'First ticket',
+        issue: {
+          id: 'Issues/t1',
+          summary: 'First issue',
           description: 'Implement the feature.',
         },
         testResults: {

@@ -44,6 +44,7 @@ import PlusIcon from '@cardstack/boxel-icons/plus';
 import TrendingUp from '@cardstack/boxel-icons/trending-up';
 
 const taskSource = {
+  // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
   module: new URL('./task', import.meta.url).href,
   name: 'CRMTask',
 };
@@ -116,6 +117,7 @@ class IsolatedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./deal', import.meta.url).href,
           name: 'Deal',
         },
@@ -266,6 +268,7 @@ class IsolatedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./deal', import.meta.url).href,
           name: 'Deal',
         },
@@ -682,6 +685,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./deal', import.meta.url).href,
           name: 'Deal',
         },
@@ -785,6 +789,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
     return {
       filter: {
         on: {
+          // @ts-expect-error import.meta is valid ESM but TS detects .gts as CJS
           module: new URL('./deal', import.meta.url).href,
           name: 'Deal',
         },

@@ -56,8 +56,11 @@ module.exports = function (defaults) {
                 type: 'asset/inline',
               },
               {
-                test: /\.woff2$/,
-                type: 'asset',
+                test: /\.woff2?$/,
+                type: 'asset/resource',
+                generator: {
+                  filename: 'assets/fonts/[name][ext]',
+                },
               },
               {
                 test: /\.png$/,

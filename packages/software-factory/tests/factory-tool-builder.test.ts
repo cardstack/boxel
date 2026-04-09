@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import type { ToolResult } from '../scripts/lib/factory-agent';
+import type { ToolResult } from '../src/factory-agent';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
@@ -9,13 +9,13 @@ import {
   type ToolBuilderConfig,
   type DoneResult,
   type ClarificationResult,
-} from '../scripts/lib/factory-tool-builder';
-import type { ToolExecutor } from '../scripts/lib/factory-tool-executor';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+} from '../src/factory-tool-builder';
+import type { ToolExecutor } from '../src/factory-tool-executor';
+import { ToolRegistry } from '../src/factory-tool-registry';
 import type {
   ExecuteTestRunOptions,
   TestRunHandle,
-} from '../scripts/lib/test-run-types';
+} from '../src/test-run-types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -26,14 +26,51 @@ const TEST_REALM = 'https://realms.example.test/user/target-tests/';
 const TARGET_TOKEN = 'Bearer target-jwt-123';
 const TEST_TOKEN = 'Bearer test-jwt-456';
 
+const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
+  string,
+  {
+    attributes: Record<string, unknown>;
+    relationships?: Record<string, unknown>;
+  }
+>([
+  [
+    'Project',
+    {
+      attributes: {
+        type: 'object',
+        properties: { projectName: { type: 'string' } },
+      },
+    },
+  ],
+  [
+    'Issue',
+    {
+      attributes: {
+        type: 'object',
+        properties: { summary: { type: 'string' } },
+      },
+    },
+  ],
+  [
+    'KnowledgeArticle',
+    {
+      attributes: {
+        type: 'object',
+        properties: { articleTitle: { type: 'string' } },
+      },
+    },
+  ],
+]);
+
 function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
   return {
     targetRealmUrl: TARGET_REALM,
-    testRealmUrl: TEST_REALM,
+    realmServerUrl: 'https://realms.example.test/',
     realmTokens: {
       [TARGET_REALM]: TARGET_TOKEN,
       [TEST_REALM]: TEST_TOKEN,
     },
+    cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
     ...overrides,
   };
 }
@@ -137,7 +174,7 @@ module('factory-tool-builder > tool building', function () {
     assert.true(toolNames.includes('write_file'));
     assert.true(toolNames.includes('read_file'));
     assert.true(toolNames.includes('search_realm'));
-    assert.true(toolNames.includes('update_ticket'));
+    assert.true(toolNames.includes('update_issue'));
     assert.true(toolNames.includes('create_knowledge'));
     assert.true(toolNames.includes('signal_done'));
     assert.true(toolNames.includes('request_clarification'));
@@ -189,7 +226,7 @@ module('factory-tool-builder > write_file', function () {
     assert.strictEqual(requests[0].body, 'export default class MyCard {}');
   });
 
-  test('routes .ts file to writeModuleSource', async function (assert) {
+  test('routes .ts file to writeFile', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
@@ -227,7 +264,7 @@ module('factory-tool-builder > write_file', function () {
     assert.true(result.ok);
     assert.strictEqual(requests[0].url, `${TARGET_REALM}Card/1.json`);
     assert.strictEqual(requests[0].method, 'POST');
-    // writeModuleSource sends raw content as-is
+    // writeFile sends raw content as-is
     assert.strictEqual(requests[0].body, cardJson);
   });
 });
@@ -251,24 +288,6 @@ module('factory-tool-builder > realm targeting and auth', function () {
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
   });
 
-  test('write_file to test realm uses test JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({
-      path: 'Tests/spec.ts',
-      content: 'test content',
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests[0].url, `${TEST_REALM}Tests/spec.ts`);
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-  });
-
   test('read_file uses correct JWT for target realm', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {
       data: { attributes: {} },
@@ -284,36 +303,21 @@ module('factory-tool-builder > realm targeting and auth', function () {
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
   });
 
-  test('read_file uses correct JWT for test realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {
-      data: { attributes: {} },
-    });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    await readTool.execute({ path: 'Tests/spec.ts', realm: 'test' });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-  });
-
-  test('update_ticket uses target realm JWT', async function (assert) {
+  test('update_issue uses target realm JWT', async function (assert) {
     let { fetch: mockFetch, requests } = createMockFetch(200, {});
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig({ fetch: mockFetch });
     let tools = buildFactoryTools(config, executor, registry);
-    let updateTool = findTool(tools, 'update_ticket');
+    let updateTool = findTool(tools, 'update_issue');
 
     await updateTool.execute({
-      path: 'Ticket/1.json',
-      content: JSON.stringify({ data: { attributes: { status: 'done' } } }),
+      path: 'Issues/1.json',
+      attributes: { status: 'done' },
     });
 
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}Ticket/1.json`);
+    assert.strictEqual(requests[0].url, `${TARGET_REALM}Issues/1.json`);
   });
 
   test('create_knowledge uses target realm JWT', async function (assert) {
@@ -326,7 +330,7 @@ module('factory-tool-builder > realm targeting and auth', function () {
 
     await knowledgeTool.execute({
       path: 'Knowledge/deploy.json',
-      content: JSON.stringify({ data: { attributes: { title: 'Guide' } } }),
+      attributes: { articleTitle: 'Guide' },
     });
 
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
@@ -342,72 +346,10 @@ module('factory-tool-builder > realm targeting and auth', function () {
     let searchTool = findTool(tools, 'search_realm');
 
     await searchTool.execute({
-      query: { filter: { type: { name: 'Ticket' } } },
+      query: { filter: { type: { name: 'Issue' } } },
     });
 
     assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('search_realm uses correct JWT for test realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchTool = findTool(tools, 'search_realm');
-
-    await searchTool.execute({
-      query: { filter: { type: { name: 'TestRun' } } },
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-  });
-
-  test('write_file .json to test realm uses test JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    let cardJson = JSON.stringify({
-      data: { type: 'card', attributes: { name: 'fixture' } },
-    });
-
-    await writeTool.execute({
-      path: 'Fixtures/card.json',
-      content: cardJson,
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TEST_TOKEN);
-    assert.strictEqual(requests[0].url, `${TEST_REALM}Fixtures/card.json`);
-  });
-
-  test('different JWTs for actions targeting different realms', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({
-      path: 'card.gts',
-      content: 'content',
-      realm: 'target',
-    });
-    await writeTool.execute({
-      path: 'Tests/spec.ts',
-      content: 'test',
-      realm: 'test',
-    });
-
-    assert.strictEqual(requests.length, 2);
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-    assert.strictEqual(requests[1].headers['Authorization'], TEST_TOKEN);
   });
 
   test('omits Authorization when token not found for realm', async function (assert) {
@@ -661,44 +603,162 @@ module('factory-tool-builder > registered tool JWT resolution', function () {
 });
 
 // ---------------------------------------------------------------------------
-// Card write validation
+// Card tool schemas and document assembly
 // ---------------------------------------------------------------------------
 
-module('factory-tool-builder > card write validation', function () {
-  test('update_ticket fails with invalid JSON content', async function (assert) {
-    let { fetch: mockFetch } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let updateTool = findTool(tools, 'update_ticket');
+module(
+  'factory-tool-builder > card tool schemas and document assembly',
+  function () {
+    test('card tools use runtime schemas from cardTypeSchemas config', function (assert) {
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({
+        cardTypeSchemas: new Map([
+          [
+            'Project',
+            {
+              attributes: {
+                type: 'object',
+                properties: {
+                  projectName: { type: 'string' },
+                  projectStatus: {
+                    type: 'string',
+                    enum: ['planning', 'active'],
+                  },
+                },
+              },
+            },
+          ],
+          [
+            'Issue',
+            {
+              attributes: {
+                type: 'object',
+                properties: {
+                  summary: { type: 'string' },
+                  status: { type: 'string', enum: ['backlog', 'done'] },
+                },
+              },
+              relationships: {
+                type: 'object',
+                properties: {
+                  project: { type: 'object' },
+                },
+              },
+            },
+          ],
+          [
+            'KnowledgeArticle',
+            {
+              attributes: {
+                type: 'object',
+                properties: {
+                  articleTitle: { type: 'string' },
+                  content: { type: 'string' },
+                },
+              },
+            },
+          ],
+        ]),
+      });
+      let tools = buildFactoryTools(config, executor, registry);
 
-    let result = (await updateTool.execute({
-      path: 'Ticket/1.json',
-      content: 'not json',
-    })) as { ok: boolean; error: string };
+      // update_project uses runtime schema
+      let projectTool = findTool(tools, 'update_project');
+      let projectParams = projectTool.parameters as {
+        properties: Record<string, Record<string, unknown>>;
+        required: string[];
+      };
+      assert.true('attributes' in projectParams.properties);
+      assert.true(projectParams.required.includes('attributes'));
+      let projectAttrs = projectParams.properties.attributes as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      assert.true('projectName' in projectAttrs.properties);
+      assert.deepEqual(
+        (projectAttrs.properties.projectStatus as { enum: string[] }).enum,
+        ['planning', 'active'],
+      );
 
-    assert.false(result.ok);
-    assert.true(result.error.includes('Failed to parse'));
-  });
+      // update_issue uses runtime schema with relationships
+      let issueTool = findTool(tools, 'update_issue');
+      let issueParams = issueTool.parameters as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      assert.true('attributes' in issueParams.properties);
+      assert.true('relationships' in issueParams.properties);
 
-  test('create_knowledge fails with invalid JSON content', async function (assert) {
-    let { fetch: mockFetch } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let knowledgeTool = findTool(tools, 'create_knowledge');
+      // create_knowledge uses runtime schema
+      let knowledgeTool = findTool(tools, 'create_knowledge');
+      let knowledgeParams = knowledgeTool.parameters as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      let knowledgeAttrs = knowledgeParams.properties.attributes as {
+        properties: Record<string, Record<string, unknown>>;
+      };
+      assert.true('articleTitle' in knowledgeAttrs.properties);
+      assert.true('content' in knowledgeAttrs.properties);
+    });
 
-    let result = (await knowledgeTool.execute({
-      path: 'Knowledge/x.json',
-      content: 'not json',
-    })) as { ok: boolean; error: string };
+    test('card tools are omitted when cardTypeSchemas is not provided', function (assert) {
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({ cardTypeSchemas: undefined });
+      let tools = buildFactoryTools(config, executor, registry);
+      let toolNames = tools.map((t) => t.name);
+      assert.false(toolNames.includes('update_project'));
+      assert.false(toolNames.includes('update_issue'));
+      assert.false(toolNames.includes('create_knowledge'));
+      assert.true(toolNames.includes('write_file'));
+      assert.true(toolNames.includes('run_command'));
+    });
 
-    assert.false(result.ok);
-    assert.true(result.error.includes('Failed to parse'));
-  });
-});
+    test('update_issue assembles JSON:API document from attributes', async function (assert) {
+      let { fetch: mockFetch, requests } = createMockFetch(200, {});
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({ fetch: mockFetch });
+      let tools = buildFactoryTools(config, executor, registry);
+      let tool = findTool(tools, 'update_issue');
+
+      await tool.execute({
+        path: 'Issues/1.json',
+        attributes: { status: 'done', summary: 'Build sticky note' },
+      });
+
+      assert.strictEqual(requests.length, 1);
+      let body = JSON.parse(requests[0].body);
+      assert.strictEqual(body.data.type, 'card');
+      assert.strictEqual(body.data.attributes.status, 'done');
+      assert.strictEqual(body.data.meta.adoptsFrom.name, 'Issue');
+      assert.strictEqual(
+        body.data.meta.adoptsFrom.module,
+        `${TARGET_REALM}darkfactory`,
+      );
+    });
+
+    test('card tools omit empty relationships from document', async function (assert) {
+      let { fetch: mockFetch, requests } = createMockFetch(200, {});
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({ fetch: mockFetch });
+      let tools = buildFactoryTools(config, executor, registry);
+      let tool = findTool(tools, 'update_project');
+
+      await tool.execute({
+        path: 'Project/mvp.json',
+        attributes: { projectStatus: 'completed' },
+      });
+
+      let body = JSON.parse(requests[0].body);
+      assert.strictEqual(
+        body.data.relationships,
+        undefined,
+        'no relationships key when none provided',
+      );
+    });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // run_tests tool
@@ -718,7 +778,6 @@ module('factory-tool-builder > run_tests', function () {
       properties?: Record<string, unknown>;
     };
     assert.true(params.required!.includes('slug'));
-    assert.true(params.required!.includes('specPaths'));
     assert.true('testNames' in params.properties!);
     assert.true('projectCardUrl' in params.properties!);
   });
@@ -736,11 +795,6 @@ module('factory-tool-builder > run_tests', function () {
       serverToken: 'Bearer server-jwt',
       testResultsModuleUrl:
         'https://realms.example.test/user/target/test-results',
-      matrixAuth: {
-        userId: '@factory:localhost',
-        accessToken: 'matrix-token',
-        matrixUrl: 'https://matrix.example.test/',
-      },
       executeTestRun: async (options: ExecuteTestRunOptions) => {
         capturedOptions = options;
         return mockHandle;
@@ -751,7 +805,6 @@ module('factory-tool-builder > run_tests', function () {
 
     let result = await runTestsTool.execute({
       slug: 'define-sticky-note',
-      specPaths: ['Tests/sticky-note.spec.ts'],
       testNames: ['renders fitted view'],
       projectCardUrl: 'https://realms.example.test/user/target/Project/mvp',
     });
@@ -763,20 +816,12 @@ module('factory-tool-builder > run_tests', function () {
       'https://realms.example.test/user/target/test-results',
     );
     assert.strictEqual(capturedOptions!.slug, 'define-sticky-note');
-    assert.deepEqual(capturedOptions!.specPaths, ['Tests/sticky-note.spec.ts']);
     assert.deepEqual(capturedOptions!.testNames, ['renders fitted view']);
     assert.strictEqual(capturedOptions!.authorization, TARGET_TOKEN);
-    assert.strictEqual(capturedOptions!.serverToken, 'Bearer server-jwt');
-    assert.strictEqual(capturedOptions!.testRealmUrl, TEST_REALM);
     assert.strictEqual(
       capturedOptions!.projectCardUrl,
       'https://realms.example.test/user/target/Project/mvp',
     );
-    assert.deepEqual(capturedOptions!.matrixAuth, {
-      userId: '@factory:localhost',
-      accessToken: 'matrix-token',
-      matrixUrl: 'https://matrix.example.test/',
-    });
 
     // Verify the result is passed through
     let handle = result as TestRunHandle;
@@ -800,7 +845,6 @@ module('factory-tool-builder > run_tests', function () {
 
     await runTestsTool.execute({
       slug: 'test-slug',
-      specPaths: ['Tests/test.spec.ts'],
     });
 
     assert.strictEqual(
@@ -825,7 +869,6 @@ module('factory-tool-builder > run_tests', function () {
 
     await runTestsTool.execute({
       slug: 'auth-test',
-      specPaths: ['Tests/auth.spec.ts'],
     });
 
     assert.strictEqual(

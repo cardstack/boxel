@@ -40,7 +40,7 @@ export default class ChooseRealmAction extends GlimmerComponent<ChooseRealmActio
   // if you click on the info-section surrounding the remix
   // it will open the details of the card
   @action
-  handleStopPropagation(e: MouseEvent) {
+  handleStopPropagation(e: Event) {
     e.stopPropagation();
   }
 
