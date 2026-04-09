@@ -56,9 +56,9 @@ export const openCardSearchEffect = StateEffect.define<{
 
 // Block: ::card[URL] or ::card[URL | size-spec], must be the only content on a line
 // Use [ \t]* instead of \s* to avoid matching newline characters
-const BLOCK_CARD_RE = /^::card\[([^\]]+)\][ \t]*$/gm;
+const BLOCK_CARD_RE = /^::card\[([^\]\n]+)\][ \t]*$/gm;
 // Inline: :card[URL], not preceded by another colon (avoids matching ::card)
-const INLINE_CARD_RE = /(?<!:):card\[([^\]]+)\]/g;
+const INLINE_CARD_RE = /(?<!:):card\[([^\]\n]+)\]/g;
 
 // ── CardWidget (extends WidgetType) ─────────────────────────────────────────
 
@@ -184,6 +184,10 @@ function buildCardDecorations(
   let allDecorations: { from: number; to: number; value: Decoration }[] = [];
 
   for (let m of marks) {
+    // CM6 plugins cannot provide mark decorations that span line breaks
+    let slice = doc.sliceString(m.from, m.to);
+    if (slice.includes('\n')) continue;
+
     allDecorations.push({
       from: m.from,
       to: m.to,
