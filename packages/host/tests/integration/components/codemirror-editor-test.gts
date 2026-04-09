@@ -696,11 +696,7 @@ module('Integration | codemirror-context', function (hooks) {
       await settled();
 
       // In source mode, the card target notifier plugin is not included
-      assert.strictEqual(
-        targets.length,
-        0,
-        'no widget targets in source mode',
-      );
+      assert.strictEqual(targets.length, 0, 'no widget targets in source mode');
 
       // Card ref syntax is visible as text, not replaced by widgets
       let widgets = element.querySelectorAll('.cm-card-widget');
@@ -1026,7 +1022,11 @@ module('Integration | codemirror-context', function (hooks) {
     document.body.appendChild(element);
 
     try {
-      let selectionInfo: { hasSelection: boolean; from: number; to: number } | null = null;
+      let selectionInfo: {
+        hasSelection: boolean;
+        from: number;
+        to: number;
+      } | null = null;
       let state = cmContext.createEditorState({
         content: 'Hello World',
         onDocChange: () => {},
@@ -1080,7 +1080,10 @@ module('Integration | codemirror-context', function (hooks) {
       view.dispatch({ selection: { anchor: 3, head: 3 } });
 
       assert.ok(selectionInfo, 'onSelectionChange was called');
-      assert.false(selectionInfo!.hasSelection, 'hasSelection is false for cursor');
+      assert.false(
+        selectionInfo!.hasSelection,
+        'hasSelection is false for cursor',
+      );
 
       view.destroy();
     } finally {
@@ -1093,7 +1096,12 @@ module('Integration | codemirror-context', function (hooks) {
     document.body.appendChild(element);
 
     try {
-      let formats: { bold: boolean; italic: boolean; code: boolean; strikethrough: boolean } | null = null;
+      let formats: {
+        bold: boolean;
+        italic: boolean;
+        code: boolean;
+        strikethrough: boolean;
+      } | null = null;
       let state = cmContext.createEditorState({
         content: 'Hello **World** end',
         onDocChange: () => {},
@@ -1180,7 +1188,11 @@ module('Integration | codemirror-context', function (hooks) {
       let prefix = '# ';
       if (line.text.startsWith(prefix)) {
         view.dispatch({
-          changes: { from: line.from, to: line.from + prefix.length, insert: '' },
+          changes: {
+            from: line.from,
+            to: line.from + prefix.length,
+            insert: '',
+          },
         });
       }
 
@@ -1323,7 +1335,11 @@ module('Integration | codemirror-context', function (hooks) {
       let changes: { from: number; to: number; insert: string }[] = [];
       for (let i = startLine.number; i <= endLine.number; i++) {
         let line = view.state.doc.line(i);
-        changes.push({ from: line.from, to: line.from + prefix.length, insert: '' });
+        changes.push({
+          from: line.from,
+          to: line.from + prefix.length,
+          insert: '',
+        });
       }
       view.dispatch({ changes });
 
