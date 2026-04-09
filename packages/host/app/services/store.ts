@@ -680,7 +680,11 @@ export default class StoreService extends Service implements StoreInterface {
       }
   > {
     let normalizedRealms = (realms ?? [])
-      .map((realm) => new RealmPaths(new URL(realm)).url)
+      .map((realm) =>
+        new RealmPaths(
+          isRegisteredPrefix(realm) ? cardIdToURL(realm) : new URL(realm),
+        ).url,
+      )
       .filter(Boolean);
     let searchRealms =
       normalizedRealms.length > 0
