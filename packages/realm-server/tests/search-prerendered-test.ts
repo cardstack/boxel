@@ -2,7 +2,11 @@ import { module, test } from 'qunit';
 import type { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
 import type { Realm } from '@cardstack/runtime-common';
-import { setupPermissionedRealmCached, createJWT } from './helpers';
+import {
+  setupPermissionedRealmCached,
+  createJWT,
+  localBaseRealm,
+} from './helpers';
 import { PRERENDERED_HTML_FORMATS, baseRealm } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -1190,7 +1194,8 @@ function assertScopedCssUrlsContain(
   moduleUrls: string[],
 ) {
   moduleUrls.forEach((url) => {
-    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
+    let escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let pattern = new RegExp(`^${escapedUrl}\\.[^.]+\\.glimmer-scoped\\.css$`);
 
     assert.true(
       scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
@@ -1201,11 +1206,11 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  '@cardstack/base/default-templates/embedded.gts',
-  '@cardstack/base/default-templates/isolated-and-edit.gts',
-  '@cardstack/base/default-templates/field-edit.gts',
-  '@cardstack/base/field-component.gts',
-  '@cardstack/base/contains-many-component.gts',
-  '@cardstack/base/links-to-editor.gts',
-  '@cardstack/base/links-to-many-component.gts',
+  `${localBaseRealm}/default-templates/embedded.gts`,
+  `${localBaseRealm}/default-templates/isolated-and-edit.gts`,
+  `${localBaseRealm}/default-templates/field-edit.gts`,
+  `${localBaseRealm}/field-component.gts`,
+  `${localBaseRealm}/contains-many-component.gts`,
+  `${localBaseRealm}/links-to-editor.gts`,
+  `${localBaseRealm}/links-to-many-component.gts`,
 ];

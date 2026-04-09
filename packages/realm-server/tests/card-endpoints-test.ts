@@ -28,6 +28,7 @@ import {
   createJWT,
   testRealmServerMatrixUserId,
   cardInfo,
+  localBaseRealm,
   type RealmRequest,
   withRealmPath,
 } from './helpers';
@@ -1213,7 +1214,7 @@ module(basename(__filename), function () {
                 type: 'card',
                 meta: {
                   adoptsFrom: {
-                    module: '@cardstack/base/card-api',
+                    module: `${localBaseRealm}/card-api`,
                     name: 'CardDef',
                   },
                 },
@@ -4222,7 +4223,8 @@ function assertScopedCssUrlsContain(
   moduleUrls: string[],
 ) {
   moduleUrls.forEach((url) => {
-    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
+    let escapedUrl = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let pattern = new RegExp(`^${escapedUrl}\\.[^.]+\\.glimmer-scoped\\.css$`);
 
     assert.true(
       scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
@@ -4233,11 +4235,11 @@ function assertScopedCssUrlsContain(
 
 // These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
 let cardDefModuleDependencies = [
-  '@cardstack/base/default-templates/embedded.gts',
-  '@cardstack/base/default-templates/isolated-and-edit.gts',
-  '@cardstack/base/default-templates/field-edit.gts',
-  '@cardstack/base/field-component.gts',
-  '@cardstack/base/contains-many-component.gts',
-  '@cardstack/base/links-to-editor.gts',
-  '@cardstack/base/links-to-many-component.gts',
+  `${localBaseRealm}/default-templates/embedded.gts`,
+  `${localBaseRealm}/default-templates/isolated-and-edit.gts`,
+  `${localBaseRealm}/default-templates/field-edit.gts`,
+  `${localBaseRealm}/field-component.gts`,
+  `${localBaseRealm}/contains-many-component.gts`,
+  `${localBaseRealm}/links-to-editor.gts`,
+  `${localBaseRealm}/links-to-many-component.gts`,
 ];

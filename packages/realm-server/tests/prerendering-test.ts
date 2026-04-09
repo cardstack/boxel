@@ -21,6 +21,7 @@ import {
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
+  localBaseRealm,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import {
@@ -3490,9 +3491,10 @@ module(basename(__filename), function () {
 
         test('deps', function (assert) {
           // spot check a few deps, as the whole list is overwhelming...
+          let resolvedCardApiModule = `${localBaseRealm}/card-api`;
           assert.ok(
-            result.deps?.includes(baseCardRef.module),
-            `${baseCardRef.module} is a dep`,
+            result.deps?.includes(resolvedCardApiModule),
+            `${resolvedCardApiModule} is a dep`,
           );
           assert.ok(
             result.deps?.includes(`${realmURL1}person`),
@@ -3502,13 +3504,16 @@ module(basename(__filename), function () {
             result.deps?.includes(`${realmURL2}cat`),
             `${realmURL2}cat is a dep`,
           );
+          let escapedBase = localBaseRealm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
           assert.ok(
             result.deps?.find((d) =>
               d.match(
-                /^https:\/\/cardstack.com\/base\/card-api\.gts\..*glimmer-scoped\.css$/,
+                new RegExp(
+                  `^${escapedBase}/card-api\\.gts\\..*glimmer-scoped\\.css$`,
+                ),
               ),
             ),
-            `glimmer scoped css from ${baseCardRef.module} is a dep`,
+            `glimmer scoped css from ${resolvedCardApiModule} is a dep`,
           );
         });
 
