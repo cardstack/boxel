@@ -841,8 +841,15 @@ jobs:
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
       - name: Index all realms and dump tables
-        run: mise run ci:cache-index
+        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
         timeout-minutes: 45
+      - name: Upload service logs
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: cache-index-log
+          path: /tmp/cache-index.log
+          retention-days: 7
       - name: Upload index cache
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         with:
