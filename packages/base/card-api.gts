@@ -723,6 +723,17 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
             }
             return entry;
           } else {
+            if (fieldSerializer in this.card) {
+              assertIsSerializerName(this.card[fieldSerializer]);
+              let serializer = getSerializer(this.card[fieldSerializer]);
+              entry = await serializer.deserialize(
+                entry,
+                relativeTo,
+                doc,
+                store,
+                opts,
+              );
+            }
             let meta = metas[index];
             let resource: LooseCardResource = {
               attributes: entry,
@@ -958,6 +969,11 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
         return serializer.deserialize(value, relativeTo, doc, store, opts);
       }
       return value;
+    }
+    if (fieldSerializer in this.card) {
+      assertIsSerializerName(this.card[fieldSerializer]);
+      let serializer = getSerializer(this.card[fieldSerializer]);
+      value = await serializer.deserialize(value, relativeTo, doc, store, opts);
     }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
@@ -2186,6 +2202,14 @@ export class BaseDef {
   ): Promise<BaseInstanceType<T>> {
     if (primitive in this) {
       return data;
+    }
+    if (
+      this.hasOwnProperty(deserialize) &&
+      this !== (BaseDef as unknown as T)
+    ) {
+      throw new Error(
+        `${this.name} overrides [deserialize] directly. Composite fields must use a registered fieldSerializer instead.`,
+      );
     }
     return _createFromSerialized(this, data, doc, relativeTo, store, opts);
   }
