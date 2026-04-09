@@ -25,7 +25,7 @@ export const VALID_ACTION_TYPES = [
   'update_file',
   'create_test',
   'update_test',
-  'update_ticket',
+  'update_issue',
   'create_knowledge',
   'invoke_tool',
   'request_clarification',
@@ -66,7 +66,7 @@ export interface ProjectCard {
   [key: string]: unknown;
 }
 
-export interface TicketCard {
+export interface IssueCard {
   id: string;
   [key: string]: unknown;
 }
@@ -120,7 +120,7 @@ export interface ToolResult {
 
 export interface AgentContext {
   project: ProjectCard;
-  ticket: TicketCard;
+  issue: IssueCard;
   knowledge: KnowledgeArticle[];
   skills: ResolvedSkill[];
   /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */

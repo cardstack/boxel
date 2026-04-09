@@ -41,7 +41,7 @@ export interface TestRunRealmOptions {
 /** Additional options for creating a new TestRun card. */
 export interface CreateTestRunOptions {
   sequenceNumber?: number;
-  ticketURL?: string;
+  issueURL?: string;
   projectCardUrl?: string;
   moduleRef?: ResolvedCodeRef;
 }
@@ -51,6 +51,8 @@ export interface TestRunHandle {
   testRunId: string;
   status: 'running' | 'passed' | 'failed' | 'error';
   errorMessage?: string;
+  /** The sequence number assigned to this TestRun. */
+  sequenceNumber?: number;
 }
 
 /**
@@ -129,7 +131,7 @@ export interface ExecuteTestRunOptions {
   authorization?: string;
   fetch?: typeof globalThis.fetch;
   forceNew?: boolean;
-  ticketURL?: string;
+  issueURL?: string;
   /** URL to the Project card — used for TestRun relationship. */
   projectCardUrl?: string;
   /** Realm server URL. Required — never inferred from targetRealmUrl. */
@@ -140,4 +142,11 @@ export interface ExecuteTestRunOptions {
   hostDistDir?: string;
   /** Log browser console output for debugging. */
   debug?: boolean;
+  /**
+   * Floor for the next sequence number. When the realm search index is stale
+   * (hasn't indexed the most recent TestRun yet), getNextSequenceNumber may
+   * return a number that was already used. Passing the last-used sequence
+   * number here guarantees the new TestRun gets at least lastSequenceNumber + 1.
+   */
+  lastSequenceNumber?: number;
 }

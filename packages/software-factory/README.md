@@ -7,15 +7,15 @@ The software factory is an automated card-development system that takes a brief 
 The factory flow has four phases:
 
 1. **Intake** — Fetch a brief card from a source realm, normalize it into a structured representation
-2. **Bootstrap** — Create a target realm (if needed), populate it with a Project card, Knowledge Articles, and starter Tickets
-3. **Implementation** — An LLM agent picks up the active ticket and uses tool calls to write card definitions (`.gts`), sample instances (`.json`), catalog specs (`Spec/`), and QUnit test files (`.test.gts`) into the target realm
+2. **Bootstrap** — Create a target realm (if needed), populate it with a Project card, Knowledge Articles, and starter Issues
+3. **Implementation** — An LLM agent picks up the active issue and uses tool calls to write card definitions (`.gts`), sample instances (`.json`), catalog specs (`Spec/`), and QUnit test files (`.test.gts`) into the target realm
 4. **Verification** — The orchestrator runs QUnit tests via Playwright in a real browser, collects structured results into a TestRun card, and feeds failures back to the agent for iteration
 
-The agent iterates (implement → test → fix) until tests pass or max iterations are reached. The orchestrator (the "ralph loop") controls iteration count, test execution, and ticket selection deterministically — the LLM handles only the implementation work.
+The agent iterates (implement → test → fix) until tests pass or max iterations are reached. The orchestrator (the "ralph loop") controls iteration count, test execution, and issue selection deterministically — the LLM handles only the implementation work.
 
 ### Realm Roles
 
-- **Source realm** (`packages/software-factory/realm/`) — publishes shared modules, card type definitions (Project, Ticket, KnowledgeArticle, TestRun), briefs, and templates. Never written to by the factory.
+- **Source realm** (`packages/software-factory/realm/`) — publishes shared modules, card type definitions (Project, Issue, KnowledgeArticle, TestRun), briefs, and templates. Never written to by the factory.
 - **Target realm** (user-specified) — receives all generated artifacts: card definitions, instances, specs, test files, and TestRun results.
 - **Fixture realm** (`test-fixtures/`) — disposable test input for development-time verification of the factory itself.
 
@@ -24,7 +24,7 @@ The agent iterates (implement → test → fix) until tests pass or max iteratio
 | Path                  | What it is                                                          |
 | --------------------- | ------------------------------------------------------------------- |
 | `Projects/`           | Project card with objective, scope, success criteria                |
-| `Tickets/`            | Ticket cards tracking implementation work                           |
+| `Issues/`             | Issue cards tracking implementation work                            |
 | `Knowledge Articles/` | Context articles derived from the brief                             |
 | `*.gts`               | Card definition files                                               |
 | `*.test.gts`          | Co-located QUnit test files                                         |
@@ -81,7 +81,7 @@ The `--debug` flag shows LLM prompts, tool calls and their results, and `console
 | Folder / File              | What it is                                                                |
 | -------------------------- | ------------------------------------------------------------------------- |
 | `Projects/`                | A Project card with the brief's objective and success criteria            |
-| `Tickets/`                 | Ticket cards — the active ticket should show status `done`                |
+| `Issues/`                  | Issue cards — the active issue should show status `done`                  |
 | `Knowledge Articles/`      | Context articles derived from the brief                                   |
 | `*.gts`                    | Card definition file(s) for the implemented card                          |
 | `*.test.gts`               | Co-located QUnit test file(s)                                             |

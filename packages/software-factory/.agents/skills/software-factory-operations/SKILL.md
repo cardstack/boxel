@@ -1,6 +1,6 @@
 ---
 name: software-factory-operations
-description: Use when implementing cards in a target realm through the factory execution loop — covers the tool-use workflow for searching, writing, testing, and updating tickets via factory tools.
+description: Use when implementing cards in a target realm through the factory execution loop — covers the tool-use workflow for searching, writing, testing, and updating issues via factory tools.
 ---
 
 # Software Factory Operations
@@ -12,7 +12,7 @@ Use this skill when operating inside the factory execution loop. The factory age
 - **Source realm** (`packages/software-factory/realm`)
   Publishes shared modules, briefs, templates, and tracker schema. Never write to this realm.
 - **Target realm** (user-specified, passed to `factory:go`)
-  Receives all generated artifacts: Project, Ticket, KnowledgeArticle, card definitions, card instances, Catalog Spec cards, and QUnit test files.
+  Receives all generated artifacts: Project, Issue, KnowledgeArticle, card definitions, card instances, Catalog Spec cards, and QUnit test files.
 
 ## Available Tools
 
@@ -30,7 +30,7 @@ The agent has these tools during the execution loop. Use them by name — they a
 ### Updating Project State
 
 - `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. The tool's parameters include a dynamic JSON schema describing available fields — use it to know valid field names and types. The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
-- `update_ticket({ path, attributes, relationships? })` — Update a Ticket card. Same structured interface with dynamic field schema in the tool parameters.
+- `update_issue({ path, attributes, relationships? })` — Update an Issue card. Same structured interface with dynamic field schema in the tool parameters.
 - `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
 - `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `@cardstack/base/spec#Spec`.
 
@@ -60,20 +60,20 @@ Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Pars
 
 ### Control Flow
 
-- `signal_done()` — Signal that the current ticket is complete. Call this only after all implementation and test files have been written.
+- `signal_done()` — Signal that the current issue is complete. Call this only after all implementation and test files have been written.
 - `request_clarification({ message })` — Signal that you cannot proceed and need human input. Describe what is blocking.
 
 ## Required Flow
 
 1. **Inspect before writing.** Use `search_realm` and `read_file` to understand what already exists in the target realm before creating or modifying files.
-2. **Move ticket to `in_progress`.** Use `update_ticket` to set the ticket status before starting implementation.
+2. **Move issue to `in_progress`.** Use `update_issue` to set the issue status before starting implementation.
 3. **Write card definitions** (`.gts`) via `write_file` to the target realm.
 4. **Write card instances** (`.json`) via `write_file` to the target realm.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
-6. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every ticket must have at least one test file.
+6. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file.
 7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator triggers test execution after this.
 8. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
-9. **Update ticket state** via `update_ticket` — update notes, acceptance criteria, and related knowledge as work progresses.
+9. **Update issue state** via `update_issue` — update notes, acceptance criteria, and related knowledge as work progresses.
 
 ## Target Realm Artifact Structure
 
@@ -86,11 +86,11 @@ target-realm/
 ├── Spec/
 │   └── card-name.json               # Catalog Spec card
 ├── Test Runs/
-│   └── ticket-slug-1.json           # TestRun card
+│   └── issue-slug-1.json            # TestRun card
 ├── Projects/
 │   └── project-name.json            # Project card
-├── Tickets/
-│   └── ticket-slug.json             # Ticket card
+├── Issues/
+│   └── issue-slug.json              # Issue card
 └── Knowledge Articles/
     └── article-name.json            # KnowledgeArticle card
 ```

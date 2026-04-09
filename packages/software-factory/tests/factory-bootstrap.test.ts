@@ -148,17 +148,17 @@ module('factory-bootstrap', function () {
       assert.strictEqual(result.knowledgeArticles.length, 2);
       assert.strictEqual(result.knowledgeArticles[0].status, 'created');
       assert.strictEqual(result.knowledgeArticles[1].status, 'created');
-      assert.strictEqual(result.tickets.length, 3);
-      assert.strictEqual(result.tickets[0].status, 'created');
-      assert.strictEqual(result.tickets[1].status, 'created');
-      assert.strictEqual(result.tickets[2].status, 'created');
+      assert.strictEqual(result.issues.length, 3);
+      assert.strictEqual(result.issues[0].status, 'created');
+      assert.strictEqual(result.issues[1].status, 'created');
+      assert.strictEqual(result.issues[2].status, 'created');
       assert.strictEqual(
-        result.activeTicket.id,
-        'Tickets/sticky-note-define-core',
+        result.activeIssue.id,
+        'Issues/sticky-note-define-core',
       );
     });
 
-    test('created tickets have correct IDs and structure', async function (assert) {
+    test('created issues have correct IDs and structure', async function (assert) {
       let writtenBodies: Record<string, unknown> = {};
 
       let result = await bootstrapProjectArtifacts(
@@ -173,39 +173,36 @@ module('factory-bootstrap', function () {
         },
       );
 
+      assert.strictEqual(result.issues[0].id, 'Issues/sticky-note-define-core');
       assert.strictEqual(
-        result.tickets[0].id,
-        'Tickets/sticky-note-define-core',
+        result.issues[1].id,
+        'Issues/sticky-note-design-views',
       );
       assert.strictEqual(
-        result.tickets[1].id,
-        'Tickets/sticky-note-design-views',
-      );
-      assert.strictEqual(
-        result.tickets[2].id,
-        'Tickets/sticky-note-add-integration',
+        result.issues[2].id,
+        'Issues/sticky-note-add-integration',
       );
 
-      let ticket1 = writtenBodies['Tickets/sticky-note-define-core'] as {
+      let issue1 = writtenBodies['Issues/sticky-note-define-core'] as {
         data: {
-          attributes: { ticketId: string; status: string; summary: string };
+          attributes: { issueId: string; status: string; summary: string };
         };
       };
-      assert.strictEqual(ticket1.data.attributes.ticketId, 'SN-1');
-      assert.strictEqual(ticket1.data.attributes.status, 'in_progress');
-      assert.true(ticket1.data.attributes.summary.includes('Sticky Note'));
+      assert.strictEqual(issue1.data.attributes.issueId, 'SN-1');
+      assert.strictEqual(issue1.data.attributes.status, 'in_progress');
+      assert.true(issue1.data.attributes.summary.includes('Sticky Note'));
 
-      let ticket2 = writtenBodies['Tickets/sticky-note-design-views'] as {
-        data: { attributes: { ticketId: string; status: string } };
+      let issue2 = writtenBodies['Issues/sticky-note-design-views'] as {
+        data: { attributes: { issueId: string; status: string } };
       };
-      assert.strictEqual(ticket2.data.attributes.ticketId, 'SN-2');
-      assert.strictEqual(ticket2.data.attributes.status, 'backlog');
+      assert.strictEqual(issue2.data.attributes.issueId, 'SN-2');
+      assert.strictEqual(issue2.data.attributes.status, 'backlog');
 
-      let ticket3 = writtenBodies['Tickets/sticky-note-add-integration'] as {
-        data: { attributes: { ticketId: string; status: string } };
+      let issue3 = writtenBodies['Issues/sticky-note-add-integration'] as {
+        data: { attributes: { issueId: string; status: string } };
       };
-      assert.strictEqual(ticket3.data.attributes.ticketId, 'SN-3');
-      assert.strictEqual(ticket3.data.attributes.status, 'backlog');
+      assert.strictEqual(issue3.data.attributes.issueId, 'SN-3');
+      assert.strictEqual(issue3.data.attributes.status, 'backlog');
     });
 
     test('created project has correct content from brief', async function (assert) {
@@ -310,7 +307,7 @@ module('factory-bootstrap', function () {
       );
     });
 
-    test('ticket descriptions derive from brief sections', async function (assert) {
+    test('issue descriptions derive from brief sections', async function (assert) {
       let writtenBodies: Record<string, unknown> = {};
 
       await bootstrapProjectArtifacts(stickyNoteBrief, targetRealmUrl, {
@@ -321,22 +318,22 @@ module('factory-bootstrap', function () {
         }),
       });
 
-      let ticket1 = writtenBodies['Tickets/sticky-note-define-core'] as {
+      let issue1 = writtenBodies['Issues/sticky-note-define-core'] as {
         data: { attributes: { description: string } };
       };
       assert.true(
-        ticket1.data.attributes.description.includes(
+        issue1.data.attributes.description.includes(
           'drafting, review, and reuse',
         ),
-        'first ticket description derived from Core Mechanics section',
+        'first issue description derived from Core Mechanics section',
       );
 
-      let ticket3 = writtenBodies['Tickets/sticky-note-add-integration'] as {
+      let issue3 = writtenBodies['Issues/sticky-note-add-integration'] as {
         data: { attributes: { description: string } };
       };
       assert.true(
-        ticket3.data.attributes.description.includes('Document'),
-        'third ticket description derived from Integration Points section',
+        issue3.data.attributes.description.includes('Document'),
+        'third issue description derived from Integration Points section',
       );
     });
 
@@ -350,7 +347,7 @@ module('factory-bootstrap', function () {
           darkfactoryModuleUrl,
           fetch: buildMockFetch(fetchCalls, {
             allExist: true,
-            existingTicketStatus: 'in_progress',
+            existingIssueStatus: 'in_progress',
           }),
         },
       );
@@ -358,9 +355,9 @@ module('factory-bootstrap', function () {
       assert.strictEqual(result.project.status, 'existing');
       assert.strictEqual(result.knowledgeArticles[0].status, 'existing');
       assert.strictEqual(result.knowledgeArticles[1].status, 'existing');
-      assert.strictEqual(result.tickets[0].status, 'existing');
-      assert.strictEqual(result.tickets[1].status, 'existing');
-      assert.strictEqual(result.tickets[2].status, 'existing');
+      assert.strictEqual(result.issues[0].status, 'existing');
+      assert.strictEqual(result.issues[1].status, 'existing');
+      assert.strictEqual(result.issues[2].status, 'existing');
 
       let writeCalls = fetchCalls.filter((c) => c.method === 'POST');
       assert.strictEqual(writeCalls.length, 0, 'no write calls made');
@@ -384,9 +381,9 @@ module('factory-bootstrap', function () {
       assert.strictEqual(result.project.status, 'existing');
       assert.strictEqual(result.knowledgeArticles[0].status, 'existing');
       assert.strictEqual(result.knowledgeArticles[1].status, 'created');
-      assert.strictEqual(result.tickets[0].status, 'created');
-      assert.strictEqual(result.tickets[1].status, 'created');
-      assert.strictEqual(result.tickets[2].status, 'created');
+      assert.strictEqual(result.issues[0].status, 'created');
+      assert.strictEqual(result.issues[1].status, 'created');
+      assert.strictEqual(result.issues[2].status, 'created');
     });
 
     test('handles brief with minimal content gracefully', async function (assert) {
@@ -406,7 +403,7 @@ module('factory-bootstrap', function () {
 
       assert.strictEqual(result.project.id, 'Projects/my-widget-mvp');
       assert.strictEqual(result.project.status, 'created');
-      assert.strictEqual(result.tickets.length, 3);
+      assert.strictEqual(result.issues.length, 3);
 
       let project = writtenBodies['Projects/my-widget-mvp'] as {
         data: { attributes: { projectName: string; objective: string } };
@@ -438,8 +435,8 @@ module('factory-bootstrap', function () {
 
       assert.strictEqual(result.project.id, 'Projects/my-app-v2-0-beta-mvp');
       assert.strictEqual(
-        result.tickets[0].id,
-        'Tickets/my-app-v2-0-beta-define-core',
+        result.issues[0].id,
+        'Issues/my-app-v2-0-beta-define-core',
       );
     });
 
@@ -483,7 +480,7 @@ type MockFetchOptions = {
   allMissing?: boolean;
   allExist?: boolean;
   existingPaths?: Set<string>;
-  existingTicketStatus?: string;
+  existingIssueStatus?: string;
   captureWrites?: Record<string, unknown>;
 };
 
@@ -521,12 +518,12 @@ function buildMockFetch(
             data: {
               type: 'card',
               attributes: {
-                status: options.existingTicketStatus ?? 'backlog',
+                status: options.existingIssueStatus ?? 'backlog',
               },
               meta: {
                 adoptsFrom: {
                   module: darkfactoryModuleUrl,
-                  name: 'Ticket',
+                  name: 'Issue',
                 },
               },
             },

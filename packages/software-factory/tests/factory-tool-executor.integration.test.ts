@@ -3,8 +3,8 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { ToolExecutor } from '../scripts/lib/factory-tool-executor';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import { ToolExecutor } from '../src/factory-tool-executor';
+import { ToolRegistry } from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Test server helpers
@@ -214,7 +214,7 @@ module('factory-tool-executor integration > realm-api requests', function () {
 
       let query = JSON.stringify({
         filter: {
-          type: { module: 'https://example.test/ticket', name: 'Ticket' },
+          type: { module: 'https://example.test/issue', name: 'Issue' },
         },
       });
 

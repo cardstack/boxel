@@ -221,7 +221,10 @@ export default class CreateListingModal extends Component<Signature> {
           </FieldContainer>
 
           {{#if this.shouldShowExampleRow}}
-            <FieldContainer @label='Examples' class='field'>
+            <FieldContainer
+              @label='Examples'
+              class='field examples-field-container'
+            >
               <div
                 class='field-contents examples-field'
                 data-test-create-listing-examples
@@ -462,6 +465,9 @@ export default class CreateListingModal extends Component<Signature> {
       .field :deep(.content) {
         flex-grow: 1;
         min-width: 0;
+      }
+      .examples-field-container > :deep(.content) {
+        align-self: start;
       }
       .realm-icon {
         --boxel-realm-icon-size: 1rem;

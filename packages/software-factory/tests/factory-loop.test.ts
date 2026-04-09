@@ -5,13 +5,10 @@ import type {
   KnowledgeArticle,
   ProjectCard,
   TestResult,
-  TicketCard,
-} from '../scripts/lib/factory-agent';
+  IssueCard,
+} from '../src/factory-agent';
 
-import type {
-  FactoryTool,
-  ToolCallEntry,
-} from '../scripts/lib/factory-tool-builder';
+import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
 
 import {
   runFactoryLoop,
@@ -21,7 +18,7 @@ import {
   type FactoryLoopConfig,
   type LoopAgent,
   type TestRunner,
-} from '../scripts/lib/factory-loop';
+} from '../src/factory-loop';
 
 // ---------------------------------------------------------------------------
 // Mock agent
@@ -107,7 +104,7 @@ class MockFactoryAgent implements LoopAgent {
 class StubContextBuilder implements ContextBuilderLike {
   buildCalls: {
     project: ProjectCard;
-    ticket: TicketCard;
+    issue: IssueCard;
     knowledge: KnowledgeArticle[];
     targetRealmUrl: string;
     testRealmUrl: string;
@@ -116,7 +113,7 @@ class StubContextBuilder implements ContextBuilderLike {
 
   async build(params: {
     project: ProjectCard;
-    ticket: TicketCard;
+    issue: IssueCard;
     knowledge: KnowledgeArticle[];
     targetRealmUrl: string;
     testRealmUrl: string;
@@ -125,7 +122,7 @@ class StubContextBuilder implements ContextBuilderLike {
     this.buildCalls.push(params);
     return {
       project: params.project,
-      ticket: params.ticket,
+      issue: params.issue,
       knowledge: params.knowledge,
       skills: [],
       targetRealmUrl: params.targetRealmUrl,
@@ -143,8 +140,8 @@ function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
   return { id: 'project-1', name: 'Sticky Notes', ...overrides };
 }
 
-function makeTicket(overrides?: Partial<TicketCard>): TicketCard {
-  return { id: 'ticket-1', title: 'Implement StickyNote card', ...overrides };
+function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
+  return { id: 'issue-1', title: 'Implement StickyNote card', ...overrides };
 }
 
 function makeKnowledge(
@@ -215,7 +212,7 @@ function makeLoopConfig(
     tools: DEFAULT_TOOLS,
     testRunner: makeTestRunner([makePassingTestResult()]),
     project: makeProject(),
-    ticket: makeTicket(),
+    issue: makeIssue(),
     knowledge: [makeKnowledge()],
     targetRealmUrl: 'https://example.test/target/',
     testRealmUrl: 'https://example.test/target-test-artifacts/',
@@ -648,9 +645,9 @@ module('factory-loop > context threading', function () {
     );
   });
 
-  test('context includes correct project and ticket across iterations', async function (assert) {
+  test('context includes correct project and issue across iterations', async function (assert) {
     let project = makeProject({ id: 'p-42' });
-    let ticket = makeTicket({ id: 't-99' });
+    let issue = makeIssue({ id: 't-99' });
     let agent = new MockFactoryAgent([
       {
         toolCalls: [
@@ -670,7 +667,7 @@ module('factory-loop > context threading', function () {
       makeLoopConfig({
         agent,
         project,
-        ticket,
+        issue,
         testRunner: makeTestRunner([
           makeFailingTestResult(),
           makePassingTestResult(),
@@ -679,9 +676,9 @@ module('factory-loop > context threading', function () {
     );
 
     assert.strictEqual(agent.receivedContexts[0].project, project);
-    assert.strictEqual(agent.receivedContexts[0].ticket, ticket);
+    assert.strictEqual(agent.receivedContexts[0].issue, issue);
     assert.strictEqual(agent.receivedContexts[1].project, project);
-    assert.strictEqual(agent.receivedContexts[1].ticket, ticket);
+    assert.strictEqual(agent.receivedContexts[1].issue, issue);
   });
 
   test('tools are passed consistently across iterations', async function (assert) {

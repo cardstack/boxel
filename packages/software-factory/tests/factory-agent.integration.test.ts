@@ -7,7 +7,7 @@ import {
   OpenRouterFactoryAgent,
   type AgentAction,
   type AgentContext,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -16,7 +16,7 @@ import {
 function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
   return {
     project: { id: 'Projects/test-project' },
-    ticket: { id: 'Tickets/test-ticket' },
+    issue: { id: 'Issues/test-issue' },
     knowledge: [],
     skills: [],
     tools: [],
@@ -187,8 +187,8 @@ module(
         assert.strictEqual(messages[0].role, 'system');
         assert.strictEqual(messages[1].role, 'user');
         assert.ok(
-          messages[1].content.includes('Tickets/test-ticket'),
-          'user message includes ticket ID',
+          messages[1].content.includes('Issues/test-issue'),
+          'user message includes issue ID',
         );
       } finally {
         await stopServer(server);

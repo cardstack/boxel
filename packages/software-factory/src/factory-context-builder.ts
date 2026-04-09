@@ -1,9 +1,9 @@
 import type {
   AgentContext,
+  IssueCard,
   KnowledgeArticle,
   ProjectCard,
   TestResult,
-  TicketCard,
 } from './factory-agent';
 
 import type { ResolvedSkill } from './factory-agent';
@@ -51,22 +51,22 @@ export class ContextBuilder {
    */
   async build(params: {
     project: ProjectCard;
-    ticket: TicketCard;
+    issue: IssueCard;
     knowledge: KnowledgeArticle[];
     targetRealmUrl: string;
     testRealmUrl: string;
     /** Test results from the previous iteration, if any. */
     testResults?: TestResult;
   }): Promise<AgentContext> {
-    let { project, ticket, knowledge, targetRealmUrl, testRealmUrl } = params;
+    let { project, issue, knowledge, targetRealmUrl, testRealmUrl } = params;
 
-    // Step 1: Resolve which skills are needed for this ticket
-    let skillNames = this.skillResolver.resolve(ticket, project);
+    // Step 1: Resolve which skills are needed for this issue
+    let skillNames = this.skillResolver.resolve(issue, project);
 
     // Step 2: Load skill content from disk
     let skills: ResolvedSkill[] = await this.skillLoader.loadAll(
       skillNames,
-      ticket,
+      issue,
     );
 
     // Step 3: Enforce token budget if configured
@@ -75,7 +75,7 @@ export class ContextBuilder {
     // Step 4: Assemble the context
     let context: AgentContext = {
       project,
-      ticket,
+      issue,
       knowledge,
       skills,
       targetRealmUrl,

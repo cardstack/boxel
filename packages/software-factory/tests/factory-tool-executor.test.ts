@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import type { ToolResult } from '../scripts/lib/factory-agent';
+import type { ToolResult } from '../src/factory-agent';
 import {
   ToolExecutor,
   ToolNotFoundError,
@@ -10,9 +10,9 @@ import {
   ToolTimeoutError,
   type ToolExecutionLogEntry,
   type ToolExecutorConfig,
-} from '../scripts/lib/factory-tool-executor';
+} from '../src/factory-tool-executor';
 import { iconURLFor } from '@cardstack/runtime-common/realm-display-defaults';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import { ToolRegistry } from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -363,7 +363,7 @@ module('factory-tool-executor > realm-api execution', function () {
 
     let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      query: JSON.stringify({ filter: { type: { name: 'Ticket' } } }),
+      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
     });
 
     assert.strictEqual(capturedMethod, 'QUERY');

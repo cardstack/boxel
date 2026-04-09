@@ -12,9 +12,13 @@
  *   pnpm smoke:prompt -- --stage all        (default)
  */
 
-import { parseArgs } from 'node:util';
+// This should be first
+import '../../src/setup-logger';
 
-import type { AgentAction, AgentContext } from '../lib/factory-agent';
+import { parseArgs } from 'node:util';
+import { logger } from '../../src/logger';
+
+import type { AgentAction, AgentContext } from '../../src/factory-agent';
 
 import {
   assembleImplementPrompt,
@@ -23,7 +27,7 @@ import {
   assembleTestPrompt,
   buildOneShotMessages,
   FilePromptLoader,
-} from '../lib/factory-prompt-loader';
+} from '../../src/factory-prompt-loader';
 
 // ---------------------------------------------------------------------------
 // Sample data
@@ -39,8 +43,8 @@ const SAMPLE_CONTEXT: AgentContext = {
       'All tests pass',
     ],
   },
-  ticket: {
-    id: 'Tickets/define-sticky-note-core',
+  issue: {
+    id: 'Issues/define-sticky-note-core',
     summary: 'Define the core StickyNote CardDef',
     status: 'in-progress',
     priority: 'high',
@@ -136,18 +140,19 @@ const SAMPLE_PREVIOUS_ACTIONS: AgentAction[] = [
 // Helpers
 // ---------------------------------------------------------------------------
 
+let log = logger('factory-prompt-smoke');
+
 function separator(label: string): void {
   let line = '═'.repeat(72);
-  console.log(`\n${line}`);
-  console.log(`  ${label}`);
-  console.log(`${line}\n`);
+  log.info(`\n${line}`);
+  log.info(`  ${label}`);
+  log.info(`${line}\n`);
 }
 
 function printMessages(messages: { role: string; content: string }[]): void {
   for (let msg of messages) {
-    console.log(`── [${msg.role.toUpperCase()}] ──────────────────────────`);
-    console.log(msg.content);
-    console.log();
+    log.info(`── [${msg.role.toUpperCase()}] ──────────────────────────`);
+    log.info(msg.content);
   }
 }
 
@@ -169,7 +174,7 @@ function main(): void {
 
   let stage = (values.stage ?? 'all') as Stage;
   if (!['all', 'implement', 'iterate', 'test'].includes(stage)) {
-    console.error(
+    log.error(
       `Invalid stage: "${stage}". Must be one of: all, implement, iterate, test`,
     );
     process.exit(1);
@@ -186,7 +191,7 @@ function main(): void {
     let userPrompt = assembleImplementPrompt({ context: ctx, loader });
     let messages = buildOneShotMessages(systemPrompt, userPrompt);
     printMessages(messages);
-    console.log(
+    log.info(
       `📊  System: ${systemPrompt.length} chars | User: ${userPrompt.length} chars`,
     );
   }
@@ -221,7 +226,7 @@ function main(): void {
     });
     let messages = buildOneShotMessages(systemPrompt, userPrompt);
     printMessages(messages);
-    console.log(
+    log.info(
       `📊  System: ${systemPrompt.length} chars | User: ${userPrompt.length} chars`,
     );
   }
@@ -242,14 +247,14 @@ function main(): void {
     });
     let messages = buildOneShotMessages(systemPrompt, userPrompt);
     printMessages(messages);
-    console.log(
+    log.info(
       `📊  System: ${systemPrompt.length} chars | User: ${userPrompt.length} chars`,
     );
   }
 
   separator('DONE');
-  console.log('All prompt templates assembled successfully.');
-  console.log(
+  log.info('All prompt templates assembled successfully.');
+  log.info(
     'The prompts above are exactly what the LLM would receive in a one-shot call.',
   );
 }

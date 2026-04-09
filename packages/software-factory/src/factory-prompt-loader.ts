@@ -15,7 +15,7 @@ import type {
 // Constants
 // ---------------------------------------------------------------------------
 
-const PROMPTS_DIR = resolve(__dirname, '../../prompts');
+const PROMPTS_DIR = resolve(__dirname, '../prompts');
 
 // ---------------------------------------------------------------------------
 // PromptLoader
@@ -367,7 +367,7 @@ function buildToolResultsData(
 
 /**
  * Assemble the system prompt for a one-shot LLM call.
- * This is the same for all calls within a ticket.
+ * This is the same for all calls within an issue.
  *
  * Uses the tool-use system prompt template (prompts/system.md). Tools are
  * provided natively via the LLM API's tool definitions parameter, not
@@ -405,7 +405,7 @@ export function assembleImplementPrompt(
 
   return loader.load('ticket-implement', {
     project: context.project,
-    ticket: context.ticket,
+    issue: context.issue,
     knowledge: context.knowledge,
     toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
   });
@@ -418,7 +418,7 @@ export function assembleTestPrompt(options: AssembleTestPromptOptions): string {
   let { context, implementedFiles, loader } = options;
 
   return loader.load('ticket-test', {
-    ticket: context.ticket,
+    issue: context.issue,
     implementedFiles,
   });
 }
@@ -450,7 +450,7 @@ export function assembleIteratePrompt(
 
   return loader.load('ticket-iterate', {
     project: context.project,
-    ticket: context.ticket,
+    issue: context.issue,
     iteration,
     previousActions: previousActionsData,
     testResults: context.testResults

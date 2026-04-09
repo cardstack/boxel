@@ -26,7 +26,7 @@ export async function createTestRun(
     options.testResultsModuleUrl,
     {
       sequenceNumber: seq,
-      ticketURL: options.ticketURL,
+      issueURL: options.issueURL,
       moduleRef: options.moduleRef,
       projectCardUrl: options.projectCardUrl,
     },
@@ -153,13 +153,13 @@ export function buildTestRunCardDocument(
   let relationships:
     | Record<string, { links: { self: string | null } }>
     | undefined;
-  if (options?.projectCardUrl || options?.ticketURL) {
+  if (options?.projectCardUrl || options?.issueURL) {
     relationships = {};
     if (options?.projectCardUrl) {
       relationships.project = { links: { self: options.projectCardUrl } };
     }
-    if (options?.ticketURL) {
-      relationships.ticket = { links: { self: options.ticketURL } };
+    if (options?.issueURL) {
+      relationships.issue = { links: { self: options.issueURL } };
     }
   }
 

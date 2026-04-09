@@ -7,6 +7,7 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
+import { logger } from './logger';
 import type {
   LooseSingleCardDocument,
   Relationship,
@@ -30,6 +31,8 @@ import {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+let log = logger('factory-tool-builder');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,7 +121,7 @@ export function buildFactoryTools(
   let schemas = config.cardTypeSchemas;
   let cardToolEntries: [string, string, () => FactoryTool][] = [
     ['Project', 'update_project', () => buildUpdateProjectTool(config)],
-    ['Ticket', 'update_ticket', () => buildUpdateTicketTool(config)],
+    ['Issue', 'update_issue', () => buildUpdateIssueTool(config)],
     [
       'KnowledgeArticle',
       'create_knowledge',
@@ -130,7 +133,7 @@ export function buildFactoryTools(
     if (schemas?.has(cardName)) {
       tools.push(buildFn());
     } else {
-      console.warn(
+      log.warn(
         `[factory-tool-builder] Omitting ${toolName} tool: no schema for ${cardName}`,
       );
     }
@@ -306,14 +309,14 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
-  let schema = resolveCardSchema(config, 'Ticket');
+function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Issue');
   return {
-    name: 'update_ticket',
+    name: 'update_issue',
     description:
-      'Update a ticket card in the target realm. Auth: per-realm JWT.',
+      'Update an issue card in the target realm. Auth: per-realm JWT.',
     parameters: buildCardToolParams(
-      'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
+      'Realm-relative path to the issue card (e.g., "Issues/1.json")',
       schema,
     ),
     execute: async (args) => {
@@ -325,7 +328,7 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
       let document = buildCardDocument(
-        'Ticket',
+        'Issue',
         realmUrl,
         attributes,
         relationships,
@@ -423,6 +426,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
 }
 
 function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
+  let lastSequenceBySlug = new Map<string, number>();
   return {
     name: 'run_tests',
     description: 'Execute QUnit card tests against the target realm',
@@ -432,7 +436,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         slug: {
           type: 'string',
           description:
-            'Ticket slug used to name the test run (e.g., "define-sticky-note-core")',
+            'Issue slug used to name the test run (e.g., "define-sticky-note-core")',
         },
         testNames: {
           type: 'array',
@@ -449,6 +453,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
       required: ['slug'],
     },
     execute: async (args) => {
+      let slug = args.slug as string;
       let targetRealmUrl = config.targetRealmUrl;
       let authorization = resolveAuthForUrl(config, targetRealmUrl);
       let testResultsModuleUrl =
@@ -459,7 +464,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
       let result = await executeFn({
         targetRealmUrl,
         testResultsModuleUrl,
-        slug: args.slug as string,
+        slug,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
         testNames: (args.testNames as string[]) ?? [],
         authorization,
@@ -467,7 +472,14 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         projectCardUrl: args.projectCardUrl as string | undefined,
         realmServerUrl: config.realmServerUrl,
         forceNew: true,
+        lastSequenceNumber: lastSequenceBySlug.get(slug) ?? 0,
       });
+
+      // Track the sequence number per slug so subsequent calls don't
+      // reuse it even if the realm search index hasn't caught up yet.
+      if (result.sequenceNumber != null) {
+        lastSequenceBySlug.set(slug, result.sequenceNumber);
+      }
 
       return result;
     },
