@@ -192,14 +192,14 @@ function buildCardDecorations(
   }
 
   for (let w of widgets) {
-    // All widgets are point decorations (placed after the source text)
+    // All widgets are inline point decorations — block styling is via CSS.
+    // CM6 disallows block widget decorations from plugins.
     allDecorations.push({
       from: w.from,
       to: w.to,
       value: Decoration.widget({
         widget: w.widget,
         side: 1,
-        block: w.widget.kind === 'block',
       }),
     });
   }
