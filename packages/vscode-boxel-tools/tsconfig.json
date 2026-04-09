@@ -3,6 +3,7 @@
     "strictNullChecks": true,
     "module": "Node16",
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "target": "ES2022",
     "outDir": "out",
     "baseUrl": ".",
