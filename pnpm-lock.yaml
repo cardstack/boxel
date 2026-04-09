@@ -927,6 +927,9 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      '@floating-ui/dom':
+        specifier: 'catalog:'
+        version: 1.7.4
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.0.0
