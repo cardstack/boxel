@@ -113,7 +113,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   @tracked _formatPickerCardTitle: string | null = null;
 
   private editorView: any = null;
-  private lastExternalContent: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private _pendingTargets: CardWidgetTarget[] = [];
   private _slotUpdatePending = false;
@@ -401,42 +400,48 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   // ── Editor lifecycle ─────────────────────────────────────────────────────
 
+  willDestroy() {
+    super.willDestroy();
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    if (this.editorView) {
+      this.editorView.destroy();
+      this.editorView = null;
+    }
+  }
+
   mountEditor = modifier((element: HTMLElement, _positional: unknown[]) => {
     let cm = this._cm;
     if (!cm) {
       return;
     }
 
+    // Consume tracked args so auto-tracking is set up.
+    // We read them here but the editor is only created once —
+    // subsequent re-runs (from save echoes) hit the early return.
     let content = this.args.content;
     let onUpdate = this.args.onUpdate;
 
-    // If editor already exists and content hasn't changed externally, keep it
-    if (
-      this.editorView &&
-      element.contains(this.editorView.dom) &&
-      content === this.lastExternalContent
-    ) {
+    // Editor already exists and is in the DOM — keep it.
+    // The modifier re-runs when args.content changes (after debounced
+    // save), but we must NOT destroy/recreate the editor or focus is lost.
+    if (this.editorView && element.contains(this.editorView.dom)) {
       return;
     }
 
-    // External content changed — destroy old editor
-    if (this.editorView && content !== this.lastExternalContent) {
+    // Editor exists but not in this element — clean it up
+    if (this.editorView) {
       this.editorView.destroy();
       this.editorView = null;
     }
 
-    this.lastExternalContent = content;
-
-    // Clear element before creating editor
     element.innerHTML = '';
 
     let state = cm.createEditorState({
       content: content || '',
       onDocChange: (text: string) => {
-        // Keep lastExternalContent in sync so the modifier doesn't
-        // treat the debounced save echo as an external content change
-        // (which would destroy and recreate the editor, losing focus).
-        this.lastExternalContent = text;
         if (onUpdate) {
           // Debounced save
           if (this.saveTimer) {
@@ -459,14 +464,14 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
     this.editorView = view;
 
+    // Cleanup only clears the debounce timer. Editor destruction is
+    // handled by willDestroy — this prevents the Ember modifier
+    // lifecycle from destroying the editor on re-runs triggered by
+    // args.content changes (debounced save echoes).
     return () => {
       if (this.saveTimer) {
         clearTimeout(this.saveTimer);
         this.saveTimer = null;
-      }
-      if (this.editorView) {
-        this.editorView.destroy();
-        this.editorView = null;
       }
     };
   });
