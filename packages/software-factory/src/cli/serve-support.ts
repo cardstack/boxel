@@ -1,8 +1,14 @@
+// This should be first
+import '../setup-logger';
+
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { startFactorySupportServices } from '../harness';
 import { sharedRuntimeDir, writeSupportMetadata } from '../runtime-metadata';
+import { logger } from '../logger';
+
+let log = logger('serve-support');
 
 async function main(): Promise<void> {
   let realmDir = resolve(
@@ -20,7 +26,7 @@ async function main(): Promise<void> {
   mkdirSync(sharedRuntimeDir, { recursive: true });
   writeSupportMetadata(payload);
 
-  console.log(JSON.stringify(payload, null, 2));
+  process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 
   let stop = async () => {
     await support.stop();
@@ -40,6 +46,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error);
+  log.error(String(error));
   process.exitCode = 1;
 });

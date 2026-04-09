@@ -8,6 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import { logger } from '../../src/logger';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
@@ -18,6 +19,8 @@ import {
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 export { SupportedMimeType };
+
+let log = logger('realm-operations');
 
 export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
@@ -777,12 +780,12 @@ async function addRealmToMatrixAccountData(
         body: JSON.stringify({ realms: existingRealms }),
       });
       if (!putResponse.ok) {
-        console.warn(
+        log.warn(
           `Warning: failed to update Matrix account data for realm ${realmUrl}: HTTP ${putResponse.status}`,
         );
       }
     } catch (err) {
-      console.warn(
+      log.warn(
         `Warning: failed to update Matrix account data for realm ${realmUrl}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }

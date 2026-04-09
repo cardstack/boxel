@@ -354,5 +354,5 @@ export function fieldPairs(
 }
 
 export function printJson(value: unknown): void {
-  console.log(JSON.stringify(value, null, 2));
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }

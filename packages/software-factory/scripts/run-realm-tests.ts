@@ -1,3 +1,6 @@
+// This should be first
+import '../src/setup-logger';
+
 import {
   spawnSync,
   type SpawnSyncOptionsWithStringEncoding,
@@ -310,7 +313,7 @@ let summary = {
   failures,
 };
 
-console.log(JSON.stringify(summary, null, 2));
+process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
 if (testRun.status !== 0) {
   process.exit(testRun.status ?? 1);

@@ -2,6 +2,8 @@ import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { normalize, resolve } from 'node:path';
 
+import { logger } from '../../src/logger';
+
 import { chromium } from '@playwright/test';
 
 import { ensureTrailingSlash, searchRealm } from './realm-operations';
@@ -13,6 +15,8 @@ import type {
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
+
+let log = logger('test-run-execution');
 
 // ---------------------------------------------------------------------------
 // Resume Logic
@@ -458,8 +462,8 @@ export async function executeTestRunFromRealm(
     });
     setHtml(html);
 
-    console.error(
-      `[test-run-execution] Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmUrl}`,
+    log.info(
+      `Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmUrl}`,
     );
 
     browser = await chromium.launch({ headless: true });
@@ -468,10 +472,10 @@ export async function executeTestRunFromRealm(
     // Forward browser console when debug is enabled
     if (options.debug) {
       page.on('console', (msg) => {
-        console.error(`[browser] ${msg.type()}: ${msg.text()}`);
+        log.debug(`[browser] ${msg.type()}: ${msg.text()}`);
       });
       page.on('pageerror', (err) => {
-        console.error(`[browser] PAGE ERROR: ${err.message}`);
+        log.debug(`[browser] PAGE ERROR: ${err.message}`);
       });
     }
 
@@ -506,8 +510,8 @@ export async function executeTestRunFromRealm(
     );
 
     let durationMs = Date.now() - start;
-    console.error(
-      `[test-run-execution] QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
+    log.info(
+      `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
     );
 
     // Step 3: Parse results and complete the TestRun card.
@@ -530,9 +534,7 @@ export async function executeTestRunFromRealm(
   } catch (err) {
     let durationMs = Date.now() - start;
     let errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[test-run-execution] Error: ${errorMessage} (${durationMs}ms)`,
-    );
+    log.error(`Error: ${errorMessage} (${durationMs}ms)`);
     try {
       await completeTestRun(
         testRunId,

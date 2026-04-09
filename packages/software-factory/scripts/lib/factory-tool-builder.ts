@@ -7,6 +7,7 @@
  * (realm protection, per-realm JWT auth, logging).
  */
 
+import { logger } from '../../src/logger';
 import type {
   LooseSingleCardDocument,
   Relationship,
@@ -30,6 +31,8 @@ import {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+let log = logger('factory-tool-builder');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -130,7 +133,7 @@ export function buildFactoryTools(
     if (schemas?.has(cardName)) {
       tools.push(buildFn());
     } else {
-      console.warn(
+      log.warn(
         `[factory-tool-builder] Omitting ${toolName} tool: no schema for ${cardName}`,
       );
     }

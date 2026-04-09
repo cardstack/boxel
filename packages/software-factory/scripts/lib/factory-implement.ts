@@ -15,6 +15,8 @@
 
 import { resolve } from 'node:path';
 
+import { logger } from '../../src/logger';
+
 import type {
   KnowledgeArticle,
   ProjectCard,
@@ -70,6 +72,8 @@ import type { FactoryBootstrapResult } from '../../src/factory-bootstrap';
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+let log = logger('factory-implement');
 
 const PACKAGE_ROOT = resolve(__dirname, '../..');
 
@@ -248,10 +252,10 @@ export async function runFactoryImplement(
   if (loopResult.outcome === 'tests_passed' || loopResult.outcome === 'done') {
     try {
       await updateTicketStatus(targetRealmUrl, ticket.id, 'done', fetchOptions);
-      console.error('[factory-implement] Updated ticket status to done');
+      log.info('Updated ticket status to done');
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not update ticket status: ${
+      log.warn(
+        `Could not update ticket status: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -405,9 +409,7 @@ async function fetchCardData(
       knowledge.push(card);
     } catch {
       // Non-fatal: knowledge articles are supplementary
-      console.warn(
-        `[factory-implement] Could not fetch knowledge article: ${ka.id}`,
-      );
+      log.warn(`Could not fetch knowledge article: ${ka.id}`);
     }
   }
 
@@ -513,9 +515,7 @@ function buildTestRunner(
     let start = Date.now();
 
     try {
-      console.error(
-        `[factory-implement] Running test file(s) for ticket: ${slug}`,
-      );
+      log.info(`Running test file(s) for ticket: ${slug}`);
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
@@ -537,9 +537,7 @@ function buildTestRunner(
       }
 
       let durationMs = Date.now() - start;
-      console.error(
-        `[factory-implement] Test run complete: status=${handle.status} (${durationMs}ms)`,
-      );
+      log.info(`Test run complete: status=${handle.status} (${durationMs}ms)`);
 
       if (handle.status === 'passed') {
         return {
@@ -587,8 +585,8 @@ function buildTestRunner(
       }
     } catch (error) {
       let durationMs = Date.now() - start;
-      console.error(
-        `[factory-implement] Test execution error: ${
+      log.error(
+        `Test execution error: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -779,8 +777,8 @@ async function loadDarkFactorySchemas(
         schemas.set(cardName, schema);
       }
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not fetch schema for ${cardName}: ${
+      log.warn(
+        `Could not fetch schema for ${cardName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -800,8 +798,8 @@ async function loadDarkFactorySchemas(
         schemas.set(name, schema);
       }
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not fetch schema for ${name}: ${
+      log.warn(
+        `Could not fetch schema for ${name}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

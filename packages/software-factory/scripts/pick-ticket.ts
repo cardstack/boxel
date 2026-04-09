@@ -1,3 +1,6 @@
+// This should be first
+import '../src/setup-logger';
+
 import {
   getAccessibleRealmTokens,
   matrixLogin,
@@ -7,6 +10,9 @@ import {
   type SearchResultCard,
   type SearchSort,
 } from './lib/boxel';
+import { logger } from '../src/logger';
+
+let log = logger('pick-ticket');
 
 type TicketStatus = 'backlog' | 'in_progress' | 'blocked' | 'review' | 'done';
 type TicketPriority = 'critical' | 'high' | 'medium' | 'low';
@@ -160,6 +166,6 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   let message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
-  console.error(message);
+  log.error(message);
   process.exit(1);
 });
