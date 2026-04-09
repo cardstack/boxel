@@ -7,7 +7,7 @@ import {
   getEnvironmentFromMatrixId,
   getUsernameFromMatrixId,
   getDomainFromMatrixId,
-  getEnvironmentShortLabel,
+  getEnvironmentLabel,
 } from '../../src/lib/profile-manager.js';
 
 describe('ProfileManager', () => {
@@ -115,15 +115,18 @@ describe('ProfileManager', () => {
     expect(profile!.password).toBe('password123');
   });
 
-  it('sets file permissions to 0600', async () => {
-    await manager.addProfile('@testuser:stack.cards', 'password123');
+  it.skipIf(process.platform === 'win32')(
+    'sets file permissions to 0600',
+    async () => {
+      await manager.addProfile('@testuser:stack.cards', 'password123');
 
-    const profilesFile = path.join(tmpDir, 'profiles.json');
-    const stats = fs.statSync(profilesFile);
-    // Check owner-only permissions (0600 = 0o600 = 384 decimal)
-    const mode = stats.mode & 0o777;
-    expect(mode).toBe(0o600);
-  });
+      const profilesFile = path.join(tmpDir, 'profiles.json');
+      const stats = fs.statSync(profilesFile);
+      // Check owner-only permissions (0600 = 0o600 = 384 decimal)
+      const mode = stats.mode & 0o777;
+      expect(mode).toBe(0o600);
+    },
+  );
 
   it('gets active credentials from profile', async () => {
     await manager.addProfile(
@@ -177,6 +180,35 @@ describe('ProfileManager', () => {
     const freshManager = new ProfileManager(tmpDir);
     expect(freshManager.listProfiles()).toEqual([]);
   });
+
+  it('handles valid JSON with invalid shape gracefully', () => {
+    const profilesFile = path.join(tmpDir, 'profiles.json');
+    fs.writeFileSync(profilesFile, JSON.stringify({ foo: 'bar' }));
+
+    const freshManager = new ProfileManager(tmpDir);
+    expect(freshManager.listProfiles()).toEqual([]);
+  });
+
+  it('rejects unknown domains without explicit URLs', async () => {
+    await expect(
+      manager.addProfile('@alice:custom.domain', 'password123'),
+    ).rejects.toThrow(/Unknown domain/);
+  });
+
+  it('allows unknown domains with explicit URLs', async () => {
+    await manager.addProfile(
+      '@alice:custom.domain',
+      'password123',
+      undefined,
+      'https://matrix.custom.domain',
+      'https://app.custom.domain/',
+    );
+
+    const profile = manager.getProfile('@alice:custom.domain');
+    expect(profile).toBeDefined();
+    expect(profile!.matrixUrl).toBe('https://matrix.custom.domain');
+    expect(profile!.realmServerUrl).toBe('https://app.custom.domain/');
+  });
 });
 
 describe('environment helpers', () => {
@@ -203,8 +235,8 @@ describe('environment helpers', () => {
   });
 
   it('returns correct short labels', () => {
-    expect(getEnvironmentShortLabel('staging')).toBe('stack.cards');
-    expect(getEnvironmentShortLabel('production')).toBe('boxel.ai');
-    expect(getEnvironmentShortLabel('unknown')).toBe('unknown');
+    expect(getEnvironmentLabel('staging')).toBe('stack.cards');
+    expect(getEnvironmentLabel('production')).toBe('boxel.ai');
+    expect(getEnvironmentLabel('unknown')).toBe('unknown');
   });
 });

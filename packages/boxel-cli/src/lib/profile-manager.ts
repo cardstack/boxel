@@ -1,23 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors';
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
-
-// ANSI color codes
-const FG_YELLOW = '\x1b[33m';
-const FG_CYAN = '\x1b[36m';
-const FG_MAGENTA = '\x1b[35m';
-const DIM = '\x1b[2m';
-const BOLD = '\x1b[1m';
-const RESET = '\x1b[0m';
 
 export interface Profile {
   displayName: string;
   matrixUrl: string;
   realmServerUrl: string;
-  password: string; // Stored in plaintext - file should have restricted permissions
+  password: string; // Stored in plaintext - file should have restricted permissions, this will be updated in CS-10642
 }
 
 export interface ProfilesConfig {
@@ -57,23 +50,9 @@ export function getDomainFromMatrixId(matrixId: string): string {
 }
 
 /**
- * Get environment emoji/label for display
+ * Get environment label for display (uses domain)
  */
 export function getEnvironmentLabel(env: Environment): string {
-  switch (env) {
-    case 'staging':
-      return 'stack.cards';
-    case 'production':
-      return 'boxel.ai';
-    default:
-      return 'unknown';
-  }
-}
-
-/**
- * Get short environment label (uses domain)
- */
-export function getEnvironmentShortLabel(env: Environment): string {
   switch (env) {
     case 'staging':
       return 'stack.cards';
@@ -90,7 +69,7 @@ export function getEnvironmentShortLabel(env: Environment): string {
  */
 export function formatProfileBadge(matrixId: string): string {
   const username = getUsernameFromMatrixId(matrixId);
-  const env = getEnvironmentShortLabel(getEnvironmentFromMatrixId(matrixId));
+  const env = getEnvironmentLabel(getEnvironmentFromMatrixId(matrixId));
   return `${DIM}[${RESET}${FG_CYAN}${username}${RESET} ${DIM}\u00b7${RESET} ${FG_MAGENTA}${env}${RESET}${DIM}]${RESET}`;
 }
 
@@ -112,15 +91,36 @@ export class ProfileManager {
   }
 
   private loadConfig(): ProfilesConfig {
+    const defaultConfig: ProfilesConfig = { profiles: {}, activeProfile: null };
+
     if (fs.existsSync(this.profilesFile)) {
       try {
         const data = fs.readFileSync(this.profilesFile, 'utf-8');
-        return JSON.parse(data);
+        const parsed: unknown = JSON.parse(data);
+
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const candidate = parsed as Record<string, unknown>;
+          const profiles =
+            candidate.profiles &&
+            typeof candidate.profiles === 'object' &&
+            !Array.isArray(candidate.profiles)
+              ? (candidate.profiles as ProfilesConfig['profiles'])
+              : null;
+          const activeProfile =
+            candidate.activeProfile === null ||
+            typeof candidate.activeProfile === 'string'
+              ? (candidate.activeProfile as string | null)
+              : null;
+
+          if (profiles) {
+            return { profiles, activeProfile };
+          }
+        }
       } catch {
         // Corrupted file, start fresh
       }
     }
-    return { profiles: {}, activeProfile: null };
+    return defaultConfig;
   }
 
   private saveConfig(): void {
@@ -164,6 +164,12 @@ export class ProfileManager {
   ): Promise<void> {
     const env = getEnvironmentFromMatrixId(matrixId);
     const username = getUsernameFromMatrixId(matrixId);
+
+    if (env === 'unknown' && (!matrixUrl || !realmServerUrl)) {
+      throw new Error(
+        `Unknown domain in Matrix ID "${matrixId}". You must provide explicit --matrix-url and --realm-server-url for non-standard domains.`,
+      );
+    }
 
     const defaultMatrixUrl =
       env === 'production'
@@ -237,33 +243,16 @@ export class ProfileManager {
     const matrixUrl = process.env.MATRIX_URL;
     const username = process.env.MATRIX_USERNAME;
     const password = process.env.MATRIX_PASSWORD;
-    let realmServerUrl = process.env.REALM_SERVER_URL;
+    const realmServerUrl = process.env.REALM_SERVER_URL;
 
-    if (matrixUrl && username && password) {
-      if (!realmServerUrl) {
-        try {
-          const matrixUrlObj = new URL(matrixUrl);
-          if (matrixUrlObj.hostname.startsWith('matrix.')) {
-            realmServerUrl = `${matrixUrlObj.protocol}//app.${matrixUrlObj.hostname.slice(7)}/`;
-          } else if (matrixUrlObj.hostname.startsWith('matrix-staging.')) {
-            realmServerUrl = `${matrixUrlObj.protocol}//realms-staging.${matrixUrlObj.hostname.slice(15)}/`;
-          } else if (matrixUrlObj.hostname.startsWith('matrix-')) {
-            realmServerUrl = `${matrixUrlObj.protocol}//${matrixUrlObj.hostname.slice(7)}/`;
-          }
-        } catch {
-          // Invalid URL, will return null below
-        }
-      }
-
-      if (realmServerUrl) {
-        return {
-          matrixUrl,
-          username,
-          password,
-          realmServerUrl,
-          profileId: null,
-        };
-      }
+    if (matrixUrl && username && password && realmServerUrl) {
+      return {
+        matrixUrl,
+        username,
+        password,
+        realmServerUrl,
+        profileId: null,
+      };
     }
 
     return null;
@@ -292,7 +281,10 @@ export class ProfileManager {
     return true;
   }
 
-  async migrateFromEnv(): Promise<string | null> {
+  async migrateFromEnv(): Promise<{
+    profileId: string;
+    created: boolean;
+  } | null> {
     const matrixUrl = process.env.MATRIX_URL;
     const username = process.env.MATRIX_USERNAME;
     const password = process.env.MATRIX_PASSWORD;
@@ -307,7 +299,12 @@ export class ProfileManager {
     const matrixId = `@${username}:${domain}`;
 
     if (this.config.profiles[matrixId]) {
-      return matrixId;
+      // Update password if it changed
+      if (this.config.profiles[matrixId].password !== password) {
+        this.config.profiles[matrixId].password = password;
+        this.saveConfig();
+      }
+      return { profileId: matrixId, created: false };
     }
 
     await this.addProfile(
@@ -317,7 +314,7 @@ export class ProfileManager {
       matrixUrl,
       realmServerUrl,
     );
-    return matrixId;
+    return { profileId: matrixId, created: true };
   }
 
   printStatus(): void {
@@ -349,12 +346,13 @@ export class ProfileManager {
   }
 }
 
-// Singleton instance
+// Singleton instance — callers needing a custom configDir should use
+// `new ProfileManager(dir)` directly.
 let _instance: ProfileManager | null = null;
 
-export function getProfileManager(configDir?: string): ProfileManager {
+export function getProfileManager(): ProfileManager {
   if (!_instance) {
-    _instance = new ProfileManager(configDir);
+    _instance = new ProfileManager();
   }
   return _instance;
 }

@@ -5,19 +5,19 @@ import {
   getProfileManager,
   formatProfileBadge,
   getEnvironmentFromMatrixId,
-  getEnvironmentShortLabel,
+  getEnvironmentLabel,
   getUsernameFromMatrixId,
 } from '../lib/profile-manager';
-
-// ANSI color codes
-const FG_GREEN = '\x1b[32m';
-const FG_YELLOW = '\x1b[33m';
-const FG_CYAN = '\x1b[36m';
-const FG_MAGENTA = '\x1b[35m';
-const FG_RED = '\x1b[31m';
-const DIM = '\x1b[2m';
-const BOLD = '\x1b[1m';
-const RESET = '\x1b[0m';
+import {
+  FG_GREEN,
+  FG_YELLOW,
+  FG_CYAN,
+  FG_MAGENTA,
+  FG_RED,
+  DIM,
+  BOLD,
+  RESET,
+} from '../lib/colors';
 
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({
@@ -49,31 +49,41 @@ function promptPassword(question: string): Promise<string> {
       stdin.setRawMode(true);
     }
 
+    const cleanup = () => {
+      stdin.removeListener('data', onData);
+      if (stdin.isTTY) {
+        stdin.setRawMode(false);
+      }
+      rl.close();
+    };
+
     process.stdout.write(question);
     let password = '';
 
     const onData = (char: Buffer) => {
-      const c = char.toString();
-      if (c === '\n' || c === '\r') {
-        stdin.removeListener('data', onData);
-        if (stdin.isTTY) {
-          stdin.setRawMode(false);
+      try {
+        const c = char.toString();
+        if (c === '\n' || c === '\r') {
+          cleanup();
+          process.stdout.write('\n');
+          resolve(password);
+        } else if (c === '\u0003') {
+          // Ctrl+C
+          cleanup();
+          process.exit();
+        } else if (c === '\u007F' || c === '\b') {
+          // Backspace
+          if (password.length > 0) {
+            password = password.slice(0, -1);
+            process.stdout.write('\b \b');
+          }
+        } else {
+          password += c;
+          process.stdout.write('*');
         }
-        process.stdout.write('\n');
-        rl.close();
-        resolve(password);
-      } else if (c === '\u0003') {
-        // Ctrl+C
-        process.exit();
-      } else if (c === '\u007F' || c === '\b') {
-        // Backspace
-        if (password.length > 0) {
-          password = password.slice(0, -1);
-          process.stdout.write('\b \b');
-        }
-      } else {
-        password += c;
-        process.stdout.write('*');
+      } catch {
+        cleanup();
+        throw new Error('Error reading password input');
       }
     };
 
@@ -181,7 +191,7 @@ async function listProfiles(manager: ProfileManager): Promise<void> {
     const env = getEnvironmentFromMatrixId(id);
 
     const marker = isActive ? `${FG_GREEN}\u2605${RESET} ` : '  ';
-    const envLabel = getEnvironmentShortLabel(env);
+    const envLabel = getEnvironmentLabel(env);
     const envColor = env === 'production' ? FG_MAGENTA : FG_CYAN;
 
     console.log(`${marker}${BOLD}${id}${RESET}`);
@@ -391,8 +401,9 @@ async function migrateFromEnv(manager: ProfileManager): Promise<void> {
   const matrixUrl = process.env.MATRIX_URL;
   const username = process.env.MATRIX_USERNAME;
   const password = process.env.MATRIX_PASSWORD;
+  const realmServerUrl = process.env.REALM_SERVER_URL;
 
-  if (!matrixUrl || !username || !password) {
+  if (!matrixUrl || !username || !password || !realmServerUrl) {
     console.log(
       `${FG_YELLOW}No complete credentials found in environment variables.${RESET}`,
     );
@@ -402,17 +413,24 @@ async function migrateFromEnv(manager: ProfileManager): Promise<void> {
     return;
   }
 
-  const profileId = await manager.migrateFromEnv();
-  if (profileId) {
-    console.log(
-      `${FG_GREEN}\u2713${RESET} Created profile: ${formatProfileBadge(profileId)}`,
-    );
-    console.log(
-      `\n${DIM}You can now remove credentials from .env if desired.${RESET}`,
-    );
+  const result = await manager.migrateFromEnv();
+  if (result) {
+    if (result.created) {
+      console.log(
+        `${FG_GREEN}\u2713${RESET} Created profile: ${formatProfileBadge(result.profileId)}`,
+      );
+      console.log(
+        `\n${DIM}You can now remove credentials from .env if desired.${RESET}`,
+      );
+    } else {
+      console.log(
+        `${FG_YELLOW}Profile ${formatProfileBadge(result.profileId)} already exists.${RESET} Password has been updated if it changed.`,
+      );
+      console.log(
+        `\n${DIM}Use 'boxel profile add -u ${result.profileId} -p <password>' to update other fields.${RESET}`,
+      );
+    }
   } else {
-    console.log(
-      `${FG_YELLOW}Migration failed or profile already exists.${RESET}`,
-    );
+    console.log(`${FG_YELLOW}Migration failed.${RESET}`);
   }
 }
