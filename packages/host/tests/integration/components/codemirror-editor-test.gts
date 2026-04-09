@@ -268,7 +268,8 @@ module('Integration | codemirror-context', function (hooks) {
     try {
       let targets: CardWidgetTarget[] = [];
       let state = cmContext.createEditorState({
-        content: '::card[https://example.com/cards/2 | 400x200]',
+        content:
+          'Some text\n\n::card[https://example.com/cards/2 | 400x200]',
         onDocChange: () => {},
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
@@ -357,7 +358,7 @@ module('Integration | codemirror-context', function (hooks) {
       });
 
       view.dispatch({
-        changes: { from: 9, insert: '\n::card[./cards/1]\n' },
+        changes: { from: 8, insert: '\n::card[./cards/1]\n' },
       });
 
       assert.ok(
