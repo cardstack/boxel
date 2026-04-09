@@ -168,7 +168,7 @@ function makeIssue(
   overrides: Partial<SchedulableIssue> & { id: string },
 ): SchedulableIssue {
   return {
-    status: 'ready',
+    status: 'backlog',
     priority: 'medium',
     blockedBy: [],
     order: 0,
@@ -240,7 +240,7 @@ async function scenarioSingleIssue(): Promise<void> {
   let store = new MockIssueStore([
     makeIssue({
       id: 'ISS-001',
-      status: 'ready',
+      status: 'backlog',
       priority: 'high',
       order: 1,
       summary: 'Define StickyNote card',
@@ -283,14 +283,14 @@ async function scenarioDependencyCascade(): Promise<void> {
   let store = new MockIssueStore([
     makeIssue({
       id: 'A',
-      status: 'ready',
+      status: 'backlog',
       priority: 'high',
       order: 1,
       summary: 'Define card',
     }),
     makeIssue({
       id: 'B',
-      status: 'ready',
+      status: 'backlog',
       priority: 'medium',
       order: 2,
       blockedBy: ['A'],
@@ -345,21 +345,21 @@ async function scenarioPriorityOrdering(): Promise<void> {
   let store = new MockIssueStore([
     makeIssue({
       id: 'LOW',
-      status: 'ready',
+      status: 'backlog',
       priority: 'low',
       order: 1,
       summary: 'Low priority',
     }),
     makeIssue({
       id: 'HIGH',
-      status: 'ready',
+      status: 'backlog',
       priority: 'high',
       order: 2,
       summary: 'High priority',
     }),
     makeIssue({
       id: 'MED',
-      status: 'ready',
+      status: 'backlog',
       priority: 'medium',
       order: 3,
       summary: 'Medium priority',
@@ -426,7 +426,7 @@ async function scenarioMaxIterations(): Promise<void> {
   let store = new MockIssueStore([
     makeIssue({
       id: 'ISS-1',
-      status: 'ready',
+      status: 'backlog',
       priority: 'high',
       order: 1,
       summary: 'Fix card rendering',
@@ -478,7 +478,7 @@ async function scenarioBlockedIssue(): Promise<void> {
   let store = new MockIssueStore([
     makeIssue({
       id: 'A',
-      status: 'ready',
+      status: 'backlog',
       priority: 'high',
       order: 1,
       summary: 'Needs clarification',

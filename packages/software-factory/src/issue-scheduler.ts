@@ -37,9 +37,10 @@ export interface IssueStore {
 // ---------------------------------------------------------------------------
 
 const PRIORITY_ORDER: Record<IssuePriority, number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
 };
 
 // ---------------------------------------------------------------------------
@@ -110,9 +111,14 @@ export class IssueScheduler {
     return refreshed;
   }
 
-  /** True if any ready or in_progress issue has no non-completed blockers. */
+  /** True if any backlog or in_progress issue has no non-completed blockers. */
   hasUnblockedIssues(exclude?: ReadonlySet<string>): boolean {
     return this.getUnblockedIssues(exclude).length > 0;
+  }
+
+  /** True if the loaded issue list is non-empty (regardless of status). */
+  hasAnyIssues(): boolean {
+    return this.issues.length > 0;
   }
 
   // ---------------------------------------------------------------------------
@@ -133,8 +139,8 @@ export class IssueScheduler {
         return false;
       }
 
-      // Only consider ready or in_progress issues
-      if (issue.status !== 'ready' && issue.status !== 'in_progress') {
+      // Only consider backlog or in_progress issues
+      if (issue.status !== 'backlog' && issue.status !== 'in_progress') {
         return false;
       }
 
@@ -159,13 +165,22 @@ export class IssueScheduler {
  * Loads issues from a Boxel realm using the searchRealm() function
  * from realm-operations.ts.
  */
+export interface RealmIssueStoreConfig {
+  realmUrl: string;
+  /** Absolute module URL for the darkfactory module (e.g. from inferDarkfactoryModuleUrl()). */
+  darkfactoryModuleUrl: string;
+  options?: RealmFetchOptions;
+}
+
 export class RealmIssueStore implements IssueStore {
   private realmUrl: string;
+  private darkfactoryModuleUrl: string;
   private options: RealmFetchOptions | undefined;
 
-  constructor(realmUrl: string, options?: RealmFetchOptions) {
-    this.realmUrl = realmUrl;
-    this.options = options;
+  constructor(config: RealmIssueStoreConfig) {
+    this.realmUrl = config.realmUrl;
+    this.darkfactoryModuleUrl = config.darkfactoryModuleUrl;
+    this.options = config.options;
   }
 
   async listIssues(): Promise<SchedulableIssue[]> {
@@ -173,7 +188,7 @@ export class RealmIssueStore implements IssueStore {
       this.realmUrl,
       {
         filter: {
-          type: { module: './darkfactory', name: 'Issue' },
+          type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
         },
       },
       this.options,
@@ -192,7 +207,7 @@ export class RealmIssueStore implements IssueStore {
       this.realmUrl,
       {
         filter: {
-          type: { module: './darkfactory', name: 'Issue' },
+          type: { module: this.darkfactoryModuleUrl, name: 'Issue' },
           eq: { id: issueId },
         },
       },
@@ -236,7 +251,7 @@ function mapCardToSchedulableIssue(
 
   return {
     id,
-    status: (attrs.status as IssueStatus) ?? 'ready',
+    status: (attrs.status as IssueStatus) ?? 'backlog',
     priority: (attrs.priority as IssuePriority) ?? 'medium',
     blockedBy,
     order: (attrs.order as number) ?? 0,

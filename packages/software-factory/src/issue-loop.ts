@@ -169,6 +169,16 @@ export async function runIssueLoop(
   );
 
   if (!scheduler.hasUnblockedIssues()) {
+    // Distinguish "no issues at all" from "issues exist but all blocked"
+    let hasAnyIssues = scheduler.hasAnyIssues();
+    if (hasAnyIssues) {
+      log.info('All issues are blocked — nothing to do');
+      return {
+        outcome: 'no_unblocked_issues',
+        outerCycles: 0,
+        issueResults: [],
+      };
+    }
     log.info('No issues found — nothing to do');
     return { outcome: 'all_issues_done', outerCycles: 0, issueResults: [] };
   }
@@ -283,20 +293,19 @@ export async function runIssueLoop(
 
   if (outerCycles >= maxOuterCycles) {
     outcome = 'max_outer_cycles';
-    log.info(
-      `Outer loop finished: outcome=max_outer_cycles, cycles=${outerCycles}`,
-    );
-  } else if (!scheduler.hasUnblockedIssues()) {
-    // Check if all issues are done or if some are still blocked
-    let hasNonDone = issueResults.some((r) => r.exitReason !== 'done');
-    outcome = hasNonDone ? 'no_unblocked_issues' : 'all_issues_done';
-    log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
   } else {
-    outcome = 'all_issues_done';
-    log.info(
-      `Outer loop finished: outcome=all_issues_done, cycles=${outerCycles}`,
-    );
+    let allDone = issueResults.every((r) => r.exitReason === 'done');
+    let hasExhausted = exhaustedIssues.size > 0;
+
+    if (allDone && !hasExhausted) {
+      outcome = 'all_issues_done';
+    } else {
+      // Some issues are blocked, exhausted, or otherwise unresolved
+      outcome = 'no_unblocked_issues';
+    }
   }
+
+  log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
 
   return { outcome, outerCycles, issueResults };
 }

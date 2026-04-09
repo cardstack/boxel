@@ -171,7 +171,7 @@ function makeIssue(
   overrides: Partial<SchedulableIssue> & { id: string },
 ): SchedulableIssue {
   return {
-    status: 'ready',
+    status: 'backlog',
     priority: 'medium',
     blockedBy: [],
     order: 0,
@@ -245,7 +245,7 @@ function makeLoopConfig(
 module('issue-loop > happy path', function () {
   test('single issue completes in one iteration', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'iss-1', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
 
     let agent = new MockLoopAgent(
@@ -284,10 +284,10 @@ module('issue-loop > happy path', function () {
 module('issue-loop > multiple issues', function () {
   test('first done unblocks second', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'a', status: 'backlog', priority: 'high', order: 1 }),
       makeIssue({
         id: 'b',
-        status: 'ready',
+        status: 'backlog',
         priority: 'medium',
         order: 2,
         blockedBy: ['a'],
@@ -339,7 +339,7 @@ module('issue-loop > multiple issues', function () {
 module('issue-loop > validation failure', function () {
   test('inner loop self-corrects after validation failure', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'iss-1', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
 
     let agent = new MockLoopAgent(
@@ -402,8 +402,8 @@ module('issue-loop > validation failure', function () {
 module('issue-loop > blocked issue', function () {
   test('blocked issue exits inner loop, outer loop continues', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', priority: 'high', order: 1 }),
-      makeIssue({ id: 'b', status: 'ready', priority: 'medium', order: 2 }),
+      makeIssue({ id: 'a', status: 'backlog', priority: 'high', order: 1 }),
+      makeIssue({ id: 'b', status: 'backlog', priority: 'medium', order: 2 }),
     ]);
 
     let agent = new MockLoopAgent(
@@ -451,7 +451,7 @@ module('issue-loop > blocked issue', function () {
 module('issue-loop > max inner iterations', function () {
   test('exits inner loop after maxIterationsPerIssue', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'iss-1', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
 
     let turns: MockAgentTurn[] = [];
@@ -497,7 +497,7 @@ module('issue-loop > max inner iterations', function () {
 module('issue-loop > no unblocked issues', function () {
   test('outer loop exits immediately when all issues are blocked', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', blockedBy: ['b'] }),
+      makeIssue({ id: 'a', status: 'backlog', blockedBy: ['b'] }),
       makeIssue({ id: 'b', status: 'blocked' }),
     ]);
 
@@ -543,7 +543,7 @@ module('issue-loop > NoOpValidator', function () {
     let store = new MockIssueStore([
       makeIssue({
         id: 'seed',
-        status: 'ready',
+        status: 'backlog',
         priority: 'high',
         order: 1,
         summary: 'Process brief and create project artifacts',
@@ -590,7 +590,7 @@ module('issue-loop > NoOpValidator', function () {
 module('issue-loop > context threading', function () {
   test('validationResults from prior iteration passed to context', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'iss-1', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
 
     let failValidation = makeFailingValidation();
@@ -643,7 +643,7 @@ module('issue-loop > context threading', function () {
 module('issue-loop > brief URL threading', function () {
   test('briefUrl is passed through to buildForIssue', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'seed', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'seed', status: 'backlog', priority: 'high', order: 1 }),
     ]);
 
     let agent = new MockLoopAgent(
@@ -685,7 +685,7 @@ module('issue-loop > brief URL threading', function () {
 module('issue-loop > new issues mid-loop', function () {
   test('agent creates new issues that are picked up by outer loop', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'seed', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'seed', status: 'backlog', priority: 'high', order: 1 }),
     ]);
 
     let agent = new MockLoopAgent(
@@ -724,7 +724,7 @@ module('issue-loop > new issues mid-loop', function () {
           store.issues.push(
             makeIssue({
               id: 'new-1',
-              status: 'ready',
+              status: 'backlog',
               priority: 'medium',
               order: 2,
             }),

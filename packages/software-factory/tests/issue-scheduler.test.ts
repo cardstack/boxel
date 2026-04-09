@@ -36,7 +36,7 @@ function makeIssue(
   overrides: Partial<SchedulableIssue> & { id: string },
 ): SchedulableIssue {
   return {
-    status: 'ready',
+    status: 'backlog',
     priority: 'medium',
     blockedBy: [],
     order: 0,
@@ -52,7 +52,7 @@ function makeIssue(
 module('issue-scheduler > pickNextIssue', function () {
   test('returns in_progress over ready (resume semantics)', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', priority: 'high', order: 1 }),
+      makeIssue({ id: 'a', status: 'backlog', priority: 'high', order: 1 }),
       makeIssue({
         id: 'b',
         status: 'in_progress',
@@ -74,8 +74,8 @@ module('issue-scheduler > pickNextIssue', function () {
 
   test('returns high priority over medium', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', priority: 'medium', order: 1 }),
-      makeIssue({ id: 'b', status: 'ready', priority: 'high', order: 2 }),
+      makeIssue({ id: 'a', status: 'backlog', priority: 'medium', order: 1 }),
+      makeIssue({ id: 'b', status: 'backlog', priority: 'high', order: 2 }),
     ]);
 
     let scheduler = new IssueScheduler(store);
@@ -87,9 +87,9 @@ module('issue-scheduler > pickNextIssue', function () {
 
   test('returns high over medium over low', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'low', status: 'ready', priority: 'low', order: 1 }),
-      makeIssue({ id: 'high', status: 'ready', priority: 'high', order: 2 }),
-      makeIssue({ id: 'med', status: 'ready', priority: 'medium', order: 3 }),
+      makeIssue({ id: 'low', status: 'backlog', priority: 'low', order: 1 }),
+      makeIssue({ id: 'high', status: 'backlog', priority: 'high', order: 2 }),
+      makeIssue({ id: 'med', status: 'backlog', priority: 'medium', order: 3 }),
     ]);
 
     let scheduler = new IssueScheduler(store);
@@ -101,9 +101,9 @@ module('issue-scheduler > pickNextIssue', function () {
 
   test('returns lower order for same priority', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', priority: 'medium', order: 5 }),
-      makeIssue({ id: 'b', status: 'ready', priority: 'medium', order: 2 }),
-      makeIssue({ id: 'c', status: 'ready', priority: 'medium', order: 8 }),
+      makeIssue({ id: 'a', status: 'backlog', priority: 'medium', order: 5 }),
+      makeIssue({ id: 'b', status: 'backlog', priority: 'medium', order: 2 }),
+      makeIssue({ id: 'c', status: 'backlog', priority: 'medium', order: 8 }),
     ]);
 
     let scheduler = new IssueScheduler(store);
@@ -117,7 +117,7 @@ module('issue-scheduler > pickNextIssue', function () {
     let store = new MockIssueStore([
       makeIssue({
         id: 'a',
-        status: 'ready',
+        status: 'backlog',
         priority: 'high',
         order: 1,
         blockedBy: ['b'],
@@ -145,7 +145,7 @@ module('issue-scheduler > pickNextIssue', function () {
     let store = new MockIssueStore([
       makeIssue({
         id: 'a',
-        status: 'ready',
+        status: 'backlog',
         priority: 'high',
         order: 1,
         blockedBy: ['b'],
@@ -179,7 +179,7 @@ module('issue-scheduler > pickNextIssue', function () {
 
   test('returns undefined when all eligible issues are blocked', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', blockedBy: ['b'] }),
+      makeIssue({ id: 'a', status: 'backlog', blockedBy: ['b'] }),
       makeIssue({ id: 'b', status: 'blocked' }),
     ]);
 
@@ -202,10 +202,25 @@ module('issue-scheduler > pickNextIssue', function () {
 
   test('combined sort: in_progress > priority > order', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'low-1', status: 'ready', priority: 'low', order: 1 }),
-      makeIssue({ id: 'high-5', status: 'ready', priority: 'high', order: 5 }),
-      makeIssue({ id: 'med-3', status: 'ready', priority: 'medium', order: 3 }),
-      makeIssue({ id: 'high-2', status: 'ready', priority: 'high', order: 2 }),
+      makeIssue({ id: 'low-1', status: 'backlog', priority: 'low', order: 1 }),
+      makeIssue({
+        id: 'high-5',
+        status: 'backlog',
+        priority: 'high',
+        order: 5,
+      }),
+      makeIssue({
+        id: 'med-3',
+        status: 'backlog',
+        priority: 'medium',
+        order: 3,
+      }),
+      makeIssue({
+        id: 'high-2',
+        status: 'backlog',
+        priority: 'high',
+        order: 2,
+      }),
       makeIssue({
         id: 'ip-med-10',
         status: 'in_progress',
@@ -233,7 +248,7 @@ module('issue-scheduler > pickNextIssue', function () {
 
 module('issue-scheduler > hasUnblockedIssues', function () {
   test('returns true when unblocked ready issues exist', async function (assert) {
-    let store = new MockIssueStore([makeIssue({ id: 'a', status: 'ready' })]);
+    let store = new MockIssueStore([makeIssue({ id: 'a', status: 'backlog' })]);
 
     let scheduler = new IssueScheduler(store);
     await scheduler.loadIssues();
@@ -266,7 +281,7 @@ module('issue-scheduler > hasUnblockedIssues', function () {
 
   test('returns false when all ready issues are blocked', async function (assert) {
     let store = new MockIssueStore([
-      makeIssue({ id: 'a', status: 'ready', blockedBy: ['b'] }),
+      makeIssue({ id: 'a', status: 'backlog', blockedBy: ['b'] }),
       makeIssue({ id: 'b', status: 'blocked' }),
     ]);
 
@@ -294,7 +309,7 @@ module('issue-scheduler > refreshIssueState', function () {
   test('delegates to store and updates internal list', async function (assert) {
     let store = new MockIssueStore([
       makeIssue({ id: 'a', status: 'in_progress' }),
-      makeIssue({ id: 'b', status: 'ready' }),
+      makeIssue({ id: 'b', status: 'backlog' }),
     ]);
 
     let scheduler = new IssueScheduler(store);
@@ -332,7 +347,7 @@ module('issue-scheduler > refreshIssueState', function () {
   test('refreshed issue state affects dependency resolution', async function (assert) {
     let store = new MockIssueStore([
       makeIssue({ id: 'a', status: 'in_progress' }),
-      makeIssue({ id: 'b', status: 'ready', blockedBy: ['a'] }),
+      makeIssue({ id: 'b', status: 'backlog', blockedBy: ['a'] }),
     ]);
 
     let scheduler = new IssueScheduler(store);

@@ -147,8 +147,13 @@ export interface ValidationResults {
 // Issue scheduling types
 // ---------------------------------------------------------------------------
 
-export type IssueStatus = 'ready' | 'in_progress' | 'done' | 'blocked';
-export type IssuePriority = 'high' | 'medium' | 'low';
+export type IssueStatus =
+  | 'backlog'
+  | 'in_progress'
+  | 'blocked'
+  | 'review'
+  | 'done';
+export type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
 
 /** IssueData extended with the typed fields the IssueScheduler needs. */
 export interface SchedulableIssue extends IssueData {
