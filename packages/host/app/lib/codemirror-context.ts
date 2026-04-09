@@ -55,7 +55,8 @@ export const openCardSearchEffect = StateEffect.define<{
 // ── Card reference patterns ─────────────────────────────────────────────────
 
 // Block: ::card[URL] or ::card[URL | size-spec], must be the only content on a line
-const BLOCK_CARD_RE = /^::card\[([^\]]+)\]\s*$/gm;
+// Use [ \t]* instead of \s* to avoid matching newline characters
+const BLOCK_CARD_RE = /^::card\[([^\]]+)\][ \t]*$/gm;
 // Inline: :card[URL], not preceded by another colon (avoids matching ::card)
 const INLINE_CARD_RE = /(?<!:):card\[([^\]]+)\]/g;
 
@@ -139,18 +140,23 @@ function buildCardDecorations(
     }
 
     let line = doc.lineAt(from);
-    // If cursor is on this line, show raw text instead of widget
-    if (line.number === cursorLine) {
-      marks.push({
-        from,
-        to,
-        className: 'cm-bfm-card-ref cm-bfm-card-ref--block',
-      });
-      continue;
-    }
 
-    let widget = new CardWidget(cardId, 'block');
-    widgets.push({ from, to, widget });
+    // Mark the source syntax (dimmed when widget is shown, highlighted on cursor line)
+    marks.push({
+      from,
+      to,
+      className:
+        line.number === cursorLine
+          ? 'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active'
+          : 'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--hidden',
+    });
+
+    // Show widget preview below the line (not when cursor is on it)
+    if (line.number !== cursorLine) {
+      let widget = new CardWidget(cardId, 'block');
+      // Place widget at end of line (side: 1 = after)
+      widgets.push({ from: to, to, widget });
+    }
   }
 
   // Inline cards: :card[URL]
@@ -186,26 +192,16 @@ function buildCardDecorations(
   }
 
   for (let w of widgets) {
-    if (w.from === w.to) {
-      // Widget decoration (no range to replace)
-      allDecorations.push({
-        from: w.from,
-        to: w.to,
-        value: Decoration.widget({
-          widget: w.widget,
-          side: 1,
-        }),
-      });
-    } else {
-      // Replace decoration (block cards not on cursor line)
-      allDecorations.push({
-        from: w.from,
-        to: w.to,
-        value: Decoration.replace({
-          widget: w.widget,
-        }),
-      });
-    }
+    // All widgets are point decorations (placed after the source text)
+    allDecorations.push({
+      from: w.from,
+      to: w.to,
+      value: Decoration.widget({
+        widget: w.widget,
+        side: 1,
+        block: w.widget.kind === 'block',
+      }),
+    });
   }
 
   // Sort by from position, then by to position
