@@ -46,19 +46,17 @@ function isUrlLikeReference(ref: string): boolean {
 }
 
 export function resolveCardReference(
-  reference: string,
+  reference: string | URL,
   relativeTo: URL | string | undefined,
 ): string {
-  if (typeof reference !== 'string') {
-    // Defensive: coerce URL objects to strings. This shouldn't happen but
-    // something is leaking URL objects into CodeRef.module fields.
-    if (reference instanceof URL) {
-      reference = reference.href;
-    } else {
-      throw new Error(
-        `resolveCardReference expected a string but received ${typeof reference}: ${String(reference)} (constructor: ${(reference as any)?.constructor?.name})`,
-      );
-    }
+  // Defensive: coerce URL objects to strings. This shouldn't happen but
+  // something is leaking URL objects into CodeRef.module fields.
+  if (reference instanceof URL) {
+    reference = reference.href;
+  } else if (typeof reference !== 'string') {
+    throw new Error(
+      `resolveCardReference expected a string but received ${typeof reference}: ${String(reference)} (constructor: ${(reference as any)?.constructor?.name})`,
+    );
   }
   for (let [prefix, target] of prefixMappings) {
     if (reference.startsWith(prefix)) {
