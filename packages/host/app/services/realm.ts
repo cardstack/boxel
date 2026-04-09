@@ -1237,8 +1237,11 @@ export default class RealmService extends Service {
       }
       return undefined;
     }
+    // Resolve prefix-form URL for comparison (e.g. @cardstack/base/ → http://...)
+    let resolvedUrl = isRegisteredPrefix(url) ? cardIdToURL(url).href : url;
     for (let [key, value] of this.realms) {
-      if (url.startsWith(key)) {
+      let resolvedKey = isRegisteredPrefix(key) ? cardIdToURL(key).href : key;
+      if (resolvedUrl.startsWith(resolvedKey) || url.startsWith(key)) {
         return value;
       }
     }
