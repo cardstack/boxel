@@ -16,11 +16,10 @@ import {
  * // Returns: ['http://localhost:4201/test/', 'http://localhost:4201/demo/']
  */
 export function normalizeRealms(realms: string[]): string[] {
-  return realms
-    .filter((r) => !isRegisteredPrefix(r))
-    .map((r) => {
-      return new RealmPaths(new URL(r)).url;
-    });
+  return realms.map((r) => {
+    return new RealmPaths(isRegisteredPrefix(r) ? cardIdToURL(r) : new URL(r))
+      .url;
+  });
 }
 
 /**
