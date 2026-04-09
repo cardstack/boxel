@@ -13,13 +13,10 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { test } from './fixtures';
 import { expect } from '@playwright/test';
 
-import {
-  ToolExecutor,
-  ToolNotFoundError,
-} from '../scripts/lib/factory-tool-executor';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
-import { buildFactoryTools } from '../scripts/lib/factory-tool-builder';
-import { fetchCardTypeSchema } from '../scripts/lib/darkfactory-schemas';
+import { ToolExecutor, ToolNotFoundError } from '../src/factory-tool-executor';
+import { ToolRegistry } from '../src/factory-tool-registry';
+import { buildFactoryTools } from '../src/factory-tool-builder';
+import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import {
   baseRealmURLFor,
   DEFAULT_REALM_OWNER,
@@ -192,7 +189,7 @@ test('unregistered tool is rejected without reaching the server', async ({
 // Factory tool (card write) tests against live realm
 // ---------------------------------------------------------------------------
 
-import type { FactoryTool } from '../scripts/lib/factory-tool-builder';
+import type { FactoryTool } from '../src/factory-tool-builder';
 
 type CardWriteResult = { ok: boolean; error?: string };
 type CardReadResult = { ok: boolean; document?: LooseSingleCardDocument };

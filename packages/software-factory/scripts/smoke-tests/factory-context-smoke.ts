@@ -9,23 +9,29 @@
  *   pnpm smoke:context --max-tokens 8000
  */
 
+// This should be first
+import '../../src/setup-logger';
+
 import { parseArgs } from 'node:util';
+import { logger } from '../../src/logger';
 
 import type {
   KnowledgeArticleData,
   ProjectData,
   IssueData,
-} from '../lib/factory-agent';
-import { ContextBuilder } from '../lib/factory-context-builder';
+} from '../../src/factory-agent';
+import { ContextBuilder } from '../../src/factory-context-builder';
 import {
   DefaultSkillResolver,
   estimateTokens,
   SkillLoader,
-} from '../lib/factory-skill-loader';
+} from '../../src/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+let log = logger('factory-context-smoke');
 
 let passed = 0;
 let failed = 0;
@@ -33,10 +39,10 @@ let failed = 0;
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) {
     passed++;
-    console.log(`  \u2713 ${label}`);
+    log.info(`  \u2713 ${label}`);
   } else {
     failed++;
-    console.log(`  \u2717 ${label}${detail ? ` -- ${detail}` : ''}`);
+    log.info(`  \u2717 ${label}${detail ? ` -- ${detail}` : ''}`);
   }
 }
 
@@ -115,7 +121,7 @@ async function main(): Promise<void> {
       !Number.isFinite(maxSkillTokens) ||
       maxSkillTokens <= 0)
   ) {
-    console.error(
+    log.error(
       `Invalid value for --max-tokens: "${values['max-tokens']}". ` +
         'Please provide a positive numeric value.',
     );
@@ -128,14 +134,14 @@ async function main(): Promise<void> {
     maxSkillTokens,
   });
 
-  console.log('');
-  console.log('=== Context Builder Smoke Test ===');
-  console.log('');
+  log.info('');
+  log.info('=== Context Builder Smoke Test ===');
+  log.info('');
 
   for (let { label, issue } of SAMPLE_ISSUES) {
-    console.log(`--- ${label} ---`);
-    console.log(`  Issue: ${issue.title}`);
-    console.log('');
+    log.info(`--- ${label} ---`);
+    log.info(`  Issue: ${issue.title}`);
+    log.info('');
 
     // -------------------------------------------------------------------
     // First pass (no test results)
@@ -148,7 +154,7 @@ async function main(): Promise<void> {
       targetRealmUrl: 'https://example.test/user/target/',
     });
 
-    console.log('  First pass (no test results):');
+    log.info('  First pass (no test results):');
     check('project.id set', ctx.project.id === SAMPLE_PROJECT.id);
     check('issue.id set', ctx.issue.id === issue.id);
     check(
@@ -167,12 +173,12 @@ async function main(): Promise<void> {
     );
 
     let totalTokens = ctx.skills.reduce((s, sk) => s + estimateTokens(sk), 0);
-    console.log(`  Skill breakdown (~${totalTokens} total tokens):`);
+    log.info(`  Skill breakdown (~${totalTokens} total tokens):`);
     for (let skill of ctx.skills) {
       let tokens = estimateTokens(skill);
       let refCount = skill.references?.length ?? 0;
       let refNote = refCount > 0 ? ` + ${refCount} ref(s)` : '';
-      console.log(`    - ${skill.name}: ~${tokens} tokens${refNote}`);
+      log.info(`    - ${skill.name}: ~${tokens} tokens${refNote}`);
     }
 
     // -------------------------------------------------------------------
@@ -199,8 +205,8 @@ async function main(): Promise<void> {
       },
     });
 
-    console.log('');
-    console.log('  Iteration pass (with failed test results):');
+    log.info('');
+    log.info('  Iteration pass (with failed test results):');
     check(
       'testResults.status = failed',
       ctxWithResults.testResults?.status === 'failed',
@@ -226,7 +232,7 @@ async function main(): Promise<void> {
         ctxWithResults.iteration === undefined,
     );
 
-    console.log('');
+    log.info('');
   }
 
   // -----------------------------------------------------------------------
@@ -234,8 +240,8 @@ async function main(): Promise<void> {
   // -----------------------------------------------------------------------
 
   if (maxSkillTokens) {
-    console.log(`--- Budget enforcement (${maxSkillTokens} tokens) ---`);
-    console.log('');
+    log.info(`--- Budget enforcement (${maxSkillTokens} tokens) ---`);
+    log.info('');
 
     let ctx = await builder.build({
       project: SAMPLE_PROJECT,
@@ -250,19 +256,19 @@ async function main(): Promise<void> {
       totalTokens <= maxSkillTokens,
     );
     for (let skill of ctx.skills) {
-      console.log(`    - ${skill.name}: ~${estimateTokens(skill)} tokens`);
+      log.info(`    - ${skill.name}: ~${estimateTokens(skill)} tokens`);
     }
-    console.log('');
+    log.info('');
   }
 
   // -----------------------------------------------------------------------
   // Summary
   // -----------------------------------------------------------------------
 
-  console.log('===========================');
-  console.log(`  ${passed} passed, ${failed} failed`);
-  console.log('===========================');
-  console.log('');
+  log.info('===========================');
+  log.info(`  ${passed} passed, ${failed} failed`);
+  log.info('===========================');
+  log.info('');
 
   if (failed > 0) {
     process.exit(1);
@@ -270,7 +276,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(
+  log.error(
     'Smoke test failed:',
     err instanceof Error ? err.message : String(err),
   );

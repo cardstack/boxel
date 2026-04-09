@@ -9,7 +9,11 @@
  *   pnpm smoke:loop --max-iterations 3
  */
 
+// This should be first
+import '../../src/setup-logger';
+
 import { parseArgs } from 'node:util';
+import { logger } from '../../src/logger';
 
 import type {
   AgentContext,
@@ -17,9 +21,12 @@ import type {
   ProjectData,
   TestResult,
   IssueData,
-} from '../lib/factory-agent';
+} from '../../src/factory-agent';
 
-import type { FactoryTool, ToolCallEntry } from '../lib/factory-tool-builder';
+import type {
+  FactoryTool,
+  ToolCallEntry,
+} from '../../src/factory-tool-builder';
 
 import {
   runFactoryLoop,
@@ -30,11 +37,13 @@ import {
   type FactoryLoopResult,
   type LoopAgent,
   type TestRunner,
-} from '../lib/factory-loop';
+} from '../../src/factory-loop';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+let log = logger('factory-loop-smoke');
 
 let passed = 0;
 let failed = 0;
@@ -42,10 +51,10 @@ let failed = 0;
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) {
     passed++;
-    console.log(`  \u2713 ${label}`);
+    log.info(`  \u2713 ${label}`);
   } else {
     failed++;
-    console.log(`  \u2717 ${label}${detail ? ` -- ${detail}` : ''}`);
+    log.info(`  \u2717 ${label}${detail ? ` -- ${detail}` : ''}`);
   }
 }
 
@@ -192,16 +201,16 @@ function makeBaseConfig(
 }
 
 function printResult(result: FactoryLoopResult): void {
-  console.log(`  outcome:    ${result.outcome}`);
-  console.log(`  iterations: ${result.iterations}`);
-  console.log(`  tool calls: ${result.toolCallLog.length}`);
+  log.info(`  outcome:    ${result.outcome}`);
+  log.info(`  iterations: ${result.iterations}`);
+  log.info(`  tool calls: ${result.toolCallLog.length}`);
   if (result.testResults) {
-    console.log(
+    log.info(
       `  tests:      ${result.testResults.passedCount} passed, ${result.testResults.failedCount} failed`,
     );
   }
   if (result.message) {
-    console.log(`  message:    ${result.message}`);
+    log.info(`  message:    ${result.message}`);
   }
 }
 
@@ -210,8 +219,8 @@ function printResult(result: FactoryLoopResult): void {
 // ---------------------------------------------------------------------------
 
 async function scenarioHappyPath(maxIterations: number): Promise<void> {
-  console.log('--- Scenario 1: Happy path (implement + test pass) ---');
-  console.log('');
+  log.info('--- Scenario 1: Happy path (implement + test pass) ---');
+  log.info('');
 
   let agent = new MockLoopAgent([
     {
@@ -261,12 +270,12 @@ async function scenarioHappyPath(maxIterations: number): Promise<void> {
   check('completed in 1 iteration', result.iterations === 1);
   check('4 tool calls logged', result.toolCallLog.length === 4);
   check('tests passed', result.testResults?.status === 'passed');
-  console.log('');
+  log.info('');
 }
 
 async function scenarioIterationPath(maxIterations: number): Promise<void> {
-  console.log('--- Scenario 2: Iteration path (fail then fix) ---');
-  console.log('');
+  log.info('--- Scenario 2: Iteration path (fail then fix) ---');
+  log.info('');
 
   let agent = new MockLoopAgent([
     {
@@ -323,12 +332,12 @@ async function scenarioIterationPath(maxIterations: number): Promise<void> {
     'context threading: second call had failing testResults',
     agent.receivedContexts[1].testResults?.status === 'failed',
   );
-  console.log('');
+  log.info('');
 }
 
 async function scenarioMaxIterations(maxIterations: number): Promise<void> {
-  console.log(`--- Scenario 3: Max iterations (${maxIterations} failures) ---`);
-  console.log('');
+  log.info(`--- Scenario 3: Max iterations (${maxIterations} failures) ---`);
+  log.info('');
 
   let configs: MockRunConfig[] = [];
   let testResults: TestResult[] = [];
@@ -366,12 +375,12 @@ async function scenarioMaxIterations(maxIterations: number): Promise<void> {
     result.iterations === maxIterations,
   );
   check('last test result was failed', result.testResults?.status === 'failed');
-  console.log('');
+  log.info('');
 }
 
 async function scenarioDoneSignal(): Promise<void> {
-  console.log('--- Scenario 4: Bare done signal (no work) ---');
-  console.log('');
+  log.info('--- Scenario 4: Bare done signal (no work) ---');
+  log.info('');
 
   let result = await runFactoryLoop(
     makeBaseConfig({
@@ -384,12 +393,12 @@ async function scenarioDoneSignal(): Promise<void> {
   check('1 iteration', result.iterations === 1);
   check('no tool calls', result.toolCallLog.length === 0);
   check('no test results', result.testResults === undefined);
-  console.log('');
+  log.info('');
 }
 
 async function scenarioClarification(): Promise<void> {
-  console.log('--- Scenario 5: Clarification needed (blocked) ---');
-  console.log('');
+  log.info('--- Scenario 5: Clarification needed (blocked) ---');
+  log.info('');
 
   let result = await runFactoryLoop(
     makeBaseConfig({
@@ -410,12 +419,12 @@ async function scenarioClarification(): Promise<void> {
   );
   check('message preserved', result.message?.includes('color scheme') ?? false);
   check('tool calls before block recorded', result.toolCallLog.length === 1);
-  console.log('');
+  log.info('');
 }
 
 async function scenarioToolOnlyRound(): Promise<void> {
-  console.log('--- Scenario 6: Tool-only round (read then write) ---');
-  console.log('');
+  log.info('--- Scenario 6: Tool-only round (read then write) ---');
+  log.info('');
 
   let agent = new MockLoopAgent([
     {
@@ -462,7 +471,7 @@ async function scenarioToolOnlyRound(): Promise<void> {
     'all 4 tool calls across both rounds logged',
     result.toolCallLog.length === 4,
   );
-  console.log('');
+  log.info('');
 }
 
 // ---------------------------------------------------------------------------
@@ -484,17 +493,17 @@ async function main(): Promise<void> {
     : 5;
 
   if (!Number.isFinite(maxIterations) || maxIterations <= 0) {
-    console.error(
+    log.error(
       `Invalid --max-iterations: "${values['max-iterations']}". Must be a positive number.`,
     );
     process.exit(1);
   }
 
-  console.log('');
-  console.log('=== Factory Loop Smoke Test ===');
-  console.log('');
-  console.log(`maxIterations: ${maxIterations}`);
-  console.log('');
+  log.info('');
+  log.info('=== Factory Loop Smoke Test ===');
+  log.info('');
+  log.info(`maxIterations: ${maxIterations}`);
+  log.info('');
 
   await scenarioHappyPath(maxIterations);
   await scenarioIterationPath(maxIterations);
@@ -503,10 +512,10 @@ async function main(): Promise<void> {
   await scenarioClarification();
   await scenarioToolOnlyRound();
 
-  console.log('===========================');
-  console.log(`  ${passed} passed, ${failed} failed`);
-  console.log('===========================');
-  console.log('');
+  log.info('===========================');
+  log.info(`  ${passed} passed, ${failed} failed`);
+  log.info('===========================');
+  log.info('');
 
   if (failed > 0) {
     process.exit(1);
@@ -514,7 +523,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(
+  log.error(
     'Smoke test failed:',
     err instanceof Error ? err.message : String(err),
   );

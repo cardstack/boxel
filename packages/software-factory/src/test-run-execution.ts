@@ -2,6 +2,8 @@ import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { normalize, resolve } from 'node:path';
 
+import { logger } from './logger';
+
 import { chromium } from '@playwright/test';
 
 import { ensureTrailingSlash, searchRealm } from './realm-operations';
@@ -13,6 +15,8 @@ import type {
   TestRunHandle,
   TestRunRealmOptions,
 } from './test-run-types';
+
+let log = logger('test-run-execution');
 
 // ---------------------------------------------------------------------------
 // Resume Logic
@@ -45,13 +49,17 @@ export async function resolveTestRun(
   if (resumeResult) {
     return {
       testRunId: resumeResult.testRunId,
+      sequenceNumber: resumeResult.sequenceNumber,
       status: 'running',
       resumed: true,
       pendingTests: resumeResult.pendingTests,
     };
   }
 
-  let sequenceNumber = await getNextSequenceNumber(realmOptions);
+  let sequenceNumber = await getNextSequenceNumber(
+    realmOptions,
+    options.lastSequenceNumber,
+  );
 
   let createResult = await createTestRun(options.slug, options.testNames, {
     ...realmOptions,
@@ -63,6 +71,7 @@ export async function resolveTestRun(
   if (!createResult.created) {
     return {
       testRunId: createResult.testRunId,
+      sequenceNumber,
       status: 'error',
       errorMessage: `Failed to create TestRun: ${createResult.error}`,
       resumed: false,
@@ -71,6 +80,7 @@ export async function resolveTestRun(
 
   return {
     testRunId: createResult.testRunId,
+    sequenceNumber,
     status: 'running',
     resumed: false,
   };
@@ -133,6 +143,7 @@ async function findResumableTestRun(
 
 async function getNextSequenceNumber(
   options: TestRunRealmOptions,
+  minSequenceNumber = 0,
 ): Promise<number> {
   let result = await searchRealm(
     options.targetRealmUrl,
@@ -151,7 +162,8 @@ async function getNextSequenceNumber(
         | { attributes?: { sequenceNumber?: number } }
         | undefined)
     : undefined;
-  return (latest?.attributes?.sequenceNumber ?? 0) + 1;
+  let fromIndex = latest?.attributes?.sequenceNumber ?? 0;
+  return Math.max(fromIndex, minSequenceNumber) + 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,6 +430,7 @@ export async function executeTestRunFromRealm(
     return resolved;
   }
   let testRunId = resolved.testRunId;
+  let sequenceNumber = resolved.sequenceNumber;
 
   // Step 2: Serve a custom QUnit test page and navigate Playwright to it.
   let start = Date.now();
@@ -427,7 +440,7 @@ export async function executeTestRunFromRealm(
   try {
     // Locate the host app's dist directory — contains tests/index.html and assets
     let hostDistDir =
-      options.hostDistDir ?? resolve(__dirname, '../../../host/dist');
+      options.hostDistDir ?? resolve(__dirname, '../../host/dist');
 
     // Start a local server to serve both the test HTML page and the host's
     // dist assets. All asset references point to our server, so no external
@@ -449,8 +462,8 @@ export async function executeTestRunFromRealm(
     });
     setHtml(html);
 
-    console.error(
-      `[test-run-execution] Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmUrl}`,
+    log.info(
+      `Serving QUnit page at ${testPageUrl} for realm ${options.targetRealmUrl}`,
     );
 
     browser = await chromium.launch({ headless: true });
@@ -459,10 +472,10 @@ export async function executeTestRunFromRealm(
     // Forward browser console when debug is enabled
     if (options.debug) {
       page.on('console', (msg) => {
-        console.error(`[browser] ${msg.type()}: ${msg.text()}`);
+        log.debug(`[browser] ${msg.type()}: ${msg.text()}`);
       });
       page.on('pageerror', (err) => {
-        console.error(`[browser] PAGE ERROR: ${err.message}`);
+        log.debug(`[browser] PAGE ERROR: ${err.message}`);
       });
     }
 
@@ -497,8 +510,8 @@ export async function executeTestRunFromRealm(
     );
 
     let durationMs = Date.now() - start;
-    console.error(
-      `[test-run-execution] QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
+    log.info(
+      `QUnit completed in ${durationMs}ms: ${qunitResults.runEnd?.testCounts?.total ?? 0} test(s)`,
     );
 
     // Step 3: Parse results and complete the TestRun card.
@@ -513,6 +526,7 @@ export async function executeTestRunFromRealm(
 
     return {
       testRunId,
+      sequenceNumber,
       status: attrs.status,
       ...(attrs.errorMessage ? { errorMessage: attrs.errorMessage } : {}),
       ...(completeResult.error ? { error: completeResult.error } : {}),
@@ -520,9 +534,7 @@ export async function executeTestRunFromRealm(
   } catch (err) {
     let durationMs = Date.now() - start;
     let errorMessage = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[test-run-execution] Error: ${errorMessage} (${durationMs}ms)`,
-    );
+    log.error(`Error: ${errorMessage} (${durationMs}ms)`);
     try {
       await completeTestRun(
         testRunId,
@@ -539,7 +551,7 @@ export async function executeTestRunFromRealm(
     } catch {
       // Best-effort
     }
-    return { testRunId, status: 'error', errorMessage };
+    return { testRunId, sequenceNumber, status: 'error', errorMessage };
   } finally {
     if (browser) {
       await browser.close().catch(() => {});

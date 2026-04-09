@@ -15,13 +15,13 @@ import {
   validateAgentActions,
   type AgentAction,
   type AgentContext,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 
 import {
   DONE_SIGNAL,
   CLARIFICATION_SIGNAL,
   type FactoryTool,
-} from '../scripts/lib/factory-tool-builder';
+} from '../src/factory-tool-builder';
 
 // ---------------------------------------------------------------------------
 // Fixtures

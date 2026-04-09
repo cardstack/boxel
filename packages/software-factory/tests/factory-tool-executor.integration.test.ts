@@ -3,8 +3,8 @@ import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
-import { ToolExecutor } from '../scripts/lib/factory-tool-executor';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+import { ToolExecutor } from '../src/factory-tool-executor';
+import { ToolRegistry } from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Test server helpers

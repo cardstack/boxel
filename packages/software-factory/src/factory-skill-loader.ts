@@ -7,7 +7,7 @@ import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '../..');
+const PACKAGE_ROOT = resolve(__dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
 
@@ -231,7 +231,7 @@ export class SkillLoader implements SkillLoaderInterface {
         results.push(skill);
       } catch (error) {
         console.warn(
-          `[SkillLoader] Skipping unavailable skill "${name}": ${
+          `Skipping unavailable skill "${name}": ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
@@ -379,7 +379,7 @@ export function enforceSkillBudget(
 
     if (usedTokens + skillTokens > maxTokens) {
       console.warn(
-        `[SkillBudget] Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
+        `Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
           `would exceed budget of ${maxTokens} (used: ${usedTokens})`,
       );
       continue;

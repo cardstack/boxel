@@ -7,18 +7,18 @@ import type {
   TestResult,
   ValidationResults,
   IssueData,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 
 import {
   ContextBuilder,
   type ContextBuilderConfig,
   type IssueRelationshipLoader,
-} from '../scripts/lib/factory-context-builder';
+} from '../src/factory-context-builder';
 
 import type {
   SkillLoaderInterface,
   SkillResolver,
-} from '../scripts/lib/factory-skill-loader';
+} from '../src/factory-skill-loader';
 
 // ---------------------------------------------------------------------------
 // Test doubles
