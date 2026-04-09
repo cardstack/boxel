@@ -377,7 +377,24 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   _applyTargets = () => {
     this._slotUpdatePending = false;
-    this._widgetTargets = this._pendingTargets;
+    let pending = this._pendingTargets;
+    let current = this._widgetTargets;
+
+    // Skip update if targets are structurally identical — avoids
+    // unnecessary Glimmer re-renders that mutate CM6's DOM.
+    if (
+      current.length === pending.length &&
+      current.every(
+        (t, i) =>
+          t.cardId === pending[i].cardId &&
+          t.kind === pending[i].kind &&
+          t.element === pending[i].element,
+      )
+    ) {
+      return;
+    }
+
+    this._widgetTargets = pending;
   };
 
   getCardComponent = (card: BaseDef) => getComponent(card);
@@ -416,6 +433,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     let state = cm.createEditorState({
       content: content || '',
       onDocChange: (text: string) => {
+        // Keep lastExternalContent in sync so the modifier doesn't
+        // treat the debounced save echo as an external content change
+        // (which would destroy and recreate the editor, losing focus).
+        this.lastExternalContent = text;
         if (onUpdate) {
           // Debounced save
           if (this.saveTimer) {
