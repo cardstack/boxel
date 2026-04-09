@@ -47,7 +47,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: `${baseRealm.url}file-api`,
+            module: `${baseRealm.url}card-api`,
             name: 'FileDef',
           },
         },
@@ -223,7 +223,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 on: {
-                  module: `${baseRealm.url}file-api`,
+                  module: `${baseRealm.url}card-api`,
                   name: 'FileDef',
                 },
                 eq: {
