@@ -38,7 +38,29 @@ echo "Registering realm users..."
 pnpm --dir=../matrix register-realm-users
 
 echo "Waiting for realm readiness..."
-wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ')
+TIMEOUT=1800
+ELAPSED=0
+IFS='|'
+while [ $ELAPSED -lt $TIMEOUT ]; do
+  ALL_READY=true
+  for raw_url in $READINESS_URLS; do
+    url=$(echo "$raw_url" | sed 's|^http-get://|http://|')
+    if ! curl --output /dev/null --silent --fail "$url" 2>/dev/null; then
+      ALL_READY=false
+      break
+    fi
+  done
+  unset IFS
+  if $ALL_READY; then break; fi
+  sleep 5
+  ELAPSED=$((ELAPSED + 5))
+  IFS='|'
+done
+unset IFS
+if [ $ELAPSED -ge $TIMEOUT ]; then
+  echo "Timed out waiting for realm readiness after ${TIMEOUT}s"
+  exit 1
+fi
 
 echo "All realms ready. Dumping index tables..."
 docker exec boxel-pg pg_dump -U postgres --data-only \
