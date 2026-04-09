@@ -667,7 +667,7 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(new URL(this.realmURL));
+      let realmPath = new RealmPaths(cardIdToURL(this.realmURL));
 
       if (realmPath.inRealm(this._state.codePath)) {
         try {
@@ -689,7 +689,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   onFileSelected = async (entryPath: LocalPath) => {
-    let fileUrl = new RealmPaths(new URL(this.realmURL)).fileURL(entryPath);
+    let fileUrl = new RealmPaths(cardIdToURL(this.realmURL)).fileURL(entryPath);
     await this.updateCodePath(fileUrl);
   };
 
@@ -1237,7 +1237,7 @@ export default class OperatorModeStateService extends Service {
     this.updateSubmode(Submodes.Interact);
 
     this._state.workspaceChooserOpened = false;
-    this.cachedRealmURL = new URL(realmUrl);
+    this.cachedRealmURL = cardIdToURL(realmUrl);
   };
 
   get workspaceChooserOpened() {
