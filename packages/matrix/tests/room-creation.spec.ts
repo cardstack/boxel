@@ -339,11 +339,10 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room]);
   });
 
-  test('it opens latest room available (or creates new) when current room is deleted', {
-    timeout: 120_000,
-  }, async ({
+  test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
+    test.setTimeout(120_000);
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
