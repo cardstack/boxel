@@ -17,7 +17,6 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   baseRealm,
-  fieldSerializer,
   fields,
   isSingleCardDocument,
   localId,
@@ -68,7 +67,6 @@ import {
   getQueryableValue,
   EthereumAddressField,
   RichMarkdownField,
-  MarkdownField,
   getFields,
 } from '../../helpers/base-realm';
 
@@ -7815,8 +7813,8 @@ module('Integration | serialization', function (hooks) {
 
         assert.strictEqual(
           post.body.content,
-          null,
-          'content is null when body is null',
+          undefined,
+          'content is undefined when body is null',
         );
       });
 

@@ -506,6 +506,17 @@ function cardTypeFor(
     .constructor as typeof BaseDef;
 }
 
+function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
+  if (
+    !(primitive in cardClass) &&
+    cardClass.hasOwnProperty(deserialize)
+  ) {
+    throw new Error(
+      `${cardClass.name} overrides [deserialize] directly. Composite fields must use a registered fieldSerializer instead.`,
+    );
+  }
+}
+
 class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   FieldT,
   any[] | null
@@ -756,9 +767,19 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
                   }),
               );
             }
-            return (
-              await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, store, opts);
+            let cardClass = await cardClassFromResource(
+              resource,
+              this.card,
+              relativeTo,
+            );
+            assertNoDeserializeOverride(cardClass);
+            return cardClass[deserialize](
+              resource,
+              relativeTo,
+              doc,
+              store,
+              opts,
+            );
           }
         }),
       ),
@@ -999,9 +1020,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           ]),
       );
     }
-    return (await cardClassFromResource(resource, this.card, relativeTo))[
-      deserialize
-    ](resource, relativeTo, doc, store, opts);
+    let cardClass = await cardClassFromResource(
+      resource,
+      this.card,
+      relativeTo,
+    );
+    assertNoDeserializeOverride(cardClass);
+    return cardClass[deserialize](resource, relativeTo, doc, store, opts);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -2202,14 +2227,6 @@ export class BaseDef {
   ): Promise<BaseInstanceType<T>> {
     if (primitive in this) {
       return data;
-    }
-    if (
-      this.hasOwnProperty(deserialize) &&
-      this !== (BaseDef as unknown as T)
-    ) {
-      throw new Error(
-        `${this.name} overrides [deserialize] directly. Composite fields must use a registered fieldSerializer instead.`,
-      );
     }
     return _createFromSerialized(this, data, doc, relativeTo, store, opts);
   }
