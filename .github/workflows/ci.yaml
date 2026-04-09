@@ -822,7 +822,7 @@ jobs:
   cache-index:
     name: Cache realm index
     needs: [change-check, test-web-assets]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/cache-index-development-cs-10664'
     runs-on: ubuntu-latest
     concurrency:
       group: cache-index-${{ github.run_id }}
