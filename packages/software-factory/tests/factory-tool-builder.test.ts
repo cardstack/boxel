@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import type { ToolResult } from '../scripts/lib/factory-agent';
+import type { ToolResult } from '../src/factory-agent';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
@@ -9,13 +9,13 @@ import {
   type ToolBuilderConfig,
   type DoneResult,
   type ClarificationResult,
-} from '../scripts/lib/factory-tool-builder';
-import type { ToolExecutor } from '../scripts/lib/factory-tool-executor';
-import { ToolRegistry } from '../scripts/lib/factory-tool-registry';
+} from '../src/factory-tool-builder';
+import type { ToolExecutor } from '../src/factory-tool-executor';
+import { ToolRegistry } from '../src/factory-tool-registry';
 import type {
   ExecuteTestRunOptions,
   TestRunHandle,
-} from '../scripts/lib/test-run-types';
+} from '../src/test-run-types';
 
 // ---------------------------------------------------------------------------
 // Helpers

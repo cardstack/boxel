@@ -15,7 +15,7 @@ import type {
 // Constants
 // ---------------------------------------------------------------------------
 
-const PROMPTS_DIR = resolve(__dirname, '../../prompts');
+const PROMPTS_DIR = resolve(__dirname, '../prompts');
 
 // ---------------------------------------------------------------------------
 // PromptLoader

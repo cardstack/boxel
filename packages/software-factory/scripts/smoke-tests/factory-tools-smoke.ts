@@ -9,25 +9,31 @@
  *   pnpm smoke:tools
  */
 
+// This should be first
+import '../../src/setup-logger';
+
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import { logger } from '../../src/logger';
 
 import {
   ToolExecutor,
   ToolNotFoundError,
   ToolSafetyError,
-} from '../lib/factory-tool-executor';
+} from '../../src/factory-tool-executor';
 import {
   buildFactoryTools,
   DONE_SIGNAL,
   CLARIFICATION_SIGNAL,
   type DoneResult,
   type ClarificationResult,
-} from '../lib/factory-tool-builder';
-import { ToolRegistry } from '../lib/factory-tool-registry';
+} from '../../src/factory-tool-builder';
+import { ToolRegistry } from '../../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+let log = logger('factory-tools-smoke');
 
 let passed = 0;
 let failed = 0;
@@ -35,10 +41,10 @@ let failed = 0;
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) {
     passed++;
-    console.log(`  \u2713 ${label}`);
+    log.info(`  \u2713 ${label}`);
   } else {
     failed++;
-    console.log(`  \u2717 ${label}${detail ? ` -- ${detail}` : ''}`);
+    log.info(`  \u2717 ${label}${detail ? ` -- ${detail}` : ''}`);
   }
 }
 
@@ -51,15 +57,15 @@ async function main(): Promise<void> {
   // 1. Registry
   // -----------------------------------------------------------------------
 
-  console.log('');
-  console.log('=== Tool Registry ===');
-  console.log('');
+  log.info('');
+  log.info('=== Tool Registry ===');
+  log.info('');
 
   let registry = new ToolRegistry();
   let manifests = registry.getManifests();
 
-  console.log(`Registered tools: ${manifests.length}`);
-  console.log('');
+  log.info(`Registered tools: ${manifests.length}`);
+  log.info('');
 
   let byCategory: Record<string, string[]> = {};
   for (let m of manifests) {
@@ -67,7 +73,7 @@ async function main(): Promise<void> {
   }
 
   for (let [category, names] of Object.entries(byCategory)) {
-    console.log(`  ${category} (${names.length}):`);
+    log.info(`  ${category} (${names.length}):`);
     for (let name of names) {
       let manifest = registry.getManifest(name)!;
       let requiredArgs = manifest.args
@@ -76,7 +82,7 @@ async function main(): Promise<void> {
       let optionalArgs = manifest.args
         .filter((a) => !a.required)
         .map((a) => a.name);
-      console.log(
+      log.info(
         `    - ${name}  [${manifest.outputFormat}]` +
           (requiredArgs.length
             ? `  required: ${requiredArgs.join(', ')}`
@@ -84,7 +90,7 @@ async function main(): Promise<void> {
           (optionalArgs.length ? `  optional: ${optionalArgs.join(', ')}` : ''),
       );
     }
-    console.log('');
+    log.info('');
   }
 
   check('has script tools', byCategory['script']?.length === 4);
@@ -99,9 +105,9 @@ async function main(): Promise<void> {
   // 2. Argument validation
   // -----------------------------------------------------------------------
 
-  console.log('');
-  console.log('=== Argument Validation ===');
-  console.log('');
+  log.info('');
+  log.info('=== Argument Validation ===');
+  log.info('');
 
   let validErrors = registry.validateArgs('search-realm', {
     realm: 'http://example.test/',
@@ -124,9 +130,9 @@ async function main(): Promise<void> {
   // 3. Safety constraints
   // -----------------------------------------------------------------------
 
-  console.log('');
-  console.log('=== Safety Constraints ===');
-  console.log('');
+  log.info('');
+  log.info('=== Safety Constraints ===');
+  log.info('');
 
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
@@ -169,9 +175,9 @@ async function main(): Promise<void> {
   // 4. Mocked realm-api round-trip
   // -----------------------------------------------------------------------
 
-  console.log('');
-  console.log('=== Realm API Round-Trip (mock) ===');
-  console.log('');
+  log.info('');
+  log.info('=== Realm API Round-Trip (mock) ===');
+  log.info('');
 
   let mockCallCount = 0;
 
@@ -183,7 +189,7 @@ async function main(): Promise<void> {
       mockCallCount++;
       let url = String(input);
       let method = init?.method ?? 'GET';
-      console.log(`  -> ${method} ${url}`);
+      log.info(`  -> ${method} ${url}`);
       return new Response(
         JSON.stringify({
           data: [{ id: 'CardDef/hello', type: 'card' }],
@@ -223,9 +229,9 @@ async function main(): Promise<void> {
   // 5. FactoryTool builder
   // -----------------------------------------------------------------------
 
-  console.log('');
-  console.log('=== Factory Tool Builder ===');
-  console.log('');
+  log.info('');
+  log.info('=== Factory Tool Builder ===');
+  log.info('');
 
   let toolBuilderFetchCount = 0;
   let toolBuilderFetch = (async (
@@ -235,7 +241,7 @@ async function main(): Promise<void> {
     toolBuilderFetchCount++;
     let url = String(input);
     let method = init?.method ?? 'GET';
-    console.log(`  -> ${method} ${url}`);
+    log.info(`  -> ${method} ${url}`);
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { 'Content-Type': SupportedMimeType.JSON },
@@ -264,14 +270,14 @@ async function main(): Promise<void> {
   );
 
   let toolNames = factoryTools.map((t) => t.name);
-  console.log(`  Built ${factoryTools.length} tools:`);
-  console.log(
+  log.info(`  Built ${factoryTools.length} tools:`);
+  log.info(
     `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
   );
-  console.log(
+  log.info(
     `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
   );
-  console.log('');
+  log.info('');
 
   check('has write_file tool', toolNames.includes('write_file'));
   check('has read_file tool', toolNames.includes('read_file'));
@@ -340,11 +346,11 @@ async function main(): Promise<void> {
   // Summary
   // -----------------------------------------------------------------------
 
-  console.log('');
-  console.log('===========================');
-  console.log(`  ${passed} passed, ${failed} failed`);
-  console.log('===========================');
-  console.log('');
+  log.info('');
+  log.info('===========================');
+  log.info(`  ${passed} passed, ${failed} failed`);
+  log.info('===========================');
+  log.info('');
 
   if (failed > 0) {
     process.exit(1);
@@ -352,7 +358,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(
+  log.error(
     'Smoke test failed:',
     err instanceof Error ? err.message : String(err),
   );

@@ -15,6 +15,8 @@
 
 import { resolve } from 'node:path';
 
+import { logger } from './logger';
+
 import type {
   IssueCard,
   KnowledgeArticle,
@@ -65,13 +67,15 @@ import {
 import { executeTestRunFromRealm } from './test-run-execution';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
 
-import type { FactoryBootstrapResult } from '../../src/factory-bootstrap';
+import type { FactoryBootstrapResult } from './factory-bootstrap';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '../..');
+let log = logger('factory-implement');
+
+const PACKAGE_ROOT = resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -248,10 +252,10 @@ export async function runFactoryImplement(
   if (loopResult.outcome === 'tests_passed' || loopResult.outcome === 'done') {
     try {
       await updateIssueStatus(targetRealmUrl, issue.id, 'done', fetchOptions);
-      console.error('[factory-implement] Updated issue status to done');
+      log.info('Updated issue status to done');
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not update issue status: ${
+      log.warn(
+        `Could not update issue status: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -405,9 +409,7 @@ async function fetchCardData(
       knowledge.push(card);
     } catch {
       // Non-fatal: knowledge articles are supplementary
-      console.warn(
-        `[factory-implement] Could not fetch knowledge article: ${ka.id}`,
-      );
+      log.warn(`Could not fetch knowledge article: ${ka.id}`);
     }
   }
 
@@ -463,6 +465,7 @@ function buildTestRunner(
   toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {
+  let lastSequenceNumber = 0;
   return async (): Promise<TestResult> => {
     let wroteTestFiles = toolCallLog.some(
       (entry) =>
@@ -512,9 +515,7 @@ function buildTestRunner(
     let start = Date.now();
 
     try {
-      console.error(
-        `[factory-implement] Running test file(s) for issue: ${slug}`,
-      );
+      log.info(`Running test file(s) for issue: ${slug}`);
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
@@ -526,12 +527,17 @@ function buildTestRunner(
         realmServerUrl: runConfig.realmServerUrl,
         hostAppUrl: runConfig.hostAppUrl,
         forceNew: true,
+        lastSequenceNumber,
       });
 
+      // Track the sequence number so the next iteration doesn't reuse it
+      // even if the realm search index hasn't caught up yet.
+      if (handle.sequenceNumber != null) {
+        lastSequenceNumber = handle.sequenceNumber;
+      }
+
       let durationMs = Date.now() - start;
-      console.error(
-        `[factory-implement] Test run complete: status=${handle.status} (${durationMs}ms)`,
-      );
+      log.info(`Test run complete: status=${handle.status} (${durationMs}ms)`);
 
       if (handle.status === 'passed') {
         return {
@@ -579,8 +585,8 @@ function buildTestRunner(
       }
     } catch (error) {
       let durationMs = Date.now() - start;
-      console.error(
-        `[factory-implement] Test execution error: ${
+      log.error(
+        `Test execution error: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -771,8 +777,8 @@ async function loadDarkFactorySchemas(
         schemas.set(cardName, schema);
       }
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not fetch schema for ${cardName}: ${
+      log.warn(
+        `Could not fetch schema for ${cardName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -792,8 +798,8 @@ async function loadDarkFactorySchemas(
         schemas.set(name, schema);
       }
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not fetch schema for ${name}: ${
+      log.warn(
+        `Could not fetch schema for ${name}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

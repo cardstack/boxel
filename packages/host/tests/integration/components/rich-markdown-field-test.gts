@@ -1,4 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
+import { waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -11,6 +12,8 @@ import {
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
 import {
   provideConsumeContext,
   setupCardLogs,
@@ -22,6 +25,7 @@ import {
   setupBaseRealm,
   CardDef,
   Component,
+  StringField,
   RichMarkdownField,
   contains,
   field,
@@ -310,5 +314,342 @@ module('Integration | RichMarkdownField', function (hooks) {
       root.textContent!.includes('This is the footnote content'),
       'footnote content is present',
     );
+  });
+
+  test('linkedCards render inside the markdown when card is loaded from realm', async function (assert) {
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded><@fields.name /></div>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline ref: :card[${testRealmURL}Pet/mango]\n\nBlock ref:\n\n::card[${testRealmURL}Pet/mango]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+
+    assert
+      .dom('[data-test-pet-atom]')
+      .exists(
+        'inline card reference renders the referenced card in atom format',
+      );
+    assert
+      .dom('[data-test-pet-atom]')
+      .hasText('Mango', 'inline atom shows the correct card');
+
+    assert
+      .dom('[data-test-pet-embedded]')
+      .exists(
+        'block card reference renders the referenced card in embedded format',
+      );
+    assert
+      .dom('[data-test-pet-embedded]')
+      .hasText('Mango', 'block embedded shows the correct card');
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotExist('no unresolved Pill remains after card resolves (inline)');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .doesNotExist('no unresolved Pill remains after card resolves (block)');
+  });
+
+  test('card references show loading shimmer before linkedCards resolves, not broken Pills', async function (assert) {
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline ref: :card[${testRealmURL}Pet/mango]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    // Use a MutationObserver to detect if an unresolved Pill *ever* appears
+    // during the loading→resolved transition. This catches regressions where
+    // a deferred timer prematurely enables unresolved Pills, even if the flash
+    // is too brief for a point-in-time assertion to catch.
+    let unresolvedPillEverAppeared = false;
+    let testRoot = document.querySelector('#ember-testing')!;
+    let testObserver = new MutationObserver(() => {
+      if (
+        testRoot.querySelector('[data-test-markdown-bfm-unresolved-inline]')
+      ) {
+        unresolvedPillEverAppeared = true;
+      }
+    });
+    testObserver.observe(testRoot, { childList: true, subtree: true });
+
+    let inlineRef = document.querySelector('[data-boxel-bfm-inline-ref]');
+    assert.ok(inlineRef, 'card ref element exists in the DOM');
+
+    // Wait for the card to resolve
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+
+    testObserver.disconnect();
+
+    assert.false(
+      unresolvedPillEverAppeared,
+      'no broken Pill flashed during the loading→resolved transition',
+    );
+    assert
+      .dom('[data-test-pet-atom]')
+      .hasText('Mango', 'card resolves correctly');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotExist('no unresolved Pill after card resolves');
+  });
+
+  test('unresolved card references render as muted Pill indicators', async function (assert) {
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'article.gts': { ArticleCard },
+        'article-unresolved.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline: :card[https://nonexistent.example/Pet/missing]\n\nBlock:\n\n::card[https://nonexistent.example/BlogPost/gone]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(
+      `${testRealmURL}article-unresolved`,
+    )) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitUntil(
+      () =>
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
+      { timeout: 10_000 },
+    );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasText('Pet', 'inline unresolved ref shows type name in Pill');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/Pet/missing',
+        'inline Pill title shows the raw URL',
+      );
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .exists('block unresolved ref renders a Pill');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .hasAttribute(
+        'title',
+        'https://nonexistent.example/BlogPost/gone',
+        'block Pill title shows the raw URL',
+      );
+  });
+
+  test('linkedCards resolve when markdown uses relative card references', async function (assert) {
+    class Pet extends CardDef {
+      static displayName = 'Pet';
+      @field name = contains(StringField);
+      @field cardTitle = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.name;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-pet-embedded><@fields.name /></div>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <span data-test-pet-atom>{{@model.name}}</span>
+        </template>
+      };
+    }
+
+    class ArticleCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'pet.gts': { Pet },
+        'article.gts': { ArticleCard },
+        'Pet/mango.json': {
+          data: {
+            attributes: { name: 'Mango', cardTitle: 'Mango' },
+            meta: {
+              adoptsFrom: { module: '../pet', name: 'Pet' },
+            },
+          },
+        },
+        'article-1.json': {
+          data: {
+            attributes: {
+              body: {
+                content: `Inline ref: :card[./Pet/mango]\n\nBlock ref:\n\n::card[./Pet/mango]\n`,
+              },
+            },
+            meta: {
+              adoptsFrom: { module: './article', name: 'ArticleCard' },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let article = (await store.get(`${testRealmURL}article-1`)) as BaseDef;
+    await store.loaded();
+
+    await renderCard(loader, article, 'isolated');
+
+    await waitFor('[data-test-pet-atom]', { timeout: 10_000 });
+
+    assert
+      .dom('[data-test-pet-atom]')
+      .exists(
+        'inline card reference with relative path renders the referenced card',
+      );
+    assert
+      .dom('[data-test-pet-atom]')
+      .hasText('Mango', 'inline atom shows the correct card');
+
+    assert
+      .dom('[data-test-pet-embedded]')
+      .exists(
+        'block card reference with relative path renders the referenced card',
+      );
+    assert
+      .dom('[data-test-pet-embedded]')
+      .hasText('Mango', 'block embedded shows the correct card');
+
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-inline]')
+      .doesNotExist('no unresolved Pill remains after card resolves (inline)');
+    assert
+      .dom('[data-test-markdown-bfm-unresolved-block]')
+      .doesNotExist('no unresolved Pill remains after card resolves (block)');
   });
 });

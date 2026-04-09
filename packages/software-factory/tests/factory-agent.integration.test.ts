@@ -7,7 +7,7 @@ import {
   OpenRouterFactoryAgent,
   type AgentAction,
   type AgentContext,
-} from '../scripts/lib/factory-agent';
+} from '../src/factory-agent';
 
 // ---------------------------------------------------------------------------
 // Helpers
