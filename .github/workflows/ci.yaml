@@ -409,10 +409,10 @@ jobs:
           retention-days: 30
 
       - name: Upload blob report to GitHub Actions Artifacts
-        if: ${{ !cancelled() && matrix.repeat == 1 }}
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         with:
-          name: blob-report-${{ matrix.shardIndex }}
+          name: blob-report-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: packages/matrix/blob-report
           retention-days: 1
 
@@ -458,10 +458,16 @@ jobs:
         with:
           path: all-blob-reports
           pattern: blob-report-*
-          merge-multiple: true
+
+      - name: Flatten blob reports into a single directory
+        run: |
+          mkdir -p all-blob-reports-flat
+          i=0; for f in all-blob-reports/**/*.zip; do
+            cp "$f" "all-blob-reports-flat/$((i++))-$(basename "$f")"
+          done
 
       - name: Merge blobs into one single report
-        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports-flat
 
       - name: Upload HTML report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
