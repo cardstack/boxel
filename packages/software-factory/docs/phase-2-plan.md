@@ -169,6 +169,7 @@ while (
 
   // Inner loop: multiple iterations per issue
   let validationResults = undefined;
+  let exitReason = 'max_iterations';
   for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
     let context = await contextBuilder.buildForIssue({
       issue,
@@ -184,10 +185,24 @@ while (
     // Read issue state from realm (not from AgentRunResult.status)
     issue = await scheduler.refreshIssueState(issue);
 
-    if (issue.status === 'done' || issue.status === 'blocked') break;
+    if (issue.status === 'done' || issue.status === 'blocked') {
+      exitReason = issue.status;
+      break;
+    }
   }
 
-  if (exitReason === 'max_iterations') exhaustedIssues.add(issue.id);
+  if (exitReason === 'max_iterations') {
+    // If validation still failing at max iterations, block the issue
+    // with the reason and failure context written to the realm
+    if (validationResults && !validationResults.passed) {
+      exitReason = 'blocked';
+      await issueStore.updateIssue(issue.id, {
+        status: 'blocked',
+        description: buildMaxIterationBlockedDescription(validationResults),
+      });
+    }
+    exhaustedIssues.add(issue.id);
+  }
 
   // Reload to pick up new issues the agent may have created
   await scheduler.loadIssues();
@@ -196,7 +211,9 @@ while (
 
 The agent signals progress by updating the issue — tagging it as blocked, marking it done, or leaving it in progress for another iteration. The orchestrator reads issue state from the realm after each agent turn, then runs validation. Validation failures are fed back as context in the next inner-loop iteration so the agent can self-correct. The agent can also create new issues via tool calls if it determines a failure requires separate work.
 
-All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, and validation.
+The orchestrator also **writes** to the realm in one case: when max iterations are reached with failing validation, it updates the issue's status to `blocked` and writes the formatted validation failure context into the issue description. This uses `IssueStore.updateIssue()`, which performs a read-modify-write against the realm card.
+
+All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, validation, and max-iteration blocking.
 
 ### Issue Loading via searchRealm()
 
@@ -316,13 +333,13 @@ CS-10671 trims and renames the current schema as a first step. The adoption from
 
 ```
 backlog → in_progress → done
-                      → blocked (needs human input)
+                      → blocked (needs human input or max iterations with failing validation)
                       → review (optional)
 ```
 
-Issues that exhaust `maxIterationsPerIssue` without completing stay in their current status but are excluded from re-picking in the same loop run via an `exhaustedIssues` set.
-
 The agent manages its own transitions by updating the issue directly (e.g., tagging as blocked, marking done). The orchestrator reads the issue state after the agent exits to decide what to do next — it does not inspect the agent's return value for status.
+
+The orchestrator also transitions issues to `blocked` in one case: when max iterations are reached with validation still failing. It writes the reason ("max iteration limit reached") and the formatted validation failure context into the issue description via `IssueStore.updateIssue()`, making the blocking reason visible in the realm. Issues blocked this way are also added to an `exhaustedIssues` set to prevent re-selection within the same run.
 
 ## Migration Path from Phase 1
 
@@ -485,7 +502,7 @@ The principle that boxel-cli owns the entire Boxel API surface extends to auth. 
 
 1. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
 
-2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — no `--jwt` flag, no token passing.
+2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
 
 3. **Programmatic auth API** — Export a `BoxelAuth` class (or similar) so the factory imports it and never constructs HTTP requests or manages tokens:
 

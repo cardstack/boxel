@@ -14,11 +14,11 @@ export class NoOpStepRunner implements ValidationStepRunner {
     this.step = step;
   }
 
-  async run(): Promise<ValidationStepResult> {
+  async run(_targetRealmUrl: string): Promise<ValidationStepResult> {
     return { step: this.step, passed: true, errors: [] };
   }
 
-  formatForContext(): string {
+  formatForContext(_result: ValidationStepResult): string {
     return '';
   }
 }
