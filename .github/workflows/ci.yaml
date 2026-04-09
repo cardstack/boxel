@@ -409,10 +409,10 @@ jobs:
           retention-days: 30
 
       - name: Upload blob report to GitHub Actions Artifacts
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.repeat == 1 }}
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         with:
-          name: blob-report-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
+          name: blob-report-${{ matrix.shardIndex }}
           path: packages/matrix/blob-report
           retention-days: 1
 

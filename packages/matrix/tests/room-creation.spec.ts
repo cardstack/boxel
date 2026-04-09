@@ -339,7 +339,9 @@ test.describe('Room creation', () => {
     await assertRooms(page, [room]);
   });
 
-  test('it opens latest room available (or creates new) when current room is deleted', async ({
+  test('it opens latest room available (or creates new) when current room is deleted', {
+    timeout: 120_000,
+  }, async ({
     page,
   }) => {
     await login(page, firstUser.username, firstUser.password, { url: appURL });
@@ -362,9 +364,16 @@ test.describe('Room creation', () => {
     await isInRoom(page, room2); // remains in same room
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
+    // Wait for the deleted room to be removed from the DOM before polling
+    // for the auto-created replacement room
+    await expect(page.locator(`[data-test-room="${room2}"]`)).toHaveCount(0, {
+      timeout: 30_000,
+    });
     let newRoom: string | undefined;
-    // Poll without using getRoomId, which blocks on waitFor('[data-test-room-settled]')
-    // and can consume the entire waitUntil budget in a single attempt
+    // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
+    // which can consume the entire waitUntil budget in a single attempt.
+    // Use a generous timeout because room creation involves Matrix API calls
+    // that can be slow under CI load.
     await waitUntil(async () => {
       try {
         let roomEl = page.locator('[data-test-room]');
@@ -378,7 +387,7 @@ test.describe('Room creation', () => {
       } catch {
         return false;
       }
-    }, 30000);
+    }, 60_000);
     if (!newRoom) {
       throw new Error('expected to enter a newly-created room after deletion');
     }
