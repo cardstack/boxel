@@ -3,8 +3,11 @@ import {
   Component,
   field,
   contains,
-  // linksTo,
+  containsMany,
+  linksTo,
   linksToMany,
+  CSSField,
+  CssImportField,
 } from '../card-api';
 import enumField from '../enum';
 import StringField from '../string';
@@ -79,7 +82,26 @@ export class Issue extends CardDef {
   );
   @field priority = contains(IssuePriorityField);
   @field relatedTickets = linksToMany(() => Issue);
-  // @field project = linksTo(() => Project);
+  @field project = linksTo(() => Project);
+
+  @field cssVariables = contains(CSSField, {
+    computeVia: function (this: Issue) {
+      return (
+        this.cardInfo.theme?.cssVariables ??
+        this.project?.cardInfo?.theme?.cssVariables
+      );
+    },
+  });
+
+  @field cssImports = containsMany(CssImportField, {
+    computeVia: function (this: Issue) {
+      return (
+        this.cardInfo.theme?.cssImports ??
+        this.project?.cardInfo?.theme?.cssImports ??
+        []
+      );
+    },
+  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Issue) {
