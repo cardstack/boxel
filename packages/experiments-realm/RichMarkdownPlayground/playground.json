@@ -11,7 +11,7 @@
       "body": {
         "content": "# Welcome to Rich Markdown\n\nThis is a **playground** for the `RichMarkdownField` with its CodeMirror editor.\n\n## Features\n\n- Markdown syntax highlighting\n- Card embedding via `:card[URL]` syntax\n- Slash commands for inserting cards\n- Keyboard shortcuts (Mod-B, Mod-I, Mod-`)\n\n## Card References\n\nInline card reference: :card[../Author/alice]\n\n::card[../Author/alice-enwunder]\n\n\nBlock card reference:\n\n::card[../Author/jane-doe]\n\n## Code Block\n\n```typescript\nlet greeting = 'Hello, world!';\nconsole.log(greeting);\n```\n\n> This is a blockquote with some *italic* text.\n\n---\n\n1. First ordered item\n2. Second ordered item\n3. Third ordered item"
       },
-      "title": "Rich Markdown Playground",
+      "title": "Rich Markdown  Playground",
       "cardInfo": {
         "name": null,
         "notes": null,

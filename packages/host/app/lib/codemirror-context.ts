@@ -60,6 +60,22 @@ export const openCardSearchEffect = StateEffect.define<{
   to: number;
 }>();
 
+// ── Focus tracking ─────────────────────────────────────────────────────────
+
+const focusChangeEffect = StateEffect.define<boolean>();
+
+const focusField = StateField.define<boolean>({
+  create() {
+    return false;
+  },
+  update(focused, tr) {
+    for (let e of tr.effects) {
+      if (e.is(focusChangeEffect)) return e.value;
+    }
+    return focused;
+  },
+});
+
 // ── Decoration range type ──────────────────────────────────────────────────
 
 interface DecoRange {
@@ -170,6 +186,7 @@ function isInsideCode(state: EditorState, from: number, to: number): boolean {
 function buildHeadingDecorations(
   state: EditorState,
   cursorLine: number,
+  livePreview: boolean,
 ): DecoRange[] {
   let decos: DecoRange[] = [];
   let tree = syntaxTree(state);
@@ -189,7 +206,8 @@ function buildHeadingDecorations(
       if (level === 0) return;
 
       let line = state.doc.lineAt(node.from);
-      let onCursor = cursorInRange(state, node.from, node.to, cursorLine);
+      let onCursor =
+        !livePreview || cursorInRange(state, node.from, node.to, cursorLine);
 
       // Line decoration for heading size
       decos.push({
@@ -204,13 +222,25 @@ function buildHeadingDecorations(
       if (cursor.firstChild()) {
         do {
           if (cursor.name === 'HeaderMark') {
-            decos.push({
-              from: cursor.from,
-              to: cursor.to,
-              value: onCursor
-                ? Decoration.mark({ class: 'cm-md-marker' })
-                : Decoration.mark({ class: 'cm-md-marker cm-md-marker--dim' }),
-            });
+            if (onCursor) {
+              decos.push({
+                from: cursor.from,
+                to: cursor.to,
+                value: Decoration.mark({ class: 'cm-md-marker' }),
+              });
+            } else {
+              // Replace the marker AND the trailing space with nothing
+              let hideEnd = cursor.to;
+              let nextChar = state.sliceDoc(hideEnd, hideEnd + 1);
+              if (nextChar === ' ') {
+                hideEnd += 1;
+              }
+              decos.push({
+                from: cursor.from,
+                to: hideEnd,
+                value: Decoration.replace({}),
+              });
+            }
           }
         } while (cursor.nextSibling());
       }
@@ -225,6 +255,7 @@ function buildHeadingDecorations(
 function buildInlineFormattingDecorations(
   state: EditorState,
   cursorLine: number,
+  livePreview: boolean,
 ): DecoRange[] {
   let decos: DecoRange[] = [];
   let tree = syntaxTree(state);
@@ -239,7 +270,8 @@ function buildInlineFormattingDecorations(
         return;
       }
 
-      let onCursor = isOnCursorLine(state, node.from, cursorLine);
+      let onCursor =
+        !livePreview || isOnCursorLine(state, node.from, cursorLine);
 
       if (node.name === 'InlineCode') {
         // Find CodeMark children (backticks)
@@ -331,6 +363,7 @@ function buildInlineFormattingDecorations(
 function buildBlockDecorations(
   state: EditorState,
   cursorLine: number,
+  livePreview: boolean,
 ): DecoRange[] {
   let decos: DecoRange[] = [];
   let tree = syntaxTree(state);
@@ -414,7 +447,8 @@ function buildBlockDecorations(
 
       // ── Horizontal rules ──
       if (node.name === 'HorizontalRule') {
-        let onCursor = isOnCursorLine(state, node.from, cursorLine);
+        let onCursor =
+          !livePreview || isOnCursorLine(state, node.from, cursorLine);
         let line = state.doc.lineAt(node.from);
 
         if (onCursor) {
@@ -486,6 +520,7 @@ function buildListDecorations(
 function buildLinkDecorations(
   state: EditorState,
   cursorLine: number,
+  livePreview: boolean,
 ): DecoRange[] {
   let decos: DecoRange[] = [];
   let tree = syntaxTree(state);
@@ -494,7 +529,8 @@ function buildLinkDecorations(
     enter(node) {
       if (node.name !== 'Link') return;
 
-      let onCursor = isOnCursorLine(state, node.from, cursorLine);
+      let onCursor =
+        !livePreview || isOnCursorLine(state, node.from, cursorLine);
       let inner = node.node;
 
       // Collect child nodes: LinkMark ([ ] ( )), URL
@@ -572,6 +608,7 @@ function buildLinkDecorations(
 function buildCardDecorations(
   state: EditorState,
   cursorLine: number,
+  livePreview: boolean,
 ): DecoRange[] {
   let decos: DecoRange[] = [];
   let doc = state.doc;
@@ -592,7 +629,7 @@ function buildCardDecorations(
     }
 
     let line = doc.lineAt(from);
-    let onCursor = line.number === cursorLine;
+    let onCursor = !livePreview || line.number === cursorLine;
 
     if (onCursor) {
       // Show raw syntax with active highlighting
@@ -623,7 +660,7 @@ function buildCardDecorations(
     if (isInsideCode(state, from, to)) continue;
 
     let cardId = match[1].trim();
-    let onCursor = isOnCursorLine(state, from, cursorLine);
+    let onCursor = !livePreview || isOnCursorLine(state, from, cursorLine);
 
     if (onCursor) {
       // Show raw syntax dimmed
@@ -653,14 +690,15 @@ function buildCardDecorations(
 function buildDecorations(
   state: EditorState,
   cursorLine: number,
+  livePreview: boolean,
 ): DecorationSet {
   let allDecos: DecoRange[] = [
-    ...buildHeadingDecorations(state, cursorLine),
-    ...buildInlineFormattingDecorations(state, cursorLine),
-    ...buildBlockDecorations(state, cursorLine),
+    ...buildHeadingDecorations(state, cursorLine, livePreview),
+    ...buildInlineFormattingDecorations(state, cursorLine, livePreview),
+    ...buildBlockDecorations(state, cursorLine, livePreview),
     ...buildListDecorations(state, cursorLine),
-    ...buildLinkDecorations(state, cursorLine),
-    ...buildCardDecorations(state, cursorLine),
+    ...buildLinkDecorations(state, cursorLine, livePreview),
+    ...buildCardDecorations(state, cursorLine, livePreview),
   ];
 
   return Decoration.set(
@@ -671,18 +709,24 @@ function buildDecorations(
 
 // ── Card decoration StateField ─────────────────────────────────────────────
 
-function createDecorationField(): StateField<DecorationSet> {
+function createDecorationField(livePreview: boolean): StateField<DecorationSet> {
   return StateField.define<DecorationSet>({
     create(state) {
-      let cursorLine = state.doc.lineAt(state.selection.main.head).number;
-      return buildDecorations(state, cursorLine);
+      let focused = state.field(focusField);
+      let cursorLine = focused
+        ? state.doc.lineAt(state.selection.main.head).number
+        : -1;
+      return buildDecorations(state, cursorLine, livePreview);
     },
     update(decos, tr) {
-      if (tr.docChanged || tr.selection) {
-        let cursorLine = tr.state.doc.lineAt(
-          tr.state.selection.main.head,
-        ).number;
-        return buildDecorations(tr.state, cursorLine);
+      let focusChanged = tr.effects.some((e) => e.is(focusChangeEffect));
+      // In source mode, cursor/focus changes don't affect decorations
+      if (tr.docChanged || (livePreview && (tr.selection || focusChanged))) {
+        let focused = tr.state.field(focusField);
+        let cursorLine = focused
+          ? tr.state.doc.lineAt(tr.state.selection.main.head).number
+          : -1;
+        return buildDecorations(tr.state, cursorLine, livePreview);
       }
       return decos;
     },
@@ -821,13 +865,20 @@ export interface CreateEditorStateOptions {
   onDocChange: (text: string) => void;
   onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
   onOpenCardSearch: (pos: { from: number; to: number }) => void;
+  /** When false, all syntax markers are visible (source mode). Default true. */
+  livePreview?: boolean;
 }
 
 function createEditorState(options: CreateEditorStateOptions): EditorState {
-  let { content, onDocChange, onCardTargetsChange, onOpenCardSearch } = options;
+  let {
+    content,
+    onDocChange,
+    onCardTargetsChange,
+    onOpenCardSearch,
+    livePreview = true,
+  } = options;
 
-  let decoField = createDecorationField();
-  let targetNotifier = createCardTargetNotifier(onCardTargetsChange);
+  let decoField = createDecorationField(livePreview);
   let slashSource = createSlashCommandSource(onOpenCardSearch);
 
   let extensions: Extension[] = [
@@ -835,8 +886,16 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     markdownKeymap,
+    focusField,
+    EditorView.focusChangeEffect.of((_state, focusing) =>
+      focusChangeEffect.of(focusing),
+    ),
     decoField,
-    targetNotifier,
+    // Card widget target notifier is only needed in live preview mode
+    // (source mode has no card widgets to track)
+    ...(livePreview
+      ? [createCardTargetNotifier(onCardTargetsChange)]
+      : []),
     autocompletion({
       override: [slashSource],
       defaultKeymap: true,
@@ -864,6 +923,7 @@ export interface CodeMirrorContext {
   undo: typeof undo;
   redo: typeof redo;
   openCardSearchEffect: typeof openCardSearchEffect;
+  focusChangeEffect: typeof focusChangeEffect;
 }
 
 const codemirrorContext: CodeMirrorContext = {
@@ -873,6 +933,8 @@ const codemirrorContext: CodeMirrorContext = {
   undo,
   redo,
   openCardSearchEffect,
+  focusChangeEffect,
 };
 
 export default codemirrorContext;
+

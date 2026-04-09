@@ -3,6 +3,10 @@ import {
   fieldSerializer,
   relativeTo,
 } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   CardDef,
@@ -97,6 +101,8 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
+    @tracked _mode: 'edit' | 'source' | 'preview' = 'edit';
+
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
     };
@@ -111,16 +117,101 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
+    setMode = (mode: 'edit' | 'source' | 'preview') => {
+      this._mode = mode;
+    };
     <template>
-      <CardContextConsumer as |context|>
-        <CodeMirrorEditor
-          @content={{@model.content}}
-          @onUpdate={{this.updateContent}}
-          @linkedCards={{this.linkedCards}}
-          @cardReferenceBaseUrl={{this.baseUrl}}
-          @getCards={{context.getCards}}
-        />
-      </CardContextConsumer>
+      <div class='rich-markdown-editor'>
+        <div class='rich-markdown-mode-switcher' data-test-mode-switcher>
+          <button
+            class='mode-btn {{if (eq this._mode "edit") "mode-btn--active"}}'
+            data-test-mode-edit
+            type='button'
+            {{on 'click' (fn this.setMode 'edit')}}
+          >Edit</button>
+          <button
+            class='mode-btn {{if (eq this._mode "source") "mode-btn--active"}}'
+            data-test-mode-source
+            type='button'
+            {{on 'click' (fn this.setMode 'source')}}
+          >Source</button>
+          <button
+            class='mode-btn {{if (eq this._mode "preview") "mode-btn--active"}}'
+            data-test-mode-preview
+            type='button'
+            {{on 'click' (fn this.setMode 'preview')}}
+          >Preview</button>
+        </div>
+
+        {{#if (eq this._mode 'preview')}}
+          <div class='rich-markdown-preview' data-test-markdown-preview>
+            <MarkdownTemplate
+              @content={{@model.content}}
+              @linkedCards={{@model.linkedCards}}
+              @cardReferenceBaseUrl={{this.baseUrl}}
+            />
+          </div>
+        {{else}}
+          <CardContextConsumer as |context|>
+            <CodeMirrorEditor
+              @content={{@model.content}}
+              @onUpdate={{this.updateContent}}
+              @linkedCards={{this.linkedCards}}
+              @cardReferenceBaseUrl={{this.baseUrl}}
+              @livePreview={{eq this._mode 'edit'}}
+              @getCards={{context.getCards}}
+            />
+          </CardContextConsumer>
+        {{/if}}
+      </div>
+
+      <style scoped>
+        .rich-markdown-editor {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxxs);
+        }
+
+        .rich-markdown-mode-switcher {
+          display: flex;
+          width: fit-content;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          overflow: hidden;
+        }
+
+        .mode-btn {
+          padding: 2px 12px;
+          border: none;
+          border-right: 1px solid var(--boxel-border-color, #c4c4c4);
+          background: transparent;
+          font: inherit;
+          font-size: 0.8rem;
+          cursor: pointer;
+          color: var(--boxel-400, #666);
+          transition: background-color 0.15s, color 0.15s;
+        }
+
+        .mode-btn:last-child {
+          border-right: none;
+        }
+
+        .mode-btn:hover:not(.mode-btn--active) {
+          background: var(--boxel-100, #f5f5f5);
+        }
+
+        .mode-btn--active {
+          background: var(--boxel-highlight, #0078d4);
+          color: white;
+        }
+
+        .rich-markdown-preview {
+          min-height: 120px;
+          padding: var(--boxel-sp-xs);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+        }
+      </style>
     </template>
   };
 }

@@ -36,6 +36,7 @@ interface CodeMirrorContext {
     onDocChange: (text: string) => void;
     onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
     onOpenCardSearch: (pos: { from: number; to: number }) => void;
+    livePreview?: boolean;
   }) => any;
   undo: any;
   redo: any;
@@ -89,6 +90,8 @@ interface CodeMirrorEditorSignature {
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
+    /** When false, all syntax markers are visible (source mode). Default true. */
+    livePreview?: boolean;
     getCards?: (
       parent: object,
       getQuery: () => Record<string, unknown> | undefined,
@@ -116,6 +119,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private _pendingTargets: CardWidgetTarget[] = [];
   private _slotUpdatePending = false;
+  private _currentLivePreview: boolean | undefined;
+
+  get livePreview(): boolean {
+    return this.args.livePreview !== false;
+  }
 
   // ── Lazy loading ─────────────────────────────────────────────────────────
 
@@ -402,7 +410,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   willDestroy() {
     super.willDestroy();
-    if (this.saveTimer) {
+    // Flush any pending debounced save so content isn't lost on mode switch
+    if (this.saveTimer && this.editorView) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      this.args.onUpdate(this.editorView.state.doc.toString());
+    } else if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
@@ -423,24 +436,35 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     // subsequent re-runs (from save echoes) hit the early return.
     let content = this.args.content;
     let onUpdate = this.args.onUpdate;
+    let livePreview = this.livePreview;
 
-    // Editor already exists and is in the DOM — keep it.
-    // The modifier re-runs when args.content changes (after debounced
-    // save), but we must NOT destroy/recreate the editor or focus is lost.
     if (this.editorView && element.contains(this.editorView.dom)) {
-      return;
-    }
-
-    // Editor exists but not in this element — clean it up
-    if (this.editorView) {
+      // Editor exists and is in the DOM. If the livePreview mode hasn't
+      // changed, keep the editor (prevents focus loss on save echo).
+      if (this._currentLivePreview === livePreview) {
+        return;
+      }
+      // Mode changed — flush pending save and use current editor content
+      if (this.saveTimer && onUpdate) {
+        clearTimeout(this.saveTimer);
+        this.saveTimer = null;
+        onUpdate(this.editorView.state.doc.toString());
+      }
+      content = this.editorView.state.doc.toString();
+      this.editorView.destroy();
+      this.editorView = null;
+    } else if (this.editorView) {
+      // Editor exists but not in this element — clean it up
       this.editorView.destroy();
       this.editorView = null;
     }
 
+    this._currentLivePreview = livePreview;
     element.innerHTML = '';
 
     let state = cm.createEditorState({
       content: content || '',
+      livePreview,
       onDocChange: (text: string) => {
         if (onUpdate) {
           // Debounced save
@@ -481,7 +505,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       <div
         class='codemirror-editor'
         data-test-codemirror-editor
-        {{this.mountEditor this.cm this.args.content this.args.onUpdate}}
+        {{this.mountEditor this.cm this.args.content this.args.onUpdate this.livePreview}}
         ...attributes
       >
       </div>
@@ -563,51 +587,53 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         </div>
       {{/if}}
 
-      {{#each this.cardRenderTargets as |target|}}
-        {{#in-element target.element insertBefore=null}}
-          {{#if target.card}}
-            <CardContextConsumer as |context|>
-              {{#let (this.getCardComponent target.card) as |CardComponent|}}
-                {{#if (isInline target.kind)}}
-                  <span
-                    class='codemirror-card-slot codemirror-card-slot--inline'
-                    data-test-codemirror-card-slot-inline
-                    {{context.cardComponentModifier
-                      card=target.card
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <CardComponent
-                      @format={{target.format}}
-                      @displayContainer={{false}}
-                    />
-                  </span>
-                {{else}}
-                  <div
-                    class='codemirror-card-slot codemirror-card-slot--block'
-                    data-test-codemirror-card-slot-block
-                    {{context.cardComponentModifier
-                      card=target.card
-                      format='data'
-                      fieldType=undefined
-                      fieldName=undefined
-                    }}
-                  >
-                    <CardComponent
-                      @format={{target.format}}
-                      @displayContainer={{false}}
-                    />
-                  </div>
-                {{/if}}
-              {{/let}}
-            </CardContextConsumer>
-          {{else}}
-            <span class='codemirror-card-fallback'>{{target.cardId}}</span>
-          {{/if}}
-        {{/in-element}}
-      {{/each}}
+      {{#if this.livePreview}}
+        {{#each this.cardRenderTargets as |target|}}
+          {{#in-element target.element insertBefore=null}}
+            {{#if target.card}}
+              <CardContextConsumer as |context|>
+                {{#let (this.getCardComponent target.card) as |CardComponent|}}
+                  {{#if (isInline target.kind)}}
+                    <span
+                      class='codemirror-card-slot codemirror-card-slot--inline'
+                      data-test-codemirror-card-slot-inline
+                      {{context.cardComponentModifier
+                        card=target.card
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                    >
+                      <CardComponent
+                        @format={{target.format}}
+                        @displayContainer={{false}}
+                      />
+                    </span>
+                  {{else}}
+                    <div
+                      class='codemirror-card-slot codemirror-card-slot--block'
+                      data-test-codemirror-card-slot-block
+                      {{context.cardComponentModifier
+                        card=target.card
+                        format='data'
+                        fieldType=undefined
+                        fieldName=undefined
+                      }}
+                    >
+                      <CardComponent
+                        @format={{target.format}}
+                        @displayContainer={{false}}
+                      />
+                    </div>
+                  {{/if}}
+                {{/let}}
+              </CardContextConsumer>
+            {{else}}
+              <span class='codemirror-card-fallback'>{{target.cardId}}</span>
+            {{/if}}
+          {{/in-element}}
+        {{/each}}
+      {{/if}}
     {{else}}
       <div class='codemirror-editor-loading' data-test-codemirror-loading>
         Loading editor…
@@ -762,7 +788,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
         /* ── Markdown live preview: lists ── */
         .codemirror-editor :deep(.cm-md-list-mark) {
-          color: var(--boxel-highlight, #0078d4);
+          color: var(--boxel-dark, #000);
           font-weight: 600;
         }
 

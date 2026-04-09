@@ -600,6 +600,227 @@ module('Integration | codemirror-context', function (hooks) {
 
   // ── Lazy loading ──
 
+  // ── Source mode (livePreview=false) ──
+
+  test('source mode: heading markers are visible, not replaced', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '# Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        livePreview: false,
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // In source mode, onCursor is always true so heading markers get
+      // Decoration.mark (visible) instead of Decoration.replace (hidden).
+      let markers = element.querySelectorAll('.cm-md-marker');
+      assert.ok(markers.length > 0, 'heading markers have cm-md-marker class');
+      assert.ok(
+        element.textContent?.includes('#'),
+        'hash character is visible in source mode',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('source mode: bold markers are visible, not hidden', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Some **bold** text',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        livePreview: false,
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // In source mode, emphasis markers are never hidden
+      let hiddenMarkers = element.querySelectorAll('.cm-md-marker--hidden');
+      assert.strictEqual(
+        hiddenMarkers.length,
+        0,
+        'no markers are hidden in source mode',
+      );
+
+      let markers = element.querySelectorAll('.cm-md-marker');
+      assert.ok(markers.length > 0, 'bold markers are visible in source mode');
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('source mode: card widget targets are not produced', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let targets: CardWidgetTarget[] = [];
+      let state = cmContext.createEditorState({
+        content:
+          'See :card[https://example.com/Author/alice] for details.\n\n::card[https://example.com/cards/1]',
+        onDocChange: () => {},
+        onCardTargetsChange: (t: CardWidgetTarget[]) => {
+          targets = t;
+        },
+        onOpenCardSearch: () => {},
+        livePreview: false,
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await settled();
+
+      // In source mode, the card target notifier plugin is not included
+      assert.strictEqual(
+        targets.length,
+        0,
+        'no widget targets in source mode',
+      );
+
+      // Card ref syntax is visible as text, not replaced by widgets
+      let widgets = element.querySelectorAll('.cm-card-widget');
+      assert.strictEqual(widgets.length, 0, 'no card widgets in source mode');
+      assert.ok(
+        element.textContent?.includes(':card['),
+        'card ref syntax is visible in source mode',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('source mode: card refs are decorated with syntax highlighting', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content:
+          'Text before\n\n::card[https://example.com/cards/1]\n\nText after',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        livePreview: false,
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // In source mode, card refs get syntax highlighting marks (onCursor=true always)
+      let cardRefs = element.querySelectorAll('.cm-bfm-card-ref');
+      assert.ok(
+        cardRefs.length > 0,
+        'card refs have syntax highlighting in source mode',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  // ── Focus-aware decorations ──
+
+  test('unfocused editor hides heading markers in live preview mode', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '# Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        livePreview: true,
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Editor starts unfocused — heading markers should be replaced (hidden)
+      let cmContent = element.querySelector('.cm-content');
+      assert.notOk(
+        cmContent?.textContent?.includes('#'),
+        'heading hash is hidden when editor is unfocused',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('focused editor shows heading markers on cursor line', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '# Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        livePreview: true,
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // CM6 processes focus change effects asynchronously via DOM events,
+      // so we dispatch the effect directly to simulate gaining focus.
+      view.dispatch({
+        effects: cmContext.focusChangeEffect.of(true),
+      });
+
+      // Heading markers on the cursor line (line 1, where cursor is at pos 0)
+      // should now be visible instead of replaced.
+      let cmContent = element.querySelector('.cm-content');
+      assert.ok(
+        cmContent?.textContent?.includes('#'),
+        'heading hash is visible on cursor line when editor is focused',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  // ── Lazy loading ──
+
   test('globalThis.__loadCodeMirror returns context with expected exports', async function (assert) {
     // Set up the globalThis loader (mimicking what application.ts does)
     (globalThis as any).__loadCodeMirror = async () => cmContext;
