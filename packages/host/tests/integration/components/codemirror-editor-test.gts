@@ -1502,6 +1502,108 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  // ── Link toggling ──
+
+  test('link wraps selection in markdown link syntax', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Click here for details',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select "here" (positions 6-10)
+      view.dispatch({ selection: { anchor: 6, head: 10 } });
+
+      let { from, to } = view.state.selection.main;
+      let selected = view.state.sliceDoc(from, to);
+      let insert = `[${selected}](url)`;
+      view.dispatch({
+        changes: { from, to, insert },
+        selection: {
+          anchor: from + selected.length + 3,
+          head: from + selected.length + 6,
+        },
+      });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Click [here](url) for details',
+        'text is wrapped in markdown link syntax',
+      );
+
+      // Cursor should select "url" placeholder
+      let sel = view.state.selection.main;
+      assert.strictEqual(
+        view.state.sliceDoc(sel.from, sel.to),
+        'url',
+        'cursor selects the url placeholder',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('link is unwrapped when selecting just the link text', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Click [here](https://example.com) for details',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select just "here" (positions 7-11) — the text inside the brackets,
+      // as a user would in live preview where [ and ](url) are hidden
+      view.dispatch({ selection: { anchor: 7, head: 11 } });
+
+      // Simulate _toggleLink: scan for enclosing [text](url)
+      let doc = view.state.doc.toString();
+      let { from, to } = view.state.selection.main;
+      let bracketOpen = doc.lastIndexOf('[', from);
+      let parenClose = doc.indexOf(')', to - 1);
+      let between = doc.slice(bracketOpen, parenClose + 1);
+      let linkMatch = between.match(/^\[(.+)\]\(.*\)$/);
+      assert.ok(linkMatch, 'enclosing link pattern found');
+      view.dispatch({
+        changes: {
+          from: bracketOpen,
+          to: parenClose + 1,
+          insert: linkMatch![1],
+        },
+      });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Click here for details',
+        'link syntax is removed, leaving just the text',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   // ── Lazy loading ──
 
   test('globalThis.__loadCodeMirror returns context with expected exports', async function (assert) {

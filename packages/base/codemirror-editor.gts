@@ -24,6 +24,7 @@ import Heading3Icon from '@cardstack/boxel-icons/heading-3';
 import ListIcon from '@cardstack/boxel-icons/list';
 import ListOrderedIcon from '@cardstack/boxel-icons/list-ordered';
 import BlockquoteIcon from '@cardstack/boxel-icons/blockquote';
+import LinkIcon from '@cardstack/boxel-icons/link';
 import {
   computePosition,
   flip,
@@ -404,6 +405,48 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
   };
 
+  _toggleLink = () => {
+    let view = this.editorView;
+    if (!view) return;
+    let { from, to } = view.state.selection.main;
+    if (from === to) return;
+
+    // Check if selection is inside a markdown link by scanning for [text](url)
+    // around the selection boundaries
+    let doc = view.state.doc.toString();
+    let bracketOpen = doc.lastIndexOf('[', from);
+    if (bracketOpen >= 0) {
+      let parenClose = doc.indexOf(')', to - 1);
+      if (parenClose >= 0) {
+        let between = doc.slice(bracketOpen, parenClose + 1);
+        let linkMatch = between.match(/^\[(.+)\]\(.*\)$/);
+        if (linkMatch) {
+          view.dispatch({
+            changes: {
+              from: bracketOpen,
+              to: parenClose + 1,
+              insert: linkMatch[1],
+            },
+          });
+          view.focus();
+          return;
+        }
+      }
+    }
+
+    // Wrap selection as link text with placeholder URL, cursor selects "url"
+    let selected = view.state.sliceDoc(from, to);
+    let insert = `[${selected}](url)`;
+    view.dispatch({
+      changes: { from, to, insert },
+      selection: {
+        anchor: from + selected.length + 3,
+        head: from + selected.length + 6,
+      },
+    });
+    view.focus();
+  };
+
   _insertHeading = (level: number) => {
     let view = this.editorView;
     if (!view) return;
@@ -766,6 +809,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             title='Code'
             {{on 'mousedown' (fn this._toolbarAction '`')}}
           ><CodeIcon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn {{if this.toolbarFormats.link "toolbar-btn--active"}}'
+            data-test-toolbar-link
+            title='Link'
+            {{on 'mousedown' this._toggleLink}}
+          ><LinkIcon @width='16' @height='16' /></button>
 
           <span class='toolbar-divider'></span>
 
@@ -1032,6 +1081,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
         .codemirror-editor :deep(.cm-md-italic) {
           font-style: italic;
+        }
+
+        .codemirror-editor :deep(.cm-md-strikethrough) {
+          text-decoration: line-through;
         }
 
         .codemirror-editor :deep(.cm-md-inline-code) {

@@ -265,6 +265,7 @@ function buildInlineFormattingDecorations(
       if (
         node.name !== 'StrongEmphasis' &&
         node.name !== 'Emphasis' &&
+        node.name !== 'Strikethrough' &&
         node.name !== 'InlineCode'
       ) {
         return;
@@ -314,15 +315,21 @@ function buildInlineFormattingDecorations(
         return false; // don't descend
       }
 
-      // StrongEmphasis or Emphasis
+      // StrongEmphasis, Emphasis, or Strikethrough
       let cssClass =
-        node.name === 'StrongEmphasis' ? 'cm-md-bold' : 'cm-md-italic';
+        node.name === 'StrongEmphasis'
+          ? 'cm-md-bold'
+          : node.name === 'Strikethrough'
+            ? 'cm-md-strikethrough'
+            : 'cm-md-italic';
+      let markName =
+        node.name === 'Strikethrough' ? 'StrikethroughMark' : 'EmphasisMark';
       let inner = node.node;
       let marks: { from: number; to: number }[] = [];
       let c = inner.cursor();
       if (c.firstChild()) {
         do {
-          if (c.name === 'EmphasisMark') {
+          if (c.name === markName) {
             marks.push({ from: c.from, to: c.to });
           }
         } while (c.nextSibling());
