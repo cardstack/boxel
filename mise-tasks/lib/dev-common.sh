@@ -35,5 +35,6 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   "$REPO_ROOT/scripts/ensure-branch-db.sh"
   echo "Running database migrations…"
   pnpm migrate
+  "$REPO_ROOT/scripts/import-cached-index.sh" || true
   ./scripts/start-matrix.sh
 fi

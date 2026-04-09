@@ -1,0 +1,24 @@
+#!/bin/sh
+#MISE description="Index all realms and dump boxel_index tables for caching"
+#MISE dir="packages/realm-server"
+
+# start-server-and-test and run-p live in node_modules/.bin; ensure they're on
+# PATH when this task is invoked directly via `mise run` (not through pnpm).
+export PATH="./node_modules/.bin:$PATH"
+
+READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
+REALM_HOST="${REALM_BASE_URL#http://}"
+
+# Wait for ALL 9 development realms to be indexed and ready.
+READINESS_URLS=""
+for realm in base catalog external-catalog skills submissions boxel-homepage experiments openrouter software-factory; do
+  READINESS_URLS="${READINESS_URLS:+${READINESS_URLS}|}http-get://${REALM_HOST}/${realm}/${READY_PATH}"
+done
+READINESS_URLS="${READINESS_URLS}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}|${HOST_URL}"
+
+WAIT_ON_TIMEOUT=1800000 \
+  NODE_NO_WARNINGS=1 \
+  start-server-and-test \
+    'run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
+    "${READINESS_URLS}" \
+    'docker exec boxel-pg pg_dump -U postgres --data-only -t boxel_index -t boxel_index_working -t realm_versions -t realm_meta boxel | gzip > /tmp/boxel-index-cache.sql.gz && echo "Index cache created at /tmp/boxel-index-cache.sql.gz"'
