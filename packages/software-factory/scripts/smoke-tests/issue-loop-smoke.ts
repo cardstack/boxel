@@ -78,6 +78,10 @@ class MockIssueStore implements IssueStore {
     if (!issue) throw new Error(`Issue "${issueId}" not found`);
     return { ...issue };
   }
+
+  async updateIssue(): Promise<void> {
+    // no-op for smoke tests
+  }
 }
 
 interface MockAgentTurn {
@@ -599,9 +603,10 @@ async function scenarioValidationPipeline(): Promise<void> {
   );
 
   // Verify formatForContext works
-  let formatted = pipeline.formatForContext(
-    result.issueResults[0]?.lastValidation!,
-  );
+  let lastValidation = result.issueResults[0]?.lastValidation;
+  let formatted = lastValidation
+    ? pipeline.formatForContext(lastValidation)
+    : '';
   check(
     'formatForContext reports all passed',
     formatted === 'All validation steps passed.',

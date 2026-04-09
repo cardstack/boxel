@@ -81,8 +81,7 @@ export class ValidationPipeline implements Validator {
       } else {
         // Step threw an exception — capture as a failed result
         let reason = outcome.reason;
-        let message =
-          reason instanceof Error ? reason.message : String(reason);
+        let message = reason instanceof Error ? reason.message : String(reason);
         log.error(
           `Validation step "${this.runners[i].step}" threw: ${message}`,
         );

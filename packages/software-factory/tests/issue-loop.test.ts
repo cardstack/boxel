@@ -25,6 +25,7 @@ import {
 
 class MockIssueStore implements IssueStore {
   issues: SchedulableIssue[];
+  updateCalls: { issueId: string; updates: Record<string, unknown> }[] = [];
 
   constructor(issues: SchedulableIssue[]) {
     this.issues = issues.map((i) => ({ ...i }));
@@ -40,6 +41,13 @@ class MockIssueStore implements IssueStore {
       throw new Error(`Issue "${issueId}" not found in mock store`);
     }
     return { ...issue };
+  }
+
+  async updateIssue(
+    issueId: string,
+    updates: { status?: string; description?: string },
+  ): Promise<void> {
+    this.updateCalls.push({ issueId, updates });
   }
 }
 
@@ -527,19 +535,9 @@ module('issue-loop > max inner iterations', function () {
   });
 
   test('updateIssue called when blocking due to max iterations + failing validation', async function (assert) {
-    let updateCalls: { issueId: string; updates: Record<string, unknown> }[] = [];
-
     let store = new MockIssueStore([
       makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
-
-    // Add updateIssue to mock store
-    (store as MockIssueStore & { updateIssue: Function }).updateIssue = async (
-      issueId: string,
-      updates: { status?: string; description?: string },
-    ) => {
-      updateCalls.push({ issueId, updates });
-    };
 
     let turns: MockAgentTurn[] = [];
     let validations: ValidationResults[] = [];
@@ -564,11 +562,13 @@ module('issue-loop > max inner iterations', function () {
       }),
     );
 
-    assert.strictEqual(updateCalls.length, 1, 'updateIssue called once');
-    assert.strictEqual(updateCalls[0].issueId, 'iss-1');
-    assert.strictEqual(updateCalls[0].updates.status, 'blocked');
+    assert.strictEqual(store.updateCalls.length, 1, 'updateIssue called once');
+    assert.strictEqual(store.updateCalls[0].issueId, 'iss-1');
+    assert.strictEqual(store.updateCalls[0].updates.status, 'blocked');
     assert.ok(
-      (updateCalls[0].updates.description as string).includes('max iteration limit'),
+      (store.updateCalls[0].updates.description as string).includes(
+        'max iteration limit',
+      ),
       'description includes reason',
     );
   });

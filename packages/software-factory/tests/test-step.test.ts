@@ -10,7 +10,10 @@ import {
   type TestValidationDetails,
 } from '../src/validators/test-step';
 
-import type { TestRunHandle, ExecuteTestRunOptions } from '../src/test-run-types';
+import type {
+  TestRunHandle,
+  ExecuteTestRunOptions,
+} from '../src/test-run-types';
 import type { RealmFetchOptions } from '../src/realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -61,7 +64,9 @@ function makeExecuteTestRunThrows(
   };
 }
 
-function makeTestRunCardDocument(attrs: Record<string, unknown>): LooseSingleCardDocument {
+function makeTestRunCardDocument(
+  attrs: Record<string, unknown>,
+): LooseSingleCardDocument {
   return {
     data: {
       type: 'card',
@@ -73,9 +78,11 @@ function makeTestRunCardDocument(attrs: Record<string, unknown>): LooseSingleCar
   } as LooseSingleCardDocument;
 }
 
-function makeReadCard(
-  document: LooseSingleCardDocument,
-): (realmUrl: string, path: string, options?: RealmFetchOptions) => Promise<{
+function makeReadCard(document: LooseSingleCardDocument): (
+  realmUrl: string,
+  path: string,
+  options?: RealmFetchOptions,
+) => Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;
   error?: string;
@@ -83,9 +90,11 @@ function makeReadCard(
   return async () => ({ ok: true, document });
 }
 
-function makeReadCardError(
-  error: string,
-): (realmUrl: string, path: string, options?: RealmFetchOptions) => Promise<{
+function makeReadCardError(error: string): (
+  realmUrl: string,
+  path: string,
+  options?: RealmFetchOptions,
+) => Promise<{
   ok: boolean;
   document?: LooseSingleCardDocument;
   error?: string;

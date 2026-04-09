@@ -323,25 +323,19 @@ export async function runIssueLoop(
         );
         exitReason = 'blocked';
 
-        if (issueStore.updateIssue) {
-          try {
-            let description = buildMaxIterationBlockedDescription(
-              maxIterationsPerIssue,
-              validationResults,
-              validator,
-            );
-            await issueStore.updateIssue(issue.id, {
-              status: 'blocked',
-              description,
-            });
-          } catch (err) {
-            log.warn(
-              `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        } else {
+        try {
+          let description = buildMaxIterationBlockedDescription(
+            maxIterationsPerIssue,
+            validationResults,
+            validator,
+          );
+          await issueStore.updateIssue(issue.id, {
+            status: 'blocked',
+            description,
+          });
+        } catch (err) {
           log.warn(
-            `  IssueStore does not implement updateIssue — blocked status not persisted to realm`,
+            `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
           );
         }
       }

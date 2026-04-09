@@ -39,9 +39,7 @@ export interface TestValidationStepConfig {
   targetRealmUrl: string;
   issueId?: string;
   /** Injected for testing — defaults to executeTestRunFromRealm. */
-  executeTestRun?: (
-    options: ExecuteTestRunOptions,
-  ) => Promise<TestRunHandle>;
+  executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
   /** Injected for testing — defaults to fetchRealmFilenames. */
   fetchFilenames?: (
     realmUrl: string,
@@ -195,10 +193,9 @@ export class TestValidationStep implements ValidationStepRunner {
           }))
         : [
             {
-              message:
-                handle.errorMessage ?? `Tests ${handle.status}`,
+              message: handle.errorMessage ?? `Tests ${handle.status}`,
             },
-        ];
+          ];
 
     return {
       step: 'test',
@@ -250,9 +247,7 @@ export class TestValidationStep implements ValidationStepRunner {
   // Private helpers
   // -------------------------------------------------------------------------
 
-  private async discoverTestFiles(
-    targetRealmUrl: string,
-  ): Promise<string[]> {
+  private async discoverTestFiles(targetRealmUrl: string): Promise<string[]> {
     let result = await this.fetchFilenamesFn(targetRealmUrl, {
       authorization: this.config.authorization,
       fetch: this.config.fetch,

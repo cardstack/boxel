@@ -399,7 +399,9 @@ async function main() {
 
   let validationResults = await pipeline.validate(targetRealmUrl);
 
-  log.info(`  Pipeline result: ${validationResults.passed ? 'PASSED' : 'FAILED'} (${validationResults.steps.length} steps)`);
+  log.info(
+    `  Pipeline result: ${validationResults.passed ? 'PASSED' : 'FAILED'} (${validationResults.steps.length} steps)`,
+  );
   for (let step of validationResults.steps) {
     let statusIcon = step.passed ? '✓' : '✗';
     let detail = '';
@@ -409,7 +411,9 @@ async function main() {
         detail = ` (${d.passedCount} passed, ${d.failedCount} failed)`;
       }
     }
-    log.info(`    ${step.step}: ${statusIcon} ${step.passed ? 'passed' : 'failed'}${detail}`);
+    log.info(
+      `    ${step.step}: ${statusIcon} ${step.passed ? 'passed' : 'failed'}${detail}`,
+    );
   }
 
   // Verify pipeline results
@@ -433,9 +437,7 @@ async function main() {
     log.info('  ✓ Test step correctly failed');
   }
 
-  let noOpSteps = validationResults.steps.filter(
-    (s) => s.step !== 'test',
-  );
+  let noOpSteps = validationResults.steps.filter((s) => s.step !== 'test');
   let allNoOpsPassed = noOpSteps.every((s) => s.passed);
   if (allNoOpsPassed) {
     log.info('  ✓ All NoOp steps (parse, lint, evaluate, instantiate) passed');
@@ -447,9 +449,13 @@ async function main() {
   if (testStep?.details) {
     let details = testStep.details as unknown as TestValidationDetails;
     if (details.passedCount > 0 && details.failedCount > 0) {
-      log.info(`  ✓ Test details: ${details.passedCount} passed, ${details.failedCount} failed`);
+      log.info(
+        `  ✓ Test details: ${details.passedCount} passed, ${details.failedCount} failed`,
+      );
     } else {
-      log.info(`  ✗ Expected both passing and failing tests, got passed=${details.passedCount} failed=${details.failedCount}`);
+      log.info(
+        `  ✗ Expected both passing and failing tests, got passed=${details.passedCount} failed=${details.failedCount}`,
+      );
       pipelinePassed = false;
     }
   } else {

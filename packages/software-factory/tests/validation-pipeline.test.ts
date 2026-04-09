@@ -220,7 +220,11 @@ module('ValidationPipeline', function () {
     assert.strictEqual(results.steps[0].step, 'parse', 'step 1 is parse');
     assert.strictEqual(results.steps[1].step, 'lint', 'step 2 is lint');
     assert.strictEqual(results.steps[2].step, 'evaluate', 'step 3 is evaluate');
-    assert.strictEqual(results.steps[3].step, 'instantiate', 'step 4 is instantiate');
+    assert.strictEqual(
+      results.steps[3].step,
+      'instantiate',
+      'step 4 is instantiate',
+    );
     assert.strictEqual(results.steps[4].step, 'test', 'step 5 is test');
     assert.true(results.passed, 'all steps pass (NoOp + no test files)');
   });
