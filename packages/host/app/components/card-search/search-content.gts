@@ -18,6 +18,7 @@ import {
   type getCard,
   GetCardContextName,
   cardIdToURL,
+  isRegisteredPrefix,
 } from '@cardstack/runtime-common';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
@@ -238,7 +239,11 @@ export default class SearchContent extends Component<Signature> {
       this.args.selectedRealmURLs.length > 0
         ? this.args.selectedRealmURLs
         : this.realmServer.availableRealmURLs;
-    return urls ?? [];
+    // Normalize prefix-form realm URLs (e.g. @cardstack/base/) to HTTP URLs
+    // so they match the form used in search results for section grouping.
+    return (urls ?? []).map((u) =>
+      isRegisteredPrefix(u) ? cardIdToURL(u).href : u,
+    );
   }
 
   private get summaryText(): string {
