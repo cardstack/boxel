@@ -25,6 +25,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import ENV from '@cardstack/host/config/environment';
 import { skillsRealm } from '@cardstack/host/lib/utils';
 
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
@@ -1172,7 +1173,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-card]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
-    await click(`[data-test-card-catalog-item="@cardstack/base/types/card"]`);
+    await click(`[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}types/card"]`);
 
     await click(`[data-test-card-catalog-go-button]`);
 

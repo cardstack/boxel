@@ -12,6 +12,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
@@ -621,10 +622,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -648,11 +649,11 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-search-field]', 'Date');
 
     await waitFor(
-      '[data-test-card-catalog-item="@cardstack/base/fields/date-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/date-field"]`,
     );
 
     await click(
-      '[data-test-card-catalog-item="@cardstack/base/fields/date-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/date-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     // There is some additional thing we are waiting on here, probably the
@@ -722,10 +723,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
@@ -902,10 +903,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // Edit the field to be a "contains" BigInteger field, named friendCount
     await click('[data-test-choose-card-button]');
     await waitFor(
-      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      '[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]',
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'friendCount');

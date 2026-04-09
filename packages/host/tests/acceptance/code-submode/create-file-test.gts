@@ -11,6 +11,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
+import ENV from '@cardstack/host/config/environment';
 import type FileUploadService from '@cardstack/host/services/file-upload';
 
 import {
@@ -947,10 +948,10 @@ export class TestCard extends Person {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
 
@@ -989,10 +990,10 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await waitFor('[data-test-card-catalog-modal]');
 
       await waitFor(
-        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
       );
       await click(
-        `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
+        `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
       );
       await click('[data-test-card-catalog-go-button]');
       await fillIn(
