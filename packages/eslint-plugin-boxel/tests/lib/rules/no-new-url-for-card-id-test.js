@@ -19,7 +19,6 @@ ruleTester.run('no-new-url-for-card-id', rule, {
     // Two-argument form — relative URL resolution, safe
     { code: `let url = new URL(path, baseURL);` },
     // Variable name that doesn't match card ID patterns
-    { code: `let url = new URL(realmURL);` },
     { code: `let url = new URL(fileUrl);` },
     { code: `let url = new URL(response.url);` },
     // Template literal — usually constructed URLs
@@ -81,6 +80,18 @@ ruleTester.run('no-new-url-for-card-id', rule, {
     {
       code: `let url = new URL(selectedCardId);`,
       output: `let url = cardIdToURL(selectedCardId);`,
+      errors: [{ messageId: 'noNewUrlForCardId' }],
+    },
+    // Realm URL — can be prefix form like @cardstack/base/
+    {
+      code: `let url = new URL(realmURL);`,
+      output: `let url = cardIdToURL(realmURL);`,
+      errors: [{ messageId: 'noNewUrlForCardId' }],
+    },
+    // Property access this.realmURL
+    {
+      code: `let url = new URL(this.realmURL);`,
+      output: `let url = cardIdToURL(this.realmURL);`,
       errors: [{ messageId: 'noNewUrlForCardId' }],
     },
     // codeRef.module

@@ -17,6 +17,10 @@ const CARD_ID_PATTERNS = [
   /^url$/,
   /^value$/,
   /Id$/,
+  // Realm URLs can also be in prefix form (e.g. @cardstack/base/)
+  /^realmURL$/,
+  /^realmUrl$/,
+  /^normalizedRealmURL$/,
 ];
 
 // Property access patterns like ref.module, codeRef.module, spec.id
@@ -25,6 +29,8 @@ const CARD_ID_PROPERTY_PATTERNS = [
   /\.id$/,
   /\.moduleHref$/,
   /\.sourceUrl$/,
+  /\.realmURL$/,
+  /\.realmUrl$/,
 ];
 
 function getArgumentText(node, sourceCode) {

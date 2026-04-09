@@ -6,6 +6,14 @@
  */
 export type CardOrModuleRef = string;
 
+/**
+ * A realm URL that may be either a full HTTP URL
+ * (e.g. "http://localhost:4201/base/") or a registered prefix form
+ * (e.g. "@cardstack/base/"). Use `cardIdToURL()` to safely convert
+ * to a URL — do NOT pass directly to `new URL()`.
+ */
+export type RealmRef = string;
+
 const prefixMappings = new Map<string, string>();
 
 export function registerCardReferencePrefix(

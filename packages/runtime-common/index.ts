@@ -189,6 +189,7 @@ export {
   isRegisteredPrefix,
   cardIdToURL,
   type CardOrModuleRef,
+  type RealmRef,
 } from './card-reference-resolver';
 
 export interface ResourceObject {
