@@ -880,16 +880,52 @@ export async function pullRealmFiles(
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
 
-  // Use fetchRealmFilenames to discover all file paths.
-  let { filenames, error } = await fetchRealmFilenames(realmUrl, options);
-  if (error) {
-    return { files: [], error };
+  let headers = buildAuthHeaders(
+    options?.authorization,
+    SupportedMimeType.JSONAPI,
+  );
+
+  // Fetch mtimes to discover all file paths.
+  let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
+  let mtimesResponse: Response;
+  try {
+    mtimesResponse = await fetchImpl(mtimesUrl, { method: 'GET', headers });
+  } catch (err) {
+    return {
+      files: [],
+      error: `Failed to fetch _mtimes: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (!mtimesResponse.ok) {
+    let body = await mtimesResponse.text();
+    return {
+      files: [],
+      error: `_mtimes returned HTTP ${mtimesResponse.status}: ${body.slice(0, 300)}`,
+    };
+  }
+
+  let mtimes: Record<string, number>;
+  try {
+    let json = await mtimesResponse.json();
+    // _mtimes returns JSON:API format: { data: { attributes: { mtimes: {...} } } }
+    mtimes =
+      (json as { data?: { attributes?: { mtimes?: Record<string, number> } } })
+        ?.data?.attributes?.mtimes ?? json;
+  } catch {
+    return { files: [], error: 'Failed to parse _mtimes response as JSON' };
   }
 
   // Download each file.
   let downloadedFiles: string[] = [];
-  for (let relativePath of filenames) {
-    let fullUrl = `${normalizedRealmUrl}${relativePath}`;
+  for (let fullUrl of Object.keys(mtimes)) {
+    if (!fullUrl.startsWith(normalizedRealmUrl)) {
+      continue;
+    }
+    let relativePath = fullUrl.slice(normalizedRealmUrl.length);
+    if (!relativePath || relativePath.endsWith('/')) {
+      continue;
+    }
 
     let localPath = join(localDir, relativePath);
     mkdirSync(dirname(localPath), { recursive: true });
