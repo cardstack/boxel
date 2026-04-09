@@ -61,17 +61,17 @@ export interface FactoryAgentConfig {
   debug?: boolean;
 }
 
-export interface ProjectCard {
+export interface ProjectData {
   id: string;
   [key: string]: unknown;
 }
 
-export interface IssueCard {
+export interface IssueData {
   id: string;
   [key: string]: unknown;
 }
 
-export interface KnowledgeArticle {
+export interface KnowledgeArticleData {
   id: string;
   [key: string]: unknown;
 }
@@ -111,6 +111,38 @@ export interface TestResult {
   durationMs: number;
 }
 
+// ---------------------------------------------------------------------------
+// Validation types (broader than TestResult)
+// ---------------------------------------------------------------------------
+
+/** Steps in the post-iteration validation pipeline. */
+export type ValidationStep =
+  | 'parse'
+  | 'lint'
+  | 'evaluate'
+  | 'instantiate'
+  | 'test';
+
+export interface ValidationError {
+  file?: string;
+  message: string;
+  stackTrace?: string;
+}
+
+/** Result of a single validation step. */
+export interface ValidationStepResult {
+  step: ValidationStep;
+  passed: boolean;
+  files?: string[];
+  errors: ValidationError[];
+}
+
+/** Aggregated results from a full validation run (all steps). */
+export interface ValidationResults {
+  passed: boolean;
+  steps: ValidationStepResult[];
+}
+
 export interface ToolResult {
   tool: string;
   exitCode: number;
@@ -119,9 +151,9 @@ export interface ToolResult {
 }
 
 export interface AgentContext {
-  project: ProjectCard;
-  issue: IssueCard;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData;
+  issue: IssueData;
+  knowledge: KnowledgeArticleData[];
   skills: ResolvedSkill[];
   /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
   tools?: ToolManifest[];
@@ -133,7 +165,10 @@ export interface AgentContext {
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
-  testRealmUrl: string;
+  /** Validation results from the prior inner-loop iteration. */
+  validationResults?: ValidationResults;
+  /** Brief URL for bootstrap issues. */
+  briefUrl?: string;
 }
 
 export interface AgentAction {

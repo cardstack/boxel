@@ -25,7 +25,6 @@ function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
     skills: [],
     tools: [],
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     ...overrides,
   };
 }
@@ -192,7 +191,6 @@ module('factory-prompt-loader > FilePromptLoader', function () {
     let loader = new FilePromptLoader();
     let result = loader.load('system', {
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/test/',
       skills: [],
     });
     assert.ok(
@@ -206,7 +204,6 @@ module('factory-prompt-loader > FilePromptLoader', function () {
     let loader = new FilePromptLoader();
     let vars = {
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/test/',
       skills: [],
     };
     let first = loader.load('system', vars);
@@ -227,7 +224,6 @@ module('factory-prompt-loader > FilePromptLoader', function () {
     let loader = new FilePromptLoader();
     let vars = {
       targetRealmUrl: 'https://example.test/target/',
-      testRealmUrl: 'https://example.test/test/',
       skills: [],
     };
     let first = loader.load('system', vars);

@@ -114,7 +114,6 @@ async function main(): Promise<void> {
     skills: [],
     tools: [],
     targetRealmUrl: 'https://example.test/user/target/',
-    testRealmUrl: 'https://example.test/user/target-tests/',
   };
 
   log.info('Sending plan() request...');

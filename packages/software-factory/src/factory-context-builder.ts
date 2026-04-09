@@ -1,9 +1,10 @@
 import type {
   AgentContext,
-  IssueCard,
-  KnowledgeArticle,
-  ProjectCard,
+  IssueData,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
+  ValidationResults,
 } from './factory-agent';
 
 import type { ResolvedSkill } from './factory-agent';
@@ -15,6 +16,22 @@ import {
 } from './factory-skill-loader';
 
 // ---------------------------------------------------------------------------
+// Issue relationship loader
+// ---------------------------------------------------------------------------
+
+/**
+ * Loads related cards from an issue's relationships.
+ *
+ * The `buildForIssue()` method uses this to traverse the issue's
+ * linksTo / linksToMany fields (project, relatedKnowledge)
+ * without coupling ContextBuilder to the realm I/O layer.
+ */
+export interface IssueRelationshipLoader {
+  loadProject(issue: IssueData): Promise<ProjectData | undefined>;
+  loadKnowledge(issue: IssueData): Promise<KnowledgeArticleData[]>;
+}
+
+// ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
 
@@ -23,6 +40,8 @@ export interface ContextBuilderConfig {
   skillLoader: SkillLoaderInterface;
   /** Maximum token budget for skills. When set, enforceSkillBudget() trims. */
   maxSkillTokens?: number;
+  /** Loader for traversing issue relationships (required for buildForIssue). */
+  issueLoader?: IssueRelationshipLoader;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,11 +52,13 @@ export class ContextBuilder {
   private skillResolver: SkillResolver;
   private skillLoader: SkillLoaderInterface;
   private maxSkillTokens: number | undefined;
+  private issueLoader: IssueRelationshipLoader | undefined;
 
   constructor(config: ContextBuilderConfig) {
     this.skillResolver = config.skillResolver;
     this.skillLoader = config.skillLoader;
     this.maxSkillTokens = config.maxSkillTokens;
+    this.issueLoader = config.issueLoader;
   }
 
   /**
@@ -50,15 +71,14 @@ export class ContextBuilder {
    * 4. Return AgentContext (tools are provided separately as FactoryTool[])
    */
   async build(params: {
-    project: ProjectCard;
-    issue: IssueCard;
-    knowledge: KnowledgeArticle[];
+    project: ProjectData;
+    issue: IssueData;
+    knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    testRealmUrl: string;
     /** Test results from the previous iteration, if any. */
     testResults?: TestResult;
   }): Promise<AgentContext> {
-    let { project, issue, knowledge, targetRealmUrl, testRealmUrl } = params;
+    let { project, issue, knowledge, targetRealmUrl } = params;
 
     // Step 1: Resolve which skills are needed for this issue
     let skillNames = this.skillResolver.resolve(issue, project);
@@ -79,12 +99,78 @@ export class ContextBuilder {
       knowledge,
       skills,
       targetRealmUrl,
-      testRealmUrl,
     };
 
     // Include test results when iterating after a failed test run
     if (params.testResults) {
       context.testResults = params.testResults;
+    }
+
+    return context;
+  }
+
+  /**
+   * Build agent context from the current issue (issue-driven loop).
+   *
+   * Unlike `build()` which takes pre-loaded project/knowledge, this method
+   * traverses issue relationships to load them automatically:
+   * - project from issue.project
+   * - knowledge from issue.relatedKnowledge
+   *
+   * Accepts optional validationResults from the prior inner-loop iteration
+   * so the agent can self-correct on failures.
+   */
+  async buildForIssue(params: {
+    issue: IssueData;
+    targetRealmUrl: string;
+    validationResults?: ValidationResults;
+    briefUrl?: string;
+  }): Promise<AgentContext> {
+    if (!this.issueLoader) {
+      throw new Error(
+        'buildForIssue() requires an issueLoader in ContextBuilderConfig',
+      );
+    }
+
+    let { issue, targetRealmUrl } = params;
+
+    // Step 1: Traverse issue relationships
+    let [project, knowledge] = await Promise.all([
+      this.issueLoader.loadProject(issue),
+      this.issueLoader.loadKnowledge(issue),
+    ]);
+
+    if (!project) {
+      throw new Error(
+        `Issue "${issue.id}" has no linked project — cannot build context`,
+      );
+    }
+
+    // Step 2: Resolve and load skills
+    let skillNames = this.skillResolver.resolve(issue, project);
+    let skills: ResolvedSkill[] = await this.skillLoader.loadAll(
+      skillNames,
+      issue,
+    );
+
+    // Step 3: Enforce token budget if configured
+    skills = enforceSkillBudget(skills, this.maxSkillTokens);
+
+    // Step 4: Assemble the context
+    let context: AgentContext = {
+      project,
+      issue,
+      knowledge,
+      skills,
+      targetRealmUrl,
+    };
+
+    if (params.validationResults) {
+      context.validationResults = params.validationResults;
+    }
+
+    if (params.briefUrl) {
+      context.briefUrl = params.briefUrl;
     }
 
     return context;

@@ -18,9 +18,9 @@ import { resolve } from 'node:path';
 import { logger } from './logger';
 
 import type {
-  IssueCard,
-  KnowledgeArticle,
-  ProjectCard,
+  IssueData,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
 } from './factory-agent';
 import {
@@ -137,10 +137,6 @@ export async function runFactoryImplement(
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let fetchImpl = config.fetch ?? globalThis.fetch;
 
-  // Derive the test-artifacts realm URL from the target realm URL.
-  // e.g., "http://localhost:4201/user/my-realm/" -> "http://localhost:4201/user/my-realm-test-artifacts/"
-  let testRealmUrl = targetRealmUrl.replace(/\/$/, '-test-artifacts/');
-
   // 1. Auth: get Matrix auth, server token, and per-realm JWTs
   let { serverToken, realmTokens } = await resolveAuth(config);
 
@@ -160,7 +156,6 @@ export async function runFactoryImplement(
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
-    testRealmUrl,
     fetch: fetchImpl,
     authorization: config.authorization,
   });
@@ -244,7 +239,6 @@ export async function runFactoryImplement(
     issue,
     knowledge,
     targetRealmUrl,
-    testRealmUrl,
     maxIterations: config.maxIterations,
   });
 
@@ -383,9 +377,9 @@ async function fetchCardData(
   bootstrapResult: FactoryBootstrapResult,
   fetchOptions: RealmFetchOptions,
 ): Promise<{
-  project: ProjectCard;
-  issue: IssueCard;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData;
+  issue: IssueData;
+  knowledge: KnowledgeArticleData[];
 }> {
   // Fetch the project card
   let project = await fetchCard(
@@ -402,7 +396,7 @@ async function fetchCardData(
   );
 
   // Fetch all knowledge articles
-  let knowledge: KnowledgeArticle[] = [];
+  let knowledge: KnowledgeArticleData[] = [];
   for (let ka of bootstrapResult.knowledgeArticles) {
     try {
       let card = await fetchCard(targetRealmUrl, ka.id, fetchOptions);
@@ -461,7 +455,7 @@ interface TestRunnerConfig {
  */
 function buildTestRunner(
   targetRealmUrl: string,
-  issue: IssueCard,
+  issue: IssueData,
   toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {

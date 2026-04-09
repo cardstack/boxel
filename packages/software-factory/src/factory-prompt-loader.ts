@@ -386,7 +386,6 @@ export function assembleSystemPrompt(
 
   return loader.load('system', {
     targetRealmUrl: context.targetRealmUrl,
-    testRealmUrl: context.testRealmUrl,
     skills,
   });
 }

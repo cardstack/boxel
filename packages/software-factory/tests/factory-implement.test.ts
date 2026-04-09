@@ -244,27 +244,6 @@ module('factory-implement', function () {
         ctx.targetRealmUrl,
         'http://localhost:4201/test-user/my-realm/',
       );
-      assert.strictEqual(
-        ctx.testRealmUrl,
-        'http://localhost:4201/test-user/my-realm-test-artifacts/',
-      );
-    });
-
-    test('derives test realm URL correctly', async function (assert) {
-      let agent = new MockLoopAgentForTest([{ status: 'done', toolCalls: [] }]);
-
-      let config = makeConfig({
-        agent,
-        targetRealmUrl: 'http://localhost:4201/hassan1/personal/',
-      });
-      await runFactoryImplement(config);
-
-      // The agent context should have the derived test realm URL
-      let ctx = agent.receivedContexts[0];
-      assert.strictEqual(
-        ctx.testRealmUrl,
-        'http://localhost:4201/hassan1/personal-test-artifacts/',
-      );
     });
 
     test('handles maxIterations configuration', async function (assert) {

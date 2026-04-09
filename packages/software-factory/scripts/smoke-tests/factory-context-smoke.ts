@@ -16,9 +16,9 @@ import { parseArgs } from 'node:util';
 import { logger } from '../../src/logger';
 
 import type {
-  KnowledgeArticle,
-  ProjectCard,
-  IssueCard,
+  KnowledgeArticleData,
+  ProjectData,
+  IssueData,
 } from '../../src/factory-agent';
 import { ContextBuilder } from '../../src/factory-context-builder';
 import {
@@ -50,12 +50,12 @@ function check(label: string, ok: boolean, detail?: string): void {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const SAMPLE_PROJECT: ProjectCard = {
+const SAMPLE_PROJECT: ProjectData = {
   id: 'Projects/sticky-notes',
   name: 'Sticky Notes MVP',
 };
 
-const SAMPLE_KNOWLEDGE: KnowledgeArticle[] = [
+const SAMPLE_KNOWLEDGE: KnowledgeArticleData[] = [
   {
     id: 'Knowledge/card-basics',
     title: 'Boxel Card Development Basics',
@@ -68,7 +68,7 @@ const SAMPLE_KNOWLEDGE: KnowledgeArticle[] = [
   },
 ];
 
-const SAMPLE_ISSUES: { label: string; issue: IssueCard }[] = [
+const SAMPLE_ISSUES: { label: string; issue: IssueData }[] = [
   {
     label: 'Card definition (.gts work)',
     issue: {
@@ -152,7 +152,6 @@ async function main(): Promise<void> {
       issue,
       knowledge: SAMPLE_KNOWLEDGE,
       targetRealmUrl: 'https://example.test/user/target/',
-      testRealmUrl: 'https://example.test/user/target-test-artifacts/',
     });
 
     log.info('  First pass (no test results):');
@@ -171,10 +170,6 @@ async function main(): Promise<void> {
     check(
       'targetRealmUrl set',
       ctx.targetRealmUrl === 'https://example.test/user/target/',
-    );
-    check(
-      'testRealmUrl set',
-      ctx.testRealmUrl === 'https://example.test/user/target-test-artifacts/',
     );
 
     let totalTokens = ctx.skills.reduce((s, sk) => s + estimateTokens(sk), 0);
@@ -195,7 +190,6 @@ async function main(): Promise<void> {
       issue,
       knowledge: SAMPLE_KNOWLEDGE,
       targetRealmUrl: 'https://example.test/user/target/',
-      testRealmUrl: 'https://example.test/user/target-test-artifacts/',
       testResults: {
         status: 'failed',
         passedCount: 2,
@@ -254,7 +248,6 @@ async function main(): Promise<void> {
       issue: SAMPLE_ISSUES[0].issue,
       knowledge: [],
       targetRealmUrl: 'https://example.test/user/target/',
-      testRealmUrl: 'https://example.test/user/target-test-artifacts/',
     });
 
     let totalTokens = ctx.skills.reduce((s, sk) => s + estimateTokens(sk), 0);
