@@ -24,18 +24,19 @@ This makes the loop generic. It doesn't need to know whether an issue is "implem
 
 Issues need properties that let the orchestrator determine execution order. Possible fields (may use a combination):
 
-- **priority** — enum (`high`, `medium`, `low`), high = execute first
+- **priority** — enum (`critical`, `high`, `medium`, `low`), critical = execute first
 - **predecessors / blockedBy** — explicit dependency edges; an issue cannot start until its blockers are done
 - **order** — explicit sequence number for tie-breaking
 
-The selection algorithm:
+The selection algorithm (implemented in `IssueScheduler.pickNextIssue()`):
 
-1. Filter to issues with status `ready` or `in_progress`
+1. Filter to issues with status `backlog` or `in_progress`
 2. Exclude issues whose `blockedBy` list contains any non-completed issue
-3. Sort by priority (high first, then medium, then low), then by order (ascending)
-4. Pick the first one
+3. Exclude exhausted issues (hit `maxIterationsPerIssue` in the current run)
+4. Sort: `in_progress` first, then by priority (`critical` > `high` > `medium` > `low`), then by order (ascending)
+5. Pick the first one
 
-Resume semantics: if an issue is already `in_progress`, it takes priority over `ready` issues (the factory was interrupted and should continue where it left off).
+Resume semantics: if an issue is already `in_progress`, it takes priority over `backlog` issues (the factory was interrupted and should continue where it left off).
 
 ## Validation Phase After Every Iteration
 
@@ -127,29 +128,77 @@ This is the "quirk" where an issue's job is to create the project itself. But it
 
 The phase 2 orchestrator is a thin scheduler with a built-in validation phase that runs after every agent turn:
 
-```
-while (hasUnblockedIssues()) {
-  let issue = pickNextIssue();
+```typescript
+// As implemented in runIssueLoop() — src/issue-loop.ts
+let exhaustedIssues = new Set<string>();
+
+while (
+  scheduler.hasUnblockedIssues(exhaustedIssues) &&
+  outerCycles < maxOuterCycles
+) {
+  let issue = scheduler.pickNextIssue(exhaustedIssues);
 
   // Inner loop: multiple iterations per issue
-  let validationResults = null;
-  while (issue.status !== 'done' && issue.status !== 'blocked' && iterations < maxIterations) {
-    await agent.run(contextForIssue(issue, validationResults), tools);
-    refreshIssueState(issue);
+  let validationResults = undefined;
+  for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
+    let context = await contextBuilder.buildForIssue({
+      issue,
+      targetRealmUrl,
+      validationResults,
+      briefUrl,
+    });
+    let result = await agent.run(context, tools);
 
-    // Validation phase — runs after EVERY iteration
-    validationResults = await validate(targetRealm);  // parse, lint, evaluate, instantiate, run tests
-    // Failures are fed back as context in the next iteration — agent self-corrects
-    // Agent can also create new issues via tool calls if it decides to
+    // Validation phase — runs after EVERY agent turn
+    validationResults = await validator.validate(targetRealmUrl);
 
-    iterations++;
+    // Read issue state from realm (not from AgentRunResult.status)
+    issue = await scheduler.refreshIssueState(issue);
+
+    if (issue.status === 'done' || issue.status === 'blocked') break;
   }
+
+  if (exitReason === 'max_iterations') exhaustedIssues.add(issue.id);
+
+  // Reload to pick up new issues the agent may have created
+  await scheduler.loadIssues();
 }
 ```
 
 The agent signals progress by updating the issue — tagging it as blocked, marking it done, or leaving it in progress for another iteration. The orchestrator reads issue state from the realm after each agent turn, then runs validation. Validation failures are fed back as context in the next inner-loop iteration so the agent can self-correct. The agent can also create new issues via tool calls if it determines a failure requires separate work.
 
 All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, and validation.
+
+### Issue Loading via searchRealm()
+
+`RealmIssueStore` loads issues from the target realm using `searchRealm()` from `realm-operations.ts`. The search filter uses the absolute darkfactory module URL (from `inferDarkfactoryModuleUrl(targetRealmUrl)`), which varies by environment (production, staging, localhost). The store maps JSON:API card responses to `SchedulableIssue` objects.
+
+Boxel encodes `linksToMany` relationships with dotted keys rather than JSON:API `data` arrays:
+
+```json
+{
+  "relationships": {
+    "blockedBy.0": { "links": { "self": "../Issues/issue-a" } },
+    "blockedBy.1": { "links": { "self": "../Issues/issue-b" } }
+  }
+}
+```
+
+The `extractLinksToManyIds()` helper parses this format to extract blocker IDs for dependency resolution.
+
+When `searchRealm()` fails (auth, network, query errors), the store logs at `warn` level and returns an empty list — preventing the loop from silently treating a failure as "no issues exist."
+
+### Loop Outcome Determination
+
+The loop distinguishes several terminal states:
+
+| Condition                                     | Outcome               |
+| --------------------------------------------- | --------------------- |
+| No issues loaded                              | `all_issues_done`     |
+| Issues exist but all blocked at startup       | `no_unblocked_issues` |
+| All issues completed successfully             | `all_issues_done`     |
+| Some issues done, others blocked or exhausted | `no_unblocked_issues` |
+| Safety guard hit                              | `max_outer_cycles`    |
 
 ## Schema Refinement: darkfactory.gts
 
@@ -237,24 +286,25 @@ CS-10671 trims and renames the current schema as a first step. The adoption from
 ## Issue Lifecycle
 
 ```
-created → ready → in_progress → done
-                → blocked (needs human input)
-                → failed (max retries exceeded)
+backlog → in_progress → done
+                      → blocked (needs human input)
+                      → review (optional)
 ```
+
+Issues that exhaust `maxIterationsPerIssue` without completing stay in their current status but are excluded from re-picking in the same loop run via an `exhaustedIssues` set.
 
 The agent manages its own transitions by updating the issue directly (e.g., tagging as blocked, marking done). The orchestrator reads the issue state after the agent exits to decide what to do next — it does not inspect the agent's return value for status.
 
 ## Migration Path from Phase 1
 
-Phase 1 and phase 2 can coexist:
+Phase 1 and phase 2 coexist during the transition. The implementation lives in separate files to avoid touching Phase 1 code:
 
-1. Phase 1 ships with the hard-coded pipeline (`factory-loop.ts`)
-2. Phase 2 introduces an `IssueScheduler` that replaces the fixed loop with issue-driven scheduling
-3. The `LoopAgent` interface (`run(context, tools)`) stays the same — only the orchestrator changes
-4. `ContextBuilder` gains an issue-aware mode that builds context from the current issue rather than a fixed ticket
-5. The `TestRunner` callback becomes a tool the agent can call, rather than a loop phase
+- `src/issue-scheduler.ts` — `IssueScheduler`, `IssueStore`, `RealmIssueStore`
+- `src/issue-loop.ts` — `runIssueLoop()`, `Validator`, `NoOpValidator`, config/result types
 
-The `FactoryTool[]` type from phase 1 carries forward unchanged. `AgentRunResult` may be simplified — in phase 2 the agent signals completion by updating the issue (tagging as blocked, marking done), so the orchestrator reads issue state rather than inspecting a return status. The agent just needs to exit; the orchestrator figures out what happened from the issue.
+Phase 1's `factory-loop.ts` (`runFactoryLoop()`) remains untouched. The `LoopAgent` interface (`run(context, tools)`) is unchanged and reused by both loops. `FactoryTool[]` carries forward unchanged.
+
+CS-10708 tracks the integration work: wire `runIssueLoop()`, the validation phase (CS-10675), and bootstrap-as-seed (CS-10673) into the `factory:go` entrypoint, then retire all Phase 1 mechanisms (`factory-loop.ts`, `factory-loop.test.ts`, old bootstrap orchestration, `TestRunner`/`buildTestRunner()`).
 
 ## Refactor: request_clarification → Blocking Issue
 
