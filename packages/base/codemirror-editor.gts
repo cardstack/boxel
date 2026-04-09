@@ -21,6 +21,9 @@ import CodeIcon from '@cardstack/boxel-icons/code';
 import Heading1Icon from '@cardstack/boxel-icons/heading-1';
 import Heading2Icon from '@cardstack/boxel-icons/heading-2';
 import Heading3Icon from '@cardstack/boxel-icons/heading-3';
+import ListIcon from '@cardstack/boxel-icons/list';
+import ListOrderedIcon from '@cardstack/boxel-icons/list-ordered';
+import BlockquoteIcon from '@cardstack/boxel-icons/blockquote';
 import {
   computePosition,
   flip,
@@ -429,6 +432,41 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
   };
 
+  _toggleLinePrefix = (prefix: string) => {
+    let view = this.editorView;
+    if (!view) return;
+    let { from, to } = view.state.selection.main;
+    let startLine = view.state.doc.lineAt(from);
+    let endLine = view.state.doc.lineAt(to);
+    let changes: { from: number; to: number; insert: string }[] = [];
+
+    // Check if all affected lines already have this prefix
+    let allHavePrefix = true;
+    for (let i = startLine.number; i <= endLine.number; i++) {
+      let line = view.state.doc.line(i);
+      if (!line.text.startsWith(prefix)) {
+        allHavePrefix = false;
+        break;
+      }
+    }
+
+    for (let i = startLine.number; i <= endLine.number; i++) {
+      let line = view.state.doc.line(i);
+      if (allHavePrefix) {
+        // Remove prefix from all lines
+        changes.push({ from: line.from, to: line.from + prefix.length, insert: '' });
+      } else if (!line.text.startsWith(prefix)) {
+        // Add prefix to lines that don't have it
+        changes.push({ from: line.from, to: line.from, insert: prefix });
+      }
+    }
+
+    if (changes.length) {
+      view.dispatch({ changes });
+    }
+    view.focus();
+  };
+
   // ── Card insertion ───────────────────────────────────────────────────────
 
   _insertCardWithFormat = (format: string) => {
@@ -749,6 +787,27 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             title='Heading 3'
             {{on 'mousedown' (fn this._insertHeading 3)}}
           ><Heading3Icon @width='16' @height='16' /></button>
+
+          <span class='toolbar-divider'></span>
+
+          <button
+            class='toolbar-btn'
+            data-test-toolbar-bullet-list
+            title='Bullet List'
+            {{on 'mousedown' (fn this._toggleLinePrefix '- ')}}
+          ><ListIcon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn'
+            data-test-toolbar-numbered-list
+            title='Numbered List'
+            {{on 'mousedown' (fn this._toggleLinePrefix '1. ')}}
+          ><ListOrderedIcon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn'
+            data-test-toolbar-blockquote
+            title='Blockquote'
+            {{on 'mousedown' (fn this._toggleLinePrefix '> ')}}
+          ><BlockquoteIcon @width='16' @height='16' /></button>
         </div>
       {{/if}}
 
