@@ -144,7 +144,7 @@ export interface ValidationResults {
 }
 
 // ---------------------------------------------------------------------------
-// Issue scheduling types (Phase 2)
+// Issue scheduling types
 // ---------------------------------------------------------------------------
 
 export type IssueStatus = 'ready' | 'in_progress' | 'done' | 'blocked';

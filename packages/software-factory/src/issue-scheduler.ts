@@ -1,5 +1,5 @@
 /**
- * Issue scheduler for the Phase 2 issue-driven loop.
+ * Issue scheduler for the issue-driven loop.
  *
  * Owns issue selection, dependency resolution, and state refresh.
  * Uses an IssueStore abstraction for realm I/O so the scheduler

@@ -11,7 +11,6 @@
     "factory:go": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/factory-entrypoint.ts",
     "smoke:agent": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-agent-smoke.ts",
     "smoke:context": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-context-smoke.ts",
-    "smoke:loop": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-loop-smoke.ts",
     "smoke:prompt": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-prompt-smoke.ts",
     "smoke:skill": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-skill-smoke.ts",
     "smoke:issue-loop": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/issue-loop-smoke.ts",

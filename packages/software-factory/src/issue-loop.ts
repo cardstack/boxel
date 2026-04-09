@@ -1,5 +1,5 @@
 /**
- * Issue-driven execution loop (Phase 2).
+ * Issue-driven execution loop.
  *
  * Two-level loop structure:
  * - Outer loop: iterates over unblocked issues via IssueScheduler
