@@ -1000,7 +1000,12 @@ export default class RealmService extends Service {
     let allRealmsInfoEntries = Object.entries(this.allRealmsInfo);
 
     if (allRealmsInfoEntries.length > 0) {
-      let firstMeta = allRealmsInfoEntries[0];
+      // Prefer a non-base realm as the default (the base realm is read-only
+      // and not useful as a default workspace).
+      let nonBase = allRealmsInfoEntries.find(
+        ([url]) => !isRegisteredPrefix(url),
+      );
+      let firstMeta = nonBase ?? allRealmsInfoEntries[0];
       return { path: firstMeta[0], info: firstMeta[1].info };
     }
 

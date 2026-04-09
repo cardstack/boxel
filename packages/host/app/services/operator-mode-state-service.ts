@@ -1046,6 +1046,18 @@ export default class OperatorModeStateService extends Service {
       if (isReady(this.openFile.current)) {
         return this.readyFile.realmURL;
       }
+      // When no file is open yet, infer the realm from the stack
+      // (the same logic used in interact mode).
+      let stack = this.rightMostStack();
+      if (stack) {
+        let cardId = stack[0]?.id;
+        if (cardId) {
+          let realm = this.realm.url(cardId);
+          if (realm) {
+            return realm;
+          }
+        }
+      }
     }
 
     // For interact mode, the idea of "current realm" is a bit abstract. the
