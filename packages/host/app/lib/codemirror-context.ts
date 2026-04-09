@@ -891,11 +891,58 @@ const markdownKeymap = keymap.of([
 
 // ── createEditorState factory ───────────────────────────────────────────────
 
+export interface SelectionInfo {
+  hasSelection: boolean;
+  from: number;
+  to: number;
+  /** Bounding rect of the selection relative to the editor container */
+  coords: { left: number; top: number; right: number; bottom: number } | null;
+  /** Which inline formats are active in the current selection */
+  formats: {
+    bold: boolean;
+    italic: boolean;
+    code: boolean;
+    strikethrough: boolean;
+    link: boolean;
+  };
+}
+
+function detectFormats(
+  state: EditorState,
+  from: number,
+  to: number,
+): SelectionInfo['formats'] {
+  let text = state.sliceDoc(from, to);
+  // Check if the selection (or surrounding context) contains these markers
+  let before = state.sliceDoc(Math.max(0, from - 3), from);
+  let after = state.sliceDoc(to, Math.min(state.doc.length, to + 3));
+  let expanded = before + text + after;
+
+  return {
+    bold:
+      (text.startsWith('**') && text.endsWith('**')) ||
+      (before.endsWith('**') && after.startsWith('**')),
+    italic:
+      ((text.startsWith('*') && text.endsWith('*')) ||
+        (before.endsWith('*') && after.startsWith('*'))) &&
+      !((text.startsWith('**') && text.endsWith('**')) ||
+        (before.endsWith('**') && after.startsWith('**'))),
+    code:
+      (text.startsWith('`') && text.endsWith('`')) ||
+      (before.endsWith('`') && after.startsWith('`')),
+    strikethrough:
+      (text.startsWith('~~') && text.endsWith('~~')) ||
+      (before.endsWith('~~') && after.startsWith('~~')),
+    link: expanded.includes(']('),
+  };
+}
+
 export interface CreateEditorStateOptions {
   content: string;
   onDocChange: (text: string) => void;
   onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
   onOpenCardSearch: (pos: { from: number; to: number }) => void;
+  onSelectionChange?: (info: SelectionInfo) => void;
   /** When false, all syntax markers are visible (source mode). Default true. */
   livePreview?: boolean;
 }
@@ -906,6 +953,7 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     onDocChange,
     onCardTargetsChange,
     onOpenCardSearch,
+    onSelectionChange,
     livePreview = true,
   } = options;
 
@@ -935,6 +983,39 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       if (update.docChanged) {
         onDocChange(update.state.doc.toString());
       }
+      if (onSelectionChange && (update.selectionSet || update.docChanged || update.geometryChanged)) {
+        let { from, to } = update.state.selection.main;
+        let hasSelection = from !== to;
+        let coords: SelectionInfo['coords'] = null;
+        if (hasSelection) {
+          let fromCoords = update.view.coordsAtPos(from);
+          let toCoords = update.view.coordsAtPos(to);
+          if (fromCoords && toCoords) {
+            // Check if selection is visible within the scrollable container
+            let scrollParent = update.view.dom.closest('.boxel-card-container');
+            let parentRect = scrollParent?.getBoundingClientRect();
+            let selectionVisible = !parentRect ||
+              (fromCoords.top < parentRect.bottom && toCoords.bottom > parentRect.top);
+            if (selectionVisible) {
+              coords = {
+                left: Math.min(fromCoords.left, toCoords.left),
+                top: fromCoords.top,
+                right: Math.max(fromCoords.right, toCoords.right),
+                bottom: toCoords.bottom,
+              };
+            }
+          }
+        }
+        onSelectionChange({
+          hasSelection,
+          from,
+          to,
+          coords,
+          formats: hasSelection
+            ? detectFormats(update.state, from, to)
+            : { bold: false, italic: false, code: false, strikethrough: false, link: false },
+        });
+      }
     }),
     EditorView.lineWrapping,
   ];
@@ -955,6 +1036,7 @@ export interface CodeMirrorContext {
   redo: typeof redo;
   openCardSearchEffect: typeof openCardSearchEffect;
   focusChangeEffect: typeof focusChangeEffect;
+  wrapWith: typeof wrapWith;
 }
 
 const codemirrorContext: CodeMirrorContext = {
@@ -965,6 +1047,7 @@ const codemirrorContext: CodeMirrorContext = {
   redo,
   openCardSearchEffect,
   focusChangeEffect,
+  wrapWith,
 };
 
 export default codemirrorContext;

@@ -14,6 +14,15 @@ import {
 import { type BaseDef, type CardDef, getComponent } from './card-api';
 import { CardContextConsumer } from './field-component';
 
+import BoldIcon from '@cardstack/boxel-icons/bold';
+import ItalicIcon from '@cardstack/boxel-icons/italic';
+import StrikethroughIcon from '@cardstack/boxel-icons/strikethrough';
+import CodeIcon from '@cardstack/boxel-icons/code';
+import LinkIcon from '@cardstack/boxel-icons/link';
+import Heading1Icon from '@cardstack/boxel-icons/heading-1';
+import Heading2Icon from '@cardstack/boxel-icons/heading-2';
+import Heading3Icon from '@cardstack/boxel-icons/heading-3';
+
 // The CodeMirrorContext type is defined in the host app's lazy-loaded module.
 // We only use it as a type here — the actual module is loaded at runtime via
 // globalThis.__loadCodeMirror.
@@ -28,6 +37,22 @@ interface CardRenderTarget extends CardWidgetTarget {
   card: CardDef | null;
 }
 
+interface SelectionFormats {
+  bold: boolean;
+  italic: boolean;
+  code: boolean;
+  strikethrough: boolean;
+  link: boolean;
+}
+
+interface SelectionInfo {
+  hasSelection: boolean;
+  from: number;
+  to: number;
+  coords: { left: number; top: number; right: number; bottom: number } | null;
+  formats: SelectionFormats;
+}
+
 interface CodeMirrorContext {
   EditorState: any;
   EditorView: any;
@@ -36,10 +61,12 @@ interface CodeMirrorContext {
     onDocChange: (text: string) => void;
     onCardTargetsChange: (targets: CardWidgetTarget[]) => void;
     onOpenCardSearch: (pos: { from: number; to: number }) => void;
+    onSelectionChange?: (info: SelectionInfo) => void;
     livePreview?: boolean;
   }) => any;
   undo: any;
   redo: any;
+  wrapWith: (marker: string) => (view: any) => boolean;
 }
 
 interface SlashMenuItem {
@@ -115,11 +142,15 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   @tracked _formatPickerCardUrl: string | null = null;
   @tracked _formatPickerCardTitle: string | null = null;
 
+  // ── Floating toolbar state ──────────────────────────────────────────────
+  @tracked _selectionInfo: SelectionInfo | null = null;
+
   private editorView: any = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private _pendingTargets: CardWidgetTarget[] = [];
   private _slotUpdatePending = false;
   private _currentLivePreview: boolean | undefined;
+  private _scrollCleanup: (() => void) | null = null;
 
   get livePreview(): boolean {
     return this.args.livePreview !== false;
@@ -291,6 +322,97 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._cardSearchIndex = 0;
     this._menuCoords = null;
     this.editorView?.focus();
+  };
+
+  // ── Floating toolbar ────────────────────────────────────────────────────
+
+  private _handleSelectionChange = (info: SelectionInfo) => {
+    this._selectionInfo = info;
+  };
+
+  private _updateToolbarCoordsOnScroll = () => {
+    let view = this.editorView;
+    if (!view || !this._selectionInfo?.hasSelection) return;
+    let { from, to } = view.state.selection.main;
+    if (from === to) return;
+    let fromCoords = view.coordsAtPos(from);
+    let toCoords = view.coordsAtPos(to);
+    if (fromCoords && toCoords) {
+      // Check if selection is visible within the scrollable container
+      let scrollParent = view.dom.closest('.boxel-card-container') as HTMLElement | null;
+      let parentRect = scrollParent?.getBoundingClientRect();
+      let selectionVisible = !parentRect ||
+        (fromCoords.top < parentRect.bottom && toCoords.bottom > parentRect.top);
+
+      this._selectionInfo = {
+        ...this._selectionInfo,
+        coords: selectionVisible ? {
+          left: Math.min(fromCoords.left, toCoords.left),
+          top: fromCoords.top,
+          right: Math.max(fromCoords.right, toCoords.right),
+          bottom: toCoords.bottom,
+        } : null,
+      };
+    }
+  };
+
+  get showToolbar(): boolean {
+    return !!this._selectionInfo?.hasSelection && !!this._selectionInfo?.coords;
+  }
+
+  get toolbarStyle(): string {
+    let coords = this._selectionInfo?.coords;
+    if (!coords) return 'display: none';
+    let centerX = (coords.left + coords.right) / 2;
+    return `left: ${centerX}px; top: ${coords.top}px;`;
+  }
+
+  get toolbarFormats(): SelectionFormats {
+    return (
+      this._selectionInfo?.formats ?? {
+        bold: false,
+        italic: false,
+        code: false,
+        strikethrough: false,
+        link: false,
+      }
+    );
+  }
+
+  _toolbarAction = (marker: string) => {
+    let cm = this._cm;
+    let view = this.editorView;
+    if (!cm || !view) return;
+    cm.wrapWith(marker)(view);
+    view.focus();
+  };
+
+  _insertHeading = (level: number) => {
+    let view = this.editorView;
+    if (!view) return;
+    let { from, to } = view.state.selection.main;
+    let line = view.state.doc.lineAt(from);
+    let lineText = line.text;
+    let prefix = '#'.repeat(level) + ' ';
+
+    // If the line already starts with this heading level, remove it
+    if (lineText.startsWith(prefix)) {
+      view.dispatch({
+        changes: { from: line.from, to: line.from + prefix.length, insert: '' },
+      });
+    } else {
+      // Remove any existing heading prefix
+      let existingMatch = lineText.match(/^#{1,6}\s/);
+      let removeLen = existingMatch ? existingMatch[0].length : 0;
+      view.dispatch({
+        changes: {
+          from: line.from,
+          to: line.from + removeLen,
+          insert: prefix,
+        },
+      });
+    }
+    view.focus();
   };
 
   // ── Card insertion ───────────────────────────────────────────────────────
@@ -529,6 +651,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       },
       onCardTargetsChange: this._handleTargetChange,
       onOpenCardSearch: this._handleOpenCardSearch,
+      onSelectionChange: this._handleSelectionChange,
     });
 
     let view = new cm.EditorView({
@@ -537,6 +660,19 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     });
 
     this.editorView = view;
+
+    // Listen for scroll on the nearest scrollable ancestor so the
+    // floating toolbar tracks the selection when the card scrolls.
+    this._scrollCleanup?.();
+    let scrollParent = element.closest('.boxel-card-container') ?? element.parentElement;
+    if (scrollParent) {
+      let handler = this._updateToolbarCoordsOnScroll;
+      scrollParent.addEventListener('scroll', handler, { passive: true });
+      this._scrollCleanup = () => {
+        scrollParent.removeEventListener('scroll', handler);
+        this._scrollCleanup = null;
+      };
+    }
 
     // Cleanup only clears the debounce timer. Editor destruction is
     // handled by willDestroy — this prevents the Ember modifier
@@ -547,6 +683,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
+      this._scrollCleanup?.();
     };
   });
 
@@ -559,6 +696,61 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         ...attributes
       >
       </div>
+
+      {{! ── Floating toolbar ── }}
+      {{#if this.showToolbar}}
+        <div
+          class='codemirror-floating-toolbar'
+          style={{this.toolbarStyle}}
+          data-test-floating-toolbar
+        >
+          <button
+            class='toolbar-btn {{if this.toolbarFormats.bold "toolbar-btn--active"}}'
+            data-test-toolbar-bold
+            title='Bold'
+            {{on 'mousedown' (fn this._toolbarAction '**')}}
+          ><BoldIcon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
+            data-test-toolbar-italic
+            title='Italic'
+            {{on 'mousedown' (fn this._toolbarAction '*')}}
+          ><ItalicIcon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
+            data-test-toolbar-strikethrough
+            title='Strikethrough'
+            {{on 'mousedown' (fn this._toolbarAction '~~')}}
+          ><StrikethroughIcon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn {{if this.toolbarFormats.code "toolbar-btn--active"}}'
+            data-test-toolbar-code
+            title='Code'
+            {{on 'mousedown' (fn this._toolbarAction '`')}}
+          ><CodeIcon @width='16' @height='16' /></button>
+
+          <span class='toolbar-divider'></span>
+
+          <button
+            class='toolbar-btn'
+            data-test-toolbar-h1
+            title='Heading 1'
+            {{on 'mousedown' (fn this._insertHeading 1)}}
+          ><Heading1Icon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn'
+            data-test-toolbar-h2
+            title='Heading 2'
+            {{on 'mousedown' (fn this._insertHeading 2)}}
+          ><Heading2Icon @width='16' @height='16' /></button>
+          <button
+            class='toolbar-btn'
+            data-test-toolbar-h3
+            title='Heading 3'
+            {{on 'mousedown' (fn this._insertHeading 3)}}
+          ><Heading3Icon @width='16' @height='16' /></button>
+        </div>
+      {{/if}}
 
       {{! ── Card search popup ── }}
       {{#if this._cardSearchMode}}
@@ -929,6 +1121,53 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                font-size: 0.85em;
                color: var(--boxel-400, #666);
                word-break: break-all;
+             }
+
+             /* ── Floating toolbar ── */
+             .codemirror-floating-toolbar {
+               position: fixed;
+               z-index: 110;
+               display: flex;
+               align-items: center;
+               gap: 2px;
+               padding: 4px 6px;
+               background: var(--boxel-dark, #27272a);
+               border-radius: 8px;
+               box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+               transform: translate(-50%, -100%);
+               margin-top: -8px;
+               pointer-events: auto;
+             }
+
+             .toolbar-btn {
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               width: 28px;
+               height: 28px;
+               border: none;
+               border-radius: 4px;
+               background: transparent;
+               color: var(--boxel-light, #fafafa);
+               cursor: pointer;
+               padding: 0;
+               transition: background-color 0.1s;
+             }
+
+             .toolbar-btn:hover {
+               background: rgb(255 255 255 / 0.15);
+             }
+
+             .toolbar-btn--active {
+               background: rgb(255 255 255 / 0.2);
+               color: var(--boxel-highlight, #6366f1);
+             }
+
+             .toolbar-divider {
+               width: 1px;
+               height: 18px;
+               background: rgb(255 255 255 / 0.2);
+               margin: 0 4px;
              }
 
              .codemirror-editor-loading {
