@@ -348,15 +348,55 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this.editorView?.focus();
   };
 
+  // ── Card reference resolution via getCards ────────────────────────────────
+  // The linkedCards linksToMany query on RichMarkdownField returns empty in
+  // edit mode because nested FieldDef instances lack a card store. We bypass
+  // that by using getCards (from CardContext) to resolve cards independently.
+
+  private _cardRefResourceCreated = false;
+  private _cardRefResource: {
+    instances: CardDef[];
+    isLoading: boolean;
+  } | null = null;
+
+  get _resolvedCardUrls(): string[] {
+    let baseUrl = this.args.cardReferenceBaseUrl;
+    let urls = new Set<string>();
+    for (let target of this._widgetTargets) {
+      urls.add(resolveUrl(target.cardId, baseUrl));
+    }
+    return [...urls];
+  }
+
+  get resolvedCards(): CardDef[] {
+    if (!this._cardRefResourceCreated) {
+      this._cardRefResourceCreated = true;
+      let getCards = this.args.getCards;
+      if (typeof getCards === 'function') {
+        this._cardRefResource =
+          getCards(this, () => {
+            let urls = this._resolvedCardUrls;
+            if (!urls.length) return undefined;
+            return {
+              filter: { in: { id: urls } },
+            };
+          }) ?? null;
+      }
+    }
+    return this._cardRefResource?.instances ?? [];
+  }
+
   // ── Card slot resolution ─────────────────────────────────────────────────
 
   @cached
   get cardRenderTargets(): CardRenderTarget[] {
     let targets = this._widgetTargets;
-    let linkedCards = this.args.linkedCards;
     let baseUrl = this.args.cardReferenceBaseUrl;
 
     let cardsByUrl = new Map<string, CardDef>();
+
+    // Use linkedCards if available (works when store is present)
+    let linkedCards = this.args.linkedCards;
     if (linkedCards?.length) {
       for (let card of linkedCards) {
         if (card?.id) {
@@ -365,11 +405,21 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       }
     }
 
+    // Also use cards resolved via getCards resource (bypasses FallbackCardStore)
+    let resolved = this.resolvedCards;
+    if (resolved?.length) {
+      for (let card of resolved) {
+        if (card?.id) {
+          cardsByUrl.set(card.id, card);
+        }
+      }
+    }
+
     return targets.map((target) => {
-      let resolved = resolveUrl(target.cardId, baseUrl);
+      let resolvedUrl = resolveUrl(target.cardId, baseUrl);
       return {
         ...target,
-        card: cardsByUrl.get(resolved) ?? null,
+        card: cardsByUrl.get(resolvedUrl) ?? null,
       };
     });
   }
@@ -831,6 +881,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         /* ── Card widget containers ── */
         .codemirror-editor :deep(.cm-card-widget) {
           user-select: none;
+          white-space: normal;
         }
 
         .codemirror-editor :deep(.cm-card-widget--inline) {

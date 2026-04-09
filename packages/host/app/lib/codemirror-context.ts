@@ -629,10 +629,10 @@ function buildCardDecorations(
     }
 
     let line = doc.lineAt(from);
-    let onCursor = !livePreview || line.number === cursorLine;
+    let onCursor = livePreview && line.number === cursorLine;
 
-    if (onCursor) {
-      // Show raw syntax with active highlighting
+    if (!livePreview) {
+      // Source mode: show raw syntax with highlighting only
       decos.push({
         from,
         to,
@@ -640,6 +640,22 @@ function buildCardDecorations(
           class:
             'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
         }),
+      });
+    } else if (onCursor) {
+      // Cursor on line: show raw syntax AND card preview below
+      decos.push({
+        from,
+        to,
+        value: Decoration.mark({
+          class:
+            'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
+        }),
+      });
+      let previewWidget = new CardWidget(cardId, 'block');
+      decos.push({
+        from: to,
+        to: to,
+        value: Decoration.widget({ widget: previewWidget, side: 1 }),
       });
     } else {
       // Replace source text with card widget
@@ -660,16 +676,31 @@ function buildCardDecorations(
     if (isInsideCode(state, from, to)) continue;
 
     let cardId = match[1].trim();
-    let onCursor = !livePreview || isOnCursorLine(state, from, cursorLine);
+    let onCursor = livePreview && isOnCursorLine(state, from, cursorLine);
 
-    if (onCursor) {
-      // Show raw syntax dimmed
+    if (!livePreview) {
+      // Source mode: show raw syntax with highlighting only
       decos.push({
         from,
         to,
         value: Decoration.mark({
           class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
         }),
+      });
+    } else if (onCursor) {
+      // Cursor on line: show raw syntax AND card preview after
+      decos.push({
+        from,
+        to,
+        value: Decoration.mark({
+          class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+        }),
+      });
+      let previewWidget = new CardWidget(cardId, 'inline');
+      decos.push({
+        from: to,
+        to: to,
+        value: Decoration.widget({ widget: previewWidget, side: 1 }),
       });
     } else {
       // Replace source text with inline card widget
