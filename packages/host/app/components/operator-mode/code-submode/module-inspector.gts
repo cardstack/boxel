@@ -23,6 +23,7 @@ import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import type {
+  cardIdToURL,
   CodeRef,
   CardErrorJSONAPI,
   ResolvedCodeRef,

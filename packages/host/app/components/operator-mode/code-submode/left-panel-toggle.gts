@@ -10,6 +10,7 @@ import { Button as BoxelButton } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { Download } from '@cardstack/boxel-ui/icons';
 
+import { cardIdToURL } from '@cardstack/runtime-common';
 import { createURLSignature } from '@cardstack/runtime-common/url-signature';
 
 import RealmDropdown from '@cardstack/host/components/realm-dropdown';
