@@ -6,6 +6,7 @@ import {
 import {
   getProfileManager,
   getUsernameFromMatrixId,
+  type ProfileManager,
 } from '../../lib/profile-manager';
 import {
   matrixLogin,
@@ -15,39 +16,42 @@ import {
 } from '../../lib/auth';
 import { FG_GREEN, FG_CYAN, DIM, RESET } from '../../lib/colors';
 
-const ENDPOINT_PATTERN = /^[a-z0-9-]+$/;
+const REALM_NAME_PATTERN = /^[a-z0-9-]+$/;
 
 export function registerCreateCommand(realm: Command): void {
   realm
     .command('create')
     .description('Create a new realm on the realm server')
-    .argument('<endpoint>', 'realm endpoint (lowercase, numbers, hyphens only)')
-    .argument('<name>', 'display name for the realm')
+    .argument('<realm-name>', 'realm name (lowercase, numbers, hyphens only)')
+    .argument('<display-name>', 'display name for the realm')
     .option('--background <url>', 'background image URL')
     .option('--icon <url>', 'icon image URL')
-    .action(async (endpoint: string, name: string, options: CreateOptions) => {
-      await createRealm(endpoint, name, options);
-    });
+    .action(
+      async (realmName: string, displayName: string, options: CreateOptions) => {
+        await createRealm(realmName, displayName, options);
+      },
+    );
 }
 
-interface CreateOptions {
+export interface CreateOptions {
   background?: string;
   icon?: string;
+  profileManager?: ProfileManager;
 }
 
 export async function createRealm(
-  endpoint: string,
-  name: string,
+  realmName: string,
+  displayName: string,
   options: CreateOptions,
 ): Promise<void> {
-  if (!ENDPOINT_PATTERN.test(endpoint)) {
+  if (!REALM_NAME_PATTERN.test(realmName)) {
     console.error(
-      'Error: endpoint must contain only lowercase letters, numbers, and hyphens',
+      'Error: realm name must contain only lowercase letters, numbers, and hyphens',
     );
     process.exit(1);
   }
 
-  let pm = getProfileManager();
+  let pm = options.profileManager ?? getProfileManager();
   let active = pm.getActiveProfile();
   if (!active) {
     console.error(
@@ -90,9 +94,13 @@ export async function createRealm(
   }
 
   // Build request attributes with default icon/background
-  let attributes: Record<string, string> = { endpoint, name };
+  let attributes: Record<string, string> = {
+    endpoint: realmName,
+    name: displayName,
+  };
   attributes.backgroundURL = options.background ?? getRandomBackgroundURL();
-  attributes.iconURL = options.icon ?? iconURLFor(name) ?? iconURLFor(endpoint) ?? '';
+  attributes.iconURL =
+    options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName) ?? '';
 
   let url = `${realmServerUrl}/_create-realm`;
   let body = JSON.stringify({
@@ -197,7 +205,7 @@ export async function createRealm(
   }
 
   console.log(
-    `${FG_GREEN}Realm created:${RESET} ${FG_CYAN}${realmUrl ?? endpoint}${RESET}`,
+    `${FG_GREEN}Realm created:${RESET} ${FG_CYAN}${realmUrl ?? realmName}${RESET}`,
   );
 }
 
