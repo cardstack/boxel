@@ -202,18 +202,27 @@ module('ValidationPipeline', function () {
     );
   });
 
-  test('createDefaultPipeline creates 5 steps in correct order', function (assert) {
+  test('createDefaultPipeline creates 5 steps in correct order', async function (assert) {
     let pipeline = createDefaultPipeline({
       realmServerUrl: 'https://example.test/',
       hostAppUrl: 'https://example.test/',
       testResultsModuleUrl: 'https://example.test/test-results',
       targetRealmUrl: 'https://example.test/realm/',
+      // Inject a fetchFilenames that returns no test files so the test
+      // step returns "nothing to validate" without hitting a real realm
+      fetchFilenames: async () => ({ filenames: [] }),
     });
 
-    // Access runners via validate + inspection
-    // Since runners is private, we verify through the pipeline's behavior
-    assert.ok(pipeline, 'pipeline was created');
-    assert.ok(pipeline instanceof ValidationPipeline, 'is a ValidationPipeline');
+    // Verify step count and order by running validate and inspecting results
+    let results = await pipeline.validate('https://example.test/realm/');
+
+    assert.strictEqual(results.steps.length, 5, 'has 5 steps');
+    assert.strictEqual(results.steps[0].step, 'parse', 'step 1 is parse');
+    assert.strictEqual(results.steps[1].step, 'lint', 'step 2 is lint');
+    assert.strictEqual(results.steps[2].step, 'evaluate', 'step 3 is evaluate');
+    assert.strictEqual(results.steps[3].step, 'instantiate', 'step 4 is instantiate');
+    assert.strictEqual(results.steps[4].step, 'test', 'step 5 is test');
+    assert.true(results.passed, 'all steps pass (NoOp + no test files)');
   });
 
   test('formatForContext returns simple message when all pass', function (assert) {

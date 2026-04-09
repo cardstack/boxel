@@ -339,6 +339,10 @@ export async function runIssueLoop(
               `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
+        } else {
+          log.warn(
+            `  IssueStore does not implement updateIssue — blocked status not persisted to realm`,
+          );
         }
       }
 

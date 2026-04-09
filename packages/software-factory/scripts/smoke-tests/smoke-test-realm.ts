@@ -409,7 +409,7 @@ async function main() {
         detail = ` (${d.passedCount} passed, ${d.failedCount} failed)`;
       }
     }
-    log.info(`    ${step.step}: ${statusIcon} ${step.passed ? 'passed' : 'failed'}${step.errors.length > 0 ? ' — no-op' : ''}${detail}`);
+    log.info(`    ${step.step}: ${statusIcon} ${step.passed ? 'passed' : 'failed'}${detail}`);
   }
 
   // Verify pipeline results

@@ -186,17 +186,18 @@ export class TestValidationStep implements ValidationStepRunner {
       };
     }
 
-    let errors = details
-      ? details.failures.map((f) => ({
-          file: f.module,
-          message: `${f.testName}: ${f.message}`,
-          stackTrace: f.stackTrace,
-        }))
-      : [
-          {
-            message:
-              handle.errorMessage ?? `Tests ${handle.status}`,
-          },
+    let errors =
+      details && details.failures.length > 0
+        ? details.failures.map((f) => ({
+            file: f.module,
+            message: `${f.testName}: ${f.message}`,
+            stackTrace: f.stackTrace,
+          }))
+        : [
+            {
+              message:
+                handle.errorMessage ?? `Tests ${handle.status}`,
+            },
         ];
 
     return {

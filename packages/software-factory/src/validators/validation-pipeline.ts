@@ -147,6 +147,8 @@ export interface ValidationPipelineConfig {
   testResultsModuleUrl: string;
   targetRealmUrl: string;
   issueId?: string;
+  /** Injected for testing — passed through to TestValidationStep. */
+  fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
 }
 
 /**
@@ -164,6 +166,7 @@ export function createDefaultPipeline(
     testResultsModuleUrl: config.testResultsModuleUrl,
     targetRealmUrl: config.targetRealmUrl,
     issueId: config.issueId,
+    fetchFilenames: config.fetchFilenames,
   };
 
   return new ValidationPipeline([
