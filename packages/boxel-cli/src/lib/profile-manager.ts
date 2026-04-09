@@ -11,6 +11,8 @@ export interface Profile {
   matrixUrl: string;
   realmServerUrl: string;
   password: string; // Stored in plaintext - file should have restricted permissions, this will be updated in CS-10642
+  realmTokens?: Record<string, string>;
+  realmServerToken?: string;
 }
 
 export interface ProfilesConfig {
@@ -279,6 +281,37 @@ export class ProfileManager {
     this.config.profiles[profileId].displayName = displayName;
     this.saveConfig();
     return true;
+  }
+
+  setRealmToken(realmUrl: string, token: string): void {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return;
+    }
+    if (!active.profile.realmTokens) {
+      active.profile.realmTokens = {};
+    }
+    active.profile.realmTokens[realmUrl] = token;
+    this.saveConfig();
+  }
+
+  getRealmToken(realmUrl: string): string | undefined {
+    let active = this.getActiveProfile();
+    return active?.profile.realmTokens?.[realmUrl];
+  }
+
+  setRealmServerToken(token: string): void {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return;
+    }
+    active.profile.realmServerToken = token;
+    this.saveConfig();
+  }
+
+  getRealmServerToken(): string | undefined {
+    let active = this.getActiveProfile();
+    return active?.profile.realmServerToken;
   }
 
   async migrateFromEnv(): Promise<{
