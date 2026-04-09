@@ -821,6 +821,673 @@ module('Integration | codemirror-context', function (hooks) {
 
   // ── Lazy loading ──
 
+  // ── wrapWith formatting ──
+
+  test('wrapWith wraps selection in bold markers', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select "World" (positions 6-11)
+      view.dispatch({ selection: { anchor: 6, head: 11 } });
+      cmContext.wrapWith('**')(view);
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello **World**',
+        'text is wrapped in ** for bold',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('wrapWith toggles off bold markers when already present', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello **World**',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select "**World**" (positions 6-15)
+      view.dispatch({ selection: { anchor: 6, head: 15 } });
+      cmContext.wrapWith('**')(view);
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello World',
+        'bold markers are removed when toggled off',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('wrapWith wraps selection in italic markers', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      view.dispatch({ selection: { anchor: 6, head: 11 } });
+      cmContext.wrapWith('*')(view);
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello *World*',
+        'text is wrapped in * for italic',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('wrapWith wraps selection in strikethrough markers', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      view.dispatch({ selection: { anchor: 6, head: 11 } });
+      cmContext.wrapWith('~~')(view);
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello ~~World~~',
+        'text is wrapped in ~~ for strikethrough',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('wrapWith wraps selection in code markers', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      view.dispatch({ selection: { anchor: 6, head: 11 } });
+      cmContext.wrapWith('`')(view);
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello `World`',
+        'text is wrapped in backticks for inline code',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('wrapWith does nothing when no text is selected', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Cursor at position 6, no selection
+      view.dispatch({ selection: { anchor: 6, head: 6 } });
+      let result = cmContext.wrapWith('**')(view);
+
+      assert.false(result, 'returns false when no selection');
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello World',
+        'document is unchanged',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  // ── onSelectionChange callback ──
+
+  test('onSelectionChange fires when text is selected', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let selectionInfo: { hasSelection: boolean; from: number; to: number } | null = null;
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          selectionInfo = info;
+        },
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      view.dispatch({ selection: { anchor: 6, head: 11 } });
+
+      assert.ok(selectionInfo, 'onSelectionChange was called');
+      assert.true(selectionInfo!.hasSelection, 'hasSelection is true');
+      assert.strictEqual(selectionInfo!.from, 6, 'from is correct');
+      assert.strictEqual(selectionInfo!.to, 11, 'to is correct');
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('onSelectionChange reports no selection for cursor', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let selectionInfo: { hasSelection: boolean } | null = null;
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          selectionInfo = info;
+        },
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Move cursor (not a selection)
+      view.dispatch({ selection: { anchor: 3, head: 3 } });
+
+      assert.ok(selectionInfo, 'onSelectionChange was called');
+      assert.false(selectionInfo!.hasSelection, 'hasSelection is false for cursor');
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('onSelectionChange detects bold format in selection', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let formats: { bold: boolean; italic: boolean; code: boolean; strikethrough: boolean } | null = null;
+      let state = cmContext.createEditorState({
+        content: 'Hello **World** end',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+        onSelectionChange: (info) => {
+          formats = info.formats;
+        },
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select "**World**" (positions 6-15)
+      view.dispatch({ selection: { anchor: 6, head: 15 } });
+
+      assert.ok(formats, 'formats were provided');
+      assert.true(formats!.bold, 'bold format is detected');
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  // ── Heading insertion (same logic as component's _insertHeading) ──
+
+  test('heading prefix is added to line', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Simulate _insertHeading(1): add "# " prefix
+      let line = view.state.doc.lineAt(0);
+      view.dispatch({
+        changes: { from: line.from, to: line.from, insert: '# ' },
+      });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        '# Hello World',
+        'H1 prefix is added',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('heading prefix is removed when toggling same level', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '# Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Simulate _insertHeading(1) on a line that already has "# "
+      let line = view.state.doc.lineAt(0);
+      let prefix = '# ';
+      if (line.text.startsWith(prefix)) {
+        view.dispatch({
+          changes: { from: line.from, to: line.from + prefix.length, insert: '' },
+        });
+      }
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello World',
+        'H1 prefix is removed',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('heading level is switched when changing from one level to another', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '# Hello World',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Simulate _insertHeading(2): replace "# " with "## "
+      let line = view.state.doc.lineAt(0);
+      let existingMatch = line.text.match(/^#{1,6}\s/);
+      let removeLen = existingMatch ? existingMatch[0].length : 0;
+      view.dispatch({
+        changes: {
+          from: line.from,
+          to: line.from + removeLen,
+          insert: '## ',
+        },
+      });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        '## Hello World',
+        'heading level is changed from H1 to H2',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  // ── Line prefix toggling (same logic as component's _toggleLinePrefix) ──
+
+  test('line prefix is added for bullet list', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Item one\nItem two\nItem three',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select all three lines
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+
+      // Simulate _toggleLinePrefix('- ')
+      let prefix = '- ';
+      let { from, to } = view.state.selection.main;
+      let startLine = view.state.doc.lineAt(from);
+      let endLine = view.state.doc.lineAt(to);
+      let changes: { from: number; to: number; insert: string }[] = [];
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        if (!line.text.startsWith(prefix)) {
+          changes.push({ from: line.from, to: line.from, insert: prefix });
+        }
+      }
+      view.dispatch({ changes });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        '- Item one\n- Item two\n- Item three',
+        'bullet list prefix added to all lines',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('line prefix is removed when toggling off bullet list', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '- Item one\n- Item two\n- Item three',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select all three lines
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+
+      // Simulate _toggleLinePrefix('- ') when all lines already have prefix
+      let prefix = '- ';
+      let { from, to } = view.state.selection.main;
+      let startLine = view.state.doc.lineAt(from);
+      let endLine = view.state.doc.lineAt(to);
+      let allHavePrefix = true;
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        if (!line.text.startsWith(prefix)) {
+          allHavePrefix = false;
+          break;
+        }
+      }
+      assert.true(allHavePrefix, 'all lines have the prefix initially');
+
+      let changes: { from: number; to: number; insert: string }[] = [];
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        changes.push({ from: line.from, to: line.from + prefix.length, insert: '' });
+      }
+      view.dispatch({ changes });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Item one\nItem two\nItem three',
+        'bullet list prefix removed from all lines',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('numbered list prefix is added to lines', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'First\nSecond',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select both lines
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+
+      let prefix = '1. ';
+      let { from, to } = view.state.selection.main;
+      let startLine = view.state.doc.lineAt(from);
+      let endLine = view.state.doc.lineAt(to);
+      let changes: { from: number; to: number; insert: string }[] = [];
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        if (!line.text.startsWith(prefix)) {
+          changes.push({ from: line.from, to: line.from, insert: prefix });
+        }
+      }
+      view.dispatch({ changes });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        '1. First\n1. Second',
+        'numbered list prefix added to all lines',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('blockquote prefix is added to lines', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'A quote\nAnother line',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select both lines
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+
+      let prefix = '> ';
+      let { from, to } = view.state.selection.main;
+      let startLine = view.state.doc.lineAt(from);
+      let endLine = view.state.doc.lineAt(to);
+      let changes: { from: number; to: number; insert: string }[] = [];
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        if (!line.text.startsWith(prefix)) {
+          changes.push({ from: line.from, to: line.from, insert: prefix });
+        }
+      }
+      view.dispatch({ changes });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        '> A quote\n> Another line',
+        'blockquote prefix added to all lines',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  test('line prefix only adds to lines missing it (partial toggle)', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: '- Item one\nItem two\n- Item three',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select all lines
+      view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } });
+
+      let prefix = '- ';
+      let { from, to } = view.state.selection.main;
+      let startLine = view.state.doc.lineAt(from);
+      let endLine = view.state.doc.lineAt(to);
+
+      // Not all lines have prefix, so add to those missing
+      let allHavePrefix = true;
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        if (!line.text.startsWith(prefix)) {
+          allHavePrefix = false;
+          break;
+        }
+      }
+      assert.false(allHavePrefix, 'not all lines have the prefix');
+
+      let changes: { from: number; to: number; insert: string }[] = [];
+      for (let i = startLine.number; i <= endLine.number; i++) {
+        let line = view.state.doc.line(i);
+        if (!line.text.startsWith(prefix)) {
+          changes.push({ from: line.from, to: line.from, insert: prefix });
+        }
+      }
+      view.dispatch({ changes });
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        '- Item one\n- Item two\n- Item three',
+        'prefix added only to lines that were missing it',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
+  // ── Lazy loading ──
+
   test('globalThis.__loadCodeMirror returns context with expected exports', async function (assert) {
     // Set up the globalThis loader (mimicking what application.ts does)
     (globalThis as any).__loadCodeMirror = async () => cmContext;
