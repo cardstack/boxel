@@ -38,7 +38,7 @@ echo "Registering realm users..."
 pnpm --dir=../matrix register-realm-users
 
 echo "Waiting for realm readiness..."
-npx wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ')
+wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ')
 
 echo "All realms ready. Dumping index tables..."
 docker exec boxel-pg pg_dump -U postgres --data-only \
