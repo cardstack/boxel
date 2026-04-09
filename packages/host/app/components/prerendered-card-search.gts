@@ -88,7 +88,7 @@ export class PrerenderedCard implements PrerenderedCardLike {
   }
 }
 function getErrorComponent(realmURL: string, url: string) {
-  let name = new RealmPaths(new URL(realmURL)).local(new URL(url));
+  let name = new RealmPaths(new URL(realmURL)).local(cardIdToURL(url));
   const DefaultErrorResultComponent: TemplateOnlyComponent<{
     Element: HTMLDivElement;
   }> = <template>

@@ -236,7 +236,7 @@ export default class HostModeService extends Service {
   private async fetchPrerenderedHead(
     cardURL: string,
   ): Promise<string | null | undefined> {
-    let card = new URL(cardURL);
+    let card = cardIdToURL(cardURL);
     let realmRoot =
       this.realm.realmOfURL(card)?.href ??
       new URL(

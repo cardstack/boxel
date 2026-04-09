@@ -41,7 +41,9 @@ module('Integration | card-delete', function (hooks) {
   let noop = () => {};
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized } = cardApi;
-    let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
+    let result = await realm.realmIndexQueryEngine.cardDocument(
+      cardIdToURL(url),
+    );
     if (!result || result.type === 'error') {
       throw new Error(
         `cannot get instance ${url} from the index: ${
@@ -52,7 +54,7 @@ module('Integration | card-delete', function (hooks) {
     let card = await createFromSerialized<typeof CardDef>(
       result.doc.data,
       result.doc,
-      new URL(url),
+      cardIdToURL(url),
     );
     return card;
   }

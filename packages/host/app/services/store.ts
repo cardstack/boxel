@@ -1580,7 +1580,9 @@ export default class StoreService extends Service implements StoreInterface {
       let fileInstance = await api.createFromSerialized(
         fileMetaDoc.data,
         fileMetaDoc,
-        fileMetaDoc.data.id ? cardIdToURL(fileMetaDoc.data.id) : new URL(url),
+        fileMetaDoc.data.id
+          ? cardIdToURL(fileMetaDoc.data.id)
+          : cardIdToURL(url),
         {
           store: this.store,
           dependencyTrackingContext: opts?.dependencyTrackingContext,

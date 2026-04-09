@@ -427,6 +427,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
 function getRelativePath(baseUrl: string, targetUrl: string) {
   const basePath = new URL(baseUrl).pathname;
-  const targetPath = new URL(targetUrl).pathname;
+  const targetPath = cardIdToURL(targetUrl).pathname;
   return targetPath.replace(basePath, '') || '/';
 }

@@ -1,8 +1,8 @@
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import CreateSubmissionWorkflowCommand from './create-submission-workflow';
+
+import type * as BaseCommandModule from '@cardstack/base/command';
 
 export default class CreateAndOpenSubmissionWorkflowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateListingPRRequestInput

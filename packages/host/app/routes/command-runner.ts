@@ -217,7 +217,7 @@ function parseCommandParam(
   }
 
   try {
-    let url = new URL(value);
+    let url = cardIdToURL(value);
     let pathname = url.pathname.replace(/\/+$/, '');
     let index = pathname.lastIndexOf('/');
     if (index <= 0 || index >= pathname.length - 1) {

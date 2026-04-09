@@ -1452,7 +1452,7 @@ async function persistDocumentToTestRealm(
   if (!id) {
     return;
   }
-  let url = new URL(id);
+  let url = cardIdToURL(id);
   let registry = getTestRealmRegistry();
   let matching = [...registry.values()].find(({ realm }) =>
     realm.paths.inRealm(url),

@@ -12,7 +12,10 @@ import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
 import { isEqual, omit } from 'lodash';
 
-import { cardIdToURL, localId as localIdSymbol } from '@cardstack/runtime-common';
+import {
+  cardIdToURL,
+  localId as localIdSymbol,
+} from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type RealmService from '@cardstack/host/services/realm';

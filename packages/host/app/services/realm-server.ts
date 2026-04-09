@@ -470,9 +470,7 @@ export default class RealmServerService extends Service {
       return { data: [], publicReadableRealms: new Set() };
     }
 
-    let uniqueRealmUrls = Array.from(
-      new Set(this.resolveRealmUrls(realmUrls)),
-    );
+    let uniqueRealmUrls = Array.from(new Set(this.resolveRealmUrls(realmUrls)));
     if (uniqueRealmUrls.length === 0) {
       return { data: [], publicReadableRealms: new Set() };
     }
@@ -539,9 +537,7 @@ export default class RealmServerService extends Service {
       return { data: [], meta: { page: { total: 0 } } };
     }
 
-    let uniqueRealmUrls = Array.from(
-      new Set(this.resolveRealmUrls(realmUrls)),
-    );
+    let uniqueRealmUrls = Array.from(new Set(this.resolveRealmUrls(realmUrls)));
     if (uniqueRealmUrls.length === 0) {
       return { data: [], meta: { page: { total: 0 } } };
     }
@@ -627,7 +623,7 @@ export default class RealmServerService extends Service {
       url = globalThis.location.origin;
     }
 
-    return new URL(url);
+    return cardIdToURL(url);
   }
 
   private async getClaims() {

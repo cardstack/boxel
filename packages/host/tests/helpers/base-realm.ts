@@ -18,10 +18,10 @@ import type * as MarkdownFieldModule from '@cardstack/base/markdown';
 import type * as NumberFieldModule from '@cardstack/base/number';
 import type * as PhoneNumberFieldModule from '@cardstack/base/phone-number';
 import type * as RealmFieldModule from '@cardstack/base/realm';
+import type * as RichMarkdownModule from '@cardstack/base/rich-markdown';
 import type * as SkillModule from '@cardstack/base/skill';
 import type * as StringFieldModule from '@cardstack/base/string';
 import type * as SystemCardModule from '@cardstack/base/system-card';
-import type * as RichMarkdownModule from '@cardstack/base/rich-markdown';
 import type * as TextAreaFieldModule from '@cardstack/base/text-area';
 
 type StringField = (typeof StringFieldModule)['default'];

@@ -40,7 +40,7 @@ function cardErrorRealm(cardError: CardErrorJSONAPI) {
   }
 
   try {
-    let url = new URL(id);
+    let url = cardIdToURL(id);
     let lastSlashIndex = url.pathname.lastIndexOf('/');
     let pathname =
       lastSlashIndex >= 0 ? url.pathname.slice(0, lastSlashIndex + 1) : '/';
@@ -62,7 +62,7 @@ function cardErrorDisplayTitle(cardError: CardErrorJSONAPI) {
 
   let path = id;
   try {
-    path = new URL(id).pathname;
+    path = cardIdToURL(id).pathname;
   } catch {
     // ignore invalid urls
   }

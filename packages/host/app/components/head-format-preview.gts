@@ -145,7 +145,7 @@ export default class HeadFormatPreview extends Component<Signature> {
       return undefined;
     }
     try {
-      return new URL(url).hostname.replace(/^www\./, '');
+      return cardIdToURL(url).hostname.replace(/^www\./, '');
     } catch {
       return url;
     }

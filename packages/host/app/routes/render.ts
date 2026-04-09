@@ -1053,7 +1053,7 @@ export default class RenderRoute extends Route<Model> {
     ) {
       let parsed: URL | undefined;
       try {
-        parsed = new URL(value);
+        parsed = cardIdToURL(value);
       } catch (e) {
         return value;
       }

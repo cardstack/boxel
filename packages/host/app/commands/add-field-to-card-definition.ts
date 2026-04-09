@@ -35,13 +35,13 @@ export default class AddFieldToCardDefinitionCommand extends HostBaseCommand<
   ): Promise<undefined> {
     let moduleSource = (
       await this.cardService.getSource(
-        new URL(input.cardDefinitionToModify.module),
+        cardIdToURL(input.cardDefinitionToModify.module),
       )
     ).content;
 
     let moduleSyntax = new ModuleSyntax(
       moduleSource,
-      new URL(input.cardDefinitionToModify.module),
+      cardIdToURL(input.cardDefinitionToModify.module),
     );
 
     moduleSyntax.addField({

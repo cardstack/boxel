@@ -468,7 +468,7 @@ module('Integration | commands | patch-instance', function (hooks) {
       timeoutMessage: 'waiting for andrea to get assigned a remote id',
     });
 
-    let result = await indexQuery.instance(new URL(andrea.id));
+    let result = await indexQuery.instance(cardIdToURL(andrea.id));
     assert.ok(result, 'instance query returned a result');
     assert.strictEqual(result?.type, 'instance', 'result is an instance');
     let instance =

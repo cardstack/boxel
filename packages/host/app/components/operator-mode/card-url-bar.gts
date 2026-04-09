@@ -183,7 +183,7 @@ export default class CardURLBar extends Component<Signature> {
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),
     setValue: async (url: string) => {
-      await this.operatorModeStateService.updateCodePath(new URL(url));
+      await this.operatorModeStateService.updateCodePath(cardIdToURL(url));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,

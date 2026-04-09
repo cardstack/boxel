@@ -82,7 +82,7 @@ export default class URLBarResource extends Resource<Args> {
       return false;
     }
     try {
-      new URL(url);
+      cardIdToURL(url);
       return true;
     } catch (e) {
       return false;

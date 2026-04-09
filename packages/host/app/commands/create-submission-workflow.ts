@@ -3,8 +3,6 @@ import { service } from '@ember/service';
 import { isCardInstance } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-import type * as BaseCommandModule from '@cardstack/base/command';
-
 import HostBaseCommand from '../lib/host-base-command';
 
 import UseAiAssistantCommand from './ai-assistant';
@@ -15,6 +13,7 @@ import type MatrixService from '../services/matrix-service';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
+import type * as BaseCommandModule from '@cardstack/base/command';
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
@@ -60,7 +59,7 @@ export default class CreateSubmissionWorkflowCommand extends HostBaseCommand<
 
     // Save the workflow card in the user's realm (where the listing lives)
     let workflowRealm =
-      this.realm.realmOfURL(new URL(listingId))?.href ?? realm;
+      this.realm.realmOfURL(cardIdToURL(listingId))?.href ?? realm;
 
     // Step 1: Create the SubmissionWorkflowCard with listing linked
     let catalogRealm = this.catalogRealm;

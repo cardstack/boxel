@@ -66,7 +66,7 @@ export default class BillingService extends Service {
     let { aiCreditAmount, plan } = params;
     let email = this.matrixService.profile.email!;
     let url = `${this.realmServer.url.origin}/_stripe-session`;
-    let urlWithParams = new URL(url);
+    let urlWithParams = cardIdToURL(url);
     urlWithParams.searchParams.set('email', email);
     urlWithParams.searchParams.set(
       'returnUrl',

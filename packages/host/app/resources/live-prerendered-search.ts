@@ -145,7 +145,7 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
 
   private isScopedCssModule(url: string): boolean {
     try {
-      return isScopedCSSRequest(new URL(url).pathname);
+      return isScopedCSSRequest(cardIdToURL(url).pathname);
     } catch {
       return false;
     }

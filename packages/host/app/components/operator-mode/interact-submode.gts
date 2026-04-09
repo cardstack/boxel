@@ -700,9 +700,14 @@ export default class InteractSubmode extends Component {
     }
 
     // assumption: take actions in the right-most stack
-    await this.createCard(this.rightMostStackIndex, spec.ref, new URL(specId), {
-      realmURL: this.operatorModeStateService.getWritableRealmURL(),
-    });
+    await this.createCard(
+      this.rightMostStackIndex,
+      spec.ref,
+      cardIdToURL(specId),
+      {
+        realmURL: this.operatorModeStateService.getWritableRealmURL(),
+      },
+    );
   });
 
   private createNewFromRecentType = restartableTask(

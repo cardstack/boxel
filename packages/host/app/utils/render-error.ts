@@ -393,7 +393,9 @@ export function stripSelfDeps(
     } catch (_e) {
       if (moduleURL) {
         try {
-          return trimExecutableExtension(new URL(cardIdToURL(value).href, moduleURL)).href;
+          return trimExecutableExtension(
+            new URL(cardIdToURL(value).href, moduleURL),
+          ).href;
         } catch (_e2) {
           return value;
         }

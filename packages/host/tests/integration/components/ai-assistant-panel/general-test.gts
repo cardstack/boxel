@@ -701,7 +701,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let unreachableCardId = 'http://this-is-not-a-real-card.com';
-    let canonicalUnreachableCardId = new URL(unreachableCardId).href;
+    let canonicalUnreachableCardId = cardIdToURL(unreachableCardId).href;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

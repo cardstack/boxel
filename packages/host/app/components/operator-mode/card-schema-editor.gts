@@ -500,7 +500,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   }
 
   @action async openCardDefinition(moduleURL: string) {
-    await this.operatorModeStateService.updateCodePath(new URL(moduleURL));
+    await this.operatorModeStateService.updateCodePath(cardIdToURL(moduleURL));
   }
 
   @action

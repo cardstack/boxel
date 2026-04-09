@@ -103,7 +103,7 @@ module('Acceptance | prerender | module', function (hooks) {
     assert.ok(model.createdAt > 0, 'createdAt recorded');
 
     let personKey = `${
-      trimExecutableExtension(new URL(moduleURL)).href
+      trimExecutableExtension(cardIdToURL(moduleURL)).href
     }/Person`;
     assert.ok(personKey in model.definitions, 'includes person definition');
 
@@ -120,7 +120,7 @@ module('Acceptance | prerender | module', function (hooks) {
     );
     assert.strictEqual(
       personEntry.moduleURL,
-      trimExecutableExtension(new URL(moduleURL)).href,
+      trimExecutableExtension(cardIdToURL(moduleURL)).href,
       'moduleURL exposes trimmed module path',
     );
     assert.ok(
@@ -249,7 +249,7 @@ module('Acceptance | prerender | module', function (hooks) {
       'module prerender reports ready',
     );
     assert.strictEqual(response.id, moduleURL, 'module id echoed back');
-    let key = `${trimExecutableExtension(new URL(moduleURL)).href}/Person`;
+    let key = `${trimExecutableExtension(cardIdToURL(moduleURL)).href}/Person`;
     assert.ok(response.definitions[key], 'definition captured');
     assert.strictEqual(
       response.definitions[key]?.type,
@@ -294,7 +294,7 @@ module('Acceptance | prerender | module', function (hooks) {
     let initial = captureModuleResult();
 
     let definitionKey = `${
-      trimExecutableExtension(new URL(moduleURL)).href
+      trimExecutableExtension(cardIdToURL(moduleURL)).href
     }/Person`;
     let initialEntry = initial.model.definitions[definitionKey];
     assert.ok(initialEntry, 'initial definition exists');

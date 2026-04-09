@@ -1156,7 +1156,7 @@ export default class OperatorModeStateService extends Service {
         if (!url) {
           return;
         }
-        this.replaceCodePath(new URL(url));
+        this.replaceCodePath(cardIdToURL(url));
       },
     }));
   });
@@ -1232,7 +1232,7 @@ export default class OperatorModeStateService extends Service {
     await this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(id),
+        : cardIdToURL(id),
     );
     this.updateSubmode(Submodes.Interact);
 

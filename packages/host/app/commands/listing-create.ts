@@ -270,7 +270,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     if (sanitizedModules.length > 0) {
       const createSpecCommand = new CreateSpecCommand(this.commandContext);
       const normalizedModuleUrl = trimExecutableExtension(
-        new URL(moduleUrl),
+        cardIdToURL(moduleUrl),
       ).href;
       const specResults = await Promise.all(
         sanitizedModules.map((module) => {

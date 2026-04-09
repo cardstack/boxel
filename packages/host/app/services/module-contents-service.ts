@@ -104,7 +104,7 @@ export default class ModuleContentsService extends Service {
       this.loaderService.loader,
       this.network.authedFetch,
     );
-    const moduleUrl = new URL(url);
+    const moduleUrl = cardIdToURL(url);
     let r = await this.cardService.getSource(moduleUrl);
     if (r.status !== 200) {
       throw new Error(`Failed to fetch module source from ${url}: ${r.status}`);

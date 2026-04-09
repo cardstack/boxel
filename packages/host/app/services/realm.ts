@@ -396,17 +396,20 @@ class RealmResource {
       Accept: SupportedMimeType.JSON,
       Authorization: `Bearer ${this.token}`,
     };
-    let response = await this.network.authedFetch(`${this.resolvedURL}_config`, {
-      method: 'PATCH',
-      headers,
-      body: JSON.stringify({
-        data: {
-          type: 'realm-config',
-          id: this.url,
-          attributes: { [property]: value },
-        },
-      }),
-    });
+    let response = await this.network.authedFetch(
+      `${this.resolvedURL}_config`,
+      {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          data: {
+            type: 'realm-config',
+            id: this.url,
+            attributes: { [property]: value },
+          },
+        }),
+      },
+    );
 
     if (response.status !== 200) {
       throw new Error(

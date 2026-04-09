@@ -14,7 +14,6 @@ const log = logger('commands:search-and-choose');
 
 import type * as BaseCommandModule from '@cardstack/base/command';
 
-
 export default class SearchAndChooseCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchAndChooseInput,
   typeof BaseCommandModule.SearchAndChooseResult

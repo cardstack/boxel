@@ -189,7 +189,9 @@ module('Integration | text-input-validator', function (hooks) {
     assert
       .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
       .hasNoValue();
-    let card = await realm.realmIndexQueryEngine.cardDocument(new URL(cardId));
+    let card = await realm.realmIndexQueryEngine.cardDocument(
+      cardIdToURL(cardId),
+    );
     if (card?.type !== 'doc' || !card.doc.data.attributes) {
       throw new Error('Search result did not return expected card doc');
     }
@@ -202,7 +204,7 @@ module('Integration | text-input-validator', function (hooks) {
       .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
       .hasValue('444');
 
-    card = await realm.realmIndexQueryEngine.cardDocument(new URL(cardId));
+    card = await realm.realmIndexQueryEngine.cardDocument(cardIdToURL(cardId));
     if (card?.type !== 'doc') {
       throw new Error('Search result for card is not type doc');
     }

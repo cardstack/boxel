@@ -223,7 +223,9 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     let moduleURL = (
       document.querySelector('[data-test-view-module]') as HTMLElement
     )?.innerText;
-    let moduleFile = await realm.realmIndexQueryEngine.file(new URL(moduleURL));
+    let moduleFile = await realm.realmIndexQueryEngine.file(
+      cardIdToURL(moduleURL),
+    );
     assert.ok(moduleFile, 'module file entry exists');
     assert.strictEqual(moduleFile?.type, 'file');
     assert.strictEqual(moduleFile?.canonicalURL, moduleURL);

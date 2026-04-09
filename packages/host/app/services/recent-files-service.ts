@@ -63,7 +63,7 @@ export default class RecentFilesService extends Service {
   }
 
   removeRecentFilesForRealmURL(url: string) {
-    let realmURL = new RealmPaths(new URL(url)).url;
+    let realmURL = new RealmPaths(cardIdToURL(url)).url;
     let removedAny = false;
 
     for (let index = this.recentFiles.length - 1; index >= 0; index--) {
@@ -136,7 +136,7 @@ export default class RecentFilesService extends Service {
 
   findRecentFileByRealmURL(url: string) {
     return this.recentFiles.find((recentFile) => {
-      const realmUrl = new RealmPaths(new URL(url)).url;
+      const realmUrl = new RealmPaths(cardIdToURL(url)).url;
       return realmUrl === recentFile.realmURL.href;
     });
   }

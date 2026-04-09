@@ -18,8 +18,8 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import ENV from '@cardstack/host/config/environment';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import ENV from '@cardstack/host/config/environment';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
@@ -524,7 +524,10 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
-    await fillIn(`[data-test-search-field]`, `${ENV.resolvedBaseRealmURL}types/card`);
+    await fillIn(
+      `[data-test-search-field]`,
+      `${ENV.resolvedBaseRealmURL}types/card`,
+    );
 
     await waitFor('[data-test-card-catalog-item]', {
       count: 1,
@@ -1313,7 +1316,9 @@ module('Integration | operator-mode | card catalog', function (hooks) {
     await click('[data-test-create-new-card-button]');
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
-    await click(`[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}cards/skill"]`);
+    await click(
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}cards/skill"]`,
+    );
     await click('[data-test-card-catalog-go-button]');
 
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');
