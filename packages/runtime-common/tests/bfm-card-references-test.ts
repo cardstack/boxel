@@ -40,16 +40,14 @@ const tests = Object.freeze({
     assert.strictEqual(cardTypeName('../Pet/some-id'), 'Pet');
   },
 
-  'cardTypeName returns last segment for relative .. with single name':
-    async (assert) => {
-      assert.strictEqual(cardTypeName('../Pet'), 'Pet');
-    },
+  'cardTypeName returns last segment for relative .. with single name': async (
+    assert,
+  ) => {
+    assert.strictEqual(cardTypeName('../Pet'), 'Pet');
+  },
 
   'cardTypeName strips query string from URL': async (assert) => {
-    assert.strictEqual(
-      cardTypeName('https://example.com/Pet/abc?v=1'),
-      'Pet',
-    );
+    assert.strictEqual(cardTypeName('https://example.com/Pet/abc?v=1'), 'Pet');
   },
 
   'cardTypeName strips fragment from URL': async (assert) => {
