@@ -20,8 +20,8 @@ interface CardDocument {
 export interface FactoryBootstrapResult {
   project: FactoryBootstrapArtifact;
   knowledgeArticles: FactoryBootstrapArtifact[];
-  tickets: FactoryBootstrapArtifact[];
-  activeTicket: FactoryBootstrapArtifact;
+  issues: FactoryBootstrapArtifact[];
+  activeIssue: FactoryBootstrapArtifact;
 }
 
 export interface FactoryBootstrapArtifact {
@@ -57,10 +57,10 @@ export async function bootstrapProjectArtifacts(
     `Knowledge Articles/${slug}-brief-context`,
     `Knowledge Articles/${slug}-agent-onboarding`,
   ];
-  let ticketPaths = [
-    `Tickets/${slug}-define-core`,
-    `Tickets/${slug}-design-views`,
-    `Tickets/${slug}-add-integration`,
+  let issuePaths = [
+    `Issues/${slug}-define-core`,
+    `Issues/${slug}-design-views`,
+    `Issues/${slug}-add-integration`,
   ];
 
   let projectDoc = buildProjectDocument(brief, {
@@ -73,7 +73,7 @@ export async function bootstrapProjectArtifacts(
     darkfactoryModuleUrl,
     now,
   });
-  let ticketDocs = buildTicketDocuments(brief, {
+  let issueDocs = buildIssueDocuments(brief, {
     darkfactoryModuleUrl,
     projectCode,
     slug,
@@ -92,39 +92,39 @@ export async function bootstrapProjectArtifacts(
       createCardIfMissing(targetRealmUrl, path, knowledgeDocs[i], fetchImpl),
     ),
   );
-  let tickets = await Promise.all(
-    ticketPaths.map((path, i) =>
-      createCardIfMissing(targetRealmUrl, path, ticketDocs[i], fetchImpl),
+  let issues = await Promise.all(
+    issuePaths.map((path, i) =>
+      createCardIfMissing(targetRealmUrl, path, issueDocs[i], fetchImpl),
     ),
   );
 
-  let inProgressPath = await hasInProgressTicket(
+  let inProgressPath = await hasInProgressIssue(
     targetRealmUrl,
-    ticketPaths,
+    issuePaths,
     fetchImpl,
   );
 
-  let activeTicket: FactoryBootstrapArtifact;
+  let activeIssue: FactoryBootstrapArtifact;
 
   if (inProgressPath) {
-    let idx = ticketPaths.indexOf(inProgressPath);
-    activeTicket = idx >= 0 ? tickets[idx] : tickets[0];
+    let idx = issuePaths.indexOf(inProgressPath);
+    activeIssue = idx >= 0 ? issues[idx] : issues[0];
   } else {
-    await patchTicketStatus(
+    await patchIssueStatus(
       targetRealmUrl,
-      ticketPaths[0],
+      issuePaths[0],
       'in_progress',
       darkfactoryModuleUrl,
       fetchImpl,
     );
-    activeTicket = tickets[0];
+    activeIssue = issues[0];
   }
 
   return {
     project,
     knowledgeArticles,
-    tickets,
-    activeTicket,
+    issues,
+    activeIssue,
   };
 }
 
@@ -288,7 +288,7 @@ function buildKnowledgeDocuments(
   ];
 }
 
-function buildTicketDocuments(
+function buildIssueDocuments(
   brief: FactoryBrief,
   context: {
     darkfactoryModuleUrl: string;
@@ -298,16 +298,16 @@ function buildTicketDocuments(
     now: string;
   },
 ): CardDocument[] {
-  let ticketTemplates = deriveTicketContent(brief, context.sections);
+  let issueTemplates = deriveIssueContent(brief, context.sections);
 
-  return ticketTemplates.map((template, i) => ({
+  return issueTemplates.map((template, i) => ({
     data: {
       type: 'card' as const,
       attributes: {
-        ticketId: `${context.projectCode}-${i + 1}`,
+        issueId: `${context.projectCode}-${i + 1}`,
         summary: template.summary,
         description: template.description,
-        ticketType: 'feature',
+        issueType: 'feature',
         status: i === 0 ? 'in_progress' : 'backlog',
         priority: i === 0 ? 'high' : 'medium',
         acceptanceCriteria: template.acceptanceCriteria,
@@ -322,23 +322,23 @@ function buildTicketDocuments(
       meta: {
         adoptsFrom: {
           module: context.darkfactoryModuleUrl,
-          name: 'Ticket',
+          name: 'Issue',
         },
       },
     },
   }));
 }
 
-interface TicketTemplate {
+interface IssueTemplate {
   summary: string;
   description: string;
   acceptanceCriteria: string;
 }
 
-function deriveTicketContent(
+function deriveIssueContent(
   brief: FactoryBrief,
   sections: { heading: string; body: string }[],
-): TicketTemplate[] {
+): IssueTemplate[] {
   let namedSections = sections.filter((s) => s.heading);
 
   let coreMechanicsSection = namedSections.find((s) =>
@@ -438,8 +438,7 @@ function buildOnboardingContent(brief: FactoryBrief): string {
     '## How to Work on This Project',
     '',
     '- Use the Project card for scope and success criteria',
-    '- Use Ticket cards for execution — pick the active ticket and implement it',
-    '- Update agent notes on each ticket as you make progress',
+    '- Use Issue cards for execution — pick the active issue and implement it',
     '- Create or update Knowledge Articles when meaningful decisions occur',
   ];
 
@@ -491,12 +490,12 @@ async function createCardIfMissing(
   return { id: cardPath, status: 'created' };
 }
 
-async function hasInProgressTicket(
+async function hasInProgressIssue(
   realmUrl: string,
-  ticketPaths: string[],
+  issuePaths: string[],
   fetchImpl: typeof globalThis.fetch,
 ): Promise<string | null> {
-  for (let path of ticketPaths) {
+  for (let path of issuePaths) {
     let url = new URL(path, realmUrl).href;
     let response = await fetchImpl(url, {
       method: 'GET',
@@ -517,15 +516,15 @@ async function hasInProgressTicket(
   return null;
 }
 
-async function patchTicketStatus(
+async function patchIssueStatus(
   realmUrl: string,
-  ticketPath: string,
+  issuePath: string,
   status: string,
   darkfactoryModuleUrl: string,
   fetchImpl: typeof globalThis.fetch,
 ): Promise<void> {
-  let url = new URL(ticketPath, realmUrl).href;
-  let writeUrl = new URL(`${ticketPath}.json`, realmUrl).href;
+  let url = new URL(issuePath, realmUrl).href;
+  let writeUrl = new URL(`${issuePath}.json`, realmUrl).href;
 
   let getResponse = await fetchImpl(url, {
     method: 'GET',
@@ -539,7 +538,7 @@ async function patchTicketStatus(
   let existing = (await getResponse.json()) as CardDocument;
   existing.data.attributes.status = status;
   existing.data.meta = {
-    adoptsFrom: { module: darkfactoryModuleUrl, name: 'Ticket' },
+    adoptsFrom: { module: darkfactoryModuleUrl, name: 'Issue' },
   };
 
   let patchResponse = await fetchImpl(writeUrl, {
@@ -554,11 +553,11 @@ async function patchTicketStatus(
   if (!patchResponse.ok) {
     let text = await formatErrorResponse(patchResponse);
     throw new Error(
-      `Failed to patch ticket status for ${ticketPath}: HTTP ${patchResponse.status} ${text}`.trim(),
+      `Failed to patch issue status for ${issuePath}: HTTP ${patchResponse.status} ${text}`.trim(),
     );
   }
 
-  await waitForCardToBeReadable(realmUrl, ticketPath, fetchImpl);
+  await waitForCardToBeReadable(realmUrl, issuePath, fetchImpl);
 }
 
 async function waitForCardToBeReadable(

@@ -56,7 +56,7 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
   expect(schema.attributes.properties).toHaveProperty('scope');
 });
 
-test('fetches Ticket schema with enum fields', async ({ realm }) => {
+test('fetches Issue schema with enum fields', async ({ realm }) => {
   let realmServerUrl = realm.realmServerURL.href;
   let sourceRealmUrl = ensureTrailingSlash(
     sourceRealmURLFor(realm.realmServerURL).href,
@@ -65,7 +65,7 @@ test('fetches Ticket schema with enum fields', async ({ realm }) => {
   let schema = await fetchCardTypeSchema(
     realmServerUrl,
     sourceRealmUrl,
-    { module: `${sourceRealmUrl}darkfactory`, name: 'Ticket' },
+    { module: `${sourceRealmUrl}darkfactory`, name: 'Issue' },
     { authorization: `Bearer ${realm.ownerBearerToken}` },
   );
 
@@ -75,7 +75,7 @@ test('fetches Ticket schema with enum fields', async ({ realm }) => {
   let attrs = schema!.attributes as {
     properties: Record<string, Record<string, unknown>>;
   };
-  expect(attrs.properties).toHaveProperty('ticketId');
+  expect(attrs.properties).toHaveProperty('issueId');
   expect(attrs.properties).toHaveProperty('summary');
   expect(attrs.properties).toHaveProperty('status');
   expect(attrs.properties).toHaveProperty('priority');

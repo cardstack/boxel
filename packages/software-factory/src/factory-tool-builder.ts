@@ -121,7 +121,7 @@ export function buildFactoryTools(
   let schemas = config.cardTypeSchemas;
   let cardToolEntries: [string, string, () => FactoryTool][] = [
     ['Project', 'update_project', () => buildUpdateProjectTool(config)],
-    ['Ticket', 'update_ticket', () => buildUpdateTicketTool(config)],
+    ['Issue', 'update_issue', () => buildUpdateIssueTool(config)],
     [
       'KnowledgeArticle',
       'create_knowledge',
@@ -309,14 +309,14 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
-  let schema = resolveCardSchema(config, 'Ticket');
+function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
+  let schema = resolveCardSchema(config, 'Issue');
   return {
-    name: 'update_ticket',
+    name: 'update_issue',
     description:
-      'Update a ticket card in the target realm. Auth: per-realm JWT.',
+      'Update an issue card in the target realm. Auth: per-realm JWT.',
     parameters: buildCardToolParams(
-      'Realm-relative path to the ticket card (e.g., "Ticket/1.json")',
+      'Realm-relative path to the issue card (e.g., "Issues/1.json")',
       schema,
     ),
     execute: async (args) => {
@@ -328,7 +328,7 @@ function buildUpdateTicketTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
       let document = buildCardDocument(
-        'Ticket',
+        'Issue',
         realmUrl,
         attributes,
         relationships,
@@ -436,7 +436,7 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         slug: {
           type: 'string',
           description:
-            'Ticket slug used to name the test run (e.g., "define-sticky-note-core")',
+            'Issue slug used to name the test run (e.g., "define-sticky-note-core")',
         },
         testNames: {
           type: 'array',

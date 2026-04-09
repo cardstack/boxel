@@ -363,7 +363,7 @@ module('factory-tool-executor > realm-api execution', function () {
 
     let result = await executor.execute('realm-search', {
       'realm-url': 'https://realms.example.test/user/target/',
-      query: JSON.stringify({ filter: { type: { name: 'Ticket' } } }),
+      query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
     });
 
     assert.strictEqual(capturedMethod, 'QUERY');

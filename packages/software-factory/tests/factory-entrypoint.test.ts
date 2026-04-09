@@ -42,12 +42,12 @@ const mockBootstrapResult: FactoryBootstrapResult = {
       status: 'created',
     },
   ],
-  tickets: [
-    { id: 'Tickets/sticky-note-define-core', status: 'created' },
-    { id: 'Tickets/sticky-note-design-views', status: 'created' },
-    { id: 'Tickets/sticky-note-add-integration', status: 'created' },
+  issues: [
+    { id: 'Issues/sticky-note-define-core', status: 'created' },
+    { id: 'Issues/sticky-note-design-views', status: 'created' },
+    { id: 'Issues/sticky-note-add-integration', status: 'created' },
   ],
-  activeTicket: { id: 'Tickets/sticky-note-define-core', status: 'created' },
+  activeIssue: { id: 'Issues/sticky-note-define-core', status: 'created' },
 };
 
 module('factory-entrypoint', function (hooks) {
@@ -140,12 +140,12 @@ module('factory-entrypoint', function (hooks) {
       ],
     );
     assert.strictEqual(summary.bootstrap.projectId, 'Projects/sticky-note-mvp');
-    assert.strictEqual(summary.bootstrap.ticketIds.length, 3);
+    assert.strictEqual(summary.bootstrap.issueIds.length, 3);
     assert.strictEqual(
-      summary.bootstrap.activeTicket.id,
-      'Tickets/sticky-note-define-core',
+      summary.bootstrap.activeIssue.id,
+      'Issues/sticky-note-define-core',
     );
-    assert.strictEqual(summary.bootstrap.activeTicket.status, 'created');
+    assert.strictEqual(summary.bootstrap.activeIssue.status, 'created');
     assert.deepEqual(summary.result, {
       status: 'ready',
       nextStep: 'bootstrap-target-realm',
@@ -194,7 +194,7 @@ module('factory-entrypoint', function (hooks) {
           outcome: 'done' as const,
           iterations: 1,
           toolCallLog: [],
-          ticketId: 'Tickets/sticky-note-define-core',
+          issueId: 'Issues/sticky-note-define-core',
           testRealmUrl:
             'https://realms.example.test/hassan/personal-test-artifacts/',
         }),
@@ -268,7 +268,7 @@ module('factory-entrypoint', function (hooks) {
           outcome: 'done' as const,
           iterations: 1,
           toolCallLog: [],
-          ticketId: 'Tickets/sticky-note-define-core',
+          issueId: 'Issues/sticky-note-define-core',
           testRealmUrl:
             'https://realms.example.test/app/hassan/personal-test-artifacts/',
         }),

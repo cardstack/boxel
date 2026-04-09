@@ -212,7 +212,7 @@ async function main(): Promise<void> {
 
   let searchResult = await mockExecutor.execute('realm-search', {
     'realm-url': 'https://realms.example.test/user/target/',
-    query: JSON.stringify({ filter: { type: { name: 'Ticket' } } }),
+    query: JSON.stringify({ filter: { type: { name: 'Issue' } } }),
   });
   check('realm-search exitCode=0', searchResult.exitCode === 0);
 
@@ -272,10 +272,10 @@ async function main(): Promise<void> {
   let toolNames = factoryTools.map((t) => t.name);
   log.info(`  Built ${factoryTools.length} tools:`);
   log.info(
-    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_ticket', 'create_knowledge'].includes(n)).join(', ')}`,
+    `    factory: ${toolNames.filter((n) => ['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
   );
   log.info(
-    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_ticket', 'create_knowledge'].includes(n)).join(', ')}`,
+    `    registered: ${toolNames.filter((n) => !['write_file', 'read_file', 'search_realm', 'run_command', 'signal_done', 'request_clarification', 'update_project', 'update_issue', 'create_knowledge'].includes(n)).join(', ')}`,
   );
   log.info('');
 

@@ -43,8 +43,8 @@ const SAMPLE_CONTEXT: AgentContext = {
       'All tests pass',
     ],
   },
-  ticket: {
-    id: 'Tickets/define-sticky-note-core',
+  issue: {
+    id: 'Issues/define-sticky-note-core',
     summary: 'Define the core StickyNote CardDef',
     status: 'in-progress',
     priority: 'high',

@@ -20,10 +20,10 @@
 
 import type {
   AgentContext,
+  IssueCard,
   KnowledgeArticle,
   ProjectCard,
   TestResult,
-  TicketCard,
 } from './factory-agent';
 
 import type { FactoryTool, ToolCallEntry } from './factory-tool-builder';
@@ -74,7 +74,7 @@ export type TestRunner = () => Promise<TestResult>;
 export interface ContextBuilderLike {
   build(params: {
     project: ProjectCard;
-    ticket: TicketCard;
+    issue: IssueCard;
     knowledge: KnowledgeArticle[];
     targetRealmUrl: string;
     testRealmUrl: string;
@@ -88,7 +88,7 @@ export interface FactoryLoopConfig {
   tools: FactoryTool[];
   testRunner: TestRunner;
   project: ProjectCard;
-  ticket: TicketCard;
+  issue: IssueCard;
   knowledge: KnowledgeArticle[];
   targetRealmUrl: string;
   testRealmUrl: string;
@@ -126,7 +126,7 @@ export async function runFactoryLoop(
     // Build context — includes test results from prior iteration if any
     let context = await contextBuilder.build({
       project: config.project,
-      ticket: config.ticket,
+      issue: config.issue,
       knowledge: config.knowledge,
       targetRealmUrl: config.targetRealmUrl,
       testRealmUrl: config.testRealmUrl,
