@@ -21,7 +21,6 @@ function makeMinimalContext(overrides?: Partial<AgentContext>): AgentContext {
     skills: [],
     tools: [],
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     ...overrides,
   };
 }

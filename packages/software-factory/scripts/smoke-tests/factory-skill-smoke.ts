@@ -21,9 +21,9 @@ import {
   enforceSkillBudget,
   estimateTokens,
 } from '../../src/factory-skill-loader';
-import type { ProjectCard, IssueCard } from '../../src/factory-agent';
+import type { ProjectData, IssueData } from '../../src/factory-agent';
 
-const SAMPLE_ISSUES: { label: string; issue: IssueCard }[] = [
+const SAMPLE_ISSUES: { label: string; issue: IssueData }[] = [
   {
     label: 'Generic card work (base case)',
     issue: {
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
 
   let resolver = new DefaultSkillResolver();
   let loader = new SkillLoader();
-  let project: ProjectCard = { id: 'Projects/smoke-test' };
+  let project: ProjectData = { id: 'Projects/smoke-test' };
 
   log.info('=== Skill Loader & Resolver Smoke Test ===\n');
 
@@ -107,7 +107,7 @@ async function main(): Promise<void> {
             id: 'Issues/custom',
             title: customIssueText,
             description: customIssueText,
-          } as IssueCard,
+          } as IssueData,
         },
       ]
     : SAMPLE_ISSUES;

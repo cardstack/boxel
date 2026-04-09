@@ -24,7 +24,6 @@ function makeConfig(
   return {
     packageRoot: '/fake/software-factory',
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     ...overrides,
   };
 }
@@ -134,22 +133,6 @@ module('factory-tool-executor > source realm protection', function () {
     let result = await executor.execute('realm-read', {
       'realm-url': 'https://realms.example.test/user/target/',
       path: 'CardDef/my-card.gts',
-    });
-
-    assert.strictEqual(result.exitCode, 0);
-  });
-
-  test('allows tool targeting test realm', async function (assert) {
-    let registry = new ToolRegistry();
-    let config = makeConfig({
-      sourceRealmUrl: 'https://realms.example.test/user/source/',
-      fetch: createMockFetch(200, { data: [] }),
-    });
-    let executor = new ToolExecutor(registry, config);
-
-    let result = await executor.execute('realm-read', {
-      'realm-url': 'https://realms.example.test/user/target-tests/',
-      path: 'Test/spec.ts',
     });
 
     assert.strictEqual(result.exitCode, 0);

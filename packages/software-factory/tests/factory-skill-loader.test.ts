@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { module, test } from 'qunit';
 
 import type {
-  ProjectCard,
+  ProjectData,
   ResolvedSkill,
-  IssueCard,
+  IssueData,
 } from '../src/factory-agent';
 import {
   DefaultSkillResolver,
@@ -70,7 +70,7 @@ function writeSkill(
   }
 }
 
-function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
+function makeIssue(overrides?: Partial<IssueData>): IssueData {
   return {
     id: 'Issues/test-issue',
     title: 'Test issue',
@@ -79,7 +79,7 @@ function makeIssue(overrides?: Partial<IssueCard>): IssueCard {
   };
 }
 
-function makeProject(overrides?: Partial<ProjectCard>): ProjectCard {
+function makeProject(overrides?: Partial<ProjectData>): ProjectData {
   return {
     id: 'Projects/test-project',
     ...overrides,

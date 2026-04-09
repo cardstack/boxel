@@ -20,9 +20,9 @@
 
 import type {
   AgentContext,
-  IssueCard,
-  KnowledgeArticle,
-  ProjectCard,
+  IssueData,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
 } from './factory-agent';
 
@@ -73,11 +73,10 @@ export type TestRunner = () => Promise<TestResult>;
  */
 export interface ContextBuilderLike {
   build(params: {
-    project: ProjectCard;
-    issue: IssueCard;
-    knowledge: KnowledgeArticle[];
+    project: ProjectData;
+    issue: IssueData;
+    knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    testRealmUrl: string;
     testResults?: TestResult;
   }): Promise<AgentContext>;
 }
@@ -87,11 +86,10 @@ export interface FactoryLoopConfig {
   contextBuilder: ContextBuilderLike;
   tools: FactoryTool[];
   testRunner: TestRunner;
-  project: ProjectCard;
-  issue: IssueCard;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData;
+  issue: IssueData;
+  knowledge: KnowledgeArticleData[];
   targetRealmUrl: string;
-  testRealmUrl: string;
   /** Maximum iterations before the loop gives up. Default: 5. */
   maxIterations?: number;
 }
@@ -129,7 +127,6 @@ export async function runFactoryLoop(
       issue: config.issue,
       knowledge: config.knowledge,
       targetRealmUrl: config.targetRealmUrl,
-      testRealmUrl: config.testRealmUrl,
       testResults,
     });
 

@@ -137,7 +137,6 @@ async function main(): Promise<void> {
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     sourceRealmUrl: 'https://realms.example.test/user/source/',
     allowedRealmPrefixes: ['https://realms.example.test/user/scratch-'],
   });
@@ -184,7 +183,6 @@ async function main(): Promise<void> {
   let mockExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       mockCallCount++;
       let url = String(input);
@@ -251,7 +249,6 @@ async function main(): Promise<void> {
   let toolBuilderExecutor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: 'https://realms.example.test/user/target/',
-    testRealmUrl: 'https://realms.example.test/user/target-tests/',
     fetch: toolBuilderFetch,
   });
 
