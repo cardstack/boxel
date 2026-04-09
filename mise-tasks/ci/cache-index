@@ -42,7 +42,7 @@ npx wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ')
 
 echo "All realms ready. Dumping index tables..."
 docker exec boxel-pg pg_dump -U postgres --data-only \
-  -t boxel_index -t boxel_index_working -t realm_versions -t realm_meta \
+  -t boxel_index -t realm_versions -t realm_meta \
   boxel | gzip > /tmp/boxel-index-cache.sql.gz
 
 echo "Index cache created at /tmp/boxel-index-cache.sql.gz"
