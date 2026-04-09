@@ -143,6 +143,30 @@ export interface ValidationResults {
   steps: ValidationStepResult[];
 }
 
+// ---------------------------------------------------------------------------
+// Issue scheduling types
+// ---------------------------------------------------------------------------
+
+export type IssueStatus =
+  | 'backlog'
+  | 'in_progress'
+  | 'blocked'
+  | 'review'
+  | 'done';
+export type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
+
+/** IssueData extended with the typed fields the IssueScheduler needs. */
+export interface SchedulableIssue extends IssueData {
+  status: IssueStatus;
+  priority: IssuePriority;
+  /** IDs of issues that must be done before this one can start. */
+  blockedBy: string[];
+  /** Explicit ordering for tie-breaking when priorities are equal. */
+  order: number;
+  /** Short summary for logging. */
+  summary?: string;
+}
+
 export interface ToolResult {
   tool: string;
   exitCode: number;
