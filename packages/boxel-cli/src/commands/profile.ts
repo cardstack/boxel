@@ -43,8 +43,10 @@ function promptPassword(question: string): Promise<string> {
     terminal: true,
   });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const stdin = process.stdin;
+    const wasFlowing = stdin.readableFlowing;
+
     if (stdin.isTTY) {
       stdin.setRawMode(true);
     }
@@ -55,10 +57,10 @@ function promptPassword(question: string): Promise<string> {
         stdin.setRawMode(false);
       }
       rl.close();
+      if (!wasFlowing) {
+        stdin.pause();
+      }
     };
-
-    process.stdout.write(question);
-    let password = '';
 
     const onData = (char: Buffer) => {
       try {
@@ -81,14 +83,21 @@ function promptPassword(question: string): Promise<string> {
           password += c;
           process.stdout.write('*');
         }
-      } catch {
+      } catch (e) {
         cleanup();
-        throw new Error('Error reading password input');
+        reject(e);
       }
     };
 
-    stdin.on('data', onData);
-    stdin.resume();
+    let password = '';
+    try {
+      process.stdout.write(question);
+      stdin.on('data', onData);
+      stdin.resume();
+    } catch (e) {
+      cleanup();
+      reject(e);
+    }
   });
 }
 
