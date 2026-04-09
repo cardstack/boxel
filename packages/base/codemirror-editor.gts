@@ -644,7 +644,142 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           padding: 0 2px;
         }
 
-        /* BFM card reference syntax styling */
+        /* ── Markdown live preview: headings ── */
+        .codemirror-editor :deep(.cm-md-h1) {
+          font-size: 1.8em;
+          font-weight: 700;
+          line-height: 1.3;
+        }
+
+        .codemirror-editor :deep(.cm-md-h2) {
+          font-size: 1.5em;
+          font-weight: 700;
+          line-height: 1.3;
+        }
+
+        .codemirror-editor :deep(.cm-md-h3) {
+          font-size: 1.25em;
+          font-weight: 600;
+          line-height: 1.4;
+        }
+
+        .codemirror-editor :deep(.cm-md-h4) {
+          font-size: 1.1em;
+          font-weight: 600;
+          line-height: 1.4;
+        }
+
+        .codemirror-editor :deep(.cm-md-h5) {
+          font-size: 1em;
+          font-weight: 600;
+        }
+
+        .codemirror-editor :deep(.cm-md-h6) {
+          font-size: 0.9em;
+          font-weight: 600;
+          color: var(--boxel-400, #666);
+        }
+
+        /* ── Markdown live preview: markers ── */
+        .codemirror-editor :deep(.cm-md-marker) {
+          color: var(--boxel-400, #999);
+          opacity: 0.6;
+        }
+
+        .codemirror-editor :deep(.cm-md-marker--dim) {
+          opacity: 0.3;
+        }
+
+        .codemirror-editor :deep(.cm-md-marker--hidden) {
+          font-size: 0;
+          opacity: 0;
+          overflow: hidden;
+          display: inline;
+          width: 0;
+        }
+
+        /* ── Markdown live preview: inline formatting ── */
+        .codemirror-editor :deep(.cm-md-bold) {
+          font-weight: 700;
+        }
+
+        .codemirror-editor :deep(.cm-md-italic) {
+          font-style: italic;
+        }
+
+        .codemirror-editor :deep(.cm-md-inline-code) {
+          font-family: var(--boxel-font-family-mono, ui-monospace, monospace);
+          font-size: 0.9em;
+          background-color: var(--boxel-100, #f0f0f0);
+          border-radius: 3px;
+          padding: 1px 4px;
+        }
+
+        /* ── Markdown live preview: code blocks ── */
+        .codemirror-editor :deep(.cm-md-code-line) {
+          background-color: var(--boxel-100, #f5f5f5);
+        }
+
+        .codemirror-editor :deep(.cm-md-code-line .cm-line) {
+          font-family: var(--boxel-font-family-mono, ui-monospace, monospace);
+          font-size: 0.9em;
+        }
+
+        .codemirror-editor :deep(.cm-md-code-fence) {
+          color: var(--boxel-400, #999);
+          opacity: 0.5;
+        }
+
+        .codemirror-editor :deep(.cm-md-code-info) {
+          color: var(--boxel-400, #999);
+          font-size: 0.85em;
+        }
+
+        /* ── Markdown live preview: blockquotes ── */
+        .codemirror-editor :deep(.cm-md-blockquote-line) {
+          border-left: 3px solid var(--boxel-300, #ccc);
+          padding-left: 12px;
+          color: var(--boxel-500, #555);
+        }
+
+        .codemirror-editor :deep(.cm-md-quote-mark) {
+          color: var(--boxel-300, #ccc);
+          opacity: 0.5;
+        }
+
+        /* ── Markdown live preview: horizontal rules ── */
+        .codemirror-editor :deep(.cm-md-hr-line) {
+          color: var(--boxel-400, #999);
+          opacity: 0.4;
+        }
+
+        .codemirror-editor :deep(.cm-md-hr-widget) {
+          display: block;
+          border: none;
+          border-top: 1px solid var(--boxel-300, #ddd);
+          margin: 8px 0;
+        }
+
+        /* ── Markdown live preview: lists ── */
+        .codemirror-editor :deep(.cm-md-list-mark) {
+          color: var(--boxel-highlight, #0078d4);
+          font-weight: 600;
+        }
+
+        /* ── Markdown live preview: links ── */
+        .codemirror-editor :deep(.cm-md-link-text) {
+          color: var(--boxel-highlight, #0078d4);
+          text-decoration: underline;
+          text-decoration-color: var(--boxel-highlight, #0078d4);
+          text-underline-offset: 2px;
+        }
+
+        .codemirror-editor :deep(.cm-md-link-url) {
+          color: var(--boxel-400, #999);
+          font-size: 0.85em;
+        }
+
+        /* ── BFM card reference syntax (cursor-on-line) ── */
         .codemirror-editor :deep(.cm-bfm-card-ref) {
           background-color: var(--boxel-100, #f0f0f0);
           border-radius: 3px;
@@ -663,227 +798,211 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           padding: 2px 6px;
         }
 
-        /* Hide source syntax when block card widget is shown */
-        .codemirror-editor :deep(.cm-bfm-card-ref--hidden) {
-          font-size: 0;
-          padding: 0;
-          opacity: 0;
-          height: 0;
-          overflow: hidden;
-        }
-
-        /* Highlight source syntax when cursor is on the block card line */
         .codemirror-editor :deep(.cm-bfm-card-ref--active) {
           background-color: var(--boxel-highlight-hover, #e8f0fe);
         }
 
-        /* Card widget containers */
+        /* ── Card widget containers ── */
         .codemirror-editor :deep(.cm-card-widget) {
           user-select: none;
         }
 
         .codemirror-editor :deep(.cm-card-widget--inline) {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          background-color: var(--boxel-100, #f0f0f0);
-          border: 1px solid var(--boxel-border-color, #c4c4c4);
-          border-radius: var(--boxel-border-radius, 4px);
-          padding: 1px 6px;
-          font-size: 0.85em;
-          cursor: pointer;
+          display: inline;
+          vertical-align: baseline;
         }
 
         .codemirror-editor :deep(.cm-card-widget--block) {
           display: block;
           margin: var(--boxel-sp-xs, 4px) 0;
+          min-height: 40px;
         }
 
         /* Card slot wrappers rendered via{{in-element}}*/
-                   .codemirror-editor :deep(.codemirror-card-slot) {
-                     contain: layout style paint;
-                   }
+             .codemirror-editor :deep(.codemirror-card-slot) {
+               contain: layout style paint;
+             }
 
-                   .codemirror-editor :deep(.codemirror-card-slot--inline) {
-                     display: inline-flex;
-                     align-items: center;
-                     gap: 4px;
-                     background-color: var(--boxel-100, #f0f0f0);
-                     border: 1px solid var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     padding: 1px 6px;
-                     font-size: 0.85em;
-                     cursor: pointer;
-                   }
+             .codemirror-editor :deep(.codemirror-card-slot--inline) {
+               display: inline-flex;
+               align-items: center;
+               gap: 4px;
+               background-color: var(--boxel-100, #f0f0f0);
+               border: 1px solid var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               padding: 1px 6px;
+               font-size: 0.85em;
+               cursor: pointer;
+             }
 
-                   .codemirror-editor :deep(.codemirror-card-slot--block) {
-                     display: block;
-                     border: 1px solid var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     overflow: hidden;
-                   }
+             .codemirror-editor :deep(.codemirror-card-slot--block) {
+               display: block;
+               border: 1px solid var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               overflow: hidden;
+             }
 
-                   /* Fallback for unresolved card references */
-                   .codemirror-editor :deep(.codemirror-card-fallback) {
-                     display: inline-block;
-                     padding: 1px 6px;
-                     background-color: var(--boxel-100, #f0f0f0);
-                     border: 1px dashed var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     font-size: 0.85em;
-                     color: var(--boxel-400, #666);
-                     word-break: break-all;
-                   }
+             /* Fallback for unresolved card references */
+             .codemirror-editor :deep(.codemirror-card-fallback) {
+               display: inline-block;
+               padding: 1px 6px;
+               background-color: var(--boxel-100, #f0f0f0);
+               border: 1px dashed var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               font-size: 0.85em;
+               color: var(--boxel-400, #666);
+               word-break: break-all;
+             }
 
-                   .codemirror-editor-loading {
-                     min-height: 120px;
-                     display: flex;
-                     align-items: center;
-                     justify-content: center;
-                     color: var(--boxel-400, #999);
-                     font-style: italic;
-                   }
+             .codemirror-editor-loading {
+               min-height: 120px;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               color: var(--boxel-400, #999);
+               font-style: italic;
+             }
 
-                   /* ── Card search popup ── */
-                   .codemirror-card-search {
-                     position: absolute;
-                     z-index: 100;
-                     background: var(--boxel-light, #fff);
-                     border: 1px solid var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-                     min-width: 280px;
-                     max-width: 400px;
-                     padding: 8px;
-                   }
+             /* ── Card search popup ── */
+             .codemirror-card-search {
+               position: absolute;
+               z-index: 100;
+               background: var(--boxel-light, #fff);
+               border: 1px solid var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+               min-width: 280px;
+               max-width: 400px;
+               padding: 8px;
+             }
 
-                   .codemirror-card-search-input {
-                     width: 100%;
-                     padding: 6px 10px;
-                     border: 1px solid var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     font: inherit;
-                     font-size: 0.9em;
-                     outline: none;
-                     box-sizing: border-box;
-                   }
+             .codemirror-card-search-input {
+               width: 100%;
+               padding: 6px 10px;
+               border: 1px solid var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               font: inherit;
+               font-size: 0.9em;
+               outline: none;
+               box-sizing: border-box;
+             }
 
-                   .codemirror-card-search-input:focus {
-                     border-color: var(--boxel-highlight, #0078d4);
-                     box-shadow: 0 0 0 1px var(--boxel-highlight, #0078d4);
-                   }
+             .codemirror-card-search-input:focus {
+               border-color: var(--boxel-highlight, #0078d4);
+               box-shadow: 0 0 0 1px var(--boxel-highlight, #0078d4);
+             }
 
-                   .codemirror-card-search-loading {
-                     padding: 8px 4px;
-                     color: var(--boxel-400, #666);
-                     font-size: 0.85em;
-                     font-style: italic;
-                   }
+             .codemirror-card-search-loading {
+               padding: 8px 4px;
+               color: var(--boxel-400, #666);
+               font-size: 0.85em;
+               font-style: italic;
+             }
 
-                   .codemirror-card-search-results {
-                     margin-top: 4px;
-                     max-height: 240px;
-                     overflow-y: auto;
-                   }
+             .codemirror-card-search-results {
+               margin-top: 4px;
+               max-height: 240px;
+               overflow-y: auto;
+             }
 
-                   .codemirror-card-search-result {
-                     display: flex;
-                     flex-direction: column;
-                     align-items: flex-start;
-                     width: 100%;
-                     padding: 6px 10px;
-                     border: none;
-                     background: transparent;
-                     cursor: pointer;
-                     border-radius: var(--boxel-border-radius, 4px);
-                     text-align: left;
-                     font: inherit;
-                   }
+             .codemirror-card-search-result {
+               display: flex;
+               flex-direction: column;
+               align-items: flex-start;
+               width: 100%;
+               padding: 6px 10px;
+               border: none;
+               background: transparent;
+               cursor: pointer;
+               border-radius: var(--boxel-border-radius, 4px);
+               text-align: left;
+               font: inherit;
+             }
 
-                   .codemirror-card-search-result:hover,
-                   .codemirror-card-search-result.selected {
-                     background: var(--boxel-highlight-hover, #e8f0fe);
-                   }
+             .codemirror-card-search-result:hover,
+             .codemirror-card-search-result.selected {
+               background: var(--boxel-highlight-hover, #e8f0fe);
+             }
 
-                   .search-result-title {
-                     font-weight: 500;
-                     font-size: 0.9em;
-                   }
+             .search-result-title {
+               font-weight: 500;
+               font-size: 0.9em;
+             }
 
-                   .search-result-url {
-                     font-size: 0.75em;
-                     color: var(--boxel-400, #666);
-                     word-break: break-all;
-                   }
+             .search-result-url {
+               font-size: 0.75em;
+               color: var(--boxel-400, #666);
+               word-break: break-all;
+             }
 
-                   /* ── Format picker popup ── */
-                   .codemirror-format-picker {
-                     position: absolute;
-                     z-index: 100;
-                     background: var(--boxel-light, #fff);
-                     border: 1px solid var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-                     padding: 12px;
-                     min-width: 220px;
-                   }
+             /* ── Format picker popup ── */
+             .codemirror-format-picker {
+               position: absolute;
+               z-index: 100;
+               background: var(--boxel-light, #fff);
+               border: 1px solid var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+               padding: 12px;
+               min-width: 220px;
+             }
 
-                   .format-picker-label {
-                     display: block;
-                     font-size: 0.85em;
-                     color: var(--boxel-400, #666);
-                     margin-bottom: 8px;
-                     word-break: break-word;
-                   }
+             .format-picker-label {
+               display: block;
+               font-size: 0.85em;
+               color: var(--boxel-400, #666);
+               margin-bottom: 8px;
+               word-break: break-word;
+             }
 
-                   .format-picker-buttons {
-                     display: flex;
-                     gap: 8px;
-                     margin-bottom: 8px;
-                   }
+             .format-picker-buttons {
+               display: flex;
+               gap: 8px;
+               margin-bottom: 8px;
+             }
 
-                   .format-picker-btn {
-                     flex: 1;
-                     padding: 6px 12px;
-                     border: 1px solid var(--boxel-border-color, #c4c4c4);
-                     border-radius: var(--boxel-border-radius, 4px);
-                     background: var(--boxel-light, #fff);
-                     cursor: pointer;
-                     font: inherit;
-                     font-size: 0.9em;
-                   }
+             .format-picker-btn {
+               flex: 1;
+               padding: 6px 12px;
+               border: 1px solid var(--boxel-border-color, #c4c4c4);
+               border-radius: var(--boxel-border-radius, 4px);
+               background: var(--boxel-light, #fff);
+               cursor: pointer;
+               font: inherit;
+               font-size: 0.9em;
+             }
 
-                   .format-picker-btn:hover {
-                     background: var(--boxel-highlight-hover, #e8f0fe);
-                   }
+             .format-picker-btn:hover {
+               background: var(--boxel-highlight-hover, #e8f0fe);
+             }
 
-                   .format-picker-btn--primary {
-                     background: var(--boxel-highlight, #0078d4);
-                     color: white;
-                     border-color: var(--boxel-highlight, #0078d4);
-                   }
+             .format-picker-btn--primary {
+               background: var(--boxel-highlight, #0078d4);
+               color: white;
+               border-color: var(--boxel-highlight, #0078d4);
+             }
 
-                   .format-picker-btn--primary:hover {
-                     opacity: 0.9;
-                   }
+             .format-picker-btn--primary:hover {
+               opacity: 0.9;
+             }
 
-                   .format-picker-dismiss {
-                     display: block;
-                     width: 100%;
-                     padding: 4px;
-                     border: none;
-                     background: transparent;
-                     color: var(--boxel-400, #666);
-                     cursor: pointer;
-                     font: inherit;
-                     font-size: 0.8em;
-                     text-align: center;
-                   }
+             .format-picker-dismiss {
+               display: block;
+               width: 100%;
+               padding: 4px;
+               border: none;
+               background: transparent;
+               color: var(--boxel-400, #666);
+               cursor: pointer;
+               font: inherit;
+               font-size: 0.8em;
+               text-align: center;
+             }
 
-                   .format-picker-dismiss:hover {
-                     color: var(--boxel-dark, #333);
-                   }
-                 }
+             .format-picker-dismiss:hover {
+               color: var(--boxel-dark, #333);
+             }
+           }
     </style>
   </template>
 }

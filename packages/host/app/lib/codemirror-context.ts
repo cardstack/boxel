@@ -9,6 +9,9 @@
  * Unlike ProseMirror, CodeMirror edits markdown source text directly --
  * there is no intermediate document model, no parse/serialize layer.
  * Card previews are achieved through CM6's decoration/widget system.
+ * Obsidian-style live preview is achieved by using the Lezer markdown
+ * syntax tree to apply decorations that render formatting inline and
+ * reveal raw syntax only when the cursor is on the relevant line.
  */
 
 import {
@@ -57,13 +60,41 @@ export const openCardSearchEffect = StateEffect.define<{
   to: number;
 }>();
 
+// ── Decoration range type ──────────────────────────────────────────────────
+
+interface DecoRange {
+  from: number;
+  to: number;
+  value: Decoration;
+}
+
 // ── Card reference patterns ─────────────────────────────────────────────────
 
 // Block: ::card[URL] or ::card[URL | size-spec], must be the only content on a line
-// Use [ \t]* instead of \s* to avoid matching newline characters
 const BLOCK_CARD_RE = /^::card\[([^\]\n]+)\][ \t]*$/gm;
 // Inline: :card[URL], not preceded by another colon (avoids matching ::card)
 const INLINE_CARD_RE = /(?<!:):card\[([^\]\n]+)\]/g;
+
+// ── Cursor-aware helpers ───────────────────────────────────────────────────
+
+function isOnCursorLine(
+  state: EditorState,
+  pos: number,
+  cursorLine: number,
+): boolean {
+  return state.doc.lineAt(pos).number === cursorLine;
+}
+
+function cursorInRange(
+  state: EditorState,
+  from: number,
+  to: number,
+  cursorLine: number,
+): boolean {
+  let startLine = state.doc.lineAt(from).number;
+  let endLine = state.doc.lineAt(Math.min(to, state.doc.length)).number;
+  return cursorLine >= startLine && cursorLine <= endLine;
+}
 
 // ── CardWidget (extends WidgetType) ─────────────────────────────────────────
 
@@ -94,6 +125,23 @@ class CardWidget extends WidgetType {
   }
 }
 
+// ── HorizontalRuleWidget ───────────────────────────────────────────────────
+
+class HorizontalRuleWidget extends WidgetType {
+  eq() {
+    return true;
+  }
+  toDOM(): HTMLElement {
+    let el = document.createElement('hr');
+    el.className = 'cm-md-hr-widget';
+    el.contentEditable = 'false';
+    return el;
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
 // ── Check if a position is inside a code block or inline code ───────────────
 
 function isInsideCode(state: EditorState, from: number, to: number): boolean {
@@ -110,22 +158,422 @@ function isInsideCode(state: EditorState, from: number, to: number): boolean {
         node.name === 'CodeText'
       ) {
         inside = true;
-        return false; // stop descending
+        return false;
       }
     },
   });
   return inside;
 }
 
-// ── Build card decorations from document text ───────────────────────────────
+// ── Heading decorations ────────────────────────────────────────────────────
+
+function buildHeadingDecorations(
+  state: EditorState,
+  cursorLine: number,
+): DecoRange[] {
+  let decos: DecoRange[] = [];
+  let tree = syntaxTree(state);
+
+  tree.iterate({
+    enter(node) {
+      let level = 0;
+      if (node.name === 'ATXHeading1') level = 1;
+      else if (node.name === 'ATXHeading2') level = 2;
+      else if (node.name === 'ATXHeading3') level = 3;
+      else if (node.name === 'ATXHeading4') level = 4;
+      else if (node.name === 'ATXHeading5') level = 5;
+      else if (node.name === 'ATXHeading6') level = 6;
+      else if (node.name === 'SetextHeading1') level = 1;
+      else if (node.name === 'SetextHeading2') level = 2;
+
+      if (level === 0) return;
+
+      let line = state.doc.lineAt(node.from);
+      let onCursor = cursorInRange(state, node.from, node.to, cursorLine);
+
+      // Line decoration for heading size
+      decos.push({
+        from: line.from,
+        to: line.from,
+        value: Decoration.line({ class: `cm-md-h${level}` }),
+      });
+
+      // Find and style HeaderMark children (the # characters)
+      let inner = node.node;
+      let cursor = inner.cursor();
+      if (cursor.firstChild()) {
+        do {
+          if (cursor.name === 'HeaderMark') {
+            decos.push({
+              from: cursor.from,
+              to: cursor.to,
+              value: onCursor
+                ? Decoration.mark({ class: 'cm-md-marker' })
+                : Decoration.mark({ class: 'cm-md-marker cm-md-marker--dim' }),
+            });
+          }
+        } while (cursor.nextSibling());
+      }
+    },
+  });
+
+  return decos;
+}
+
+// ── Inline formatting decorations ──────────────────────────────────────────
+
+function buildInlineFormattingDecorations(
+  state: EditorState,
+  cursorLine: number,
+): DecoRange[] {
+  let decos: DecoRange[] = [];
+  let tree = syntaxTree(state);
+
+  tree.iterate({
+    enter(node) {
+      if (
+        node.name !== 'StrongEmphasis' &&
+        node.name !== 'Emphasis' &&
+        node.name !== 'InlineCode'
+      ) {
+        return;
+      }
+
+      let onCursor = isOnCursorLine(state, node.from, cursorLine);
+
+      if (node.name === 'InlineCode') {
+        // Find CodeMark children (backticks)
+        let inner = node.node;
+        let marks: { from: number; to: number }[] = [];
+        let c = inner.cursor();
+        if (c.firstChild()) {
+          do {
+            if (c.name === 'CodeMark') {
+              marks.push({ from: c.from, to: c.to });
+            }
+          } while (c.nextSibling());
+        }
+
+        // Style the content (between first and last mark)
+        if (marks.length >= 2) {
+          let contentFrom = marks[0].to;
+          let contentTo = marks[marks.length - 1].from;
+          if (contentFrom < contentTo) {
+            decos.push({
+              from: contentFrom,
+              to: contentTo,
+              value: Decoration.mark({ class: 'cm-md-inline-code' }),
+            });
+          }
+
+          // Hide or dim backtick marks
+          for (let m of marks) {
+            decos.push({
+              from: m.from,
+              to: m.to,
+              value: onCursor
+                ? Decoration.mark({ class: 'cm-md-marker' })
+                : Decoration.mark({
+                    class: 'cm-md-marker cm-md-marker--hidden',
+                  }),
+            });
+          }
+        }
+        return false; // don't descend
+      }
+
+      // StrongEmphasis or Emphasis
+      let cssClass =
+        node.name === 'StrongEmphasis' ? 'cm-md-bold' : 'cm-md-italic';
+      let inner = node.node;
+      let marks: { from: number; to: number }[] = [];
+      let c = inner.cursor();
+      if (c.firstChild()) {
+        do {
+          if (c.name === 'EmphasisMark') {
+            marks.push({ from: c.from, to: c.to });
+          }
+        } while (c.nextSibling());
+      }
+
+      if (marks.length >= 2) {
+        let contentFrom = marks[0].to;
+        let contentTo = marks[marks.length - 1].from;
+        if (contentFrom < contentTo) {
+          decos.push({
+            from: contentFrom,
+            to: contentTo,
+            value: Decoration.mark({ class: cssClass }),
+          });
+        }
+
+        // Hide or dim emphasis marks
+        for (let m of marks) {
+          decos.push({
+            from: m.from,
+            to: m.to,
+            value: onCursor
+              ? Decoration.mark({ class: 'cm-md-marker' })
+              : Decoration.mark({
+                  class: 'cm-md-marker cm-md-marker--hidden',
+                }),
+          });
+        }
+      }
+    },
+  });
+
+  return decos;
+}
+
+// ── Block decorations (code blocks, blockquotes, horizontal rules) ─────────
+
+function buildBlockDecorations(
+  state: EditorState,
+  cursorLine: number,
+): DecoRange[] {
+  let decos: DecoRange[] = [];
+  let tree = syntaxTree(state);
+
+  tree.iterate({
+    enter(node) {
+      // ── Fenced code blocks ──
+      if (node.name === 'FencedCode') {
+        let onCursor = cursorInRange(state, node.from, node.to, cursorLine);
+
+        // Line decoration on every line in the code block
+        let startLine = state.doc.lineAt(node.from).number;
+        let endLine = state.doc.lineAt(
+          Math.min(node.to, state.doc.length),
+        ).number;
+        for (let i = startLine; i <= endLine; i++) {
+          let line = state.doc.line(i);
+          decos.push({
+            from: line.from,
+            to: line.from,
+            value: Decoration.line({ class: 'cm-md-code-line' }),
+          });
+        }
+
+        // Style fence markers and code info
+        let inner = node.node;
+        let c = inner.cursor();
+        if (c.firstChild()) {
+          do {
+            if (c.name === 'CodeMark') {
+              decos.push({
+                from: c.from,
+                to: c.to,
+                value: Decoration.mark({
+                  class: onCursor ? 'cm-md-code-fence' : 'cm-md-code-fence',
+                }),
+              });
+            } else if (c.name === 'CodeInfo') {
+              decos.push({
+                from: c.from,
+                to: c.to,
+                value: Decoration.mark({ class: 'cm-md-code-info' }),
+              });
+            }
+          } while (c.nextSibling());
+        }
+
+        return false; // don't descend further
+      }
+
+      // ── Blockquotes ──
+      if (node.name === 'Blockquote') {
+        let startLine = state.doc.lineAt(node.from).number;
+        let endLine = state.doc.lineAt(
+          Math.min(node.to, state.doc.length),
+        ).number;
+        for (let i = startLine; i <= endLine; i++) {
+          let line = state.doc.line(i);
+          decos.push({
+            from: line.from,
+            to: line.from,
+            value: Decoration.line({ class: 'cm-md-blockquote-line' }),
+          });
+        }
+
+        // Dim QuoteMark children
+        let inner = node.node;
+        let c = inner.cursor();
+        if (c.firstChild()) {
+          do {
+            if (c.name === 'QuoteMark') {
+              decos.push({
+                from: c.from,
+                to: c.to,
+                value: Decoration.mark({ class: 'cm-md-quote-mark' }),
+              });
+            }
+          } while (c.nextSibling());
+        }
+      }
+
+      // ── Horizontal rules ──
+      if (node.name === 'HorizontalRule') {
+        let onCursor = isOnCursorLine(state, node.from, cursorLine);
+        let line = state.doc.lineAt(node.from);
+
+        if (onCursor) {
+          decos.push({
+            from: line.from,
+            to: line.from,
+            value: Decoration.line({ class: 'cm-md-hr-line' }),
+          });
+        } else {
+          // Replace the --- with a visual <hr>
+          decos.push({
+            from: node.from,
+            to: node.to,
+            value: Decoration.replace({
+              widget: new HorizontalRuleWidget(),
+            }),
+          });
+        }
+      }
+    },
+  });
+
+  return decos;
+}
+
+// ── List decorations ───────────────────────────────────────────────────────
+
+function buildListDecorations(
+  state: EditorState,
+  _cursorLine: number,
+): DecoRange[] {
+  let decos: DecoRange[] = [];
+  let tree = syntaxTree(state);
+
+  tree.iterate({
+    enter(node) {
+      if (node.name === 'ListItem') {
+        let line = state.doc.lineAt(node.from);
+        decos.push({
+          from: line.from,
+          to: line.from,
+          value: Decoration.line({ class: 'cm-md-list-item' }),
+        });
+
+        // Style the ListMark
+        let inner = node.node;
+        let c = inner.cursor();
+        if (c.firstChild()) {
+          do {
+            if (c.name === 'ListMark') {
+              decos.push({
+                from: c.from,
+                to: c.to,
+                value: Decoration.mark({ class: 'cm-md-list-mark' }),
+              });
+            }
+          } while (c.nextSibling());
+        }
+        return false; // don't descend further into list item content
+      }
+    },
+  });
+
+  return decos;
+}
+
+// ── Link decorations ───────────────────────────────────────────────────────
+
+function buildLinkDecorations(
+  state: EditorState,
+  cursorLine: number,
+): DecoRange[] {
+  let decos: DecoRange[] = [];
+  let tree = syntaxTree(state);
+
+  tree.iterate({
+    enter(node) {
+      if (node.name !== 'Link') return;
+
+      let onCursor = isOnCursorLine(state, node.from, cursorLine);
+      let inner = node.node;
+
+      // Collect child nodes: LinkMark ([ ] ( )), URL
+      let linkMarks: { from: number; to: number }[] = [];
+      let urlNode: { from: number; to: number } | null = null;
+
+      let c = inner.cursor();
+      if (c.firstChild()) {
+        do {
+          if (c.name === 'LinkMark') {
+            linkMarks.push({ from: c.from, to: c.to });
+          } else if (c.name === 'URL') {
+            urlNode = { from: c.from, to: c.to };
+          }
+        } while (c.nextSibling());
+      }
+
+      // Need at least [ ] ( ) — 4 marks
+      if (linkMarks.length < 4) return false;
+
+      // Text is between first [ and second ] (linkMarks[0] and linkMarks[1])
+      let textFrom = linkMarks[0].to;
+      let textTo = linkMarks[1].from;
+
+      if (textFrom < textTo) {
+        decos.push({
+          from: textFrom,
+          to: textTo,
+          value: Decoration.mark({ class: 'cm-md-link-text' }),
+        });
+      }
+
+      if (onCursor) {
+        // Show all marks dimmed
+        for (let m of linkMarks) {
+          decos.push({
+            from: m.from,
+            to: m.to,
+            value: Decoration.mark({ class: 'cm-md-marker' }),
+          });
+        }
+        if (urlNode) {
+          decos.push({
+            from: urlNode.from,
+            to: urlNode.to,
+            value: Decoration.mark({ class: 'cm-md-link-url' }),
+          });
+        }
+      } else {
+        // Hide opening [
+        decos.push({
+          from: linkMarks[0].from,
+          to: linkMarks[0].to,
+          value: Decoration.replace({}),
+        });
+        // Hide ]( ... )  — from second mark through end
+        if (linkMarks.length >= 3) {
+          decos.push({
+            from: linkMarks[1].from,
+            to: node.to,
+            value: Decoration.replace({}),
+          });
+        }
+      }
+
+      return false; // don't descend
+    },
+  });
+
+  return decos;
+}
+
+// ── Card decorations ───────────────────────────────────────────────────────
 
 function buildCardDecorations(
   state: EditorState,
   cursorLine: number,
-): DecorationSet {
-  let widgets: { from: number; to: number; widget: CardWidget }[] = [];
-  let marks: { from: number; to: number; className: string }[] = [];
-
+): DecoRange[] {
+  let decos: DecoRange[] = [];
   let doc = state.doc;
   let text = doc.toString();
 
@@ -144,22 +592,26 @@ function buildCardDecorations(
     }
 
     let line = doc.lineAt(from);
+    let onCursor = line.number === cursorLine;
 
-    // Mark the source syntax (dimmed when widget is shown, highlighted on cursor line)
-    marks.push({
-      from,
-      to,
-      className:
-        line.number === cursorLine
-          ? 'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active'
-          : 'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--hidden',
-    });
-
-    // Show widget preview below the line (not when cursor is on it)
-    if (line.number !== cursorLine) {
+    if (onCursor) {
+      // Show raw syntax with active highlighting
+      decos.push({
+        from,
+        to,
+        value: Decoration.mark({
+          class:
+            'cm-bfm-card-ref cm-bfm-card-ref--block cm-bfm-card-ref--active',
+        }),
+      });
+    } else {
+      // Replace source text with card widget
       let widget = new CardWidget(cardId, 'block');
-      // Place widget at end of line (side: 1 = after)
-      widgets.push({ from: to, to, widget });
+      decos.push({
+        from,
+        to,
+        value: Decoration.replace({ widget }),
+      });
     }
   }
 
@@ -171,65 +623,66 @@ function buildCardDecorations(
     if (isInsideCode(state, from, to)) continue;
 
     let cardId = match[1].trim();
+    let onCursor = isOnCursorLine(state, from, cursorLine);
 
-    // Mark the source syntax as dimmed
-    marks.push({
-      from,
-      to,
-      className: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
-    });
-
-    // Add widget after the syntax
-    let widget = new CardWidget(cardId, 'inline');
-    widgets.push({ from: to, to, widget });
+    if (onCursor) {
+      // Show raw syntax dimmed
+      decos.push({
+        from,
+        to,
+        value: Decoration.mark({
+          class: 'cm-bfm-card-ref cm-bfm-card-ref--inline',
+        }),
+      });
+    } else {
+      // Replace source text with inline card widget
+      let widget = new CardWidget(cardId, 'inline');
+      decos.push({
+        from,
+        to,
+        value: Decoration.replace({ widget }),
+      });
+    }
   }
 
-  // Build decoration set
-  let allDecorations: { from: number; to: number; value: Decoration }[] = [];
+  return decos;
+}
 
-  for (let m of marks) {
-    allDecorations.push({
-      from: m.from,
-      to: m.to,
-      value: Decoration.mark({ class: m.className }),
-    });
-  }
+// ── Build all decorations ──────────────────────────────────────────────────
 
-  for (let w of widgets) {
-    allDecorations.push({
-      from: w.from,
-      to: w.to,
-      value: Decoration.widget({
-        widget: w.widget,
-        side: 1,
-      }),
-    });
-  }
+function buildDecorations(
+  state: EditorState,
+  cursorLine: number,
+): DecorationSet {
+  let allDecos: DecoRange[] = [
+    ...buildHeadingDecorations(state, cursorLine),
+    ...buildInlineFormattingDecorations(state, cursorLine),
+    ...buildBlockDecorations(state, cursorLine),
+    ...buildListDecorations(state, cursorLine),
+    ...buildLinkDecorations(state, cursorLine),
+    ...buildCardDecorations(state, cursorLine),
+  ];
 
   return Decoration.set(
-    allDecorations.map((d) => d.value.range(d.from, d.to)),
+    allDecos.map((d) => d.value.range(d.from, d.to)),
     true, // let CM6 sort
   );
 }
 
 // ── Card decoration StateField ─────────────────────────────────────────────
-// Decorations are provided via a StateField (not a ViewPlugin) so that
-// block-level widgets and marks that touch line boundaries are allowed.
-// CM6 restricts plugin-provided decorations from replacing line breaks,
-// but state-field decorations have no such restriction.
 
-function createCardDecorationField(): StateField<DecorationSet> {
+function createDecorationField(): StateField<DecorationSet> {
   return StateField.define<DecorationSet>({
     create(state) {
       let cursorLine = state.doc.lineAt(state.selection.main.head).number;
-      return buildCardDecorations(state, cursorLine);
+      return buildDecorations(state, cursorLine);
     },
     update(decos, tr) {
       if (tr.docChanged || tr.selection) {
         let cursorLine = tr.state.doc.lineAt(
           tr.state.selection.main.head,
         ).number;
-        return buildCardDecorations(tr.state, cursorLine);
+        return buildDecorations(tr.state, cursorLine);
       }
       return decos;
     },
@@ -238,9 +691,6 @@ function createCardDecorationField(): StateField<DecorationSet> {
 }
 
 // ── Card target notification ViewPlugin ────────────────────────────────────
-// Separate plugin that only observes DOM changes and collects widget targets.
-// It does NOT provide decorations, so it's not subject to the line-break
-// restriction.
 
 function createCardTargetNotifier(
   onChange: (targets: CardWidgetTarget[]) => void,
@@ -262,8 +712,6 @@ function createCardTargetNotifier(
       }
 
       notifyTargets(view: EditorView) {
-        // After the decorations are applied, collect actual DOM elements from widgets
-        // We use requestAnimationFrame to ensure DOM is updated
         requestAnimationFrame(() => {
           let targets: CardWidgetTarget[] = [];
           let editorDom = view.dom;
@@ -299,7 +747,6 @@ function createSlashCommandSource(
     if (!match) return null;
     if (match.from === match.to && !context.explicit) return null;
 
-    // Only trigger at start of line or after whitespace
     let line = context.state.doc.lineAt(match.from);
     if (match.from > line.from) {
       let charBefore = context.state.sliceDoc(match.from - 1, match.from);
@@ -319,9 +766,7 @@ function createSlashCommandSource(
             from: number,
             to: number,
           ) => {
-            // Delete the slash command text
             view.dispatch({ changes: { from, to, insert: '' } });
-            // Signal the Glimmer component to open card search
             onOpenCardSearch({ from, to });
           },
         },
@@ -335,10 +780,9 @@ function createSlashCommandSource(
 function wrapWith(marker: string) {
   return (view: EditorView): boolean => {
     let { from, to } = view.state.selection.main;
-    if (from === to) return false; // no selection
+    if (from === to) return false;
     let selected = view.state.sliceDoc(from, to);
 
-    // Toggle: if already wrapped, unwrap
     if (
       selected.startsWith(marker) &&
       selected.endsWith(marker) &&
@@ -382,7 +826,7 @@ export interface CreateEditorStateOptions {
 function createEditorState(options: CreateEditorStateOptions): EditorState {
   let { content, onDocChange, onCardTargetsChange, onOpenCardSearch } = options;
 
-  let cardField = createCardDecorationField();
+  let decoField = createDecorationField();
   let targetNotifier = createCardTargetNotifier(onCardTargetsChange);
   let slashSource = createSlashCommandSource(onOpenCardSearch);
 
@@ -391,7 +835,7 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     history(),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     markdownKeymap,
-    cardField,
+    decoField,
     targetNotifier,
     autocompletion({
       override: [slashSource],

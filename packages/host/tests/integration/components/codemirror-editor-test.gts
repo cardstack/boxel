@@ -145,7 +145,10 @@ module('Integration | codemirror-context', function (hooks) {
     try {
       let targets: CardWidgetTarget[] = [];
       let state = cmContext.createEditorState({
-        content: 'See :card[https://example.com/Author/alice] for details.',
+        // Card ref is on line 3 so the cursor (at pos 0, line 1) doesn't
+        // suppress the replace widget via cursor-aware decoration logic.
+        content:
+          'Some intro text\n\nSee :card[https://example.com/Author/alice] for details.',
         onDocChange: () => {},
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
@@ -268,8 +271,7 @@ module('Integration | codemirror-context', function (hooks) {
     try {
       let targets: CardWidgetTarget[] = [];
       let state = cmContext.createEditorState({
-        content:
-          'Some text\n\n::card[https://example.com/cards/2 | 400x200]',
+        content: 'Some text\n\n::card[https://example.com/cards/2 | 400x200]',
         onDocChange: () => {},
         onCardTargetsChange: (t: CardWidgetTarget[]) => {
           targets = t;
