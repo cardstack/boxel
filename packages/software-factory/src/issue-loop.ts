@@ -30,27 +30,40 @@ import { logger } from './logger';
 let log = logger('issue-loop');
 
 // ---------------------------------------------------------------------------
-// Validator interface (placeholder for CS-10675)
+// Validator interface
 // ---------------------------------------------------------------------------
 
 /**
  * Runs the post-iteration validation pipeline.
  * Steps: parse, lint, evaluate, instantiate, run tests.
- * CS-10675 provides the real implementation.
+ * See ValidationPipeline for the real implementation.
  */
 export interface Validator {
   validate(targetRealmUrl: string): Promise<ValidationResults>;
+  /** Format validation results for LLM context or issue descriptions. */
+  formatForContext?(results: ValidationResults): string;
 }
 
 /**
  * No-op validator that always passes. Used for bootstrap issues
- * or when CS-10675 validation is not yet available.
+ * or when validation is not needed.
  */
 export class NoOpValidator implements Validator {
   async validate(): Promise<ValidationResults> {
     return { passed: true, steps: [] };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Re-exports from validators/
+// ---------------------------------------------------------------------------
+
+export {
+  ValidationPipeline,
+  createDefaultPipeline,
+  type ValidationStepRunner,
+  type ValidationPipelineConfig,
+} from './validators/validation-pipeline';
 
 // ---------------------------------------------------------------------------
 // Context builder interface for issue-driven loop
@@ -136,6 +149,42 @@ function formatValidation(results: ValidationResults): string {
         `${s.step} (${s.errors.length} error${s.errors.length !== 1 ? 's' : ''})`,
     );
   return `FAILED — ${failures.join(', ')}`;
+}
+
+/**
+ * Build a description for an issue blocked due to max iterations with
+ * failing validation, including the formatted failure context.
+ */
+function buildMaxIterationBlockedDescription(
+  maxIterations: number,
+  validationResults: ValidationResults,
+  validator: Validator,
+): string {
+  let lines = [
+    `**Blocked: max iteration limit reached (${maxIterations} turns) with failing validation.**`,
+    '',
+    `The agent was unable to resolve validation failures within the allowed number of iterations.`,
+    '',
+    `### Last Validation Results`,
+    '',
+  ];
+
+  if (validator.formatForContext) {
+    lines.push(validator.formatForContext(validationResults));
+  } else {
+    // Fallback: format from the raw results
+    for (let step of validationResults.steps) {
+      if (!step.passed) {
+        lines.push(`**${step.step}**: FAILED`);
+        for (let error of step.errors) {
+          lines.push(`- ${error.message}`);
+        }
+        lines.push('');
+      }
+    }
+  }
+
+  return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -263,8 +312,36 @@ export async function runIssueLoop(
 
     if (exitReason === 'max_iterations') {
       log.info(
-        `  Max iterations (${maxIterationsPerIssue}) reached for issue ${issueSummaryLabel(issue)} — exiting inner loop`,
+        `  Max iterations (${maxIterationsPerIssue}) reached for issue ${issueSummaryLabel(issue)}`,
       );
+
+      // If validation still failing at max iterations, block the issue with
+      // the reason and failure context so it's visible in the realm.
+      if (validationResults && !validationResults.passed) {
+        log.info(
+          `  Validation still failing — blocking issue with failure context`,
+        );
+        exitReason = 'blocked';
+
+        if (issueStore.updateIssue) {
+          try {
+            let description = buildMaxIterationBlockedDescription(
+              maxIterationsPerIssue,
+              validationResults,
+              validator,
+            );
+            await issueStore.updateIssue(issue.id, {
+              status: 'blocked',
+              description,
+            });
+          } catch (err) {
+            log.warn(
+              `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+      }
+
       exhaustedIssues.add(issue.id);
     }
 

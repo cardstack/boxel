@@ -16,3 +16,7 @@ import './factory-tool-builder.test';
 import './factory-loop.test';
 import './factory-implement.test';
 import './realm-auth.test';
+import './issue-loop.test';
+import './issue-scheduler.test';
+import './validation-pipeline.test';
+import './test-step.test';

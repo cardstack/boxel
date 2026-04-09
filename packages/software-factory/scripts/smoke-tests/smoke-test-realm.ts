@@ -45,6 +45,8 @@ import {
   getRealmScopedAuth,
   writeFile,
 } from '../../src/realm-operations';
+import { createDefaultPipeline } from '../../src/validators/validation-pipeline';
+import type { TestValidationDetails } from '../../src/validators/test-step';
 
 // ---------------------------------------------------------------------------
 // Sample LLM output -- what the agent would produce in the implementation phase
@@ -365,15 +367,109 @@ async function main() {
   );
   log.info(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
 
-  if (expectedStatus) {
-    log.info(
-      '\n✓ Smoke test passed! TestRun contains both pass and fail QUnit results.',
-    );
-  } else {
-    log.info('\n✗ Smoke test had unexpected results.');
+  if (!expectedStatus) {
+    log.info('\n✗ Phase 2 had unexpected results.');
     log.info(
       `  Expected "failed" (mixed pass/fail QUnit tests) but got "${handle.status}"`,
     );
+    process.exit(1);
+  }
+
+  log.info(
+    '\n✓ Phase 2 passed! TestRun contains both pass and fail QUnit results.',
+  );
+
+  // -------------------------------------------------------------------------
+  // Validation Pipeline — exercises the full ValidationPipeline with a real
+  // TestValidationStep against the same realm.
+  // -------------------------------------------------------------------------
+
+  log.info(
+    '\n--- Validation Pipeline: Running ValidationPipeline.validate() ---\n',
+  );
+
+  let pipeline = createDefaultPipeline({
+    authorization,
+    fetch: fetchImpl,
+    realmServerUrl,
+    hostAppUrl: realmServerUrl,
+    testResultsModuleUrl,
+    targetRealmUrl,
+  });
+
+  let validationResults = await pipeline.validate(targetRealmUrl);
+
+  log.info(`  Pipeline result: ${validationResults.passed ? 'PASSED' : 'FAILED'} (${validationResults.steps.length} steps)`);
+  for (let step of validationResults.steps) {
+    let statusIcon = step.passed ? '✓' : '✗';
+    let detail = '';
+    if (step.details) {
+      let d = step.details as unknown as TestValidationDetails;
+      if (d.passedCount != null) {
+        detail = ` (${d.passedCount} passed, ${d.failedCount} failed)`;
+      }
+    }
+    log.info(`    ${step.step}: ${statusIcon} ${step.passed ? 'passed' : 'failed'}${step.errors.length > 0 ? ' — no-op' : ''}${detail}`);
+  }
+
+  // Verify pipeline results
+  let pipelinePassed = true;
+
+  if (validationResults.passed) {
+    log.info('\n  ✗ Expected pipeline to fail (deliberately failing test)');
+    pipelinePassed = false;
+  } else {
+    log.info('\n  ✓ Pipeline correctly reports failure');
+  }
+
+  let testStep = validationResults.steps.find((s) => s.step === 'test');
+  if (!testStep) {
+    log.info('  ✗ No test step in results');
+    pipelinePassed = false;
+  } else if (testStep.passed) {
+    log.info('  ✗ Test step should have failed');
+    pipelinePassed = false;
+  } else {
+    log.info('  ✓ Test step correctly failed');
+  }
+
+  let noOpSteps = validationResults.steps.filter(
+    (s) => s.step !== 'test',
+  );
+  let allNoOpsPassed = noOpSteps.every((s) => s.passed);
+  if (allNoOpsPassed) {
+    log.info('  ✓ All NoOp steps (parse, lint, evaluate, instantiate) passed');
+  } else {
+    log.info('  ✗ Some NoOp steps failed unexpectedly');
+    pipelinePassed = false;
+  }
+
+  if (testStep?.details) {
+    let details = testStep.details as unknown as TestValidationDetails;
+    if (details.passedCount > 0 && details.failedCount > 0) {
+      log.info(`  ✓ Test details: ${details.passedCount} passed, ${details.failedCount} failed`);
+    } else {
+      log.info(`  ✗ Expected both passing and failing tests, got passed=${details.passedCount} failed=${details.failedCount}`);
+      pipelinePassed = false;
+    }
+  } else {
+    log.info('  ✗ No test details available');
+    pipelinePassed = false;
+  }
+
+  // Show formatted context for LLM
+  let formatted = pipeline.formatForContext(validationResults);
+  log.info('\n  Formatted context for LLM:');
+  log.info('  ─────────────────────────');
+  for (let line of formatted.split('\n')) {
+    log.info(`  ${line}`);
+  }
+  log.info('  ─────────────────────────');
+
+  if (pipelinePassed) {
+    log.info('\n✓ Validation pipeline smoke test passed!');
+  } else {
+    log.info('\n✗ Validation pipeline smoke test failed.');
     process.exit(1);
   }
 }

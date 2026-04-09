@@ -30,6 +30,11 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
+  /** Update issue fields in the realm. Used for max-iteration blocking. */
+  updateIssue?(
+    issueId: string,
+    updates: { status?: string; description?: string },
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

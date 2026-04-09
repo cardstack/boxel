@@ -57,6 +57,34 @@ After each agent turn in the inner loop, the orchestrator runs these checks dete
 4. **Card instantiation** — Verify that sample card instances can be instantiated from their definitions
 5. **Run existing tests** — Execute all QUnit `.test.gts` files in the target realm via the QUnit test page
 
+### Validation Architecture (CS-10675)
+
+The validation pipeline is implemented as a modular system in `src/validators/`:
+
+**`ValidationStepRunner` interface** — the contract every step must implement:
+
+```typescript
+interface ValidationStepRunner {
+  readonly step: ValidationStep;
+  run(targetRealmUrl: string): Promise<ValidationStepResult>;
+  formatForContext(result: ValidationStepResult): string;
+}
+```
+
+**`ValidationPipeline` class** — implements the `Validator` interface and composes step runners:
+
+- Steps run **concurrently** via `Promise.allSettled()` — a failure or exception in one step does not prevent others from running
+- Exceptions thrown by a step are captured as failed `ValidationStepResult` entries with the error message
+- `formatForContext()` delegates to each step runner to produce LLM-friendly markdown
+- `createDefaultPipeline(config)` factory function composes all 5 steps with config injection
+
+**Step-specific failure shapes** — each validation type carries its own structured data in `ValidationStepResult.details` (flattened POJOs, not cards):
+
+- **Test step**: `{ testRunId, passedCount, failedCount, failures: [{ testName, module, message, stackTrace }] }` — reads back the completed TestRun card from the realm for detailed failure data (will become cheap local filesystem reads after boxel-cli integration)
+- **Future parse/lint/evaluate/instantiate steps**: each defines its own `details` shape
+
+**Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
+
 ### Handling Failures
 
 Validation failures are fed back to the agent as context in the **next inner-loop iteration**. The orchestrator does not create fix issues for validation failures — it iterates with the failure details so the agent can self-correct. This mirrors Phase 1's approach (feed test results back, iterate) but with a broader validation pipeline.
@@ -65,7 +93,8 @@ The inner loop continues until:
 
 - The agent marks the issue as done (all validation passes)
 - The agent marks the issue as blocked (needs human input)
-- Max iterations are reached
+- Max iterations are reached with **failing validation** — the orchestrator blocks the issue with the reason ("max iteration limit reached") and the formatted validation failure context in the issue description, then moves to the next issue
+- Max iterations are reached with **passing validation** — the issue is exhausted but not blocked (agent did not mark done despite passing validation)
 
 The agent always has the option to create new issues via tool calls if it determines that a failure requires separate work (e.g., "this card definition depends on another card that doesn't exist yet — creating a new issue for it"). But the orchestrator does not force this — the agent decides.
 

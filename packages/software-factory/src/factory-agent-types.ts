@@ -135,6 +135,8 @@ export interface ValidationStepResult {
   passed: boolean;
   files?: string[];
   errors: ValidationError[];
+  /** Step-specific structured data for context formatting (POJOs, not cards). */
+  details?: Record<string, unknown>;
 }
 
 /** Aggregated results from a full validation run (all steps). */

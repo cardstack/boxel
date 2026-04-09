@@ -2,7 +2,7 @@
  * Shared realm operations for the software-factory scripts.
  *
  * Centralizes HTTP-based realm API calls so they're easy to find and
- * refactor to boxel-cli tool calls when --jwt support is added (CS-10529).
+ * refactor to boxel-cli tool calls (CS-10529).
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -793,22 +793,17 @@ async function addRealmToMatrixAccountData(
 }
 
 // ---------------------------------------------------------------------------
-// Pull Realm Files
+// Fetch Realm Filenames
 // ---------------------------------------------------------------------------
 
 /**
- * Download all files from a remote realm to a local directory using the
- * `_mtimes` endpoint to discover file paths.
- *
- * TODO: Replace with `boxel pull --jwt <token>` once CS-10529 is implemented.
- *
- * Returns the list of relative file paths that were downloaded.
+ * Fetch the list of file paths from a realm via the `_mtimes` endpoint.
+ * Returns relative file paths (e.g., `hello.gts`, `Cards/my-card.json`).
  */
-export async function pullRealmFiles(
+export async function fetchRealmFilenames(
   realmUrl: string,
-  localDir: string,
   options?: RealmFetchOptions,
-): Promise<{ files: string[]; error?: string }> {
+): Promise<{ filenames: string[]; error?: string }> {
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
 
@@ -817,14 +812,13 @@ export async function pullRealmFiles(
     SupportedMimeType.JSONAPI,
   );
 
-  // Fetch mtimes to discover all file paths.
   let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
   let mtimesResponse: Response;
   try {
     mtimesResponse = await fetchImpl(mtimesUrl, { method: 'GET', headers });
   } catch (err) {
     return {
-      files: [],
+      filenames: [],
       error: `Failed to fetch _mtimes: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
@@ -832,7 +826,7 @@ export async function pullRealmFiles(
   if (!mtimesResponse.ok) {
     let body = await mtimesResponse.text();
     return {
-      files: [],
+      filenames: [],
       error: `_mtimes returned HTTP ${mtimesResponse.status}: ${body.slice(0, 300)}`,
     };
   }
@@ -845,11 +839,13 @@ export async function pullRealmFiles(
       (json as { data?: { attributes?: { mtimes?: Record<string, number> } } })
         ?.data?.attributes?.mtimes ?? json;
   } catch {
-    return { files: [], error: 'Failed to parse _mtimes response as JSON' };
+    return {
+      filenames: [],
+      error: 'Failed to parse _mtimes response as JSON',
+    };
   }
 
-  // Download each file.
-  let downloadedFiles: string[] = [];
+  let filenames: string[] = [];
   for (let fullUrl of Object.keys(mtimes)) {
     if (!fullUrl.startsWith(normalizedRealmUrl)) {
       continue;
@@ -858,6 +854,42 @@ export async function pullRealmFiles(
     if (!relativePath || relativePath.endsWith('/')) {
       continue;
     }
+    filenames.push(relativePath);
+  }
+
+  return { filenames: filenames.sort() };
+}
+
+// ---------------------------------------------------------------------------
+// Pull Realm Files
+// ---------------------------------------------------------------------------
+
+/**
+ * Download all files from a remote realm to a local directory using the
+ * `_mtimes` endpoint to discover file paths.
+ *
+ * TODO: Replace with `boxel pull` once CS-10529 is implemented.
+ *
+ * Returns the list of relative file paths that were downloaded.
+ */
+export async function pullRealmFiles(
+  realmUrl: string,
+  localDir: string,
+  options?: RealmFetchOptions,
+): Promise<{ files: string[]; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+
+  // Use fetchRealmFilenames to discover all file paths.
+  let { filenames, error } = await fetchRealmFilenames(realmUrl, options);
+  if (error) {
+    return { files: [], error };
+  }
+
+  // Download each file.
+  let downloadedFiles: string[] = [];
+  for (let relativePath of filenames) {
+    let fullUrl = `${normalizedRealmUrl}${relativePath}`;
 
     let localPath = join(localDir, relativePath);
     mkdirSync(dirname(localPath), { recursive: true });
