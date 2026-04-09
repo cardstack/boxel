@@ -14,6 +14,8 @@ import { module, test } from 'qunit';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import ENV from '@cardstack/host/config/environment';
+
 import { testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
 
@@ -152,11 +154,12 @@ module('Integration | operator-mode | links', function (hooks) {
     assert.dom('[data-test-add-new="spec"]').exists();
 
     await click('[data-test-add-new="spec"]');
+    await this.pauseTest();
     await waitFor(
-      `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click(
-      `[data-test-card-catalog-item="@cardstack/base/fields/biginteger-field"]`,
+      `[data-test-card-catalog-item="${ENV.resolvedBaseRealmURL}fields/biginteger-field"]`,
     );
     await click('[data-test-card-catalog-go-button]');
 
