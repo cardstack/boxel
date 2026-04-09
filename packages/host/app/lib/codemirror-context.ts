@@ -895,8 +895,6 @@ export interface SelectionInfo {
   hasSelection: boolean;
   from: number;
   to: number;
-  /** Bounding rect of the selection relative to the editor container */
-  coords: { left: number; top: number; right: number; bottom: number } | null;
   /** Which inline formats are active in the current selection */
   formats: {
     bold: boolean;
@@ -983,34 +981,13 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
       if (update.docChanged) {
         onDocChange(update.state.doc.toString());
       }
-      if (onSelectionChange && (update.selectionSet || update.docChanged || update.geometryChanged)) {
+      if (onSelectionChange && (update.selectionSet || update.docChanged)) {
         let { from, to } = update.state.selection.main;
         let hasSelection = from !== to;
-        let coords: SelectionInfo['coords'] = null;
-        if (hasSelection) {
-          let fromCoords = update.view.coordsAtPos(from);
-          let toCoords = update.view.coordsAtPos(to);
-          if (fromCoords && toCoords) {
-            // Check if selection is visible within the scrollable container
-            let scrollParent = update.view.dom.closest('.boxel-card-container');
-            let parentRect = scrollParent?.getBoundingClientRect();
-            let selectionVisible = !parentRect ||
-              (fromCoords.top < parentRect.bottom && toCoords.bottom > parentRect.top);
-            if (selectionVisible) {
-              coords = {
-                left: Math.min(fromCoords.left, toCoords.left),
-                top: fromCoords.top,
-                right: Math.max(fromCoords.right, toCoords.right),
-                bottom: toCoords.bottom,
-              };
-            }
-          }
-        }
         onSelectionChange({
           hasSelection,
           from,
           to,
-          coords,
           formats: hasSelection
             ? detectFormats(update.state, from, to)
             : { bold: false, italic: false, code: false, strikethrough: false, link: false },

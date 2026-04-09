@@ -42,6 +42,7 @@ import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consum
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
+import * as floatingUiDom from '@floating-ui/dom';
 import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';
@@ -163,6 +164,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     default: class {},
   });
   virtualNetwork.shimModule('flat', flat);
+  virtualNetwork.shimModule('@floating-ui/dom', floatingUiDom);
   virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
   virtualNetwork.shimModule('rsvp', rsvp);

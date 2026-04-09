@@ -18,10 +18,17 @@ import BoldIcon from '@cardstack/boxel-icons/bold';
 import ItalicIcon from '@cardstack/boxel-icons/italic';
 import StrikethroughIcon from '@cardstack/boxel-icons/strikethrough';
 import CodeIcon from '@cardstack/boxel-icons/code';
-import LinkIcon from '@cardstack/boxel-icons/link';
 import Heading1Icon from '@cardstack/boxel-icons/heading-1';
 import Heading2Icon from '@cardstack/boxel-icons/heading-2';
 import Heading3Icon from '@cardstack/boxel-icons/heading-3';
+import {
+  computePosition,
+  flip,
+  shift,
+  offset,
+  autoUpdate,
+} from '@floating-ui/dom';
+import type { VirtualElement } from '@floating-ui/dom';
 
 // The CodeMirrorContext type is defined in the host app's lazy-loaded module.
 // We only use it as a type here — the actual module is loaded at runtime via
@@ -49,7 +56,6 @@ interface SelectionInfo {
   hasSelection: boolean;
   from: number;
   to: number;
-  coords: { left: number; top: number; right: number; bottom: number } | null;
   formats: SelectionFormats;
 }
 
@@ -150,7 +156,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   private _pendingTargets: CardWidgetTarget[] = [];
   private _slotUpdatePending = false;
   private _currentLivePreview: boolean | undefined;
-  private _scrollCleanup: (() => void) | null = null;
 
   get livePreview(): boolean {
     return this.args.livePreview !== false;
@@ -330,41 +335,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._selectionInfo = info;
   };
 
-  private _updateToolbarCoordsOnScroll = () => {
-    let view = this.editorView;
-    if (!view || !this._selectionInfo?.hasSelection) return;
-    let { from, to } = view.state.selection.main;
-    if (from === to) return;
-    let fromCoords = view.coordsAtPos(from);
-    let toCoords = view.coordsAtPos(to);
-    if (fromCoords && toCoords) {
-      // Check if selection is visible within the scrollable container
-      let scrollParent = view.dom.closest('.boxel-card-container') as HTMLElement | null;
-      let parentRect = scrollParent?.getBoundingClientRect();
-      let selectionVisible = !parentRect ||
-        (fromCoords.top < parentRect.bottom && toCoords.bottom > parentRect.top);
-
-      this._selectionInfo = {
-        ...this._selectionInfo,
-        coords: selectionVisible ? {
-          left: Math.min(fromCoords.left, toCoords.left),
-          top: fromCoords.top,
-          right: Math.max(fromCoords.right, toCoords.right),
-          bottom: toCoords.bottom,
-        } : null,
-      };
-    }
-  };
-
   get showToolbar(): boolean {
-    return !!this._selectionInfo?.hasSelection && !!this._selectionInfo?.coords;
-  }
-
-  get toolbarStyle(): string {
-    let coords = this._selectionInfo?.coords;
-    if (!coords) return 'display: none';
-    let centerX = (coords.left + coords.right) / 2;
-    return `left: ${centerX}px; top: ${coords.top}px;`;
+    return !!this._selectionInfo?.hasSelection;
   }
 
   get toolbarFormats(): SelectionFormats {
@@ -378,6 +350,48 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       }
     );
   }
+
+  positionToolbar = modifier((element: HTMLElement) => {
+    let view = this.editorView;
+    if (!view) return;
+
+    let virtualEl: VirtualElement = {
+      getBoundingClientRect: () => {
+        let { from, to } = view.state.selection.main;
+        let fromCoords = view.coordsAtPos(from);
+        let toCoords = view.coordsAtPos(to);
+        if (!fromCoords || !toCoords) {
+          return { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 } as DOMRect;
+        }
+        let left = Math.min(fromCoords.left, toCoords.left);
+        let top = fromCoords.top;
+        let right = Math.max(fromCoords.right, toCoords.right);
+        let bottom = toCoords.bottom;
+        return { x: left, y: top, width: right - left, height: bottom - top, top, left, right, bottom } as DOMRect;
+      },
+    };
+
+    let cleanup = autoUpdate(virtualEl, element, () => {
+      // Hide toolbar if selection scrolled out of the visible container
+      let scrollParent = view.dom.closest('.boxel-card-container');
+      let parentRect = scrollParent?.getBoundingClientRect();
+      let selRect = virtualEl.getBoundingClientRect();
+      if (parentRect && (selRect.bottom < parentRect.top || selRect.top > parentRect.bottom)) {
+        element.style.display = 'none';
+        return;
+      }
+      element.style.display = '';
+
+      computePosition(virtualEl, element, {
+        placement: 'top',
+        middleware: [offset(8), flip(), shift({ padding: 8 })],
+      }).then(({ x, y }) => {
+        Object.assign(element.style, { left: `${x}px`, top: `${y}px` });
+      });
+    });
+
+    return cleanup;
+  });
 
   _toolbarAction = (marker: string) => {
     let cm = this._cm;
@@ -661,19 +675,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
     this.editorView = view;
 
-    // Listen for scroll on the nearest scrollable ancestor so the
-    // floating toolbar tracks the selection when the card scrolls.
-    this._scrollCleanup?.();
-    let scrollParent = element.closest('.boxel-card-container') ?? element.parentElement;
-    if (scrollParent) {
-      let handler = this._updateToolbarCoordsOnScroll;
-      scrollParent.addEventListener('scroll', handler, { passive: true });
-      this._scrollCleanup = () => {
-        scrollParent.removeEventListener('scroll', handler);
-        this._scrollCleanup = null;
-      };
-    }
-
     // Cleanup only clears the debounce timer. Editor destruction is
     // handled by willDestroy — this prevents the Ember modifier
     // lifecycle from destroying the editor on re-runs triggered by
@@ -683,7 +684,6 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         clearTimeout(this.saveTimer);
         this.saveTimer = null;
       }
-      this._scrollCleanup?.();
     };
   });
 
@@ -701,7 +701,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       {{#if this.showToolbar}}
         <div
           class='codemirror-floating-toolbar'
-          style={{this.toolbarStyle}}
+          {{this.positionToolbar}}
           data-test-floating-toolbar
         >
           <button
@@ -1134,9 +1134,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                background: var(--boxel-dark, #27272a);
                border-radius: 8px;
                box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
-               transform: translate(-50%, -100%);
-               margin-top: -8px;
                pointer-events: auto;
+               width: max-content;
+               top: 0;
+               left: 0;
              }
 
              .toolbar-btn {
