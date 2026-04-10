@@ -682,9 +682,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     });
     await renderCard(loader, card, 'edit');
 
-    assert
-      .dom('[data-test-mode-switcher]')
-      .exists('mode switcher is rendered');
+    assert.dom('[data-test-mode-switcher]').exists('mode switcher is rendered');
     assert
       .dom('[data-test-mode-edit]')
       .hasText('Edit', 'Edit button is rendered');
@@ -720,12 +718,10 @@ module('Integration | RichMarkdownField', function (hooks) {
       .dom('[data-test-markdown-preview]')
       .doesNotExist('preview is not shown by default');
     // CodeMirror editor should be present (either loaded or loading)
-    let editor = document.querySelector('[data-test-codemirror-editor]');
-    let loading = document.querySelector('[data-test-codemirror-loading]');
-    assert.ok(
-      editor !== null || loading !== null,
-      'editor is shown by default (edit mode)',
-    );
+    let editorOrLoading =
+      document.querySelector('[data-test-codemirror-editor]') ??
+      document.querySelector('[data-test-codemirror-loading]');
+    assert.ok(editorOrLoading, 'editor is shown by default (edit mode)');
   });
 
   test('clicking Preview shows rendered markdown and hides editor', async function (assert) {
@@ -794,12 +790,10 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert
       .dom('[data-test-markdown-preview]')
       .doesNotExist('preview is not shown in source mode');
-    let editor = document.querySelector('[data-test-codemirror-editor]');
-    let loading = document.querySelector('[data-test-codemirror-loading]');
-    assert.ok(
-      editor !== null || loading !== null,
-      'editor is shown in source mode',
-    );
+    let editorOrLoading =
+      document.querySelector('[data-test-codemirror-editor]') ??
+      document.querySelector('[data-test-codemirror-loading]');
+    assert.ok(editorOrLoading, 'editor is shown in source mode');
   });
 
   test('switching from Preview back to Edit restores editor', async function (assert) {
@@ -824,19 +818,18 @@ module('Integration | RichMarkdownField', function (hooks) {
 
     // Switch to Preview
     await click('[data-test-mode-preview]');
-    assert
-      .dom('[data-test-markdown-preview]')
-      .exists('preview is shown');
+    assert.dom('[data-test-markdown-preview]').exists('preview is shown');
 
     // Switch back to Edit
     await click('[data-test-mode-edit]');
     assert
       .dom('[data-test-markdown-preview]')
       .doesNotExist('preview is hidden after switching back');
-    let editor = document.querySelector('[data-test-codemirror-editor]');
-    let loading = document.querySelector('[data-test-codemirror-loading]');
+    let editorOrLoading =
+      document.querySelector('[data-test-codemirror-editor]') ??
+      document.querySelector('[data-test-codemirror-loading]');
     assert.ok(
-      editor !== null || loading !== null,
+      editorOrLoading,
       'editor is restored after switching back to Edit',
     );
   });

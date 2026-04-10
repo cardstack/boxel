@@ -15,6 +15,7 @@ import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
 import * as viewTransitions from '@cardstack/view-transitions';
+import * as floatingUiDom from '@floating-ui/dom';
 import * as awesomePhoneNumber from 'awesome-phonenumber';
 import * as dateFns from 'date-fns';
 import * as emberAnimated from 'ember-animated';
@@ -42,7 +43,6 @@ import * as emberProvideConsumeContextContextConsumer from 'ember-provide-consum
 import * as emberProvideConsumeContextContextProvider from 'ember-provide-consume-context/components/context-provider';
 import * as emberResources from 'ember-resources';
 import * as flat from 'flat';
-import * as floatingUiDom from '@floating-ui/dom';
 import * as lodash from 'lodash';
 import * as matrixJsSDK from 'matrix-js-sdk';
 import * as rsvp from 'rsvp';

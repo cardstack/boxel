@@ -166,7 +166,7 @@ function isInsideCode(state: EditorState, from: number, to: number): boolean {
   tree.iterate({
     from,
     to,
-    enter(node) {
+    enter(node): false | void {
       if (
         node.name === 'FencedCode' ||
         node.name === 'CodeBlock' ||
@@ -192,7 +192,7 @@ function buildHeadingDecorations(
   let tree = syntaxTree(state);
 
   tree.iterate({
-    enter(node) {
+    enter(node): false | void {
       let level = 0;
       if (node.name === 'ATXHeading1') level = 1;
       else if (node.name === 'ATXHeading2') level = 2;
@@ -261,7 +261,7 @@ function buildInlineFormattingDecorations(
   let tree = syntaxTree(state);
 
   tree.iterate({
-    enter(node) {
+    enter(node): false | void {
       if (
         node.name !== 'StrongEmphasis' &&
         node.name !== 'Emphasis' &&
@@ -376,7 +376,7 @@ function buildBlockDecorations(
   let tree = syntaxTree(state);
 
   tree.iterate({
-    enter(node) {
+    enter(node): false | void {
       // ── Fenced code blocks ──
       if (node.name === 'FencedCode') {
         let onCursor = cursorInRange(state, node.from, node.to, cursorLine);
@@ -491,7 +491,7 @@ function buildListDecorations(
   let tree = syntaxTree(state);
 
   tree.iterate({
-    enter(node) {
+    enter(node): false | void {
       if (node.name === 'ListItem') {
         let line = state.doc.lineAt(node.from);
         decos.push({
@@ -533,7 +533,7 @@ function buildLinkDecorations(
   let tree = syntaxTree(state);
 
   tree.iterate({
-    enter(node) {
+    enter(node): false | void {
       if (node.name !== 'Link') return;
 
       let onCursor =
@@ -747,7 +747,9 @@ function buildDecorations(
 
 // ── Card decoration StateField ─────────────────────────────────────────────
 
-function createDecorationField(livePreview: boolean): StateField<DecorationSet> {
+function createDecorationField(
+  livePreview: boolean,
+): StateField<DecorationSet> {
   return StateField.define<DecorationSet>({
     create(state) {
       let focused = state.field(focusField);
@@ -930,8 +932,10 @@ function detectFormats(
     italic:
       ((text.startsWith('*') && text.endsWith('*')) ||
         (before.endsWith('*') && after.startsWith('*'))) &&
-      !((text.startsWith('**') && text.endsWith('**')) ||
-        (before.endsWith('**') && after.startsWith('**'))),
+      !(
+        (text.startsWith('**') && text.endsWith('**')) ||
+        (before.endsWith('**') && after.startsWith('**'))
+      ),
     code:
       (text.startsWith('`') && text.endsWith('`')) ||
       (before.endsWith('`') && after.startsWith('`')),
@@ -977,9 +981,7 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
     decoField,
     // Card widget target notifier is only needed in live preview mode
     // (source mode has no card widgets to track)
-    ...(livePreview
-      ? [createCardTargetNotifier(onCardTargetsChange)]
-      : []),
+    ...(livePreview ? [createCardTargetNotifier(onCardTargetsChange)] : []),
     autocompletion({
       override: [slashSource],
       defaultKeymap: true,
@@ -997,7 +999,13 @@ function createEditorState(options: CreateEditorStateOptions): EditorState {
           to,
           formats: hasSelection
             ? detectFormats(update.state, from, to)
-            : { bold: false, italic: false, code: false, strikethrough: false, link: false },
+            : {
+                bold: false,
+                italic: false,
+                code: false,
+                strikethrough: false,
+                link: false,
+              },
         });
       }
     }),
@@ -1035,4 +1043,3 @@ const codemirrorContext: CodeMirrorContext = {
 };
 
 export default codemirrorContext;
-

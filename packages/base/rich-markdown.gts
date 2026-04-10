@@ -3,9 +3,9 @@ import {
   fieldSerializer,
   relativeTo,
 } from '@cardstack/runtime-common';
-import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { TrackedObject } from 'tracked-built-ins';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -101,7 +101,11 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    @tracked _mode: 'edit' | 'source' | 'preview' = 'edit';
+    _modeState = new TrackedObject({ value: 'edit' as 'edit' | 'source' | 'preview' });
+
+    get _mode(): 'edit' | 'source' | 'preview' {
+      return this._modeState.value;
+    }
 
     updateContent = (markdown: string) => {
       this.args.model.content = markdown;
@@ -118,7 +122,7 @@ export class RichMarkdownField extends FieldDef {
       }
     }
     setMode = (mode: 'edit' | 'source' | 'preview') => {
-      this._mode = mode;
+      this._modeState.value = mode;
     };
     <template>
       <div class='rich-markdown-editor'>

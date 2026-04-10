@@ -79,16 +79,6 @@ interface CodeMirrorContext {
   wrapWith: (marker: string) => (view: any) => boolean;
 }
 
-interface SlashMenuItem {
-  id: string;
-  label: string;
-  description: string;
-}
-
-const SLASH_COMMANDS: SlashMenuItem[] = [
-  { id: 'card', label: 'Card', description: 'Insert a card reference' },
-];
-
 const SAVE_DEBOUNCE_MS = 500;
 
 function isInline(kind: string): boolean {
@@ -123,7 +113,7 @@ function labelFromUrl(url: string): string {
 
 interface CodeMirrorEditorSignature {
   Args: {
-    content: string | null;
+    content: string | null | undefined;
     onUpdate: (markdown: string) => void;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
@@ -186,7 +176,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
   // ── Card search logic ────────────────────────────────────────────────────
 
-  private _handleOpenCardSearch = (pos: { from: number; to: number }) => {
+  private _handleOpenCardSearch = (_pos: { from: number; to: number }) => {
     this._cardSearchMode = true;
     this._cardSearchText = '';
     this._cardSearchIndex = 0;
@@ -271,7 +261,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     this._cardSearchIndex = 0;
   };
 
-  _handleCardSearchKeydown = (event: KeyboardEvent) => {
+  _handleCardSearchKeydown = (evt: Event) => {
+    let event = evt as KeyboardEvent;
     if (event.key === 'Escape') {
       event.preventDefault();
       this._dismissCardSearch();
@@ -321,7 +312,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   _selectCardResult = (card: CardDef) => {
     if (!card.id) return;
     this._formatPickerCardUrl = card.id;
-    this._formatPickerCardTitle = card.title ?? labelFromUrl(card.id);
+    this._formatPickerCardTitle = (card as any).title ?? labelFromUrl(card.id);
     this._cardSearchMode = false;
   };
 
@@ -397,7 +388,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     return cleanup;
   });
 
-  _toolbarAction = (marker: string) => {
+  _toolbarAction = (marker: string, _event?: Event) => {
     let cm = this._cm;
     let view = this.editorView;
     if (!cm || !view) return;
@@ -447,10 +438,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
   };
 
-  _insertHeading = (level: number) => {
+  _insertHeading = (level: number, _event?: Event) => {
     let view = this.editorView;
     if (!view) return;
-    let { from, to } = view.state.selection.main;
+    let { from } = view.state.selection.main;
     let line = view.state.doc.lineAt(from);
     let lineText = line.text;
     let prefix = '#'.repeat(level) + ' ';
@@ -475,7 +466,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
   };
 
-  _toggleLinePrefix = (prefix: string) => {
+  _toggleLinePrefix = (prefix: string, _event?: Event) => {
     let view = this.editorView;
     if (!view) return;
     let { from, to } = view.state.selection.main;

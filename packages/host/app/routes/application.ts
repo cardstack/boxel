@@ -44,6 +44,7 @@ export default class Application extends Route {
       // Lazy-load CodeMirror for WYSIWYG editing in RichMarkdownField.
       // The base package's CodeMirrorEditor component calls this via globalThis.
       (globalThis as any).__loadCodeMirror ??= async () => {
+        // @ts-expect-error dynamic import resolved by Ember's build pipeline
         let mod = await import('@cardstack/host/lib/codemirror-context');
         return mod.default;
       };
