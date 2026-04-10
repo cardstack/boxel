@@ -239,6 +239,7 @@ export default class AiAssistantPanelService extends Service {
       addSameSkills: boolean;
       shouldCopyFileHistory: boolean;
       shouldSummarizeSession: boolean;
+      deferDefaultSkills?: boolean;
     } = {
       addSameSkills: false,
       shouldCopyFileHistory: false,
@@ -396,10 +397,15 @@ export default class AiAssistantPanelService extends Service {
         addSameSkills: boolean;
         shouldCopyFileHistory: boolean;
         shouldSummarizeSession: boolean;
+        deferDefaultSkills?: boolean;
       },
     ) => {
-      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
-        opts;
+      let {
+        addSameSkills,
+        shouldCopyFileHistory,
+        shouldSummarizeSession,
+        deferDefaultSkills,
+      } = opts;
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
@@ -419,14 +425,14 @@ export default class AiAssistantPanelService extends Service {
           disabledSkills = extractedSkills.disabledSkills;
         }
 
-        let loadDefaultSkillsAfterCreation = false;
         if (enabledSkills.length || disabledSkills.length) {
           input.enabledSkills = enabledSkills;
           input.disabledSkills = disabledSkills;
-        } else {
-          // Defer loading default skills until after the room is created
-          // and entered, so the UI updates immediately.
-          loadDefaultSkillsAfterCreation = true;
+        } else if (!deferDefaultSkills) {
+          // Use default skills
+          input.enabledSkills = await this.matrixService.loadDefaultSkills(
+            this.operatorModeStateService.state.submode,
+          );
         }
 
         let oldRoomId = this.matrixService.currentRoomId;
@@ -437,7 +443,8 @@ export default class AiAssistantPanelService extends Service {
         // Enter room immediately
         this.enterRoom(roomId);
 
-        if (loadDefaultSkillsAfterCreation) {
+        // Load default skills in the background after room creation
+        if (deferDefaultSkills && !enabledSkills.length) {
           this.applyDefaultSkillsToRoom(roomId);
         }
 
@@ -730,7 +737,12 @@ export default class AiAssistantPanelService extends Service {
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {
-          await this.createNewSession();
+          await this.createNewSession({
+            addSameSkills: false,
+            shouldCopyFileHistory: false,
+            shouldSummarizeSession: false,
+            deferDefaultSkills: true,
+          });
         }
       }
       this.roomToDelete = undefined;
