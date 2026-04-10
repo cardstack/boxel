@@ -239,8 +239,13 @@ export class RealmIssueStore implements IssueStore {
     issueId: string,
     updates: { status?: string; description?: string },
   ): Promise<void> {
-    // Read the existing card document
-    let readResult = await readFile(this.realmUrl, issueId, this.options);
+    // Read the source JSON file (not the indexed card, which can have
+    // stripped relationships during indexing).
+    let readResult = await readFile(
+      this.realmUrl,
+      `${issueId}.json`,
+      this.options,
+    );
     if (!readResult.ok || !readResult.document) {
       throw new Error(
         `Failed to read issue "${issueId}" for update: ${readResult.error ?? 'no document returned'}`,
