@@ -379,16 +379,18 @@ export class ProfileManager {
     return response;
   }
 
-  async fetchAndStoreRealmTokens(
+  async fetchAndStoreRealmToken(
+    realmUrl: string,
     serverToken: string,
-  ): Promise<Record<string, string>> {
+  ): Promise<string | undefined> {
     let active = this.getActiveProfile()!;
     let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
     let tokens = await getRealmTokens(realmServerUrl, serverToken);
-    for (let [realmUrl, token] of Object.entries(tokens)) {
+    let token = tokens[realmUrl];
+    if (token) {
       this.setRealmToken(realmUrl, token);
     }
-    return tokens;
+    return token;
   }
 
   async registerRealmInDashboard(realmUrl: string): Promise<void> {

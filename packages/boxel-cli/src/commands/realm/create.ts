@@ -97,8 +97,11 @@ export async function createRealm(
   if (normalizedRealmUrl) {
     try {
       let serverToken = await pm.getOrRefreshServerToken();
-      let tokens = await pm.fetchAndStoreRealmTokens(serverToken);
-      if (!tokens[normalizedRealmUrl]) {
+      let token = await pm.fetchAndStoreRealmToken(
+        normalizedRealmUrl,
+        serverToken,
+      );
+      if (!token) {
         console.error(
           `${DIM}Warning: realm created but JWT not found in auth response.${RESET}`,
         );
