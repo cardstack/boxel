@@ -128,7 +128,7 @@ export function writeSnapshotFingerprint(data: SnapshotFingerprintData): void {
     dirname(FINGERPRINT_FILE),
     `.fingerprint.${process.pid}.${Date.now()}.tmp`,
   );
-  writeFileSync(tempFile, JSON.stringify(data, null, 2));
+  writeFileSync(tempFile, JSON.stringify(data, null, 2) + '\n');
   renameSync(tempFile, FINGERPRINT_FILE);
 }
 
