@@ -118,9 +118,7 @@ module('Integration | Component | picker', function (hooks) {
     // Select-all in before-options + 4 options in main list
     assert.dom('[data-test-boxel-picker-select-all]').exists();
     assert
-      .dom(
-        '.ember-power-select-options [data-test-boxel-picker-option-row]',
-      )
+      .dom('.ember-power-select-options [data-test-boxel-picker-option-row]')
       .exists({ count: 4 });
   });
 
@@ -194,7 +192,9 @@ module('Integration | Component | picker', function (hooks) {
     const firstOption = document.querySelector(
       '.ember-power-select-options [data-test-boxel-picker-option-row="1"]',
     ) as HTMLElement;
-    await click(firstOption.closest('.ember-power-select-option') as HTMLElement);
+    await click(
+      firstOption.closest('.ember-power-select-option') as HTMLElement,
+    );
 
     assert.strictEqual(
       controller.selected.length,
@@ -207,7 +207,9 @@ module('Integration | Component | picker', function (hooks) {
       'Should have selected first option',
     );
 
-    await click(firstOption.closest('.ember-power-select-option') as HTMLElement);
+    await click(
+      firstOption.closest('.ember-power-select-option') as HTMLElement,
+    );
     assert.strictEqual(
       controller.selected.length,
       1,
@@ -309,7 +311,9 @@ module('Integration | Component | picker', function (hooks) {
     const firstOption = document.querySelector(
       '.ember-power-select-options [data-test-boxel-picker-option-row="1"]',
     ) as HTMLElement;
-    await click(firstOption.closest('.ember-power-select-option') as HTMLElement);
+    await click(
+      firstOption.closest('.ember-power-select-option') as HTMLElement,
+    );
 
     assert.deepEqual(
       controller.selected.map((option) => option.id),
@@ -449,10 +453,14 @@ module('Integration | Component | picker', function (hooks) {
     const firstOption = document.querySelector(
       '.ember-power-select-options [data-test-boxel-picker-option-row="1"]',
     ) as HTMLElement;
-    await click(firstOption.closest('.ember-power-select-option') as HTMLElement);
+    await click(
+      firstOption.closest('.ember-power-select-option') as HTMLElement,
+    );
 
     // Click it again to deselect
-    await click(firstOption.closest('.ember-power-select-option') as HTMLElement);
+    await click(
+      firstOption.closest('.ember-power-select-option') as HTMLElement,
+    );
 
     assert.deepEqual(
       controller.selected.map((option) => option.id),
@@ -607,9 +615,7 @@ module('Integration | Component | picker', function (hooks) {
 
     // Dropdown should be open with 4 options in main list
     assert
-      .dom(
-        '.ember-power-select-options [data-test-boxel-picker-option-row]',
-      )
+      .dom('.ember-power-select-options [data-test-boxel-picker-option-row]')
       .exists({ count: 4 });
   });
 
