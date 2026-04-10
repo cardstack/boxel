@@ -107,6 +107,7 @@ export interface TestResult {
   status: 'passed' | 'failed' | 'error';
   passedCount: number;
   failedCount: number;
+  skippedCount?: number;
   failures: TestFailure[];
   durationMs: number;
 }

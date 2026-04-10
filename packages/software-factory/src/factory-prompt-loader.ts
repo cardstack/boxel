@@ -457,6 +457,7 @@ export function assembleIteratePrompt(
           status: context.testResults.status,
           passedCount: context.testResults.passedCount,
           failedCount: context.testResults.failedCount,
+          skippedCount: context.testResults.skippedCount,
           durationMs: context.testResults.durationMs,
           failures: testFailures,
         }

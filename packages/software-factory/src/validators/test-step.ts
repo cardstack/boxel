@@ -62,6 +62,7 @@ export interface TestValidationDetails {
   testRunId: string;
   passedCount: number;
   failedCount: number;
+  skippedCount: number;
   durationMs: number;
   failures: TestValidationFailure[];
 }
@@ -212,7 +213,9 @@ export class TestValidationStep implements ValidationStepRunner {
         | TestValidationDetails
         | undefined;
       if (details && details.passedCount > 0) {
-        return `## Test Validation: PASSED\n${details.passedCount} test(s) passed (TestRun: ${details.testRunId})`;
+        let skippedNote =
+          details.skippedCount > 0 ? `, ${details.skippedCount} skipped` : '';
+        return `## Test Validation: PASSED\n${details.passedCount} test(s) passed${skippedNote} (TestRun: ${details.testRunId})`;
       }
       return '';
     }
@@ -228,7 +231,7 @@ export class TestValidationStep implements ValidationStepRunner {
 
     let lines: string[] = [
       `## Test Validation: FAILED`,
-      `${details.passedCount} passed, ${details.failedCount} failed (TestRun: ${details.testRunId})`,
+      `${details.passedCount} passed, ${details.failedCount} failed${details.skippedCount > 0 ? `, ${details.skippedCount} skipped` : ''} (TestRun: ${details.testRunId})`,
     ];
 
     for (let failure of details.failures) {
@@ -332,6 +335,7 @@ function extractTestDetails(
   let failures: TestValidationFailure[] = [];
   let passedCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
 
   for (let moduleResult of attrs.moduleResults ?? []) {
     let moduleName = moduleResult.moduleRef?.module ?? 'unknown';
@@ -346,6 +350,8 @@ function extractTestDetails(
           message: result.message ?? `Test ${result.status}`,
           stackTrace: result.stackTrace,
         });
+      } else if (result.status === 'skipped') {
+        skippedCount++;
       }
     }
   }
@@ -357,11 +363,15 @@ function extractTestDetails(
   if (attrs.failedCount != null) {
     failedCount = attrs.failedCount;
   }
+  if ((attrs as Record<string, unknown>).skippedCount != null) {
+    skippedCount = (attrs as Record<string, unknown>).skippedCount as number;
+  }
 
   return {
     testRunId,
     passedCount,
     failedCount,
+    skippedCount,
     durationMs: attrs.durationMs ?? 0,
     failures,
   };

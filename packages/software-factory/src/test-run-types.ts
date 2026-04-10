@@ -70,6 +70,7 @@ export interface TestRunAttributes {
   status: 'running' | 'passed' | 'failed' | 'error';
   passedCount: number;
   failedCount: number;
+  skippedCount?: number;
   durationMs?: number;
   errorMessage?: string;
   moduleResults: TestModuleResultData[];
@@ -78,7 +79,7 @@ export interface TestRunAttributes {
 /** Shape of a single test result entry within a TestRun card. */
 export interface TestResultEntryData {
   testName: string;
-  status: 'pending' | 'passed' | 'failed' | 'error';
+  status: 'pending' | 'passed' | 'failed' | 'error' | 'skipped';
   message?: string;
   stackTrace?: string;
   durationMs?: number;

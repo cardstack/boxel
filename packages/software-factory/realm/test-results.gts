@@ -29,6 +29,7 @@ export const TestResultStatusField = enumField(StringField, {
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
+    { value: 'skipped', label: 'Skipped' },
   ],
 });
 
@@ -50,6 +51,8 @@ export class TestResultEntry extends FieldDef {
           return '\u2717';
         case 'error':
           return '!';
+        case 'skipped':
+          return '\u2192';
         case 'pending':
           return '\u2013';
         default:
@@ -90,6 +93,10 @@ export class TestResultEntry extends FieldDef {
         .status-pending {
           color: var(--boxel-400, #9ca3af);
         }
+        .status-skipped {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
+        }
         .test-name {
           flex: 1;
         }
@@ -122,6 +129,12 @@ export class TestModuleResult extends FieldDef {
     },
   });
 
+  @field skippedCount = contains(NumberField, {
+    computeVia: function (this: TestModuleResult) {
+      return (this.results ?? []).filter((r) => r.status === 'skipped').length;
+    },
+  });
+
   get moduleName() {
     return this.moduleRef?.module ?? 'default';
   }
@@ -145,6 +158,12 @@ export class TestModuleResult extends FieldDef {
             <span class='module-counts'>
               {{this.args.model.passedCount}}/{{this.total}}
               passed
+              {{#if this.args.model.skippedCount}}
+                <span class='skipped-label'>
+                  ({{this.args.model.skippedCount}}
+                  skipped)
+                </span>
+              {{/if}}
             </span>
           {{else}}
             <span class='module-counts'>running...</span>
@@ -173,6 +192,10 @@ export class TestModuleResult extends FieldDef {
         .module-counts {
           font-size: 0.8rem;
           color: var(--muted-foreground);
+        }
+        .skipped-label {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
         }
         .module-entries {
           padding-left: 0.5rem;
@@ -213,6 +236,15 @@ export class TestRun extends CardDef {
     },
   });
 
+  @field skippedCount = contains(NumberField, {
+    computeVia: function (this: TestRun) {
+      return (this.moduleResults ?? []).reduce(
+        (sum, sr) => sum + (sr.skippedCount ?? 0),
+        0,
+      );
+    },
+  });
+
   @field title = contains(StringField, {
     computeVia: function (this: TestRun) {
       let seq = this.sequenceNumber ?? '?';
@@ -224,7 +256,9 @@ export class TestRun extends CardDef {
   static fitted = class Fitted extends Component<typeof TestRun> {
     get total() {
       return (
-        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+        (this.args.model.passedCount ?? 0) +
+        (this.args.model.failedCount ?? 0) +
+        (this.args.model.skippedCount ?? 0)
       );
     }
 
@@ -237,6 +271,12 @@ export class TestRun extends CardDef {
         <div class='counts'>
           {{@model.passedCount}}/{{this.total}}
           passed
+          {{#if @model.skippedCount}}
+            <span class='skipped-label'>
+              ({{@model.skippedCount}}
+              skipped)
+            </span>
+          {{/if}}
           {{#if @model.durationMs}}
             <span class='duration'>{{@model.durationMs}}ms</span>
           {{/if}}
@@ -285,6 +325,10 @@ export class TestRun extends CardDef {
           font-size: 0.85rem;
           color: var(--muted-foreground);
         }
+        .skipped-label {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
+        }
         .duration {
           margin-left: 0.5rem;
           font-size: 0.75rem;
@@ -298,7 +342,9 @@ export class TestRun extends CardDef {
   static isolated = class Isolated extends Component<typeof TestRun> {
     get total() {
       return (
-        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+        (this.args.model.passedCount ?? 0) +
+        (this.args.model.failedCount ?? 0) +
+        (this.args.model.skippedCount ?? 0)
       );
     }
 
@@ -307,6 +353,12 @@ export class TestRun extends CardDef {
         (sr.results ?? []).filter(
           (r) => r.status === 'failed' || r.status === 'error',
         ),
+      );
+    }
+
+    get skippedResults() {
+      return (this.args.model.moduleResults ?? []).flatMap((sr) =>
+        (sr.results ?? []).filter((r) => r.status === 'skipped'),
       );
     }
 
@@ -322,6 +374,12 @@ export class TestRun extends CardDef {
           <div class='summary'>
             {{@model.passedCount}}/{{this.total}}
             passed
+            {{#if @model.skippedCount}}
+              <span class='skipped-label'>
+                ({{@model.skippedCount}}
+                skipped)
+              </span>
+            {{/if}}
             {{#if @model.durationMs}}
               in
               {{@model.durationMs}}ms
@@ -366,6 +424,18 @@ export class TestRun extends CardDef {
                 {{#if result.stackTrace}}
                   <pre class='failure-stack'>{{result.stackTrace}}</pre>
                 {{/if}}
+              </div>
+            {{/each}}
+          </section>
+        {{/if}}
+
+        {{#if this.skippedResults.length}}
+          <section>
+            <h2>Skipped</h2>
+            {{#each this.skippedResults as |result|}}
+              <div class='skipped-entry'>
+                <span class='skip-icon'>&rarr;</span>
+                <span class='skipped-name'>{{result.testName}}</span>
               </div>
             {{/each}}
           </section>
@@ -417,6 +487,23 @@ export class TestRun extends CardDef {
         .summary {
           font-size: 0.9rem;
           color: var(--muted-foreground);
+        }
+        .skipped-label {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
+        }
+        .skipped-entry {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.25rem 0;
+          font-size: 0.85rem;
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
+        }
+        .skip-icon {
+          width: 1.25rem;
+          text-align: center;
         }
         .error-message {
           color: var(--boxel-red, #dc2626);
