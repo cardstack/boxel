@@ -15,11 +15,13 @@
 
 import { resolve } from 'node:path';
 
+import { logger } from './logger';
+
 import type {
-  KnowledgeArticle,
-  ProjectCard,
+  IssueData,
+  KnowledgeArticleData,
+  ProjectData,
   TestResult,
-  TicketCard,
 } from './factory-agent';
 import {
   resolveFactoryModel,
@@ -65,13 +67,15 @@ import {
 import { executeTestRunFromRealm } from './test-run-execution';
 import { fetchCardTypeSchema } from './darkfactory-schemas';
 
-import type { FactoryBootstrapResult } from '../../src/factory-bootstrap';
+import type { FactoryBootstrapResult } from './factory-bootstrap';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '../..');
+let log = logger('factory-implement');
+
+const PACKAGE_ROOT = resolve(__dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,8 +122,8 @@ export interface ImplementResult {
   toolCallLog: FactoryLoopResult['toolCallLog'];
   testResults?: TestResult;
   message?: string;
-  /** The ticket that was worked on. */
-  ticketId: string;
+  /** The issue that was worked on. */
+  issueId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +137,6 @@ export async function runFactoryImplement(
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
   let fetchImpl = config.fetch ?? globalThis.fetch;
 
-  // Derive the test-artifacts realm URL from the target realm URL.
-  // e.g., "http://localhost:4201/user/my-realm/" -> "http://localhost:4201/user/my-realm-test-artifacts/"
-  let testRealmUrl = targetRealmUrl.replace(/\/$/, '-test-artifacts/');
-
   // 1. Auth: get Matrix auth, server token, and per-realm JWTs
   let { serverToken, realmTokens } = await resolveAuth(config);
 
@@ -145,7 +145,7 @@ export async function runFactoryImplement(
     authorization: config.authorization,
     fetch: fetchImpl,
   };
-  let { project, ticket, knowledge } = await fetchCardData(
+  let { project, issue, knowledge } = await fetchCardData(
     targetRealmUrl,
     config.bootstrapResult,
     fetchOptions,
@@ -156,7 +156,6 @@ export async function runFactoryImplement(
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
-    testRealmUrl,
     fetch: fetchImpl,
     authorization: config.authorization,
   });
@@ -223,7 +222,7 @@ export async function runFactoryImplement(
   };
   let testRunner: TestRunner =
     config.testRunner ??
-    buildTestRunner(targetRealmUrl, ticket, sharedToolCallLog, {
+    buildTestRunner(targetRealmUrl, issue, sharedToolCallLog, {
       authorization: config.authorization,
       fetch: fetchImpl,
       realmServerUrl,
@@ -237,21 +236,20 @@ export async function runFactoryImplement(
     tools,
     testRunner,
     project,
-    ticket,
+    issue,
     knowledge,
     targetRealmUrl,
-    testRealmUrl,
     maxIterations: config.maxIterations,
   });
 
-  // 8. Post-loop: update ticket status on success
+  // 8. Post-loop: update issue status on success
   if (loopResult.outcome === 'tests_passed' || loopResult.outcome === 'done') {
     try {
-      await updateTicketStatus(targetRealmUrl, ticket.id, 'done', fetchOptions);
-      console.error('[factory-implement] Updated ticket status to done');
+      await updateIssueStatus(targetRealmUrl, issue.id, 'done', fetchOptions);
+      log.info('Updated issue status to done');
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not update ticket status: ${
+      log.warn(
+        `Could not update issue status: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -264,7 +262,7 @@ export async function runFactoryImplement(
     toolCallLog: loopResult.toolCallLog,
     testResults: loopResult.testResults,
     message: loopResult.message,
-    ticketId: ticket.id,
+    issueId: issue.id,
   };
 }
 
@@ -379,9 +377,9 @@ async function fetchCardData(
   bootstrapResult: FactoryBootstrapResult,
   fetchOptions: RealmFetchOptions,
 ): Promise<{
-  project: ProjectCard;
-  ticket: TicketCard;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData;
+  issue: IssueData;
+  knowledge: KnowledgeArticleData[];
 }> {
   // Fetch the project card
   let project = await fetchCard(
@@ -390,28 +388,26 @@ async function fetchCardData(
     fetchOptions,
   );
 
-  // Fetch the active ticket card
-  let ticket = await fetchCard(
+  // Fetch the active issue card
+  let issue = await fetchCard(
     targetRealmUrl,
-    bootstrapResult.activeTicket.id,
+    bootstrapResult.activeIssue.id,
     fetchOptions,
   );
 
   // Fetch all knowledge articles
-  let knowledge: KnowledgeArticle[] = [];
+  let knowledge: KnowledgeArticleData[] = [];
   for (let ka of bootstrapResult.knowledgeArticles) {
     try {
       let card = await fetchCard(targetRealmUrl, ka.id, fetchOptions);
       knowledge.push(card);
     } catch {
       // Non-fatal: knowledge articles are supplementary
-      console.warn(
-        `[factory-implement] Could not fetch knowledge article: ${ka.id}`,
-      );
+      log.warn(`Could not fetch knowledge article: ${ka.id}`);
     }
   }
 
-  return { project, ticket, knowledge };
+  return { project, issue, knowledge };
 }
 
 async function fetchCard(
@@ -459,10 +455,11 @@ interface TestRunnerConfig {
  */
 function buildTestRunner(
   targetRealmUrl: string,
-  ticket: TicketCard,
+  issue: IssueData,
   toolCallLog: ToolCallEntry[],
   runConfig: TestRunnerConfig,
 ): TestRunner {
+  let lastSequenceNumber = 0;
   return async (): Promise<TestResult> => {
     let wroteTestFiles = toolCallLog.some(
       (entry) =>
@@ -480,7 +477,7 @@ function buildTestRunner(
           {
             testName: 'test-discovery',
             error:
-              'No .test.gts test files found. Every ticket must include at least one test file.',
+              'No .test.gts test files found. Every issue must include at least one test file.',
           },
         ],
         durationMs: 0,
@@ -508,13 +505,11 @@ function buildTestRunner(
       });
     }
 
-    let slug = deriveTicketSlug(ticket.id);
+    let slug = deriveIssueSlug(issue.id);
     let start = Date.now();
 
     try {
-      console.error(
-        `[factory-implement] Running test file(s) for ticket: ${slug}`,
-      );
+      log.info(`Running test file(s) for issue: ${slug}`);
 
       let handle = await executeTestRunFromRealm({
         targetRealmUrl,
@@ -526,12 +521,17 @@ function buildTestRunner(
         realmServerUrl: runConfig.realmServerUrl,
         hostAppUrl: runConfig.hostAppUrl,
         forceNew: true,
+        lastSequenceNumber,
       });
 
+      // Track the sequence number so the next iteration doesn't reuse it
+      // even if the realm search index hasn't caught up yet.
+      if (handle.sequenceNumber != null) {
+        lastSequenceNumber = handle.sequenceNumber;
+      }
+
       let durationMs = Date.now() - start;
-      console.error(
-        `[factory-implement] Test run complete: status=${handle.status} (${durationMs}ms)`,
-      );
+      log.info(`Test run complete: status=${handle.status} (${durationMs}ms)`);
 
       if (handle.status === 'passed') {
         return {
@@ -579,8 +579,8 @@ function buildTestRunner(
       }
     } catch (error) {
       let durationMs = Date.now() - start;
-      console.error(
-        `[factory-implement] Test execution error: ${
+      log.error(
+        `Test execution error: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -666,15 +666,15 @@ async function readTestRunFailures(
 }
 
 // ---------------------------------------------------------------------------
-// Ticket slug derivation
+// Issue slug derivation
 // ---------------------------------------------------------------------------
 
 /**
- * Derive a ticket slug from a ticket ID.
- * e.g., "Tickets/sticky-note-define-core" → "sticky-note-define-core"
+ * Derive an issue slug from an issue ID.
+ * e.g., "Issues/sticky-note-define-core" → "sticky-note-define-core"
  */
-function deriveTicketSlug(ticketId: string): string {
-  let parts = ticketId.split('/');
+function deriveIssueSlug(issueId: string): string {
+  let parts = issueId.split('/');
   return parts[parts.length - 1];
 }
 
@@ -683,19 +683,19 @@ function deriveTicketSlug(ticketId: string): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Update the status field on a ticket card in the target realm.
+ * Update the status field on an issue card in the target realm.
  * Reads the current card, sets the new status, and writes it back.
  */
-async function updateTicketStatus(
+async function updateIssueStatus(
   realmUrl: string,
-  ticketId: string,
+  issueId: string,
   status: string,
   fetchOptions: RealmFetchOptions,
 ): Promise<void> {
-  let result = await readFile(realmUrl, ticketId, fetchOptions);
+  let result = await readFile(realmUrl, issueId, fetchOptions);
   if (!result.ok || !result.document) {
     throw new Error(
-      `Cannot read ticket ${ticketId}: ${result.error ?? 'unknown'}`,
+      `Cannot read issue ${issueId}: ${result.error ?? 'unknown'}`,
     );
   }
 
@@ -707,13 +707,13 @@ async function updateTicketStatus(
 
   let writeResult = await writeFile(
     realmUrl,
-    ticketId,
+    issueId,
     JSON.stringify(doc, null, 2),
     fetchOptions,
   );
   if (!writeResult.ok) {
     throw new Error(
-      `Failed to write ticket ${ticketId}: ${writeResult.error ?? 'unknown'}`,
+      `Failed to write issue ${issueId}: ${writeResult.error ?? 'unknown'}`,
     );
   }
 }
@@ -722,7 +722,7 @@ async function updateTicketStatus(
 // DarkFactory schema loading
 // ---------------------------------------------------------------------------
 
-const DARKFACTORY_CARD_TYPES = ['Project', 'Ticket', 'KnowledgeArticle'];
+const DARKFACTORY_CARD_TYPES = ['Project', 'Issue', 'KnowledgeArticle'];
 
 /** Card types from base that the factory also needs schemas for. */
 const BASE_CARD_TYPES: { module: string; name: string }[] = [
@@ -731,7 +731,7 @@ const BASE_CARD_TYPES: { module: string; name: string }[] = [
 
 /**
  * Fetch JSON schemas for card types the factory uses. Includes both
- * DarkFactory types (Project, Ticket, KnowledgeArticle) from the target
+ * DarkFactory types (Project, Issue, KnowledgeArticle) from the target
  * realm and base types (Spec) from the base realm. Returns a Map
  * suitable for passing to ToolBuilderConfig.cardTypeSchemas.
  */
@@ -771,8 +771,8 @@ async function loadDarkFactorySchemas(
         schemas.set(cardName, schema);
       }
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not fetch schema for ${cardName}: ${
+      log.warn(
+        `Could not fetch schema for ${cardName}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -792,8 +792,8 @@ async function loadDarkFactorySchemas(
         schemas.set(name, schema);
       }
     } catch (error) {
-      console.warn(
-        `[factory-implement] Could not fetch schema for ${name}: ${
+      log.warn(
+        `Could not fetch schema for ${name}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );

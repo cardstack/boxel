@@ -141,5 +141,5 @@ When tests fail, the orchestrator feeds test failure details back to the agent. 
 - **All test data lives in browser memory only** — never write to external realms during tests.
 - **Use `import.meta.url`** to resolve card definitions — never hardcode realm URLs.
 - **Use `data-test-*` attributes** for stable test selectors, not CSS classes.
-- **Every ticket must have at least one test file** as `{card-name}.test.gts` co-located with the card definition.
+- **Every issue must have at least one test file** as `{card-name}.test.gts` co-located with the card definition.
 - **Test files live in the target realm** as realm files alongside the card definitions they test.

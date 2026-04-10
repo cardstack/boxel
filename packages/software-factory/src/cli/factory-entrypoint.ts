@@ -1,3 +1,6 @@
+// This should be first
+import '../setup-logger';
+
 import {
   FactoryEntrypointUsageError,
   getFactoryEntrypointUsage,
@@ -6,10 +9,9 @@ import {
   wantsFactoryEntrypointHelp,
 } from '../factory-entrypoint';
 import { FactoryBriefError } from '../factory-brief';
+import { logger } from '../logger';
 
-function log(message: string): void {
-  process.stderr.write(`[factory:go] ${message}\n`);
-}
+let log = logger('factory-entrypoint');
 
 async function main(): Promise<void> {
   try {
@@ -19,16 +21,16 @@ async function main(): Promise<void> {
     }
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
-    log(`mode=${options.mode} brief=${options.briefUrl}`);
+    log.info(`mode=${options.mode} brief=${options.briefUrl}`);
 
     if (options.mode === 'implement') {
-      log('Starting bootstrap + implement flow...');
+      log.info('Starting bootstrap + implement flow...');
     }
 
     let summary = await runFactoryEntrypoint(options);
 
     if (summary.implement) {
-      log(
+      log.info(
         `Implement complete: outcome=${summary.implement.outcome} ` +
           `iterations=${summary.implement.iterations} ` +
           `toolCalls=${summary.implement.toolCallCount}`,
@@ -43,13 +45,15 @@ async function main(): Promise<void> {
     }
   } catch (error) {
     if (error instanceof FactoryEntrypointUsageError) {
-      console.error(error.message);
-      console.error('');
-      console.error(getFactoryEntrypointUsage());
+      log.error(error.message);
+      log.error('');
+      log.error(getFactoryEntrypointUsage());
     } else if (error instanceof FactoryBriefError) {
-      console.error(error.message);
+      log.error(error.message);
+    } else if (error instanceof Error) {
+      log.error(error.stack ?? error.message);
     } else {
-      console.error(error);
+      log.error(String(error));
     }
 
     process.exit(1);

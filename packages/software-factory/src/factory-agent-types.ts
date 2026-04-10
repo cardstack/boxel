@@ -25,7 +25,7 @@ export const VALID_ACTION_TYPES = [
   'update_file',
   'create_test',
   'update_test',
-  'update_ticket',
+  'update_issue',
   'create_knowledge',
   'invoke_tool',
   'request_clarification',
@@ -61,17 +61,17 @@ export interface FactoryAgentConfig {
   debug?: boolean;
 }
 
-export interface ProjectCard {
+export interface ProjectData {
   id: string;
   [key: string]: unknown;
 }
 
-export interface TicketCard {
+export interface IssueData {
   id: string;
   [key: string]: unknown;
 }
 
-export interface KnowledgeArticle {
+export interface KnowledgeArticleData {
   id: string;
   [key: string]: unknown;
 }
@@ -111,6 +111,62 @@ export interface TestResult {
   durationMs: number;
 }
 
+// ---------------------------------------------------------------------------
+// Validation types (broader than TestResult)
+// ---------------------------------------------------------------------------
+
+/** Steps in the post-iteration validation pipeline. */
+export type ValidationStep =
+  | 'parse'
+  | 'lint'
+  | 'evaluate'
+  | 'instantiate'
+  | 'test';
+
+export interface ValidationError {
+  file?: string;
+  message: string;
+  stackTrace?: string;
+}
+
+/** Result of a single validation step. */
+export interface ValidationStepResult {
+  step: ValidationStep;
+  passed: boolean;
+  files?: string[];
+  errors: ValidationError[];
+}
+
+/** Aggregated results from a full validation run (all steps). */
+export interface ValidationResults {
+  passed: boolean;
+  steps: ValidationStepResult[];
+}
+
+// ---------------------------------------------------------------------------
+// Issue scheduling types
+// ---------------------------------------------------------------------------
+
+export type IssueStatus =
+  | 'backlog'
+  | 'in_progress'
+  | 'blocked'
+  | 'review'
+  | 'done';
+export type IssuePriority = 'critical' | 'high' | 'medium' | 'low';
+
+/** IssueData extended with the typed fields the IssueScheduler needs. */
+export interface SchedulableIssue extends IssueData {
+  status: IssueStatus;
+  priority: IssuePriority;
+  /** IDs of issues that must be done before this one can start. */
+  blockedBy: string[];
+  /** Explicit ordering for tie-breaking when priorities are equal. */
+  order: number;
+  /** Short summary for logging. */
+  summary?: string;
+}
+
 export interface ToolResult {
   tool: string;
   exitCode: number;
@@ -119,9 +175,9 @@ export interface ToolResult {
 }
 
 export interface AgentContext {
-  project: ProjectCard;
-  ticket: TicketCard;
-  knowledge: KnowledgeArticle[];
+  project: ProjectData;
+  issue: IssueData;
+  knowledge: KnowledgeArticleData[];
   skills: ResolvedSkill[];
   /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
   tools?: ToolManifest[];
@@ -133,7 +189,10 @@ export interface AgentContext {
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
-  testRealmUrl: string;
+  /** Validation results from the prior inner-loop iteration. */
+  validationResults?: ValidationResults;
+  /** Brief URL for bootstrap issues. */
+  briefUrl?: string;
 }
 
 export interface AgentAction {

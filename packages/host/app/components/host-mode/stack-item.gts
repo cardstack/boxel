@@ -164,6 +164,7 @@ export default class HostModeStackItem extends Component<Signature> {
             <ContextButton
               @icon='close'
               @label='close'
+              @variant='primary-dark'
               {{on 'click' this.handleClose}}
               data-test-host-stack-item-close-button
             />
@@ -211,15 +212,9 @@ export default class HostModeStackItem extends Component<Signature> {
         position: absolute;
         width: 89%;
         height: inherit;
-        padding-top: var(--boxel-sp-xxl);
+        padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
-      }
-
-      @media screen {
-        .host-mode-stack-item {
-          min-height: 80cqh;
-        }
       }
 
       .host-mode-stack-item:not(.buried) {
@@ -261,7 +256,7 @@ export default class HostModeStackItem extends Component<Signature> {
 
       .stack-item-card {
         height: 100%;
-        border-radius: var(--boxel-border-radius-xl);
+        border-radius: var(--boxel-border-radius-2xl);
         box-shadow: var(--boxel-deep-box-shadow);
         pointer-events: auto;
         overflow: hidden;
@@ -282,17 +277,20 @@ export default class HostModeStackItem extends Component<Signature> {
         right: var(--boxel-sp-xs);
         z-index: 1;
       }
-      .close-button-container :deep(.boxel-context-button:not(:hover)) {
-        background-color: var(--boxel-100);
-      }
       .close-button-container :deep(.boxel-context-button) {
         box-shadow: var(--boxel-box-shadow);
       }
+      .close-button-container :deep(.boxel-context-button:hover) {
+        box-shadow: var(--boxel-box-shadow-hover);
+      }
 
       .host-mode-stack-item-card {
-        border-radius: 0;
+        border-radius: inherit;
         box-shadow: none;
         z-index: 0;
+      }
+      .host-mode-stack-item-card > :deep(.boxel-card-container) {
+        border-radius: inherit;
       }
 
       @media print {

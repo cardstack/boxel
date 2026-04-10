@@ -38,11 +38,11 @@ test('renders a project adopted from the public DarkFactory module', async ({
   await expect(authedPage.getByText('Agent Onboarding')).toBeVisible();
 });
 
-test('renders a ticket adopted from the public DarkFactory module', async ({
+test('renders an issue adopted from the public DarkFactory module', async ({
   authedPage,
   cardURL,
 }) => {
-  await gotoCard(authedPage, cardURL('ticket-demo'));
+  await gotoCard(authedPage, cardURL('issue-demo'));
 
   await expect(
     authedPage.getByRole('heading', {
@@ -57,9 +57,6 @@ test('renders a ticket adopted from the public DarkFactory module', async ({
   ).toBeVisible();
   await expect(
     authedPage.getByRole('heading', { name: 'Acceptance Criteria' }),
-  ).toBeVisible();
-  await expect(
-    authedPage.getByRole('heading', { name: 'Agent Notes' }),
   ).toBeVisible();
   await expect(
     authedPage.getByRole('heading', { name: 'Related Knowledge' }),
@@ -80,7 +77,7 @@ test('renders a knowledge article and agent profile adopted from the public Dark
   ).toBeVisible();
   await expect(
     authedPage.getByText(
-      'Use the project card for scope, the ticket card for execution, and update notes as you go.',
+      'Use the project card for scope, the issue card for execution, and update notes as you go.',
     ),
   ).toBeVisible();
 
@@ -90,7 +87,7 @@ test('renders a knowledge article and agent profile adopted from the public Dark
     authedPage.getByRole('heading', { name: 'codex-darkfactory' }),
   ).toBeVisible({ timeout: 120_000 });
   await expect(authedPage.getByText('Boxel tracker workflows')).toBeVisible();
-  await expect(authedPage.getByText('ticket triage')).toBeVisible();
+  await expect(authedPage.getByText('issue triage')).toBeVisible();
 });
 
 test('renders a DarkFactory card with active projects from the adopter realm', async ({

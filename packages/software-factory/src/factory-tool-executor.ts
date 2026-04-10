@@ -26,7 +26,6 @@ const DEFAULT_TIMEOUT_MS = 60_000;
  */
 const SCRIPT_FILE_MAP: Record<string, string> = {
   'search-realm': 'boxel-search.ts',
-  'pick-ticket': 'pick-ticket.ts',
   'get-session': 'boxel-session.ts',
   'run-realm-tests': 'run-realm-tests.ts',
 };
@@ -52,8 +51,6 @@ export interface ToolExecutorConfig {
   packageRoot: string;
   /** Target realm URL — tools may only target this realm. */
   targetRealmUrl: string;
-  /** Test realm URL — tools may also target this realm. */
-  testRealmUrl: string;
   /** Additional scratch realm URL prefixes that are allowed. */
   allowedRealmPrefixes?: string[];
   /** Source realm URL — tools must NEVER target this realm. */
@@ -281,10 +278,9 @@ export class ToolExecutor {
   private validateRealmTarget(toolName: string, realmUrl: string): void {
     let normalized = ensureTrailingSlash(realmUrl);
     let target = ensureTrailingSlash(this.config.targetRealmUrl);
-    let test = ensureTrailingSlash(this.config.testRealmUrl);
 
     // Exact realm matches (with trailing slash normalization)
-    let exactAllowed = [target, test];
+    let exactAllowed = [target];
 
     // Prefix matches (no trailing slash — these are URL path prefixes)
     let prefixAllowed = this.config.allowedRealmPrefixes ?? [];
@@ -318,11 +314,6 @@ export class ToolExecutor {
     let allowedOrigins = new Set<string>();
     try {
       allowedOrigins.add(new URL(this.config.targetRealmUrl).origin);
-    } catch {
-      // skip invalid
-    }
-    try {
-      allowedOrigins.add(new URL(this.config.testRealmUrl).origin);
     } catch {
       // skip invalid
     }

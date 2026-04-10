@@ -1,0 +1,80 @@
+name: CI Software Factory
+
+on:
+  push:
+    branches:
+      - main
+      - ci-bisect
+      - ci-bisect-**
+  pull_request:
+    paths:
+      - ".github/workflows/ci-software-factory.yaml"
+      - "packages/runtime-common/**"
+      - "packages/base/**"
+      - "packages/boxel-icons/**"
+      - "packages/host/**"
+      - "packages/matrix/**"
+      - "packages/postgres/**"
+      - "packages/realm-server/**"
+      - "packages/software-factory/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-software-factory-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  checks: write
+  contents: read
+  id-token: write
+  pull-requests: write
+
+jobs:
+  test-web-assets:
+    name: Build test web assets
+    uses: ./.github/workflows/test-web-assets.yaml
+
+  software-factory-test:
+    name: Software Factory Tests
+    needs: test-web-assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Install Playwright Browsers
+        run: pnpm exec playwright install
+        working-directory: packages/software-factory
+      - name: Run Node tests
+        run: pnpm test:node
+        working-directory: packages/software-factory
+      - name: Serve test assets (icons + host dist)
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: mise run ci:serve-test-assets &
+          wait-for: 3m
+          wait-on: |
+            http-get://localhost:4200
+            http-get://localhost:4206
+      - name: Run Playwright tests
+        run: pnpm test:playwright
+        working-directory: packages/software-factory
+      - name: Upload Playwright traces
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: software-factory-playwright-traces
+          path: packages/software-factory/test-results/**/trace.zip
+          retention-days: 30
+          if-no-files-found: ignore

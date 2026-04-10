@@ -536,6 +536,17 @@ function cardTypeFor(
     .constructor as typeof BaseDef;
 }
 
+function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
+  if (
+    !(primitive in cardClass) &&
+    Object.prototype.hasOwnProperty.call(cardClass, deserialize)
+  ) {
+    throw new Error(
+      `${cardClass.name} overrides [deserialize] directly. Composite fields must use a registered fieldSerializer instead.`,
+    );
+  }
+}
+
 class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   FieldT,
   any[] | null
@@ -753,6 +764,17 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
             }
             return entry;
           } else {
+            if (fieldSerializer in this.card) {
+              assertIsSerializerName(this.card[fieldSerializer]);
+              let serializer = getSerializer(this.card[fieldSerializer]);
+              entry = await serializer.deserialize(
+                entry,
+                relativeTo,
+                doc,
+                store,
+                opts,
+              );
+            }
             let meta = metas[index];
             let resource: LooseCardResource = {
               attributes: entry,
@@ -775,9 +797,19 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
                   }),
               );
             }
-            return (
-              await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, store, opts);
+            let cardClass = await cardClassFromResource(
+              resource,
+              this.card,
+              relativeTo,
+            );
+            assertNoDeserializeOverride(cardClass);
+            return cardClass[deserialize](
+              resource,
+              relativeTo,
+              doc,
+              store,
+              opts,
+            );
           }
         }),
       ),
@@ -989,6 +1021,11 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       }
       return value;
     }
+    if (fieldSerializer in this.card) {
+      assertIsSerializerName(this.card[fieldSerializer]);
+      let serializer = getSerializer(this.card[fieldSerializer]);
+      value = await serializer.deserialize(value, relativeTo, doc, store, opts);
+    }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
         `fieldMeta for contains field '${
@@ -1013,9 +1050,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           ]),
       );
     }
-    return (await cardClassFromResource(resource, this.card, relativeTo))[
-      deserialize
-    ](resource, relativeTo, doc, store, opts);
+    let cardClass = await cardClassFromResource(
+      resource,
+      this.card,
+      relativeTo,
+    );
+    assertNoDeserializeOverride(cardClass);
+    return cardClass[deserialize](resource, relativeTo, doc, store, opts);
   }
 
   emptyValue(_instance: BaseDef) {

@@ -13,8 +13,8 @@ import {
   matrixLogin,
   type ActiveBoxelProfile,
   type MatrixAuth,
-} from '../scripts/lib/boxel';
-import { createRealm as createRealmViaApi } from '../scripts/lib/realm-operations';
+} from './boxel';
+import { createRealm as createRealmViaApi } from './realm-operations';
 import { formatErrorResponse, formatUnknownError } from './error-format';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 

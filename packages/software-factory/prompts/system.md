@@ -23,7 +23,6 @@ inspect existing state before making changes — do not guess.
 # Realms
 
 - Target realm: {{targetRealmUrl}}
-- Test realm: {{testRealmUrl}}
 
 {{#each skills}}
 

@@ -12,7 +12,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
-import { Project, Ticket } from './darkfactory';
+import { Project, Issue } from './darkfactory';
 
 export const TestRunStatusField = enumField(StringField, {
   options: [
@@ -189,7 +189,7 @@ export class TestRun extends CardDef {
   @field runAt = contains(DateTimeField);
   @field completedAt = contains(DateTimeField);
   @field project = linksTo(() => Project);
-  @field ticket = linksTo(() => Ticket);
+  @field issue = linksTo(() => Issue);
   @field status = contains(TestRunStatusField);
   @field durationMs = contains(NumberField);
   @field moduleResults = containsMany(TestModuleResult);
@@ -338,11 +338,11 @@ export class TestRun extends CardDef {
           </section>
         {{/if}}
 
-        {{#if @model.ticket}}
+        {{#if @model.issue}}
           <section>
-            <h2>Ticket</h2>
+            <h2>Issue</h2>
             <div class='linked-card'>
-              <@fields.ticket @format='embedded' />
+              <@fields.issue @format='embedded' />
             </div>
           </section>
         {{/if}}

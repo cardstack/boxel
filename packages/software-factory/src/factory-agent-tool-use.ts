@@ -12,7 +12,7 @@ import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type
 
 const MAX_TOOL_USE_TURNS = 50;
 
-import { createBoxelRealmFetch } from '../../src/realm-auth';
+import { createBoxelRealmFetch } from './realm-auth';
 
 import type {
   AgentContext,
@@ -314,7 +314,6 @@ export class ToolUseFactoryAgent implements LoopAgent {
 
     return this.promptLoader.load('system', {
       targetRealmUrl: context.targetRealmUrl,
-      testRealmUrl: context.testRealmUrl,
       skills,
     });
   }

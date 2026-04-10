@@ -76,8 +76,8 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(result1.project.id).toBe('Projects/sticky-note-mvp');
   expect(result1.project.status).toBe('created');
   expect(result1.knowledgeArticles).toHaveLength(2);
-  expect(result1.tickets).toHaveLength(3);
-  expect(result1.activeTicket.id).toBe('Tickets/sticky-note-define-core');
+  expect(result1.issues).toHaveLength(3);
+  expect(result1.activeIssue.id).toBe('Issues/sticky-note-define-core');
 
   let projectResponse = await authenticatedFetch(
     realm.cardURL('Projects/sticky-note-mvp'),
@@ -95,31 +95,31 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(projectJson.data.meta.adoptsFrom.module).toBe(darkfactoryModuleUrl);
   expect(projectJson.data.meta.adoptsFrom.name).toBe('Project');
 
-  let ticketResponse = await authenticatedFetch(
-    realm.cardURL('Tickets/sticky-note-define-core'),
+  let issueResponse = await authenticatedFetch(
+    realm.cardURL('Issues/sticky-note-define-core'),
     { headers: { Accept: SupportedMimeType.CardSource } },
   );
-  expect(ticketResponse.ok).toBe(true);
-  let ticketJson = (await ticketResponse.json()) as {
+  expect(issueResponse.ok).toBe(true);
+  let issueJson = (await issueResponse.json()) as {
     data: {
-      attributes: { ticketId: string; status: string; summary: string };
+      attributes: { issueId: string; status: string; summary: string };
       meta: { adoptsFrom: { module: string; name: string } };
     };
   };
-  expect(ticketJson.data.attributes.ticketId).toBe('SN-1');
-  expect(ticketJson.data.attributes.status).toBe('in_progress');
-  expect(ticketJson.data.attributes.summary).toContain('Sticky Note');
-  expect(ticketJson.data.meta.adoptsFrom.name).toBe('Ticket');
+  expect(issueJson.data.attributes.issueId).toBe('SN-1');
+  expect(issueJson.data.attributes.status).toBe('in_progress');
+  expect(issueJson.data.attributes.summary).toContain('Sticky Note');
+  expect(issueJson.data.meta.adoptsFrom.name).toBe('Issue');
 
-  let ticket2Response = await authenticatedFetch(
-    realm.cardURL('Tickets/sticky-note-design-views'),
+  let issue2Response = await authenticatedFetch(
+    realm.cardURL('Issues/sticky-note-design-views'),
     { headers: { Accept: SupportedMimeType.CardSource } },
   );
-  expect(ticket2Response.ok).toBe(true);
-  let ticket2Json = (await ticket2Response.json()) as {
+  expect(issue2Response.ok).toBe(true);
+  let issue2Json = (await issue2Response.json()) as {
     data: { attributes: { status: string } };
   };
-  expect(ticket2Json.data.attributes.status).toBe('backlog');
+  expect(issue2Json.data.attributes.status).toBe('backlog');
 
   let contextResponse = await authenticatedFetch(
     realm.cardURL('Knowledge Articles/sticky-note-brief-context'),
@@ -142,9 +142,9 @@ test('bootstrap creates card instances and reruns idempotently in a live realm',
   expect(result2.project.status).toBe('existing');
   expect(result2.knowledgeArticles[0].status).toBe('existing');
   expect(result2.knowledgeArticles[1].status).toBe('existing');
-  expect(result2.tickets[0].status).toBe('existing');
-  expect(result2.tickets[1].status).toBe('existing');
-  expect(result2.tickets[2].status).toBe('existing');
+  expect(result2.issues[0].status).toBe('existing');
+  expect(result2.issues[1].status).toBe('existing');
+  expect(result2.issues[2].status).toBe('existing');
 });
 
 test('bootstrapped project card renders correctly in the browser', async ({

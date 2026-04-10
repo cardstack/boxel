@@ -14,11 +14,11 @@ import {
 const stickyNoteFixture = JSON.parse(
   readFileSync(resolve(__dirname, '../realm/Wiki/sticky-note.json'), 'utf8'),
 ) as unknown;
-const darkfactoryTicketFixture = JSON.parse(
+const darkfactoryIssueFixture = JSON.parse(
   readFileSync(
     resolve(
       __dirname,
-      '../test-fixtures/darkfactory-adopter/Tickets/ticket-001.json',
+      '../test-fixtures/darkfactory-adopter/Issues/issue-001.json',
     ),
     'utf8',
   ),
@@ -63,10 +63,10 @@ module('factory-brief', function () {
 
   test('normalizeFactoryBrief falls back to summary and description text when content is absent', function (assert) {
     let sourceUrl =
-      'https://briefs.example.test/darkfactory-adopter/Tickets/ticket-001';
-    let brief = normalizeFactoryBrief(darkfactoryTicketFixture, sourceUrl);
+      'https://briefs.example.test/darkfactory-adopter/Issues/issue-001';
+    let brief = normalizeFactoryBrief(darkfactoryIssueFixture, sourceUrl);
 
-    assert.strictEqual(brief.title, 'Ticket 001');
+    assert.strictEqual(brief.title, 'Issue 001');
     assert.strictEqual(
       brief.content,
       'Render tracker cards from an adopter realm using the public software-factory module URL.',

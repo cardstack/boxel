@@ -6,32 +6,36 @@
  * Usage:
  *   pnpm smoke:skill
  *   pnpm smoke:skill --max-tokens 8000
- *   pnpm smoke:skill --ticket-text "Create a .gts component with styling"
+ *   pnpm smoke:skill --issue-text "Create a .gts component with styling"
  */
 
+// This should be first
+import '../../src/setup-logger';
+
 import { parseArgs } from 'node:util';
+import { logger } from '../../src/logger';
 
 import {
   DefaultSkillResolver,
   SkillLoader,
   enforceSkillBudget,
   estimateTokens,
-} from '../lib/factory-skill-loader';
-import type { ProjectCard, TicketCard } from '../lib/factory-agent';
+} from '../../src/factory-skill-loader';
+import type { ProjectData, IssueData } from '../../src/factory-agent';
 
-const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
+const SAMPLE_ISSUES: { label: string; issue: IssueData }[] = [
   {
     label: 'Generic card work (base case)',
-    ticket: {
-      id: 'Tickets/generic',
+    issue: {
+      id: 'Issues/generic',
       title: 'Create a contact card',
       description: 'Build a contact card with name, email, and phone fields.',
     },
   },
   {
     label: '.gts component work (triggers ember-best-practices)',
-    ticket: {
-      id: 'Tickets/gts-component',
+    issue: {
+      id: 'Issues/gts-component',
       title: 'Build a dashboard component',
       description:
         'Create a .gts component for the dashboard with template and styling.',
@@ -39,18 +43,18 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   },
   {
     label: 'Factory workflow (triggers software-factory-operations)',
-    ticket: {
-      id: 'Tickets/factory-workflow',
+    issue: {
+      id: 'Issues/factory-workflow',
       title: 'Improve factory delivery pipeline',
       description:
-        'Update the factory orchestrator to handle multi-ticket workflows.',
+        'Update the factory orchestrator to handle multi-issue workflows.',
     },
   },
   {
     label:
       'Realm sync work (CLI skills excluded — no boxel-cli tools in registry)',
-    ticket: {
-      id: 'Tickets/sync-work',
+    issue: {
+      id: 'Issues/sync-work',
       title: 'Sync and restore workspace',
       description:
         'Sync local workspace changes to staging, then restore a checkpoint.',
@@ -58,12 +62,14 @@ const SAMPLE_TICKETS: { label: string; ticket: TicketCard }[] = [
   },
 ];
 
+let log = logger('factory-skill-smoke');
+
 async function main(): Promise<void> {
   let { values } = parseArgs({
     args: process.argv.slice(2),
     options: {
       'max-tokens': { type: 'string' },
-      'ticket-text': { type: 'string' },
+      'issue-text': { type: 'string' },
     },
     strict: true,
     allowPositionals: true,
@@ -77,52 +83,52 @@ async function main(): Promise<void> {
     values['max-tokens'] !== undefined &&
     (maxTokens === undefined || !Number.isFinite(maxTokens) || maxTokens <= 0)
   ) {
-    console.error(
+    log.error(
       `Invalid value for --max-tokens: "${values['max-tokens']}". ` +
         'Please provide a positive numeric value.',
     );
     process.exit(1);
   }
 
-  let customTicketText = values['ticket-text'];
+  let customIssueText = values['issue-text'];
 
   let resolver = new DefaultSkillResolver();
   let loader = new SkillLoader();
-  let project: ProjectCard = { id: 'Projects/smoke-test' };
+  let project: ProjectData = { id: 'Projects/smoke-test' };
 
-  console.log('=== Skill Loader & Resolver Smoke Test ===\n');
+  log.info('=== Skill Loader & Resolver Smoke Test ===\n');
 
-  // If custom ticket text is provided, use only that
-  let tickets = customTicketText
+  // If custom issue text is provided, use only that
+  let issues = customIssueText
     ? [
         {
-          label: `Custom: "${customTicketText}"`,
-          ticket: {
-            id: 'Tickets/custom',
-            title: customTicketText,
-            description: customTicketText,
-          } as TicketCard,
+          label: `Custom: "${customIssueText}"`,
+          issue: {
+            id: 'Issues/custom',
+            title: customIssueText,
+            description: customIssueText,
+          } as IssueData,
         },
       ]
-    : SAMPLE_TICKETS;
+    : SAMPLE_ISSUES;
 
-  for (let { label, ticket } of tickets) {
-    console.log(`--- ${label} ---`);
-    console.log(`  Ticket: ${ticket.title}`);
+  for (let { label, issue } of issues) {
+    log.info(`--- ${label} ---`);
+    log.info(`  Issue: ${issue.title}`);
 
     // 1. Resolve
-    let skillNames = resolver.resolve(ticket, project);
-    console.log(`  Resolved skills: [${skillNames.join(', ')}]`);
+    let skillNames = resolver.resolve(issue, project);
+    log.info(`  Resolved skills: [${skillNames.join(', ')}]`);
 
-    // 2. Load (with ticket context for reference filtering)
-    let skills = await loader.loadAll(skillNames, ticket);
-    console.log(`  Loaded: ${skills.length}/${skillNames.length} skills`);
+    // 2. Load (with issue context for reference filtering)
+    let skills = await loader.loadAll(skillNames, issue);
+    log.info(`  Loaded: ${skills.length}/${skillNames.length} skills`);
 
     for (let skill of skills) {
       let tokens = estimateTokens(skill);
       let refCount = skill.references?.length ?? 0;
       let refNote = refCount > 0 ? ` + ${refCount} reference(s)` : '';
-      console.log(`    - ${skill.name}: ~${tokens} tokens${refNote}`);
+      log.info(`    - ${skill.name}: ~${tokens} tokens${refNote}`);
     }
 
     // 3. Budget enforcement
@@ -130,7 +136,7 @@ async function main(): Promise<void> {
       let budgeted = enforceSkillBudget(skills, maxTokens);
       let totalBefore = skills.reduce((s, sk) => s + estimateTokens(sk), 0);
       let totalAfter = budgeted.reduce((s, sk) => s + estimateTokens(sk), 0);
-      console.log(
+      log.info(
         `  Budget (${maxTokens} tokens): ` +
           `${budgeted.length}/${skills.length} skills kept ` +
           `(${totalAfter}/${totalBefore} tokens)`,
@@ -139,15 +145,13 @@ async function main(): Promise<void> {
         let dropped = skills.filter(
           (s) => !budgeted.find((b) => b.name === s.name),
         );
-        console.log(`  Dropped: [${dropped.map((d) => d.name).join(', ')}]`);
+        log.info(`  Dropped: [${dropped.map((d) => d.name).join(', ')}]`);
       }
     }
-
-    console.log();
   }
 
   // Summary: list all discoverable skills
-  console.log('--- All discoverable skills ---');
+  log.info('--- All discoverable skills ---');
   let allSkillNames = [
     'boxel-development',
     'boxel-file-structure',
@@ -168,22 +172,20 @@ async function main(): Promise<void> {
     grandTotal += tokens;
     let refCount = skill.references?.length ?? 0;
     let refNote = refCount > 0 ? ` (${refCount} refs)` : '';
-    console.log(`  ${skill.name}: ~${tokens} tokens${refNote}`);
+    log.info(`  ${skill.name}: ~${tokens} tokens${refNote}`);
   }
   let missing = allSkillNames.filter(
     (n) => !allSkills.find((s) => s.name === n),
   );
   if (missing.length > 0) {
-    console.log(`  Not found: [${missing.join(', ')}]`);
+    log.info(`  Not found: [${missing.join(', ')}]`);
   }
-  console.log(
-    `  Total: ~${grandTotal} tokens across ${allSkills.length} skills`,
-  );
+  log.info(`  Total: ~${grandTotal} tokens across ${allSkills.length} skills`);
 
-  console.log('\nSmoke test passed.');
+  log.info('\nSmoke test passed.');
 }
 
 main().catch((err) => {
-  console.error('Smoke test failed:', err);
+  log.error('Smoke test failed:', err);
   process.exit(1);
 });

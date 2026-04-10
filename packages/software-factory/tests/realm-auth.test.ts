@@ -10,7 +10,7 @@ import {
   type ActiveBoxelProfile,
 } from '../src/realm-auth';
 import { FactoryBriefError, loadFactoryBrief } from '../src/factory-brief';
-import { matrixLogin } from '../scripts/lib/boxel';
+import { matrixLogin } from '../src/boxel';
 import {
   browserPassword,
   buildRealmSessionJwt,
