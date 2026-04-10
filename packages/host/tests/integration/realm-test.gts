@@ -376,7 +376,6 @@ module('Integration | realm', function (hooks) {
             cardInfo,
           },
           relationships: {
-            'cardInfo.cardThumbnail': { links: { self: null } },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {

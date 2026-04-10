@@ -527,11 +527,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           },
         },
         relationships: {
-          'cardInfo.cardThumbnail': {
-            links: {
-              self: null,
-            },
-          },
           'cardInfo.theme': {
             links: {
               self: null,

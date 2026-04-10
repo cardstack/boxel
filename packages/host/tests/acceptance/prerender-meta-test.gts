@@ -346,9 +346,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Pet/mango`,
         _cardType: 'Pet',
-        cardInfo: {
-          cardThumbnail: null,
-        },
+        cardInfo: {},
         name: 'Mango',
         cardTitle: 'Mango',
       },
@@ -366,9 +364,7 @@ module('Acceptance | prerender | meta', function (hooks) {
       {
         id: `${testRealmURL}Pet/paper`,
         _cardType: 'Cat',
-        cardInfo: {
-          cardThumbnail: null,
-        },
+        cardInfo: {},
         name: 'Paper',
         cardTitle: 'Paper',
         aliases: ['Satan', "Satan's Mistress"],
@@ -391,7 +387,6 @@ module('Acceptance | prerender | meta', function (hooks) {
         id: `${testRealmURL}Person/jade`,
         _cardType: 'Person',
         cardInfo: {
-          cardThumbnail: null,
           theme: null,
         },
         name: 'Jade',
@@ -401,7 +396,6 @@ module('Acceptance | prerender | meta', function (hooks) {
         friend: {
           id: `${testRealmURL}Person/hassan`,
           cardInfo: {
-            cardThumbnail: null,
             theme: null,
           },
           name: 'Hassan',
@@ -436,7 +430,6 @@ module('Acceptance | prerender | meta', function (hooks) {
         id: `${testRealmURL}Person/hassan`,
         _cardType: 'Person',
         cardInfo: {
-          cardThumbnail: null,
           theme: null,
         },
         name: 'Hassan',
@@ -444,36 +437,33 @@ module('Acceptance | prerender | meta', function (hooks) {
         friend: null,
         numOfPets: '3',
         pets: [
-          {
-            id: `${testRealmURL}Pet/mango`,
-            name: 'Mango',
-            cardTitle: 'Mango',
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
+            {
+              id: `${testRealmURL}Pet/mango`,
+              name: 'Mango',
+              cardTitle: 'Mango',
+              cardInfo: {
+                theme: null,
+              },
             },
-          },
-          {
-            id: `${testRealmURL}Pet/vangogh`,
-            name: 'Van Gogh',
-            cardTitle: 'Van Gogh',
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
+            {
+              id: `${testRealmURL}Pet/vangogh`,
+              name: 'Van Gogh',
+              cardTitle: 'Van Gogh',
+              cardInfo: {
+                theme: null,
+              },
             },
-          },
-          {
-            id: `${testRealmURL}Pet/paper`,
+            {
+              id: `${testRealmURL}Pet/paper`,
             name: 'Paper',
             cardTitle: 'Paper',
-            aliases: ['Satan', "Satan's Mistress"],
-            emergencyContacts: null,
-            cardInfo: {
-              cardThumbnail: null,
-              theme: null,
+              aliases: ['Satan', "Satan's Mistress"],
+              emergencyContacts: null,
+              cardInfo: {
+                theme: null,
+              },
             },
-          },
-        ],
+          ],
       },
       'search doc is correct',
     );
@@ -491,7 +481,6 @@ module('Acceptance | prerender | meta', function (hooks) {
         _cardType: 'Cat',
         aliases: null,
         cardInfo: {
-          cardThumbnail: null,
           theme: null,
         },
         emergencyContacts: [
@@ -504,7 +493,6 @@ module('Acceptance | prerender | meta', function (hooks) {
               numOfPets: '0',
               pets: null,
               cardInfo: {
-                cardThumbnail: null,
                 theme: null,
               },
               friend: {
@@ -519,7 +507,6 @@ module('Acceptance | prerender | meta', function (hooks) {
               name: 'Hassan',
               cardTitle: 'Hassan',
               cardInfo: {
-                cardThumbnail: null,
                 theme: null,
               },
               numOfPets: '3',

@@ -740,6 +740,11 @@ module(basename(__filename), function () {
                 self: './ringo',
               },
             },
+            'cardInfo.cardThumbnail': {
+              links: {
+                self: null,
+              },
+            },
             'cardInfo.theme': {
               links: {
                 self: null,
@@ -766,6 +771,7 @@ module(basename(__filename), function () {
               cardTitle: 'Untitled Card',
               firstName: 'Ringo',
               cardInfo: {
+                cardThumbnail: null,
                 theme: null,
               },
             },
@@ -774,6 +780,7 @@ module(basename(__filename), function () {
             firstName: 'Hassan',
             cardTitle: 'Untitled Card',
             cardInfo: {
+              cardThumbnail: null,
               theme: null,
             },
           },
