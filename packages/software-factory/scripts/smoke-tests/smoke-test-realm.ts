@@ -1,26 +1,19 @@
 /**
- * Smoke test for the factory test realm management (QUnit).
+ * Smoke test for the validation pipeline with real QUnit test execution.
  *
- * Simulates the full factory workflow: implementation phase output followed
- * by the testing phase via executeTestRunFromRealm with QUnit .test.gts files.
+ * 1. Creates a target realm and writes simulated LLM output:
+ *    - A HelloCard definition (.gts)
+ *    - A Spec card instance pointing to the HelloCard definition
+ *    - A passing QUnit test (hello.test.gts)
+ *    - A deliberately failing QUnit test (hello-fail.test.gts)
  *
- * Phase 1 -- Simulate LLM implementation output:
- *   Writes to the target realm (what the LLM would have produced):
- *   1. A sample HelloCard definition (.gts)
- *   2. A Spec card instance pointing to the HelloCard definition
- *   3. A sample HelloCard instance (HelloCard/sample.json)
- *   4. A QUnit test file (hello.test.gts) -- passing
- *   5. A QUnit test file (hello-fail.test.gts) -- deliberately failing
+ * 2. Runs the full ValidationPipeline via createDefaultPipeline(), which
+ *    executes all validation steps (parse, lint, evaluate, instantiate
+ *    are NoOp placeholders; test step runs real QUnit tests via Playwright).
  *
- * Phase 2 -- Run the testing phase via QUnit:
- *   Calls executeTestRunFromRealm, which:
- *   - Creates a TestRun card (status: running) in the target realm
- *   - Launches a headless browser pointing at the host app QUnit page
- *   - Collects QUnit results (testEnd / runEnd events)
- *   - Completes the TestRun card with module results
- *   - The passing test produces a result with passedCount=1
- *   - The failing test produces a result with failedCount=1
- *   - The overall TestRun status is 'failed' (mixed results)
+ * 3. Verifies pipeline results: test step fails (deliberately), NoOp steps
+ *    pass, detailed failure data is read back from the TestRun card, and
+ *    formatForContext() produces LLM-friendly markdown.
  *
  * Prerequisites:
  *
@@ -39,7 +32,6 @@ import '../../src/setup-logger';
 
 import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
-import { executeTestRunFromRealm } from '../../src/test-run-execution';
 import {
   createRealm,
   getRealmScopedAuth,
@@ -321,72 +313,10 @@ async function main() {
   );
 
   // -------------------------------------------------------------------------
-  // Phase 2: Run QUnit tests via executeTestRunFromRealm
+  // Run validation pipeline against the realm
   // -------------------------------------------------------------------------
 
-  log.info(
-    '\n--- Phase 2: Running QUnit tests via executeTestRunFromRealm ---\n',
-  );
-
-  let handle = await executeTestRunFromRealm({
-    targetRealmUrl,
-    testResultsModuleUrl,
-    slug: 'hello-smoke',
-    testNames: [],
-    authorization,
-    fetch: fetchImpl,
-    forceNew: true,
-    realmServerUrl,
-    hostAppUrl: realmServerUrl,
-  });
-
-  log.info(`  TestRun ID:  ${handle.testRunId}`);
-  log.info(`  Status:      ${handle.status}`);
-  if (handle.errorMessage) {
-    log.info(`  Error:       ${handle.errorMessage}`);
-  }
-  if ((handle as unknown as Record<string, unknown>).error) {
-    log.info(
-      `  Complete error: ${(handle as unknown as Record<string, unknown>).error}`,
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Results
-  // -------------------------------------------------------------------------
-
-  log.info('\n--- Results ---\n');
-
-  // The TestRun should have status 'failed' because it contains both a
-  // passing and a deliberately failing QUnit test. The module results inside
-  // should show one test passed and one test failed.
-  let expectedStatus = handle.status === 'failed';
-
-  log.info(
-    `  TestRun status: ${expectedStatus ? '✓ failed (as expected -- one test passes, one fails)' : `✗ expected failed, got ${handle.status}`}`,
-  );
-  log.info(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
-
-  if (!expectedStatus) {
-    log.info('\n✗ Phase 2 had unexpected results.');
-    log.info(
-      `  Expected "failed" (mixed pass/fail QUnit tests) but got "${handle.status}"`,
-    );
-    process.exit(1);
-  }
-
-  log.info(
-    '\n✓ Phase 2 passed! TestRun contains both pass and fail QUnit results.',
-  );
-
-  // -------------------------------------------------------------------------
-  // Validation Pipeline — exercises the full ValidationPipeline with a real
-  // TestValidationStep against the same realm.
-  // -------------------------------------------------------------------------
-
-  log.info(
-    '\n--- Validation Pipeline: Running ValidationPipeline.validate() ---\n',
-  );
+  log.info('\n--- Running ValidationPipeline.validate() ---\n');
 
   let pipeline = createDefaultPipeline({
     authorization,
