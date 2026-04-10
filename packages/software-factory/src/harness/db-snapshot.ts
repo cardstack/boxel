@@ -84,6 +84,21 @@ export interface SnapshotFingerprintData {
 // ---------------------------------------------------------------------------
 
 /**
+ * Check whether the given fixtures match the canonical snapshot fixture set.
+ * Only canonical fixtures should read/write the committed snapshot.
+ */
+export function isCanonicalFixtureSet(
+  fixtures: CombinedRealmFixture[],
+): boolean {
+  if (fixtures.length !== DEFAULT_SNAPSHOT_FIXTURES.length) {
+    return false;
+  }
+  let canonical = DEFAULT_SNAPSHOT_FIXTURES.map((f) => f.realmDir).sort();
+  let actual = fixtures.map((f) => resolve(f.realmDir)).sort();
+  return canonical.every((dir, i) => dir === actual[i]);
+}
+
+/**
  * Compute a deterministic fingerprint string for the given fixtures.
  * Pure computation — no I/O beyond file hashing.
  */
@@ -150,10 +165,11 @@ export function getPgDumpVersion(): string {
 }
 
 function pgEnv(): Record<string, string> {
-  return {
-    ...process.env,
-    PGPASSWORD: process.env.PGPASSWORD || '',
-  } as Record<string, string>;
+  let env = { ...process.env } as Record<string, string>;
+  if (process.env.PGPASSWORD) {
+    env.PGPASSWORD = process.env.PGPASSWORD;
+  }
+  return env;
 }
 
 /**

@@ -55,6 +55,7 @@ import {
 } from './database';
 import {
   checkCommittedSnapshot,
+  isCanonicalFixtureSet,
   restoreTemplateFromDisk,
   saveSnapshot,
 } from './db-snapshot';
@@ -171,43 +172,54 @@ export async function ensureFactoryRealmTemplate(
       : 'template database is missing';
 
     // Tier 2: Try restoring from committed pg_dump snapshot.
+    // Only attempt when the DB is actually missing (not when metadata is missing
+    // but the DB exists — CREATE DATABASE would fail in that case).
     let snapshotFixtures: CombinedRealmFixture[] = [
       { realmDir, realmPath: realmRelativePath(realmURL, realmServerURL) },
     ];
-    let snapshotData = checkCommittedSnapshot(snapshotFixtures);
-    if (snapshotData) {
-      harnessLog.info('Restoring template from committed snapshot (fast path)');
-      try {
-        await restoreTemplateFromDisk(templateDatabaseName);
-        writePreparedTemplateMetadata({
-          realmDir,
-          templateDatabaseName,
-          templateRealmURL: realmURL.href,
-          templateRealmServerURL: snapshotData.realmServerURL,
-        });
-        return {
-          cacheKey,
-          templateDatabaseName,
-          fixtureHash,
-          cacheHit: false,
-          cacheMissReason: 'restored from snapshot',
-          realmURL,
-          realmServerURL: new URL(snapshotData.realmServerURL),
-        };
-      } catch (error) {
-        harnessLog.warn(
-          `Snapshot restore failed, falling back to full build: ${error}`,
+    if (!hasTemplateDatabase) {
+      let snapshotData = checkCommittedSnapshot(snapshotFixtures);
+      if (snapshotData) {
+        harnessLog.info(
+          'Restoring template from committed snapshot (fast path)',
+        );
+        let snapshotServerURL = new URL(snapshotData.realmServerURL);
+        let snapshotRealmURL = new URL(
+          realmRelativePath(realmURL, realmServerURL),
+          snapshotServerURL,
         );
         try {
-          await dropDatabase(templateDatabaseName);
-        } catch {
-          /* best effort */
+          await restoreTemplateFromDisk(templateDatabaseName);
+          writePreparedTemplateMetadata({
+            realmDir,
+            templateDatabaseName,
+            templateRealmURL: snapshotRealmURL.href,
+            templateRealmServerURL: snapshotData.realmServerURL,
+          });
+          return {
+            cacheKey,
+            templateDatabaseName,
+            fixtureHash,
+            cacheHit: false,
+            cacheMissReason: 'restored from snapshot',
+            realmURL: snapshotRealmURL,
+            realmServerURL: snapshotServerURL,
+          };
+        } catch (error) {
+          harnessLog.warn(
+            `Snapshot restore failed, falling back to full build: ${error}`,
+          );
+          try {
+            await dropDatabase(templateDatabaseName);
+          } catch {
+            /* best effort */
+          }
         }
+      } else {
+        harnessLog.info(
+          'Snapshot not available or stale, proceeding with full build',
+        );
       }
-    } else {
-      harnessLog.info(
-        'Snapshot not available or stale, proceeding with full build',
-      );
     }
 
     // Tier 3: Full build from scratch.
@@ -240,15 +252,17 @@ export async function ensureFactoryRealmTemplate(
         templateRealmServerURL: realmServerURL.href,
       });
 
-      // Save snapshot for future fast restores.
-      try {
-        await saveSnapshot(
-          templateDatabaseName,
-          realmServerURL.href,
-          snapshotFixtures,
-        );
-      } catch (error) {
-        harnessLog.warn(`Failed to save snapshot: ${error}`);
+      // Save snapshot for future fast restores (only for canonical fixtures).
+      if (isCanonicalFixtureSet(snapshotFixtures)) {
+        try {
+          await saveSnapshot(
+            templateDatabaseName,
+            realmServerURL.href,
+            snapshotFixtures,
+          );
+        } catch (error) {
+          harnessLog.warn(`Failed to save snapshot: ${error}`);
+        }
       }
 
       return {
@@ -353,44 +367,48 @@ export async function ensureCombinedFactoryRealmTemplate(
       }));
 
       // Tier 2: Try restoring from committed pg_dump snapshot.
-      let snapshotData = checkCommittedSnapshot(resolvedFixtures);
-      if (snapshotData) {
-        harnessLog.info(
-          'Restoring template from committed snapshot (fast path)',
-        );
-        try {
-          await restoreTemplateFromDisk(templateDatabaseName);
-          writePreparedTemplateMetadata({
-            realmDir: resolvedFixtures[0].realmDir,
-            templateDatabaseName,
-            templateRealmURL:
-              snapshotData.realmServerURL + resolvedFixtures[0].realmPath,
-            templateRealmServerURL: snapshotData.realmServerURL,
-            coveredRealmDirs: resolvedFixtures.map((f) => f.realmDir),
-          });
-          return {
-            cacheKey,
-            templateDatabaseName,
-            combinedFixtureHash,
-            cacheHit: false,
-            cacheMissReason: 'restored from snapshot',
-            coveredRealmDirs: resolvedFixtures.map((f) => f.realmDir),
-            realmServerURL: new URL(snapshotData.realmServerURL),
-          };
-        } catch (error) {
-          harnessLog.warn(
-            `Snapshot restore failed, falling back to full build: ${error}`,
+      // Only attempt when the DB is actually missing (not when metadata is missing
+      // but the DB exists — CREATE DATABASE would fail in that case).
+      if (!hasTemplateDatabase) {
+        let snapshotData = checkCommittedSnapshot(resolvedFixtures);
+        if (snapshotData) {
+          harnessLog.info(
+            'Restoring template from committed snapshot (fast path)',
           );
           try {
-            await dropDatabase(templateDatabaseName);
-          } catch {
-            /* best effort */
+            await restoreTemplateFromDisk(templateDatabaseName);
+            writePreparedTemplateMetadata({
+              realmDir: resolvedFixtures[0].realmDir,
+              templateDatabaseName,
+              templateRealmURL:
+                snapshotData.realmServerURL + resolvedFixtures[0].realmPath,
+              templateRealmServerURL: snapshotData.realmServerURL,
+              coveredRealmDirs: resolvedFixtures.map((f) => f.realmDir),
+            });
+            return {
+              cacheKey,
+              templateDatabaseName,
+              combinedFixtureHash,
+              cacheHit: false,
+              cacheMissReason: 'restored from snapshot',
+              coveredRealmDirs: resolvedFixtures.map((f) => f.realmDir),
+              realmServerURL: new URL(snapshotData.realmServerURL),
+            };
+          } catch (error) {
+            harnessLog.warn(
+              `Snapshot restore failed, falling back to full build: ${error}`,
+            );
+            try {
+              await dropDatabase(templateDatabaseName);
+            } catch {
+              /* best effort */
+            }
           }
+        } else {
+          harnessLog.info(
+            'Snapshot not available or stale, proceeding with full build',
+          );
         }
-      } else {
-        harnessLog.info(
-          'Snapshot not available or stale, proceeding with full build',
-        );
       }
 
       // Tier 3: Full build from scratch.
@@ -430,15 +448,17 @@ export async function ensureCombinedFactoryRealmTemplate(
           templateRealmServerURL: realmServerURL.href,
         });
 
-        // Save snapshot for future fast restores.
-        try {
-          await saveSnapshot(
-            templateDatabaseName,
-            realmServerURL.href,
-            resolvedFixtures,
-          );
-        } catch (error) {
-          harnessLog.warn(`Failed to save snapshot: ${error}`);
+        // Save snapshot for future fast restores (only for canonical fixtures).
+        if (isCanonicalFixtureSet(resolvedFixtures)) {
+          try {
+            await saveSnapshot(
+              templateDatabaseName,
+              realmServerURL.href,
+              resolvedFixtures,
+            );
+          } catch (error) {
+            harnessLog.warn(`Failed to save snapshot: ${error}`);
+          }
         }
 
         return {

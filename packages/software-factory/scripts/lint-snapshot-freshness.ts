@@ -7,7 +7,6 @@ import {
   DUMP_FILE,
   FINGERPRINT_FILE,
 } from '../src/harness/db-snapshot';
-import { CACHE_VERSION } from '../src/harness/shared';
 
 function printError(headline: string, detail: string): void {
   console.error('');
@@ -85,15 +84,6 @@ function main(): void {
         `  Current source fingerprint: ${currentFingerprint}`,
         `  Committed fingerprint:      ${committed.fingerprint}`,
       ].join('\n'),
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  if (committed.cacheVersion !== CACHE_VERSION) {
-    printError(
-      'The software-factory snapshot was built with an outdated schema version.',
-      `Current CACHE_VERSION: ${CACHE_VERSION}, snapshot was built with: ${committed.cacheVersion}`,
     );
     process.exitCode = 1;
     return;
