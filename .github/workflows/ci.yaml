@@ -813,7 +813,9 @@ jobs:
       - name: Start test services
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: Wait for test services
-        run: npx wait-on http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson http://localhost:8008 --timeout 300000
+        run: |
+          timeout 300 bash -c 'until curl -sf http://localhost:8008 > /dev/null 2>&1; do sleep 2; done'
+          timeout 300 bash -c 'until curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null 2>&1; do sleep 2; done'
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
