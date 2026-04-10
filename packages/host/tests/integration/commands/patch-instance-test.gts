@@ -139,6 +139,7 @@ module('Integration | commands | patch-instance', function (hooks) {
             self: null,
           },
         },
+        'cardInfo.cardThumbnail': { links: { self: null } },
         'cardInfo.theme': { links: { self: null } },
       },
       'the relationships are correct',
@@ -209,6 +210,7 @@ module('Integration | commands | patch-instance', function (hooks) {
             self: null,
           },
         },
+        'cardInfo.cardThumbnail': { links: { self: null } },
         'cardInfo.theme': { links: { self: null } },
       },
       'the relationships are correct',
@@ -279,6 +281,7 @@ module('Integration | commands | patch-instance', function (hooks) {
             self: null,
           },
         },
+        'cardInfo.cardThumbnail': { links: { self: null } },
         'cardInfo.theme': { links: { self: null } },
       },
       'the relationships are correct',
@@ -347,6 +350,7 @@ module('Integration | commands | patch-instance', function (hooks) {
         },
         'friends.0': { links: { self: `./germaine` } },
         'friends.1': { links: { self: `./queenzy` } },
+        'cardInfo.cardThumbnail': { links: { self: null } },
         'cardInfo.theme': { links: { self: null } },
       },
       'the relationships are correct',
@@ -493,6 +497,7 @@ module('Integration | commands | patch-instance', function (hooks) {
       instance.relationships,
       {
         bestFriend: { links: { self: `./queenzy` } },
+        'cardInfo.cardThumbnail': { links: { self: null } },
         'cardInfo.theme': { links: { self: null } },
         friends: {
           links: {

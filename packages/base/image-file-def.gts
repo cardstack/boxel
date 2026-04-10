@@ -1,1 +1,1 @@
-export { ImageDef as default } from './card-api';
+export { ImageDef, ImageDef as default } from './card-api';
