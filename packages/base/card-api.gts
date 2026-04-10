@@ -509,7 +509,7 @@ function cardTypeFor(
 function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
   if (
     !(primitive in cardClass) &&
-    cardClass.hasOwnProperty(deserialize)
+    Object.prototype.hasOwnProperty.call(cardClass, deserialize)
   ) {
     throw new Error(
       `${cardClass.name} overrides [deserialize] directly. Composite fields must use a registered fieldSerializer instead.`,
