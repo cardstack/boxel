@@ -11,6 +11,7 @@
  */
 
 import type { ValidationStepResult } from '../factory-agent';
+import { deriveIssueSlug } from '../factory-agent-types';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { executeTestRunFromRealm } from '../test-run-execution';
@@ -290,15 +291,6 @@ export class TestValidationStep implements ValidationStepRunner {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Derive a slug from an issue ID.
- * e.g., "Issues/sticky-note-define-core" → "sticky-note-define-core"
- */
-function deriveIssueSlug(issueId: string): string {
-  let parts = issueId.split('/');
-  return parts[parts.length - 1];
-}
 
 interface TestRunCardAttributes {
   status?: string;

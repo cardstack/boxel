@@ -24,6 +24,7 @@ import type {
   TestResult,
 } from './factory-agent';
 import {
+  deriveIssueSlug,
   resolveFactoryModel,
   ToolUseFactoryAgent,
   type FactoryAgentConfig,
@@ -663,19 +664,6 @@ async function readTestRunFailures(
   } catch {
     return [];
   }
-}
-
-// ---------------------------------------------------------------------------
-// Issue slug derivation
-// ---------------------------------------------------------------------------
-
-/**
- * Derive an issue slug from an issue ID.
- * e.g., "Issues/sticky-note-define-core" → "sticky-note-define-core"
- */
-function deriveIssueSlug(issueId: string): string {
-  let parts = issueId.split('/');
-  return parts[parts.length - 1];
 }
 
 // ---------------------------------------------------------------------------
