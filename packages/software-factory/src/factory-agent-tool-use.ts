@@ -20,8 +20,9 @@ import type {
   ResolvedSkill,
 } from './factory-agent-types';
 import { OPENROUTER_CHAT_URL } from './factory-agent-types';
-import type { LoopAgent, AgentRunResult } from './factory-loop';
+import type { LoopAgent, AgentRunResult } from './factory-agent-types';
 import {
+  assembleBootstrapPrompt,
   assembleImplementPrompt,
   assembleIteratePrompt,
   FilePromptLoader,
@@ -280,7 +281,13 @@ export class ToolUseFactoryAgent implements LoopAgent {
     let systemPrompt = this.buildToolUseSystemPrompt(context);
 
     let userPrompt: string;
-    if (context.testResults) {
+    let issueType = (context.issue as Record<string, unknown>).issueType;
+    if (issueType === 'bootstrap' && context.briefUrl) {
+      userPrompt = assembleBootstrapPrompt({
+        context,
+        loader: this.promptLoader,
+      });
+    } else if (context.testResults) {
       userPrompt = assembleIteratePrompt({
         context,
         previousActions: [],

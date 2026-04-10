@@ -38,10 +38,10 @@ import {
   type RealmTokens,
 } from './boxel';
 import { ContextBuilder } from './factory-context-builder';
+import type { LoopAgent } from './factory-agent-types';
 import {
   runFactoryLoop,
   type FactoryLoopResult,
-  type LoopAgent,
   type TestRunner,
 } from './factory-loop';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader';

@@ -100,12 +100,12 @@ The agent always has the option to create new issues via tool calls if it determ
 
 ### What This Means for Task Breakdown
 
-During task breakdown, the agent creates issues for implementation work:
+During task breakdown, the agent creates exactly **two** implementation issues:
 
-- "Implement StickyNote card definition" (type: implement)
-- "Create sample StickyNote instances" (type: implement)
-- "Write QUnit tests for StickyNote" (type: implement)
-- "Create Catalog Spec for StickyNote" (type: implement)
+- **Issue #1**: "Create card definition and tests" (`priority: high`, `order: 1`) — card `.gts` definition + co-located `.test.gts`
+- **Issue #2**: "Create catalog spec with examples" (`priority: medium`, `order: 2`, `blockedBy: issue #1`) — `Spec/*.json` + sample instances
+
+Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
 The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
 
@@ -136,15 +136,21 @@ In phase 1, bootstrap (creating the Project, KnowledgeArticles, and initial Tick
 The flow becomes:
 
 1. Factory starts with a brief URL and a target realm
-2. The orchestrator creates a single **seed issue**: "Process brief and create project artifacts"
+2. The orchestrator creates a single **seed issue** in the realm: `issueType: 'bootstrap'`, `status: 'backlog'`, `priority: 'critical'`, `order: 0` — this ensures `IssueScheduler.pickNextIssue()` picks it first
 3. The agent picks up this seed issue, reads the brief, and creates:
    - The Project card
-   - KnowledgeArticle cards
-   - The initial set of implementation issues (card definitions, instances, specs, tests)
-4. The agent marks the seed issue as done
+   - KnowledgeArticle cards (brief context + agent onboarding)
+   - Two implementation issues with `project` and `relatedKnowledge` relationships wired
+4. The agent marks the seed issue as done via `update_issue`
 5. The orchestrator now has a populated issue backlog and continues the normal loop
 
-This is the "quirk" where an issue's job is to create the project itself. But it's a natural fit — the LLM participates in brief processing and task breakdown as part of the loop, not as a separate hard-coded phase. This was already identified as a goal (the plan mentions LLM participation in brief processing / artifact creation).
+Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up.
+
+The `ContextBuilder.buildForIssue()` handles the bootstrap case where no Project exists yet by supplying a minimal stub (`{ id: 'bootstrap-pending' }`) when `loadProject()` returns `undefined` and the issue has `issueType === 'bootstrap'`. This keeps `AgentContext.project` required (no type ripple) while the bootstrap prompt template doesn't reference project fields.
+
+The `IssueTypeField` enum in `darkfactory.gts` includes `bootstrap` as a valid value so seed issues render correctly in the Boxel UI.
+
+This is the "quirk" where an issue's job is to create the project itself. But it's a natural fit — the LLM participates in brief processing and task breakdown as part of the loop, not as a separate hard-coded phase.
 
 ### Benefits
 
@@ -348,9 +354,9 @@ Phase 1 and phase 2 coexist during the transition. The implementation lives in s
 - `src/issue-scheduler.ts` — `IssueScheduler`, `IssueStore`, `RealmIssueStore`
 - `src/issue-loop.ts` — `runIssueLoop()`, `Validator`, `NoOpValidator`, config/result types
 
-Phase 1's `factory-loop.ts` (`runFactoryLoop()`) remains untouched. The `LoopAgent` interface (`run(context, tools)`) is unchanged and reused by both loops. `FactoryTool[]` carries forward unchanged.
+The `LoopAgent` interface (`run(context, tools)`) is unchanged and reused by the issue loop. `LoopAgent`, `AgentRunResult`, and `AgentRunStatus` types are now in `factory-agent-types.ts` (relocated from `factory-loop.ts` to break the dependency). `LoopFactoryTool`/`LoopToolCallEntry` mirror interfaces in `factory-agent-types.ts` avoid circular imports with `factory-tool-builder.ts` — TypeScript's structural typing makes them assignment-compatible.
 
-CS-10708 tracks the integration work: wire `runIssueLoop()`, the validation phase (CS-10675), and bootstrap-as-seed (CS-10673) into the `factory:go` entrypoint, then retire all Phase 1 mechanisms (`factory-loop.ts`, `factory-loop.test.ts`, old bootstrap orchestration, `TestRunner`/`buildTestRunner()`).
+CS-10673 + CS-10708 wired the issue loop into `factory:go`: `src/factory-issue-loop-wiring.ts` constructs all Phase 2 infrastructure (RealmIssueStore, RealmIssueRelationshipLoader, ContextBuilder, tools, agent, ValidationPipeline) and calls `runIssueLoop()`. The `factory-entrypoint.ts` now creates a seed issue then delegates to this wiring. Phase 1's `factory-loop.ts` and `factory-implement.ts` remain for backward compatibility but are no longer called from the main entrypoint.
 
 ## Refactor: request_clarification → Blocking Issue
 
