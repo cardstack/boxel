@@ -24,7 +24,6 @@ import {
   packageRoot,
   pgAdminConnectionConfig,
   quotePgIdentifier,
-  sourceRealmDir,
   stableStringify,
   templateLog,
   type CombinedRealmFixture,
@@ -37,6 +36,16 @@ import {
 export const DB_SNAPSHOTS_DIR = resolve(packageRoot, 'db-snapshots');
 export const DUMP_FILE = join(DB_SNAPSHOTS_DIR, 'template.pgdump');
 export const FINGERPRINT_FILE = join(DB_SNAPSHOTS_DIR, 'fingerprint.json');
+
+/**
+ * Canonical source realm dir for the Playwright test configuration.
+ * The global setup overrides SOFTWARE_FACTORY_SOURCE_REALM_DIR to this value,
+ * so the snapshot fingerprint must always use it (not the env-dependent default).
+ */
+export const CANONICAL_SOURCE_REALM_DIR = resolve(
+  packageRoot,
+  'test-fixtures/public-software-factory-source',
+);
 
 /** Canonical fixture list matching playwright.global-setup.ts. */
 export const DEFAULT_SNAPSHOT_FIXTURES: CombinedRealmFixture[] = [
@@ -106,7 +115,7 @@ export function computeSnapshotFingerprint(
   fixtures: CombinedRealmFixture[],
 ): string {
   let baseRealmHash = hashRealmFixture(baseRealmDir);
-  let sourceRealmHash = hashRealmFixture(sourceRealmDir);
+  let sourceRealmHash = hashRealmFixture(CANONICAL_SOURCE_REALM_DIR);
   let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
   return hashString(
     stableStringify({
@@ -362,7 +371,7 @@ export async function saveSnapshot(
 ): Promise<void> {
   await logTimed(templateLog, 'saveSnapshot', async () => {
     let baseRealmHash = hashRealmFixture(baseRealmDir);
-    let sourceRealmHash = hashRealmFixture(sourceRealmDir);
+    let sourceRealmHash = hashRealmFixture(CANONICAL_SOURCE_REALM_DIR);
     let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
     let fingerprint = hashString(
       stableStringify({
