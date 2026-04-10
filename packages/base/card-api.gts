@@ -1,14 +1,9 @@
-import { concat } from '@ember/helper';
 import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { isEqual } from 'lodash';
 import { WatchedArray } from './watched-array';
 import { BoxelInput, CopyButton } from '@cardstack/boxel-ui/components';
-import {
-  copyCardURLToClipboard,
-  type MenuItemOptions,
-  not,
-} from '@cardstack/boxel-ui/helpers';
+import { type MenuItemOptions, not } from '@cardstack/boxel-ui/helpers';
 import {
   getBoxComponent,
   type BoxComponent,
@@ -110,6 +105,11 @@ import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
+import FileDefEditTemplate from './default-templates/file-def-edit';
+import ImageDefAtomTemplate from './default-templates/image-def-atom';
+import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
+import ImageDefFittedTemplate from './default-templates/image-def-fitted';
+import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import FileIcon from '@cardstack/boxel-icons/file';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
@@ -120,18 +120,10 @@ import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
 import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
 import WandIcon from '@cardstack/boxel-icons/wand';
-import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
-import LinkIcon from '@cardstack/boxel-icons/link';
-import Eye from '@cardstack/boxel-icons/eye';
-import CodeIcon from '@cardstack/boxel-icons/code';
 import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
 import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
 import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
-import CopyFileToRealmCommand from '@cardstack/boxel-host/commands/copy-file-to-realm';
-import OpenInInteractModeCommand from '@cardstack/boxel-host/commands/open-in-interact-mode';
-import ShowFileCommand from '@cardstack/boxel-host/commands/show-file';
-import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 import { md5 } from 'super-fast-md5';
 
 import {
@@ -174,6 +166,7 @@ import {
 } from './field-support';
 import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
+import { getDefaultFileMenuItems } from './file-menu-items';
 import {
   LinkableDocument,
   SingleFileMetaDocument,
@@ -2630,25 +2623,7 @@ export class FileDef extends BaseDef {
   static fitted = this.embedded;
   static isolated = this.embedded;
   static atom = this.embedded;
-  static edit: BaseDefComponent = class Edit extends Component<typeof this> {
-    <template>
-      <div class='filedef-edit-unavailable' data-test-filedef-edit-unavailable>
-        This file
-        {{if @model.id (concat ' (' @model.id ')')}}
-        is not editable via this interface. Replace it via file upload.
-      </div>
-      <style scoped>
-        .filedef-edit-unavailable {
-          background: var(--boxel-light);
-          border: 1px solid var(--boxel-200);
-          border-radius: var(--boxel-radius-sm);
-          color: var(--boxel-700);
-          font-size: var(--boxel-font-sm);
-          padding: var(--boxel-sp-md);
-        }
-      </style>
-    </template>
-  };
+  static edit: BaseDefComponent = FileDefEditTemplate;
 
   static async extractAttributes(
     url: string,
@@ -2720,80 +2695,7 @@ export function createFileDef({
   });
 }
 
-export function getDefaultFileMenuItems(
-  fileDefInstance: FileDef,
-  params: GetMenuItemParams,
-): MenuItemOptions[] {
-  let fileDefInstanceId = fileDefInstance.id as unknown as string;
-  let menuItems: MenuItemOptions[] = [];
-  if (
-    ['interact', 'code-mode-preview', 'code-mode-playground'].includes(
-      params.menuContext,
-    )
-  ) {
-    menuItems.push({
-      label: 'Copy File URL',
-      action: () => copyCardURLToClipboard(fileDefInstanceId),
-      icon: LinkIcon,
-      disabled: !fileDefInstanceId,
-    });
-  }
-  if (params.menuContext === 'interact') {
-    if (fileDefInstanceId && params.canEdit) {
-      // TODO: add menu item to delete the file
-    }
-  }
-  if (
-    params.menuContext === 'ai-assistant' &&
-    params.menuContextParams.canEditActiveRealm
-  ) {
-    menuItems.push({
-      label: 'Copy to Workspace',
-      action: async () => {
-        let { newFileUrl } = await new CopyFileToRealmCommand(
-          params.commandContext,
-        ).execute({
-          sourceFileUrl: fileDefInstance.sourceUrl,
-          targetRealm: params.menuContextParams.activeRealmURL,
-        });
-
-        await new ShowFileCommand(params.commandContext).execute({
-          fileUrl: newFileUrl,
-        });
-      },
-      icon: ArrowLeft,
-    });
-  }
-  if (
-    ['code-mode-preview', 'code-mode-playground'].includes(params.menuContext)
-  ) {
-    menuItems.push({
-      label: 'Open in Interact Mode',
-      action: () => {
-        new OpenInInteractModeCommand(params.commandContext).execute({
-          cardId: fileDefInstanceId,
-          format: params.format === 'edit' ? 'edit' : 'isolated',
-        });
-      },
-      icon: Eye,
-    });
-  }
-  if (params.menuContext === 'code-mode-playground') {
-    menuItems.push({
-      label: 'Open in Code Mode',
-      action: async () => {
-        await new SwitchSubmodeCommand(params.commandContext).execute({
-          submode: 'code',
-          codePath: fileDefInstanceId
-            ? new URL(fileDefInstanceId).href
-            : undefined,
-        });
-      },
-      icon: CodeIcon,
-    });
-  }
-  return menuItems;
-}
+export { getDefaultFileMenuItems } from './file-menu-items';
 
 export class ImageDef extends FileDef {
   static displayName = 'Image';
@@ -2802,197 +2704,10 @@ export class ImageDef extends FileDef {
   @field width = contains(NumberField);
   @field height = contains(NumberField);
 
-  static isolated: BaseDefComponent = class Isolated extends Component<
-    typeof this
-  > {
-    <template>
-      <div class='image-isolated'>
-        {{#if @model.url}}
-          <img
-            class='image-isolated__img'
-            src={{@model.url}}
-            alt={{@model.name}}
-            width={{@model.width}}
-            height={{@model.height}}
-          />
-          <footer class='image-isolated__meta'>
-            <span class='image-isolated__name'>{{@model.name}}</span>
-            {{#if @model.width}}
-              <span class='image-isolated__dimensions'>{{@model.width}}
-                &times;
-                {{@model.height}}px</span>
-            {{/if}}
-          </footer>
-        {{else}}
-          <p class='image-isolated__empty'>{{@model.name}}</p>
-        {{/if}}
-      </div>
-      <style scoped>
-        .image-isolated {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          max-width: 100%;
-        }
-
-        .image-isolated__img {
-          max-width: 100%;
-          height: auto;
-          border-radius: var(--boxel-radius-sm);
-        }
-
-        .image-isolated__meta {
-          display: flex;
-          align-items: baseline;
-          gap: var(--boxel-sp-xs);
-          color: var(--boxel-600);
-          font-size: var(--boxel-font-sm);
-          padding-bottom: var(--boxel-sp-xs);
-        }
-
-        .image-isolated__name {
-          font-weight: 600;
-          color: var(--boxel-900);
-        }
-
-        .image-isolated__empty {
-          color: var(--boxel-600);
-          margin: 0;
-        }
-      </style>
-    </template>
-  };
-  static atom: BaseDefComponent = class Atom extends Component<typeof this> {
-    <template>
-      <div class='image-atom'>
-        {{#if @model.url}}
-          <img class='image-atom__img' src={{@model.url}} alt={{@model.name}} />
-        {{/if}}
-        <span class='image-atom__name'>{{@model.name}}</span>
-      </div>
-      <style scoped>
-        .image-atom {
-          display: inline-flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          min-width: 0;
-        }
-
-        .image-atom__img {
-          width: 20px;
-          height: 20px;
-          object-fit: cover;
-          border-radius: var(--boxel-radius-xs);
-          flex-shrink: 0;
-        }
-
-        .image-atom__name {
-          color: var(--boxel-900);
-          font-size: var(--boxel-font-sm);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      </style>
-    </template>
-  };
-  static embedded: BaseDefComponent = class Embedded extends Component<
-    typeof this
-  > {
-    <template>
-      <div class='image-embedded'>
-        {{#if @model.url}}
-          <img
-            class='image-embedded__img'
-            src={{@model.url}}
-            alt={{@model.name}}
-          />
-        {{else}}
-          <p class='image-embedded__empty'>{{@model.name}}</p>
-        {{/if}}
-      </div>
-      <style scoped>
-        .image-embedded {
-          width: 100%;
-        }
-
-        .image-embedded__img {
-          display: block;
-          width: 100%;
-          height: auto;
-          border-radius: var(--boxel-radius-sm);
-        }
-
-        .image-embedded__empty {
-          color: var(--boxel-600);
-          margin: 0;
-        }
-      </style>
-    </template>
-  };
-  static fitted: BaseDefComponent = class Fitted extends Component<
-    typeof this
-  > {
-    get backgroundImageStyle() {
-      if (this.args.model.url) {
-        return `background-image: url(${this.args.model.url});`;
-      }
-      return undefined;
-    }
-
-    <template>
-      <div class='image-fitted'>
-        {{#if @model.url}}
-          <div
-            class='image-fitted__bg'
-            style={{this.backgroundImageStyle}}
-            role='img'
-            aria-label={{@model.name}}
-          ></div>
-        {{else}}
-          <div class='image-fitted__placeholder'>
-            <span class='image-fitted__name'>{{@model.name}}</span>
-          </div>
-        {{/if}}
-      </div>
-      <style scoped>
-        .image-fitted {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-        }
-
-        .image-fitted__bg {
-          width: 100%;
-          height: 100%;
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
-        }
-
-        .image-fitted__placeholder {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: var(--boxel-100);
-          color: var(--boxel-600);
-          font-size: var(--boxel-font-sm);
-        }
-
-        .image-fitted__name {
-          font-size: var(--boxel-font-xs);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          display: block;
-        }
-      </style>
-    </template>
-  };
+  static isolated: BaseDefComponent = ImageDefIsolatedTemplate;
+  static atom: BaseDefComponent = ImageDefAtomTemplate;
+  static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
+  static fitted: BaseDefComponent = ImageDefFittedTemplate;
 }
 
 export class CardInfoField extends FieldDef {
