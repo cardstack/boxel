@@ -5,15 +5,8 @@ import {
 } from '@cardstack/runtime-common/realm-display-defaults';
 import {
   getProfileManager,
-  getUsernameFromMatrixId,
   type ProfileManager,
 } from '../../lib/profile-manager';
-import {
-  matrixLogin,
-  getRealmServerToken,
-  getRealmTokens,
-  addRealmToMatrixAccountData,
-} from '../../lib/auth';
 import { FG_GREEN, FG_CYAN, DIM, RESET } from '../../lib/colors';
 
 const REALM_NAME_PATTERN = /^[a-z0-9-]+$/;
@@ -27,7 +20,11 @@ export function registerCreateCommand(realm: Command): void {
     .option('--background <url>', 'background image URL')
     .option('--icon <url>', 'icon image URL')
     .action(
-      async (realmName: string, displayName: string, options: CreateOptions) => {
+      async (
+        realmName: string,
+        displayName: string,
+        options: CreateOptions,
+      ) => {
         await createRealm(realmName, displayName, options);
       },
     );
@@ -60,37 +57,15 @@ export async function createRealm(
     process.exit(1);
   }
 
-  let { id: profileId, profile } = active;
-  let username = getUsernameFromMatrixId(profileId);
-  let realmServerUrl = profile.realmServerUrl.replace(/\/$/, '');
+  let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
 
-  // Try cached server token first, fall back to full Matrix auth
-  let serverToken = pm.getRealmServerToken();
-  let matrixAuth;
-
-  if (!serverToken) {
-    try {
-      matrixAuth = await matrixLogin(
-        profile.matrixUrl,
-        username,
-        profile.password,
-      );
-    } catch (e: unknown) {
-      console.error(
-        `Error: Matrix login failed for ${profileId}`,
-      );
-      console.error(e instanceof Error ? e.message : String(e));
-      process.exit(1);
-    }
-
-    try {
-      serverToken = await getRealmServerToken(matrixAuth, realmServerUrl);
-      pm.setRealmServerToken(serverToken);
-    } catch (e: unknown) {
-      console.error('Error: failed to obtain realm server token');
-      console.error(e instanceof Error ? e.message : String(e));
-      process.exit(1);
-    }
+  let serverToken: string;
+  try {
+    serverToken = await pm.getOrRefreshServerToken();
+  } catch (e: unknown) {
+    console.error('Error: authentication failed');
+    console.error(e instanceof Error ? e.message : String(e));
+    process.exit(1);
   }
 
   // Build request attributes with default icon/background
@@ -127,15 +102,9 @@ export async function createRealm(
   }
 
   // Cached token may be expired — re-auth and retry once
-  if (response.status === 401 && !matrixAuth) {
+  if (response.status === 401) {
     try {
-      matrixAuth = await matrixLogin(
-        profile.matrixUrl,
-        username,
-        profile.password,
-      );
-      serverToken = await getRealmServerToken(matrixAuth, realmServerUrl);
-      pm.setRealmServerToken(serverToken);
+      serverToken = await pm.refreshServerToken();
     } catch (e: unknown) {
       console.error('Error: re-authentication failed');
       console.error(e instanceof Error ? e.message : String(e));
@@ -174,30 +143,22 @@ export async function createRealm(
   // Obtain and store the realm JWT
   if (normalizedRealmUrl) {
     try {
-      let realmTokenMap = await getRealmTokens(realmServerUrl, serverToken);
-      let realmJwt = realmTokenMap[normalizedRealmUrl];
-      if (realmJwt) {
-        pm.setRealmToken(normalizedRealmUrl, realmJwt);
+      let tokens = await pm.fetchAndStoreRealmTokens(serverToken);
+      if (!tokens[normalizedRealmUrl]) {
+        console.error(
+          `${DIM}Warning: realm created but JWT not found in auth response.${RESET}`,
+        );
       }
     } catch {
-      // Non-fatal — realm was created but we couldn't persist the token
       console.error(
-        `${DIM}Warning: realm created but could not obtain realm JWT. Run a command against the realm to re-authenticate.${RESET}`,
+        `${DIM}Warning: realm created but could not obtain realm JWT.${RESET}`,
       );
     }
 
     // Register realm in Matrix account data so it appears in the Boxel dashboard
     try {
-      if (!matrixAuth) {
-        matrixAuth = await matrixLogin(
-          profile.matrixUrl,
-          username,
-          profile.password,
-        );
-      }
-      await addRealmToMatrixAccountData(matrixAuth, normalizedRealmUrl);
+      await pm.registerRealmInDashboard(normalizedRealmUrl);
     } catch {
-      // Non-fatal — realm was created but won't appear in dashboard until next login
       console.error(
         `${DIM}Warning: could not register realm in dashboard. It may not appear until next login.${RESET}`,
       );

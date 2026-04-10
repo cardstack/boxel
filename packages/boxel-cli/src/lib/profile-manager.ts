@@ -2,6 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { FG_YELLOW, FG_CYAN, FG_MAGENTA, DIM, BOLD, RESET } from './colors';
+import {
+  matrixLogin,
+  getRealmServerToken as fetchRealmServerToken,
+  getRealmTokens,
+  addRealmToMatrixAccountData,
+  type MatrixAuth,
+} from './auth';
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
 const PROFILES_FILENAME = 'profiles.json';
@@ -312,6 +319,55 @@ export class ProfileManager {
   getRealmServerToken(): string | undefined {
     let active = this.getActiveProfile();
     return active?.profile.realmServerToken;
+  }
+
+  private async loginToMatrix(): Promise<MatrixAuth> {
+    let active = this.getActiveProfile();
+    if (!active) {
+      throw new Error('No active profile');
+    }
+    let { id, profile } = active;
+    let username = getUsernameFromMatrixId(id);
+    return matrixLogin(profile.matrixUrl, username, profile.password);
+  }
+
+  async getOrRefreshServerToken(): Promise<string> {
+    let cached = this.getRealmServerToken();
+    if (cached) {
+      return cached;
+    }
+    let matrixAuth = await this.loginToMatrix();
+    let active = this.getActiveProfile()!;
+    let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+    let token = await fetchRealmServerToken(matrixAuth, realmServerUrl);
+    this.setRealmServerToken(token);
+    return token;
+  }
+
+  async refreshServerToken(): Promise<string> {
+    let matrixAuth = await this.loginToMatrix();
+    let active = this.getActiveProfile()!;
+    let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+    let token = await fetchRealmServerToken(matrixAuth, realmServerUrl);
+    this.setRealmServerToken(token);
+    return token;
+  }
+
+  async fetchAndStoreRealmTokens(
+    serverToken: string,
+  ): Promise<Record<string, string>> {
+    let active = this.getActiveProfile()!;
+    let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
+    let tokens = await getRealmTokens(realmServerUrl, serverToken);
+    for (let [realmUrl, token] of Object.entries(tokens)) {
+      this.setRealmToken(realmUrl, token);
+    }
+    return tokens;
+  }
+
+  async registerRealmInDashboard(realmUrl: string): Promise<void> {
+    let matrixAuth = await this.loginToMatrix();
+    await addRealmToMatrixAccountData(matrixAuth, realmUrl);
   }
 
   async migrateFromEnv(): Promise<{
