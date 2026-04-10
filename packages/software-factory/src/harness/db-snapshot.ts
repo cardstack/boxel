@@ -71,6 +71,10 @@ export const DEFAULT_SNAPSHOT_FIXTURES: CombinedRealmFixture[] = [
  * Space-separated glob controlling which source realm files are included
  * in the test DB snapshot. Prefix a pattern with ! to exclude.
  * Evaluated in order — last matching pattern wins.
+ *
+ * Only the core card definitions (darkfactory, test-results, wiki) are
+ * needed for tests. The wiki briefs, document instances, and other
+ * content in realm/ are not necessary for the Playwright test suite.
  */
 export const SOURCE_REALM_GLOB = '*.gts .realm.json !document.gts';
 
