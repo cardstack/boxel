@@ -662,7 +662,7 @@ module('Integration | RichMarkdownField', function (hooks) {
 
   // ── Mode switcher tests ──
 
-  test('edit template renders mode switcher with Edit, Source, and Preview buttons', async function (assert) {
+  test('edit template renders mode switcher with Compose, Source, and Preview buttons', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -685,7 +685,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert.dom('[data-test-mode-switcher]').exists('mode switcher is rendered');
     assert
       .dom('[data-test-mode-compose]')
-      .hasText('Edit', 'Edit button is rendered');
+      .hasText('Compose', 'Compose button is rendered');
     assert
       .dom('[data-test-mode-source]')
       .hasText('Source', 'Source button is rendered');
@@ -796,7 +796,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert.ok(editorOrLoading, 'editor is shown in source mode');
   });
 
-  test('switching from Preview back to Edit restores editor', async function (assert) {
+  test('switching from Preview back to Compose restores editor', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -820,7 +820,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     await click('[data-test-mode-preview]');
     assert.dom('[data-test-markdown-preview]').exists('preview is shown');
 
-    // Switch back to Edit
+    // Switch back to Compose
     await click('[data-test-mode-compose]');
     assert
       .dom('[data-test-markdown-preview]')
@@ -830,7 +830,7 @@ module('Integration | RichMarkdownField', function (hooks) {
       document.querySelector('[data-test-codemirror-loading]');
     assert.ok(
       editorOrLoading,
-      'editor is restored after switching back to Edit',
+      'editor is restored after switching back to Compose',
     );
   });
 });
