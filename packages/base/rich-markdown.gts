@@ -101,9 +101,9 @@ export class RichMarkdownField extends FieldDef {
   };
 
   static edit = class Edit extends Component<typeof this> {
-    _modeState = new TrackedObject({ value: 'edit' as 'edit' | 'source' | 'preview' });
+    _modeState = new TrackedObject({ value: 'compose' as 'compose' | 'source' | 'preview' });
 
-    get _mode(): 'edit' | 'source' | 'preview' {
+    get _mode(): 'compose' | 'source' | 'preview' {
       return this._modeState.value;
     }
 
@@ -121,18 +121,18 @@ export class RichMarkdownField extends FieldDef {
         return null;
       }
     }
-    setMode = (mode: 'edit' | 'source' | 'preview') => {
+    setMode = (mode: 'compose' | 'source' | 'preview') => {
       this._modeState.value = mode;
     };
     <template>
       <div class='rich-markdown-editor'>
         <div class='rich-markdown-mode-switcher' data-test-mode-switcher>
           <button
-            class='mode-btn {{if (eq this._mode "edit") "mode-btn--active"}}'
-            data-test-mode-edit
+            class='mode-btn {{if (eq this._mode "compose") "mode-btn--active"}}'
+            data-test-mode-compose
             type='button'
-            {{on 'click' (fn this.setMode 'edit')}}
-          >Edit</button>
+            {{on 'click' (fn this.setMode 'compose')}}
+          >Compose</button>
           <button
             class='mode-btn {{if (eq this._mode "source") "mode-btn--active"}}'
             data-test-mode-source
@@ -162,7 +162,7 @@ export class RichMarkdownField extends FieldDef {
               @onUpdate={{this.updateContent}}
               @linkedCards={{this.linkedCards}}
               @cardReferenceBaseUrl={{this.baseUrl}}
-              @livePreview={{eq this._mode 'edit'}}
+              @livePreview={{eq this._mode 'compose'}}
               @getCards={{context.getCards}}
             />
           </CardContextConsumer>

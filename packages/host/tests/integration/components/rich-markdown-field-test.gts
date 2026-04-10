@@ -684,7 +684,7 @@ module('Integration | RichMarkdownField', function (hooks) {
 
     assert.dom('[data-test-mode-switcher]').exists('mode switcher is rendered');
     assert
-      .dom('[data-test-mode-edit]')
+      .dom('[data-test-mode-compose]')
       .hasText('Edit', 'Edit button is rendered');
     assert
       .dom('[data-test-mode-source]')
@@ -821,7 +821,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert.dom('[data-test-markdown-preview]').exists('preview is shown');
 
     // Switch back to Edit
-    await click('[data-test-mode-edit]');
+    await click('[data-test-mode-compose]');
     assert
       .dom('[data-test-markdown-preview]')
       .doesNotExist('preview is hidden after switching back');
