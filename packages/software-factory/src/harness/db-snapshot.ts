@@ -156,31 +156,85 @@ function pgEnv(): Record<string, string> {
   } as Record<string, string>;
 }
 
-/** Dump a template database to disk using pg_dump --format=custom. */
-export function dumpTemplateToDisk(databaseName: string): void {
+/**
+ * Dump a template database to disk using pg_dump --format=custom.
+ *
+ * To minimize dump size, we clone the template to a temporary database,
+ * strip data that is rebuilt at clone/startup time, then dump that copy:
+ * - boxel_index_working: rebuilt via rebuildWorkingIndexFromIndex()
+ * - boxel_index.last_known_good_deps: fallback deps, rebuilt on next index
+ * - modules: cleared via clearModuleCache() on realm startup
+ * - jobs / job_reservations: cleared via resetQueueState()
+ */
+export async function dumpTemplateToDisk(databaseName: string): Promise<void> {
   mkdirSync(DB_SNAPSHOTS_DIR, { recursive: true });
-  let result = spawnSync(
-    'pg_dump',
-    [
-      '--format=custom',
-      '--no-owner',
-      '--no-privileges',
-      '-h',
-      DEFAULT_PG_HOST,
-      '-p',
-      DEFAULT_PG_PORT,
-      '-U',
-      DEFAULT_PG_USER,
-      '-f',
-      DUMP_FILE,
-      databaseName,
-    ],
-    { env: pgEnv(), encoding: 'utf8' },
-  );
-  if (result.status !== 0) {
-    throw new Error(
-      `pg_dump failed with exit code ${result.status}: ${result.stderr || result.error?.message || 'unknown error'}`,
+
+  // Clone to a temporary database so we can strip columns without
+  // modifying the live template.
+  let tmpDb = `sf_dump_tmp_${process.pid}`;
+  let adminClient = new PgClient(pgAdminConnectionConfig());
+  try {
+    await adminClient.connect();
+    await adminClient.query(
+      `DROP DATABASE IF EXISTS ${quotePgIdentifier(tmpDb)}`,
     );
+    await adminClient.query(
+      `CREATE DATABASE ${quotePgIdentifier(tmpDb)} TEMPLATE ${quotePgIdentifier(databaseName)}`,
+    );
+  } finally {
+    await adminClient.end();
+  }
+
+  try {
+    // NULL out large columns that are rebuilt at runtime.
+    let stripClient = new PgClient(pgAdminConnectionConfig(tmpDb));
+    try {
+      await stripClient.connect();
+      await stripClient.query(
+        `UPDATE boxel_index SET last_known_good_deps = NULL`,
+      );
+      await stripClient.query(`TRUNCATE boxel_index_working`);
+      await stripClient.query(`TRUNCATE modules`);
+      await stripClient.query(`TRUNCATE job_reservations, jobs CASCADE`);
+      await stripClient.query(`VACUUM FULL`);
+    } finally {
+      await stripClient.end();
+    }
+
+    let result = spawnSync(
+      'pg_dump',
+      [
+        '--format=custom',
+        '--no-owner',
+        '--no-privileges',
+        '-h',
+        DEFAULT_PG_HOST,
+        '-p',
+        DEFAULT_PG_PORT,
+        '-U',
+        DEFAULT_PG_USER,
+        '-f',
+        DUMP_FILE,
+        tmpDb,
+      ],
+      { env: pgEnv(), encoding: 'utf8' },
+    );
+    if (result.status !== 0) {
+      throw new Error(
+        `pg_dump failed with exit code ${result.status}: ${result.stderr || result.error?.message || 'unknown error'}`,
+      );
+    }
+  } finally {
+    // Clean up the temporary database.
+    let cleanupClient = new PgClient(pgAdminConnectionConfig());
+    try {
+      await cleanupClient.connect();
+      await cleanupClient.query(
+        `DROP DATABASE IF EXISTS ${quotePgIdentifier(tmpDb)}`,
+      );
+    } finally {
+      await cleanupClient.end();
+    }
   }
 }
 
@@ -303,7 +357,7 @@ export async function saveSnapshot(
       }),
     );
 
-    dumpTemplateToDisk(databaseName);
+    await dumpTemplateToDisk(databaseName);
 
     let dumpSize = statSync(DUMP_FILE).size;
     templateLog.info(
