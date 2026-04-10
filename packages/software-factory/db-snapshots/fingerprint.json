@@ -1,7 +1,7 @@
 {
-  "fingerprint": "00e4ffae0083ac64dbacf19e4fe603646dc2950ee5326792bf6cf98d2cac4405",
+  "fingerprint": "5221e3458be077f4de66ab442895c52b97993b7d0039a3b42994544fc43f1b84",
   "cacheVersion": 8,
-  "realmServerURL": "http://localhost:41395/",
-  "generatedAt": "2026-04-10T15:22:31.989Z",
+  "realmServerURL": "http://localhost:46179/",
+  "generatedAt": "2026-04-10T15:41:24.697Z",
   "pgDumpVersion": "pg_dump (PostgreSQL) 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)"
 }
