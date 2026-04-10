@@ -314,6 +314,15 @@ export async function startIsolatedRealmStack({
   prerenderURL?: string;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
+  // Create a filtered copy of the source realm — only card definitions
+  // (via SOURCE_REALM_GLOB), not instance data like wiki briefs or documents.
+  let filteredSourceRealmDir = join(rootDir, 'source-realm');
+  copyRealmFixture(
+    sourceRealmDir,
+    filteredSourceRealmDir,
+    new URL('https://placeholder/'),
+    { fileFilter: matchesSourceRealmGlob },
+  );
   let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
@@ -363,18 +372,9 @@ export async function startIsolatedRealmStack({
     );
     let username = additional.username ?? `additional_realm_${i}`;
     ensureDirSync(additionalLocalDir);
-    // For the source realm fixture (which may symlink to the full realm/ dir),
-    // only copy files matching SOURCE_REALM_INCLUDE_GLOBS — instances aren't needed.
-    let isSourceRealmFixture =
-      realpathSync(additional.realmDir) === realpathSync(sourceRealmDir);
-    copyRealmFixture(
-      additional.realmDir,
-      additionalLocalDir,
-      sourceRealmURL,
-      isSourceRealmFixture ? { fileFilter: matchesSourceRealmGlob } : undefined,
-    );
+    copyRealmFixture(additional.realmDir, additionalLocalDir, sourceRealmURL);
     realmLog.debug(
-      `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}${isSourceRealmFixture ? ' (filtered to .gts only)' : ''}`,
+      `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}`,
     );
     resolvedAdditionalRealms.push({
       realmDir: additional.realmDir,
@@ -510,7 +510,7 @@ export async function startIsolatedRealmStack({
     `--fromUrl=${publicBaseRealmURL.href}`,
     `--toUrl=${actualBaseRealmURL.href}`,
     '--username=software_factory_realm',
-    `--path=${sourceRealmDir}`,
+    `--path=${filteredSourceRealmDir}`,
     `--fromUrl=${sourceRealmURL.href}`,
     `--toUrl=${actualSourceRealmURL.href}`,
     '--username=test_realm',

@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
@@ -18,12 +17,14 @@ import {
   DEFAULT_PG_HOST,
   DEFAULT_PG_PORT,
   DEFAULT_PG_USER,
+  hashCombinedRealmFixtures,
   hashRealmFixture,
   hashString,
   logTimed,
   packageRoot,
   pgAdminConnectionConfig,
   quotePgIdentifier,
+  sourceRealmDir,
   stableStringify,
   templateLog,
   type CombinedRealmFixture,
@@ -36,16 +37,6 @@ import {
 export const DB_SNAPSHOTS_DIR = resolve(packageRoot, 'db-snapshots');
 export const DUMP_FILE = join(DB_SNAPSHOTS_DIR, 'template.pgdump');
 export const FINGERPRINT_FILE = join(DB_SNAPSHOTS_DIR, 'fingerprint.json');
-
-/**
- * The source realm fixture dir. This is a symlink to realm/ so they
- * can never diverge. Only .gts files (card definitions) and index.json
- * are relevant for the test DB.
- */
-export const SOURCE_REALM_FIXTURE_DIR = resolve(
-  packageRoot,
-  'test-fixtures/public-software-factory-source',
-);
 
 /** Canonical fixture list matching playwright.global-setup.ts. */
 export const DEFAULT_SNAPSHOT_FIXTURES: CombinedRealmFixture[] = [
@@ -60,10 +51,6 @@ export const DEFAULT_SNAPSHOT_FIXTURES: CombinedRealmFixture[] = [
   {
     realmDir: resolve(packageRoot, 'test-fixtures/test-realm-runner'),
     realmPath: 'test-realm-runner/',
-  },
-  {
-    realmDir: SOURCE_REALM_FIXTURE_DIR,
-    realmPath: 'public-software-factory-source/',
   },
 ];
 
@@ -136,27 +123,15 @@ export function computeSnapshotFingerprint(
   fixtures: CombinedRealmFixture[],
 ): string {
   let baseRealmHash = hashRealmFixture(baseRealmDir);
-  // Hash each fixture, applying a .gts-only filter to the source realm
-  // (which is a symlink to realm/ and contains many instance .json files
-  // that aren't used by tests).
-  let fixtureEntries = fixtures
-    .slice()
-    .sort((a, b) => a.realmPath.localeCompare(b.realmPath))
-    .map((f) => {
-      let resolvedDir = realpathSync(f.realmDir);
-      let isSourceRealm =
-        resolvedDir === realpathSync(SOURCE_REALM_FIXTURE_DIR);
-      let hash = hashRealmFixture(
-        f.realmDir,
-        isSourceRealm ? { fileFilter: matchesSourceRealmGlob } : undefined,
-      );
-      return `${f.realmPath}:${hash}`;
-    });
-  let combinedFixtureHash = hashString(fixtureEntries.join('||'));
+  let sourceRealmHash = hashRealmFixture(sourceRealmDir, {
+    fileFilter: matchesSourceRealmGlob,
+  });
+  let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
   return hashString(
     stableStringify({
       version: CACHE_VERSION,
       baseRealmHash,
+      sourceRealmHash,
       combinedFixtureHash,
     }),
   );
