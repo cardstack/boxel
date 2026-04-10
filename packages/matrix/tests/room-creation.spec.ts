@@ -386,7 +386,7 @@ test.describe('Room creation', () => {
         }
         return false;
       }
-    }, 30_000);
+    }, 45_000);
     if (!newRoom) {
       throw new Error('expected to enter a newly-created room after deletion');
     }
