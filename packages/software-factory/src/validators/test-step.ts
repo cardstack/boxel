@@ -36,7 +36,6 @@ export interface TestValidationStepConfig {
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
-  targetRealmUrl: string;
   issueId?: string;
   /** Injected for testing — defaults to executeTestRunFromRealm. */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;

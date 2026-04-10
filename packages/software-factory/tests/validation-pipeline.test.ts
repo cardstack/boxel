@@ -207,7 +207,6 @@ module('ValidationPipeline', function () {
       realmServerUrl: 'https://example.test/',
       hostAppUrl: 'https://example.test/',
       testResultsModuleUrl: 'https://example.test/test-results',
-      targetRealmUrl: 'https://example.test/realm/',
       // Inject a fetchFilenames that returns no test files so the test
       // step returns "nothing to validate" without hitting a real realm
       fetchFilenames: async () => ({ filenames: [] }),
