@@ -64,6 +64,7 @@ import {
   BigIntegerField,
   getQueryableValue,
   EthereumAddressField,
+  RichMarkdownField,
   getFields,
 } from '../../helpers/base-realm';
 
@@ -7697,6 +7698,171 @@ module('Integration | serialization', function (hooks) {
           getQueryableValue(EthereumAddressField, undefined),
           undefined,
         );
+      });
+    });
+
+    module('string-to-content serializer', function () {
+      test('can deserialize a composite field from a plain string (migration path)', async function (assert) {
+        class Post extends CardDef {
+          @field cardTitle = contains(StringField);
+          @field body = contains(RichMarkdownField);
+        }
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-cards.gts': { Post },
+          },
+        });
+
+        // Old MarkdownField format: body is a plain string
+        let resource = {
+          attributes: {
+            cardTitle: 'Migration Test',
+            body: '# Hello World\n\nSome **bold** text.',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Post',
+            },
+          },
+        };
+        let post = await createFromSerialized<typeof Post>(
+          resource,
+          { data: resource },
+          undefined,
+        );
+
+        assert.strictEqual(
+          post.body.content,
+          '# Hello World\n\nSome **bold** text.',
+          'content is correctly deserialized from plain string',
+        );
+      });
+
+      test('can deserialize a composite field from an object with content property (normal path)', async function (assert) {
+        class Post extends CardDef {
+          @field cardTitle = contains(StringField);
+          @field body = contains(RichMarkdownField);
+        }
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-cards.gts': { Post },
+          },
+        });
+
+        // New RichMarkdownField format: body is an object with content
+        let resource = {
+          attributes: {
+            cardTitle: 'Normal Test',
+            body: {
+              content: '# Hello World\n\nSome **bold** text.',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Post',
+            },
+          },
+        };
+        let post = await createFromSerialized<typeof Post>(
+          resource,
+          { data: resource },
+          undefined,
+        );
+
+        assert.strictEqual(
+          post.body.content,
+          '# Hello World\n\nSome **bold** text.',
+          'content is correctly deserialized from object',
+        );
+      });
+
+      test('can deserialize null value for a field with string-to-content serializer', async function (assert) {
+        class Post extends CardDef {
+          @field cardTitle = contains(StringField);
+          @field body = contains(RichMarkdownField);
+        }
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-cards.gts': { Post },
+          },
+        });
+
+        let resource = {
+          attributes: {
+            cardTitle: 'Null Test',
+            body: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Post',
+            },
+          },
+        };
+        let post = await createFromSerialized<typeof Post>(
+          resource,
+          { data: resource },
+          undefined,
+        );
+
+        assert.strictEqual(
+          post.body.content,
+          undefined,
+          'content is undefined when body is null',
+        );
+      });
+
+      test('composite field with [deserialize] override throws an error', async function (assert) {
+        let deserializeSymbol = Symbol.for('cardstack-deserialize');
+
+        class BadField extends FieldDef {
+          @field content = contains(StringField);
+          static async [deserializeSymbol]() {
+            return {};
+          }
+        }
+        class Post extends CardDef {
+          @field cardTitle = contains(StringField);
+          @field body = contains(BadField);
+        }
+        await setupIntegrationTestRealm({
+          mockMatrixUtils,
+          contents: {
+            'test-cards.gts': { BadField, Post },
+          },
+        });
+
+        let resource = {
+          attributes: {
+            cardTitle: 'Lockdown Test',
+            body: { content: 'hello' },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Post',
+            },
+          },
+        };
+
+        try {
+          await createFromSerialized<typeof Post>(
+            resource,
+            { data: resource },
+            undefined,
+          );
+          assert.ok(false, 'should have thrown an error');
+        } catch (e: any) {
+          assert.ok(
+            e.message.includes('overrides [deserialize] directly'),
+            `error message is correct: ${e.message}`,
+          );
+        }
       });
     });
   });

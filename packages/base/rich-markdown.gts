@@ -1,5 +1,6 @@
 import {
   extractCardReferenceUrls,
+  fieldSerializer,
   relativeTo,
 } from '@cardstack/runtime-common';
 
@@ -35,6 +36,7 @@ import MarkdownTemplate from './default-templates/markdown';
  */
 export class RichMarkdownField extends FieldDef {
   static displayName = 'Rich Markdown';
+  static [fieldSerializer] = 'string-to-content' as const;
 
   /** The raw markdown text. Uses MarkdownField for textarea edit UI. */
   @field content = contains(MarkdownField);

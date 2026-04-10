@@ -22,12 +22,15 @@ import { Author } from './author';
 import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
 import { User } from './user';
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='embedded-blog-post'>
-      <div class='thumbnail' style={{setBackgroundImage @model.cardThumbnailURL}} />
+      <div
+        class='thumbnail'
+        style={{setBackgroundImage @model.cardThumbnailURL}}
+      />
       {{#if @model.categories.length}}
         <div class='categories'>
           {{#each @model.categories as |category|}}
@@ -129,7 +132,10 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
 class FittedTemplate extends Component<typeof BlogPost> {
   <template>
     <article class='fitted-blog-post'>
-      <div class='thumbnail' style={{setBackgroundImage @model.cardThumbnailURL}} />
+      <div
+        class='thumbnail'
+        style={{setBackgroundImage @model.cardThumbnailURL}}
+      />
       <div class='categories'>
         {{#each @model.categories as |category|}}
           <div class='category' style={{categoryStyle category}}>

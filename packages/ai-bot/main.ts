@@ -40,9 +40,13 @@ import {
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
-import { saveUsageCost } from '@cardstack/billing/ai-billing';
+import {
+  spendUsageCost,
+  fetchGenerationCostWithBackoff,
+} from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
+import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireRoomLock, releaseRoomLock } from './lib/queries';
@@ -86,22 +90,45 @@ class Assistant {
     this.aiBotInstanceId = aiBotInstanceId;
   }
 
-  async trackAiUsageCost(matrixUserId: string, generationId: string) {
+  async trackAiUsageCost(
+    matrixUserId: string,
+    opts: { costInUsd?: number; generationId?: string },
+  ) {
     if (trackAiUsageCostPromises.has(matrixUserId)) {
       return;
     }
-    // intentionally do not await saveUsageCost promise - it has a backoff mechanism to retry if the cost is not immediately available so we don't want to block the main thread
-    trackAiUsageCostPromises.set(
-      matrixUserId,
-      saveUsageCost(
-        this.pgAdapter,
-        matrixUserId,
-        generationId,
-        process.env.OPENROUTER_API_KEY!,
-      ).finally(() => {
-        trackAiUsageCostPromises.delete(matrixUserId);
-      }),
-    );
+    const promise = (async () => {
+      let { costInUsd, generationId } = opts;
+      if (
+        typeof costInUsd === 'number' &&
+        Number.isFinite(costInUsd) &&
+        costInUsd > 0
+      ) {
+        await spendUsageCost(this.pgAdapter, matrixUserId, costInUsd);
+      } else if (generationId) {
+        log.info(
+          `No inline cost for user ${matrixUserId}, falling back to generation cost API (generationId: ${generationId})`,
+        );
+        const fetchedCost = await fetchGenerationCostWithBackoff(
+          generationId,
+          process.env.OPENROUTER_API_KEY!,
+        );
+        if (fetchedCost !== null) {
+          await spendUsageCost(this.pgAdapter, matrixUserId, fetchedCost);
+        } else {
+          const message = `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`;
+          log.error(message);
+          Sentry.captureMessage(message, 'error');
+        }
+      } else {
+        log.warn(
+          `No usage cost and no generation ID for user ${matrixUserId}, skipping credit deduction`,
+        );
+      }
+    })().finally(() => {
+      trackAiUsageCostPromises.delete(matrixUserId);
+    });
+    trackAiUsageCostPromises.set(matrixUserId, promise);
   }
 
   getResponse(prompt: PromptParts, senderMatrixUserId?: string) {
@@ -284,16 +311,9 @@ Common issues are:
             event.getType() === 'm.room.message')
         ) {
           activeGeneration.runner.abort();
-          await activeGeneration.responder.finalize({
-            isCanceled: true,
-          });
-          if (activeGeneration.lastGeneratedChunkId) {
-            await assistant.trackAiUsageCost(
-              senderMatrixUserId,
-              activeGeneration.lastGeneratedChunkId,
-            );
-          }
-          activeGenerations.delete(room.roomId);
+          // Finalization, credit tracking, and cleanup are all
+          // handled by the streaming code path's catch/finally
+          // blocks after the APIUserAbortError is thrown.
         }
 
         if (isShuttingDown()) {
@@ -448,6 +468,7 @@ Common issues are:
 
           let chunkHandlingError: string | undefined;
           let generationId: string | undefined;
+          let costInUsd: number | undefined;
           log.info(
             `[${eventId}] Starting generation with model %s`,
             promptParts.model,
@@ -471,6 +492,9 @@ Common issues are:
                 });
               }
               generationId = chunk.id;
+              if (chunk.usage && (chunk.usage as any).cost != null) {
+                costInUsd = (chunk.usage as any).cost;
+              }
               let activeGeneration = activeGenerations.get(room.roomId);
               if (activeGeneration) {
                 activeGeneration.lastGeneratedChunkId = generationId;
@@ -517,17 +541,29 @@ Common issues are:
             );
             log.info(`[${eventId}] Response finalized`);
           } catch (error) {
-            log.error(`[${eventId}] Error during generation or finalization`);
-            log.error(error);
-            if (chunkHandlingError) {
-              await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+            // When the cancel handler aborts the runner,
+            // finalChatCompletion() throws APIUserAbortError.
+            // Finalize the responder with the canceled flag and let
+            // the finally block handle credit tracking.
+            if (error instanceof APIUserAbortError) {
+              log.info(`[${eventId}] Generation was canceled by user`);
+              await responder.finalize({ isCanceled: true });
             } else {
-              await responder.onError(error as OpenAIError);
+              log.error(`[${eventId}] Error during generation or finalization`);
+              log.error(error);
+              if (chunkHandlingError) {
+                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+              } else {
+                await responder.onError(error as OpenAIError);
+              }
             }
           } finally {
-            if (generationId) {
-              assistant.trackAiUsageCost(senderMatrixUserId, generationId);
-            }
+            // Always track cost here — this path has the best data
+            // (both costInUsd from inline chunks and generationId).
+            assistant.trackAiUsageCost(senderMatrixUserId, {
+              costInUsd,
+              generationId,
+            });
             activeGenerations.delete(room.roomId);
           }
 
