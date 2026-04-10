@@ -771,7 +771,6 @@ module(basename(__filename), function () {
               cardTitle: 'Untitled Card',
               firstName: 'Ringo',
               cardInfo: {
-                cardThumbnail: null,
                 theme: null,
               },
             },
