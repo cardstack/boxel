@@ -18,19 +18,19 @@ Success criteria:
 {{content}}
 {{/each}}
 
-# Current Ticket
+# Current Issue
 
-ID: {{ticket.id}}
-Summary: {{ticket.summary}}
-Status: {{ticket.status}}
-Priority: {{ticket.priority}}
+ID: {{issue.id}}
+Summary: {{issue.summary}}
+Status: {{issue.status}}
+Priority: {{issue.priority}}
 
 Description:
-{{ticket.description}}
+{{issue.description}}
 
-{{#if ticket.checklist}}
+{{#if issue.checklist}}
 Checklist:
-{{#each ticket.checklist}}
+{{#each issue.checklist}}
 - [ ] {{.}}
 {{/each}}
 {{/if}}
@@ -54,7 +54,7 @@ You previously invoked the following tools. Use these results to inform your imp
 
 # Instructions
 
-Implement this ticket:
+Implement this issue:
 
 1. Use search_realm and read_file to inspect existing realm state
 2. Use write_file to create or update card definitions (.gts) and/or card instances (.json) in the target realm

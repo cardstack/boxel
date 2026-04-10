@@ -35,7 +35,7 @@ The testing strategy assumes three separate realm roles:
   - `packages/software-factory/realm`
   - publishes shared modules, briefs, templates, and other software-factory inputs
 - target realm
-  - the user-selected realm where the factory writes generated tickets, knowledge articles, and implementation artifacts
+  - the user-selected realm where the factory writes generated issues, knowledge articles, and implementation artifacts
 - fixture realm
   - disposable test data used to verify source-realm publishing and target-realm behavior during development
 
@@ -47,7 +47,7 @@ If the source realm includes output-like examples, they should be clearly labele
 
 The factory requires the agent to produce tests alongside implementation code. This is not optional.
 
-Flow per ticket:
+Flow per issue:
 
 1. agent implements the card or feature in the target realm
 2. agent generates QUnit test files co-located with card definitions (`.test.gts`)
@@ -57,9 +57,9 @@ Flow per ticket:
 6. test results are parsed from the QUnit test output, grouped by module into `TestModuleResult` entries, and written back to the TestRun card's `moduleResults` field. Each TestModuleResult has a `moduleRef` (CodeRefField with `module` = test module URL, `name` = "default") and its own `passedCount`/`failedCount` computeds. TestRun's `passedCount`/`failedCount` are rolled up across all TestModuleResults.
 7. if tests fail, the full test output (errors, stack traces) is available on the TestRun card and fed back to the agent
 8. agent iterates on implementation and/or tests until all tests pass
-9. passing TestRun cards serve as durable verification evidence for the ticket, linked to the Project card
+9. passing TestRun cards serve as durable verification evidence for the issue, linked to the Project card
 
-This loop is the primary quality gate. A ticket cannot be marked done without at least one passing TestRun in the target realm.
+This loop is the primary quality gate. An issue cannot be marked done without at least one passing TestRun in the target realm.
 
 ## Core Principle
 
@@ -153,7 +153,7 @@ We are trying to prove that:
 
 - briefs are normalized correctly
 - project artifacts are created correctly
-- ticket state transitions are correct
+- issue state transitions are correct
 - verification gates are enforced
 - reruns resume instead of duplicating work
 - failure paths are handled predictably
@@ -165,7 +165,7 @@ This is the straightforward part.
 Test the `DarkFactory` cards like normal Boxel artifacts:
 
 - `Project`
-- `Ticket`
+- `Issue`
 - `KnowledgeArticle`
 - `AgentProfile`
 
@@ -224,7 +224,7 @@ Examples:
 - a vague brief defaults to thin-MVP planning
 - a missing target realm gets bootstrapped correctly via `/_create-realm` while reusing the public tracker module URL
 - rerunning bootstrap does not create duplicate cards
-- existing `in_progress` tickets are resumed instead of replaced
+- existing `in_progress` issues are resumed instead of replaced
 
 ## Terminology: "Spec" Disambiguation
 
@@ -250,11 +250,11 @@ The agent produces actions using these actual action types:
 - `update_file` — replace the content of an existing file
 - `create_test` — create a QUnit test file co-located with card definitions (`.test.gts`)
 - `update_test` — update an existing QUnit test file
-- `update_ticket` — update the current ticket with notes or status changes
+- `update_issue` — update the current issue with notes or status changes
 - `create_knowledge` — create a knowledge article
 - `invoke_tool` — run a registered tool (search-realm, realm-read, etc.)
 - `request_clarification` — signal that the agent cannot proceed
-- `done` — signal that all work for this ticket is complete
+- `done` — signal that all work for this issue is complete
 
 Then test the loop as a state machine.
 
@@ -272,9 +272,9 @@ Then test the loop as a state machine.
 
 Assertions should be about workflow behavior:
 
-- the right ticket is chosen
+- the right issue is chosen
 - the right state transitions occur
-- failed verification keeps the ticket open
+- failed verification keeps the issue open
 - successful verification advances the loop
 - clarification paths stop correctly
 - retries and resumes are handled correctly
@@ -292,10 +292,10 @@ Suggested acceptance cases:
 1. Sticky Note bootstrap
    - brief URL points to `software-factory/Wiki/sticky-note`
    - target realm is a scratch or temp realm
-   - result is one project, starter knowledge cards, and starter tickets
+   - result is one project, starter knowledge cards, and starter issues
 
 2. Sticky Note first implementation pass
-   - loop executes the first active ticket
+   - loop executes the first active issue
    - one implementation artifact is created (card definition + card instance)
    - one Catalog Spec card is created in the `Spec/` folder
    - one QUnit test file is created co-located with the card definition (`.test.gts`)
@@ -312,7 +312,7 @@ These tests are slower and more brittle, so keep them few and high-signal.
 Avoid tests that depend on:
 
 - exact phrasing of generated text
-- exact ticket wording
+- exact issue wording
 - exact `agentNotes` wording
 - full open-ended model behavior
 
@@ -398,7 +398,7 @@ These are the highest-value early tests:
    - use a dedicated fixture realm, not the published realm itself, for any mutable test setup
 2. brief normalization handles the sticky-note wiki card
 3. target realm bootstrap creates required surfaces in a temp realm
-4. artifact bootstrap creates one project and one `in_progress` ticket
+4. artifact bootstrap creates one project and one `in_progress` issue
 5. rerunning bootstrap does not duplicate artifacts
 6. fake loop test covers success path
 7. fake loop test covers failed verification path
@@ -406,7 +406,7 @@ These are the highest-value early tests:
 
 ## Ticket Mapping
 
-Testing is part of implementation and should stay attached to the current Linear tickets.
+Testing is part of implementation and should stay attached to the current Linear issues.
 
 The current mapping is:
 
@@ -425,7 +425,7 @@ The current mapping is:
 - ~~`CS-10451`~~ _(cancelled — hard-coded verification policy conflicts with phase-2 issue-driven approach where test execution is an issue type, not an orchestrator-enforced gate)_
   - ~~verification-policy unit tests~~
 - `CS-10450`
-  - execution loop implementation, broken into child tickets:
+  - execution loop implementation, broken into child issues:
     - ~~action dispatcher~~ _(replaced by agent-driven tool calls in CS-10568)_
     - context builder (assemble `AgentContext` from skills, realm state) — CS-10567
     - core loop orchestrator (run → test → iterate cycle) — CS-10568

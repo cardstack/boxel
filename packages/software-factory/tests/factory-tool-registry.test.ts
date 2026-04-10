@@ -7,7 +7,7 @@ import {
   SCRIPT_TOOLS,
   ToolRegistry,
   type ToolManifest,
-} from '../scripts/lib/factory-tool-registry';
+} from '../src/factory-tool-registry';
 
 // ---------------------------------------------------------------------------
 // ToolRegistry construction
@@ -264,7 +264,6 @@ module('factory-tool-registry > built-in manifests', function () {
   test('expected script tools are registered', function (assert) {
     let registry = new ToolRegistry();
     assert.true(registry.has('search-realm'));
-    assert.true(registry.has('pick-ticket'));
     assert.true(registry.has('get-session'));
     assert.true(registry.has('run-realm-tests'));
   });

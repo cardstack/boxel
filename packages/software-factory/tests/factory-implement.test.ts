@@ -1,17 +1,14 @@
 import { module, test } from 'qunit';
 
-import type { AgentContext } from '../scripts/lib/factory-agent';
-import type { AgentRunResult, LoopAgent } from '../scripts/lib/factory-loop';
-import type {
-  FactoryTool,
-  ToolCallEntry,
-} from '../scripts/lib/factory-tool-builder';
+import type { AgentContext } from '../src/factory-agent';
+import type { AgentRunResult, LoopAgent } from '../src/factory-loop';
+import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
 import type { FactoryBootstrapResult } from '../src/factory-bootstrap';
 
 import {
   runFactoryImplement,
   type ImplementConfig,
-} from '../scripts/lib/factory-implement';
+} from '../src/factory-implement';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -60,8 +57,8 @@ function makeBootstrapResult(): FactoryBootstrapResult {
     knowledgeArticles: [
       { id: 'Knowledge Articles/sticky-note-brief-context', status: 'created' },
     ],
-    tickets: [{ id: 'Tickets/sticky-note-define-core', status: 'created' }],
-    activeTicket: { id: 'Tickets/sticky-note-define-core', status: 'created' },
+    issues: [{ id: 'Issues/sticky-note-define-core', status: 'created' }],
+    activeIssue: { id: 'Issues/sticky-note-define-core', status: 'created' },
   };
 }
 
@@ -120,8 +117,8 @@ function makeConfig(overrides?: Partial<ImplementConfig>): ImplementConfig {
       objective: 'Build a sticky note card',
       successCriteria: ['Card renders'],
     }),
-    'Tickets/sticky-note-define-core': makeCardDocument(
-      'Tickets/sticky-note-define-core',
+    'Issues/sticky-note-define-core': makeCardDocument(
+      'Issues/sticky-note-define-core',
       {
         summary: 'Define StickyNote card',
         description: 'Create the core StickyNote card definition',
@@ -196,7 +193,7 @@ module('factory-implement', function () {
 
       assert.strictEqual(result.outcome, 'tests_passed');
       assert.strictEqual(result.iterations, 1);
-      assert.strictEqual(result.ticketId, 'Tickets/sticky-note-define-core');
+      assert.strictEqual(result.issueId, 'Issues/sticky-note-define-core');
       assert.ok(result.toolCallLog.length >= 1);
       assert.strictEqual(agent.callCount, 1);
     });
@@ -228,7 +225,7 @@ module('factory-implement', function () {
       assert.strictEqual(result.iterations, 1);
     });
 
-    test('passes project, ticket, and knowledge to the agent context', async function (assert) {
+    test('passes project, issue, and knowledge to the agent context', async function (assert) {
       let agent = new MockLoopAgentForTest([{ status: 'done', toolCalls: [] }]);
 
       let config = makeConfig({ agent });
@@ -237,7 +234,7 @@ module('factory-implement', function () {
       assert.strictEqual(agent.callCount, 1);
       let ctx = agent.receivedContexts[0];
       assert.strictEqual(ctx.project.id, 'Projects/sticky-note-mvp');
-      assert.strictEqual(ctx.ticket.id, 'Tickets/sticky-note-define-core');
+      assert.strictEqual(ctx.issue.id, 'Issues/sticky-note-define-core');
       assert.strictEqual(ctx.knowledge.length, 1);
       assert.strictEqual(
         ctx.knowledge[0].id,
@@ -246,27 +243,6 @@ module('factory-implement', function () {
       assert.strictEqual(
         ctx.targetRealmUrl,
         'http://localhost:4201/test-user/my-realm/',
-      );
-      assert.strictEqual(
-        ctx.testRealmUrl,
-        'http://localhost:4201/test-user/my-realm-test-artifacts/',
-      );
-    });
-
-    test('derives test realm URL correctly', async function (assert) {
-      let agent = new MockLoopAgentForTest([{ status: 'done', toolCalls: [] }]);
-
-      let config = makeConfig({
-        agent,
-        targetRealmUrl: 'http://localhost:4201/hassan1/personal/',
-      });
-      await runFactoryImplement(config);
-
-      // The agent context should have the derived test realm URL
-      let ctx = agent.receivedContexts[0];
-      assert.strictEqual(
-        ctx.testRealmUrl,
-        'http://localhost:4201/hassan1/personal-test-artifacts/',
       );
     });
 

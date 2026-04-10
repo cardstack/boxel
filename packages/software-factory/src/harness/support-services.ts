@@ -2,6 +2,8 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { logger } from '../logger';
+
 import {
   boxelIconsDir,
   browserPassword,
@@ -11,7 +13,6 @@ import {
   DEFAULT_MATRIX_SERVER_USERNAME,
   DEFAULT_PG_HOST,
   DEFAULT_PG_PORT,
-  DEFAULT_PRERENDER_PORT,
   CONFIGURED_HOST_URL,
   findAvailablePort,
   findHostDistPackageDir,
@@ -30,6 +31,7 @@ import {
 } from './shared';
 import { canConnectToPg } from './database';
 
+let log = logger('support-services');
 let preparePgPromise: Promise<void> | undefined;
 
 function hostStartupLooksLikePortContention(logs: string): boolean {
@@ -387,7 +389,7 @@ export async function startHarnessPrerenderServer(options: {
   url: string;
   stop(): Promise<void>;
 }> {
-  let port = options.port ?? DEFAULT_PRERENDER_PORT;
+  let port = options.port ?? 0;
   if (port === 0) {
     port = await findAvailablePort();
   }
@@ -406,15 +408,20 @@ export async function startHarnessPrerenderServer(options: {
         LOG_LEVELS:
           process.env.SOFTWARE_FACTORY_PRERENDER_LOG_LEVELS ??
           process.env.LOG_LEVELS,
+        // Prevent test harness prerender servers from registering with
+        // external prerender managers (e.g. the dev-all manager on :4222).
+        // Port 1 is expected to be closed, so heartbeat fetches fail fast
+        // and are silently caught by the try/catch in prerender-app.ts.
+        PRERENDER_MANAGER_URL: 'http://127.0.0.1:1',
       },
     },
   );
 
   child.stdout?.on('data', (data: Buffer) => {
-    console.log(`prerender: ${data.toString()}`);
+    log.info(`prerender: ${data.toString()}`);
   });
   child.stderr?.on('data', (data: Buffer) => {
-    console.error(`prerender: ${data.toString()}`);
+    log.error(`prerender: ${data.toString()}`);
   });
 
   let exitPromise = new Promise<never>((_, reject) => {
