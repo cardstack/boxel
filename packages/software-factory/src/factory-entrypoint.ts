@@ -1,6 +1,6 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
-import { inferDarkfactoryModuleUrl } from './factory-bootstrap';
+import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {

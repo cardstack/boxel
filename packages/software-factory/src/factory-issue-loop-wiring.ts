@@ -32,7 +32,7 @@ import {
   type RealmTokens,
 } from './boxel';
 import { ContextBuilder } from './factory-context-builder';
-import { inferDarkfactoryModuleUrl } from './factory-bootstrap';
+import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { DefaultSkillResolver, SkillLoader } from './factory-skill-loader';
 import {
   buildFactoryTools,

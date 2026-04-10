@@ -10,6 +10,15 @@
 import type { FactoryBrief } from './factory-brief';
 
 import { logger } from './logger';
+
+/**
+ * Infer the darkfactory module URL from a target realm URL.
+ * Uses the realm's origin to construct the URL.
+ */
+export function inferDarkfactoryModuleUrl(targetRealmUrl: string): string {
+  let parsed = new URL(targetRealmUrl);
+  return new URL('software-factory/darkfactory', parsed.origin + '/').href;
+}
 import {
   readFile,
   writeFile,
