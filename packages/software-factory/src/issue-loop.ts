@@ -91,7 +91,12 @@ export interface IssueLoopConfig {
   contextBuilder: IssueContextBuilderLike;
   tools: FactoryTool[];
   issueStore: IssueStore;
-  validator: Validator;
+  /**
+   * Factory that creates a fresh Validator for each issue.
+   * Receives the issue ID so the validator can scope artifacts (e.g. TestRun
+   * slugs) to the specific issue being validated.
+   */
+  createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
   briefUrl?: string;
   /** Maximum inner-loop iterations per issue. Default: 5. */
@@ -199,7 +204,7 @@ export async function runIssueLoop(
     contextBuilder,
     tools,
     issueStore,
-    validator,
+    createValidator,
     targetRealmUrl,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
@@ -253,6 +258,10 @@ export async function runIssueLoop(
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
     );
+
+    // Create a fresh validator scoped to this issue so that artifacts
+    // (e.g. TestRun cards) are named per-issue rather than shared.
+    let validator = createValidator(issue.id);
 
     // -----------------------------------------------------------------------
     // Inner loop: iterate on a single issue with validation

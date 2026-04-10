@@ -271,7 +271,7 @@ async function scenarioSingleIssue(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([makePassingValidation()]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -328,10 +328,7 @@ async function scenarioDependencyCascade(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([
-      makePassingValidation(),
-      makePassingValidation(),
-    ]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -402,11 +399,7 @@ async function scenarioPriorityOrdering(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([
-      makePassingValidation(),
-      makePassingValidation(),
-      makePassingValidation(),
-    ]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -461,7 +454,7 @@ async function scenarioMaxIterations(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator(validations),
+    createValidator: () => new MockValidator(validations),
     targetRealmUrl: 'https://example.test/target/',
     maxIterationsPerIssue: 3,
   });
@@ -507,7 +500,7 @@ async function scenarioBlockedIssue(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([makePassingValidation()]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -535,7 +528,7 @@ async function scenarioEmptyProject(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new NoOpValidator(),
+    createValidator: () => new NoOpValidator(),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -572,21 +565,23 @@ async function scenarioValidationPipeline(): Promise<void> {
     store,
   );
 
-  // Use a real ValidationPipeline with all NoOp steps (no server needed)
-  let pipeline = new ValidationPipeline([
-    new NoOpStepRunner('parse'),
-    new NoOpStepRunner('lint'),
-    new NoOpStepRunner('evaluate'),
-    new NoOpStepRunner('instantiate'),
-    new NoOpStepRunner('test'),
-  ]);
+  // Use a real ValidationPipeline with all NoOp steps (no server needed).
+  // The factory creates a fresh pipeline per issue, as in production.
+  let createPipeline = () =>
+    new ValidationPipeline([
+      new NoOpStepRunner('parse'),
+      new NoOpStepRunner('lint'),
+      new NoOpStepRunner('evaluate'),
+      new NoOpStepRunner('instantiate'),
+      new NoOpStepRunner('test'),
+    ]);
 
   let result = await runIssueLoop({
     agent,
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: pipeline,
+    createValidator: createPipeline,
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -604,8 +599,9 @@ async function scenarioValidationPipeline(): Promise<void> {
 
   // Verify formatForContext works
   let lastValidation = result.issueResults[0]?.lastValidation;
+  let pipelineForFormat = createPipeline();
   let formatted = lastValidation
-    ? pipeline.formatForContext(lastValidation)
+    ? pipelineForFormat.formatForContext(lastValidation)
     : '';
   check(
     'formatForContext reports all passed',
