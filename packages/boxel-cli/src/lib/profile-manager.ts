@@ -358,17 +358,22 @@ export class ProfileManager {
     init?: RequestInit,
   ): Promise<Response> {
     let token = await this.getOrRefreshServerToken();
-    let headers = new Headers(init?.headers);
-    if (!headers.has('Authorization')) {
-      headers.set('Authorization', token);
+    let baseHeaders =
+      input instanceof Request ? new Headers(input.headers) : new Headers();
+    let initHeaders = new Headers(init?.headers);
+    for (let [key, value] of initHeaders) {
+      baseHeaders.set(key, value);
+    }
+    if (!baseHeaders.has('Authorization')) {
+      baseHeaders.set('Authorization', token);
     }
 
-    let response = await fetch(input, { ...init, headers });
+    let response = await fetch(input, { ...init, headers: baseHeaders });
 
     if (response.status === 401) {
       token = await this.refreshServerToken();
-      headers.set('Authorization', token);
-      response = await fetch(input, { ...init, headers });
+      baseHeaders.set('Authorization', token);
+      response = await fetch(input, { ...init, headers: baseHeaders });
     }
 
     return response;

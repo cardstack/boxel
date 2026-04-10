@@ -9,4 +9,4 @@ trap '"${REALM_SERVER_SCRIPTS}/stop-test-pg.sh" >/dev/null 2>&1 || true' EXIT IN
 
 NODE_NO_WARNINGS=1 \
 PGPORT=55436 \
-  vitest run tests/integration/**
+  vitest run --pool=forks --poolOptions.forks.singleFork tests/integration/**

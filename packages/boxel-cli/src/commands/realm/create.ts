@@ -59,13 +59,13 @@ export async function createRealm(
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
 
-  let attributes: Record<string, string> = {
+  let attributes: Record<string, string | undefined> = {
     endpoint: realmName,
     name: displayName,
+    backgroundURL: options.background ?? getRandomBackgroundURL(),
+    iconURL:
+      options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName),
   };
-  attributes.backgroundURL = options.background ?? getRandomBackgroundURL();
-  attributes.iconURL =
-    options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName) ?? '';
 
   let response: Response;
   try {

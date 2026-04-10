@@ -13,7 +13,7 @@ interface MatrixLoginResponse {
   user_id: string;
 }
 
-const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 export async function matrixLogin(
   matrixUrl: string,
@@ -151,7 +151,7 @@ export async function addRealmToMatrixAccountData(
 
   if (!existingRealms.includes(realmUrl)) {
     existingRealms.push(realmUrl);
-    await fetch(accountDataUrl, {
+    let putResponse = await fetch(accountDataUrl, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -159,5 +159,11 @@ export async function addRealmToMatrixAccountData(
       },
       body: JSON.stringify({ realms: existingRealms }),
     });
+    if (!putResponse.ok) {
+      let text = await putResponse.text();
+      throw new Error(
+        `Failed to update Matrix account data: ${putResponse.status} ${text}`,
+      );
+    }
   }
 }

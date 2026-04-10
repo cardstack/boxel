@@ -119,7 +119,7 @@ jobs:
   test-web-assets:
     name: Build test web assets
     needs: change-check
-    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
+    if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.boxel-cli == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
     concurrency:
       group: ci-test-web-assets-${{ github.head_ref || github.run_id }}
@@ -812,6 +812,8 @@ jobs:
         working-directory: packages/boxel-cli
       - name: Start test services
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
+      - name: Wait for test services
+        run: npx wait-on http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson http://localhost:8008 --timeout 300000
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
