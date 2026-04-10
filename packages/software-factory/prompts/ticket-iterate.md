@@ -2,13 +2,13 @@
 
 {{project.objective}}
 
-# Current Ticket
+# Current Issue
 
-ID: {{ticket.id}}
-Summary: {{ticket.summary}}
+ID: {{issue.id}}
+Summary: {{issue.summary}}
 
 Description:
-{{ticket.description}}
+{{issue.description}}
 
 # Previous Attempt (iteration {{iteration}})
 

@@ -1,13 +1,13 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
-import type { ProjectCard, ResolvedSkill, TicketCard } from './factory-agent';
+import type { IssueData, ProjectData, ResolvedSkill } from './factory-agent';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const PACKAGE_ROOT = resolve(__dirname, '../..');
+const PACKAGE_ROOT = resolve(__dirname, '..');
 const MONOREPO_ROOT = resolve(PACKAGE_ROOT, '../..');
 const DEFAULT_SKILLS_DIR = join(PACKAGE_ROOT, '.agents', 'skills');
 
@@ -42,7 +42,7 @@ const SKILL_PRIORITY: readonly string[] = [
 // Keyword matchers for skill resolution
 // ---------------------------------------------------------------------------
 
-/** Keywords in ticket content that indicate .gts component work. */
+/** Keywords in issue content that indicate .gts component work. */
 const GTS_KEYWORDS = [
   '.gts',
   'component',
@@ -53,7 +53,7 @@ const GTS_KEYWORDS = [
   'FieldDef',
 ];
 
-/** Keywords that indicate factory workflow / delivery tickets. */
+/** Keywords that indicate factory workflow / delivery issues. */
 const FACTORY_WORKFLOW_KEYWORDS = [
   'factory',
   'delivery',
@@ -132,17 +132,17 @@ interface RawSkillData {
 // ---------------------------------------------------------------------------
 
 export interface SkillResolver {
-  resolve(ticket: TicketCard, project: ProjectCard): string[];
+  resolve(issue: IssueData, project: ProjectData): string[];
 }
 
 export class DefaultSkillResolver implements SkillResolver {
   /**
-   * Determine which skills to load based on ticket and project context.
+   * Determine which skills to load based on issue and project context.
    *
    * Resolution rules (from the phase-1 plan):
    * 1. boxel-development + boxel-file-structure — always loaded (common case)
-   * 2. ember-best-practices — when ticket involves .gts component code
-   * 3. software-factory-operations — for factory delivery workflow tickets
+   * 2. ember-best-practices — when issue involves .gts component code
+   * 3. software-factory-operations — for factory delivery workflow issues
    * 4. KnowledgeArticle tags can specify additional skills
    *
    * CLI skills (boxel-sync, boxel-track, boxel-watch, boxel-restore,
@@ -150,21 +150,21 @@ export class DefaultSkillResolver implements SkillResolver {
    * tool registry does not include boxel-cli tools (deferred to CS-10520).
    * These skills reference commands the agent cannot invoke.
    */
-  resolve(ticket: TicketCard, project: ProjectCard): string[] {
-    let ticketText = extractTicketText(ticket);
+  resolve(issue: IssueData, project: ProjectData): string[] {
+    let issueText = extractIssueText(issue);
     let skills: string[] = ['boxel-development', 'boxel-file-structure'];
 
-    if (matchesAnyKeyword(ticketText, GTS_KEYWORDS)) {
+    if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {
       skills.push('ember-best-practices');
     }
 
-    if (matchesAnyKeyword(ticketText, FACTORY_WORKFLOW_KEYWORDS)) {
+    if (matchesAnyKeyword(issueText, FACTORY_WORKFLOW_KEYWORDS)) {
       skills.push('software-factory-operations');
     }
 
     // Check for additional skills from knowledge articles on the project
-    // and from related knowledge on the ticket itself.
-    let additionalSkills = extractKnowledgeSkillTags(project, ticket);
+    // and from related knowledge on the issue itself.
+    let additionalSkills = extractKnowledgeSkillTags(project, issue);
     for (let skillName of additionalSkills) {
       if (!skills.includes(skillName)) {
         skills.push(skillName);
@@ -182,8 +182,8 @@ export class DefaultSkillResolver implements SkillResolver {
 // ---------------------------------------------------------------------------
 
 export interface SkillLoaderInterface {
-  load(skillName: string, ticket?: TicketCard): Promise<ResolvedSkill>;
-  loadAll(skillNames: string[], ticket?: TicketCard): Promise<ResolvedSkill[]>;
+  load(skillName: string, issue?: IssueData): Promise<ResolvedSkill>;
+  loadAll(skillNames: string[], issue?: IssueData): Promise<ResolvedSkill[]>;
 }
 
 export class SkillLoader implements SkillLoaderInterface {
@@ -206,13 +206,13 @@ export class SkillLoader implements SkillLoaderInterface {
   /**
    * Load a single skill by name.
    * Searches the primary skills directory first, then each fallback directory.
-   * When a ticket is provided, `boxel-development` references are filtered to
-   * only include ticket-relevant files (always applied, not just with a budget).
+   * When an issue is provided, `boxel-development` references are filtered to
+   * only include issue-relevant files (always applied, not just with a budget).
    * Results are cached for the duration of the factory run.
    */
-  async load(skillName: string, ticket?: TicketCard): Promise<ResolvedSkill> {
+  async load(skillName: string, issue?: IssueData): Promise<ResolvedSkill> {
     let raw = await this.loadRaw(skillName);
-    return toResolvedSkill(raw, ticket);
+    return toResolvedSkill(raw, issue);
   }
 
   /**
@@ -221,17 +221,17 @@ export class SkillLoader implements SkillLoaderInterface {
    */
   async loadAll(
     skillNames: string[],
-    ticket?: TicketCard,
+    issue?: IssueData,
   ): Promise<ResolvedSkill[]> {
     let results: ResolvedSkill[] = [];
 
     for (let name of skillNames) {
       try {
-        let skill = await this.load(name, ticket);
+        let skill = await this.load(name, issue);
         results.push(skill);
       } catch (error) {
         console.warn(
-          `[SkillLoader] Skipping unavailable skill "${name}": ${
+          `Skipping unavailable skill "${name}": ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
@@ -347,7 +347,7 @@ export class SkillLoader implements SkillLoaderInterface {
  * fit within the remaining budget.
  *
  * Reference filtering for `boxel-development` is handled at load time by the
- * SkillLoader when a ticket is provided — it is always applied regardless of
+ * SkillLoader when an issue is provided — it is always applied regardless of
  * whether a budget is set.
  */
 export function enforceSkillBudget(
@@ -379,7 +379,7 @@ export function enforceSkillBudget(
 
     if (usedTokens + skillTokens > maxTokens) {
       console.warn(
-        `[SkillBudget] Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
+        `Dropping skill "${skill.name}" (${skillTokens} tokens) — ` +
           `would exceed budget of ${maxTokens} (used: ${usedTokens})`,
       );
       continue;
@@ -411,18 +411,15 @@ export function estimateTokens(skill: ResolvedSkill): number {
 
 /**
  * Convert RawSkillData (with named references) to the public ResolvedSkill
- * interface. For `boxel-development`, filters references by ticket relevance
+ * interface. For `boxel-development`, filters references by issue relevance
  * using actual filenames — this happens on every load, not just when a
  * budget is enforced.
  */
-function toResolvedSkill(
-  raw: RawSkillData,
-  ticket?: TicketCard,
-): ResolvedSkill {
+function toResolvedSkill(raw: RawSkillData, issue?: IssueData): ResolvedSkill {
   let refs = raw.references;
 
-  if (refs && raw.name === 'boxel-development' && ticket) {
-    refs = filterBoxelDevelopmentRefs(refs, ticket);
+  if (refs && raw.name === 'boxel-development' && issue) {
+    refs = filterBoxelDevelopmentRefs(refs, issue);
   }
 
   let refContents =
@@ -437,14 +434,14 @@ function toResolvedSkill(
 
 /**
  * Filter boxel-development references to include only the "always load"
- * references plus those whose keywords match the ticket text.
+ * references plus those whose keywords match the issue text.
  * Uses actual filenames from disk — no index-based reconstruction.
  */
 function filterBoxelDevelopmentRefs(
   refs: NamedReference[],
-  ticket: TicketCard,
+  issue: IssueData,
 ): NamedReference[] {
-  let ticketText = extractTicketText(ticket);
+  let issueText = extractIssueText(issue);
 
   return refs.filter((ref) => {
     // Always-load refs are always included
@@ -456,14 +453,14 @@ function filterBoxelDevelopmentRefs(
       return true;
     }
 
-    // Check if ticket text matches any keywords for this reference
+    // Check if issue text matches any keywords for this reference
     let keywords = REFERENCE_KEYWORD_MAP[ref.fileName];
-    if (keywords && matchesAnyKeyword(ticketText, keywords)) {
+    if (keywords && matchesAnyKeyword(issueText, keywords)) {
       return true;
     }
 
     // References not in the keyword map (e.g., dev-file-editing.md) are only
-    // loaded when no ticket context is available (handled by the caller).
+    // loaded when no issue context is available (handled by the caller).
     return false;
   });
 }
@@ -473,12 +470,12 @@ function filterBoxelDevelopmentRefs(
 // ---------------------------------------------------------------------------
 
 /**
- * Extract searchable text from a ticket card.
+ * Extract searchable text from an issue card.
  * Concatenates known text fields (id, title, description, tags, labels, etc.)
  * into a single lowercase string for keyword matching.
  */
-export function extractTicketText(ticket: TicketCard): string {
-  let parts: string[] = [ticket.id];
+export function extractIssueText(issue: IssueData): string {
+  let parts: string[] = [issue.id];
 
   for (let key of [
     'title',
@@ -491,7 +488,7 @@ export function extractTicketText(ticket: TicketCard): string {
     'scope',
     'notes',
   ]) {
-    let value = ticket[key];
+    let value = issue[key];
     if (typeof value === 'string') {
       parts.push(value);
     } else if (Array.isArray(value)) {
@@ -517,17 +514,17 @@ export function extractTicketText(ticket: TicketCard): string {
 /**
  * Extract additional skill names from knowledge articles.
  * Checks both the project's `knowledgeBase` field (Project card schema) and
- * the ticket's `relatedKnowledge` field (Ticket card schema), as well as the
+ * the issue's `relatedKnowledge` field (Issue card schema), as well as the
  * generic `knowledge` field for forward compatibility.
  */
 function extractKnowledgeSkillTags(
-  project: ProjectCard,
-  ticket?: TicketCard,
+  project: ProjectData,
+  issue?: IssueData,
 ): string[] {
   let articles: unknown[] = [];
 
   // Collect knowledge articles from all known field names
-  for (let source of [project, ticket]) {
+  for (let source of [project, issue]) {
     if (!source) {
       continue;
     }

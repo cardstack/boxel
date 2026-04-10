@@ -1,3 +1,6 @@
+// This should be first
+import '../src/setup-logger';
+
 import {
   spawnSync,
   type SpawnSyncOptionsWithStringEncoding,
@@ -12,8 +15,8 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
-import { getActiveProfile, parseArgs } from './lib/boxel';
-import { ensureTrailingSlash } from './lib/realm-operations';
+import { getActiveProfile, parseArgs } from '../src/boxel';
+import { ensureTrailingSlash } from '../src/realm-operations';
 
 type CommandOptions = {
   cwd?: string;
@@ -310,7 +313,7 @@ let summary = {
   failures,
 };
 
-console.log(JSON.stringify(summary, null, 2));
+process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
 if (testRun.status !== 0) {
   process.exit(testRun.status ?? 1);

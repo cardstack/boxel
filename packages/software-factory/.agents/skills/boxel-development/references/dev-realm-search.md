@@ -40,9 +40,9 @@ Use `eq` to match exact field values. You must specify `on` to scope the field t
   "filter": {
     "on": {
       "module": "http://localhost:4201/software-factory/darkfactory",
-      "name": "Ticket"
+      "name": "Issue"
     },
-    "eq": { "ticketStatus": "in_progress" }
+    "eq": { "status": "in_progress" }
   }
 }
 ```
@@ -226,21 +226,21 @@ You can only filter/sort on fields that exist on the card type. To find which fi
   "commandInput": {
     "codeRef": {
       "module": "http://localhost:4201/software-factory/darkfactory",
-      "name": "Ticket"
+      "name": "Issue"
     }
   }
 }
 ```
 
-2. The result contains `attributes.properties` listing all searchable fields (e.g., `ticketStatus`, `summary`, `priority`).
+2. The result contains `attributes.properties` listing all searchable fields (e.g., `status`, `summary`, `priority`).
 
 3. Use those field names in your `eq`, `contains`, `range`, or `sort` with the matching `on` type.
 
-The card tools (`update_project`, `update_ticket`, `create_knowledge`, `create_catalog_spec`) also have dynamic JSON schemas in their parameters that list available fields.
+The card tools (`update_project`, `update_issue`, `create_knowledge`, `create_catalog_spec`) also have dynamic JSON schemas in their parameters that list available fields.
 
 ### Inheritance
 
-Filtering on a base card type's fields matches all cards that inherit from it. For example, filtering on `CardDef` fields like `cardTitle` or `cardDescription` finds cards of any type. Filtering on a `Ticket` field like `ticketStatus` finds only Ticket cards (and any subtypes of Ticket).
+Filtering on a base card type's fields matches all cards that inherit from it. For example, filtering on `CardDef` fields like `cardTitle` or `cardDescription` finds cards of any type. Filtering on an `Issue` field like `status` finds only Issue cards (and any subtypes of Issue).
 
 ### Searching Through Relationship Fields
 

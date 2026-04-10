@@ -11,7 +11,7 @@ import {
   runFactoryImplement,
   type ImplementConfig,
   type ImplementResult,
-} from '../scripts/lib/factory-implement';
+} from './factory-implement';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
@@ -47,8 +47,8 @@ export interface FactoryEntrypointBriefSummary extends FactoryBrief {
 export interface FactoryEntrypointBootstrapSummary {
   projectId: string;
   knowledgeArticleIds: string[];
-  ticketIds: string[];
-  activeTicket: {
+  issueIds: string[];
+  activeIssue: {
     id: string;
     status: string;
   };
@@ -57,7 +57,7 @@ export interface FactoryEntrypointBootstrapSummary {
 export interface FactoryEntrypointImplementSummary {
   outcome: ImplementResult['outcome'];
   iterations: number;
-  ticketId: string;
+  issueId: string;
   message?: string;
   toolCallCount: number;
 }
@@ -262,7 +262,7 @@ export async function runFactoryEntrypoint(
     summary.implement = {
       outcome: implementResult.outcome,
       iterations: implementResult.iterations,
-      ticketId: implementResult.ticketId,
+      issueId: implementResult.issueId,
       message: implementResult.message,
       toolCallCount: implementResult.toolCallLog.length,
     };
@@ -273,7 +273,7 @@ export async function runFactoryEntrypoint(
     summary.result = {
       status: succeeded ? 'completed' : 'failed',
       nextStep: succeeded
-        ? 'advance-to-next-ticket'
+        ? 'advance-to-next-issue'
         : `implement-${implementResult.outcome}`,
     };
   }
@@ -322,7 +322,7 @@ export function buildFactoryEntrypointSummary(
     {
       name: 'bootstrapped-project-artifacts',
       status: 'ok',
-      detail: `project=${artifacts.project.status} tickets=${artifacts.tickets.map((t) => t.status).join(',')}`,
+      detail: `project=${artifacts.project.status} issues=${artifacts.issues.map((t) => t.status).join(',')}`,
     },
   ];
 
@@ -340,10 +340,10 @@ export function buildFactoryEntrypointSummary(
     bootstrap: {
       projectId: artifacts.project.id,
       knowledgeArticleIds: artifacts.knowledgeArticles.map((ka) => ka.id),
-      ticketIds: artifacts.tickets.map((t) => t.id),
-      activeTicket: {
-        id: artifacts.activeTicket.id,
-        status: artifacts.activeTicket.status,
+      issueIds: artifacts.issues.map((t) => t.id),
+      activeIssue: {
+        id: artifacts.activeIssue.id,
+        status: artifacts.activeIssue.status,
       },
     },
     actions,
@@ -352,7 +352,7 @@ export function buildFactoryEntrypointSummary(
       nextStep:
         options.mode === 'bootstrap'
           ? 'bootstrap-target-realm'
-          : 'bootstrap-and-select-active-ticket',
+          : 'bootstrap-and-select-active-issue',
     },
   };
 }

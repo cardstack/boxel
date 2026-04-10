@@ -80,7 +80,6 @@ export default class HostModeStack extends Component<Signature> {
         /* .inner will handle overflow in host mode stack */
         .host-mode-stack :deep(.host-mode-card, .card) {
           overflow: hidden;
-          min-height: 80cqh;
         }
       }
 

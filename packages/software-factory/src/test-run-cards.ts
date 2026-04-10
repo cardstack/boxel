@@ -26,14 +26,14 @@ export async function createTestRun(
     options.testResultsModuleUrl,
     {
       sequenceNumber: seq,
-      ticketURL: options.ticketURL,
+      issueURL: options.issueURL,
       moduleRef: options.moduleRef,
       projectCardUrl: options.projectCardUrl,
     },
   );
 
   let result = await writeFile(
-    options.testRealmUrl,
+    options.targetRealmUrl,
     `${testRunId}.json`,
     JSON.stringify(document, null, 2),
     { authorization: options.authorization, fetch: options.fetch },
@@ -63,7 +63,11 @@ export async function completeTestRun(
   // may be stale causing the first fetch to fail with "fetch failed".
   let readResult: Awaited<ReturnType<typeof readFile>> | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
-    readResult = await readFile(options.testRealmUrl, testRunId, fetchOptions);
+    readResult = await readFile(
+      options.targetRealmUrl,
+      testRunId,
+      fetchOptions,
+    );
     if (readResult.ok && readResult.document) {
       break;
     }
@@ -106,7 +110,7 @@ export async function completeTestRun(
   }
 
   let writeResult = await writeFile(
-    options.testRealmUrl,
+    options.targetRealmUrl,
     `${testRunId}.json`,
     JSON.stringify(readResult.document, null, 2),
     fetchOptions,
@@ -153,13 +157,13 @@ export function buildTestRunCardDocument(
   let relationships:
     | Record<string, { links: { self: string | null } }>
     | undefined;
-  if (options?.projectCardUrl || options?.ticketURL) {
+  if (options?.projectCardUrl || options?.issueURL) {
     relationships = {};
     if (options?.projectCardUrl) {
       relationships.project = { links: { self: options.projectCardUrl } };
     }
-    if (options?.ticketURL) {
-      relationships.ticket = { links: { self: options.ticketURL } };
+    if (options?.issueURL) {
+      relationships.issue = { links: { self: options.issueURL } };
     }
   }
 

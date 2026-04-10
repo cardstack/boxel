@@ -192,6 +192,7 @@
   --boxel-dark: #000;
   --boxel-dark-hover: rgba(0, 0, 0, 0.1);
   --boxel-darker-hover: rgba(0, 0, 0, 0.5);
+  --boxel-light-hover-35: rgba(255, 255, 255, 0.35);
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
