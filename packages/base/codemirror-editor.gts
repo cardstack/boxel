@@ -216,7 +216,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   }
 
   private _focusSearchInput = () => {
-    let input = document.querySelector(
+    // Scope query to this editor instance's parent to avoid focusing
+    // the wrong input when multiple editors exist on the page
+    let container = this.editorView?.dom?.parentElement;
+    let input = (container ?? document).querySelector(
       '[data-test-card-search-input]',
     ) as HTMLInputElement;
     input?.focus();
@@ -390,6 +393,9 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
 
     return cleanup;
   });
+
+  /** Prevent mousedown on toolbar/popup buttons from stealing editor focus/selection */
+  _preventFocusLoss = (e: Event) => e.preventDefault();
 
   _wrapBold = () => this._toolbarAction('**');
   _wrapItalic = () => this._toolbarAction('*');
@@ -805,31 +811,46 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             class='toolbar-btn {{if this.toolbarFormats.bold "toolbar-btn--active"}}'
             data-test-toolbar-bold
             title='Bold'
-            {{on 'mousedown' this._wrapBold}}
+            aria-label='Bold'
+            aria-pressed='{{this.toolbarFormats.bold}}'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._wrapBold}}
           ><BoldIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
             data-test-toolbar-italic
             title='Italic'
-            {{on 'mousedown' this._wrapItalic}}
+            aria-label='Italic'
+            aria-pressed='{{this.toolbarFormats.italic}}'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._wrapItalic}}
           ><ItalicIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
             data-test-toolbar-strikethrough
             title='Strikethrough'
-            {{on 'mousedown' this._wrapStrikethrough}}
+            aria-label='Strikethrough'
+            aria-pressed='{{this.toolbarFormats.strikethrough}}'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._wrapStrikethrough}}
           ><StrikethroughIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.code "toolbar-btn--active"}}'
             data-test-toolbar-code
             title='Code'
-            {{on 'mousedown' this._wrapCode}}
+            aria-label='Code'
+            aria-pressed='{{this.toolbarFormats.code}}'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._wrapCode}}
           ><CodeIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.link "toolbar-btn--active"}}'
             data-test-toolbar-link
             title='Link'
-            {{on 'mousedown' this._toggleLink}}
+            aria-label='Link'
+            aria-pressed='{{this.toolbarFormats.link}}'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._toggleLink}}
           ><LinkIcon width='16' height='16' /></button>
 
           <span class='toolbar-divider'></span>
@@ -838,19 +859,25 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             class='toolbar-btn'
             data-test-toolbar-h1
             title='Heading 1'
-            {{on 'mousedown' this._insertH1}}
+            aria-label='Heading 1'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._insertH1}}
           ><Heading1Icon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-h2
             title='Heading 2'
-            {{on 'mousedown' this._insertH2}}
+            aria-label='Heading 2'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._insertH2}}
           ><Heading2Icon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-h3
             title='Heading 3'
-            {{on 'mousedown' this._insertH3}}
+            aria-label='Heading 3'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._insertH3}}
           ><Heading3Icon width='16' height='16' /></button>
 
           <span class='toolbar-divider'></span>
@@ -859,19 +886,25 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             class='toolbar-btn'
             data-test-toolbar-bullet-list
             title='Bullet List'
-            {{on 'mousedown' this._toggleBulletList}}
+            aria-label='Bullet List'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._toggleBulletList}}
           ><ListIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-numbered-list
             title='Numbered List'
-            {{on 'mousedown' this._toggleNumberedList}}
+            aria-label='Numbered List'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._toggleNumberedList}}
           ><ListOrderedIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-blockquote
             title='Blockquote'
-            {{on 'mousedown' this._toggleBlockquote}}
+            aria-label='Blockquote'
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._toggleBlockquote}}
           ><BlockquoteIcon width='16' height='16' /></button>
         </div>
       {{/if}}
@@ -906,7 +939,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
                   class='codemirror-card-search-result
                     {{if (eq index this._cardSearchIndex) "selected"}}'
                   data-test-card-search-result
-                  {{on 'mousedown' (fn this._selectCardResult card)}}
+                  {{on 'mousedown' this._preventFocusLoss}}
+                  {{on 'click' (fn this._selectCardResult card)}}
                 >
                   <span class='search-result-title'>{{card.title}}</span>
                   {{#if card.id}}
@@ -934,14 +968,16 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             <button
               class='format-picker-btn'
               data-test-format-inline
-              {{on 'mousedown' (fn this._insertCardWithFormat 'inline')}}
+              {{on 'mousedown' this._preventFocusLoss}}
+              {{on 'click' (fn this._insertCardWithFormat 'inline')}}
             >
               Inline
             </button>
             <button
               class='format-picker-btn format-picker-btn--primary'
               data-test-format-block
-              {{on 'mousedown' (fn this._insertCardWithFormat 'block')}}
+              {{on 'mousedown' this._preventFocusLoss}}
+              {{on 'click' (fn this._insertCardWithFormat 'block')}}
             >
               Block
             </button>
@@ -949,7 +985,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           <button
             class='format-picker-dismiss'
             data-test-format-picker-dismiss
-            {{on 'mousedown' this._dismissFormatPicker}}
+            {{on 'mousedown' this._preventFocusLoss}}
+            {{on 'click' this._dismissFormatPicker}}
           >
             Cancel
           </button>

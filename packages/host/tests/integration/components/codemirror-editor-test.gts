@@ -398,13 +398,8 @@ module('Integration | codemirror-context', function (hooks) {
         selection: { anchor: 6, head: 11 },
       });
 
-      // Simulate Mod-b via command dispatch
-      // We test the formatting by dispatching the same text wrapping
-      let { from, to } = view.state.selection.main;
-      let selected = view.state.sliceDoc(from, to);
-      view.dispatch({
-        changes: { from, to, insert: `**${selected}**` },
-      });
+      // Execute the wrapWith('**') command that Mod-b is bound to
+      cmContext.wrapWith('**')(view);
 
       assert.strictEqual(
         view.state.doc.toString(),
