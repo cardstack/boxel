@@ -811,11 +811,13 @@ jobs:
         run: pnpm test:unit
         working-directory: packages/boxel-cli
       - name: Start test services
-        run: mise run test-services:realm-server | tee -a /tmp/server.log &
-      - name: Wait for test services
-        run: |
-          timeout 300 bash -c 'until curl -sf http://localhost:8008 > /dev/null 2>&1; do sleep 2; done'
-          timeout 300 bash -c 'until curl -sf -H "Accept: application/vnd.api+json" http://localhost:4201/base/_readiness-check > /dev/null 2>&1; do sleep 2; done'
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: mise run test-services:realm-server | tee -a /tmp/server.log &
+          wait-for: 5m
+          wait-on: |
+            http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson
+            http://localhost:8008
       - name: Create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
