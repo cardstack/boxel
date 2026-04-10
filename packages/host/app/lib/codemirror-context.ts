@@ -903,7 +903,10 @@ function wrapWith(marker: string) {
     // Case 2: Markers are adjacent to the selection (live preview mode where
     // markers are hidden — the user selects just the visible text)
     let before = view.state.sliceDoc(Math.max(0, from - len), from);
-    let after = view.state.sliceDoc(to, Math.min(view.state.doc.length, to + len));
+    let after = view.state.sliceDoc(
+      to,
+      Math.min(view.state.doc.length, to + len),
+    );
     if (before === marker && after === marker) {
       view.dispatch({
         changes: { from: from - len, to: to + len, insert: selected },
