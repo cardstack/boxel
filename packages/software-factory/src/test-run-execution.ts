@@ -6,11 +6,7 @@ import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
 
-import {
-  ensureTrailingSlash,
-  fetchRealmFilenames,
-  searchRealm,
-} from './realm-operations';
+import { ensureTrailingSlash, searchRealm } from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseQunitResults } from './test-run-parsing';
 import type {
@@ -148,34 +144,44 @@ async function findResumableTestRun(
 }
 
 /**
- * Get the next sequence number for a given slug by inspecting existing
- * TestRun filenames in the realm. Each slug (issue) gets its own
- * independent sequence starting from 1.
+ * Get the next sequence number for a given slug by searching existing
+ * TestRun cards in the realm and filtering by card ID. Each slug (issue)
+ * gets its own independent sequence starting from 1.
  */
 async function getNextSequenceNumber(
   slug: string,
   options: TestRunRealmOptions,
   minSequenceNumber = 0,
 ): Promise<number> {
-  let result = await fetchRealmFilenames(options.targetRealmUrl, {
-    authorization: options.authorization,
-    fetch: options.fetch,
-  });
+  let result = await searchRealm(
+    options.targetRealmUrl,
+    {
+      filter: {
+        on: { module: options.testResultsModuleUrl, name: 'TestRun' },
+      },
+      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
+    },
+    { authorization: options.authorization, fetch: options.fetch },
+  );
 
-  if (result.error) {
-    log.warn(
-      `Failed to fetch filenames for sequence number — falling back to minSequenceNumber: ${result.error}`,
-    );
+  if (!result?.ok || !result.data) {
     return minSequenceNumber + 1;
   }
 
+  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
   let prefix = `Test Runs/${slug}-`;
   let maxSeq = 0;
-  for (let filename of result.filenames) {
-    if (filename.startsWith(prefix) && filename.endsWith('.json')) {
-      let seqStr = filename.slice(prefix.length, -'.json'.length);
-      let seq = parseInt(seqStr, 10);
-      if (!isNaN(seq) && seq > maxSeq) {
+
+  for (let card of result.data) {
+    let cardId = (card as { id?: string }).id ?? '';
+    let relativePath = cardId.startsWith(targetRealmUrl)
+      ? cardId.slice(targetRealmUrl.length)
+      : cardId;
+    if (relativePath.startsWith(prefix)) {
+      let attrs = (card as { attributes?: { sequenceNumber?: number } })
+        .attributes;
+      let seq = attrs?.sequenceNumber ?? 0;
+      if (seq > maxSeq) {
         maxSeq = seq;
       }
     }
