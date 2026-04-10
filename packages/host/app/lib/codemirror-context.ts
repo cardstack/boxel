@@ -778,9 +778,12 @@ function createDecorationField(
 
 function createCardTargetNotifier(
   onChange: (targets: CardWidgetTarget[]) => void,
-): ViewPlugin<Record<string, never>> {
+): ViewPlugin<{ destroy(): void }> {
   return ViewPlugin.fromClass(
     class {
+      private rafId = 0;
+      private destroyed = false;
+
       constructor(view: EditorView) {
         this.notifyTargets(view);
       }
@@ -795,8 +798,21 @@ function createCardTargetNotifier(
         }
       }
 
+      destroy() {
+        this.destroyed = true;
+        if (this.rafId) {
+          cancelAnimationFrame(this.rafId);
+          this.rafId = 0;
+        }
+      }
+
       notifyTargets(view: EditorView) {
-        requestAnimationFrame(() => {
+        if (this.rafId) {
+          cancelAnimationFrame(this.rafId);
+        }
+        this.rafId = requestAnimationFrame(() => {
+          this.rafId = 0;
+          if (this.destroyed) return;
           let targets: CardWidgetTarget[] = [];
           let editorDom = view.dom;
           let widgetElements = editorDom.querySelectorAll('.cm-card-widget');

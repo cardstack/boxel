@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
+import { isDestroying, isDestroyed } from '@ember/destroyable';
 import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -177,6 +178,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   // ── Card search logic ────────────────────────────────────────────────────
 
   private _handleOpenCardSearch = (_pos: { from: number; to: number }) => {
+    if (isDestroying(this) || isDestroyed(this)) return;
     this._cardSearchMode = true;
     this._cardSearchText = '';
     this._cardSearchIndex = 0;
@@ -327,6 +329,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   // ── Floating toolbar ────────────────────────────────────────────────────
 
   private _handleSelectionChange = (info: SelectionInfo) => {
+    if (isDestroying(this) || isDestroyed(this)) return;
     this._selectionInfo = info;
   };
 
@@ -646,6 +649,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
   }
 
   private _handleTargetChange = (targets: CardWidgetTarget[]) => {
+    if (isDestroying(this) || isDestroyed(this)) return;
     this._pendingTargets = targets;
     if (!this._slotUpdatePending) {
       this._slotUpdatePending = true;
@@ -694,6 +698,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       this.editorView.destroy();
       this.editorView = null;
     }
+    // Release references to DOM elements and large objects
+    this._widgetTargets = [];
+    this._pendingTargets = [];
+    this._selectionInfo = null;
+    this._cm = null;
   }
 
   mountEditor = modifier((element: HTMLElement, _positional: unknown[]) => {
@@ -737,12 +746,14 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       content: content || '',
       livePreview,
       onDocChange: (text: string) => {
+        if (isDestroying(this) || isDestroyed(this)) return;
         if (onUpdate) {
           // Debounced save
           if (this.saveTimer) {
             clearTimeout(this.saveTimer);
           }
           this.saveTimer = setTimeout(() => {
+            if (isDestroying(this) || isDestroyed(this)) return;
             this.saveTimer = null;
             onUpdate(text);
           }, SAVE_DEBOUNCE_MS);
