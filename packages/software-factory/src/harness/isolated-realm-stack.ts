@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -14,6 +15,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import fsExtra from 'fs-extra';
 import { spawn } from 'node:child_process';
+import { matchesSourceRealmGlob } from './db-snapshot';
 
 import {
   baseRealmDir,
@@ -248,12 +250,25 @@ function copyRealmFixture(
   realmDir: string,
   destination: string,
   sourceRealmURL: URL,
+  options?: { fileFilter?: (relativePath: string) => boolean },
 ): void {
-  copySync(realmDir, destination, {
+  // Resolve symlinks so copySync sees the real directory, not the symlink itself.
+  let resolvedDir = realpathSync(realmDir);
+  copySync(resolvedDir, destination, {
     preserveTimestamps: true,
     filter(src) {
-      let relativePath = relative(realmDir, src).replace(/\\/g, '/');
-      return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
+      let relativePath = relative(resolvedDir, src).replace(/\\/g, '/');
+      if (relativePath !== '' && shouldIgnoreFixturePath(relativePath)) {
+        return false;
+      }
+      if (
+        relativePath !== '' &&
+        options?.fileFilter &&
+        !options.fileFilter(relativePath)
+      ) {
+        return false;
+      }
+      return true;
     },
   });
   rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
@@ -348,9 +363,18 @@ export async function startIsolatedRealmStack({
     );
     let username = additional.username ?? `additional_realm_${i}`;
     ensureDirSync(additionalLocalDir);
-    copyRealmFixture(additional.realmDir, additionalLocalDir, sourceRealmURL);
+    // For the source realm fixture (which may symlink to the full realm/ dir),
+    // only copy files matching SOURCE_REALM_INCLUDE_GLOBS — instances aren't needed.
+    let isSourceRealmFixture =
+      realpathSync(additional.realmDir) === realpathSync(sourceRealmDir);
+    copyRealmFixture(
+      additional.realmDir,
+      additionalLocalDir,
+      sourceRealmURL,
+      isSourceRealmFixture ? { fileFilter: matchesSourceRealmGlob } : undefined,
+    );
     realmLog.debug(
-      `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}`,
+      `startIsolatedRealmStack: copied additional fixture ${additional.realmDir} -> ${additionalLocalDir}${isSourceRealmFixture ? ' (filtered to .gts only)' : ''}`,
     );
     resolvedAdditionalRealms.push({
       realmDir: additional.realmDir,

@@ -413,7 +413,10 @@ export function shouldIgnoreFixturePath(relativePath: string): boolean {
     );
 }
 
-export function hashRealmFixture(realmDir: string): string {
+export function hashRealmFixture(
+  realmDir: string,
+  options?: { fileFilter?: (relativePath: string) => boolean },
+): string {
   let entries: string[] = [];
 
   function visit(currentDir: string) {
@@ -428,6 +431,9 @@ export function hashRealmFixture(realmDir: string): string {
         continue;
       }
       if (!entry.isFile()) {
+        continue;
+      }
+      if (options?.fileFilter && !options.fileFilter(relativePath)) {
         continue;
       }
       let stats = statSync(absolutePath);

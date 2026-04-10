@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   writeFileSync,
@@ -17,7 +18,6 @@ import {
   DEFAULT_PG_HOST,
   DEFAULT_PG_PORT,
   DEFAULT_PG_USER,
-  hashCombinedRealmFixtures,
   hashRealmFixture,
   hashString,
   logTimed,
@@ -38,11 +38,11 @@ export const DUMP_FILE = join(DB_SNAPSHOTS_DIR, 'template.pgdump');
 export const FINGERPRINT_FILE = join(DB_SNAPSHOTS_DIR, 'fingerprint.json');
 
 /**
- * Canonical source realm dir for the Playwright test configuration.
- * The global setup overrides SOFTWARE_FACTORY_SOURCE_REALM_DIR to this value,
- * so the snapshot fingerprint must always use it (not the env-dependent default).
+ * The source realm fixture dir. This is a symlink to realm/ so they
+ * can never diverge. Only .gts files (card definitions) and index.json
+ * are relevant for the test DB.
  */
-export const CANONICAL_SOURCE_REALM_DIR = resolve(
+export const SOURCE_REALM_FIXTURE_DIR = resolve(
   packageRoot,
   'test-fixtures/public-software-factory-source',
 );
@@ -62,13 +62,33 @@ export const DEFAULT_SNAPSHOT_FIXTURES: CombinedRealmFixture[] = [
     realmPath: 'test-realm-runner/',
   },
   {
-    realmDir: resolve(
-      packageRoot,
-      'test-fixtures/public-software-factory-source',
-    ),
+    realmDir: SOURCE_REALM_FIXTURE_DIR,
     realmPath: 'public-software-factory-source/',
   },
 ];
+
+/**
+ * Space-separated glob controlling which source realm files are included
+ * in the test DB snapshot. Prefix a pattern with ! to exclude.
+ * Evaluated in order — last matching pattern wins.
+ */
+export const SOURCE_REALM_GLOB = '*.gts .realm.json !document.gts';
+
+export function matchesSourceRealmGlob(relativePath: string): boolean {
+  let filename = relativePath.split('/').pop() ?? relativePath;
+  let included = false;
+  for (let pattern of SOURCE_REALM_GLOB.split(/\s+/)) {
+    let negate = pattern.startsWith('!');
+    let glob = negate ? pattern.slice(1) : pattern;
+    let hit = glob.startsWith('*')
+      ? filename.endsWith(glob.slice(1))
+      : filename === glob;
+    if (hit) {
+      included = !negate;
+    }
+  }
+  return included;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -77,9 +97,6 @@ export const DEFAULT_SNAPSHOT_FIXTURES: CombinedRealmFixture[] = [
 export interface SnapshotFingerprintData {
   fingerprint: string;
   cacheVersion: number;
-  baseRealmHash: string;
-  sourceRealmHash: string;
-  combinedFixtureHash: string;
   /** Metadata only — not part of fingerprint hash. */
   realmServerURL: string;
   /** ISO timestamp. */
@@ -115,13 +132,27 @@ export function computeSnapshotFingerprint(
   fixtures: CombinedRealmFixture[],
 ): string {
   let baseRealmHash = hashRealmFixture(baseRealmDir);
-  let sourceRealmHash = hashRealmFixture(CANONICAL_SOURCE_REALM_DIR);
-  let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
+  // Hash each fixture, applying a .gts-only filter to the source realm
+  // (which is a symlink to realm/ and contains many instance .json files
+  // that aren't used by tests).
+  let fixtureEntries = fixtures
+    .slice()
+    .sort((a, b) => a.realmPath.localeCompare(b.realmPath))
+    .map((f) => {
+      let resolvedDir = realpathSync(f.realmDir);
+      let isSourceRealm =
+        resolvedDir === realpathSync(SOURCE_REALM_FIXTURE_DIR);
+      let hash = hashRealmFixture(
+        f.realmDir,
+        isSourceRealm ? { fileFilter: matchesSourceRealmGlob } : undefined,
+      );
+      return `${f.realmPath}:${hash}`;
+    });
+  let combinedFixtureHash = hashString(fixtureEntries.join('||'));
   return hashString(
     stableStringify({
       version: CACHE_VERSION,
       baseRealmHash,
-      sourceRealmHash,
       combinedFixtureHash,
     }),
   );
@@ -370,17 +401,7 @@ export async function saveSnapshot(
   fixtures: CombinedRealmFixture[],
 ): Promise<void> {
   await logTimed(templateLog, 'saveSnapshot', async () => {
-    let baseRealmHash = hashRealmFixture(baseRealmDir);
-    let sourceRealmHash = hashRealmFixture(CANONICAL_SOURCE_REALM_DIR);
-    let combinedFixtureHash = hashCombinedRealmFixtures(fixtures);
-    let fingerprint = hashString(
-      stableStringify({
-        version: CACHE_VERSION,
-        baseRealmHash,
-        sourceRealmHash,
-        combinedFixtureHash,
-      }),
-    );
+    let fingerprint = computeSnapshotFingerprint(fixtures);
 
     await dumpTemplateToDisk(databaseName);
 
@@ -392,9 +413,6 @@ export async function saveSnapshot(
     writeSnapshotFingerprint({
       fingerprint,
       cacheVersion: CACHE_VERSION,
-      baseRealmHash,
-      sourceRealmHash,
-      combinedFixtureHash,
       realmServerURL,
       generatedAt: new Date().toISOString(),
       pgDumpVersion: getPgDumpVersion(),
