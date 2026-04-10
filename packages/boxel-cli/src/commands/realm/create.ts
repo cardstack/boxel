@@ -63,8 +63,7 @@ export async function createRealm(
     endpoint: realmName,
     name: displayName,
     backgroundURL: options.background ?? getRandomBackgroundURL(),
-    iconURL:
-      options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName),
+    iconURL: options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName),
   };
 
   let response: Response;
