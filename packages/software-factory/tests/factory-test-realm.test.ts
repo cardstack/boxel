@@ -492,7 +492,25 @@ module('factory-test-realm > resolveTestRun', function () {
       let urlStr = String(url);
       let method = init?.method ?? 'GET';
 
-      // Search endpoint
+      // _mtimes endpoint (used by getNextSequenceNumber to list filenames)
+      if (urlStr.includes('_mtimes') && method === 'GET') {
+        let mtimes: Record<string, number> = {};
+        for (let tr of testRuns) {
+          let fullUrl = `https://realms.example.test/user/personal/${tr.id}.json`;
+          mtimes[fullUrl] = Date.now();
+        }
+        return new Response(
+          JSON.stringify({
+            data: { attributes: { mtimes } },
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': SupportedMimeType.JSONAPI },
+          },
+        );
+      }
+
+      // Search endpoint (used by findResumableTestRun)
       if (urlStr.includes('_search') && method === 'QUERY') {
         return new Response(
           JSON.stringify({

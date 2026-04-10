@@ -138,6 +138,12 @@ export class TestValidationStep implements ValidationStepRunner {
         ? deriveIssueSlug(this.config.issueId)
         : 'validation';
 
+      // Build the issue card URL for the TestRun → Issue linksTo relationship.
+      // issueId is a realm-relative path like "Issues/sticky-note-define-core".
+      let issueURL = this.config.issueId
+        ? new URL(this.config.issueId, targetRealmUrl).href
+        : undefined;
+
       handle = await this.executeTestRunFn({
         targetRealmUrl,
         testResultsModuleUrl: this.config.testResultsModuleUrl,
@@ -149,6 +155,7 @@ export class TestValidationStep implements ValidationStepRunner {
         hostAppUrl: this.config.hostAppUrl,
         forceNew: true,
         lastSequenceNumber: this.lastSequenceNumber,
+        issueURL,
       });
 
       if (handle.sequenceNumber != null) {

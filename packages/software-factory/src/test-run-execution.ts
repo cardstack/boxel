@@ -6,7 +6,11 @@ import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
 
-import { ensureTrailingSlash, searchRealm } from './realm-operations';
+import {
+  ensureTrailingSlash,
+  fetchRealmFilenames,
+  searchRealm,
+} from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseQunitResults } from './test-run-parsing';
 import type {
@@ -58,6 +62,7 @@ export async function resolveTestRun(
   }
 
   let sequenceNumber = await getNextSequenceNumber(
+    options.slug,
     realmOptions,
     options.lastSequenceNumber,
   );
@@ -142,29 +147,41 @@ async function findResumableTestRun(
   };
 }
 
+/**
+ * Get the next sequence number for a given slug by inspecting existing
+ * TestRun filenames in the realm. Each slug (issue) gets its own
+ * independent sequence starting from 1.
+ */
 async function getNextSequenceNumber(
+  slug: string,
   options: TestRunRealmOptions,
   minSequenceNumber = 0,
 ): Promise<number> {
-  let result = await searchRealm(
-    options.targetRealmUrl,
-    {
-      filter: {
-        on: { module: options.testResultsModuleUrl, name: 'TestRun' },
-      },
-      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
-      page: { size: 1 },
-    },
-    { authorization: options.authorization, fetch: options.fetch },
-  );
+  let result = await fetchRealmFilenames(options.targetRealmUrl, {
+    authorization: options.authorization,
+    fetch: options.fetch,
+  });
 
-  let latest = result?.ok
-    ? (result.data?.[0] as
-        | { attributes?: { sequenceNumber?: number } }
-        | undefined)
-    : undefined;
-  let fromIndex = latest?.attributes?.sequenceNumber ?? 0;
-  return Math.max(fromIndex, minSequenceNumber) + 1;
+  if (result.error) {
+    log.warn(
+      `Failed to fetch filenames for sequence number — falling back to minSequenceNumber: ${result.error}`,
+    );
+    return minSequenceNumber + 1;
+  }
+
+  let prefix = `Test Runs/${slug}-`;
+  let maxSeq = 0;
+  for (let filename of result.filenames) {
+    if (filename.startsWith(prefix) && filename.endsWith('.json')) {
+      let seqStr = filename.slice(prefix.length, -'.json'.length);
+      let seq = parseInt(seqStr, 10);
+      if (!isNaN(seq) && seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+
+  return Math.max(maxSeq, minSequenceNumber) + 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +207,8 @@ function buildQunitTestPageHtml(opts: {
   targetRealmUrl: string;
   /** Browser-accessible URL of the realm server (compat proxy) */
   realmProxyUrl: string;
+  /** Optional slug identifying the issue under test — shown in the page title. */
+  slug?: string;
 }): string {
   let host = opts.assetServerUrl.replace(/\/$/, '');
   // Ember config URLs must use the browser-accessible realm proxy,
@@ -268,7 +287,7 @@ function buildQunitTestPageHtml(opts: {
 <head>
   <meta charset="utf-8">
   ${metaTags.join('\n  ')}
-  <title>Software Factory Card Tests</title>
+  <title>Software Factory Card Tests${opts.slug ? ` — ${opts.slug}` : ''}</title>
   ${linkTags.join('\n  ')}
 </head>
 <body>
@@ -466,6 +485,7 @@ export async function executeTestRunFromRealm(
       hostDistDir,
       targetRealmUrl: options.targetRealmUrl,
       realmProxyUrl: options.hostAppUrl,
+      slug: options.slug,
     });
     setHtml(html);
 
