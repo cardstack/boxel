@@ -688,9 +688,7 @@ export default class AiAssistantPanelService extends Service {
       // comparison would always be false — leaving a stale ID in localStorage.
       // A subsequent sync event can re-add the room to the cache, causing
       // createNewSession to enter the deleted room instead of creating a new one.
-      if (
-        window.localStorage.getItem(NewSessionIdPersistenceKey) === roomId
-      ) {
+      if (window.localStorage.getItem(NewSessionIdPersistenceKey) === roomId) {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
