@@ -437,33 +437,33 @@ module('Acceptance | prerender | meta', function (hooks) {
         friend: null,
         numOfPets: '3',
         pets: [
-            {
-              id: `${testRealmURL}Pet/mango`,
-              name: 'Mango',
-              cardTitle: 'Mango',
-              cardInfo: {
-                theme: null,
-              },
+          {
+            id: `${testRealmURL}Pet/mango`,
+            name: 'Mango',
+            cardTitle: 'Mango',
+            cardInfo: {
+              theme: null,
             },
-            {
-              id: `${testRealmURL}Pet/vangogh`,
-              name: 'Van Gogh',
-              cardTitle: 'Van Gogh',
-              cardInfo: {
-                theme: null,
-              },
+          },
+          {
+            id: `${testRealmURL}Pet/vangogh`,
+            name: 'Van Gogh',
+            cardTitle: 'Van Gogh',
+            cardInfo: {
+              theme: null,
             },
-            {
-              id: `${testRealmURL}Pet/paper`,
+          },
+          {
+            id: `${testRealmURL}Pet/paper`,
             name: 'Paper',
             cardTitle: 'Paper',
-              aliases: ['Satan', "Satan's Mistress"],
-              emergencyContacts: null,
-              cardInfo: {
-                theme: null,
-              },
+            aliases: ['Satan', "Satan's Mistress"],
+            emergencyContacts: null,
+            cardInfo: {
+              theme: null,
             },
-          ],
+          },
+        ],
       },
       'search doc is correct',
     );
