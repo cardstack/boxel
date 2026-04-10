@@ -10,7 +10,10 @@ import { timeout } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
 import { isCardInstance } from '@cardstack/runtime-common';
-import type { LLMMode } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  type LLMMode,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import type * as CommandModule from 'https://cardstack.com/base/command';
@@ -416,14 +419,14 @@ export default class AiAssistantPanelService extends Service {
           disabledSkills = extractedSkills.disabledSkills;
         }
 
+        let loadDefaultSkillsAfterCreation = false;
         if (enabledSkills.length || disabledSkills.length) {
           input.enabledSkills = enabledSkills;
           input.disabledSkills = disabledSkills;
         } else {
-          // Use default skills
-          input.enabledSkills = await this.matrixService.loadDefaultSkills(
-            this.operatorModeStateService.state.submode,
-          );
+          // Defer loading default skills until after the room is created
+          // and entered, so the UI updates immediately.
+          loadDefaultSkillsAfterCreation = true;
         }
 
         let oldRoomId = this.matrixService.currentRoomId;
@@ -433,6 +436,10 @@ export default class AiAssistantPanelService extends Service {
 
         // Enter room immediately
         this.enterRoom(roomId);
+
+        if (loadDefaultSkillsAfterCreation) {
+          this.applyDefaultSkillsToRoom(roomId);
+        }
 
         // Start background tasks for session preparation
         if (oldRoomId && (shouldSummarizeSession || shouldCopyFileHistory)) {
@@ -449,6 +456,32 @@ export default class AiAssistantPanelService extends Service {
       return undefined;
     },
   );
+
+  private async applyDefaultSkillsToRoom(roomId: string) {
+    try {
+      let skills = await this.matrixService.loadDefaultSkills(
+        this.operatorModeStateService.state.submode,
+      );
+      if (!skills.length) {
+        return;
+      }
+      let enabledSkillFileDefs = await this.matrixService.uploadCards(skills);
+      let commandDefinitions = skills.flatMap((skill) => skill.commands);
+      let commandFileDefs =
+        await this.matrixService.uploadCommandDefinitions(commandDefinitions);
+      await this.matrixService.sendStateEvent(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        {
+          enabledSkillCards: enabledSkillFileDefs.map((fd) => fd.serialize()),
+          disabledSkillCards: [],
+          commandDefinitions: commandFileDefs.map((fd) => fd.serialize()),
+        },
+      );
+    } catch (e) {
+      console.error('Failed to apply default skills to room:', e);
+    }
+  }
 
   // Background tasks for session preparation
   private summarizeSessionTask = restartableTask(
