@@ -20,7 +20,7 @@ beforeAll(async () => {
   profileManager = testProfile.profileManager;
   cleanup = testProfile.cleanup;
   await setupTestProfile(profileManager);
-}, 60000);
+});
 
 afterAll(async () => {
   cleanup?.();
