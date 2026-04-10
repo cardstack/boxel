@@ -36,28 +36,30 @@ Required attributes:
 - `successCriteria` — derived from brief section headings
 
 Relationships:
-- `knowledgeBase.0` → `../Knowledge Articles/<slug>-brief-context`
-- `knowledgeBase.1` → `../Knowledge Articles/<slug>-agent-onboarding`
+- `knowledgeBase.0` → `../Knowledge Articles/<slug>-<article-slug>` (one per article)
 
 adoptsFrom: the darkfactory `Project` type.
 
 ### 2. Knowledge Articles
 
-Create two Knowledge Article cards:
+Create Knowledge Article cards in `Knowledge Articles/`. The number and
+organization of articles should depend on the brief — use as many as needed
+to keep each article cohesive with a clear guiding principle. A brief with
+distinct domains or concerns may warrant several articles; a simple brief
+may need just one. Organize for clarity and easy reference by the agent
+when working on implementation issues.
 
-**Brief Context** at `Knowledge Articles/<slug>-brief-context.json`:
-- `articleTitle` — `"<brief title> — Brief Context"`
-- `articleType` — `"context"`
-- `content` — full brief content
-- `tags` — tags from the brief plus `"brief-context"`
-
-**Agent Onboarding** at `Knowledge Articles/<slug>-agent-onboarding.json`:
-- `articleTitle` — `"<brief title> — Agent Onboarding"`
-- `articleType` — `"onboarding"`
-- `content` — instructions for how to work on this project
-- `tags` — `["onboarding"]` plus tags from the brief
+Each article should have:
+- `articleTitle` — a descriptive title (e.g., `"<brief title> — Brief Context"`, `"<brief title> — Data Model"`)
+- `articleType` — one of `"context"`, `"onboarding"`, `"reference"`, `"decision"`
+- `content` — the article body in markdown
+- `tags` — relevant tags for skill resolution
+- `updatedAt` — ISO timestamp
 
 adoptsFrom: the darkfactory `KnowledgeArticle` type.
+
+Link all articles from the Project card's `knowledgeBase` relationship, and
+from the implementation issues' `relatedKnowledge` relationships.
 
 ### 3. Implementation Issues
 

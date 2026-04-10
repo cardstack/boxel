@@ -39,21 +39,22 @@ Derive names from the brief title:
 
 **Relationships:**
 
-- `knowledgeBase.0` → `{ links: { self: "../Knowledge Articles/<slug>-brief-context" } }`
-- `knowledgeBase.1` → `{ links: { self: "../Knowledge Articles/<slug>-agent-onboarding" } }`
+- `knowledgeBase.0` → `{ links: { self: "../Knowledge Articles/<slug>-<article-slug>" } }` (one entry per article)
 
 ### KnowledgeArticle Card
 
-**Paths:** `Knowledge Articles/<slug>-brief-context.json`, `Knowledge Articles/<slug>-agent-onboarding.json`
+**Paths:** `Knowledge Articles/<slug>-<article-slug>.json` (as many as needed)
 **adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle" }`
 
-| Field          | Type     | Brief Context                  | Agent Onboarding               |
-| -------------- | -------- | ------------------------------ | ------------------------------ |
-| `articleTitle` | String   | `"<title> — Brief Context"`    | `"<title> — Agent Onboarding"` |
-| `articleType`  | String   | `"context"`                    | `"onboarding"`                 |
-| `content`      | Markdown | Full brief content             | Onboarding instructions        |
-| `tags`         | String[] | brief tags + `"brief-context"` | `["onboarding"]` + brief tags  |
-| `updatedAt`    | DateTime | ISO timestamp                  | ISO timestamp                  |
+The number and organization of articles depends on the brief. Keep each article cohesive with a clear guiding principle. A brief with distinct domains may warrant several articles; a simple brief may need just one.
+
+| Field          | Type     | Description                                                                   |
+| -------------- | -------- | ----------------------------------------------------------------------------- |
+| `articleTitle` | String   | Descriptive title, e.g. `"<title> — Brief Context"`, `"<title> — Data Model"` |
+| `articleType`  | String   | One of: `"context"`, `"onboarding"`, `"reference"`, `"decision"`              |
+| `content`      | Markdown | Article body                                                                  |
+| `tags`         | String[] | Relevant tags for skill resolution                                            |
+| `updatedAt`    | DateTime | ISO timestamp                                                                 |
 
 ### Issue Card
 
