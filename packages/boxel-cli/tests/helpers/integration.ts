@@ -20,8 +20,7 @@ import {
 } from '@cardstack/postgres';
 import type { Server } from 'http';
 
-const TEST_REALM_SERVER_PORT = 4446;
-export const TEST_REALM_SERVER_URL = `http://127.0.0.1:${TEST_REALM_SERVER_PORT}`;
+export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
 
 const TEST_USERNAME = `cli-test-${Date.now()}`;
 const TEST_PASSWORD = 'test-password-for-cli';
