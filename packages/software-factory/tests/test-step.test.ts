@@ -313,6 +313,7 @@ module('TestValidationStep', function () {
         testRunId: 'Test Runs/validation-1',
         passedCount: 5,
         failedCount: 0,
+        skippedCount: 0,
         durationMs: 1000,
         failures: [],
       },
@@ -321,6 +322,33 @@ module('TestValidationStep', function () {
     let formatted = step.formatForContext(result);
     assert.ok(formatted.includes('PASSED'));
     assert.ok(formatted.includes('5'));
+    assert.notOk(
+      formatted.includes('skipped'),
+      'no skipped note when skippedCount is 0',
+    );
+  });
+
+  test('formatForContext with passing result includes skipped note', function (assert) {
+    let step = new TestValidationStep(makeConfig());
+
+    let result: ValidationStepResult = {
+      step: 'test',
+      passed: true,
+      errors: [],
+      details: {
+        testRunId: 'Test Runs/validation-1',
+        passedCount: 3,
+        failedCount: 0,
+        skippedCount: 2,
+        durationMs: 800,
+        failures: [],
+      },
+    };
+
+    let formatted = step.formatForContext(result);
+    assert.ok(formatted.includes('PASSED'));
+    assert.ok(formatted.includes('3'));
+    assert.ok(formatted.includes('2 skipped'), 'includes skipped count');
   });
 
   test('formatForContext with failing result and detailed failures', function (assert) {
@@ -334,6 +362,7 @@ module('TestValidationStep', function () {
         testRunId: 'Test Runs/validation-1',
         passedCount: 2,
         failedCount: 1,
+        skippedCount: 0,
         durationMs: 1500,
         failures: [
           {
@@ -351,6 +380,34 @@ module('TestValidationStep', function () {
     assert.ok(formatted.includes('1 failed'));
     assert.ok(formatted.includes('shows author'));
     assert.ok(formatted.includes("Expected 'Alice'"));
+  });
+
+  test('formatForContext with failing result includes skipped note', function (assert) {
+    let step = new TestValidationStep(makeConfig());
+
+    let result: ValidationStepResult = {
+      step: 'test',
+      passed: false,
+      errors: [{ message: 'shows author: Expected Alice but got empty' }],
+      details: {
+        testRunId: 'Test Runs/validation-1',
+        passedCount: 2,
+        failedCount: 1,
+        skippedCount: 3,
+        durationMs: 1500,
+        failures: [
+          {
+            testName: 'shows author',
+            module: 'hello.test.gts',
+            message: "Expected 'Alice' but got ''",
+          },
+        ],
+      },
+    };
+
+    let formatted = step.formatForContext(result);
+    assert.ok(formatted.includes('FAILED'));
+    assert.ok(formatted.includes('3 skipped'), 'includes skipped count');
   });
 
   test('formatForContext without details falls back to errors', function (assert) {
