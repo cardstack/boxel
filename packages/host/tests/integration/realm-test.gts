@@ -254,6 +254,7 @@ module('Integration | realm', function (hooks) {
             cardInfo,
           },
           relationships: {
+            'cardInfo.cardThumbnail': { links: { self: null } },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
@@ -374,7 +375,10 @@ module('Integration | realm', function (hooks) {
             cardTitle: 'Hassan Abdel-Rahman',
             cardInfo,
           },
-          relationships: { 'cardInfo.theme': { links: { self: null } } },
+          relationships: {
+            'cardInfo.cardThumbnail': { links: { self: null } },
+            'cardInfo.theme': { links: { self: null } },
+          },
           meta: {
             adoptsFrom: {
               module: 'http://localhost:4202/test/person',
@@ -766,6 +770,7 @@ module('Integration | realm', function (hooks) {
             cardInfo,
           },
           relationships: {
+            'cardInfo.cardThumbnail': { links: { self: null } },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
@@ -975,6 +980,7 @@ module('Integration | realm', function (hooks) {
               cardInfo,
             },
             relationships: {
+              'cardInfo.cardThumbnail': { links: { self: null } },
               'cardInfo.theme': { links: { self: null } },
             },
             meta: {
@@ -1328,6 +1334,7 @@ module('Integration | realm', function (hooks) {
             cardInfo,
           },
           relationships: {
+            'cardInfo.cardThumbnail': { links: { self: null } },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
@@ -2310,6 +2317,7 @@ module('Integration | realm', function (hooks) {
             cardInfo,
           },
           relationships: {
+            'cardInfo.cardThumbnail': { links: { self: null } },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {
@@ -3203,6 +3211,7 @@ module('Integration | realm', function (hooks) {
             cardInfo,
           },
           relationships: {
+            'cardInfo.cardThumbnail': { links: { self: null } },
             'cardInfo.theme': { links: { self: null } },
           },
           meta: {

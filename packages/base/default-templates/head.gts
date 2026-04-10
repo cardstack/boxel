@@ -19,7 +19,10 @@ export default class DefaultHeadTemplate extends GlimmerComponent<{
   }
 
   get image(): string | undefined {
-    return this.args.model?.cardThumbnailURL;
+    return (
+      this.args.model?.cardInfo?.cardThumbnail?.url ??
+      this.args.model?.cardThumbnailURL
+    );
   }
 
   get themeIcon(): string | undefined {
