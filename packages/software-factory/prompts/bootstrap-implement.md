@@ -61,36 +61,38 @@ adoptsFrom: the darkfactory `KnowledgeArticle` type.
 
 ### 3. Implementation Issues
 
-Create exactly **two** implementation issues:
+Create exactly **two** implementation issues. Note: the brief may call for
+**multiple card definitions** (e.g., a main card plus supporting field cards
+or linked cards). Both issues should account for all cards the brief requires.
 
-**Issue #1: Create card definition and tests** at `Issues/<slug>-define-card.json`:
+**Issue #1: Create card definitions and tests** at `Issues/<slug>-define-cards.json`:
 - `issueId` — `"<projectCode>-1"`
-- `summary` — `"Create <brief title> card definition and tests"`
-- `description` — describe what card to create based on the brief, what fields it needs, and what tests to write
+- `summary` — `"Create <brief title> card definitions and tests"`
+- `description` — describe **all cards** to create based on the brief: their fields, relationships, and what tests to write. Include tests for every card, not just the primary one.
 - `issueType` — `"feature"`
 - `status` — `"backlog"`
 - `priority` — `"high"`
 - `order` — `1`
-- `acceptanceCriteria` — checklist derived from the brief
+- `acceptanceCriteria` — checklist derived from the brief covering all cards
 - Relationships:
   - `project` → `../Projects/<slug>-mvp`
   - `relatedKnowledge.0` → `../Knowledge Articles/<slug>-brief-context`
   - `relatedKnowledge.1` → `../Knowledge Articles/<slug>-agent-onboarding`
 
-**Issue #2: Create catalog spec with examples** at `Issues/<slug>-catalog-spec.json`:
+**Issue #2: Create catalog specs with examples** at `Issues/<slug>-catalog-spec.json`:
 - `issueId` — `"<projectCode>-2"`
-- `summary` — `"Create <brief title> catalog spec with examples"`
-- `description` — describe what catalog spec to create and what example instances to include
+- `summary` — `"Create <brief title> catalog specs with examples"`
+- `description` — create catalog specs for the **entry point cards** that you want others to discover in the Boxel catalog. Use judgment based on the brief: top-level cards that users interact with directly should be in the catalog; internal field cards or helper cards typically should not. At least one card must have a catalog spec. Include realistic sample instances linked via `linkedExamples`.
 - `issueType` — `"feature"`
 - `status` — `"backlog"`
 - `priority` — `"medium"`
 - `order` — `2`
-- `acceptanceCriteria` — checklist for the catalog spec
+- `acceptanceCriteria` — checklist for the catalog specs
 - Relationships:
   - `project` → `../Projects/<slug>-mvp`
   - `relatedKnowledge.0` → `../Knowledge Articles/<slug>-brief-context`
   - `relatedKnowledge.1` → `../Knowledge Articles/<slug>-agent-onboarding`
-  - `blockedBy.0` → `../Issues/<slug>-define-card`
+  - `blockedBy.0` → `../Issues/<slug>-define-cards`
 
 adoptsFrom: the darkfactory `Issue` type for both.
 

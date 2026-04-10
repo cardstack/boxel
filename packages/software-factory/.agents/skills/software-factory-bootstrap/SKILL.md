@@ -57,21 +57,27 @@ Derive names from the brief title:
 
 ### Issue Card
 
-**Paths:** `Issues/<slug>-define-card.json`, `Issues/<slug>-catalog-spec.json`
+**Paths:** `Issues/<slug>-define-cards.json`, `Issues/<slug>-catalog-spec.json`
 **adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Issue" }`
 
-| Field                | Type     | Issue #1 (card def + tests)                  | Issue #2 (catalog spec)                       |
-| -------------------- | -------- | -------------------------------------------- | --------------------------------------------- |
-| `issueId`            | String   | `"<projectCode>-1"`                          | `"<projectCode>-2"`                           |
-| `summary`            | String   | `"Create <title> card definition and tests"` | `"Create <title> catalog spec with examples"` |
-| `description`        | Markdown | What card to create, fields, tests           | What spec to create, examples                 |
-| `issueType`          | Enum     | `"feature"`                                  | `"feature"`                                   |
-| `status`             | Enum     | `"backlog"`                                  | `"backlog"`                                   |
-| `priority`           | Enum     | `"high"`                                     | `"medium"`                                    |
-| `order`              | Number   | `1`                                          | `2`                                           |
-| `acceptanceCriteria` | Markdown | Derived from brief                           | Catalog spec checklist                        |
-| `createdAt`          | DateTime | ISO timestamp                                | ISO timestamp                                 |
-| `updatedAt`          | DateTime | ISO timestamp                                | ISO timestamp                                 |
+A brief may require **multiple card definitions** (e.g., a main card plus supporting field cards or linked cards). Both issues should account for all cards the brief calls for.
+
+| Field                | Type     | Issue #1 (card definitions + tests)                     | Issue #2 (catalog specs + examples)              |
+| -------------------- | -------- | ------------------------------------------------------- | ------------------------------------------------ |
+| `issueId`            | String   | `"<projectCode>-1"`                                     | `"<projectCode>-2"`                              |
+| `summary`            | String   | `"Create <title> card definitions and tests"`           | `"Create <title> catalog specs with examples"`   |
+| `description`        | Markdown | All cards to create, their fields, relationships, tests | Which cards to catalog, what examples to include |
+| `issueType`          | Enum     | `"feature"`                                             | `"feature"`                                      |
+| `status`             | Enum     | `"backlog"`                                             | `"backlog"`                                      |
+| `priority`           | Enum     | `"high"`                                                | `"medium"`                                       |
+| `order`              | Number   | `1`                                                     | `2`                                              |
+| `acceptanceCriteria` | Markdown | Derived from brief — cover all cards                    | Catalog spec checklist                           |
+| `createdAt`          | DateTime | ISO timestamp                                           | ISO timestamp                                    |
+| `updatedAt`          | DateTime | ISO timestamp                                           | ISO timestamp                                    |
+
+**Issue #1 guidance:** The brief may describe one card or several. Create `.gts` definitions and `.test.gts` tests for **every card** the brief calls for. Tests should cover all cards, not just the primary one.
+
+**Issue #2 guidance:** Create catalog specs for the **entry point cards** — the cards you want others to discover in the Boxel catalog. Use judgment based on the brief to decide which cards are entry points (typically the top-level cards, not internal field cards or helper cards). At least one card must have a catalog spec. Each spec needs `linkedExamples` with realistic sample instances.
 
 **Relationships for both issues:**
 
@@ -81,7 +87,7 @@ Derive names from the brief title:
 
 **Issue #2 additionally:**
 
-- `blockedBy.0` → `{ links: { self: "../Issues/<slug>-define-card" } }`
+- `blockedBy.0` → `{ links: { self: "../Issues/<slug>-define-cards" } }`
 
 ## Why Relationships Matter
 
