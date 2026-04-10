@@ -11,7 +11,6 @@ import {
   stopTestPrerenderServer,
   matrixURL,
   matrixRegistrationSecret,
-  testPort,
 } from '#realm-server/tests/helpers/index';
 import { registerUser } from '#realm-server/synapse';
 import {
@@ -21,7 +20,7 @@ import {
 } from '@cardstack/postgres';
 import type { Server } from 'http';
 
-export const TEST_REALM_SERVER_PORT = testPort(4446);
+const TEST_REALM_SERVER_PORT = 4446;
 export const TEST_REALM_SERVER_URL = `http://127.0.0.1:${TEST_REALM_SERVER_PORT}`;
 
 const TEST_USERNAME = `cli-test-${Date.now()}`;
