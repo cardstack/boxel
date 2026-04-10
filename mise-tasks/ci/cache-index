@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 #MISE description="Index all realms and dump boxel_index tables for caching"
 #MISE dir="packages/realm-server"
 
-set -e
+set -euo pipefail
 
 export PATH="./node_modules/.bin:$PATH"
 
@@ -24,26 +24,45 @@ SKIP_BOXEL_HOMEPAGE=true \
   run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development &
 SERVICES_PID=$!
 
+ensure_services_running() {
+  if ! kill -0 "$SERVICES_PID" 2>/dev/null; then
+    wait "$SERVICES_PID"
+    echo "Services exited unexpectedly."
+    exit 1
+  fi
+}
+
 cleanup() {
   echo "Stopping services..."
-  kill $SERVICES_PID 2>/dev/null || true
-  wait $SERVICES_PID 2>/dev/null || true
+  kill "$SERVICES_PID" 2>/dev/null || true
+  wait "$SERVICES_PID" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
 # Register realm users with Matrix (waits for Synapse to be healthy).
 # Must happen while services are starting since the realm server needs
 # authenticated Matrix users.
+ensure_services_running
 echo "Registering realm users..."
 pnpm --dir=../matrix register-realm-users
+ensure_services_running
 
 echo "Waiting for realm readiness..."
-wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ')
+wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ') &
+WAIT_ON_PID=$!
+
+while kill -0 "$WAIT_ON_PID" 2>/dev/null; do
+  ensure_services_running
+  sleep 1
+done
+wait "$WAIT_ON_PID"
 
 echo "All realms ready. Dumping index tables..."
 docker exec boxel-pg pg_dump -U postgres --data-only \
   -t boxel_index -t realm_versions -t realm_meta \
-  boxel | gzip > /tmp/boxel-index-cache.sql.gz
+  boxel > /tmp/boxel-index-cache.sql
+
+gzip /tmp/boxel-index-cache.sql
 
 echo "Index cache created at /tmp/boxel-index-cache.sql.gz"
 ls -lh /tmp/boxel-index-cache.sql.gz

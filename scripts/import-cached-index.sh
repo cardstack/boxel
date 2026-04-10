@@ -1,15 +1,15 @@
-#!/bin/sh
+#!/bin/bash
 # Downloads and imports the cached boxel_index tables from a recent CI build.
-# Exits 0 on success, 1 on failure. The caller uses the exit code to decide
-# whether to set REALM_SERVER_FULL_INDEX_ON_STARTUP=false.
+# Exits 0 on success or when import is unnecessary (DB already has data).
+# Exits 1 on failure. The caller uses the exit code to decide whether to
+# set REALM_SERVER_FULL_INDEX_ON_STARTUP=false.
 
-set -u
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/env-slug.sh"
 
 DB_NAME="${PGDATABASE:-boxel}"
-PG_PORT="${PGPORT:-5435}"
 REPO="cardstack/boxel"
 ARTIFACT_NAME="boxel-index-cache"
 DOWNLOAD_DIR="/tmp/boxel-index-cache-$$"
@@ -24,7 +24,7 @@ ROW_COUNT=$(docker exec boxel-pg psql -U postgres -d "$DB_NAME" -tAc \
   "SELECT COUNT(*) FROM realm_versions" 2>/dev/null) || ROW_COUNT=""
 if [ -n "$ROW_COUNT" ] && [ "$ROW_COUNT" -gt 0 ] 2>/dev/null; then
   echo "Database already has index data ($ROW_COUNT realm versions), skipping cache import."
-  exit 1
+  exit 0
 fi
 
 # Require gh CLI
@@ -55,9 +55,10 @@ if [ ! -f "$CACHE_FILE" ]; then
   exit 1
 fi
 
-# Build the import pipeline.
+# Import the cache into the local database.
 # In BOXEL_ENVIRONMENT mode, remap URLs from CI standard mode (localhost:4201)
 # to the environment's Traefik hostname.
+PSQL_OPTS="-U postgres -d $DB_NAME --quiet --no-psqlrc -v ON_ERROR_STOP=1"
 if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   SLUG=$(compute_env_slug "$BOXEL_ENVIRONMENT")
   echo "Remapping URLs for environment '${SLUG}'..."
@@ -65,17 +66,10 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
     | sed \
       -e "s|http://localhost:4201|http://realm-server.${SLUG}.localhost|g" \
       -e "s|http://localhost:4206|http://icons.${SLUG}.localhost|g" \
-    | docker exec -i boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc
+    | docker exec -i boxel-pg psql $PSQL_OPTS
 else
   gunzip -c "$CACHE_FILE" \
-    | docker exec -i boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc
+    | docker exec -i boxel-pg psql $PSQL_OPTS
 fi
 
-IMPORT_STATUS=$?
-if [ $IMPORT_STATUS -eq 0 ]; then
-  echo "Index cache imported successfully."
-  exit 0
-else
-  echo "Index cache import had errors (status $IMPORT_STATUS), server will reindex as needed."
-  exit 1
-fi
+echo "Index cache imported successfully."
