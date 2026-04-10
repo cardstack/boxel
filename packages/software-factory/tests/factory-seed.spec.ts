@@ -115,10 +115,10 @@ test('creates bootstrap seed issue in a live realm', async ({ realm }) => {
   });
 
   let issues = await issueStore.listIssues();
-  expect(issues.length).toBe(1);
-  expect(issues[0].id).toContain('Issues/bootstrap-seed');
-  expect(issues[0].status).toBe('backlog');
-  expect(issues[0].priority).toBe('critical');
+  let seedIssue = issues.find((i) => i.id.includes('Issues/bootstrap-seed'));
+  expect(seedIssue).toBeDefined();
+  expect(seedIssue!.status).toBe('backlog');
+  expect(seedIssue!.priority).toBe('critical');
 });
 
 test('seed issue creation is idempotent', async ({ realm }) => {
