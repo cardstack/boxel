@@ -3,6 +3,7 @@ import {
   MINIMUM_AI_CREDITS_TO_CONTINUE,
   logger,
 } from '@cardstack/runtime-common';
+import * as Sentry from '@sentry/node';
 import {
   validateAICredits,
   spendUsageCost as spendUsageCostFromBilling,
@@ -76,6 +77,10 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
       );
       if (fetchedCost !== null) {
         await spendUsageCostFromBilling(dbAdapter, matrixUserId, fetchedCost);
+      } else {
+        const message = `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`;
+        log.error(message);
+        Sentry.captureMessage(message, 'error');
       }
     } else {
       log.warn(

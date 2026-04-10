@@ -65,24 +65,35 @@ async function handleStreamingRequest(
       async (data) => {
         // Handle end of stream
         if (data === '[DONE]') {
-          // Deduct credits using the cost from the streaming response.
-          // Chain per-user promises so costs are recorded sequentially.
-          const previousPromise =
-            pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
-          const costPromise = previousPromise
-            .then(() =>
-              endpointConfig.creditStrategy.saveUsageCost(
-                dbAdapter,
-                matrixUserId,
-                { id: generationId, usage: { cost: costInUsd } },
-              ),
-            )
-            .finally(() => {
-              if (pendingCostPromises.get(matrixUserId) === costPromise) {
-                pendingCostPromises.delete(matrixUserId);
-              }
-            });
-          pendingCostPromises.set(matrixUserId, costPromise);
+          // Only deduct credits when we observed billable metadata during
+          // the stream (an inline cost or a generation ID for the fallback).
+          if (
+            generationId != null ||
+            (typeof costInUsd === 'number' &&
+              Number.isFinite(costInUsd) &&
+              costInUsd > 0)
+          ) {
+            const previousPromise =
+              pendingCostPromises.get(matrixUserId) ?? Promise.resolve();
+            const costPromise = previousPromise
+              .then(() =>
+                endpointConfig.creditStrategy.saveUsageCost(
+                  dbAdapter,
+                  matrixUserId,
+                  { id: generationId, usage: { cost: costInUsd } },
+                ),
+              )
+              .finally(() => {
+                if (pendingCostPromises.get(matrixUserId) === costPromise) {
+                  pendingCostPromises.delete(matrixUserId);
+                }
+              });
+            pendingCostPromises.set(matrixUserId, costPromise);
+          } else {
+            log.warn(
+              `Streaming response for user ${matrixUserId} contained no generation ID or usage cost, skipping credit deduction`,
+            );
+          }
 
           ctxt.res.write(`data: [DONE]\n\n`);
           return 'stop';

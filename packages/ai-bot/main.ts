@@ -46,6 +46,7 @@ import {
 } from '@cardstack/billing/ai-billing';
 import { PgAdapter } from '@cardstack/postgres';
 import type { ChatCompletionMessageParam } from 'openai/resources';
+import { APIUserAbortError } from 'openai/error';
 import type { OpenAIError } from 'openai/error';
 import type { ChatCompletionStream } from 'openai/lib/ChatCompletionStream';
 import { acquireRoomLock, releaseRoomLock } from './lib/queries';
@@ -114,6 +115,10 @@ class Assistant {
         );
         if (fetchedCost !== null) {
           await spendUsageCost(this.pgAdapter, matrixUserId, fetchedCost);
+        } else {
+          const message = `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`;
+          log.error(message);
+          Sentry.captureMessage(message, 'error');
         }
       } else {
         log.warn(
@@ -306,15 +311,9 @@ Common issues are:
             event.getType() === 'm.room.message')
         ) {
           activeGeneration.runner.abort();
-          await activeGeneration.responder.finalize({
-            isCanceled: true,
-          });
-          if (activeGeneration.lastGeneratedChunkId) {
-            await assistant.trackAiUsageCost(senderMatrixUserId, {
-              generationId: activeGeneration.lastGeneratedChunkId,
-            });
-          }
-          activeGenerations.delete(room.roomId);
+          // Finalization, credit tracking, and cleanup are all
+          // handled by the streaming code path's catch/finally
+          // blocks after the APIUserAbortError is thrown.
         }
 
         if (isShuttingDown()) {
@@ -542,14 +541,25 @@ Common issues are:
             );
             log.info(`[${eventId}] Response finalized`);
           } catch (error) {
-            log.error(`[${eventId}] Error during generation or finalization`);
-            log.error(error);
-            if (chunkHandlingError) {
-              await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+            // When the cancel handler aborts the runner,
+            // finalChatCompletion() throws APIUserAbortError.
+            // Finalize the responder with the canceled flag and let
+            // the finally block handle credit tracking.
+            if (error instanceof APIUserAbortError) {
+              log.info(`[${eventId}] Generation was canceled by user`);
+              await responder.finalize({ isCanceled: true });
             } else {
-              await responder.onError(error as OpenAIError);
+              log.error(`[${eventId}] Error during generation or finalization`);
+              log.error(error);
+              if (chunkHandlingError) {
+                await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+              } else {
+                await responder.onError(error as OpenAIError);
+              }
             }
           } finally {
+            // Always track cost here — this path has the best data
+            // (both costInUsd from inline chunks and generationId).
             assistant.trackAiUsageCost(senderMatrixUserId, {
               costInUsd,
               generationId,
