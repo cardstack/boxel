@@ -880,6 +880,40 @@ module('Integration | codemirror-context', function (hooks) {
     }
   });
 
+  test('wrapWith toggles off when markers are adjacent to selection (live preview)', async function (assert) {
+    let element = document.createElement('div');
+    document.body.appendChild(element);
+
+    try {
+      let state = cmContext.createEditorState({
+        content: 'Hello **World** end',
+        onDocChange: () => {},
+        onCardTargetsChange: () => {},
+        onOpenCardSearch: () => {},
+      });
+
+      let view = new cmContext.EditorView({
+        state,
+        parent: element,
+      });
+
+      // Select just "World" (positions 8-13), not the surrounding **
+      // This simulates live preview where markers are hidden
+      view.dispatch({ selection: { anchor: 8, head: 13 } });
+      cmContext.wrapWith('**')(view);
+
+      assert.strictEqual(
+        view.state.doc.toString(),
+        'Hello World end',
+        'adjacent bold markers are removed when toggling off in live preview',
+      );
+
+      view.destroy();
+    } finally {
+      element.remove();
+    }
+  });
+
   test('wrapWith wraps selection in italic markers', async function (assert) {
     let element = document.createElement('div');
     document.body.appendChild(element);

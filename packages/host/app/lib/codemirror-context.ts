@@ -882,28 +882,44 @@ function wrapWith(marker: string) {
     let { from, to } = view.state.selection.main;
     if (from === to) return false;
     let selected = view.state.sliceDoc(from, to);
+    let len = marker.length;
 
+    // Case 1: Selection includes the markers (source mode selection)
     if (
       selected.startsWith(marker) &&
       selected.endsWith(marker) &&
-      selected.length >= marker.length * 2
+      selected.length >= len * 2
     ) {
       view.dispatch({
         changes: {
           from,
           to,
-          insert: selected.slice(marker.length, -marker.length),
+          insert: selected.slice(len, -len),
         },
       });
-    } else {
-      view.dispatch({
-        changes: { from, to, insert: marker + selected + marker },
-        selection: {
-          anchor: from + marker.length,
-          head: to + marker.length,
-        },
-      });
+      return true;
     }
+
+    // Case 2: Markers are adjacent to the selection (live preview mode where
+    // markers are hidden — the user selects just the visible text)
+    let before = view.state.sliceDoc(Math.max(0, from - len), from);
+    let after = view.state.sliceDoc(to, Math.min(view.state.doc.length, to + len));
+    if (before === marker && after === marker) {
+      view.dispatch({
+        changes: { from: from - len, to: to + len, insert: selected },
+        selection: { anchor: from - len, head: to - len },
+      });
+      return true;
+    }
+
+    // Case 3: Wrap with markers
+    view.dispatch({
+      changes: { from, to, insert: marker + selected + marker },
+      selection: {
+        anchor: from + len,
+        head: to + len,
+      },
+    });
     return true;
   };
 }
