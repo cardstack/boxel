@@ -317,7 +317,7 @@ jobs:
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.host-test.result != 'skipped' }}
     concurrency:
       group: host-merge-reports-and-publish-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
