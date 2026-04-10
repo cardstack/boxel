@@ -211,6 +211,7 @@ export default class Picker extends Component<PickerSignature> {
 
   onClose = () => {
     this.searchTerm = '';
+    this.args.onSearchTermChange?.('');
     return true;
   };
 
