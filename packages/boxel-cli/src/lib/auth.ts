@@ -92,9 +92,7 @@ export async function getRealmServerToken(
 
   if (!response.ok) {
     let text = await response.text();
-    throw new Error(
-      `Realm server session failed: ${response.status} ${text}`,
-    );
+    throw new Error(`Realm server session failed: ${response.status} ${text}`);
   }
 
   let token = response.headers.get('Authorization');
