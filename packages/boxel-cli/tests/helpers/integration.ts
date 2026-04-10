@@ -8,7 +8,6 @@ import {
   createVirtualNetwork,
   runTestRealmServer,
   closeServer,
-  stopTestPrerenderServer,
   matrixURL,
   matrixRegistrationSecret,
 } from '#realm-server/tests/helpers/index';
@@ -18,7 +17,18 @@ import {
   PgQueueRunner,
   type PgAdapter,
 } from '@cardstack/postgres';
+import type { Prerenderer } from '@cardstack/runtime-common';
 import type { Server } from 'http';
+
+// CLI tests don't need card rendering — stub out the prerenderer
+// so we don't launch Chrome (which fails in CI).
+const noopPrerenderer: Prerenderer = {
+  prerenderCard: async () => ({ html: '', status: 200 }) as any,
+  prerenderModule: async () => ({ html: '', status: 200 }) as any,
+  prerenderFileExtract: async () => ({ html: '', status: 200 }) as any,
+  prerenderFileRender: async () => ({ html: '', status: 200 }) as any,
+  runCommand: async () => ({ status: 'ready' }),
+};
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
 
@@ -56,6 +66,7 @@ export async function startTestRealmServer(): Promise<void> {
     permissions: {
       '*': ['read', 'write'],
     },
+    prerenderer: noopPrerenderer,
   });
 
   testRealmHttpServer = server;
@@ -75,7 +86,6 @@ export async function stopTestRealmServer(): Promise<void> {
     await closeServer(testRealmHttpServer);
     testRealmHttpServer = undefined;
   }
-  await stopTestPrerenderServer();
   if (publisher) {
     await publisher.destroy();
     publisher = undefined;
