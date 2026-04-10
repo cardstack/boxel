@@ -353,6 +353,27 @@ export class ProfileManager {
     return token;
   }
 
+  async authedFetch(
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> {
+    let token = await this.getOrRefreshServerToken();
+    let headers = new Headers(init?.headers);
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', token);
+    }
+
+    let response = await fetch(input, { ...init, headers });
+
+    if (response.status === 401) {
+      token = await this.refreshServerToken();
+      headers.set('Authorization', token);
+      response = await fetch(input, { ...init, headers });
+    }
+
+    return response;
+  }
+
   async fetchAndStoreRealmTokens(
     serverToken: string,
   ): Promise<Record<string, string>> {

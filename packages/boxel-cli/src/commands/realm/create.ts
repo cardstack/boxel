@@ -59,16 +59,6 @@ export async function createRealm(
 
   let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
 
-  let serverToken: string;
-  try {
-    serverToken = await pm.getOrRefreshServerToken();
-  } catch (e: unknown) {
-    console.error('Error: authentication failed');
-    console.error(e instanceof Error ? e.message : String(e));
-    process.exit(1);
-  }
-
-  // Build request attributes with default icon/background
   let attributes: Record<string, string> = {
     endpoint: realmName,
     name: displayName,
@@ -77,54 +67,19 @@ export async function createRealm(
   attributes.iconURL =
     options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName) ?? '';
 
-  let url = `${realmServerUrl}/_create-realm`;
-  let body = JSON.stringify({
-    data: {
-      type: 'realm',
-      attributes,
-    },
-  });
-
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await pm.authedFetch(`${realmServerUrl}/_create-realm`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/vnd.api+json',
-        Authorization: serverToken,
-      },
-      body,
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+      body: JSON.stringify({
+        data: { type: 'realm', attributes },
+      }),
     });
   } catch (e: unknown) {
-    console.error(`Error: failed to connect to realm server at ${url}`);
+    console.error(`Error: failed to connect to realm server`);
     console.error(e instanceof Error ? e.message : String(e));
     process.exit(1);
-  }
-
-  // Cached token may be expired — re-auth and retry once
-  if (response.status === 401) {
-    try {
-      serverToken = await pm.refreshServerToken();
-    } catch (e: unknown) {
-      console.error('Error: re-authentication failed');
-      console.error(e instanceof Error ? e.message : String(e));
-      process.exit(1);
-    }
-
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/vnd.api+json',
-          Authorization: serverToken,
-        },
-        body,
-      });
-    } catch (e: unknown) {
-      console.error(`Error: failed to connect to realm server at ${url}`);
-      console.error(e instanceof Error ? e.message : String(e));
-      process.exit(1);
-    }
   }
 
   if (!response.ok) {
@@ -140,9 +95,9 @@ export async function createRealm(
   let realmUrl = result?.data?.id;
   let normalizedRealmUrl = realmUrl ? ensureTrailingSlash(realmUrl) : undefined;
 
-  // Obtain and store the realm JWT
   if (normalizedRealmUrl) {
     try {
+      let serverToken = await pm.getOrRefreshServerToken();
       let tokens = await pm.fetchAndStoreRealmTokens(serverToken);
       if (!tokens[normalizedRealmUrl]) {
         console.error(
@@ -155,7 +110,6 @@ export async function createRealm(
       );
     }
 
-    // Register realm in Matrix account data so it appears in the Boxel dashboard
     try {
       await pm.registerRealmInDashboard(normalizedRealmUrl);
     } catch {
