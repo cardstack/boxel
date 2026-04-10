@@ -108,9 +108,7 @@ export function computeSnapshotFingerprint(
 // ---------------------------------------------------------------------------
 
 /** Read and parse the committed fingerprint. Returns undefined if missing or malformed. */
-export function readSnapshotFingerprint():
-  | SnapshotFingerprintData
-  | undefined {
+export function readSnapshotFingerprint(): SnapshotFingerprintData | undefined {
   if (!existsSync(FINGERPRINT_FILE)) {
     return undefined;
   }
@@ -197,9 +195,7 @@ export async function restoreTemplateFromDisk(
   let client = new PgClient(pgAdminConnectionConfig());
   try {
     await client.connect();
-    await client.query(
-      `CREATE DATABASE ${quotePgIdentifier(databaseName)}`,
-    );
+    await client.query(`CREATE DATABASE ${quotePgIdentifier(databaseName)}`);
   } finally {
     await client.end();
   }

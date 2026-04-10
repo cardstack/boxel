@@ -176,9 +176,7 @@ export async function ensureFactoryRealmTemplate(
     ];
     let snapshotData = checkCommittedSnapshot(snapshotFixtures);
     if (snapshotData) {
-      harnessLog.info(
-        'Restoring template from committed snapshot (fast path)',
-      );
+      harnessLog.info('Restoring template from committed snapshot (fast path)');
       try {
         await restoreTemplateFromDisk(templateDatabaseName);
         writePreparedTemplateMetadata({

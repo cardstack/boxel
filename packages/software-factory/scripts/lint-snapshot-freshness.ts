@@ -30,7 +30,9 @@ function main(): void {
     return;
   }
 
-  let currentFingerprint = computeSnapshotFingerprint(DEFAULT_SNAPSHOT_FIXTURES);
+  let currentFingerprint = computeSnapshotFingerprint(
+    DEFAULT_SNAPSHOT_FIXTURES,
+  );
 
   if (committed.fingerprint !== currentFingerprint) {
     console.error('ERROR: Database snapshot is stale.');
