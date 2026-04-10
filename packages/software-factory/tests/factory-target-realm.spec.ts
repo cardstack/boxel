@@ -147,7 +147,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         };
       };
     };
-    expect(issueJson.data.attributes.issueType).toBe('implementation');
+    expect(issueJson.data.attributes.issueType).toBe('feature');
     expect(issueJson.data.attributes.status).toBe('in_progress');
     expect(issueJson.data.attributes.summary).toContain('Sticky Note');
   } finally {
