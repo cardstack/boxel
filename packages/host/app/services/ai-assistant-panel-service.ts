@@ -233,11 +233,14 @@ export default class AiAssistantPanelService extends Service {
   @action
   async createNewSession(
     opts: {
-      addSameSkills?: boolean;
-      shouldCopyFileHistory?: boolean;
-      shouldSummarizeSession?: boolean;
-      skipDefaultSkills?: boolean;
-    } = {},
+      addSameSkills: boolean;
+      shouldCopyFileHistory: boolean;
+      shouldSummarizeSession: boolean;
+    } = {
+      addSameSkills: false,
+      shouldCopyFileHistory: false,
+      shouldSummarizeSession: false,
+    },
   ) {
     this.displayRoomError = false;
     if (
@@ -387,18 +390,13 @@ export default class AiAssistantPanelService extends Service {
     async (
       name: string = 'New AI Assistant Chat',
       opts: {
-        addSameSkills?: boolean;
-        shouldCopyFileHistory?: boolean;
-        shouldSummarizeSession?: boolean;
-        skipDefaultSkills?: boolean;
+        addSameSkills: boolean;
+        shouldCopyFileHistory: boolean;
+        shouldSummarizeSession: boolean;
       },
     ) => {
-      let {
-        addSameSkills,
-        shouldCopyFileHistory,
-        shouldSummarizeSession,
-        skipDefaultSkills,
-      } = opts;
+      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
+        opts;
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
@@ -421,7 +419,7 @@ export default class AiAssistantPanelService extends Service {
         if (enabledSkills.length || disabledSkills.length) {
           input.enabledSkills = enabledSkills;
           input.disabledSkills = disabledSkills;
-        } else if (!skipDefaultSkills) {
+        } else {
           // Use default skills
           input.enabledSkills = await this.matrixService.loadDefaultSkills(
             this.operatorModeStateService.state.submode,
@@ -684,7 +682,15 @@ export default class AiAssistantPanelService extends Service {
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       this.matrixService.roomResourcesCache.delete(roomId);
 
-      if (this.newSessionId === roomId) {
+      // Check localStorage directly instead of using the newSessionId getter,
+      // which checks roomResources.has(id). Since we just deleted the room from
+      // roomResourcesCache above, the getter would return undefined and this
+      // comparison would always be false — leaving a stale ID in localStorage.
+      // A subsequent sync event can re-add the room to the cache, causing
+      // createNewSession to enter the deleted room instead of creating a new one.
+      if (
+        window.localStorage.getItem(NewSessionIdPersistenceKey) === roomId
+      ) {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
@@ -693,7 +699,7 @@ export default class AiAssistantPanelService extends Service {
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {
-          await this.createNewSession({ skipDefaultSkills: true });
+          await this.createNewSession();
         }
       }
       this.roomToDelete = undefined;
