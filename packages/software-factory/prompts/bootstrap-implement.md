@@ -109,7 +109,7 @@ adoptsFrom: the darkfactory `Issue` type for both.
 3. Create the Project card
 4. Create both Knowledge Article cards
 5. Create both implementation Issue cards with all relationships wired
-6. Mark this bootstrap issue as done via `update_issue({ path: "{{issue.id}}", attributes: { status: "done" } })`
+6. Mark this bootstrap issue as done: first `read_file` the issue to get its current attributes, then call `update_issue` with **all existing attributes** plus `status: "done"` (update_issue writes the full card, not a partial patch)
 
 Create artifacts in the order listed — Project first, then Knowledge Articles,
 then Issues — so that relationship targets exist when referenced.

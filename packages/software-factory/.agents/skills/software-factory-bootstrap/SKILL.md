@@ -130,8 +130,13 @@ Use relative paths (`../`) for relationship links since cards are in sibling dir
 
 ## Completion
 
-After creating all artifacts, mark the bootstrap issue as done:
+After creating all artifacts, mark the bootstrap issue as done. **Important:**
+`update_issue` writes the full card, not a partial patch. First `read_file` the
+issue to get its current attributes, then call `update_issue` with all existing
+attributes plus `status: "done"`:
 
 ```
-update_issue({ path: "Issues/bootstrap-seed", attributes: { status: "done" } })
+// 1. read_file({ path: "Issues/bootstrap-seed" }) to get current attributes
+// 2. update_issue with all attributes:
+update_issue({ path: "Issues/bootstrap-seed", attributes: { ...existing, status: "done" } })
 ```

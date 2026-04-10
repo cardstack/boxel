@@ -43,15 +43,21 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   /**
    * Load the Project card linked from the issue's `project` relationship.
    * Returns undefined if no project relationship exists (e.g., bootstrap issues).
+   *
+   * The issue passed in may be a SchedulableIssue (reduced shape without
+   * relationships), so we always fetch the full card from the realm first.
    */
   async loadProject(issue: IssueData): Promise<ProjectData | undefined> {
-    let projectLink = extractRelationshipLink(issue, 'project');
+    let fullIssue = await this.fetchFullIssue(issue.id);
+    if (!fullIssue) return undefined;
+
+    let projectLink = extractRelationshipLink(fullIssue, 'project');
     if (!projectLink) {
       log.info(`Issue "${issue.id}" has no project relationship`);
       return undefined;
     }
 
-    let cardId = resolveRelativeLink(projectLink, issue.id);
+    let cardId = resolveRelativeLink(projectLink);
     let result = await readFile(this.realmUrl, cardId, this.options);
 
     if (!result.ok || !result.document) {
@@ -74,16 +80,21 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
   /**
    * Load KnowledgeArticle cards linked from the issue's `relatedKnowledge` relationship.
    * Returns empty array if no knowledge relationships exist.
+   *
+   * Fetches the full issue card from the realm to get relationship data.
    */
   async loadKnowledge(issue: IssueData): Promise<KnowledgeArticleData[]> {
-    let knowledgeLinks = extractLinksToManyLinks(issue, 'relatedKnowledge');
+    let fullIssue = await this.fetchFullIssue(issue.id);
+    if (!fullIssue) return [];
+
+    let knowledgeLinks = extractLinksToManyLinks(fullIssue, 'relatedKnowledge');
     if (knowledgeLinks.length === 0) {
       return [];
     }
 
     let articles: KnowledgeArticleData[] = [];
     for (let link of knowledgeLinks) {
-      let cardId = resolveRelativeLink(link, issue.id);
+      let cardId = resolveRelativeLink(link);
       try {
         let result = await readFile(this.realmUrl, cardId, this.options);
         if (result.ok && result.document) {
@@ -106,6 +117,32 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
 
     return articles;
   }
+
+  /**
+   * Fetch the full issue card from the realm to get relationship data.
+   * The SchedulableIssue from the scheduler only has scheduling fields —
+   * relationships and issueType are not included.
+   */
+  private async fetchFullIssue(
+    issueId: string,
+  ): Promise<Record<string, unknown> | undefined> {
+    let result = await readFile(this.realmUrl, issueId, this.options);
+    if (!result.ok || !result.document) {
+      log.warn(
+        `Could not fetch full issue "${issueId}": ${result.error ?? 'not found'}`,
+      );
+      return undefined;
+    }
+
+    return {
+      id: issueId,
+      ...result.document.data.attributes,
+      ...(result.document.data.relationships
+        ? { relationships: result.document.data.relationships }
+        : {}),
+      meta: result.document.data.meta,
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +154,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
  * Boxel encodes linksTo as: `{ project: { links: { self: "../Projects/foo" } } }`
  */
 function extractRelationshipLink(
-  issue: IssueData,
+  issue: Record<string, unknown>,
   fieldName: string,
 ): string | undefined {
   let relationships = (issue as Record<string, unknown>).relationships as
@@ -139,7 +176,7 @@ function extractRelationshipLink(
  *   `relatedKnowledge.1`: { links: { self: "../Knowledge Articles/bar" } }
  */
 function extractLinksToManyLinks(
-  issue: IssueData,
+  issue: Record<string, unknown>,
   fieldName: string,
 ): string[] {
   let relationships = (issue as Record<string, unknown>).relationships as
@@ -167,7 +204,7 @@ function extractLinksToManyLinks(
  * Resolve a relative link (e.g., "../Projects/foo") to a realm-relative path.
  * Links are relative to the issue's directory (e.g., "Issues/").
  */
-function resolveRelativeLink(link: string, _issueId: string): string {
+function resolveRelativeLink(link: string): string {
   if (!link.startsWith('../')) {
     // Already a realm-relative path or absolute URL — extract last two segments
     let parts = link.split('/');

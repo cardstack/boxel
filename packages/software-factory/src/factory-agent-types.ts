@@ -167,6 +167,8 @@ export interface SchedulableIssue extends IssueData {
   order: number;
   /** Short summary for logging. */
   summary?: string;
+  /** Issue type (e.g., 'bootstrap', 'feature'). Used by context builder. */
+  issueType?: string;
 }
 
 export interface ToolResult {
