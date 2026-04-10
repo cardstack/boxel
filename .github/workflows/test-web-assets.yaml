@@ -3,6 +3,10 @@ name: Build Test Web Assets
 on:
   workflow_call:
     inputs:
+      caller:
+        description: Unique identifier for the calling workflow (used in concurrency group to prevent cross-workflow cancellation)
+        required: true
+        type: string
       skip_catalog:
         description: Build host test assets with catalog skipped
         required: false
@@ -24,7 +28,7 @@ jobs:
     name: Build and cache test web assets
     runs-on: ubuntu-latest
     concurrency:
-      group: test-web-assets-${{ github.ref }}-${{ github.sha }}
+      group: test-web-assets-${{ inputs.caller }}-${{ github.ref }}-${{ github.sha }}
       cancel-in-progress: false
 
     outputs:

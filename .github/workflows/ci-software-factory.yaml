@@ -35,6 +35,8 @@ jobs:
   test-web-assets:
     name: Build test web assets
     uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      caller: ci-software-factory
 
   software-factory-test:
     name: Software Factory Tests

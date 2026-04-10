@@ -73,6 +73,7 @@ jobs:
     name: Build test web assets
     uses: ./.github/workflows/test-web-assets.yaml
     with:
+      caller: ci-host
       skip_catalog: true
     concurrency:
       group: ci-host-test-web-assets-${{ github.head_ref || github.run_id }}
