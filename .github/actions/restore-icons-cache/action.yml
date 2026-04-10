@@ -9,7 +9,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+    - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       id: cache
       with:
         path: |

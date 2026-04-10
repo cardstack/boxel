@@ -49,7 +49,7 @@ jobs:
 
       - name: Restore cached assets
         id: restore
-        uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           key: ${{ steps.keys.outputs.cache_key }}
           path: |
@@ -101,7 +101,7 @@ jobs:
 
       - name: Save cached assets
         if: steps.restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf # 4.2.2
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
         with:
           key: ${{ steps.keys.outputs.cache_key }}
           path: |
@@ -111,7 +111,7 @@ jobs:
             .ci/test-web-assets/manifest.json
 
       - name: Upload built assets
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.keys.outputs.artifact_name }}
           path: |
