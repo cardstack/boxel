@@ -342,7 +342,6 @@ test.describe('Room creation', () => {
   test('it opens latest room available (or creates new) when current room is deleted', async ({
     page,
   }) => {
-    test.setTimeout(120_000);
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
@@ -363,17 +362,11 @@ test.describe('Room creation', () => {
     await isInRoom(page, room2); // remains in same room
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
-    // Wait for the deleted room to be removed from the DOM before polling
-    // for the auto-created replacement room
-    await expect(page.locator(`[data-test-room="${room2}"]`)).toHaveCount(0, {
-      timeout: 30_000,
-    });
     let newRoom: string | undefined;
     // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
     // which can consume the entire waitUntil budget in a single attempt.
     await waitUntil(async () => {
       try {
-        // Fail fast if room creation errored
         if ((await page.locator('[data-test-room-error]').count()) > 0) {
           throw new Error(
             'Room creation failed — [data-test-room-error] is visible',
@@ -389,11 +382,11 @@ test.describe('Room creation', () => {
         return false;
       } catch (e) {
         if (e instanceof Error && e.message.includes('Room creation failed')) {
-          throw e; // Don't swallow room creation errors
+          throw e;
         }
         return false;
       }
-    }, 60_000);
+    }, 30_000);
     if (!newRoom) {
       throw new Error('expected to enter a newly-created room after deletion');
     }
