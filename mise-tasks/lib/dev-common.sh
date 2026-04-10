@@ -3,6 +3,8 @@
 # Sourced (not executed) — sets variables and bootstraps infra.
 # Expects to run with MISE dir=packages/realm-server.
 
+export PATH="./node_modules/.bin:$PATH"
+
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
 # Phase 1 readiness URLs
