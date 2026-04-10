@@ -33,7 +33,7 @@ class MockStepRunner implements ValidationStepRunner {
     };
   }
 
-  async run(): Promise<ValidationStepResult> {
+  async run(_targetRealmUrl: string): Promise<ValidationStepResult> {
     this.runCount++;
     return this.result;
   }
@@ -57,12 +57,12 @@ class ThrowingStepRunner implements ValidationStepRunner {
     this.errorMessage = errorMessage;
   }
 
-  async run(): Promise<ValidationStepResult> {
+  async run(_targetRealmUrl: string): Promise<ValidationStepResult> {
     this.runCount++;
     throw new Error(this.errorMessage);
   }
 
-  formatForContext(): string {
+  formatForContext(_result: ValidationStepResult): string {
     return '';
   }
 }
