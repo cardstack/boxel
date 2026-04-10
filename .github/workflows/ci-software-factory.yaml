@@ -60,7 +60,7 @@ jobs:
         run: pnpm test:node
         working-directory: packages/software-factory
       - name: Serve test assets (icons + host dist)
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        uses: JarvusInnovations/background-action@341d3f0e708fa9ee49f2aa91ee86739ee72e3100 # node24 branch
         with:
           run: mise run ci:serve-test-assets &
           wait-for: 3m

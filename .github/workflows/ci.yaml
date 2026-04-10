@@ -343,7 +343,7 @@ jobs:
         run: pnpm exec playwright install
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        uses: JarvusInnovations/background-action@341d3f0e708fa9ee49f2aa91ee86739ee72e3100 # node24 branch
         with:
           run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
           wait-for: 5m
@@ -741,7 +741,7 @@ jobs:
         run: pnpm build
         working-directory: packages/workspace-sync-cli
       - name: Serve test assets (icons + host dist)
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        uses: JarvusInnovations/background-action@341d3f0e708fa9ee49f2aa91ee86739ee72e3100 # node24 branch
         with:
           run: mise run ci:serve-test-assets &
           wait-for: 3m
