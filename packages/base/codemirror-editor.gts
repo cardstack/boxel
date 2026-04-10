@@ -788,12 +788,13 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       <div
         class='codemirror-editor'
         data-test-codemirror-editor
-        {{this.mountEditor this.cm this.args.content this.args.onUpdate this.livePreview}}
+        {{this.mountEditor this.cm @content @onUpdate this.livePreview}}
         ...attributes
       >
       </div>
 
       {{! ── Floating toolbar ── }}
+      {{! template-lint-disable no-pointer-down-event-binding }}
       {{#if this.showToolbar}}
         <div
           class='codemirror-floating-toolbar'
@@ -876,6 +877,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       {{/if}}
 
       {{! ── Card search popup ── }}
+      {{! template-lint-disable no-pointer-down-event-binding }}
       {{#if this._cardSearchMode}}
         <div
           class='codemirror-card-search'
@@ -885,6 +887,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           <input
             class='codemirror-card-search-input'
             placeholder='Search cards or paste URL…'
+            aria-label='Search cards or paste URL'
             value={{this._cardSearchText}}
             data-test-card-search-input
             {{on 'input' this._handleCardSearchInput}}
@@ -917,6 +920,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       {{/if}}
 
       {{! ── Format picker popup ── }}
+      {{! template-lint-disable no-pointer-down-event-binding }}
       {{#if this._formatPickerCardUrl}}
         <div
           class='codemirror-format-picker'
