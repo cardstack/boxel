@@ -806,31 +806,31 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             data-test-toolbar-bold
             title='Bold'
             {{on 'mousedown' this._wrapBold}}
-          ><BoldIcon @width='16' @height='16' /></button>
+          ><BoldIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
             data-test-toolbar-italic
             title='Italic'
             {{on 'mousedown' this._wrapItalic}}
-          ><ItalicIcon @width='16' @height='16' /></button>
+          ><ItalicIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
             data-test-toolbar-strikethrough
             title='Strikethrough'
             {{on 'mousedown' this._wrapStrikethrough}}
-          ><StrikethroughIcon @width='16' @height='16' /></button>
+          ><StrikethroughIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.code "toolbar-btn--active"}}'
             data-test-toolbar-code
             title='Code'
             {{on 'mousedown' this._wrapCode}}
-          ><CodeIcon @width='16' @height='16' /></button>
+          ><CodeIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.link "toolbar-btn--active"}}'
             data-test-toolbar-link
             title='Link'
             {{on 'mousedown' this._toggleLink}}
-          ><LinkIcon @width='16' @height='16' /></button>
+          ><LinkIcon width='16' height='16' /></button>
 
           <span class='toolbar-divider'></span>
 
@@ -839,19 +839,19 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             data-test-toolbar-h1
             title='Heading 1'
             {{on 'mousedown' this._insertH1}}
-          ><Heading1Icon @width='16' @height='16' /></button>
+          ><Heading1Icon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-h2
             title='Heading 2'
             {{on 'mousedown' this._insertH2}}
-          ><Heading2Icon @width='16' @height='16' /></button>
+          ><Heading2Icon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-h3
             title='Heading 3'
             {{on 'mousedown' this._insertH3}}
-          ><Heading3Icon @width='16' @height='16' /></button>
+          ><Heading3Icon width='16' height='16' /></button>
 
           <span class='toolbar-divider'></span>
 
@@ -860,19 +860,19 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             data-test-toolbar-bullet-list
             title='Bullet List'
             {{on 'mousedown' this._toggleBulletList}}
-          ><ListIcon @width='16' @height='16' /></button>
+          ><ListIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-numbered-list
             title='Numbered List'
             {{on 'mousedown' this._toggleNumberedList}}
-          ><ListOrderedIcon @width='16' @height='16' /></button>
+          ><ListOrderedIcon width='16' height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-blockquote
             title='Blockquote'
             {{on 'mousedown' this._toggleBlockquote}}
-          ><BlockquoteIcon @width='16' @height='16' /></button>
+          ><BlockquoteIcon width='16' height='16' /></button>
         </div>
       {{/if}}
 
