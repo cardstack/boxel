@@ -146,6 +146,7 @@ export const sourceRealmDir = resolve(
   process.env.SOFTWARE_FACTORY_SOURCE_REALM_DIR ?? 'realm',
 );
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
+export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
 export const prepareTestPgScript = resolve(
   realmServerDir,
   'tests',
