@@ -103,18 +103,25 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     let summary = JSON.parse(result.stdout) as {
       command: string;
       targetRealm: { url: string; ownerUsername: string };
-      seedIssue: {
-        seedIssueId: string;
-        seedIssueStatus: string;
+      bootstrap: {
+        projectId: string;
+        issueIds: string[];
+        knowledgeArticleIds: string[];
+        activeIssue: { id: string; status: string };
       };
     };
 
     expect(summary.command).toBe('factory:go');
     expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
-    expect(summary.seedIssue.seedIssueId).toBe('Issues/bootstrap-seed');
-    expect(summary.seedIssue.seedIssueStatus).toBe('created');
+    expect(summary.bootstrap.projectId).toBe('Projects/sticky-note-mvp');
+    expect(summary.bootstrap.issueIds).toHaveLength(3);
+    expect(summary.bootstrap.knowledgeArticleIds).toHaveLength(2);
+    expect(summary.bootstrap.activeIssue.id).toBe(
+      'Issues/sticky-note-define-core',
+    );
+    expect(summary.bootstrap.activeIssue.status).toBe('created');
 
-    // Verify the seed issue actually exists in the newly created target realm
+    // Verify the project card actually exists in the newly created target realm
     // by authenticating as the target user who owns the realm
     let targetRealmToken = await getRealmToken(
       matrixURL,
@@ -123,30 +130,22 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       summary.targetRealm.url,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', summary.targetRealm.url)
-      .href;
-    let seedIssueResponse = await fetch(seedIssueUrl, {
+    let projectUrl = new URL(
+      'Projects/sticky-note-mvp',
+      summary.targetRealm.url,
+    ).href;
+    let projectResponse = await fetch(projectUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,
         Authorization: targetRealmToken,
       },
     });
 
-    expect(seedIssueResponse.ok).toBe(true);
-    let issueJson = (await seedIssueResponse.json()) as {
-      data: {
-        attributes: {
-          issueType: string;
-          status: string;
-          summary: string;
-        };
-      };
+    expect(projectResponse.ok).toBe(true);
+    let projectJson = (await projectResponse.json()) as {
+      data: { attributes: { projectName: string } };
     };
-    expect(issueJson.data.attributes.issueType).toBe('bootstrap');
-    expect(issueJson.data.attributes.status).toBe('backlog');
-    expect(issueJson.data.attributes.summary).toContain(
-      'Process brief and create project artifacts',
-    );
+    expect(projectJson.data.attributes.projectName).toBe('Sticky Note MVP');
   } finally {
     await new Promise<void>((r, reject) =>
       briefServer.close((err) => (err ? reject(err) : r())),
