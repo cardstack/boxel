@@ -26,6 +26,9 @@ export async function deserialize<T extends BaseDefConstructor>(
   if (typeof val === 'string') {
     return { content: val } as BaseInstanceType<T>;
   }
+  if (val == null) {
+    return {} as BaseInstanceType<T>;
+  }
   return val;
 }
 
