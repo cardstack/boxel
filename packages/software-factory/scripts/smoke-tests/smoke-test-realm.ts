@@ -35,7 +35,7 @@
  */
 
 // This should be first
-import '../setup-logger';
+import '../../src/setup-logger';
 
 import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
