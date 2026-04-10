@@ -388,7 +388,12 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     return cleanup;
   });
 
-  _toolbarAction = (marker: string, _event?: Event) => {
+  _wrapBold = () => this._toolbarAction('**');
+  _wrapItalic = () => this._toolbarAction('*');
+  _wrapStrikethrough = () => this._toolbarAction('~~');
+  _wrapCode = () => this._toolbarAction('`');
+
+  _toolbarAction = (marker: string) => {
     let cm = this._cm;
     let view = this.editorView;
     if (!cm || !view) return;
@@ -438,7 +443,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
   };
 
-  _insertHeading = (level: number, _event?: Event) => {
+  _insertH1 = () => this._insertHeading(1);
+  _insertH2 = () => this._insertHeading(2);
+  _insertH3 = () => this._insertHeading(3);
+
+  _insertHeading = (level: number) => {
     let view = this.editorView;
     if (!view) return;
     let { from } = view.state.selection.main;
@@ -466,7 +475,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     view.focus();
   };
 
-  _toggleLinePrefix = (prefix: string, _event?: Event) => {
+  _toggleBulletList = () => this._toggleLinePrefix('- ');
+  _toggleNumberedList = () => this._toggleLinePrefix('1. ');
+  _toggleBlockquote = () => this._toggleLinePrefix('> ');
+
+  _toggleLinePrefix = (prefix: string) => {
     let view = this.editorView;
     if (!view) return;
     let { from, to } = view.state.selection.main;
@@ -780,25 +793,25 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             class='toolbar-btn {{if this.toolbarFormats.bold "toolbar-btn--active"}}'
             data-test-toolbar-bold
             title='Bold'
-            {{on 'mousedown' (fn this._toolbarAction '**')}}
+            {{on 'mousedown' this._wrapBold}}
           ><BoldIcon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
             data-test-toolbar-italic
             title='Italic'
-            {{on 'mousedown' (fn this._toolbarAction '*')}}
+            {{on 'mousedown' this._wrapItalic}}
           ><ItalicIcon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
             data-test-toolbar-strikethrough
             title='Strikethrough'
-            {{on 'mousedown' (fn this._toolbarAction '~~')}}
+            {{on 'mousedown' this._wrapStrikethrough}}
           ><StrikethroughIcon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.code "toolbar-btn--active"}}'
             data-test-toolbar-code
             title='Code'
-            {{on 'mousedown' (fn this._toolbarAction '`')}}
+            {{on 'mousedown' this._wrapCode}}
           ><CodeIcon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn {{if this.toolbarFormats.link "toolbar-btn--active"}}'
@@ -813,19 +826,19 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             class='toolbar-btn'
             data-test-toolbar-h1
             title='Heading 1'
-            {{on 'mousedown' (fn this._insertHeading 1)}}
+            {{on 'mousedown' this._insertH1}}
           ><Heading1Icon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-h2
             title='Heading 2'
-            {{on 'mousedown' (fn this._insertHeading 2)}}
+            {{on 'mousedown' this._insertH2}}
           ><Heading2Icon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-h3
             title='Heading 3'
-            {{on 'mousedown' (fn this._insertHeading 3)}}
+            {{on 'mousedown' this._insertH3}}
           ><Heading3Icon @width='16' @height='16' /></button>
 
           <span class='toolbar-divider'></span>
@@ -834,19 +847,19 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             class='toolbar-btn'
             data-test-toolbar-bullet-list
             title='Bullet List'
-            {{on 'mousedown' (fn this._toggleLinePrefix '- ')}}
+            {{on 'mousedown' this._toggleBulletList}}
           ><ListIcon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-numbered-list
             title='Numbered List'
-            {{on 'mousedown' (fn this._toggleLinePrefix '1. ')}}
+            {{on 'mousedown' this._toggleNumberedList}}
           ><ListOrderedIcon @width='16' @height='16' /></button>
           <button
             class='toolbar-btn'
             data-test-toolbar-blockquote
             title='Blockquote'
-            {{on 'mousedown' (fn this._toggleLinePrefix '> ')}}
+            {{on 'mousedown' this._toggleBlockquote}}
           ><BlockquoteIcon @width='16' @height='16' /></button>
         </div>
       {{/if}}
