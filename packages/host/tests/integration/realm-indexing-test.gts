@@ -4673,6 +4673,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-ui/icons',
         'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
+        'https://packages/@cardstack/runtime-common/marked-sync',
         'https://packages/@ember/component',
         'https://packages/@ember/component/template-only',
         'https://packages/@ember/helper',
