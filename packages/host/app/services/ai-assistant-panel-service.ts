@@ -233,14 +233,11 @@ export default class AiAssistantPanelService extends Service {
   @action
   async createNewSession(
     opts: {
-      addSameSkills: boolean;
-      shouldCopyFileHistory: boolean;
-      shouldSummarizeSession: boolean;
-    } = {
-      addSameSkills: false,
-      shouldCopyFileHistory: false,
-      shouldSummarizeSession: false,
-    },
+      addSameSkills?: boolean;
+      shouldCopyFileHistory?: boolean;
+      shouldSummarizeSession?: boolean;
+      skipDefaultSkills?: boolean;
+    } = {},
   ) {
     this.displayRoomError = false;
     if (
@@ -390,13 +387,18 @@ export default class AiAssistantPanelService extends Service {
     async (
       name: string = 'New AI Assistant Chat',
       opts: {
-        addSameSkills: boolean;
-        shouldCopyFileHistory: boolean;
-        shouldSummarizeSession: boolean;
+        addSameSkills?: boolean;
+        shouldCopyFileHistory?: boolean;
+        shouldSummarizeSession?: boolean;
+        skipDefaultSkills?: boolean;
       },
     ) => {
-      let { addSameSkills, shouldCopyFileHistory, shouldSummarizeSession } =
-        opts;
+      let {
+        addSameSkills,
+        shouldCopyFileHistory,
+        shouldSummarizeSession,
+        skipDefaultSkills,
+      } = opts;
       try {
         let createRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandService.commandContext,
@@ -419,7 +421,7 @@ export default class AiAssistantPanelService extends Service {
         if (enabledSkills.length || disabledSkills.length) {
           input.enabledSkills = enabledSkills;
           input.disabledSkills = disabledSkills;
-        } else {
+        } else if (!skipDefaultSkills) {
           // Use default skills
           input.enabledSkills = await this.matrixService.loadDefaultSkills(
             this.operatorModeStateService.state.submode,
@@ -691,7 +693,7 @@ export default class AiAssistantPanelService extends Service {
         if (this.latestRoom) {
           this.enterRoom(this.latestRoom.roomId, false);
         } else {
-          this.createNewSession();
+          await this.createNewSession({ skipDefaultSkills: true });
         }
       }
       this.roomToDelete = undefined;

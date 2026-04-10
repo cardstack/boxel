@@ -371,10 +371,14 @@ test.describe('Room creation', () => {
     let newRoom: string | undefined;
     // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
     // which can consume the entire waitUntil budget in a single attempt.
-    // Use a generous timeout because room creation involves Matrix API calls
-    // that can be slow under CI load.
     await waitUntil(async () => {
       try {
+        // Fail fast if room creation errored
+        if ((await page.locator('[data-test-room-error]').count()) > 0) {
+          throw new Error(
+            'Room creation failed — [data-test-room-error] is visible',
+          );
+        }
         let roomEl = page.locator('[data-test-room]');
         if ((await roomEl.count()) === 0) return false;
         let roomId = await roomEl.getAttribute('data-test-room');
@@ -383,7 +387,10 @@ test.describe('Room creation', () => {
           return true;
         }
         return false;
-      } catch {
+      } catch (e) {
+        if (e instanceof Error && e.message.includes('Room creation failed')) {
+          throw e; // Don't swallow room creation errors
+        }
         return false;
       }
     }, 60_000);
