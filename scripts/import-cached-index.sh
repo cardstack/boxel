@@ -33,12 +33,10 @@ if ! command -v gh >/dev/null 2>&1; then
   exit 1
 fi
 
-# Find the latest CI run that produced the cache artifact.
-# Uses gh to search for the artifact directly — this works regardless of which
-# branch produced it.
+# Find the latest successful CI run on main that produced the cache artifact.
 echo "Looking for cached index from CI..."
-RUN_ID=$(gh api "repos/$REPO/actions/artifacts?name=$ARTIFACT_NAME&per_page=1" \
-  --jq '.artifacts[0].workflow_run.id // empty' 2>/dev/null) || RUN_ID=""
+RUN_ID=$(gh run list -w ci.yaml -b main -s success -L 1 \
+  --json databaseId -q '.[0].databaseId' -R "$REPO" 2>/dev/null) || RUN_ID=""
 if [ -z "$RUN_ID" ]; then
   echo "No CI run with index cache found, skipping."
   exit 1
