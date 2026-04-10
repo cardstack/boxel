@@ -1,4 +1,3 @@
-import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
@@ -13,8 +12,6 @@ export interface OptionRowSignature {
   Args: {
     currentSelected?: PickerOption[];
     isSelected: boolean;
-    onFocus?: (option: PickerOption | null) => void;
-    onLeave?: (option: PickerOption | null) => void;
     option: PickerOption;
     select?: Select;
   };
@@ -22,14 +19,6 @@ export interface OptionRowSignature {
 }
 
 export default class PickerOptionRow extends Component<OptionRowSignature> {
-  handleMouseEnter = () => {
-    this.args.onFocus?.(this.args.option);
-  };
-
-  handleMouseLeave = () => {
-    this.args.onLeave?.(null);
-  };
-
   get icon() {
     return (
       this.args.option.icon ??
@@ -72,8 +61,6 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       }}
       data-test-boxel-picker-option-row={{@option.id}}
       data-test-boxel-picker-option-label={{@option.label}}
-      {{on 'mouseenter' this.handleMouseEnter}}
-      {{on 'mouseleave' this.handleMouseLeave}}
     >
       <div
         class={{cn
