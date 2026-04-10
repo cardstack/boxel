@@ -21,7 +21,7 @@ import type { Prerenderer } from '@cardstack/runtime-common';
 import type { Server } from 'http';
 
 // CLI tests don't need card rendering — stub out the prerenderer
-// so we don't launch Chrome (which fails in CI).
+// so we don't launch Chrome.
 const noopPrerenderer: Prerenderer = {
   prerenderCard: async () => ({ html: '', status: 200 }) as any,
   prerenderModule: async () => ({ html: '', status: 200 }) as any,
