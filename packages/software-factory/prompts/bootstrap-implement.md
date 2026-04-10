@@ -42,12 +42,16 @@ adoptsFrom: the darkfactory `Project` type.
 
 ### 2. Knowledge Articles
 
-Create Knowledge Article cards in `Knowledge Articles/`. The number and
-organization of articles should depend on the brief — use as many as needed
-to keep each article cohesive with a clear guiding principle. A brief with
-distinct domains or concerns may warrant several articles; a simple brief
-may need just one. Organize for clarity and easy reference by the agent
-when working on implementation issues.
+Create Knowledge Article cards in `Knowledge Articles/`. Always create at
+least these two:
+
+- **Brief Context** (`<slug>-brief-context`) — the full brief content and background, `articleType: "context"`
+- **Agent Onboarding** (`<slug>-agent-onboarding`) — instructions for how to work on this project, `articleType: "onboarding"`
+
+Add more articles as the brief warrants — for example, a detailed visual
+design section could become its own article, or deep domain knowledge could
+be split out for clarity. Keep each article cohesive with a clear guiding
+principle.
 
 Each article should have:
 - `articleTitle` — a descriptive title (e.g., `"<brief title> — Brief Context"`, `"<brief title> — Data Model"`)

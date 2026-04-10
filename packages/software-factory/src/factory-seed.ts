@@ -128,7 +128,7 @@ function buildSeedIssueDocument(
     `Read the brief and create the following project artifacts:`,
     ``,
     `1. **Project card** — in \`Projects/\` with fields populated from the brief`,
-    `2. **Knowledge Articles** — in \`Knowledge Articles/\`, as many as needed to keep each article cohesive`,
+    `2. **Knowledge Articles** — in \`Knowledge Articles/\`, at least Brief Context + Agent Onboarding, plus more as the brief warrants`,
     `3. **Implementation Issues** — in \`Issues/\` with proper ordering, dependencies, and relationships:`,
     `   - Issue #1: Create card definitions and tests for all cards the brief requires (priority: high, order: 1)`,
     `   - Issue #2: Create catalog specs with examples for entry point cards (priority: medium, order: 2, blockedBy: issue #1)`,
@@ -142,7 +142,9 @@ function buildSeedIssueDocument(
 
   let acceptanceCriteria = [
     '- [ ] Project card created with objective, scope, and success criteria from the brief',
-    '- [ ] Knowledge Articles created (as many as needed, each cohesive with a clear guiding principle)',
+    '- [ ] Knowledge Article for brief context created',
+    '- [ ] Knowledge Article for agent onboarding created',
+    '- [ ] Additional knowledge articles if the brief warrants them',
     '- [ ] Implementation issue #1: card definitions and tests for all cards',
     '- [ ] Implementation issue #2: catalog specs with examples for entry point cards',
     '- [ ] Implementation issues have project and relatedKnowledge relationships',

@@ -46,7 +46,12 @@ Derive names from the brief title:
 **Paths:** `Knowledge Articles/<slug>-<article-slug>.json` (as many as needed)
 **adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "KnowledgeArticle" }`
 
-The number and organization of articles depends on the brief. Keep each article cohesive with a clear guiding principle. A brief with distinct domains may warrant several articles; a simple brief may need just one.
+Always create at least two articles:
+
+- **Brief Context** (`<slug>-brief-context`) — full brief content and background, `articleType: "context"`
+- **Agent Onboarding** (`<slug>-agent-onboarding`) — how to work on this project, `articleType: "onboarding"`
+
+Add more as the brief warrants (e.g., detailed visual design, deep domain knowledge). Keep each article cohesive with a clear guiding principle.
 
 | Field          | Type     | Description                                                                   |
 | -------------- | -------- | ----------------------------------------------------------------------------- |
