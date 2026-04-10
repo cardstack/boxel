@@ -113,7 +113,7 @@ export async function createRealm(
     }
 
     try {
-      await pm.registerRealmInDashboard(normalizedRealmUrl);
+      await pm.addToUserRealms(normalizedRealmUrl);
     } catch {
       console.error(
         `${DIM}Warning: could not register realm in dashboard. It may not appear until next login.${RESET}`,

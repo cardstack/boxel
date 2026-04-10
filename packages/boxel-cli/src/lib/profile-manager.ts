@@ -393,7 +393,7 @@ export class ProfileManager {
     return token;
   }
 
-  async registerRealmInDashboard(realmUrl: string): Promise<void> {
+  async addToUserRealms(realmUrl: string): Promise<void> {
     let matrixAuth = await this.loginToMatrix();
     await addRealmToMatrixAccountData(matrixAuth, realmUrl);
   }
