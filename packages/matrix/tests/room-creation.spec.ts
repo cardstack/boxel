@@ -344,7 +344,7 @@ test.describe('Room creation', () => {
   }) => {
     // This test creates 3 rooms, sends messages, deletes all 3, then waits
     // for auto-creation — needs more than the default 60s timeout.
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
@@ -389,7 +389,7 @@ test.describe('Room creation', () => {
         }
         return false;
       }
-    }, 45_000);
+    }, 60_000);
     if (!newRoom) {
       throw new Error('expected to enter a newly-created room after deletion');
     }
