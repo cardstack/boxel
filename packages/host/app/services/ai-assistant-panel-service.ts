@@ -63,6 +63,10 @@ export default class AiAssistantPanelService extends Service {
 
   @tracked displayRoomError = false;
   @tracked isShowingPastSessions = false;
+  // Rooms the user has explicitly deleted this session. Used to filter
+  // aiSessionRooms because sync events can re-add deleted rooms to the
+  // cache before the leave event propagates through the room state.
+  private deletedRoomIds = new Set<string>();
   @tracked roomToRename: SessionRoomData | undefined = undefined;
   @tracked roomToDelete: { id: string; name: string } | undefined = undefined;
   @tracked roomDeleteError: string | undefined = undefined;
@@ -652,8 +656,12 @@ export default class AiAssistantPanelService extends Service {
       ) {
         continue;
       }
-      // Skip rooms the user has left (sync events can re-add them to the
-      // cache even after leave/forget, since the bot is still a member)
+      // Skip rooms the user has deleted this session, or rooms whose state
+      // shows the user has left. Sync events can re-add deleted rooms to
+      // the cache with stale state before the leave event propagates.
+      if (this.deletedRoomIds.has(resource.roomId)) {
+        continue;
+      }
       if (
         this.matrixService.userId &&
         !resource.matrixRoom.hasActiveMember(this.matrixService.userId)
@@ -725,6 +733,7 @@ export default class AiAssistantPanelService extends Service {
 
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
+      this.deletedRoomIds.add(roomId);
       await this.matrixService.leave(roomId);
       await this.matrixService.forget(roomId);
       await timeout(eventDebounceMs); // this makes it feel a bit more responsive
