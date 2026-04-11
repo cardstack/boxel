@@ -11,7 +11,10 @@ import window from 'ember-window-mock';
 
 import { isCardInstance } from '@cardstack/runtime-common';
 import {
+  APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_LLM_MODE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM,
   type LLMMode,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -411,36 +414,45 @@ export default class AiAssistantPanelService extends Service {
         deferDefaultSkills,
       } = opts;
       try {
-        let createRoomCommand = new CreateAiAssistantRoomCommand(
-          this.commandService.commandContext,
-        );
-
-        let input: any = { name };
-        let llmMode = this.getPreferredLLMMode();
-        if (llmMode) {
-          input.llmMode = llmMode;
-        }
-        let enabledSkills: SkillCard[] = [];
-        let disabledSkills: SkillCard[] = [];
-
-        if (addSameSkills) {
-          const extractedSkills = await this.extractSkillsFromCurrentRoom();
-          enabledSkills = extractedSkills.enabledSkills;
-          disabledSkills = extractedSkills.disabledSkills;
-        }
-
-        if (enabledSkills.length || disabledSkills.length) {
-          input.enabledSkills = enabledSkills;
-          input.disabledSkills = disabledSkills;
-        } else if (!deferDefaultSkills) {
-          // Use default skills
-          input.enabledSkills = await this.matrixService.loadDefaultSkills(
-            this.operatorModeStateService.state.submode,
-          );
-        }
-
+        let roomId: string;
         let oldRoomId = this.matrixService.currentRoomId;
-        let { roomId } = await createRoomCommand.execute(input);
+
+        if (deferDefaultSkills) {
+          // Fast path: create room directly without going through the
+          // command system (which loads a JS module from the realm server
+          // that can hang on 404s). Skills are applied in the background.
+          roomId = await this.createFallbackRoom(name);
+        } else {
+          let createRoomCommand = new CreateAiAssistantRoomCommand(
+            this.commandService.commandContext,
+          );
+
+          let input: any = { name };
+          let llmMode = this.getPreferredLLMMode();
+          if (llmMode) {
+            input.llmMode = llmMode;
+          }
+          let enabledSkills: SkillCard[] = [];
+          let disabledSkills: SkillCard[] = [];
+
+          if (addSameSkills) {
+            const extractedSkills = await this.extractSkillsFromCurrentRoom();
+            enabledSkills = extractedSkills.enabledSkills;
+            disabledSkills = extractedSkills.disabledSkills;
+          }
+
+          if (enabledSkills.length || disabledSkills.length) {
+            input.enabledSkills = enabledSkills;
+            input.disabledSkills = disabledSkills;
+          } else {
+            // Use default skills
+            input.enabledSkills = await this.matrixService.loadDefaultSkills(
+              this.operatorModeStateService.state.submode,
+            );
+          }
+
+          ({ roomId } = await createRoomCommand.execute(input));
+        }
 
         window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
 
@@ -448,7 +460,7 @@ export default class AiAssistantPanelService extends Service {
         this.enterRoom(roomId);
 
         // Load default skills in the background after room creation
-        if (deferDefaultSkills && !enabledSkills.length) {
+        if (deferDefaultSkills) {
           this.applyDefaultSkillsToRoom(roomId);
         }
 
@@ -467,6 +479,54 @@ export default class AiAssistantPanelService extends Service {
       return undefined;
     },
   );
+
+  private async createFallbackRoom(name: string): Promise<string> {
+    let userId = this.matrixService.userId;
+    let aiBotFullId = this.matrixService.aiBotUserId;
+    let llmMode = this.getPreferredLLMMode();
+    let systemCard = this.matrixService.systemCard;
+    let configuration =
+      systemCard?.defaultModelConfiguration ??
+      systemCard?.modelConfigurations?.[0];
+
+    let { room_id: roomId } = await this.matrixService.createRoom({
+      preset: this.matrixService.privateChatPreset,
+      invite: [aiBotFullId],
+      name,
+      room_alias_name: encodeURIComponent(
+        `${name} - ${new Date().toISOString()} - ${userId}`,
+      ),
+      power_level_content_override: {
+        users: {
+          [userId!]: 100,
+          [aiBotFullId]: this.matrixService.aiBotPowerLevel,
+        },
+      },
+      initial_state: [
+        {
+          type: APP_BOXEL_ACTIVE_LLM,
+          content: {
+            model: configuration?.modelId ?? DEFAULT_LLM,
+            toolsSupported: Boolean(configuration?.toolsSupported),
+            reasoningEffort: configuration?.reasoningEffort ?? undefined,
+          },
+        },
+        {
+          type: APP_BOXEL_LLM_MODE,
+          content: { mode: llmMode || 'ask' },
+        },
+        {
+          type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          content: {
+            enabledSkillCards: [],
+            disabledSkillCards: [],
+            commandDefinitions: [],
+          },
+        },
+      ],
+    });
+    return roomId;
+  }
 
   private async applyDefaultSkillsToRoom(roomId: string) {
     try {
