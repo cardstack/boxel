@@ -343,13 +343,9 @@ jobs:
         run: pnpm exec playwright install
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
-        uses: JarvusInnovations/background-action@341d3f0e708fa9ee49f2aa91ee86739ee72e3100 # node24 branch
-        with:
-          run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
-          wait-for: 5m
-          wait-on: |
-            http-get://localhost:4200
-            http-get://localhost:4206
+        run: |
+          MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
+          timeout 300 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
@@ -741,13 +737,9 @@ jobs:
         run: pnpm build
         working-directory: packages/workspace-sync-cli
       - name: Serve test assets (icons + host dist)
-        uses: JarvusInnovations/background-action@341d3f0e708fa9ee49f2aa91ee86739ee72e3100 # node24 branch
-        with:
-          run: mise run ci:serve-test-assets &
-          wait-for: 3m
-          wait-on: |
-            http-get://localhost:4200
-            http-get://localhost:4206
+        run: |
+          mise run ci:serve-test-assets &
+          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Start PostgreSQL for tests
         run: pnpm start:pg | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server

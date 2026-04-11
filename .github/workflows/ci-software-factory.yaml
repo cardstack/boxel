@@ -60,13 +60,9 @@ jobs:
         run: pnpm test:node
         working-directory: packages/software-factory
       - name: Serve test assets (icons + host dist)
-        uses: JarvusInnovations/background-action@341d3f0e708fa9ee49f2aa91ee86739ee72e3100 # node24 branch
-        with:
-          run: mise run ci:serve-test-assets &
-          wait-for: 3m
-          wait-on: |
-            http-get://localhost:4200
-            http-get://localhost:4206
+        run: |
+          mise run ci:serve-test-assets &
+          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:playwright
         working-directory: packages/software-factory
