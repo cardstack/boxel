@@ -652,6 +652,14 @@ export default class AiAssistantPanelService extends Service {
       ) {
         continue;
       }
+      // Skip rooms the user has left (sync events can re-add them to the
+      // cache even after leave/forget, since the bot is still a member)
+      if (
+        this.matrixService.userId &&
+        !resource.matrixRoom.hasActiveMember(this.matrixService.userId)
+      ) {
+        continue;
+      }
       if (resource.name && resource.roomId) {
         sessions.push({
           roomId: resource.roomId,
