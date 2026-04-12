@@ -3023,7 +3023,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve search requests whose results have linksTo fields', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'dir/mariko.json': {
