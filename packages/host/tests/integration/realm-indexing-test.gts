@@ -2284,7 +2284,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardInfo,
             },
             relationships: {
-              'cardInfo.cardThumbnail': { links: { self: null } },
               'cardInfo.theme': { links: { self: null } },
             },
             meta: {
@@ -2326,7 +2325,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardInfo,
             },
             relationships: {
-              'cardInfo.cardThumbnail': { links: { self: null } },
               'cardInfo.theme': { links: { self: null } },
             },
             meta: {
@@ -2477,10 +2475,9 @@ module(`Integration | realm indexing`, function (hooks) {
         posts: 100,
         cardTitle: 'Hassan Abdel-Rahman',
         cardDescription: 'Person',
-        cardThumbnailURL: null,
         fullName: 'Hassan Abdel-Rahman',
         _cardType: 'Person',
-        cardInfo: { cardThumbnail: null, theme: null },
+        cardInfo: { theme: null },
       },
       `search doc includes fullName field`,
     );
@@ -2564,8 +2561,7 @@ module(`Integration | realm indexing`, function (hooks) {
           id: `${testRealmURL}Publication/pacific`,
         },
         views: 5,
-        cardInfo: { cardThumbnail: null, theme: null },
-        cardThumbnailURL: null,
+        cardInfo: { theme: null },
       },
       `post 1 search doc includes publication relationship`,
     );
@@ -2587,7 +2583,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: ' ',
             },
             cardInfo: { cardThumbnail: null, theme: null },
-            cardThumbnailURL: null,
             id: `${testRealmURL}Post/1`,
             publication: {
               id: `${testRealmURL}Publication/pacific`,
@@ -2602,7 +2597,6 @@ module(`Integration | realm indexing`, function (hooks) {
               cardTitle: ' ',
             },
             cardInfo: { cardThumbnail: null, theme: null },
-            cardThumbnailURL: null,
             id: `${testRealmURL}Post/2`,
             publication: {
               id: `${testRealmURL}Publication/pacific`,
@@ -2611,8 +2605,7 @@ module(`Integration | realm indexing`, function (hooks) {
             views: 24,
           },
         ],
-        cardInfo: { cardThumbnail: null, theme: null },
-        cardThumbnailURL: null,
+        cardInfo: { theme: null },
       },
       `publication search doc includes featuredPosts relationship via isUsed=true`,
     );
