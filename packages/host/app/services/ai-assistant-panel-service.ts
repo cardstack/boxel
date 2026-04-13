@@ -809,9 +809,6 @@ export default class AiAssistantPanelService extends Service {
   private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
       this.deletedRoomIds.add(roomId);
-      await this.matrixService.leave(roomId);
-      await this.matrixService.forget(roomId);
-      await timeout(eventDebounceMs); // this makes it feel a bit more responsive
       this.matrixService.roomResourcesCache.delete(roomId);
 
       // Check localStorage directly instead of using the newSessionId getter,
@@ -824,6 +821,9 @@ export default class AiAssistantPanelService extends Service {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
+      // Navigate to the next room (or create a new one) BEFORE the
+      // leave/forget calls, which can hang if the Matrix server is slow.
+      // The user needs to see a room immediately after confirming deletion.
       if (this.matrixService.currentRoomId === roomId) {
         this.localPersistenceService.setCurrentRoomId(undefined);
         if (this.latestRoom) {
@@ -838,6 +838,11 @@ export default class AiAssistantPanelService extends Service {
         }
       }
       this.roomToDelete = undefined;
+
+      // Clean up the room on the server. These can be slow but the user
+      // is already in a new room so there's no visible impact.
+      await this.matrixService.leave(roomId);
+      await this.matrixService.forget(roomId);
     } catch (e) {
       console.error(e);
       this.roomDeleteError = 'Error deleting room';
