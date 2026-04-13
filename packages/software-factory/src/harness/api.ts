@@ -130,7 +130,7 @@ export async function startFactoryGlobalContext(
 }
 
 export async function ensureFactoryRealmTemplate(
-  options: FactoryRealmOptions = {},
+  options: FactoryRealmOptions & { forceRebuild?: boolean } = {},
 ): Promise<FactoryRealmTemplate> {
   return await logTimed(harnessLog, 'ensureFactoryRealmTemplate', async () => {
     let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
@@ -167,7 +167,11 @@ export async function ensureFactoryRealmTemplate(
       readPreparedTemplateMetadata(templateDatabaseName);
     let hasTemplateDatabase = await databaseExists(templateDatabaseName);
 
-    if (hasTemplateDatabase && cachedTemplateMetadata) {
+    if (
+      !options.forceRebuild &&
+      hasTemplateDatabase &&
+      cachedTemplateMetadata
+    ) {
       return {
         cacheKey,
         templateDatabaseName,
@@ -178,11 +182,13 @@ export async function ensureFactoryRealmTemplate(
       };
     }
 
-    let cacheMissReason = !cachedTemplateMetadata
-      ? hasTemplateDatabase
-        ? 'template metadata is missing'
-        : 'template database has not been prepared yet'
-      : 'template database is missing';
+    let cacheMissReason = options.forceRebuild
+      ? 'forced rebuild'
+      : !cachedTemplateMetadata
+        ? hasTemplateDatabase
+          ? 'template metadata is missing'
+          : 'template database has not been prepared yet'
+        : 'template database is missing';
 
     // Full build from scratch.
     // Suppress noisy support-service logging during the build.
@@ -261,6 +267,7 @@ export async function ensureCombinedFactoryRealmTemplate(
     context?: FactorySupportContext;
     permissions?: Record<string, RealmAction[]>;
     cacheSalt?: string;
+    forceRebuild?: boolean;
   } = {},
 ): Promise<CombinedRealmTemplateResult> {
   return await logTimed(
@@ -301,7 +308,11 @@ export async function ensureCombinedFactoryRealmTemplate(
       let cachedTemplateMetadata =
         readPreparedTemplateMetadata(templateDatabaseName);
 
-      if (hasTemplateDatabase && cachedTemplateMetadata) {
+      if (
+        !options.forceRebuild &&
+        hasTemplateDatabase &&
+        cachedTemplateMetadata
+      ) {
         return {
           cacheKey,
           templateDatabaseName,
@@ -314,11 +325,13 @@ export async function ensureCombinedFactoryRealmTemplate(
         };
       }
 
-      let cacheMissReason = !cachedTemplateMetadata
-        ? hasTemplateDatabase
-          ? 'template metadata is missing'
-          : 'template database has not been prepared yet'
-        : 'template database is missing';
+      let cacheMissReason = options.forceRebuild
+        ? 'forced rebuild'
+        : !cachedTemplateMetadata
+          ? hasTemplateDatabase
+            ? 'template metadata is missing'
+            : 'template database has not been prepared yet'
+          : 'template database is missing';
 
       let resolvedFixtures: CombinedRealmFixture[] = fixtures.map((f) => ({
         realmDir: resolve(f.realmDir),

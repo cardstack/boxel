@@ -14,11 +14,15 @@ import { logger } from '../logger';
 
 let log = logger('cache-realm');
 
+const KNOWN_FLAGS = new Set(['--force']);
+
 async function main(): Promise<void> {
   let flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
-  if (flags.length > 0) {
-    log.warn(`unknown flag(s): ${flags.join(', ')}`);
+  let unknownFlags = flags.filter((f) => !KNOWN_FLAGS.has(f));
+  if (unknownFlags.length > 0) {
+    log.warn(`unknown flag(s): ${unknownFlags.join(', ')}`);
   }
+  let forceRebuild = flags.includes('--force');
   let args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 
   let realmDirs = [
@@ -97,6 +101,7 @@ async function main(): Promise<void> {
 
     let result = await ensureCombinedFactoryRealmTemplate(fixtures, {
       context: supportContext,
+      forceRebuild,
     });
 
     payload = {
@@ -125,6 +130,7 @@ async function main(): Promise<void> {
     let template = await ensureFactoryRealmTemplate({
       realmDir: realmDirs[0],
       context: supportContext,
+      forceRebuild,
     });
 
     payload = {
