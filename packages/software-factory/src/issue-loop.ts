@@ -20,8 +20,8 @@ import type {
   ValidationStepResult,
 } from './factory-agent';
 
+import type { LoopAgent } from './factory-agent-types';
 import type { FactoryTool, ToolCallEntry } from './factory-tool-builder';
-import type { LoopAgent } from './factory-loop';
 import type { IssueStore } from './issue-scheduler';
 
 import { IssueScheduler } from './issue-scheduler';
@@ -30,27 +30,40 @@ import { logger } from './logger';
 let log = logger('issue-loop');
 
 // ---------------------------------------------------------------------------
-// Validator interface (placeholder for CS-10675)
+// Validator interface
 // ---------------------------------------------------------------------------
 
 /**
  * Runs the post-iteration validation pipeline.
  * Steps: parse, lint, evaluate, instantiate, run tests.
- * CS-10675 provides the real implementation.
+ * See ValidationPipeline for the real implementation.
  */
 export interface Validator {
   validate(targetRealmUrl: string): Promise<ValidationResults>;
+  /** Format validation results for LLM context or issue descriptions. */
+  formatForContext?(results: ValidationResults): string;
 }
 
 /**
  * No-op validator that always passes. Used for bootstrap issues
- * or when CS-10675 validation is not yet available.
+ * or when validation is not needed.
  */
 export class NoOpValidator implements Validator {
   async validate(): Promise<ValidationResults> {
     return { passed: true, steps: [] };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Re-exports from validators/
+// ---------------------------------------------------------------------------
+
+export {
+  ValidationPipeline,
+  createDefaultPipeline,
+  type ValidationStepRunner,
+  type ValidationPipelineConfig,
+} from './validators/validation-pipeline';
 
 // ---------------------------------------------------------------------------
 // Context builder interface for issue-driven loop
@@ -78,7 +91,12 @@ export interface IssueLoopConfig {
   contextBuilder: IssueContextBuilderLike;
   tools: FactoryTool[];
   issueStore: IssueStore;
-  validator: Validator;
+  /**
+   * Factory that creates a fresh Validator for each issue.
+   * Receives the issue ID so the validator can scope artifacts (e.g. TestRun
+   * slugs) to the specific issue being validated.
+   */
+  createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
   briefUrl?: string;
   /** Maximum inner-loop iterations per issue. Default: 5. */
@@ -138,6 +156,42 @@ function formatValidation(results: ValidationResults): string {
   return `FAILED — ${failures.join(', ')}`;
 }
 
+/**
+ * Build a description for an issue blocked due to max iterations with
+ * failing validation, including the formatted failure context.
+ */
+function buildMaxIterationBlockedDescription(
+  maxIterations: number,
+  validationResults: ValidationResults,
+  validator: Validator,
+): string {
+  let lines = [
+    `**Blocked: max iteration limit reached (${maxIterations} turns) with failing validation.**`,
+    '',
+    `The agent was unable to resolve validation failures within the allowed number of iterations.`,
+    '',
+    `### Last Validation Results`,
+    '',
+  ];
+
+  if (validator.formatForContext) {
+    lines.push(validator.formatForContext(validationResults));
+  } else {
+    // Fallback: format from the raw results
+    for (let step of validationResults.steps) {
+      if (!step.passed) {
+        lines.push(`**${step.step}**: FAILED`);
+        for (let error of step.errors) {
+          lines.push(`- ${error.message}`);
+        }
+        lines.push('');
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Main loop
 // ---------------------------------------------------------------------------
@@ -150,7 +204,7 @@ export async function runIssueLoop(
     contextBuilder,
     tools,
     issueStore,
-    validator,
+    createValidator,
     targetRealmUrl,
     briefUrl,
     maxIterationsPerIssue = DEFAULT_MAX_ITERATIONS_PER_ISSUE,
@@ -204,6 +258,10 @@ export async function runIssueLoop(
     log.info(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
     );
+
+    // Create a fresh validator scoped to this issue so that artifacts
+    // (e.g. TestRun cards) are named per-issue rather than shared.
+    let validator = createValidator(issue.id);
 
     // -----------------------------------------------------------------------
     // Inner loop: iterate on a single issue with validation
@@ -263,8 +321,34 @@ export async function runIssueLoop(
 
     if (exitReason === 'max_iterations') {
       log.info(
-        `  Max iterations (${maxIterationsPerIssue}) reached for issue ${issueSummaryLabel(issue)} — exiting inner loop`,
+        `  Max iterations (${maxIterationsPerIssue}) reached for issue ${issueSummaryLabel(issue)}`,
       );
+
+      // If validation still failing at max iterations, block the issue with
+      // the reason and failure context so it's visible in the realm.
+      if (validationResults && !validationResults.passed) {
+        log.info(
+          `  Validation still failing — blocking issue with failure context`,
+        );
+
+        try {
+          let description = buildMaxIterationBlockedDescription(
+            maxIterationsPerIssue,
+            validationResults,
+            validator,
+          );
+          await issueStore.updateIssue(issue.id, {
+            status: 'blocked',
+            description,
+          });
+          exitReason = 'blocked';
+        } catch (err) {
+          log.warn(
+            `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
       exhaustedIssues.add(issue.id);
     }
 

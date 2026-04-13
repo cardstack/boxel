@@ -15,7 +15,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import fsExtra from 'fs-extra';
 import { spawn } from 'node:child_process';
-import { matchesSourceRealmGlob } from './db-snapshot';
+import { matchesSourceRealmGlob } from './shared';
 
 import {
   baseRealmDir,

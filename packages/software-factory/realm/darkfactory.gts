@@ -35,6 +35,7 @@ export const IssuePriorityField = enumField(StringField, {
 
 export const IssueTypeField = enumField(StringField, {
   options: [
+    { value: 'bootstrap', label: 'Bootstrap' },
     { value: 'feature', label: 'Feature' },
     { value: 'bug', label: 'Bug' },
     { value: 'task', label: 'Task' },
