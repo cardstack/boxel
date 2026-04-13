@@ -6,6 +6,7 @@ import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import NameIcon from '@cardstack/boxel-icons/folder-pen';
 import SummaryIcon from '@cardstack/boxel-icons/notepad-text';
 import LinkIcon from '@cardstack/boxel-icons/link';
+import ImageIcon from '@cardstack/boxel-icons/image';
 import ThemeIcon from '@cardstack/boxel-icons/palette';
 
 import type { CardOrFieldTypeIcon, CardDef, FieldsTypeFor } from '../card-api';
@@ -219,6 +220,14 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
         <div class='hidden-fields'>
           <FieldContainer
             class='card-info-field'
+            @label='Thumbnail Image'
+            @icon={{ImageIcon}}
+            data-test-field='cardInfo-thumbnail'
+          >
+            <@fields.cardInfo.cardThumbnail />
+          </FieldContainer>
+          <FieldContainer
+            class='card-info-field'
             @label='Thumbnail URL'
             @tag='label'
             @icon={{LinkIcon}}
@@ -332,6 +341,7 @@ class CardInfoEditor extends GlimmerComponent<EditSignature> {
 
   private get showThumbnailPlaceholder() {
     return (
+      !this.args.model?.cardInfo?.cardThumbnail &&
       !this.args.model?.cardInfo?.cardThumbnailURL &&
       this.args.model?.cardThumbnailURL
     );

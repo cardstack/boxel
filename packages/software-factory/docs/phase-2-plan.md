@@ -79,6 +79,22 @@ During task breakdown, the agent creates issues for implementation work:
 
 The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
 
+### Validation Behavior for Bootstrap Issues
+
+Bootstrap issues (the seed issue that creates Project, KnowledgeArticles, and implementation issues) produce no testable code artifacts — only JSON card instances. Validation still runs after every inner-loop iteration, but each step gracefully handles "nothing to validate":
+
+| Step                   | Bootstrap behavior                                                   |
+| ---------------------- | -------------------------------------------------------------------- |
+| **Parse**              | Checks created `.json` files are valid — useful                      |
+| **Lint**               | No-op for JSON card instances — pass                                 |
+| **Module evaluation**  | No `.gts` modules created — no-op, pass                              |
+| **Card instantiation** | Verifies Project/KnowledgeArticle/Issue instances are valid — useful |
+| **Run tests**          | No test files exist yet — vacuous pass                               |
+
+**Design principle**: No special-casing per issue type. Each validation step returns `passed: true` with an empty errors array when there is nothing to validate. "Nothing to validate" is a pass, not an error.
+
+The inner loop exit for bootstrap follows the same mechanism as any other issue: the agent marks the seed issue as `done` via tool calls, `refreshIssueState()` reads the updated status, and the inner loop condition (`issue.status !== 'done'`) exits. The outer loop then calls `pickNextIssue()` and finds the newly created implementation issues.
+
 ### Relationship to Phase 1
 
 Phase 1 calls this "testing" — the orchestrator runs tests after the agent signals done, feeds failures back, and iterates. Phase 2 generalizes this to a full validation pipeline (parse + lint + evaluate + instantiate + test) and feeds all failures back in the same way. The key evolution is that validation is broader (not just tests) and runs after every agent turn (not just when the agent signals done). The validation is still orchestrator-owned and deterministic — the agent never decides whether to run validation.

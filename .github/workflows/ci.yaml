@@ -37,7 +37,7 @@ jobs:
       run_all: ${{ steps.force-run-all.outputs.run_all }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # 3.0.2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
         id: filter
         with:
           filters: |
@@ -121,6 +121,8 @@ jobs:
     needs: change-check
     if: needs.change-check.outputs.boxel == 'true' || needs.change-check.outputs.boxel-ui == 'true' || needs.change-check.outputs.matrix == 'true' || needs.change-check.outputs.realm-server == 'true' || needs.change-check.outputs.vscode-boxel-tools == 'true' || needs.change-check.outputs.workspace-sync-cli == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     uses: ./.github/workflows/test-web-assets.yaml
+    with:
+      caller: ci
     concurrency:
       group: ci-test-web-assets-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -331,7 +333,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.test-web-assets.outputs.artifact_name }}
           path: .test-web-assets-artifact
@@ -344,13 +346,9 @@ jobs:
         run: pnpm exec playwright install
         working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
-          wait-for: 5m
-          wait-on: |
-            http-get://localhost:4200
-            http-get://localhost:4206
+        run: |
+          MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
+          timeout 300 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
         working-directory: packages/matrix
@@ -366,42 +364,42 @@ jobs:
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: matrix-test-realm-server-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload icon server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: matrix-test-icon-server-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/icon-server.log
           retention-days: 30
       - name: Upload host-dist log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: matrix-test-host-dist-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
@@ -410,7 +408,7 @@ jobs:
 
       - name: Upload blob report to GitHub Actions Artifacts
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: blob-report-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: packages/matrix/blob-report
@@ -418,7 +416,7 @@ jobs:
 
       - name: Upload Playwright traces
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: playwright-traces-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: packages/matrix/test-results/**/trace.zip
@@ -454,7 +452,7 @@ jobs:
       - uses: ./.github/actions/init
 
       - name: Download blob reports from GitHub Actions Artifacts
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: all-blob-reports
           pattern: blob-report-*
@@ -470,7 +468,7 @@ jobs:
         run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports-flat
 
       - name: Upload HTML report
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: html-report--attempt-${{ github.run_attempt }}
           path: playwright-report
@@ -485,7 +483,7 @@ jobs:
           echo "AWS_S3_BUCKET=cardstack-boxel-matrix-playwright-reports-staging" >> $GITHUB_ENV
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
@@ -535,7 +533,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.test-web-assets.outputs.artifact_name }}
           path: .test-web-assets-artifact
@@ -560,7 +558,7 @@ jobs:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
           JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
       - name: Upload junit report
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-${{ matrix.shardIndex }}
@@ -586,56 +584,56 @@ jobs:
           grep -E '^\[start:icons' /tmp/server.log > /tmp/icon-server.log || true
           grep -E '^\[start:host-dist' /tmp/server.log > /tmp/host-dist.log || true
       - name: Upload realm server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-worker-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-prerender-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-prerender-manager-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload start:development log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-start-development-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/start-development.log
           retention-days: 30
       - name: Upload test-realms log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-test-realms-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/test-realms.log
           retention-days: 30
       - name: Upload icon server log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-icon-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/icon-server.log
           retention-days: 30
       - name: Upload host-dist log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
@@ -654,7 +652,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download JUnit reports
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: all-realm-server-reports
           pattern: realm-server-test-report-*
@@ -662,7 +660,7 @@ jobs:
       - name: Merge reports
         run: npx junit-report-merger realm-server.xml "./all-realm-server-reports/*.xml"
       - name: Upload merged report
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: realm-server-test-report-merged
@@ -687,7 +685,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.test-web-assets.outputs.artifact_name }}
           path: .test-web-assets-artifact
@@ -703,7 +701,7 @@ jobs:
         run: pnpm vscode:package
         working-directory: packages/vscode-boxel-tools
       - name: Upload
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vscode-boxel-tools
           path: packages/vscode-boxel-tools/boxel-tools*vsix
@@ -735,7 +733,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
       - name: Download test web assets
-        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: ${{ needs.test-web-assets.outputs.artifact_name }}
           path: .test-web-assets-artifact
@@ -748,13 +746,9 @@ jobs:
         run: pnpm build
         working-directory: packages/workspace-sync-cli
       - name: Serve test assets (icons + host dist)
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: mise run ci:serve-test-assets &
-          wait-for: 3m
-          wait-on: |
-            http-get://localhost:4200
-            http-get://localhost:4206
+        run: |
+          mise run ci:serve-test-assets &
+          timeout 180 bash -c 'until curl -sf http://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Start PostgreSQL for tests
         run: pnpm start:pg | tee -a /tmp/test-services.log &
         working-directory: packages/realm-server
@@ -768,7 +762,7 @@ jobs:
         run: pnpm test
         working-directory: packages/workspace-sync-cli
       - name: Upload test services log
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
           name: workspace-sync-cli-test-services-log
@@ -804,8 +798,17 @@ jobs:
       - name: Build
         run: pnpm build
         working-directory: packages/boxel-cli
-      - name: Run tests
-        run: pnpm test
+      - name: Run unit tests
+        run: pnpm test:unit
+        working-directory: packages/boxel-cli
+      - name: Start Matrix
+        run: pnpm start:matrix
+        working-directory: packages/realm-server
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Run integration tests
+        run: pnpm test:integration
         working-directory: packages/boxel-cli
 
   deploy:
@@ -825,3 +828,41 @@ jobs:
     secrets: inherit
     with:
       environment: "staging"
+
+  cache-index:
+    name: Cache realm index
+    needs: [change-check, test-web-assets]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cache-index-${{ github.run_id }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Index all realms and dump tables
+        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
+        timeout-minutes: 45
+      - name: Upload service logs
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: cache-index-log
+          path: /tmp/cache-index.log
+          retention-days: 7
+      - name: Upload index cache
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: boxel-index-cache
+          path: /tmp/boxel-index-cache.sql.gz
+          retention-days: 30

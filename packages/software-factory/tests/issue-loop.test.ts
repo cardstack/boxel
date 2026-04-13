@@ -1,0 +1,753 @@
+import { module, test } from 'qunit';
+
+import type {
+  AgentContext,
+  SchedulableIssue,
+  IssueData,
+  ValidationResults,
+} from '../src/factory-agent';
+
+import type { FactoryTool, ToolCallEntry } from '../src/factory-tool-builder';
+import type { AgentRunResult, LoopAgent } from '../src/factory-loop';
+import type { IssueStore } from '../src/issue-scheduler';
+
+import {
+  runIssueLoop,
+  NoOpValidator,
+  type IssueContextBuilderLike,
+  type IssueLoopConfig,
+  type Validator,
+} from '../src/issue-loop';
+
+// ---------------------------------------------------------------------------
+// MockIssueStore
+// ---------------------------------------------------------------------------
+
+class MockIssueStore implements IssueStore {
+  issues: SchedulableIssue[];
+
+  constructor(issues: SchedulableIssue[]) {
+    this.issues = issues.map((i) => ({ ...i }));
+  }
+
+  async listIssues(): Promise<SchedulableIssue[]> {
+    return this.issues.map((i) => ({ ...i }));
+  }
+
+  async refreshIssue(issueId: string): Promise<SchedulableIssue> {
+    let issue = this.issues.find((i) => i.id === issueId);
+    if (!issue) {
+      throw new Error(`Issue "${issueId}" not found in mock store`);
+    }
+    return { ...issue };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MockLoopAgent
+// ---------------------------------------------------------------------------
+
+interface MockAgentTurn {
+  toolCalls: { tool: string; args: Record<string, unknown> }[];
+  /** Side effect: update issue status in the mock store after this turn. */
+  updateIssue?: { id: string; status: SchedulableIssue['status'] };
+}
+
+class MockLoopAgent implements LoopAgent {
+  private turns: MockAgentTurn[];
+  private turnIndex = 0;
+  private store: MockIssueStore;
+  readonly receivedContexts: AgentContext[] = [];
+
+  constructor(turns: MockAgentTurn[], store: MockIssueStore) {
+    this.turns = turns;
+    this.store = store;
+  }
+
+  async run(
+    context: AgentContext,
+    tools: FactoryTool[],
+  ): Promise<AgentRunResult> {
+    this.receivedContexts.push(context);
+
+    if (this.turnIndex >= this.turns.length) {
+      throw new Error(`MockLoopAgent exhausted at turn ${this.turnIndex + 1}`);
+    }
+
+    let turn = this.turns[this.turnIndex++];
+
+    let toolCalls: ToolCallEntry[] = [];
+    for (let call of turn.toolCalls) {
+      let tool = tools.find((t) => t.name === call.tool);
+      if (!tool) {
+        throw new Error(`Tool "${call.tool}" not found`);
+      }
+      let start = Date.now();
+      let result = await tool.execute(call.args);
+      toolCalls.push({
+        tool: call.tool,
+        args: call.args,
+        result,
+        durationMs: Date.now() - start,
+      });
+    }
+
+    // Apply side effect: update issue status in mock store
+    if (turn.updateIssue) {
+      let issue = this.store.issues.find((i) => i.id === turn.updateIssue!.id);
+      if (issue) {
+        issue.status = turn.updateIssue.status;
+      }
+    }
+
+    return { status: 'done', toolCalls };
+  }
+
+  get callCount(): number {
+    return this.turnIndex;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// StubIssueContextBuilder
+// ---------------------------------------------------------------------------
+
+class StubIssueContextBuilder implements IssueContextBuilderLike {
+  buildCalls: {
+    issue: IssueData;
+    targetRealmUrl: string;
+    validationResults?: ValidationResults;
+    briefUrl?: string;
+  }[] = [];
+
+  async buildForIssue(params: {
+    issue: IssueData;
+    targetRealmUrl: string;
+    validationResults?: ValidationResults;
+    briefUrl?: string;
+  }): Promise<AgentContext> {
+    this.buildCalls.push(params);
+    return {
+      project: { id: 'project-1' },
+      issue: params.issue,
+      knowledge: [],
+      skills: [],
+      targetRealmUrl: params.targetRealmUrl,
+      validationResults: params.validationResults,
+      briefUrl: params.briefUrl,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MockValidator
+// ---------------------------------------------------------------------------
+
+class MockValidator implements Validator {
+  private results: ValidationResults[];
+  private callIndex = 0;
+
+  constructor(results: ValidationResults[]) {
+    this.results = results;
+  }
+
+  async validate(): Promise<ValidationResults> {
+    if (this.callIndex >= this.results.length) {
+      throw new Error(`MockValidator exhausted at call ${this.callIndex + 1}`);
+    }
+    return this.results[this.callIndex++];
+  }
+
+  get callCount(): number {
+    return this.callIndex;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+function makeIssue(
+  overrides: Partial<SchedulableIssue> & { id: string },
+): SchedulableIssue {
+  return {
+    status: 'backlog',
+    priority: 'medium',
+    blockedBy: [],
+    order: 0,
+    summary: `Issue ${overrides.id}`,
+    ...overrides,
+  };
+}
+
+function makeTool(name: string, result: unknown = { ok: true }): FactoryTool {
+  return {
+    name,
+    description: `Mock ${name}`,
+    parameters: {},
+    execute: async () => result,
+  };
+}
+
+function makePassingValidation(): ValidationResults {
+  return {
+    passed: true,
+    steps: [
+      { step: 'parse', passed: true, errors: [] },
+      { step: 'lint', passed: true, errors: [] },
+      { step: 'evaluate', passed: true, errors: [] },
+      { step: 'instantiate', passed: true, errors: [] },
+      { step: 'test', passed: true, errors: [] },
+    ],
+  };
+}
+
+function makeFailingValidation(): ValidationResults {
+  return {
+    passed: false,
+    steps: [
+      { step: 'parse', passed: true, errors: [] },
+      { step: 'lint', passed: false, errors: [{ message: 'lint error' }] },
+      { step: 'evaluate', passed: true, errors: [] },
+      { step: 'instantiate', passed: true, errors: [] },
+      { step: 'test', passed: false, errors: [{ message: 'test failure' }] },
+    ],
+  };
+}
+
+const DEFAULT_TOOLS: FactoryTool[] = [
+  makeTool('write_file'),
+  makeTool('read_file'),
+  makeTool('signal_done'),
+];
+
+function makeLoopConfig(
+  overrides: Partial<IssueLoopConfig> & {
+    issueStore: MockIssueStore;
+    agent: LoopAgent;
+  },
+): IssueLoopConfig {
+  return {
+    contextBuilder: new StubIssueContextBuilder(),
+    tools: DEFAULT_TOOLS,
+    validator: new MockValidator([makePassingValidation()]),
+    targetRealmUrl: 'https://example.test/target/',
+    maxIterationsPerIssue: 5,
+    maxOuterCycles: 50,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 1. Happy path
+// ---------------------------------------------------------------------------
+
+module('issue-loop > happy path', function () {
+  test('single issue completes in one iteration', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator([makePassingValidation()]),
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.outerCycles, 1);
+    assert.strictEqual(result.issueResults.length, 1);
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+    assert.strictEqual(result.issueResults[0].innerIterations, 1);
+    assert.strictEqual(result.issueResults[0].toolCallLog.length, 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2. Multiple issues with dependency
+// ---------------------------------------------------------------------------
+
+module('issue-loop > multiple issues', function () {
+  test('first done unblocks second', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'a', status: 'backlog', priority: 'high', order: 1 }),
+      makeIssue({
+        id: 'b',
+        status: 'backlog',
+        priority: 'medium',
+        order: 2,
+        blockedBy: ['a'],
+      }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'a.gts', content: '' } },
+          ],
+          updateIssue: { id: 'a', status: 'done' },
+        },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'b.gts', content: '' } },
+          ],
+          updateIssue: { id: 'b', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator([
+          makePassingValidation(),
+          makePassingValidation(),
+        ]),
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.outerCycles, 2);
+    assert.strictEqual(result.issueResults[0].issueId, 'a');
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+    assert.strictEqual(result.issueResults[1].issueId, 'b');
+    assert.strictEqual(result.issueResults[1].exitReason, 'done');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. Validation failure then fix
+// ---------------------------------------------------------------------------
+
+module('issue-loop > validation failure', function () {
+  test('inner loop self-corrects after validation failure', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        // Iteration 1: write code, validation will fail
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+          ],
+        },
+        // Iteration 2: fix code, validation will pass
+        {
+          toolCalls: [
+            {
+              tool: 'write_file',
+              args: { path: 'card.gts', content: 'v2 fixed' },
+            },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let contextBuilder = new StubIssueContextBuilder();
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        contextBuilder,
+        validator: new MockValidator([
+          makeFailingValidation(),
+          makePassingValidation(),
+        ]),
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.issueResults[0].innerIterations, 2);
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+
+    // Verify validation results were threaded into context
+    assert.strictEqual(
+      contextBuilder.buildCalls[0].validationResults,
+      undefined,
+      'first iteration has no prior validation',
+    );
+    assert.false(
+      contextBuilder.buildCalls[1].validationResults?.passed,
+      'second iteration gets failing validation from first',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Blocked issue
+// ---------------------------------------------------------------------------
+
+module('issue-loop > blocked issue', function () {
+  test('blocked issue exits inner loop, outer loop continues', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'a', status: 'backlog', priority: 'high', order: 1 }),
+      makeIssue({ id: 'b', status: 'backlog', priority: 'medium', order: 2 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        // Issue a: agent marks as blocked
+        {
+          toolCalls: [{ tool: 'read_file', args: { path: 'brief.md' } }],
+          updateIssue: { id: 'a', status: 'blocked' },
+        },
+        // Issue b: agent completes
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'b.gts', content: '' } },
+          ],
+          updateIssue: { id: 'b', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator([
+          makePassingValidation(),
+          makePassingValidation(),
+        ]),
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'no_unblocked_issues');
+    assert.strictEqual(result.outerCycles, 2);
+    assert.strictEqual(result.issueResults[0].issueId, 'a');
+    assert.strictEqual(result.issueResults[0].exitReason, 'blocked');
+    assert.strictEqual(result.issueResults[1].issueId, 'b');
+    assert.strictEqual(result.issueResults[1].exitReason, 'done');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Max inner iterations
+// ---------------------------------------------------------------------------
+
+module('issue-loop > max inner iterations', function () {
+  test('exits inner loop after maxIterationsPerIssue', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let turns: MockAgentTurn[] = [];
+    let validations: ValidationResults[] = [];
+
+    for (let i = 0; i < 3; i++) {
+      turns.push({
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'card.gts', content: `attempt ${i}` },
+          },
+        ],
+        // Agent never marks done — issue stays in_progress
+      });
+      validations.push(makeFailingValidation());
+    }
+
+    let agent = new MockLoopAgent(turns, store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator(validations),
+        maxIterationsPerIssue: 3,
+      }),
+    );
+
+    assert.strictEqual(result.issueResults[0].exitReason, 'max_iterations');
+    assert.strictEqual(result.issueResults[0].innerIterations, 3);
+    assert.false(
+      result.issueResults[0].lastValidation?.passed,
+      'last validation was a failure',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. No unblocked issues
+// ---------------------------------------------------------------------------
+
+module('issue-loop > no unblocked issues', function () {
+  test('outer loop exits immediately when all issues are blocked', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'a', status: 'backlog', blockedBy: ['b'] }),
+      makeIssue({ id: 'b', status: 'blocked' }),
+    ]);
+
+    let agent = new MockLoopAgent([], store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store }),
+    );
+
+    assert.strictEqual(result.outcome, 'no_unblocked_issues');
+    assert.strictEqual(result.outerCycles, 0);
+    assert.strictEqual(result.issueResults.length, 0);
+    assert.strictEqual(agent.callCount, 0, 'agent was never called');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Empty project (no issues)
+// ---------------------------------------------------------------------------
+
+module('issue-loop > empty project', function () {
+  test('loop exits immediately with no issues', async function (assert) {
+    let store = new MockIssueStore([]);
+    let agent = new MockLoopAgent([], store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({ agent, issueStore: store }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.outerCycles, 0);
+    assert.strictEqual(result.issueResults.length, 0);
+    assert.strictEqual(agent.callCount, 0, 'agent was never called');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. NoOpValidator (bootstrap)
+// ---------------------------------------------------------------------------
+
+module('issue-loop > NoOpValidator', function () {
+  test('bootstrap issue with NoOpValidator completes', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({
+        id: 'seed',
+        status: 'backlog',
+        priority: 'high',
+        order: 1,
+        summary: 'Process brief and create project artifacts',
+      }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            {
+              tool: 'write_file',
+              args: { path: 'Project/sticky-notes.json', content: '{}' },
+            },
+          ],
+          updateIssue: { id: 'seed', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new NoOpValidator(),
+        briefUrl: 'https://example.test/brief/',
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.issueResults[0].exitReason, 'done');
+    assert.true(
+      result.issueResults[0].lastValidation?.passed,
+      'NoOpValidator returns passed',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Context threading
+// ---------------------------------------------------------------------------
+
+module('issue-loop > context threading', function () {
+  test('validationResults from prior iteration passed to context', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let failValidation = makeFailingValidation();
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'a.gts', content: 'v1' } },
+          ],
+        },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'a.gts', content: 'v2' } },
+          ],
+          updateIssue: { id: 'iss-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let contextBuilder = new StubIssueContextBuilder();
+
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        contextBuilder,
+        validator: new MockValidator([failValidation, makePassingValidation()]),
+      }),
+    );
+
+    assert.strictEqual(
+      contextBuilder.buildCalls[0].validationResults,
+      undefined,
+      'first iteration has no validation results',
+    );
+    assert.deepEqual(
+      contextBuilder.buildCalls[1].validationResults,
+      failValidation,
+      'second iteration receives failing validation from first',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. Brief URL threading
+// ---------------------------------------------------------------------------
+
+module('issue-loop > brief URL threading', function () {
+  test('briefUrl is passed through to buildForIssue', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'seed', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'p.json', content: '{}' } },
+          ],
+          updateIssue: { id: 'seed', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    let contextBuilder = new StubIssueContextBuilder();
+
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        contextBuilder,
+        validator: new MockValidator([makePassingValidation()]),
+        briefUrl: 'https://example.test/brief/',
+      }),
+    );
+
+    assert.strictEqual(
+      contextBuilder.buildCalls[0].briefUrl,
+      'https://example.test/brief/',
+      'briefUrl is passed to buildForIssue',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 11. New issues created mid-loop
+// ---------------------------------------------------------------------------
+
+module('issue-loop > new issues mid-loop', function () {
+  test('agent creates new issues that are picked up by outer loop', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'seed', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        // Seed issue: agent creates it and marks done,
+        // and adds a new issue to the store (simulating tool side-effect)
+        {
+          toolCalls: [
+            {
+              tool: 'write_file',
+              args: { path: 'project.json', content: '{}' },
+            },
+          ],
+          updateIssue: { id: 'seed', status: 'done' },
+        },
+        // New issue: agent works on it
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'card.gts', content: '' } },
+          ],
+          updateIssue: { id: 'new-1', status: 'done' },
+        },
+      ],
+      store,
+    );
+
+    // After the seed issue completes and loadIssues() is called,
+    // the store should include the new issue
+    let originalListIssues = store.listIssues.bind(store);
+    let listCalls = 0;
+    store.listIssues = async () => {
+      listCalls++;
+      if (listCalls > 1) {
+        // After first reload, simulate the agent having created a new issue
+        if (!store.issues.find((i) => i.id === 'new-1')) {
+          store.issues.push(
+            makeIssue({
+              id: 'new-1',
+              status: 'backlog',
+              priority: 'medium',
+              order: 2,
+            }),
+          );
+        }
+      }
+      return originalListIssues();
+    };
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator([
+          makePassingValidation(),
+          makePassingValidation(),
+        ]),
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.strictEqual(result.outerCycles, 2);
+    assert.strictEqual(result.issueResults[0].issueId, 'seed');
+    assert.strictEqual(result.issueResults[1].issueId, 'new-1');
+  });
+});

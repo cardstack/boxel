@@ -41,25 +41,27 @@ export class TestResultEntry extends FieldDef {
   @field stackTrace = contains(StringField);
   @field durationMs = contains(NumberField);
 
-  static embedded = class Embedded extends Component<typeof TestResultEntry> {
-    get statusIcon() {
-      switch (this.args.model.status) {
-        case 'passed':
-          return '\u2713';
-        case 'failed':
-          return '\u2717';
-        case 'error':
-          return '!';
-        case 'pending':
-          return '\u2013';
-        default:
-          return '?';
-      }
+  get statusIcon() {
+    switch (this.status) {
+      case 'passed':
+        return '\u2713';
+      case 'failed':
+        return '\u2717';
+      case 'error':
+        return '!';
+      case 'pending':
+        return '\u2013';
+      default:
+        return '?';
     }
+  }
 
+  static embedded = class Embedded extends Component<typeof TestResultEntry> {
     <template>
       <div class='result-entry'>
-        <span class='status status-{{@model.status}}'>{{this.statusIcon}}</span>
+        <span
+          class='status status-{{@model.status}}'
+        >{{@model.statusIcon}}</span>
         <span class='test-name'>{{@model.testName}}</span>
         {{#if @model.durationMs}}
           <span class='duration'>{{@model.durationMs}}ms</span>
@@ -126,24 +128,22 @@ export class TestModuleResult extends FieldDef {
     return this.moduleRef?.module ?? 'default';
   }
 
+  get totalCount() {
+    return this.results?.length ?? 0;
+  }
+
+  get isComplete() {
+    return !(this.results ?? []).some((r) => r.status === 'pending');
+  }
+
   static embedded = class Embedded extends Component<typeof TestModuleResult> {
-    get total() {
-      return this.args.model.results?.length ?? 0;
-    }
-
-    get isComplete() {
-      return !(this.args.model.results ?? []).some(
-        (r) => r.status === 'pending',
-      );
-    }
-
     <template>
       <div class='module-result'>
         <div class='module-header'>
-          <span class='module-name'>{{this.args.model.moduleName}}</span>
-          {{#if this.isComplete}}
+          <span class='module-name'>{{@model.moduleName}}</span>
+          {{#if @model.isComplete}}
             <span class='module-counts'>
-              {{this.args.model.passedCount}}/{{this.total}}
+              {{@model.passedCount}}/{{@model.totalCount}}
               passed
             </span>
           {{else}}
@@ -302,14 +302,6 @@ export class TestRun extends CardDef {
       );
     }
 
-    get failedResults() {
-      return (this.args.model.moduleResults ?? []).flatMap((sr) =>
-        (sr.results ?? []).filter(
-          (r) => r.status === 'failed' || r.status === 'error',
-        ),
-      );
-    }
-
     <template>
       <article class='surface'>
         <header>
@@ -354,26 +346,64 @@ export class TestRun extends CardDef {
           </section>
         {{/if}}
 
-        {{#if this.failedResults.length}}
-          <section>
-            <h2>Failures</h2>
-            {{#each this.failedResults as |result|}}
-              <div class='failure'>
-                <div class='failure-name'>{{result.testName}}</div>
-                {{#if result.message}}
-                  <pre class='failure-message'>{{result.message}}</pre>
-                {{/if}}
-                {{#if result.stackTrace}}
-                  <pre class='failure-stack'>{{result.stackTrace}}</pre>
-                {{/if}}
-              </div>
-            {{/each}}
-          </section>
-        {{/if}}
-
         {{#if @model.moduleResults.length}}
           <section>
-            <@fields.moduleResults />
+            <h2>Test Results</h2>
+            {{#each @model.moduleResults as |moduleResult|}}
+              <div
+                class='module-group
+                  {{if moduleResult.failedCount "module-has-failures"}}'
+              >
+                <div class='module-group-header'>
+                  <span
+                    class='module-group-name'
+                  >{{moduleResult.moduleName}}</span>
+                  {{#if moduleResult.isComplete}}
+                    <span
+                      class='module-group-counts
+                        {{if moduleResult.failedCount "has-failures"}}'
+                    >
+                      {{#if moduleResult.failedCount}}
+                        {{moduleResult.passedCount}}
+                        passed,
+                        {{moduleResult.failedCount}}
+                        failed
+                      {{else}}
+                        {{moduleResult.passedCount}}/{{moduleResult.totalCount}}
+                        passed
+                      {{/if}}
+                    </span>
+                  {{else}}
+                    <span class='module-group-counts running'>running...</span>
+                  {{/if}}
+                </div>
+                <div class='module-group-tests'>
+                  {{#each moduleResult.results as |result|}}
+                    <div class='test-item'>
+                      <div class='test-item-row'>
+                        <span
+                          class='test-status-icon status-{{result.status}}'
+                          role='img'
+                          aria-label='{{result.status}}'
+                        >{{result.statusIcon}}</span>
+                        <span class='test-item-name'>{{result.testName}}</span>
+                        {{#if result.durationMs}}
+                          <span
+                            class='test-item-duration'
+                          >{{result.durationMs}}ms</span>
+                        {{/if}}
+                      </div>
+                      {{#if result.message}}
+                        <pre class='failure-message'>{{result.message}}</pre>
+                      {{/if}}
+                      {{#if result.stackTrace}}
+                        <pre class='failure-stack'>{{result.stackTrace}}</pre>
+                      {{/if}}
+                    </div>
+                  {{/each}}
+                </div>
+              </div>
+            {{/each}}
           </section>
         {{/if}}
       </article>
@@ -424,14 +454,73 @@ export class TestRun extends CardDef {
           font-size: 0.85rem;
           white-space: pre-wrap;
         }
-        .failure {
-          border-left: 3px solid var(--boxel-red, #dc2626);
-          padding-left: 0.75rem;
+        .module-group {
+          border: 1px solid var(--boxel-200, #e5e7eb);
+          border-radius: 0.5rem;
+          padding: 0.75rem;
           margin-bottom: 0.75rem;
         }
-        .failure-name {
+        .module-has-failures {
+          border-color: var(--boxel-red, #dc2626);
+          border-left-width: 3px;
+        }
+        .module-group-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid var(--boxel-200, #e5e7eb);
+          margin-bottom: 0.5rem;
+        }
+        .module-group-name {
           font-weight: 600;
-          margin-bottom: 0.25rem;
+          font-size: 0.9rem;
+        }
+        .module-group-counts {
+          font-size: 0.8rem;
+          color: var(--boxel-green, #16a34a);
+        }
+        .module-group-counts.has-failures {
+          color: var(--boxel-red, #dc2626);
+        }
+        .module-group-counts.running {
+          color: var(--boxel-blue, #2563eb);
+        }
+        .module-group-tests {
+          display: grid;
+          gap: 0.25rem;
+        }
+        .test-item-row {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.25rem 0;
+          font-size: 0.85rem;
+        }
+        .test-status-icon {
+          font-weight: bold;
+          width: 1.25rem;
+          text-align: center;
+          flex-shrink: 0;
+        }
+        .test-status-icon.status-passed {
+          color: var(--boxel-green, #16a34a);
+        }
+        .test-status-icon.status-failed {
+          color: var(--boxel-red, #dc2626);
+        }
+        .test-status-icon.status-error {
+          color: var(--boxel-orange, #ea580c);
+        }
+        .test-status-icon.status-pending {
+          color: var(--boxel-400, #9ca3af);
+        }
+        .test-item-name {
+          flex: 1;
+        }
+        .test-item-duration {
+          color: var(--boxel-400, #9ca3af);
+          font-size: 0.75rem;
         }
         .failure-message,
         .failure-stack {
@@ -440,7 +529,7 @@ export class TestRun extends CardDef {
           white-space: pre-wrap;
           overflow-x: auto;
           max-width: 100%;
-          margin: 0.25rem 0;
+          margin: 0.25rem 0 0.25rem 1.75rem;
           color: var(--muted-foreground);
         }
         .failure-stack {

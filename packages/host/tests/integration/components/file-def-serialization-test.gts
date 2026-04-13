@@ -49,7 +49,7 @@ module('Integration | serializeFileDef', function (hooks) {
     let doc = serializeFileDef(fileDef);
 
     assert.deepEqual(doc.data.meta.adoptsFrom, {
-      module: `${baseRealm.url}file-api`,
+      module: `${baseRealm.url}card-api`,
       name: 'FileDef',
     });
   });
