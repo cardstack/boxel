@@ -874,9 +874,7 @@ export default class RenderRoute extends Route<Model> {
         // Only clear if the global still points at the last function we
         // installed. This avoids both pinning this route (and its owner)
         // via globalThis and clobbering another live route's helper.
-        if (
-          (globalThis as any).boxelTransitionTo === this.#lastTransitionFn
-        ) {
+        if ((globalThis as any).boxelTransitionTo === this.#lastTransitionFn) {
           delete (globalThis as any).boxelTransitionTo;
         }
       });

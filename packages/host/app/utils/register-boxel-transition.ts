@@ -5,9 +5,7 @@ export function registerBoxelTransitionTo(
   router: RouterService,
   owner: object,
 ): void {
-  let transitionFn = (
-    ...args: Parameters<RouterService['transitionTo']>
-  ) => {
+  let transitionFn = (...args: Parameters<RouterService['transitionTo']>) => {
     router.transitionTo(...args);
   };
   (globalThis as any).boxelTransitionTo = transitionFn;
