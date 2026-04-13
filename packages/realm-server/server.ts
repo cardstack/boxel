@@ -396,6 +396,24 @@ export class RealmServer {
       cardURL = new URL('index', requestURL);
     }
 
+    // For published realms, support HTTP caching via ETag.
+    // The ETag is based on last_published_at — content is immutable between
+    // publishes, so a matching ETag means the response hasn't changed.
+    let publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+    let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
+    let etag = lastPublishedAt ? `"${lastPublishedAt}"` : null;
+
+    if (etag) {
+      let ifNoneMatch = ctxt.get('If-None-Match');
+      if (ifNoneMatch === etag) {
+        ctxt.status = 304;
+        ctxt.set('ETag', etag);
+        ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
+        ctxt.vary('Accept');
+        return;
+      }
+    }
+
     let indexHTML = await this.retrieveIndexHTML();
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
@@ -509,6 +527,12 @@ export class RealmServer {
       responseHTML = injectIsolatedHTML(responseHTML, isolatedHTML);
     }
 
+    if (etag) {
+      ctxt.set('ETag', etag);
+      ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
+      ctxt.vary('Accept');
+    }
+
     ctxt.body = responseHTML;
     return;
   };
@@ -534,18 +558,30 @@ export class RealmServer {
     });
   }
 
-  private async isHostModeRequest(requestURL: URL): Promise<boolean> {
+  private async getPublishedRealmInfo(
+    requestURL: URL,
+  ): Promise<{ lastPublishedAt: string | null } | null> {
     let realm = this.findRealmForRequestURL(requestURL);
     if (!realm) {
-      return false;
+      return null;
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT published_realm_url FROM published_realms WHERE published_realm_url =`,
+      `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
       param(realm.url),
     ]);
 
-    return rows.length > 0;
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return {
+      lastPublishedAt: (rows[0].last_published_at as string) ?? null,
+    };
+  }
+
+  private async isHostModeRequest(requestURL: URL): Promise<boolean> {
+    return (await this.getPublishedRealmInfo(requestURL)) !== null;
   }
 
   // Check if the URL corresponds to an indexed card instance.
