@@ -18,7 +18,7 @@ export interface Profile {
   displayName: string;
   matrixUrl: string;
   realmServerUrl: string;
-  password: string; // Stored in plaintext - file should have restricted permissions, this will be updated in CS-10642
+  password: string; // Stored in plaintext - file should have restricted permissions, this will be updated in CS-10725
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
 }
