@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 import type { CiStatus, CiGroup } from '../../utils';
 
 // ── Sub-components ──────────────────────────────────────────────────────
@@ -149,7 +150,7 @@ interface CiSectionSignature {
 }
 
 export class CiSection extends GlimmerComponent<CiSectionSignature> {
-  get flatItems() {
+  @cached get flatItems() {
     return this.args.ciGroups.flatMap((g) => g.items);
   }
 
@@ -159,7 +160,7 @@ export class CiSection extends GlimmerComponent<CiSectionSignature> {
 
       {{#if this.flatItems.length}}
         <ul class='ci-group' role='list'>
-          {{#each this.flatItems key="name" as |item|}}
+          {{#each this.flatItems key='name' as |item|}}
             <li class='ci-item'>
               <CiDot @state={{item.state}} />
               <div class='ci-item-detail'>
