@@ -146,6 +146,7 @@ export const sourceRealmDir = resolve(
   process.env.SOFTWARE_FACTORY_SOURCE_REALM_DIR ?? 'realm',
 );
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
+export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
 export const prepareTestPgScript = resolve(
   realmServerDir,
   'tests',
@@ -412,7 +413,10 @@ export function shouldIgnoreFixturePath(relativePath: string): boolean {
     );
 }
 
-export function hashRealmFixture(realmDir: string): string {
+export function hashRealmFixture(
+  realmDir: string,
+  options?: { fileFilter?: (relativePath: string) => boolean },
+): string {
   let entries: string[] = [];
 
   function visit(currentDir: string) {
@@ -427,6 +431,9 @@ export function hashRealmFixture(realmDir: string): string {
         continue;
       }
       if (!entry.isFile()) {
+        continue;
+      }
+      if (options?.fileFilter && !options.fileFilter(relativePath)) {
         continue;
       }
       let stats = statSync(absolutePath);
