@@ -127,6 +127,49 @@ export async function getRealmTokens(
   return (await response.json()) as RealmTokens;
 }
 
+/**
+ * Returns true when the JWT is missing an `exp` claim, cannot be parsed, or
+ * expires within `leadTimeSeconds` from now. Accepts either a raw JWT or an
+ * Authorization header value that embeds one (e.g. "Bearer eyJ...").
+ *
+ * Tokens without an `exp` claim are treated as non-expiring — the caller
+ * decides whether that is acceptable.
+ */
+export function isTokenExpiring(
+  jwt: string | undefined,
+  leadTimeSeconds = 60,
+): boolean {
+  if (!jwt) {
+    return true;
+  }
+  let token = extractJwt(jwt);
+  let parts = token.split('.');
+  if (parts.length < 2) {
+    return true;
+  }
+  try {
+    let payload = JSON.parse(
+      Buffer.from(parts[1], 'base64url').toString('utf-8'),
+    ) as { exp?: number };
+    if (typeof payload.exp !== 'number') {
+      return false;
+    }
+    let nowSeconds = Math.floor(Date.now() / 1000);
+    return payload.exp - leadTimeSeconds < nowSeconds;
+  } catch {
+    return true;
+  }
+}
+
+function extractJwt(authHeader: string): string {
+  let trimmed = authHeader.trim();
+  let spaceIdx = trimmed.indexOf(' ');
+  if (spaceIdx === -1) {
+    return trimmed;
+  }
+  return trimmed.slice(spaceIdx + 1).trim();
+}
+
 export async function addRealmToMatrixAccountData(
   matrixAuth: MatrixAuth,
   realmUrl: string,

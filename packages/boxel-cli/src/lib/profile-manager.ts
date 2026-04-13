@@ -7,6 +7,7 @@ import {
   getRealmServerToken as fetchRealmServerToken,
   getRealmTokens,
   addRealmToMatrixAccountData,
+  isTokenExpiring,
   type MatrixAuth,
 } from './auth';
 
@@ -333,15 +334,10 @@ export class ProfileManager {
 
   async getOrRefreshServerToken(): Promise<string> {
     let cached = this.getRealmServerToken();
-    if (cached) {
+    if (cached && !isTokenExpiring(cached)) {
       return cached;
     }
-    let matrixAuth = await this.loginToMatrix();
-    let active = this.getActiveProfile()!;
-    let realmServerUrl = active.profile.realmServerUrl.replace(/\/$/, '');
-    let token = await fetchRealmServerToken(matrixAuth, realmServerUrl);
-    this.setRealmServerToken(token);
-    return token;
+    return this.refreshServerToken();
   }
 
   async refreshServerToken(): Promise<string> {
@@ -353,11 +349,24 @@ export class ProfileManager {
     return token;
   }
 
+  async getOrRefreshRealmToken(realmUrl: string): Promise<string | undefined> {
+    let cached = this.getRealmToken(realmUrl);
+    if (cached && !isTokenExpiring(cached)) {
+      return cached;
+    }
+    let serverToken = await this.getOrRefreshServerToken();
+    return this.fetchAndStoreRealmToken(realmUrl, serverToken);
+  }
+
   async authedFetch(
     input: string | URL | Request,
     init?: RequestInit,
+    options: { realmUrl?: string } = {},
   ): Promise<Response> {
-    let token = await this.getOrRefreshServerToken();
+    let token = options.realmUrl
+      ? await this.requireRealmToken(options.realmUrl)
+      : await this.getOrRefreshServerToken();
+
     let baseHeaders =
       input instanceof Request ? new Headers(input.headers) : new Headers();
     let initHeaders = new Headers(init?.headers);
@@ -371,12 +380,33 @@ export class ProfileManager {
     let response = await fetch(input, { ...init, headers: baseHeaders });
 
     if (response.status === 401) {
-      token = await this.refreshServerToken();
+      token = options.realmUrl
+        ? await this.requireRealmToken(options.realmUrl, { forceRefresh: true })
+        : await this.refreshServerToken();
       baseHeaders.set('Authorization', token);
       response = await fetch(input, { ...init, headers: baseHeaders });
     }
 
     return response;
+  }
+
+  private async requireRealmToken(
+    realmUrl: string,
+    options: { forceRefresh?: boolean } = {},
+  ): Promise<string> {
+    if (options.forceRefresh) {
+      let serverToken = await this.getOrRefreshServerToken();
+      let refreshed = await this.fetchAndStoreRealmToken(realmUrl, serverToken);
+      if (!refreshed) {
+        throw new Error(`No realm JWT available for ${realmUrl}`);
+      }
+      return refreshed;
+    }
+    let token = await this.getOrRefreshRealmToken(realmUrl);
+    if (!token) {
+      throw new Error(`No realm JWT available for ${realmUrl}`);
+    }
+    return token;
   }
 
   async fetchAndStoreRealmToken(
