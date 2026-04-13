@@ -1,6 +1,7 @@
 import type Owner from '@ember/owner';
 
 import { settled } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 

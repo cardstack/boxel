@@ -29,8 +29,9 @@ export function setupQUnit() {
         if (pm) {
           let used = (pm.usedJSHeapSize / 1048576).toFixed(1);
           let total = (pm.totalJSHeapSize / 1048576).toFixed(1);
-          // eslint-disable-next-line no-console
-          console.log(`MEMPROBE t=${probeCount} used=${used}MB total=${total}MB`);
+          console.log(
+            `MEMPROBE t=${probeCount} used=${used}MB total=${total}MB`,
+          );
         }
       } catch (_) {
         /* ignore */
