@@ -9,7 +9,7 @@ import {
 import { configureLogger } from '../logger';
 
 /**
- * Suppress console.log/warn during a callback. Used during snapshot builds
+ * Suppress console.log/warn during a callback. Used during template DB builds
  * to silence noisy third-party code (e.g. synapse docker helpers) that
  * writes directly to the console instead of going through the logger.
  */
@@ -199,14 +199,15 @@ export async function ensureFactoryRealmTemplate(
         }
       | undefined;
     let context = options.context;
-    if (!context) {
-      ownedSupport = await withSilentConsole(() =>
-        startFactorySupportServices(),
-      );
-      context = ownedSupport.context;
-    }
 
     try {
+      if (!context) {
+        ownedSupport = await withSilentConsole(() =>
+          startFactorySupportServices(),
+        );
+        context = ownedSupport.context;
+      }
+
       await buildTemplateDatabase({
         realmDir,
         realmURL,
@@ -336,14 +337,15 @@ export async function ensureCombinedFactoryRealmTemplate(
         | { context: FactorySupportContext; stop(): Promise<void> }
         | undefined;
       let context = options.context;
-      if (!context) {
-        ownedSupport = await withSilentConsole(() =>
-          startFactorySupportServices(),
-        );
-        context = ownedSupport.context;
-      }
 
       try {
+        if (!context) {
+          ownedSupport = await withSilentConsole(() =>
+            startFactorySupportServices(),
+          );
+          context = ownedSupport.context;
+        }
+
         let realmFixtures = resolvedFixtures.map((f) => {
           let realmURL = new URL(f.realmPath, realmServerURL);
           return {

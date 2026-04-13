@@ -15,6 +15,10 @@ import { logger } from '../logger';
 let log = logger('cache-realm');
 
 async function main(): Promise<void> {
+  let flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
+  if (flags.length > 0) {
+    log.warn(`unknown flag(s): ${flags.join(', ')}`);
+  }
   let args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 
   let realmDirs = [
@@ -168,7 +172,8 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
-    // Lingering timers (pg pool idle, HTTP keep-alive) can prevent the
-    // event loop from draining. Force exit once the work is done.
-    process.exit(process.exitCode ?? 0);
+    // Lingering handles (fetch keep-alive sockets, pg pool idle) can prevent
+    // the event loop from draining. Schedule a deferred exit so stdout/stderr
+    // have time to flush before the process terminates.
+    setTimeout(() => process.exit(process.exitCode ?? 0), 100).unref();
   });
