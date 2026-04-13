@@ -301,7 +301,8 @@ export default class DetailPanel extends Component<Signature> {
         handler: this.duplicateInstance,
       },
       ...(this.realm.canWrite(this.args.readyFile.url) &&
-      !isListingInstance(this.args.cardInstance)
+      !isListingInstance(this.args.cardInstance) &&
+      !this.isIndexJsonInstanceFile
         ? [
             {
               label: 'Create Listing',
@@ -491,6 +492,10 @@ export default class DetailPanel extends Component<Signature> {
       isCardDocumentString(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
+  }
+
+  private get isIndexJsonInstanceFile() {
+    return this.args.readyFile.url.endsWith('/index.json');
   }
 
   private get isEmptyFile() {

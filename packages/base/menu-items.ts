@@ -154,26 +154,30 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    menuItems.push({
-      label: `Create Listing`,
-      action: async () => {
-        const codeRef = resolveAdoptsFrom(card);
-        if (!codeRef) {
-          throw new Error('Unable to resolve codeRef from card');
-        }
-        const targetRealm = card[realmURL]?.href;
-        if (!targetRealm) {
-          throw new Error('Unable to determine target realm from card');
-        }
-        await new OpenCreateListingModalCommand(params.commandContext).execute({
-          codeRef,
-          openCardIds: [cardId],
-          targetRealm,
-        });
-      },
-      icon: Wand,
-      disabled: !params.canEdit,
-    });
+    if (!isIndexCard(card)) {
+      menuItems.push({
+        label: `Create Listing`,
+        action: async () => {
+          const codeRef = resolveAdoptsFrom(card);
+          if (!codeRef) {
+            throw new Error('Unable to resolve codeRef from card');
+          }
+          const targetRealm = card[realmURL]?.href;
+          if (!targetRealm) {
+            throw new Error('Unable to determine target realm from card');
+          }
+          await new OpenCreateListingModalCommand(
+            params.commandContext,
+          ).execute({
+            codeRef,
+            openCardIds: [cardId],
+            targetRealm,
+          });
+        },
+        icon: Wand,
+        disabled: !params.canEdit,
+      });
+    }
   }
   return menuItems;
 }
