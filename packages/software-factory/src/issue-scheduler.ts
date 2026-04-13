@@ -17,6 +17,7 @@ import {
   readFile,
   writeFile,
   ensureJsonExtension,
+  addCommentToIssue,
   type RealmFetchOptions,
 } from './realm-operations';
 import { logger } from './logger';
@@ -36,10 +37,12 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
-  /** Update issue fields in the realm (e.g., status, description). */
-  updateIssue(
+  /** Update issue fields in the realm (e.g., status). Descriptions are immutable — use addComment instead. */
+  updateIssue(issueId: string, updates: { status?: string }): Promise<void>;
+  /** Append a comment to an issue. All post-creation context goes through comments. */
+  addComment(
     issueId: string,
-    updates: { status?: string; description?: string },
+    comment: { body: string; author: string },
   ): Promise<void>;
   /** Update a project's status in the realm. */
   updateProjectStatus?(projectStatus: string): Promise<void>;
@@ -240,7 +243,7 @@ export class RealmIssueStore implements IssueStore {
 
   async updateIssue(
     issueId: string,
-    updates: { status?: string; description?: string },
+    updates: { status?: string },
   ): Promise<void> {
     // Read the source JSON file (not the indexed card, which can have
     // stripped relationships during indexing).
@@ -261,9 +264,6 @@ export class RealmIssueStore implements IssueStore {
     if (updates.status != null) {
       attrs.status = updates.status;
     }
-    if (updates.description != null) {
-      attrs.description = updates.description;
-    }
     attrs.updatedAt = new Date().toISOString();
 
     doc.data.attributes = attrs;
@@ -282,6 +282,24 @@ export class RealmIssueStore implements IssueStore {
     }
 
     log.info(`Updated issue "${issueId}": ${JSON.stringify(updates)}`);
+  }
+
+  async addComment(
+    issueId: string,
+    comment: { body: string; author: string },
+  ): Promise<void> {
+    let result = await addCommentToIssue(
+      this.realmUrl,
+      issueId,
+      comment,
+      this.options,
+    );
+    if (!result.ok) {
+      throw new Error(
+        `Failed to add comment to issue "${issueId}": ${result.error}`,
+      );
+    }
+    log.info(`Added comment to issue "${issueId}" by ${comment.author}`);
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {

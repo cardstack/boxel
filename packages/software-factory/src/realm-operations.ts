@@ -319,6 +319,54 @@ export async function writeFile(
 }
 
 // ---------------------------------------------------------------------------
+// Issue Comments
+// ---------------------------------------------------------------------------
+
+/**
+ * Append a comment to an issue card using read-patch-write.
+ * Issue descriptions are immutable — all post-creation context goes through comments.
+ */
+export async function addCommentToIssue(
+  realmUrl: string,
+  path: string,
+  comment: { body: string; author: string; datetime?: string },
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; error?: string }> {
+  let filePath = ensureJsonExtension(path);
+
+  let existing = await readFile(realmUrl, filePath, options);
+  if (!existing.ok || !existing.document) {
+    return {
+      ok: false,
+      error: `Failed to read issue at ${filePath}: ${existing.error ?? 'no document'}`,
+    };
+  }
+
+  let attrs = (existing.document.data?.attributes ?? {}) as Record<
+    string,
+    unknown
+  >;
+  let existingComments = (attrs.comments as unknown[]) ?? [];
+
+  existingComments.push({
+    body: comment.body,
+    author: comment.author,
+    datetime: comment.datetime ?? new Date().toISOString(),
+  });
+
+  attrs.comments = existingComments;
+  attrs.updatedAt = new Date().toISOString();
+  existing.document.data.attributes = attrs;
+
+  return writeFile(
+    realmUrl,
+    filePath,
+    JSON.stringify(existing.document, null, 2),
+    options,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Card / File Delete
 // ---------------------------------------------------------------------------
 

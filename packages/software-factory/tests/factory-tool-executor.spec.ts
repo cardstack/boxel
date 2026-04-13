@@ -318,6 +318,75 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
   expect(readResult.document!.data.attributes!.status).toBe('blocked');
 });
 
+test('add_comment appends a comment to an existing issue without changing other fields', async ({
+  realm,
+}) => {
+  let tools = await buildToolsForRealm(realm);
+  let writeFile = tools.find((t) => t.name === 'write_file')!;
+  let addComment = tools.find((t) => t.name === 'add_comment')!;
+  let readFileTool = tools.find((t) => t.name === 'read_file')!;
+
+  expect(addComment).toBeDefined();
+
+  // Create an issue via write_file (descriptions are set at creation time,
+  // not via update_issue which strips them)
+  let darkfactoryModule = `${realm.realmServerURL.href}software-factory/darkfactory`;
+  let issueDoc = {
+    data: {
+      type: 'card',
+      attributes: {
+        summary: 'Issue for comment test',
+        description: 'Original description that must not change',
+        status: 'blocked',
+        priority: 'high',
+      },
+      meta: {
+        adoptsFrom: { module: darkfactoryModule, name: 'Issue' },
+      },
+    },
+  };
+  let createResult = (await writeFile.execute({
+    path: 'Issues/comment-test-issue.json',
+    content: JSON.stringify(issueDoc, null, 2),
+  })) as CardWriteResult;
+
+  expect(createResult.ok).toBe(true);
+
+  // Add a comment
+  let commentResult = (await addComment.execute({
+    path: 'Issues/comment-test-issue.json',
+    body: 'This is a test comment from the integration test',
+    author: 'test-agent',
+  })) as { ok: boolean };
+
+  expect(commentResult.ok).toBe(true);
+
+  // Read back and verify
+  let readResult = (await readFileTool.execute({
+    path: 'Issues/comment-test-issue.json',
+  })) as CardReadResult;
+
+  expect(readResult.ok).toBe(true);
+  let attrs = readResult.document!.data.attributes!;
+  // Original fields unchanged
+  expect(attrs.summary).toBe('Issue for comment test');
+  expect(attrs.description).toBe('Original description that must not change');
+  expect(attrs.status).toBe('blocked');
+  expect(attrs.priority).toBe('high');
+  // Comment was appended
+  let comments = attrs.comments as {
+    body: string;
+    author: string;
+    datetime: string;
+  }[];
+  expect(comments).toHaveLength(1);
+  expect(comments[0].body).toBe(
+    'This is a test comment from the integration test',
+  );
+  expect(comments[0].author).toBe('test-agent');
+  expect(comments[0].datetime).toBeTruthy();
+});
+
 test('create_knowledge writes and reads back a knowledge article', async ({
   realm,
 }) => {

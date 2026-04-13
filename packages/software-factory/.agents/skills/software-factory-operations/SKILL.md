@@ -30,7 +30,8 @@ The agent has these tools during the execution loop. Use them by name — they a
 ### Updating Project State
 
 - `update_project({ path, attributes, relationships? })` — Update a Project card in the target realm. The tool's parameters include a dynamic JSON schema describing available fields — use it to know valid field names and types. The tool auto-constructs the JSON:API document with the correct `adoptsFrom`.
-- `update_issue({ path, attributes, relationships? })` — Update an Issue card. Same structured interface with dynamic field schema in the tool parameters.
+- `update_issue({ path, attributes, relationships? })` — Update an Issue card. Same structured interface with dynamic field schema in the tool parameters. **Note:** `description` is stripped — issue descriptions are immutable after creation. Use `add_comment` to add context.
+- `add_comment({ path, body, author })` — Append a comment to an existing issue. Use this to record context, blocked reasons, validation failures, or any post-creation updates. Comments are append-only — they cannot be edited or deleted.
 - `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
 - `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `https://cardstack.com/base/spec#Spec`.
 
@@ -59,6 +60,10 @@ Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Pars
 - `signal_done()` — Signal that the current issue is complete. Call this only after all implementation and test files have been written.
 - `request_clarification({ message })` — Signal that you cannot proceed and need human input. Describe what is blocking.
 
+### Important: Issue Descriptions Are Immutable
+
+**Never modify an issue's `description` field after creation.** The description captures the original intent of the issue. If you need to add context — blocked reasons, progress notes, clarification requests, or any post-creation information — use `add_comment` instead. The `update_issue` tool strips `description` changes automatically.
+
 ## Required Flow
 
 1. **Inspect before writing.** Use `search_realm` and `read_file` to understand what already exists in the target realm before creating or modifying files.
@@ -68,7 +73,7 @@ Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Pars
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
 6. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the validation pipeline (including test execution) automatically after this.
 7. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
-8. **Update issue state** via `update_issue` — update notes, acceptance criteria, and related knowledge as work progresses.
+8. **Record progress** via `add_comment` — append notes, blocked reasons, or context to the issue. Never modify the issue description.
 
 ## Target Realm Artifact Structure
 

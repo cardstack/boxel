@@ -157,10 +157,10 @@ function formatValidation(results: ValidationResults): string {
 }
 
 /**
- * Build a description for an issue blocked due to max iterations with
+ * Build the comment body for an issue blocked due to max iterations with
  * failing validation, including the formatted failure context.
  */
-function buildMaxIterationBlockedDescription(
+function buildMaxIterationBlockedComment(
   maxIterations: number,
   validationResults: ValidationResults,
   validator: Validator,
@@ -368,14 +368,17 @@ export async function runIssueLoop(
         );
 
         try {
-          let description = buildMaxIterationBlockedDescription(
+          let commentBody = buildMaxIterationBlockedComment(
             maxIterationsPerIssue,
             validationResults,
             validator,
           );
+          await issueStore.addComment(issue.id, {
+            body: commentBody,
+            author: 'orchestrator',
+          });
           await issueStore.updateIssue(issue.id, {
             status: 'blocked',
-            description,
           });
           exitReason = 'blocked';
         } catch (err) {

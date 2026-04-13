@@ -23,6 +23,7 @@ import {
   searchRealm,
   runRealmCommand,
   ensureJsonExtension,
+  addCommentToIssue,
   type RealmFetchOptions,
 } from './realm-operations';
 
@@ -389,6 +390,9 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
       ) {
         delete attributes.status;
       }
+      // Issue descriptions are immutable after creation. All post-creation
+      // context must go through add_comment instead.
+      delete attributes.description;
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
@@ -440,55 +444,14 @@ function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
       required: ['path', 'body', 'author'],
     },
     execute: async (args) => {
-      let path = ensureJsonExtension(args.path as string);
+      let path = args.path as string;
       let body = args.body as string;
       let author = args.author as string;
 
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
 
-      // Read existing issue
-      let existing = await readFile(realmUrl, path, fetchOptions);
-      if (!existing.ok || !existing.document) {
-        return {
-          ok: false,
-          error: `Failed to read issue at ${path}: ${existing.error ?? 'no document'}`,
-        };
-      }
-
-      // Get existing comments or initialize empty array
-      let existingComments =
-        (existing.document.data?.attributes?.comments as unknown[]) ?? [];
-
-      // Append new comment
-      let newComment = {
-        body,
-        author,
-        datetime: new Date().toISOString(),
-      };
-      existingComments.push(newComment);
-
-      // Merge back
-      let updatedAttributes = {
-        ...existing.document.data?.attributes,
-        comments: existingComments,
-      };
-
-      let document = buildCardDocument(
-        'Issue',
-        config.darkfactoryModuleUrl,
-        updatedAttributes,
-        existing.document.data?.relationships as
-          | Record<string, unknown>
-          | undefined,
-      );
-
-      return writeFile(
-        realmUrl,
-        path,
-        JSON.stringify(document, null, 2),
-        fetchOptions,
-      );
+      return addCommentToIssue(realmUrl, path, { body, author }, fetchOptions);
     },
   };
 }

@@ -907,6 +907,53 @@ module(
       );
     });
 
+    test('update_issue strips description (descriptions are immutable)', async function (assert) {
+      let existingIssue = {
+        data: {
+          type: 'card',
+          attributes: {
+            issueId: 'SN-1',
+            description: 'Original description',
+            status: 'in_progress',
+          },
+          meta: {
+            adoptsFrom: {
+              module:
+                'https://realms.example.test/software-factory/darkfactory',
+              name: 'Issue',
+            },
+          },
+        },
+      };
+      let { fetch: mockFetch, requests } = createMockFetch(
+        200,
+        {},
+        existingIssue,
+      );
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({ fetch: mockFetch });
+      let tools = buildFactoryTools(config, executor, registry);
+      let tool = findTool(tools, 'update_issue');
+
+      await tool.execute({
+        path: 'Issues/1.json',
+        attributes: { description: 'Overwritten!', status: 'blocked' },
+      });
+      let writeRequest = requests.find((r) => r.method === 'POST')!;
+      let body = JSON.parse(writeRequest.body);
+      assert.strictEqual(
+        body.data.attributes.description,
+        'Original description',
+        'description is preserved from original, not overwritten',
+      );
+      assert.strictEqual(
+        body.data.attributes.status,
+        'blocked',
+        'status update still works',
+      );
+    });
+
     test('card tools omit empty relationships from document', async function (assert) {
       let existingProject = {
         data: {
@@ -1075,10 +1122,11 @@ module('factory-tool-builder > add_comment', function () {
       writtenBody.data.attributes.comments[0].datetime,
       'datetime should be set',
     );
+    // adoptsFrom is preserved from the original document (read-patch-write)
     assert.strictEqual(writtenBody.data.meta.adoptsFrom.name, 'Issue');
     assert.strictEqual(
       writtenBody.data.meta.adoptsFrom.module,
-      'https://realms.example.test/software-factory/darkfactory',
+      `${TARGET_REALM}darkfactory`,
     );
   });
 

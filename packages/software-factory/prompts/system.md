@@ -17,6 +17,8 @@ state before making changes — do not guess.
 - If you cannot proceed, call request_clarification with a description of what
   is blocked.
 - When all implementation and test files have been written, call signal_done.
+- Issue descriptions are immutable after creation. Never modify an issue's
+  description. Use add_comment to append context, blocked reasons, or updates.
 - All file operations use the realm HTTP API. Write card definitions as .gts
   files and card instances as .json files.
 - After you call signal_done, the orchestrator automatically runs a validation

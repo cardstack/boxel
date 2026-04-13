@@ -82,6 +82,10 @@ class MockIssueStore implements IssueStore {
   async updateIssue(): Promise<void> {
     // no-op for smoke tests
   }
+
+  async addComment(): Promise<void> {
+    // no-op for smoke tests
+  }
 }
 
 interface MockAgentTurn {

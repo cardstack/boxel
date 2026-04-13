@@ -394,7 +394,20 @@ The status transition rules are:
 | `in_progress` → `blocked` | Agent or Orchestrator | Agent sets `blocked` via `update_issue`, or max iterations reached with failing validation |
 | `blocked` → `backlog`     | Agent                 | Agent unblocks via `update_issue`                                                          |
 
-The `update_issue` tool strips disallowed status values — only `blocked` and `backlog` pass through. The agent signals completion via `signal_done()`, and the loop promotes to `done` only when validation also passes. If the agent signals done but validation fails, the loop continues iterating with the failure details.
+The `update_issue` tool strips disallowed status values — only `blocked` and `backlog` pass through. It also strips `description` — issue descriptions are immutable after creation (see below). The agent signals completion via `signal_done()`, and the loop promotes to `done` only when validation also passes. If the agent signals done but validation fails, the loop continues iterating with the failure details.
+
+### Issue Descriptions Are Immutable
+
+**Issue descriptions must never be modified after creation.** The description captures the original intent of the issue. All post-creation context — blocked reasons, validation failures, progress notes, human replies — must be added as **comments** via the `add_comment` tool or `IssueStore.addComment()`.
+
+This design principle is enforced at multiple levels:
+
+- The `update_issue` agent tool strips `description` from attributes before writing
+- The orchestrator's max-iteration blocking adds failure context as a comment (author: `orchestrator`), not by overwriting the description
+- The `IssueStore.updateIssue()` interface accepts only `{ status?: string }` — no `description` field
+- Skills and system prompts instruct the agent to use `add_comment` for all post-creation context
+
+The `add_comment` tool and `addCommentToIssue()` realm operation implement the centralized read-patch-write logic for appending comments. Both the agent tool and the orchestrator's `IssueStore` delegate to this single function.
 
 ### Project Completion
 
