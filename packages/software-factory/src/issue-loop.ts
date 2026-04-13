@@ -367,6 +367,7 @@ export async function runIssueLoop(
           `  Validation still failing — blocking issue with failure context`,
         );
 
+        // Comment is best-effort context; status transition is critical.
         try {
           let commentBody = buildMaxIterationBlockedComment(
             maxIterationsPerIssue,
@@ -377,6 +378,13 @@ export async function runIssueLoop(
             body: commentBody,
             author: 'orchestrator',
           });
+        } catch (err) {
+          log.warn(
+            `  Failed to add blocking comment to issue: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        try {
           await issueStore.updateIssue(issue.id, {
             status: 'blocked',
           });

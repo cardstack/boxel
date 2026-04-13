@@ -346,7 +346,9 @@ export async function addCommentToIssue(
     string,
     unknown
   >;
-  let existingComments = (attrs.comments as unknown[]) ?? [];
+  let existingComments = Array.isArray(attrs.comments)
+    ? (attrs.comments as unknown[])
+    : [];
 
   existingComments.push({
     body: comment.body,
