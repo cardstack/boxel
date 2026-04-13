@@ -73,8 +73,9 @@ export async function createSeedIssue(
   }
 
   // Only proceed to create if the read failed with 404 (not found).
-  // Any other failure (auth, network, server error) should be surfaced.
-  if (existing.status !== undefined && existing.status !== 404) {
+  // Any other failure (auth, network, server error) should be surfaced —
+  // including network errors where status is undefined.
+  if (existing.status !== 404) {
     throw new Error(
       `Failed to check for existing seed issue: ${existing.error ?? `HTTP ${existing.status}`}`,
     );
