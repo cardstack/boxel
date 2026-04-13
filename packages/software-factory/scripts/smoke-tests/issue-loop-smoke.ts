@@ -25,7 +25,7 @@ import type {
   ToolCallEntry,
 } from '../../src/factory-tool-builder';
 
-import type { AgentRunResult, LoopAgent } from '../../src/factory-loop';
+import type { AgentRunResult, LoopAgent } from '../../src/factory-agent-types';
 import type { IssueStore } from '../../src/issue-scheduler';
 
 import {
@@ -614,6 +614,145 @@ async function scenarioValidationPipeline(): Promise<void> {
   log.info('');
 }
 
+async function scenarioBootstrapSeedIssue(): Promise<void> {
+  log.info('--- Scenario 8: Bootstrap seed issue flow ---');
+  log.info('');
+
+  let store = new MockIssueStore([
+    makeIssue({
+      id: 'Issues/bootstrap-seed',
+      status: 'backlog',
+      priority: 'critical',
+      order: 0,
+      summary: 'Process brief and create project artifacts',
+    }),
+  ]);
+
+  // Agent processes seed: creates Project + 2 Issues, marks seed done.
+  // Then picks up implementation issue #1 and completes it.
+  let agent = new MockLoopAgent(
+    [
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: {
+              path: 'Projects/sticky-note-mvp.json',
+              content: '{}',
+            },
+          },
+          {
+            tool: 'write_file',
+            args: {
+              path: 'Issues/sticky-note-define-card.json',
+              content: '{}',
+            },
+          },
+          {
+            tool: 'write_file',
+            args: {
+              path: 'Issues/sticky-note-catalog-spec.json',
+              content: '{}',
+            },
+          },
+        ],
+        updateIssue: { id: 'Issues/bootstrap-seed', status: 'done' },
+      },
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'sticky-note.gts', content: '' },
+          },
+        ],
+        updateIssue: {
+          id: 'Issues/sticky-note-define-card',
+          status: 'done',
+        },
+      },
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'Spec/sticky-note.json', content: '{}' },
+          },
+        ],
+        updateIssue: {
+          id: 'Issues/sticky-note-catalog-spec',
+          status: 'done',
+        },
+      },
+    ],
+    store,
+  );
+
+  // Simulate agent creating new issues during the seed turn
+  let originalList = store.listIssues.bind(store);
+  let listCalls = 0;
+  store.listIssues = async () => {
+    listCalls++;
+    if (
+      listCalls > 1 &&
+      !store.issues.find((i) => i.id === 'Issues/sticky-note-define-card')
+    ) {
+      store.issues.push(
+        makeIssue({
+          id: 'Issues/sticky-note-define-card',
+          status: 'backlog',
+          priority: 'high',
+          order: 1,
+          summary: 'Create Sticky Note card definition and tests',
+        }),
+      );
+      store.issues.push(
+        makeIssue({
+          id: 'Issues/sticky-note-catalog-spec',
+          status: 'backlog',
+          priority: 'medium',
+          order: 2,
+          blockedBy: ['Issues/sticky-note-define-card'],
+          summary: 'Create Sticky Note catalog spec with examples',
+        }),
+      );
+    }
+    return originalList();
+  };
+
+  let result = await runIssueLoop({
+    agent,
+    contextBuilder: new StubContextBuilder(),
+    tools: TOOLS,
+    issueStore: store,
+    validator: new NoOpValidator(),
+    targetRealmUrl: 'https://example.test/target/',
+    briefUrl: 'https://example.test/brief/',
+  });
+
+  printResult(result);
+  check(
+    'bootstrap outcome is all_issues_done',
+    result.outcome === 'all_issues_done',
+  );
+  check('3 outer cycles (seed + 2 implementation)', result.outerCycles === 3);
+  check(
+    'seed issue completed first',
+    result.issueResults[0]?.issueId === 'Issues/bootstrap-seed',
+  );
+  check(
+    'seed issue exit reason is done',
+    result.issueResults[0]?.exitReason === 'done',
+  );
+  check(
+    'implementation issue #1 completed second',
+    result.issueResults[1]?.issueId === 'Issues/sticky-note-define-card',
+  );
+  check(
+    'implementation issue #2 completed third',
+    result.issueResults[2]?.issueId === 'Issues/sticky-note-catalog-spec',
+  );
+  log.info('');
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -630,6 +769,7 @@ async function main(): Promise<void> {
   await scenarioBlockedIssue();
   await scenarioEmptyProject();
   await scenarioValidationPipeline();
+  await scenarioBootstrapSeedIssue();
 
   log.info('===========================');
   log.info(`  ${passed} passed, ${failed} failed`);

@@ -167,6 +167,8 @@ export interface SchedulableIssue extends IssueData {
   order: number;
   /** Short summary for logging. */
   summary?: string;
+  /** Issue type (e.g., 'bootstrap', 'feature'). Used by context builder. */
+  issueType?: string;
 }
 
 export interface ToolResult {
@@ -221,6 +223,44 @@ export interface FactoryAgent {
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
+}
+
+// ---------------------------------------------------------------------------
+// Loop agent types (relocated from factory-loop.ts for Phase 2)
+// ---------------------------------------------------------------------------
+
+/** Minimal tool call log entry (mirrors ToolCallEntry from factory-tool-builder). */
+export interface LoopToolCallEntry {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
+  durationMs: number;
+}
+
+/** Minimal tool definition (mirrors FactoryTool from factory-tool-builder). */
+export interface LoopFactoryTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export type AgentRunStatus = 'done' | 'blocked' | 'needs_iteration';
+
+export interface AgentRunResult {
+  status: AgentRunStatus;
+  toolCalls: LoopToolCallEntry[];
+  /** Clarification message when status is 'blocked'. */
+  message?: string;
+}
+
+/**
+ * Agent interface required by the execution loop.
+ * The agent receives context and tools, calls tools during its turn,
+ * and returns a status signal with a log of tool calls made.
+ */
+export interface LoopAgent {
+  run(context: AgentContext, tools: LoopFactoryTool[]): Promise<AgentRunResult>;
 }
 
 // ---------------------------------------------------------------------------

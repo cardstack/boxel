@@ -314,6 +314,11 @@ export interface AssembleImplementPromptOptions {
   loader: PromptLoader;
 }
 
+export interface AssembleBootstrapPromptOptions {
+  context: AgentContext;
+  loader: PromptLoader;
+}
+
 export interface AssembleIteratePromptOptions {
   context: AgentContext;
   previousActions: AgentAction[];
@@ -407,6 +412,22 @@ export function assembleImplementPrompt(
     issue: context.issue,
     knowledge: context.knowledge,
     toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
+  });
+}
+
+/**
+ * Assemble the user prompt for a bootstrap issue.
+ * Includes brief URL and issue description so the agent knows what
+ * project artifacts to create.
+ */
+export function assembleBootstrapPrompt(
+  options: AssembleBootstrapPromptOptions,
+): string {
+  let { context, loader } = options;
+
+  return loader.load('bootstrap-implement', {
+    briefUrl: context.briefUrl,
+    issue: context.issue,
   });
 }
 
