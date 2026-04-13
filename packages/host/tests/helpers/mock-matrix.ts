@@ -1,5 +1,6 @@
 import type Owner from '@ember/owner';
 
+import { settled } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 
@@ -158,5 +159,18 @@ export function setupMockMatrix(
       },
     );
   });
+
+  // Clear per-test references on the module-level `testState` object so the
+  // current test's owner/sdk can be GC'd before the next test starts. Without
+  // this, every module that calls `setupMockMatrix` retains the *last* owner
+  // it ran with — which keeps the entire owner subgraph (services, realms,
+  // adapters, registered queue handlers, bound Worker methods, etc.) alive.
+  hooks.afterEach(async function () {
+    await settled();
+    testState.owner = undefined;
+    testState.sdk = undefined;
+    testState.opts = undefined;
+  });
+
   return mockUtils;
 }
