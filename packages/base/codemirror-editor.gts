@@ -704,10 +704,18 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       this.editorView.destroy();
       this.editorView = null;
     }
-    // Release references to DOM elements and large objects
+    // Release references to DOM elements and large objects so test-suite
+    // teardown can GC them rather than retaining across 100+ tests.
     this._widgetTargets = [];
     this._pendingTargets = [];
     this._selectionInfo = null;
+    this._menuCoords = null;
+    this._formatPickerCardUrl = null;
+    this._formatPickerCardTitle = null;
+    this._searchResource = null;
+    this._cardRefResource = null;
+    this._searchResourceCreated = false;
+    this._cardRefResourceCreated = false;
     this._cm = null;
   }
 
