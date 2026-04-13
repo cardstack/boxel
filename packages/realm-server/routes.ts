@@ -126,7 +126,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   let router = new Router();
 
-  router.head('/', livenessCheck);
+  // HEAD / is handled automatically by @koa/router from the GET route below.
   router.get('/', healthCheck, args.serveIndex, args.serveFromRealm);
   router.get('/_standby', healthCheck, args.serveHostApp, args.serveFromRealm);
   router.post('/_server-session', handleCreateSessionRequest(args));
