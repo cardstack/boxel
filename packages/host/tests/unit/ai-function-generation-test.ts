@@ -100,6 +100,7 @@ module('Unit | ai-function-generation-test', function (hooks) {
   const cardDefRelationshipsProperties: {
     [fieldName: string]: RelationshipSchema;
   } = {
+    'cardInfo.cardThumbnail': linkedRelationship,
     'cardInfo.theme': linkedRelationship,
   };
 
