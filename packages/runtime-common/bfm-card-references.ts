@@ -2,7 +2,7 @@ import { escapeHtml } from './helpers/html';
 import { resolveCardReference } from './card-reference-resolver';
 import { trimJsonExtension } from './url';
 import { FITTED_FORMATS } from './formats';
-import type { TokenizerAndRendererExtension } from 'marked';
+import type { TokenizerAndRendererExtension } from './marked.mts';
 
 // Regex patterns for stripping code before extraction.
 // These avoid backtick-in-regex issues that break content-tag in .gts files.

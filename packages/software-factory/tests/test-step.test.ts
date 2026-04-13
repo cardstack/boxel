@@ -27,7 +27,6 @@ function makeConfig(
     realmServerUrl: 'https://example.test/',
     hostAppUrl: 'https://example.test/',
     testResultsModuleUrl: 'https://example.test/test-results',
-    targetRealmUrl: 'https://example.test/realm/',
     ...overrides,
   };
 }

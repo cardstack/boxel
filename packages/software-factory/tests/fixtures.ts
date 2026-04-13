@@ -82,10 +82,6 @@ const defaultRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
-const testSourceRealmDir = resolve(
-  packageRoot,
-  'test-fixtures/public-software-factory-source',
-);
 const sharedRealms = new Map<string, Promise<SharedRealmHandle>>();
 const testWorkerPortBlockSize = 10;
 const testWorkerPortSearchStride = 200;
@@ -293,7 +289,6 @@ async function startRealmProcess(
         ...process.env,
         NODE_NO_WARNINGS: '1',
         SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
-        SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
         ...(supportMetadata?.context
           ? {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),

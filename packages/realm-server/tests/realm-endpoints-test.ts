@@ -1149,6 +1149,11 @@ module(basename(__filename), function () {
               self: newCardId,
             },
             relationships: {
+              'cardInfo.cardThumbnail': {
+                links: {
+                  self: null,
+                },
+              },
               'cardInfo.theme': {
                 links: {
                   self: null,

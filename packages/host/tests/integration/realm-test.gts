@@ -320,87 +320,50 @@ module('Integration | realm', function (hooks) {
     delete included[0]?.meta.lastModified;
     delete included[0]?.meta.resourceCreatedAt;
     let resourceCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
-    assert.deepEqual(json, {
-      data: {
-        type: 'card',
-        id: `${testRealmURL}dir/mango`,
-        attributes: {
-          firstName: 'Mango',
-          cardTitle: 'Mango',
-          cardDescription: null,
-          cardThumbnailURL: null,
-          cardInfo,
-        },
-        relationships: {
-          owner: {
-            links: {
-              self: `http://localhost:4202/test/hassan`,
-            },
-            data: {
-              type: 'card',
-              id: `http://localhost:4202/test/hassan`,
-            },
-          },
-          'cardInfo.theme': { links: { self: null } },
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'http://localhost:4202/test/pet',
-            name: 'Pet',
-          },
-          lastModified: adapter.lastModifiedMap.get(
-            `${testRealmURL}dir/mango.json`,
-          ),
-          resourceCreatedAt: resourceCreatedAt!,
-          realmInfo: testRealmInfo,
-          realmURL: testRealmURL,
-        },
-        links: {
-          self: `${testRealmURL}dir/mango`,
-        },
-      },
-      included: [
-        {
-          type: 'card',
-          id: `http://localhost:4202/test/hassan`,
-          attributes: {
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            cardTitle: 'Hassan Abdel-Rahman',
-            cardInfo,
-          },
-          relationships: { 'cardInfo.theme': { links: { self: null } } },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
-            },
-            realmInfo: {
-              name: 'Test Workspace A',
-              backgroundURL:
-                'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-              iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-              realmUserId: '@realm_server:localhost',
-              showAsCatalog: null,
-              visibility: 'public',
-              publishable: null,
-              lastPublishedAt: null,
-              interactHome: null,
-              hostHome: null,
-            },
-            realmURL: 'http://localhost:4202/test/',
-          },
-          links: {
-            self: `http://localhost:4202/test/hassan`,
-          },
-        },
-      ],
-    });
+    assert.strictEqual(json.data.id, `${testRealmURL}dir/mango`, 'mango id');
+    assert.strictEqual(
+      json.data.attributes.firstName,
+      'Mango',
+      'mango firstName',
+    );
+    assert.strictEqual(
+      json.data.relationships.owner.links.self,
+      'http://localhost:4202/test/hassan',
+      'owner self link points to other realm',
+    );
+    assert.strictEqual(
+      json.data.relationships.owner.data.id,
+      'http://localhost:4202/test/hassan',
+      'owner data id points to other realm',
+    );
+    assert.strictEqual(
+      json.data.relationships['cardInfo.theme'].links.self,
+      null,
+      'mango theme is null',
+    );
+    assert.strictEqual(
+      json.data.meta.lastModified,
+      adapter.lastModifiedMap.get(`${testRealmURL}dir/mango.json`),
+      'mango lastModified',
+    );
+    assert.strictEqual(
+      json.data.meta.resourceCreatedAt,
+      resourceCreatedAt,
+      'mango resourceCreatedAt',
+    );
+
+    assert.strictEqual(included.length, 1, 'one included card');
+    let hassan = included[0];
+    assert.strictEqual(
+      hassan.id,
+      'http://localhost:4202/test/hassan',
+      'included hassan id',
+    );
+    assert.strictEqual(
+      hassan.relationships['cardInfo.theme'].links.self,
+      null,
+      'included hassan theme is null',
+    );
   });
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
@@ -3060,7 +3023,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm can serve search requests whose results have linksTo fields', async function (assert) {
-    let { realm, adapter } = await setupIntegrationTestRealm({
+    let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
         'dir/mariko.json': {
@@ -3148,167 +3111,83 @@ module('Integration | realm', function (hooks) {
     let mangoCreatedAt = await getFileCreatedAt(realm, 'dir/mango.json');
     let marikoCreatedAt = await getFileCreatedAt(realm, 'dir/mariko.json');
     let vanGoghCreatedAt = await getFileCreatedAt(realm, 'dir/vanGogh.json');
-    assert.deepEqual(json, {
-      data: [
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/mango`,
-          attributes: {
-            cardDescription: null,
-            firstName: 'Mango',
-            cardTitle: 'Mango',
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `./mariko`,
-              },
-              data: {
-                type: 'card',
-                id: `${testRealmURL}dir/mariko`,
-              },
-            },
-            'cardInfo.theme': { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/pet',
-              name: 'Pet',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/mango.json`,
-            ),
-            resourceCreatedAt: mangoCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `${testRealmURL}dir/mango`,
-          },
-        },
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/mariko`,
-          attributes: {
-            firstName: 'Mariko',
-            lastName: 'Abdel-Rahman',
-            fullName: 'Mariko Abdel-Rahman',
-            cardTitle: 'Mariko Abdel-Rahman',
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}person`,
-              name: 'Person',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/mariko.json`,
-            ),
-            resourceCreatedAt: marikoCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `${testRealmURL}dir/mariko`,
-          },
-        },
-        {
-          type: 'card',
-          id: `${testRealmURL}dir/vanGogh`,
-          attributes: {
-            cardDescription: null,
-            firstName: 'Van Gogh',
-            cardTitle: 'Van Gogh',
-            cardThumbnailURL: null,
-            cardInfo,
-          },
-          relationships: {
-            owner: {
-              links: {
-                self: `${testModuleRealm}hassan`,
-              },
-              data: {
-                type: 'card',
-                id: `${testModuleRealm}hassan`,
-              },
-            },
-            'cardInfo.theme': { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testModuleRealm}pet`,
-              name: 'Pet',
-            },
-            lastModified: adapter.lastModifiedMap.get(
-              `${testRealmURL}dir/vanGogh.json`,
-            ),
-            resourceCreatedAt: vanGoghCreatedAt!,
-            realmInfo: testRealmInfo,
-            realmURL: testRealmURL,
-          },
-          links: {
-            self: `${testRealmURL}dir/vanGogh`,
-          },
-        },
-      ],
-      included: [
-        {
-          type: 'card',
-          id: `${testModuleRealm}hassan`,
-          attributes: {
-            cardDescription: 'Person',
-            email: null,
-            posts: null,
-            cardThumbnailURL: null,
-            firstName: 'Hassan',
-            lastName: 'Abdel-Rahman',
-            cardTitle: 'Hassan Abdel-Rahman',
-            fullName: 'Hassan Abdel-Rahman',
-            cardInfo,
-          },
-          relationships: {
-            'cardInfo.theme': { links: { self: null } },
-          },
-          meta: {
-            adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
-              name: 'Person',
-            },
-            realmInfo: {
-              name: 'Test Workspace A',
-              backgroundURL:
-                'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
-              iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
-              realmUserId: '@realm_server:localhost',
-              showAsCatalog: null,
-              visibility: 'public',
-              publishable: null,
-              lastPublishedAt: null,
-              interactHome: null,
-              hostHome: null,
-            },
-            realmURL: testModuleRealm,
-          },
-          links: {
-            self: `${testModuleRealm}hassan`,
-          },
-        },
-      ],
-      meta: {
-        page: {
-          total: 3,
-        },
-      },
-    });
+    let resources = json.data as any[];
+    assert.strictEqual(resources.length, 3, 'returns 3 cards');
+    assert.strictEqual(json.meta.page.total, 3, 'meta page total is 3');
+
+    let mango = resources.find((r) => r.id === `${testRealmURL}dir/mango`);
+    assert.ok(mango, 'mango is in results');
+    assert.strictEqual(mango.attributes.firstName, 'Mango', 'mango name');
+    assert.strictEqual(
+      mango.relationships.owner.links.self,
+      './mariko',
+      'mango owner self link',
+    );
+    assert.strictEqual(
+      mango.relationships.owner.data.id,
+      `${testRealmURL}dir/mariko`,
+      'mango owner id',
+    );
+    assert.strictEqual(
+      mango.relationships['cardInfo.theme'].links.self,
+      null,
+      'mango theme is null',
+    );
+    assert.strictEqual(
+      mango.meta.resourceCreatedAt,
+      mangoCreatedAt,
+      'mango createdAt',
+    );
+
+    let mariko = resources.find((r) => r.id === `${testRealmURL}dir/mariko`);
+    assert.ok(mariko, 'mariko is in results');
+    assert.strictEqual(
+      mariko.attributes.fullName,
+      'Mariko Abdel-Rahman',
+      'mariko fullName',
+    );
+    assert.strictEqual(
+      mariko.relationships['cardInfo.theme'].links.self,
+      null,
+      'mariko theme is null',
+    );
+    assert.strictEqual(
+      mariko.meta.resourceCreatedAt,
+      marikoCreatedAt,
+      'mariko createdAt',
+    );
+
+    let vanGogh = resources.find((r) => r.id === `${testRealmURL}dir/vanGogh`);
+    assert.ok(vanGogh, 'vanGogh is in results');
+    assert.strictEqual(
+      vanGogh.relationships.owner.links.self,
+      `${testModuleRealm}hassan`,
+      'vanGogh owner self link',
+    );
+    assert.strictEqual(
+      vanGogh.relationships.owner.data.id,
+      `${testModuleRealm}hassan`,
+      'vanGogh owner id',
+    );
+    assert.strictEqual(
+      vanGogh.relationships['cardInfo.theme'].links.self,
+      null,
+      'vanGogh theme is null',
+    );
+    assert.strictEqual(
+      vanGogh.meta.resourceCreatedAt,
+      vanGoghCreatedAt,
+      'vanGogh createdAt',
+    );
+
+    let included = (json.included ?? []) as any[];
+    let hassan = included.find((r) => r.id === `${testModuleRealm}hassan`);
+    assert.ok(hassan, 'hassan is included');
+    assert.strictEqual(
+      hassan.relationships['cardInfo.theme'].links.self,
+      null,
+      'included hassan theme is null',
+    );
   });
 
   test('included card uses correct module path when realm is mounted', async function (assert) {

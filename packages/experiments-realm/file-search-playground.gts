@@ -15,13 +15,13 @@ const fileSearchQuery = {
     every: [
       {
         type: {
-          module: 'https://cardstack.com/base/file-api',
+          module: 'https://cardstack.com/base/card-api',
           name: 'FileDef',
         },
       },
       {
         on: {
-          module: 'https://cardstack.com/base/file-api',
+          module: 'https://cardstack.com/base/card-api',
           name: 'FileDef',
         },
         contains: {

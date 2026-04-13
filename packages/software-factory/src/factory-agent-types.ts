@@ -244,3 +244,12 @@ export function resolveFactoryModel(cliModel?: string): string {
 
   return FACTORY_DEFAULT_MODEL;
 }
+
+/**
+ * Derive a slug from an issue ID by taking the last path segment.
+ * e.g., "Issues/sticky-note-define-core" → "sticky-note-define-core"
+ */
+export function deriveIssueSlug(issueId: string): string {
+  let parts = issueId.split('/');
+  return parts[parts.length - 1];
+}

@@ -4,11 +4,11 @@ import {
   StringField,
   contains,
   field,
+  ImageDef,
   linksTo,
   linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers';
-import { ImageDef } from 'https://cardstack.com/base/image-file-def';
 
 /**
  * Playground card for demonstrating ImageDef capabilities.
