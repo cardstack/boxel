@@ -72,6 +72,14 @@ export async function createSeedIssue(
     return { issueId: SEED_ISSUE_PATH, status: 'existing' };
   }
 
+  // Only proceed to create if the read failed with 404 (not found).
+  // Any other failure (auth, network, server error) should be surfaced.
+  if (existing.status !== undefined && existing.status !== 404) {
+    throw new Error(
+      `Failed to check for existing seed issue: ${existing.error ?? `HTTP ${existing.status}`}`,
+    );
+  }
+
   let document = buildSeedIssueDocument(brief, options.darkfactoryModuleUrl);
 
   log.info(`Creating seed issue at ${SEED_ISSUE_FILE}`);
