@@ -31,10 +31,13 @@ import type { IssueStore } from '../../src/issue-scheduler';
 import {
   runIssueLoop,
   NoOpValidator,
+  ValidationPipeline,
   type IssueContextBuilderLike,
   type IssueLoopResult,
   type Validator,
 } from '../../src/issue-loop';
+
+import { NoOpStepRunner } from '../../src/validators/noop-step';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,6 +77,10 @@ class MockIssueStore implements IssueStore {
     let issue = this.issues.find((i) => i.id === issueId);
     if (!issue) throw new Error(`Issue "${issueId}" not found`);
     return { ...issue };
+  }
+
+  async updateIssue(): Promise<void> {
+    // no-op for smoke tests
   }
 }
 
@@ -461,8 +468,8 @@ async function scenarioMaxIterations(): Promise<void> {
 
   printResult(result);
   check(
-    'issue exits after max iterations',
-    result.issueResults[0]?.exitReason === 'max_iterations',
+    'issue blocked after max iterations with failing validation',
+    result.issueResults[0]?.exitReason === 'blocked',
   );
   check(
     'last validation was failed',
@@ -539,6 +546,74 @@ async function scenarioEmptyProject(): Promise<void> {
   log.info('');
 }
 
+async function scenarioValidationPipeline(): Promise<void> {
+  log.info('--- Scenario 7: ValidationPipeline integration ---');
+  log.info('');
+
+  let store = new MockIssueStore([
+    makeIssue({
+      id: 'ISS-P1',
+      status: 'backlog',
+      priority: 'high',
+      order: 1,
+      summary: 'Test pipeline integration',
+    }),
+  ]);
+
+  let agent = new MockLoopAgent(
+    [
+      {
+        toolCalls: [
+          { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+        ],
+        updateIssue: { id: 'ISS-P1', status: 'done' },
+      },
+    ],
+    store,
+  );
+
+  // Use a real ValidationPipeline with all NoOp steps (no server needed)
+  let pipeline = new ValidationPipeline([
+    new NoOpStepRunner('parse'),
+    new NoOpStepRunner('lint'),
+    new NoOpStepRunner('evaluate'),
+    new NoOpStepRunner('instantiate'),
+    new NoOpStepRunner('test'),
+  ]);
+
+  let result = await runIssueLoop({
+    agent,
+    contextBuilder: new StubContextBuilder(),
+    tools: TOOLS,
+    issueStore: store,
+    validator: pipeline,
+    targetRealmUrl: 'https://example.test/target/',
+  });
+
+  printResult(result);
+  check('outcome is all_issues_done', result.outcome === 'all_issues_done');
+  check('exit reason is done', result.issueResults[0]?.exitReason === 'done');
+  check(
+    'validation passed (all NoOp steps)',
+    result.issueResults[0]?.lastValidation?.passed === true,
+  );
+  check(
+    '5 validation steps reported',
+    result.issueResults[0]?.lastValidation?.steps.length === 5,
+  );
+
+  // Verify formatForContext works
+  let lastValidation = result.issueResults[0]?.lastValidation;
+  let formatted = lastValidation
+    ? pipeline.formatForContext(lastValidation)
+    : '';
+  check(
+    'formatForContext reports all passed',
+    formatted === 'All validation steps passed.',
+  );
+  log.info('');
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -554,6 +629,7 @@ async function main(): Promise<void> {
   await scenarioMaxIterations();
   await scenarioBlockedIssue();
   await scenarioEmptyProject();
+  await scenarioValidationPipeline();
 
   log.info('===========================');
   log.info(`  ${passed} passed, ${failed} failed`);

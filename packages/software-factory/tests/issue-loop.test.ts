@@ -25,6 +25,7 @@ import {
 
 class MockIssueStore implements IssueStore {
   issues: SchedulableIssue[];
+  updateCalls: { issueId: string; updates: Record<string, unknown> }[] = [];
 
   constructor(issues: SchedulableIssue[]) {
     this.issues = issues.map((i) => ({ ...i }));
@@ -40,6 +41,13 @@ class MockIssueStore implements IssueStore {
       throw new Error(`Issue "${issueId}" not found in mock store`);
     }
     return { ...issue };
+  }
+
+  async updateIssue(
+    issueId: string,
+    updates: { status?: string; description?: string },
+  ): Promise<void> {
+    this.updateCalls.push({ issueId, updates });
   }
 }
 
@@ -449,7 +457,7 @@ module('issue-loop > blocked issue', function () {
 // ---------------------------------------------------------------------------
 
 module('issue-loop > max inner iterations', function () {
-  test('exits inner loop after maxIterationsPerIssue', async function (assert) {
+  test('blocks issue when max iterations reached with failing validation', async function (assert) {
     let store = new MockIssueStore([
       makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
     ]);
@@ -481,11 +489,87 @@ module('issue-loop > max inner iterations', function () {
       }),
     );
 
-    assert.strictEqual(result.issueResults[0].exitReason, 'max_iterations');
+    // When max iterations is hit with failing validation, issue is blocked
+    assert.strictEqual(result.issueResults[0].exitReason, 'blocked');
     assert.strictEqual(result.issueResults[0].innerIterations, 3);
     assert.false(
       result.issueResults[0].lastValidation?.passed,
       'last validation was a failure',
+    );
+  });
+
+  test('max iterations with passing validation keeps max_iterations exit reason', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let turns: MockAgentTurn[] = [];
+    let validations: ValidationResults[] = [];
+
+    for (let i = 0; i < 3; i++) {
+      turns.push({
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'card.gts', content: `attempt ${i}` },
+          },
+        ],
+      });
+      validations.push(makePassingValidation());
+    }
+
+    let agent = new MockLoopAgent(turns, store);
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator(validations),
+        maxIterationsPerIssue: 3,
+      }),
+    );
+
+    // When validation passes but issue not done, exit reason stays max_iterations
+    assert.strictEqual(result.issueResults[0].exitReason, 'max_iterations');
+    assert.strictEqual(result.issueResults[0].innerIterations, 3);
+  });
+
+  test('updateIssue called when blocking due to max iterations + failing validation', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({ id: 'iss-1', status: 'backlog', priority: 'high', order: 1 }),
+    ]);
+
+    let turns: MockAgentTurn[] = [];
+    let validations: ValidationResults[] = [];
+
+    for (let i = 0; i < 2; i++) {
+      turns.push({
+        toolCalls: [
+          { tool: 'write_file', args: { path: 'card.gts', content: `v${i}` } },
+        ],
+      });
+      validations.push(makeFailingValidation());
+    }
+
+    let agent = new MockLoopAgent(turns, store);
+
+    await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        validator: new MockValidator(validations),
+        maxIterationsPerIssue: 2,
+      }),
+    );
+
+    assert.strictEqual(store.updateCalls.length, 1, 'updateIssue called once');
+    assert.strictEqual(store.updateCalls[0].issueId, 'iss-1');
+    assert.strictEqual(store.updateCalls[0].updates.status, 'blocked');
+    assert.ok(
+      (store.updateCalls[0].updates.description as string).includes(
+        'max iteration limit',
+      ),
+      'description includes reason',
     );
   });
 });

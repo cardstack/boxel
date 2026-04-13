@@ -135,6 +135,8 @@ export interface ValidationStepResult {
   passed: boolean;
   files?: string[];
   errors: ValidationError[];
+  /** Step-specific structured data for context formatting (POJOs, not cards). */
+  details?: Record<string, unknown>;
 }
 
 /** Aggregated results from a full validation run (all steps). */
@@ -240,4 +242,13 @@ export function resolveFactoryModel(cliModel?: string): string {
   }
 
   return FACTORY_DEFAULT_MODEL;
+}
+
+/**
+ * Derive a slug from an issue ID by taking the last path segment.
+ * e.g., "Issues/sticky-note-define-core" → "sticky-note-define-core"
+ */
+export function deriveIssueSlug(issueId: string): string {
+  let parts = issueId.split('/');
+  return parts[parts.length - 1];
 }
