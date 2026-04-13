@@ -278,7 +278,12 @@ function updateListeners() {
     const { body } = ownerDocument;
 
     body.removeEventListener('contextmenu', handlePointerUp);
-    body.removeEventListener('pointerdown', handlePointerDown);
+    // Must pass `capture: true` to match the addEventListener call below;
+    // otherwise removeEventListener silently no-ops and the listener stays
+    // attached, retaining the entire owner via its closure scope.
+    body.removeEventListener('pointerdown', handlePointerDown, {
+      capture: true,
+    });
     body.removeEventListener('pointerleave', handlePointerMove);
     body.removeEventListener('pointermove', handlePointerMove);
     body.removeEventListener('dblclick', handleDoubleClick);
