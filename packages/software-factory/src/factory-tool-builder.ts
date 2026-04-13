@@ -329,7 +329,7 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
     description:
       'Update a project card in the target realm (e.g., update status or success criteria). Auth: per-realm JWT.',
     parameters: buildCardToolParams(
-      'Realm-relative path to the project card (e.g., "Projects/sticky-note-mvp.json")',
+      'Realm-relative path to the project card (e.g., "Projects/sticky-note.json")',
       schema,
     ),
     execute: async (args) => {
