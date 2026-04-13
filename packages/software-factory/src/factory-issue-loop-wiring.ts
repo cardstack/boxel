@@ -181,17 +181,18 @@ export async function runFactoryIssueLoop(
       debug: config.debug,
     } satisfies FactoryAgentConfig);
 
-  // 6. Validator
-  let validator = createDefaultPipeline({
-    realmServerUrl,
-    authorization: config.authorization,
-    fetch: fetchImpl,
-    hostAppUrl,
-    testResultsModuleUrl,
-    issueId: 'validation',
-    fetchFilenames: (realmUrl: string) =>
-      fetchRealmFilenames(realmUrl, fetchOptions),
-  });
+  // 6. Validator factory
+  let createValidator = (issueId: string) =>
+    createDefaultPipeline({
+      realmServerUrl,
+      authorization: config.authorization,
+      fetch: fetchImpl,
+      hostAppUrl,
+      testResultsModuleUrl,
+      issueId,
+      fetchFilenames: (realmUrl: string) =>
+        fetchRealmFilenames(realmUrl, fetchOptions),
+    });
 
   // 7. Run issue loop
   log.info(
@@ -203,7 +204,7 @@ export async function runFactoryIssueLoop(
     contextBuilder,
     tools,
     issueStore,
-    validator,
+    createValidator,
     targetRealmUrl,
     briefUrl: config.briefUrl,
     maxIterationsPerIssue: config.maxIterationsPerIssue,
