@@ -248,6 +248,7 @@ async function buildToolsForRealm(realm: {
   return buildFactoryTools(
     {
       targetRealmUrl: realm.realmURL.href,
+      darkfactoryModuleUrl: `${realm.realmServerURL.href}software-factory/darkfactory`,
       realmServerUrl: realm.realmServerURL.href,
       realmTokens: {
         [realm.realmURL.href]: `Bearer ${realm.ownerBearerToken}`,

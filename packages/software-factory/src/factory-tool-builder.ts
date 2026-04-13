@@ -17,14 +17,12 @@ import type { ToolResult } from './factory-agent';
 import { buildCardDocument } from './darkfactory-schemas';
 import type { ToolExecutor } from './factory-tool-executor';
 import type { ToolRegistry } from './factory-tool-registry';
-import { executeTestRunFromRealm } from './test-run-execution';
-import type { ExecuteTestRunOptions, TestRunHandle } from './test-run-types';
 import {
   writeFile,
   readFile,
   searchRealm,
   runRealmCommand,
-  ensureTrailingSlash,
+  ensureJsonExtension,
   type RealmFetchOptions,
 } from './realm-operations';
 
@@ -47,6 +45,8 @@ export interface FactoryTool {
 
 export interface ToolBuilderConfig {
   targetRealmUrl: string;
+  /** The darkfactory module URL (lives in the software-factory realm, NOT the target realm). */
+  darkfactoryModuleUrl: string;
   /** Per-realm JWTs obtained via getRealmScopedAuth(). */
   realmTokens: Record<string, string>;
   /** Realm server JWT for server-level operations (_create-realm, _realm-auth, _server-session). */
@@ -55,8 +55,6 @@ export interface ToolBuilderConfig {
   testResultsModuleUrl?: string;
   /** Fetch implementation (injectable for testing). */
   fetch?: typeof globalThis.fetch;
-  /** Override for executeTestRunFromRealm (injectable for testing). */
-  executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
   /** Realm server URL. Required — never inferred from realm URLs. */
   realmServerUrl: string;
   /** Host app URL for QUnit test runner. Defaults to realmServerUrl (compat proxy). */
@@ -111,7 +109,6 @@ export function buildFactoryTools(
     buildWriteFileTool(config),
     buildReadFileTool(config),
     buildSearchRealmTool(config),
-    buildRunTestsTool(config),
     buildRunCommandTool(config),
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
@@ -286,23 +283,42 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = args.path as string;
+      let path = ensureJsonExtension(args.path as string);
       let attributes = args.attributes as Record<string, unknown>;
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      let document = buildCardDocument(
-        'Project',
-        realmUrl,
-        attributes,
-        relationships,
-      );
+
+      // Read-patch-write: preserve attributes the agent didn't include.
+      let existing = await readFile(realmUrl, path, fetchOptions);
+      let doc;
+      if (existing.ok && existing.document) {
+        doc = existing.document;
+        let existingAttrs = (doc.data.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        doc.data.attributes = { ...existingAttrs, ...attributes };
+        if (relationships && Object.keys(relationships).length > 0) {
+          doc.data.relationships = {
+            ...(doc.data.relationships ?? {}),
+            ...relationships,
+          } as typeof doc.data.relationships;
+        }
+      } else {
+        doc = buildCardDocument(
+          'Project',
+          config.darkfactoryModuleUrl,
+          attributes,
+          relationships,
+        );
+      }
       return writeFile(
         realmUrl,
         path,
-        JSON.stringify(document, null, 2),
+        JSON.stringify(doc, null, 2),
         fetchOptions,
       );
     },
@@ -320,23 +336,56 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = args.path as string;
+      let path = ensureJsonExtension(args.path as string);
       let attributes = args.attributes as Record<string, unknown>;
+      // The loop owns issue status transitions (backlog → in_progress → done).
+      // The agent may set status to "blocked" (cannot proceed) or "backlog"
+      // (unblock). The "done" and "in_progress" transitions are managed by
+      // the loop based on signal_done + validation results.
+      let allowedAgentStatuses = ['blocked', 'backlog'];
+      if (
+        attributes.status &&
+        !allowedAgentStatuses.includes(attributes.status as string)
+      ) {
+        delete attributes.status;
+      }
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      let document = buildCardDocument(
-        'Issue',
-        realmUrl,
-        attributes,
-        relationships,
-      );
+
+      // Read-patch-write: read the existing card source, merge in the
+      // provided attributes/relationships, and write back. This preserves
+      // attributes the agent didn't include in the update call.
+      let existing = await readFile(realmUrl, path, fetchOptions);
+      let doc;
+      if (existing.ok && existing.document) {
+        doc = existing.document;
+        let existingAttrs = (doc.data.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        doc.data.attributes = { ...existingAttrs, ...attributes };
+        if (relationships && Object.keys(relationships).length > 0) {
+          doc.data.relationships = {
+            ...(doc.data.relationships ?? {}),
+            ...relationships,
+          } as typeof doc.data.relationships;
+        }
+      } else {
+        // Card doesn't exist yet — create fresh
+        doc = buildCardDocument(
+          'Issue',
+          config.darkfactoryModuleUrl,
+          attributes,
+          relationships,
+        );
+      }
       return writeFile(
         realmUrl,
         path,
-        JSON.stringify(document, null, 2),
+        JSON.stringify(doc, null, 2),
         fetchOptions,
       );
     },
@@ -354,23 +403,42 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = args.path as string;
+      let path = ensureJsonExtension(args.path as string);
       let attributes = args.attributes as Record<string, unknown>;
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
-      let document = buildCardDocument(
-        'KnowledgeArticle',
-        realmUrl,
-        attributes,
-        relationships,
-      );
+
+      // Read-patch-write: preserve attributes the agent didn't include.
+      let existing = await readFile(realmUrl, path, fetchOptions);
+      let doc;
+      if (existing.ok && existing.document) {
+        doc = existing.document;
+        let existingAttrs = (doc.data.attributes ?? {}) as Record<
+          string,
+          unknown
+        >;
+        doc.data.attributes = { ...existingAttrs, ...attributes };
+        if (relationships && Object.keys(relationships).length > 0) {
+          doc.data.relationships = {
+            ...(doc.data.relationships ?? {}),
+            ...relationships,
+          } as typeof doc.data.relationships;
+        }
+      } else {
+        doc = buildCardDocument(
+          'KnowledgeArticle',
+          config.darkfactoryModuleUrl,
+          attributes,
+          relationships,
+        );
+      }
       return writeFile(
         realmUrl,
         path,
-        JSON.stringify(document, null, 2),
+        JSON.stringify(doc, null, 2),
         fetchOptions,
       );
     },
@@ -390,7 +458,7 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
       schema,
     ),
     execute: async (args) => {
-      let path = args.path as string;
+      let path = ensureJsonExtension(args.path as string);
       let attributes = args.attributes as Record<string, unknown>;
       let relationships = args.relationships as
         | Record<string, unknown>
@@ -425,66 +493,8 @@ function buildCreateCatalogSpecTool(config: ToolBuilderConfig): FactoryTool {
   };
 }
 
-function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
-  let lastSequenceBySlug = new Map<string, number>();
-  return {
-    name: 'run_tests',
-    description: 'Execute QUnit card tests against the target realm',
-    parameters: {
-      type: 'object',
-      properties: {
-        slug: {
-          type: 'string',
-          description:
-            'Issue slug used to name the test run (e.g., "define-sticky-note-core")',
-        },
-        testNames: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Specific test names to run (empty array runs all discovered tests)',
-        },
-        projectCardUrl: {
-          type: 'string',
-          description:
-            'URL to the Project card (used to read/write testArtifactsRealmUrl)',
-        },
-      },
-      required: ['slug'],
-    },
-    execute: async (args) => {
-      let slug = args.slug as string;
-      let targetRealmUrl = config.targetRealmUrl;
-      let authorization = resolveAuthForUrl(config, targetRealmUrl);
-      let testResultsModuleUrl =
-        config.testResultsModuleUrl ??
-        `${ensureTrailingSlash(targetRealmUrl)}test-results`;
-
-      let executeFn = config.executeTestRun ?? executeTestRunFromRealm;
-      let result = await executeFn({
-        targetRealmUrl,
-        testResultsModuleUrl,
-        slug,
-        hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
-        testNames: (args.testNames as string[]) ?? [],
-        authorization,
-        fetch: config.fetch,
-        projectCardUrl: args.projectCardUrl as string | undefined,
-        realmServerUrl: config.realmServerUrl,
-        forceNew: true,
-        lastSequenceNumber: lastSequenceBySlug.get(slug) ?? 0,
-      });
-
-      // Track the sequence number per slug so subsequent calls don't
-      // reuse it even if the realm search index hasn't caught up yet.
-      if (result.sequenceNumber != null) {
-        lastSequenceBySlug.set(slug, result.sequenceNumber);
-      }
-
-      return result;
-    },
-  };
-}
+// Note: buildRunTestsTool was removed — the validation pipeline runs tests
+// automatically via executeTestRunFromRealm after each agent turn.
 
 function buildSignalDoneTool(): FactoryTool {
   return {
@@ -526,9 +536,10 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
   return {
     name: 'run_command',
     description:
-      'Execute a host command on the realm server via the prerenderer. ' +
-      'Commands run in browser context with full card runtime access. ' +
-      'Use "@cardstack/boxel-host/commands/<name>/default" as the command specifier. ' +
+      'Execute a Boxel host command on the realm server via the prerenderer. ' +
+      'This runs Boxel host commands ONLY — not shell commands, scripts, or Node.js. ' +
+      'Commands must be Boxel host command specifiers in the format ' +
+      '"@cardstack/boxel-host/commands/<name>/default". ' +
       'Auth: realm server token.',
     parameters: {
       type: 'object',
@@ -536,7 +547,7 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
         command: {
           type: 'string',
           description:
-            'Command specifier (e.g., "@cardstack/boxel-host/commands/get-card-type-schema/default")',
+            'Boxel host command specifier — must be in the format "@cardstack/boxel-host/commands/<name>/default"',
         },
         commandInput: {
           type: 'object',

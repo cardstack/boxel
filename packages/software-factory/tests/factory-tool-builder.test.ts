@@ -12,10 +12,6 @@ import {
 } from '../src/factory-tool-builder';
 import type { ToolExecutor } from '../src/factory-tool-executor';
 import { ToolRegistry } from '../src/factory-tool-registry';
-import type {
-  ExecuteTestRunOptions,
-  TestRunHandle,
-} from '../src/test-run-types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,6 +61,8 @@ const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
 function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
   return {
     targetRealmUrl: TARGET_REALM,
+    darkfactoryModuleUrl:
+      'https://realms.example.test/software-factory/darkfactory',
     realmServerUrl: 'https://realms.example.test/',
     realmTokens: {
       [TARGET_REALM]: TARGET_TOKEN,
@@ -85,6 +83,8 @@ interface CapturedRequest {
 function createMockFetch(
   status: number,
   responseBody: unknown,
+  /** Optional: return this document for GET requests (read-patch-write support). */
+  getResponseBody?: unknown,
 ): {
   fetch: typeof globalThis.fetch;
   requests: CapturedRequest[];
@@ -103,12 +103,27 @@ function createMockFetch(
         headers[k] = v;
       }
     }
+    let method = init?.method ?? 'GET';
     requests.push({
       url,
-      method: init?.method ?? 'GET',
+      method,
       headers,
       body: typeof init?.body === 'string' ? init.body : '',
     });
+    // For GET requests (reads), return the getResponseBody if provided,
+    // otherwise return 404 (card doesn't exist yet → fresh create).
+    if (method === 'GET' && getResponseBody !== undefined) {
+      return new Response(JSON.stringify(getResponseBody), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (method === 'GET' && getResponseBody === undefined) {
+      return new Response('Not Found', {
+        status: 404,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
     return new Response(JSON.stringify(responseBody), {
       status,
       headers: { 'Content-Type': 'application/json' },
@@ -304,7 +319,19 @@ module('factory-tool-builder > realm targeting and auth', function () {
   });
 
   test('update_issue uses target realm JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    let existingDoc = {
+      data: {
+        type: 'card',
+        attributes: { issueId: 'SN-1', summary: 'Existing issue' },
+        meta: {
+          adoptsFrom: {
+            module: 'https://realms.example.test/software-factory/darkfactory',
+            name: 'Issue',
+          },
+        },
+      },
+    };
+    let { fetch: mockFetch, requests } = createMockFetch(200, {}, existingDoc);
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig({ fetch: mockFetch });
@@ -313,11 +340,13 @@ module('factory-tool-builder > realm targeting and auth', function () {
 
     await updateTool.execute({
       path: 'Issues/1.json',
-      attributes: { status: 'done' },
+      attributes: { status: 'blocked' },
     });
 
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}Issues/1.json`);
+    // First request is GET (read), second is POST (write)
+    let writeRequest = requests.find((r) => r.method === 'POST')!;
+    assert.strictEqual(writeRequest.headers['Authorization'], TARGET_TOKEN);
+    assert.strictEqual(writeRequest.url, `${TARGET_REALM}Issues/1.json`);
   });
 
   test('create_knowledge uses target realm JWT', async function (assert) {
@@ -713,8 +742,95 @@ module(
       assert.true(toolNames.includes('run_command'));
     });
 
-    test('update_issue assembles JSON:API document from attributes', async function (assert) {
-      let { fetch: mockFetch, requests } = createMockFetch(200, {});
+    test('update_issue merges attributes with existing card (read-patch-write)', async function (assert) {
+      let existingIssue = {
+        data: {
+          type: 'card',
+          attributes: {
+            issueId: 'SN-1',
+            summary: 'Original summary',
+            description: 'Original description',
+            status: 'backlog',
+            priority: 'high',
+          },
+          meta: {
+            adoptsFrom: {
+              module:
+                'https://realms.example.test/software-factory/darkfactory',
+              name: 'Issue',
+            },
+          },
+        },
+      };
+      let { fetch: mockFetch, requests } = createMockFetch(
+        200,
+        {},
+        existingIssue,
+      );
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({ fetch: mockFetch });
+      let tools = buildFactoryTools(config, executor, registry);
+      let tool = findTool(tools, 'update_issue');
+
+      await tool.execute({
+        path: 'Issues/1.json',
+        attributes: { status: 'blocked', summary: 'Updated summary' },
+      });
+
+      let writeRequest = requests.find((r) => r.method === 'POST')!;
+      let body = JSON.parse(writeRequest.body);
+      assert.strictEqual(body.data.type, 'card');
+      assert.strictEqual(
+        body.data.attributes.status,
+        'blocked',
+        'agent can set status to blocked',
+      );
+      assert.strictEqual(
+        body.data.attributes.summary,
+        'Updated summary',
+        'provided attributes are updated',
+      );
+      assert.strictEqual(
+        body.data.attributes.description,
+        'Original description',
+        'existing attributes are preserved',
+      );
+      assert.strictEqual(
+        body.data.attributes.issueId,
+        'SN-1',
+        'existing issueId preserved',
+      );
+      assert.strictEqual(
+        body.data.attributes.priority,
+        'high',
+        'existing priority preserved',
+      );
+    });
+
+    test('update_issue strips disallowed status values', async function (assert) {
+      let existingIssue = {
+        data: {
+          type: 'card',
+          attributes: {
+            issueId: 'SN-1',
+            summary: 'Existing',
+            status: 'in_progress',
+          },
+          meta: {
+            adoptsFrom: {
+              module:
+                'https://realms.example.test/software-factory/darkfactory',
+              name: 'Issue',
+            },
+          },
+        },
+      };
+      let { fetch: mockFetch, requests } = createMockFetch(
+        200,
+        {},
+        existingIssue,
+      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
       let config = makeConfig({ fetch: mockFetch });
@@ -726,19 +842,89 @@ module(
         attributes: { status: 'done', summary: 'Build sticky note' },
       });
 
-      assert.strictEqual(requests.length, 1);
-      let body = JSON.parse(requests[0].body);
-      assert.strictEqual(body.data.type, 'card');
-      assert.strictEqual(body.data.attributes.status, 'done');
-      assert.strictEqual(body.data.meta.adoptsFrom.name, 'Issue');
+      let writeRequest = requests.find((r) => r.method === 'POST')!;
+      let body = JSON.parse(writeRequest.body);
       assert.strictEqual(
-        body.data.meta.adoptsFrom.module,
-        `${TARGET_REALM}darkfactory`,
+        body.data.attributes.status,
+        'in_progress',
+        'done status is stripped — existing status preserved',
+      );
+      assert.strictEqual(
+        body.data.attributes.summary,
+        'Build sticky note',
+        'other attributes are updated',
+      );
+    });
+
+    test('update_issue allows blocked and backlog status', async function (assert) {
+      let existingIssue = {
+        data: {
+          type: 'card',
+          attributes: { issueId: 'SN-1', status: 'in_progress' },
+          meta: {
+            adoptsFrom: {
+              module:
+                'https://realms.example.test/software-factory/darkfactory',
+              name: 'Issue',
+            },
+          },
+        },
+      };
+      let { fetch: mockFetch, requests } = createMockFetch(
+        200,
+        {},
+        existingIssue,
+      );
+      let registry = new ToolRegistry();
+      let { executor } = createMockToolExecutor(new Map());
+      let config = makeConfig({ fetch: mockFetch });
+      let tools = buildFactoryTools(config, executor, registry);
+      let tool = findTool(tools, 'update_issue');
+
+      await tool.execute({
+        path: 'Issues/1.json',
+        attributes: { status: 'blocked', summary: 'Stuck' },
+      });
+      let writeRequests = requests.filter((r) => r.method === 'POST');
+      let body1 = JSON.parse(writeRequests[0].body);
+      assert.strictEqual(
+        body1.data.attributes.status,
+        'blocked',
+        'blocked is allowed',
+      );
+
+      await tool.execute({
+        path: 'Issues/1.json',
+        attributes: { status: 'backlog', summary: 'Unblocked' },
+      });
+      writeRequests = requests.filter((r) => r.method === 'POST');
+      let body2 = JSON.parse(writeRequests[1].body);
+      assert.strictEqual(
+        body2.data.attributes.status,
+        'backlog',
+        'backlog is allowed',
       );
     });
 
     test('card tools omit empty relationships from document', async function (assert) {
-      let { fetch: mockFetch, requests } = createMockFetch(200, {});
+      let existingProject = {
+        data: {
+          type: 'card',
+          attributes: { projectCode: 'SN', projectName: 'Sticky Note' },
+          meta: {
+            adoptsFrom: {
+              module:
+                'https://realms.example.test/software-factory/darkfactory',
+              name: 'Project',
+            },
+          },
+        },
+      };
+      let { fetch: mockFetch, requests } = createMockFetch(
+        200,
+        {},
+        existingProject,
+      );
       let registry = new ToolRegistry();
       let { executor } = createMockToolExecutor(new Map());
       let config = makeConfig({ fetch: mockFetch });
@@ -750,131 +936,18 @@ module(
         attributes: { projectStatus: 'completed' },
       });
 
-      let body = JSON.parse(requests[0].body);
+      let writeRequest = requests.find((r) => r.method === 'POST')!;
+      let body = JSON.parse(writeRequest.body);
       assert.strictEqual(
         body.data.relationships,
         undefined,
-        'no relationships key when none provided',
+        'no relationships key when none provided and none existed',
       );
     });
   },
 );
 
-// ---------------------------------------------------------------------------
-// run_tests tool
-// ---------------------------------------------------------------------------
-
-module('factory-tool-builder > run_tests', function () {
-  test('run_tests tool is built and has correct parameters', function (assert) {
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig();
-    let tools = buildFactoryTools(config, executor, registry);
-    let runTestsTool = findTool(tools, 'run_tests');
-
-    assert.strictEqual(runTestsTool.name, 'run_tests');
-    let params = runTestsTool.parameters as {
-      required?: string[];
-      properties?: Record<string, unknown>;
-    };
-    assert.true(params.required!.includes('slug'));
-    assert.true('testNames' in params.properties!);
-    assert.true('projectCardUrl' in params.properties!);
-  });
-
-  test('run_tests passes correct options to executeTestRun', async function (assert) {
-    let capturedOptions: ExecuteTestRunOptions | undefined;
-    let mockHandle: TestRunHandle = {
-      testRunId: 'TestRun/run-1',
-      status: 'passed',
-    };
-
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({
-      serverToken: 'Bearer server-jwt',
-      testResultsModuleUrl:
-        'https://realms.example.test/user/target/test-results',
-      executeTestRun: async (options: ExecuteTestRunOptions) => {
-        capturedOptions = options;
-        return mockHandle;
-      },
-    });
-    let tools = buildFactoryTools(config, executor, registry);
-    let runTestsTool = findTool(tools, 'run_tests');
-
-    let result = await runTestsTool.execute({
-      slug: 'define-sticky-note',
-      testNames: ['renders fitted view'],
-      projectCardUrl: 'https://realms.example.test/user/target/Project/mvp',
-    });
-
-    assert.ok(capturedOptions, 'executeTestRun was called');
-    assert.strictEqual(capturedOptions!.targetRealmUrl, TARGET_REALM);
-    assert.strictEqual(
-      capturedOptions!.testResultsModuleUrl,
-      'https://realms.example.test/user/target/test-results',
-    );
-    assert.strictEqual(capturedOptions!.slug, 'define-sticky-note');
-    assert.deepEqual(capturedOptions!.testNames, ['renders fitted view']);
-    assert.strictEqual(capturedOptions!.authorization, TARGET_TOKEN);
-    assert.strictEqual(
-      capturedOptions!.projectCardUrl,
-      'https://realms.example.test/user/target/Project/mvp',
-    );
-
-    // Verify the result is passed through
-    let handle = result as TestRunHandle;
-    assert.strictEqual(handle.testRunId, 'TestRun/run-1');
-    assert.strictEqual(handle.status, 'passed');
-  });
-
-  test('run_tests uses default testResultsModuleUrl when not configured', async function (assert) {
-    let capturedOptions: ExecuteTestRunOptions | undefined;
-
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({
-      executeTestRun: async (options: ExecuteTestRunOptions) => {
-        capturedOptions = options;
-        return { testRunId: 'TestRun/run-1', status: 'passed' as const };
-      },
-    });
-    let tools = buildFactoryTools(config, executor, registry);
-    let runTestsTool = findTool(tools, 'run_tests');
-
-    await runTestsTool.execute({
-      slug: 'test-slug',
-    });
-
-    assert.strictEqual(
-      capturedOptions!.testResultsModuleUrl,
-      `${TARGET_REALM}test-results`,
-    );
-  });
-
-  test('run_tests uses target realm JWT for authorization', async function (assert) {
-    let capturedOptions: ExecuteTestRunOptions | undefined;
-
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({
-      executeTestRun: async (options: ExecuteTestRunOptions) => {
-        capturedOptions = options;
-        return { testRunId: 'TestRun/run-1', status: 'passed' as const };
-      },
-    });
-    let tools = buildFactoryTools(config, executor, registry);
-    let runTestsTool = findTool(tools, 'run_tests');
-
-    await runTestsTool.execute({
-      slug: 'auth-test',
-    });
-
-    assert.strictEqual(
-      capturedOptions!.authorization,
-      TARGET_TOKEN,
-      'should use target realm JWT',
-    );
-  });
-});
+// Note: run_tests is no longer exposed as an agent tool — the validation
+// pipeline runs tests automatically via executeTestRunFromRealm after
+// each agent turn. The buildRunTestsTool function still exists but is
+// not included in buildFactoryTools output.

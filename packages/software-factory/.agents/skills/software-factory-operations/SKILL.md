@@ -34,10 +34,6 @@ The agent has these tools during the execution loop. Use them by name — they a
 - `create_knowledge({ path, attributes, relationships? })` — Create or update a KnowledgeArticle card. Same structured interface with dynamic field schema in the tool parameters.
 - `create_catalog_spec({ path, attributes, relationships? })` — Create a Catalog Spec card in the target realm's `Spec/` folder. Makes a card definition discoverable in the Boxel catalog. Same structured interface with dynamic field schema. The tool auto-constructs the document with `adoptsFrom` pointing to `https://cardstack.com/base/spec#Spec`.
 
-### Testing
-
-- `run_tests({ slug, testNames? })` — Execute QUnit card tests against the target realm. Runs `.test.gts` files co-located with card definitions, returns structured results (pass/fail counts, failure details with error messages and stack traces).
-
 ### Running Host Commands
 
 - `run_command({ command, commandInput? })` — Execute a host command on the realm server via the prerenderer. Commands run in browser context with full card runtime access (Loader, CardAPI, services). Use the specifier format `@cardstack/boxel-host/commands/<name>/default`.
@@ -66,14 +62,13 @@ Returns `{ status: "ready", result: "<serialized JsonCard with schema>" }`. Pars
 ## Required Flow
 
 1. **Inspect before writing.** Use `search_realm` and `read_file` to understand what already exists in the target realm before creating or modifying files.
-2. **Move issue to `in_progress`.** Use `update_issue` to set the issue status before starting implementation.
-3. **Write card definitions** (`.gts`) via `write_file` to the target realm.
+2. **Write card definitions** (`.gts`) via `write_file` to the target realm.
+3. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file. **Write tests immediately after the card definition, before any instances or catalog specs.**
 4. **Write card instances** (`.json`) via `write_file` to the target realm.
 5. **Write a Catalog Spec card** (`Spec/<card-name>.json`) for each top-level card defined in the brief. Link sample instances via `linkedExamples`.
-6. **Write `.test.gts` test files** co-located with card definitions via `write_file` to the target realm. Every issue must have at least one test file.
-7. **Call `signal_done()`** when all implementation and test files are written. The orchestrator triggers test execution after this.
-8. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
-9. **Update issue state** via `update_issue` — update notes, acceptance criteria, and related knowledge as work progresses.
+6. **Call `signal_done()`** when all implementation and test files are written. The orchestrator runs the validation pipeline (including test execution) automatically after this.
+7. **If tests fail**, the orchestrator feeds failure details back. Use `read_file` to inspect current state, then `write_file` to fix implementation or test files. Call `signal_done()` again.
+8. **Update issue state** via `update_issue` — update notes, acceptance criteria, and related knowledge as work progresses.
 
 ## Target Realm Artifact Structure
 
