@@ -86,6 +86,7 @@
     "undici": "catalog:",
     "uuid": "catalog:",
     "wait-for-localhost-cli": "catalog:",
+    "wait-on": "^9.0.4",
     "yaml": "catalog:",
     "yargs": "catalog:"
   },

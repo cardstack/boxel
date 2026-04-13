@@ -106,18 +106,22 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       bootstrap: {
         projectId: string;
         issueIds: string[];
+        knowledgeArticleIds: string[];
         activeIssue: { id: string; status: string };
       };
     };
 
     expect(summary.command).toBe('factory:go');
     expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
+    expect(summary.bootstrap.projectId).toBe('Projects/sticky-note-mvp');
+    expect(summary.bootstrap.issueIds).toHaveLength(3);
+    expect(summary.bootstrap.knowledgeArticleIds).toHaveLength(2);
     expect(summary.bootstrap.activeIssue.id).toBe(
       'Issues/sticky-note-define-core',
     );
     expect(summary.bootstrap.activeIssue.status).toBe('created');
 
-    // Verify the active issue actually exists in the newly created target realm
+    // Verify the project card actually exists in the newly created target realm
     // by authenticating as the target user who owns the realm
     let targetRealmToken = await getRealmToken(
       matrixURL,
@@ -126,30 +130,22 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       summary.targetRealm.url,
     );
 
-    let activeIssueUrl = new URL(
-      summary.bootstrap.activeIssue.id,
+    let projectUrl = new URL(
+      'Projects/sticky-note-mvp',
       summary.targetRealm.url,
     ).href;
-    let issueResponse = await fetch(activeIssueUrl, {
+    let projectResponse = await fetch(projectUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,
         Authorization: targetRealmToken,
       },
     });
 
-    expect(issueResponse.ok).toBe(true);
-    let issueJson = (await issueResponse.json()) as {
-      data: {
-        attributes: {
-          issueType: string;
-          status: string;
-          summary: string;
-        };
-      };
+    expect(projectResponse.ok).toBe(true);
+    let projectJson = (await projectResponse.json()) as {
+      data: { attributes: { projectName: string } };
     };
-    expect(issueJson.data.attributes.issueType).toBe('feature');
-    expect(issueJson.data.attributes.status).toBe('in_progress');
-    expect(issueJson.data.attributes.summary).toContain('Sticky Note');
+    expect(projectJson.data.attributes.projectName).toBe('Sticky Note MVP');
   } finally {
     await new Promise<void>((r, reject) =>
       briefServer.close((err) => (err ? reject(err) : r())),

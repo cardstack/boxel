@@ -9,7 +9,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import { Alert } from '@cardstack/boxel-ui/components';
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import CodeBlock from '@cardstack/host/components/ai-assistant/code-block';
 

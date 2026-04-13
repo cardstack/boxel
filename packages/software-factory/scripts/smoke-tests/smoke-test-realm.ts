@@ -324,7 +324,6 @@ async function main() {
     realmServerUrl,
     hostAppUrl: realmServerUrl,
     testResultsModuleUrl,
-    targetRealmUrl,
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);

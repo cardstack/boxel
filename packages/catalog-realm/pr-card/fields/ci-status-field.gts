@@ -85,6 +85,13 @@ export class PrCiStatusField extends FieldDef {
       return this.ciItems.length;
     }
 
+    get isLoading() {
+      return (
+        this.checkRunEventData?.isLoading ||
+        this.checkSuiteEventData?.isLoading
+      ) ?? false;
+    }
+
     get ciHeadline() {
       if (this.ciTotalCount === 0) return null;
       if (this.ciFailedCount > 0) return 'Some checks were not successful';
@@ -125,6 +132,15 @@ export class PrCiStatusField extends FieldDef {
           <div class='ci-status-text'>
             <span class='ci-headline'>{{this.ciHeadline}}</span>
             <span class='ci-subtitle'>{{this.ciSubtitle}}</span>
+          </div>
+        </div>
+      {{else if this.isLoading}}
+        <div class='ci-status-row ci-status-loading'>
+          <span class='ci-donut ci-donut-loading'>
+            <span class='ci-donut-hole'></span>
+          </span>
+          <div class='ci-status-text'>
+            <span class='ci-headline'>Loading CI checks...</span>
           </div>
         </div>
       {{/if}}
@@ -174,6 +190,17 @@ export class PrCiStatusField extends FieldDef {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        .ci-donut-loading {
+          background: var(--muted-foreground, #656d76);
+          animation: ci-donut-pulse 1.2s ease-in-out infinite;
+        }
+        .ci-status-loading .ci-headline {
+          color: var(--muted-foreground, #656d76);
+        }
+        @keyframes ci-donut-pulse {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 1; }
         }
       </style>
     </template>
