@@ -61,45 +61,48 @@ Add more as the brief warrants (e.g., detailed visual design, deep domain knowle
 | `tags`         | String[] | Relevant tags for skill resolution                                            |
 | `updatedAt`    | DateTime | ISO timestamp                                                                 |
 
-### Issue Card
+### Issue Card — Organized by Entry-Point Card
 
-**Paths:** `Issues/<slug>-define-cards.json`, `Issues/<slug>-catalog-spec.json`
+**Paths:** `Issues/<slug>-<card-slug>.json` (one per entry-point card)
 **adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Issue" }`
 
-A brief may require **multiple card definitions** (e.g., a main card plus supporting field cards or linked cards). Both issues should account for all cards the brief calls for.
+Organize implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the catalog. Create **one issue per entry-point card**.
 
-| Field                | Type     | Issue #1 (card definitions + tests)                     | Issue #2 (catalog specs + examples)              |
-| -------------------- | -------- | ------------------------------------------------------- | ------------------------------------------------ |
-| `issueId`            | String   | `"<projectCode>-1"`                                     | `"<projectCode>-2"`                              |
-| `summary`            | String   | `"Create <title> card definitions and tests"`           | `"Create <title> catalog specs with examples"`   |
-| `description`        | Markdown | All cards to create, their fields, relationships, tests | Which cards to catalog, what examples to include |
-| `issueType`          | Enum     | `"feature"`                                             | `"feature"`                                      |
-| `status`             | Enum     | `"backlog"`                                             | `"backlog"`                                      |
-| `priority`           | Enum     | `"high"`                                                | `"medium"`                                       |
-| `order`              | Number   | `1`                                                     | `2`                                              |
-| `acceptanceCriteria` | Markdown | Derived from brief — cover all cards                    | Catalog spec checklist                           |
-| `createdAt`          | DateTime | ISO timestamp                                           | ISO timestamp                                    |
-| `updatedAt`          | DateTime | ISO timestamp                                           | ISO timestamp                                    |
+Each issue covers the full scope of its entry-point card:
 
-**Issue #1 guidance:** The brief may describe one card or several. Create `.gts` definitions and `.test.gts` tests for **every card** the brief calls for. Tests should cover all cards, not just the primary one.
+- Card definition (`.gts`) and any interior/support cards it depends on
+- QUnit tests (`.test.gts`) for the entry-point card **and** all its support cards
+- Catalog Spec (`Spec/<card-name>.json`) with realistic example instances via `linkedExamples`
 
-**Issue #2 guidance:** Create catalog specs for the **entry point cards** — the cards you want others to discover in the Boxel catalog. Use judgment based on the brief to decide which cards are entry points (typically the top-level cards, not internal field cards or helper cards). At least one card must have a catalog spec. Each spec needs `linkedExamples` with realistic sample instances.
+Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do **not** need their own catalog specs or separate issues.
 
-**Relationships for both issues:**
+| Field                | Type     | Description                                                  |
+| -------------------- | -------- | ------------------------------------------------------------ |
+| `issueId`            | String   | `"<projectCode>-<N>"` (sequential)                           |
+| `summary`            | String   | `"Implement <card name> card with tests and catalog spec"`   |
+| `description`        | Markdown | Card to create, fields, support cards, tests, spec, examples |
+| `issueType`          | Enum     | `"feature"`                                                  |
+| `status`             | Enum     | `"backlog"`                                                  |
+| `priority`           | Enum     | `"high"` for first, `"medium"` for subsequent                |
+| `order`              | Number   | Sequential (1, 2, 3, ...)                                    |
+| `acceptanceCriteria` | Markdown | Checklist: card def, support cards, tests, spec, examples    |
+| `createdAt`          | DateTime | ISO timestamp                                                |
+| `updatedAt`          | DateTime | ISO timestamp                                                |
+
+**Relationships for each issue:**
 
 - `project` → `{ links: { self: "../Projects/<slug>-mvp" } }`
 - `relatedKnowledge.0` → `{ links: { self: "../Knowledge Articles/<slug>-brief-context" } }`
 - `relatedKnowledge.1` → `{ links: { self: "../Knowledge Articles/<slug>-agent-onboarding" } }`
+- `blockedBy` → reference prior issues if this card depends on cards from earlier issues
 
-**Issue #2 additionally:**
-
-- `blockedBy.0` → `{ links: { self: "../Issues/<slug>-define-cards" } }`
+If the brief describes only one entry-point card, create one issue. If it describes multiple, create one per entry-point card with dependency ordering.
 
 ## Why Relationships Matter
 
 The `project` and `relatedKnowledge` relationships on implementation issues are
-how the orchestrator loads context for the agent. When the agent picks up issue
-#1 or #2, `ContextBuilder.buildForIssue()` traverses these relationships to
+how the orchestrator loads context for the agent. When the agent picks up an
+issue, `ContextBuilder.buildForIssue()` traverses these relationships to
 load the Project card and Knowledge Articles into the agent's context. Without
 these relationships, the agent would have no project scope or brief content.
 

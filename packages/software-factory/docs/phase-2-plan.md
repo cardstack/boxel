@@ -100,10 +100,15 @@ The agent always has the option to create new issues via tool calls if it determ
 
 ### What This Means for Task Breakdown
 
-During task breakdown, the agent creates exactly **two** implementation issues:
+During task breakdown, the agent organizes implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the Boxel catalog. The agent creates **one issue per entry-point card**, where each issue covers:
 
-- **Issue #1**: "Create card definition and tests" (`priority: high`, `order: 1`) — card `.gts` definition + co-located `.test.gts`
-- **Issue #2**: "Create catalog spec with examples" (`priority: medium`, `order: 2`, `blockedBy: issue #1`) — `Spec/*.json` + sample instances
+- The card definition (`.gts`) and any interior/support cards it depends on
+- QUnit tests (`.test.gts`) for the entry-point card and all its support cards
+- A Catalog Spec (`Spec/<card-name>.json`) with realistic example instances linked via `linkedExamples`
+
+Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do not need their own catalog specs or separate issues.
+
+If the brief describes only one entry-point card, there will be one implementation issue. If it describes multiple, there will be one per entry-point card with dependency ordering via `blockedBy`.
 
 Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
@@ -140,7 +145,7 @@ The flow becomes:
 3. The agent picks up this seed issue, reads the brief, and creates:
    - The Project card
    - KnowledgeArticle cards (brief context + agent onboarding)
-   - Two implementation issues with `project` and `relatedKnowledge` relationships wired
+   - One implementation issue per entry-point card, with `project` and `relatedKnowledge` relationships wired
 4. The agent marks the seed issue as done via `update_issue`
 5. The orchestrator now has a populated issue backlog and continues the normal loop
 
