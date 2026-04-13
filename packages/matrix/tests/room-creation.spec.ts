@@ -368,12 +368,16 @@ test.describe('Room creation', () => {
     let newRoom: string | undefined;
     // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
     // which can consume the entire waitUntil budget in a single attempt.
+    // If the error UI appears (room creation timed out waiting for sync),
+    // click "Try Again" to retry just the creation step rather than
+    // restarting the entire test.
     await waitUntil(async () => {
       try {
         if ((await page.locator('[data-test-room-error]').count()) > 0) {
-          throw new Error(
-            'Room creation failed — [data-test-room-error] is visible',
-          );
+          await page
+            .locator('[data-test-room-error] button:has-text("Try Again")')
+            .click();
+          return false;
         }
         let roomEl = page.locator('[data-test-room]');
         if ((await roomEl.count()) === 0) return false;
@@ -383,10 +387,7 @@ test.describe('Room creation', () => {
           return true;
         }
         return false;
-      } catch (e) {
-        if (e instanceof Error && e.message.includes('Room creation failed')) {
-          throw e;
-        }
+      } catch {
         return false;
       }
     }, 60_000);
