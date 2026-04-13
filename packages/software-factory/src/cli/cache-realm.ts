@@ -9,29 +9,21 @@ import {
   ensureFactoryRealmTemplate,
 } from '../harness';
 import { isFactorySupportContext } from '../harness/shared';
-import { DEFAULT_SNAPSHOT_FIXTURES } from '../harness/db-snapshot';
 import { readSupportContext } from '../runtime-metadata';
 import { logger } from '../logger';
 
 let log = logger('cache-realm');
 
 async function main(): Promise<void> {
-  let flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
   let args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
-  let useSnapshotFixtures = flags.includes('--update-snapshot');
 
-  let realmDirs: string[];
-  if (useSnapshotFixtures) {
-    realmDirs = DEFAULT_SNAPSHOT_FIXTURES.map((f) => f.realmDir);
-  } else {
-    realmDirs = [
-      ...new Set(
-        (args.length > 0 ? args : ['test-fixtures/darkfactory-adopter']).map(
-          (realmDir) => resolve(process.cwd(), realmDir),
-        ),
+  let realmDirs = [
+    ...new Set(
+      (args.length > 0 ? args : ['test-fixtures/darkfactory-adopter']).map(
+        (realmDir) => resolve(process.cwd(), realmDir),
       ),
-    ];
-  }
+    ),
+  ];
   let serializedSupportContext = process.env.SOFTWARE_FACTORY_CONTEXT;
 
   let parsedEnvContext = serializedSupportContext
@@ -162,10 +154,21 @@ async function main(): Promise<void> {
       JSON.stringify(payload, null, 2),
     );
   }
-  process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+
+  // Print a concise summary instead of the full JSON blob.
+  let status = payload.cacheHit ? 'cache hit' : 'built';
+  log.info(
+    `${status}: ${payload.templateDatabaseName} (${payload.preparedTemplates.length} realm(s))`,
+  );
 }
 
-main().catch((error: unknown) => {
-  log.error(String(error));
-  process.exitCode = 1;
-});
+main()
+  .catch((error: unknown) => {
+    log.error(String(error));
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // Lingering timers (pg pool idle, HTTP keep-alive) can prevent the
+    // event loop from draining. Force exit once the work is done.
+    process.exit(process.exitCode ?? 0);
+  });

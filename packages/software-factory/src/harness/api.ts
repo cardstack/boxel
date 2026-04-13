@@ -6,6 +6,26 @@ import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
 } from '../runtime-metadata';
+import { configureLogger } from '../logger';
+
+/**
+ * Suppress console.log/warn during a callback. Used during snapshot builds
+ * to silence noisy third-party code (e.g. synapse docker helpers) that
+ * writes directly to the console instead of going through the logger.
+ */
+async function withSilentConsole<T>(fn: () => Promise<T>): Promise<T> {
+  let origLog = console.log;
+  let origWarn = console.warn;
+  console.log = () => {};
+  console.warn = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+  }
+}
+
 import {
   buildRealmToken,
   CACHE_VERSION,
@@ -51,14 +71,7 @@ import {
   resetQueueState,
   rewriteClonedRealmServerUrls,
   seedRealmPermissions,
-  warnIfSnapshotLooksCold,
 } from './database';
-import {
-  checkCommittedSnapshot,
-  isCanonicalFixtureSet,
-  restoreTemplateFromDisk,
-  saveSnapshot,
-} from './db-snapshot';
 import { startFactorySupportServices } from './support-services';
 import {
   startIsolatedRealmStack,
@@ -171,58 +184,14 @@ export async function ensureFactoryRealmTemplate(
         : 'template database has not been prepared yet'
       : 'template database is missing';
 
-    // Tier 2: Try restoring from committed pg_dump snapshot.
-    // Only attempt when the DB is actually missing (not when metadata is missing
-    // but the DB exists — CREATE DATABASE would fail in that case).
-    let snapshotFixtures: CombinedRealmFixture[] = [
-      { realmDir, realmPath: realmRelativePath(realmURL, realmServerURL) },
-    ];
-    if (!hasTemplateDatabase) {
-      let snapshotData = checkCommittedSnapshot(snapshotFixtures);
-      if (snapshotData) {
-        harnessLog.info(
-          'Restoring template from committed snapshot (fast path)',
-        );
-        let snapshotServerURL = new URL(snapshotData.realmServerURL);
-        let snapshotRealmURL = new URL(
-          realmRelativePath(realmURL, realmServerURL),
-          snapshotServerURL,
-        );
-        try {
-          await restoreTemplateFromDisk(templateDatabaseName);
-          writePreparedTemplateMetadata({
-            realmDir,
-            templateDatabaseName,
-            templateRealmURL: snapshotRealmURL.href,
-            templateRealmServerURL: snapshotData.realmServerURL,
-          });
-          return {
-            cacheKey,
-            templateDatabaseName,
-            fixtureHash,
-            cacheHit: false,
-            cacheMissReason: 'restored from snapshot',
-            realmURL: snapshotRealmURL,
-            realmServerURL: snapshotServerURL,
-          };
-        } catch (error) {
-          harnessLog.warn(
-            `Snapshot restore failed, falling back to full build: ${error}`,
-          );
-          try {
-            await dropDatabase(templateDatabaseName);
-          } catch {
-            /* best effort */
-          }
-        }
-      } else {
-        harnessLog.info(
-          'Snapshot not available or stale, proceeding with full build',
-        );
-      }
-    }
+    // Full build from scratch.
+    // Suppress noisy support-service logging during the build.
+    let originalLogLevels = process.env.LOG_LEVELS || '*=info';
+    configureLogger(
+      originalLogLevels +
+        ',software-factory:harness:support=none,support-services=none',
+    );
 
-    // Tier 3: Full build from scratch.
     let ownedSupport:
       | {
           context: FactorySupportContext;
@@ -231,7 +200,9 @@ export async function ensureFactoryRealmTemplate(
       | undefined;
     let context = options.context;
     if (!context) {
-      ownedSupport = await startFactorySupportServices();
+      ownedSupport = await withSilentConsole(() =>
+        startFactorySupportServices(),
+      );
       context = ownedSupport.context;
     }
 
@@ -252,19 +223,6 @@ export async function ensureFactoryRealmTemplate(
         templateRealmServerURL: realmServerURL.href,
       });
 
-      // Save snapshot for future fast restores (only for canonical fixtures).
-      if (isCanonicalFixtureSet(snapshotFixtures)) {
-        try {
-          await saveSnapshot(
-            templateDatabaseName,
-            realmServerURL.href,
-            snapshotFixtures,
-          );
-        } catch (error) {
-          harnessLog.warn(`Failed to save snapshot: ${error}`);
-        }
-      }
-
       return {
         cacheKey,
         templateDatabaseName,
@@ -275,7 +233,8 @@ export async function ensureFactoryRealmTemplate(
         realmServerURL,
       };
     } finally {
-      await ownedSupport?.stop();
+      configureLogger(originalLogLevels);
+      await withSilentConsole(async () => ownedSupport?.stop());
     }
   });
 }
@@ -360,69 +319,31 @@ export async function ensureCombinedFactoryRealmTemplate(
           : 'template database has not been prepared yet'
         : 'template database is missing';
 
-      // Resolve fixtures with absolute paths for snapshot operations.
       let resolvedFixtures: CombinedRealmFixture[] = fixtures.map((f) => ({
         realmDir: resolve(f.realmDir),
         realmPath: f.realmPath,
       }));
 
-      // Tier 2: Try restoring from committed pg_dump snapshot.
-      // Only attempt when the DB is actually missing (not when metadata is missing
-      // but the DB exists — CREATE DATABASE would fail in that case).
-      if (!hasTemplateDatabase) {
-        let snapshotData = checkCommittedSnapshot(resolvedFixtures);
-        if (snapshotData) {
-          harnessLog.info(
-            'Restoring template from committed snapshot (fast path)',
-          );
-          try {
-            await restoreTemplateFromDisk(templateDatabaseName);
-            writePreparedTemplateMetadata({
-              realmDir: resolvedFixtures[0].realmDir,
-              templateDatabaseName,
-              templateRealmURL:
-                snapshotData.realmServerURL + resolvedFixtures[0].realmPath,
-              templateRealmServerURL: snapshotData.realmServerURL,
-              coveredRealmDirs: resolvedFixtures.map((f) => f.realmDir),
-            });
-            return {
-              cacheKey,
-              templateDatabaseName,
-              combinedFixtureHash,
-              cacheHit: false,
-              cacheMissReason: 'restored from snapshot',
-              coveredRealmDirs: resolvedFixtures.map((f) => f.realmDir),
-              realmServerURL: new URL(snapshotData.realmServerURL),
-            };
-          } catch (error) {
-            harnessLog.warn(
-              `Snapshot restore failed, falling back to full build: ${error}`,
-            );
-            try {
-              await dropDatabase(templateDatabaseName);
-            } catch {
-              /* best effort */
-            }
-          }
-        } else {
-          harnessLog.info(
-            'Snapshot not available or stale, proceeding with full build',
-          );
-        }
-      }
+      // Full build from scratch.
+      // Suppress noisy support-service logging during the build.
+      let originalLogLevels = process.env.LOG_LEVELS || '*=info';
+      configureLogger(
+        originalLogLevels +
+          ',software-factory:harness:support=none,support-services=none',
+      );
 
-      // Tier 3: Full build from scratch.
       let ownedSupport:
         | { context: FactorySupportContext; stop(): Promise<void> }
         | undefined;
       let context = options.context;
       if (!context) {
-        ownedSupport = await startFactorySupportServices();
+        ownedSupport = await withSilentConsole(() =>
+          startFactorySupportServices(),
+        );
         context = ownedSupport.context;
       }
 
       try {
-        // Resolve realm URLs for each fixture.
         let realmFixtures = resolvedFixtures.map((f) => {
           let realmURL = new URL(f.realmPath, realmServerURL);
           return {
@@ -440,26 +361,12 @@ export async function ensureCombinedFactoryRealmTemplate(
           templateDatabaseName,
         });
 
-        // Write metadata for the primary realm (for backward compat).
         writePreparedTemplateMetadata({
           realmDir: realmFixtures[0].realmDir,
           templateDatabaseName,
           templateRealmURL: realmFixtures[0].realmURL.href,
           templateRealmServerURL: realmServerURL.href,
         });
-
-        // Save snapshot for future fast restores (only for canonical fixtures).
-        if (isCanonicalFixtureSet(resolvedFixtures)) {
-          try {
-            await saveSnapshot(
-              templateDatabaseName,
-              realmServerURL.href,
-              resolvedFixtures,
-            );
-          } catch (error) {
-            harnessLog.warn(`Failed to save snapshot: ${error}`);
-          }
-        }
 
         return {
           cacheKey,
@@ -471,7 +378,8 @@ export async function ensureCombinedFactoryRealmTemplate(
           realmServerURL,
         };
       } finally {
-        await ownedSupport?.stop();
+        configureLogger(originalLogLevels);
+        await withSilentConsole(async () => ownedSupport?.stop());
       }
     },
   );
@@ -554,11 +462,6 @@ export async function startFactoryRealmServer(
       await resetQueueState(databaseName);
       await clearModuleCache(databaseName);
       await rebuildWorkingIndexFromIndex(databaseName);
-      await warnIfSnapshotLooksCold(databaseName, [
-        realmURL,
-        baseRealmURL,
-        sourceRealmURL,
-      ]);
       await seedRealmPermissions(
         databaseName,
         baseRealmURL,
