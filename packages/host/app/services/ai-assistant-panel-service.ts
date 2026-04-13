@@ -254,6 +254,9 @@ export default class AiAssistantPanelService extends Service {
     },
   ) {
     this.displayRoomError = false;
+    console.log(
+      `[createNewSession] newSessionId=${this.newSessionId ?? 'none'} deferDefaultSkills=${opts.deferDefaultSkills ?? false}`,
+    );
     if (
       this.newSessionId &&
       !opts.addSameSkills &&
@@ -472,8 +475,9 @@ export default class AiAssistantPanelService extends Service {
           });
         }
       } catch (e) {
-        console.error(e);
+        console.error('[doCreateRoom] error:', e);
         this.displayRoomError = true;
+        console.log('[doCreateRoom] displayRoomError set to true');
       }
 
       return undefined;
@@ -489,11 +493,7 @@ export default class AiAssistantPanelService extends Service {
       systemCard?.defaultModelConfiguration ??
       systemCard?.modelConfigurations?.[0];
 
-    // Race room creation against a timeout. matrixService.createRoom()
-    // internally calls waitForRoomSync() which has no timeout — it hangs
-    // forever if the sliding sync doesn't deliver the room. A timeout
-    // lets the error bubble up to doCreateRoom's catch block (showing the
-    // error UI) so a retry can succeed.
+    console.log('[createFallbackRoom] starting Matrix room creation');
     let roomPromise = this.matrixService.createRoom({
       preset: this.matrixService.privateChatPreset,
       invite: [aiBotFullId],
@@ -531,15 +531,16 @@ export default class AiAssistantPanelService extends Service {
       ],
     });
     let timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error('Room creation timed out waiting for sync')),
-        30_000,
-      ),
+      setTimeout(() => {
+        console.log('[createFallbackRoom] 30s timeout fired');
+        reject(new Error('Room creation timed out waiting for sync'));
+      }, 30_000),
     );
     let { room_id: roomId } = await Promise.race([
       roomPromise,
       timeoutPromise,
     ]);
+    console.log(`[createFallbackRoom] room created: ${roomId}`);
     return roomId;
   }
 
@@ -811,36 +812,34 @@ export default class AiAssistantPanelService extends Service {
       this.deletedRoomIds.add(roomId);
       this.matrixService.roomResourcesCache.delete(roomId);
 
-      // Check localStorage directly instead of using the newSessionId getter,
-      // which checks roomResources.has(id). Since we just deleted the room from
-      // roomResourcesCache above, the getter would return undefined and this
-      // comparison would always be false — leaving a stale ID in localStorage.
-      // A subsequent sync event can re-add the room to the cache, causing
-      // createNewSession to enter the deleted room instead of creating a new one.
       if (window.localStorage.getItem(NewSessionIdPersistenceKey) === roomId) {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
-      // Navigate to the next room (or create a new one) BEFORE the
-      // leave/forget calls, which can hang if the Matrix server is slow.
-      // The user needs to see a room immediately after confirming deletion.
-      if (this.matrixService.currentRoomId === roomId) {
+      let isCurrentRoom = this.matrixService.currentRoomId === roomId;
+      let latest = this.latestRoom;
+      console.log(
+        `[doLeaveRoom] roomId=${roomId} isCurrentRoom=${isCurrentRoom} latestRoom=${latest?.roomId ?? 'none'} newSessionId=${this.newSessionId ?? 'none'}`,
+      );
+
+      if (isCurrentRoom) {
         this.localPersistenceService.setCurrentRoomId(undefined);
-        if (this.latestRoom) {
-          this.enterRoom(this.latestRoom.roomId, false);
+        if (latest) {
+          console.log(`[doLeaveRoom] entering latest room ${latest.roomId}`);
+          this.enterRoom(latest.roomId, false);
         } else {
+          console.log('[doLeaveRoom] no rooms left, creating new session');
           await this.createNewSession({
             addSameSkills: false,
             shouldCopyFileHistory: false,
             shouldSummarizeSession: false,
             deferDefaultSkills: true,
           });
+          console.log('[doLeaveRoom] createNewSession completed');
         }
       }
       this.roomToDelete = undefined;
 
-      // Clean up the room on the server. These can be slow but the user
-      // is already in a new room so there's no visible impact.
       await this.matrixService.leave(roomId);
       await this.matrixService.forget(roomId);
     } catch (e) {
