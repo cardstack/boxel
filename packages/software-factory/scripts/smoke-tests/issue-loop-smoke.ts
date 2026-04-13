@@ -25,16 +25,19 @@ import type {
   ToolCallEntry,
 } from '../../src/factory-tool-builder';
 
-import type { AgentRunResult, LoopAgent } from '../../src/factory-loop';
+import type { AgentRunResult, LoopAgent } from '../../src/factory-agent-types';
 import type { IssueStore } from '../../src/issue-scheduler';
 
 import {
   runIssueLoop,
   NoOpValidator,
+  ValidationPipeline,
   type IssueContextBuilderLike,
   type IssueLoopResult,
   type Validator,
 } from '../../src/issue-loop';
+
+import { NoOpStepRunner } from '../../src/validators/noop-step';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,6 +77,10 @@ class MockIssueStore implements IssueStore {
     let issue = this.issues.find((i) => i.id === issueId);
     if (!issue) throw new Error(`Issue "${issueId}" not found`);
     return { ...issue };
+  }
+
+  async updateIssue(): Promise<void> {
+    // no-op for smoke tests
   }
 }
 
@@ -264,7 +271,7 @@ async function scenarioSingleIssue(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([makePassingValidation()]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -321,10 +328,7 @@ async function scenarioDependencyCascade(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([
-      makePassingValidation(),
-      makePassingValidation(),
-    ]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -395,11 +399,7 @@ async function scenarioPriorityOrdering(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([
-      makePassingValidation(),
-      makePassingValidation(),
-      makePassingValidation(),
-    ]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -454,15 +454,15 @@ async function scenarioMaxIterations(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator(validations),
+    createValidator: () => new MockValidator(validations),
     targetRealmUrl: 'https://example.test/target/',
     maxIterationsPerIssue: 3,
   });
 
   printResult(result);
   check(
-    'issue exits after max iterations',
-    result.issueResults[0]?.exitReason === 'max_iterations',
+    'issue blocked after max iterations with failing validation',
+    result.issueResults[0]?.exitReason === 'blocked',
   );
   check(
     'last validation was failed',
@@ -500,7 +500,7 @@ async function scenarioBlockedIssue(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new MockValidator([makePassingValidation()]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -528,7 +528,7 @@ async function scenarioEmptyProject(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new NoOpValidator(),
+    createValidator: () => new NoOpValidator(),
     targetRealmUrl: 'https://example.test/target/',
   });
 
@@ -536,6 +536,216 @@ async function scenarioEmptyProject(): Promise<void> {
   check('outcome is all_issues_done', result.outcome === 'all_issues_done');
   check('0 outer cycles', result.outerCycles === 0);
   check('no issue results', result.issueResults.length === 0);
+  log.info('');
+}
+
+async function scenarioValidationPipeline(): Promise<void> {
+  log.info('--- Scenario 7: ValidationPipeline integration ---');
+  log.info('');
+
+  let store = new MockIssueStore([
+    makeIssue({
+      id: 'ISS-P1',
+      status: 'backlog',
+      priority: 'high',
+      order: 1,
+      summary: 'Test pipeline integration',
+    }),
+  ]);
+
+  let agent = new MockLoopAgent(
+    [
+      {
+        toolCalls: [
+          { tool: 'write_file', args: { path: 'card.gts', content: 'v1' } },
+        ],
+        updateIssue: { id: 'ISS-P1', status: 'done' },
+      },
+    ],
+    store,
+  );
+
+  // Use a real ValidationPipeline with all NoOp steps (no server needed).
+  // The factory creates a fresh pipeline per issue, as in production.
+  let createPipeline = () =>
+    new ValidationPipeline([
+      new NoOpStepRunner('parse'),
+      new NoOpStepRunner('lint'),
+      new NoOpStepRunner('evaluate'),
+      new NoOpStepRunner('instantiate'),
+      new NoOpStepRunner('test'),
+    ]);
+
+  let result = await runIssueLoop({
+    agent,
+    contextBuilder: new StubContextBuilder(),
+    tools: TOOLS,
+    issueStore: store,
+    createValidator: createPipeline,
+    targetRealmUrl: 'https://example.test/target/',
+  });
+
+  printResult(result);
+  check('outcome is all_issues_done', result.outcome === 'all_issues_done');
+  check('exit reason is done', result.issueResults[0]?.exitReason === 'done');
+  check(
+    'validation passed (all NoOp steps)',
+    result.issueResults[0]?.lastValidation?.passed === true,
+  );
+  check(
+    '5 validation steps reported',
+    result.issueResults[0]?.lastValidation?.steps.length === 5,
+  );
+
+  // Verify formatForContext works
+  let lastValidation = result.issueResults[0]?.lastValidation;
+  let pipelineForFormat = createPipeline();
+  let formatted = lastValidation
+    ? pipelineForFormat.formatForContext(lastValidation)
+    : '';
+  check(
+    'formatForContext reports all passed',
+    formatted === 'All validation steps passed.',
+  );
+  log.info('');
+}
+
+async function scenarioBootstrapSeedIssue(): Promise<void> {
+  log.info('--- Scenario 8: Bootstrap seed issue flow ---');
+  log.info('');
+
+  let store = new MockIssueStore([
+    makeIssue({
+      id: 'Issues/bootstrap-seed',
+      status: 'backlog',
+      priority: 'critical',
+      order: 0,
+      summary: 'Process brief and create project artifacts',
+    }),
+  ]);
+
+  // Agent processes seed: creates Project + 2 Issues, marks seed done.
+  // Then picks up implementation issue #1 and completes it.
+  let agent = new MockLoopAgent(
+    [
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: {
+              path: 'Projects/sticky-note-mvp.json',
+              content: '{}',
+            },
+          },
+          {
+            tool: 'write_file',
+            args: {
+              path: 'Issues/sticky-note-define-card.json',
+              content: '{}',
+            },
+          },
+          {
+            tool: 'write_file',
+            args: {
+              path: 'Issues/sticky-note-catalog-spec.json',
+              content: '{}',
+            },
+          },
+        ],
+        updateIssue: { id: 'Issues/bootstrap-seed', status: 'done' },
+      },
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'sticky-note.gts', content: '' },
+          },
+        ],
+        updateIssue: {
+          id: 'Issues/sticky-note-define-card',
+          status: 'done',
+        },
+      },
+      {
+        toolCalls: [
+          {
+            tool: 'write_file',
+            args: { path: 'Spec/sticky-note.json', content: '{}' },
+          },
+        ],
+        updateIssue: {
+          id: 'Issues/sticky-note-catalog-spec',
+          status: 'done',
+        },
+      },
+    ],
+    store,
+  );
+
+  // Simulate agent creating new issues during the seed turn
+  let originalList = store.listIssues.bind(store);
+  let listCalls = 0;
+  store.listIssues = async () => {
+    listCalls++;
+    if (
+      listCalls > 1 &&
+      !store.issues.find((i) => i.id === 'Issues/sticky-note-define-card')
+    ) {
+      store.issues.push(
+        makeIssue({
+          id: 'Issues/sticky-note-define-card',
+          status: 'backlog',
+          priority: 'high',
+          order: 1,
+          summary: 'Create Sticky Note card definition and tests',
+        }),
+      );
+      store.issues.push(
+        makeIssue({
+          id: 'Issues/sticky-note-catalog-spec',
+          status: 'backlog',
+          priority: 'medium',
+          order: 2,
+          blockedBy: ['Issues/sticky-note-define-card'],
+          summary: 'Create Sticky Note catalog spec with examples',
+        }),
+      );
+    }
+    return originalList();
+  };
+
+  let result = await runIssueLoop({
+    agent,
+    contextBuilder: new StubContextBuilder(),
+    tools: TOOLS,
+    issueStore: store,
+    createValidator: () => new NoOpValidator(),
+    targetRealmUrl: 'https://example.test/target/',
+    briefUrl: 'https://example.test/brief/',
+  });
+
+  printResult(result);
+  check(
+    'bootstrap outcome is all_issues_done',
+    result.outcome === 'all_issues_done',
+  );
+  check('3 outer cycles (seed + 2 implementation)', result.outerCycles === 3);
+  check(
+    'seed issue completed first',
+    result.issueResults[0]?.issueId === 'Issues/bootstrap-seed',
+  );
+  check(
+    'seed issue exit reason is done',
+    result.issueResults[0]?.exitReason === 'done',
+  );
+  check(
+    'implementation issue #1 completed second',
+    result.issueResults[1]?.issueId === 'Issues/sticky-note-define-card',
+  );
+  check(
+    'implementation issue #2 completed third',
+    result.issueResults[2]?.issueId === 'Issues/sticky-note-catalog-spec',
+  );
   log.info('');
 }
 
@@ -554,6 +764,8 @@ async function main(): Promise<void> {
   await scenarioMaxIterations();
   await scenarioBlockedIssue();
   await scenarioEmptyProject();
+  await scenarioValidationPipeline();
+  await scenarioBootstrapSeedIssue();
 
   log.info('===========================');
   log.info(`  ${passed} passed, ${failed} failed`);

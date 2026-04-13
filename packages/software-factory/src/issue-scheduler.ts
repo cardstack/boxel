@@ -12,7 +12,12 @@ import type {
   SchedulableIssue,
 } from './factory-agent-types';
 
-import { searchRealm, type RealmFetchOptions } from './realm-operations';
+import {
+  searchRealm,
+  readFile,
+  writeFile,
+  type RealmFetchOptions,
+} from './realm-operations';
 import { logger } from './logger';
 
 let log = logger('issue-scheduler');
@@ -30,6 +35,11 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
+  /** Update issue fields in the realm (e.g., status, description). */
+  updateIssue(
+    issueId: string,
+    updates: { status?: string; description?: string },
+  ): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +234,52 @@ export class RealmIssueStore implements IssueStore {
 
     return mapCardToSchedulableIssue(result.data[0]);
   }
+
+  async updateIssue(
+    issueId: string,
+    updates: { status?: string; description?: string },
+  ): Promise<void> {
+    // Read the source JSON file (not the indexed card, which can have
+    // stripped relationships during indexing).
+    let readResult = await readFile(
+      this.realmUrl,
+      `${issueId}.json`,
+      this.options,
+    );
+    if (!readResult.ok || !readResult.document) {
+      throw new Error(
+        `Failed to read issue "${issueId}" for update: ${readResult.error ?? 'no document returned'}`,
+      );
+    }
+
+    let doc = readResult.document;
+    let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
+
+    if (updates.status != null) {
+      attrs.status = updates.status;
+    }
+    if (updates.description != null) {
+      attrs.description = updates.description;
+    }
+    attrs.updatedAt = new Date().toISOString();
+
+    doc.data.attributes = attrs;
+
+    let writeResult = await writeFile(
+      this.realmUrl,
+      `${issueId}.json`,
+      JSON.stringify(doc, null, 2),
+      this.options,
+    );
+
+    if (!writeResult.ok) {
+      throw new Error(
+        `Failed to write issue "${issueId}": ${writeResult.error}`,
+      );
+    }
+
+    log.info(`Updated issue "${issueId}": ${JSON.stringify(updates)}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -298,5 +354,6 @@ function mapCardToSchedulableIssue(
     blockedBy,
     order: (attrs.order as number) ?? 0,
     summary: (attrs.summary as string) ?? undefined,
+    issueType: (attrs.issueType as string) ?? undefined,
   };
 }

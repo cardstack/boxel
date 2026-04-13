@@ -58,6 +58,7 @@ export async function resolveTestRun(
   }
 
   let sequenceNumber = await getNextSequenceNumber(
+    options.slug,
     realmOptions,
     options.lastSequenceNumber,
   );
@@ -142,7 +143,13 @@ async function findResumableTestRun(
   };
 }
 
+/**
+ * Get the next sequence number for a given slug by searching existing
+ * TestRun cards in the realm and filtering by card ID. Each slug (issue)
+ * gets its own independent sequence starting from 1.
+ */
 async function getNextSequenceNumber(
+  slug: string,
   options: TestRunRealmOptions,
   minSequenceNumber = 0,
 ): Promise<number> {
@@ -153,18 +160,34 @@ async function getNextSequenceNumber(
         on: { module: options.testResultsModuleUrl, name: 'TestRun' },
       },
       sort: [{ by: 'sequenceNumber', direction: 'desc' }],
-      page: { size: 1 },
     },
     { authorization: options.authorization, fetch: options.fetch },
   );
 
-  let latest = result?.ok
-    ? (result.data?.[0] as
-        | { attributes?: { sequenceNumber?: number } }
-        | undefined)
-    : undefined;
-  let fromIndex = latest?.attributes?.sequenceNumber ?? 0;
-  return Math.max(fromIndex, minSequenceNumber) + 1;
+  if (!result?.ok || !result.data) {
+    return minSequenceNumber + 1;
+  }
+
+  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
+  let prefix = `Test Runs/${slug}-`;
+  let maxSeq = 0;
+
+  for (let card of result.data) {
+    let cardId = (card as { id?: string }).id ?? '';
+    let relativePath = cardId.startsWith(targetRealmUrl)
+      ? cardId.slice(targetRealmUrl.length)
+      : cardId;
+    if (relativePath.startsWith(prefix)) {
+      let attrs = (card as { attributes?: { sequenceNumber?: number } })
+        .attributes;
+      let seq = attrs?.sequenceNumber ?? 0;
+      if (seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+
+  return Math.max(maxSeq, minSequenceNumber) + 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +213,8 @@ function buildQunitTestPageHtml(opts: {
   targetRealmUrl: string;
   /** Browser-accessible URL of the realm server (compat proxy) */
   realmProxyUrl: string;
+  /** Optional slug identifying the issue under test — shown in the page title. */
+  slug?: string;
 }): string {
   let host = opts.assetServerUrl.replace(/\/$/, '');
   // Ember config URLs must use the browser-accessible realm proxy,
@@ -268,7 +293,7 @@ function buildQunitTestPageHtml(opts: {
 <head>
   <meta charset="utf-8">
   ${metaTags.join('\n  ')}
-  <title>Software Factory Card Tests</title>
+  <title>Software Factory Card Tests${opts.slug ? ` — ${opts.slug}` : ''}</title>
   ${linkTags.join('\n  ')}
 </head>
 <body>
@@ -466,6 +491,7 @@ export async function executeTestRunFromRealm(
       hostDistDir,
       targetRealmUrl: options.targetRealmUrl,
       realmProxyUrl: options.hostAppUrl,
+      slug: options.slug,
     });
     setHtml(html);
 

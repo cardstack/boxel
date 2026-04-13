@@ -2,7 +2,7 @@
  * Shared realm operations for the software-factory scripts.
  *
  * Centralizes HTTP-based realm API calls so they're easy to find and
- * refactor to boxel-cli tool calls when --jwt support is added (CS-10529).
+ * refactor to boxel-cli tool calls (CS-10529).
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -793,6 +793,74 @@ async function addRealmToMatrixAccountData(
 }
 
 // ---------------------------------------------------------------------------
+// Fetch Realm Filenames
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the list of file paths from a realm via the `_mtimes` endpoint.
+ * Returns relative file paths (e.g., `hello.gts`, `Cards/my-card.json`).
+ */
+export async function fetchRealmFilenames(
+  realmUrl: string,
+  options?: RealmFetchOptions,
+): Promise<{ filenames: string[]; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+
+  let headers = buildAuthHeaders(
+    options?.authorization,
+    SupportedMimeType.JSONAPI,
+  );
+
+  let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
+  let mtimesResponse: Response;
+  try {
+    mtimesResponse = await fetchImpl(mtimesUrl, { method: 'GET', headers });
+  } catch (err) {
+    return {
+      filenames: [],
+      error: `Failed to fetch _mtimes: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (!mtimesResponse.ok) {
+    let body = await mtimesResponse.text();
+    return {
+      filenames: [],
+      error: `_mtimes returned HTTP ${mtimesResponse.status}: ${body.slice(0, 300)}`,
+    };
+  }
+
+  let mtimes: Record<string, number>;
+  try {
+    let json = await mtimesResponse.json();
+    // _mtimes returns JSON:API format: { data: { attributes: { mtimes: {...} } } }
+    mtimes =
+      (json as { data?: { attributes?: { mtimes?: Record<string, number> } } })
+        ?.data?.attributes?.mtimes ?? json;
+  } catch {
+    return {
+      filenames: [],
+      error: 'Failed to parse _mtimes response as JSON',
+    };
+  }
+
+  let filenames: string[] = [];
+  for (let fullUrl of Object.keys(mtimes)) {
+    if (!fullUrl.startsWith(normalizedRealmUrl)) {
+      continue;
+    }
+    let relativePath = fullUrl.slice(normalizedRealmUrl.length);
+    if (!relativePath || relativePath.endsWith('/')) {
+      continue;
+    }
+    filenames.push(relativePath);
+  }
+
+  return { filenames: filenames.sort() };
+}
+
+// ---------------------------------------------------------------------------
 // Pull Realm Files
 // ---------------------------------------------------------------------------
 
@@ -800,7 +868,7 @@ async function addRealmToMatrixAccountData(
  * Download all files from a remote realm to a local directory using the
  * `_mtimes` endpoint to discover file paths.
  *
- * TODO: Replace with `boxel pull --jwt <token>` once CS-10529 is implemented.
+ * TODO: Replace with `boxel pull` once CS-10529 is implemented.
  *
  * Returns the list of relative file paths that were downloaded.
  */
