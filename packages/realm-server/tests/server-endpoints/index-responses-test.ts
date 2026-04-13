@@ -1223,6 +1223,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       );
     });
 
+    test('HEAD request includes ETag and Cache-Control headers', async function (assert) {
+      let response = await request
+        .head('/published/')
+        .set('Accept', 'text/html');
+
+      assert.strictEqual(response.status, 200);
+      assert.ok(response.headers['etag'], 'ETag header is present');
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=0, must-revalidate',
+        'Cache-Control allows caching with revalidation',
+      );
+    });
+
     test('returns 304 Not Modified when If-None-Match matches ETag', async function (assert) {
       // First request to get the ETag
       let firstResponse = await request
