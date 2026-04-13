@@ -29,11 +29,18 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
       moduleMap.set(moduleName, []);
     }
 
-    // Map QUnit statuses to terminal states. Skipped/todo are not failures
-    // and must not be 'pending' (which means "not yet executed" and would
+    // Map QUnit statuses to terminal states. Skipped/todo are surfaced as
+    // 'skipped' so the agent can see they weren't actually executed.
+    // They must not be 'pending' (which means "not yet executed" and would
     // confuse resume logic and isComplete checks).
-    let status: TestResultEntryData['status'] =
-      test.status === 'failed' ? 'failed' : 'passed';
+    let status: TestResultEntryData['status'];
+    if (test.status === 'failed') {
+      status = 'failed';
+    } else if (test.status === 'skipped' || test.status === 'todo') {
+      status = 'skipped';
+    } else {
+      status = 'passed';
+    }
 
     let entry: TestResultEntryData = {
       testName: test.name,
@@ -65,19 +72,26 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
   let failedCount = allResults.filter(
     (r) => r.status === 'failed' || r.status === 'error',
   ).length;
+  let skippedCount = allResults.filter((r) => r.status === 'skipped').length;
 
-  let hasFailures = failedCount > 0;
-  let status: TestRunAttributes['status'] = hasFailures ? 'failed' : 'passed';
-
-  // If no tests ran at all, mark as error
+  let status: TestRunAttributes['status'];
   if (results.tests.length === 0) {
+    // No tests ran at all
     status = 'error';
+  } else if (failedCount > 0) {
+    status = 'failed';
+  } else if (passedCount === 0 && skippedCount > 0) {
+    // All tests were skipped — nothing was actually verified
+    status = 'failed';
+  } else {
+    status = 'passed';
   }
 
   return {
     status,
     passedCount,
     failedCount,
+    skippedCount,
     durationMs: results.runEnd.runtime,
     moduleResults,
   };
@@ -87,9 +101,13 @@ export function parseQunitResults(results: QunitResults): TestRunAttributes {
  * Format a `TestResult` into a human-readable summary for agent prompts.
  */
 export function formatTestResultSummary(result: TestResult): string {
+  let countLine = `Passed: ${result.passedCount}, Failed: ${result.failedCount}`;
+  if (result.skippedCount && result.skippedCount > 0) {
+    countLine += `, Skipped: ${result.skippedCount}`;
+  }
   let lines: string[] = [
     `Status: ${result.status}`,
-    `Passed: ${result.passedCount}, Failed: ${result.failedCount}`,
+    countLine,
     `Duration: ${result.durationMs}ms`,
   ];
 
