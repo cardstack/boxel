@@ -489,7 +489,12 @@ export default class AiAssistantPanelService extends Service {
       systemCard?.defaultModelConfiguration ??
       systemCard?.modelConfigurations?.[0];
 
-    let { room_id: roomId } = await this.matrixService.createRoom({
+    // Race room creation against a timeout. matrixService.createRoom()
+    // internally calls waitForRoomSync() which has no timeout — it hangs
+    // forever if the sliding sync doesn't deliver the room. A timeout
+    // lets the error bubble up to doCreateRoom's catch block (showing the
+    // error UI) so a retry can succeed.
+    let roomPromise = this.matrixService.createRoom({
       preset: this.matrixService.privateChatPreset,
       invite: [aiBotFullId],
       name,
@@ -525,6 +530,16 @@ export default class AiAssistantPanelService extends Service {
         },
       ],
     });
+    let timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Room creation timed out waiting for sync')),
+        30_000,
+      ),
+    );
+    let { room_id: roomId } = await Promise.race([
+      roomPromise,
+      timeoutPromise,
+    ]);
     return roomId;
   }
 
