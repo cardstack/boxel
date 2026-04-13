@@ -427,14 +427,22 @@ export async function runIssueLoop(
 
   log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
 
-  // Mark the project as completed when all issues are done
+  // Mark the project as completed only when ALL issues in the realm are done
+  // (not just the ones we processed). This prevents marking complete when
+  // pre-existing blocked issues still exist.
   if (outcome === 'all_issues_done' && issueStore.updateProjectStatus) {
-    try {
-      await issueStore.updateProjectStatus('completed');
-    } catch (err) {
-      log.warn(
-        `Failed to update project status to completed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+    let allIssues = await issueStore.listIssues();
+    let allRealmIssuesDone = allIssues.every((i) => i.status === 'done');
+    if (allRealmIssuesDone) {
+      try {
+        await issueStore.updateProjectStatus('completed');
+      } catch (err) {
+        log.warn(
+          `Failed to update project status to completed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    } else {
+      log.info(`Not marking project completed — some issues are not done`);
     }
   }
 

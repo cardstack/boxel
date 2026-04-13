@@ -243,6 +243,56 @@ function buildSearchRealmTool(config: ToolBuilderConfig): FactoryTool {
 }
 
 /**
+ * Read-patch-write helper for card update tools.
+ *
+ * Reads the existing card source, merges the provided attributes and
+ * relationships on top, and returns the merged document ready to write.
+ * Only falls back to creating a fresh document on confirmed 404 (card
+ * doesn't exist yet). Other read failures are surfaced as errors to
+ * avoid clobbering existing cards on transient failures.
+ */
+async function readPatchDocument(
+  realmUrl: string,
+  path: string,
+  cardName: string,
+  darkfactoryModuleUrl: string,
+  attributes: Record<string, unknown>,
+  relationships: Record<string, unknown> | undefined,
+  fetchOptions: RealmFetchOptions,
+): Promise<LooseSingleCardDocument> {
+  let existing = await readFile(realmUrl, path, fetchOptions);
+
+  if (existing.ok && existing.document) {
+    let doc = existing.document;
+    let existingAttrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
+    doc.data.attributes = { ...existingAttrs, ...attributes };
+    if (relationships && Object.keys(relationships).length > 0) {
+      doc.data.relationships = {
+        ...(doc.data.relationships ?? {}),
+        ...relationships,
+      } as typeof doc.data.relationships;
+    }
+    return doc;
+  }
+
+  // Only create fresh on 404 (card doesn't exist yet).
+  // Other failures (auth, network, server error) are surfaced.
+  let is404 = existing.error?.startsWith('HTTP 404');
+  if (!existing.ok && is404) {
+    return buildCardDocument(
+      cardName,
+      darkfactoryModuleUrl,
+      attributes,
+      relationships,
+    );
+  }
+
+  throw new Error(
+    `Failed to read existing ${cardName} at "${path}" before update: ${existing.error ?? 'unknown error'}`,
+  );
+}
+
+/**
  * Resolve the schema for a card type from the runtime cache.
  * Only called when the card type is known to exist in cardTypeSchemas
  * (callers check before building the tool).
@@ -292,29 +342,15 @@ function buildUpdateProjectTool(config: ToolBuilderConfig): FactoryTool {
       let fetchOptions = buildFetchOptions(config, realmUrl);
 
       // Read-patch-write: preserve attributes the agent didn't include.
-      let existing = await readFile(realmUrl, path, fetchOptions);
-      let doc;
-      if (existing.ok && existing.document) {
-        doc = existing.document;
-        let existingAttrs = (doc.data.attributes ?? {}) as Record<
-          string,
-          unknown
-        >;
-        doc.data.attributes = { ...existingAttrs, ...attributes };
-        if (relationships && Object.keys(relationships).length > 0) {
-          doc.data.relationships = {
-            ...(doc.data.relationships ?? {}),
-            ...relationships,
-          } as typeof doc.data.relationships;
-        }
-      } else {
-        doc = buildCardDocument(
-          'Project',
-          config.darkfactoryModuleUrl,
-          attributes,
-          relationships,
-        );
-      }
+      let doc = await readPatchDocument(
+        realmUrl,
+        path,
+        'Project',
+        config.darkfactoryModuleUrl,
+        attributes,
+        relationships,
+        fetchOptions,
+      );
       return writeFile(
         realmUrl,
         path,
@@ -337,7 +373,8 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
     ),
     execute: async (args) => {
       let path = ensureJsonExtension(args.path as string);
-      let attributes = args.attributes as Record<string, unknown>;
+      // Copy to avoid mutating the caller's args object
+      let attributes = { ...(args.attributes as Record<string, unknown>) };
       // The loop owns issue status transitions (backlog → in_progress → done).
       // The agent may set status to "blocked" (cannot proceed) or "backlog"
       // (unblock). The "done" and "in_progress" transitions are managed by
@@ -355,33 +392,15 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
 
-      // Read-patch-write: read the existing card source, merge in the
-      // provided attributes/relationships, and write back. This preserves
-      // attributes the agent didn't include in the update call.
-      let existing = await readFile(realmUrl, path, fetchOptions);
-      let doc;
-      if (existing.ok && existing.document) {
-        doc = existing.document;
-        let existingAttrs = (doc.data.attributes ?? {}) as Record<
-          string,
-          unknown
-        >;
-        doc.data.attributes = { ...existingAttrs, ...attributes };
-        if (relationships && Object.keys(relationships).length > 0) {
-          doc.data.relationships = {
-            ...(doc.data.relationships ?? {}),
-            ...relationships,
-          } as typeof doc.data.relationships;
-        }
-      } else {
-        // Card doesn't exist yet — create fresh
-        doc = buildCardDocument(
-          'Issue',
-          config.darkfactoryModuleUrl,
-          attributes,
-          relationships,
-        );
-      }
+      let doc = await readPatchDocument(
+        realmUrl,
+        path,
+        'Issue',
+        config.darkfactoryModuleUrl,
+        attributes,
+        relationships,
+        fetchOptions,
+      );
       return writeFile(
         realmUrl,
         path,
@@ -411,30 +430,15 @@ function buildCreateKnowledgeTool(config: ToolBuilderConfig): FactoryTool {
       let realmUrl = config.targetRealmUrl;
       let fetchOptions = buildFetchOptions(config, realmUrl);
 
-      // Read-patch-write: preserve attributes the agent didn't include.
-      let existing = await readFile(realmUrl, path, fetchOptions);
-      let doc;
-      if (existing.ok && existing.document) {
-        doc = existing.document;
-        let existingAttrs = (doc.data.attributes ?? {}) as Record<
-          string,
-          unknown
-        >;
-        doc.data.attributes = { ...existingAttrs, ...attributes };
-        if (relationships && Object.keys(relationships).length > 0) {
-          doc.data.relationships = {
-            ...(doc.data.relationships ?? {}),
-            ...relationships,
-          } as typeof doc.data.relationships;
-        }
-      } else {
-        doc = buildCardDocument(
-          'KnowledgeArticle',
-          config.darkfactoryModuleUrl,
-          attributes,
-          relationships,
-        );
-      }
+      let doc = await readPatchDocument(
+        realmUrl,
+        path,
+        'KnowledgeArticle',
+        config.darkfactoryModuleUrl,
+        attributes,
+        relationships,
+        fetchOptions,
+      );
       return writeFile(
         realmUrl,
         path,

@@ -285,13 +285,14 @@ export class RealmIssueStore implements IssueStore {
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
-    // Find the project card in the realm
+    // We expect exactly one Project card per target realm.
     let result = await searchRealm(
       this.realmUrl,
       {
         filter: {
           type: { module: this.darkfactoryModuleUrl, name: 'Project' },
         },
+        sort: [{ by: 'lastModified', direction: 'desc' as const }],
       },
       this.options,
     );

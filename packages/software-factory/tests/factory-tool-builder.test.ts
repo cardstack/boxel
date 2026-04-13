@@ -949,5 +949,5 @@ module(
 
 // Note: run_tests is no longer exposed as an agent tool — the validation
 // pipeline runs tests automatically via executeTestRunFromRealm after
-// each agent turn. The buildRunTestsTool function still exists but is
-// not included in buildFactoryTools output.
+// each agent turn. The former buildRunTestsTool implementation has been
+// removed and is no longer part of buildFactoryTools.
