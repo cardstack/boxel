@@ -228,6 +228,29 @@ export const supportLog = logger('software-factory:harness:support');
 export const templateLog = logger('software-factory:harness:template');
 export const realmLog = logger('software-factory:harness:realm');
 
+/**
+ * Space-separated glob controlling which source realm files are copied into
+ * the isolated realm stack. Only core card definitions are needed for tests.
+ * Prefix a pattern with ! to exclude. Last matching pattern wins.
+ */
+export const SOURCE_REALM_GLOB = '*.gts .realm.json !document.gts !wiki.gts';
+
+export function matchesSourceRealmGlob(relativePath: string): boolean {
+  let filename = relativePath.split('/').pop() ?? relativePath;
+  let included = false;
+  for (let pattern of SOURCE_REALM_GLOB.split(/\s+/)) {
+    let negate = pattern.startsWith('!');
+    let glob = negate ? pattern.slice(1) : pattern;
+    let hit = glob.startsWith('*')
+      ? filename.endsWith(glob.slice(1))
+      : filename === glob;
+    if (hit) {
+      included = !negate;
+    }
+  }
+  return included;
+}
+
 export function formatElapsedMs(elapsedMs: number): string {
   return `${(elapsedMs / 1000).toFixed(1)}s`;
 }
