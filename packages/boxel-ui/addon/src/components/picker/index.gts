@@ -210,8 +210,10 @@ export default class Picker extends Component<PickerSignature> {
   };
 
   onClose = () => {
-    this.searchTerm = '';
-    this.args.onSearchTermChange?.('');
+    if (this.searchTerm !== '') {
+      this.searchTerm = '';
+      this.args.onSearchTermChange?.('');
+    }
     return true;
   };
 
@@ -371,6 +373,9 @@ export default class Picker extends Component<PickerSignature> {
         display: none;
       }
 
+      .boxel-picker__dropdown .ember-power-select-options {
+        padding-top: var(--boxel-sp-2xs);
+      }
       .boxel-picker__dropdown .ember-power-select-option {
         padding: 0 var(--boxel-sp-2xs);
         display: flex;

@@ -49,10 +49,6 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
     return this.args.extra?.selectedItems ?? [];
   }
 
-  get showSelectedSummary() {
-    return !this.isSelectAllActive && this.selectedItems.length > 0;
-  }
-
   @action
   updateSearchTerm(value: string) {
     this.args.extra?.onSearchTermChange?.(value);
@@ -78,37 +74,34 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
         />
       </div>
 
-      {{#if this.selectAllOption}}
-        <button
-          type='button'
-          class='picker-before-options__option'
-          data-test-boxel-picker-select-all
-          {{on 'click' (fn this.handleToggleItem this.selectAllOption)}}
-        >
-          <PickerOptionRow
-            @option={{this.selectAllOption}}
-            @isSelected={{this.isSelectAllActive}}
-          />
-        </button>
-      {{/if}}
-
-      {{#if this.showSelectedSummary}}
-        <div
-          class='picker-before-options__selected-summary'
-          data-test-boxel-picker-selected-summary
-        >
-          {{#each this.selectedItems as |item|}}
-            <button
-              type='button'
-              class='picker-before-options__option'
-              data-test-boxel-picker-summary-item={{item.id}}
-              {{on 'click' (fn this.handleToggleItem item)}}
-            >
-              <PickerOptionRow @option={{item}} @isSelected={{true}} />
-            </button>
-          {{/each}}
-        </div>
-      {{/if}}
+      <div
+        class='picker-before-options__selected-summary'
+        data-test-boxel-picker-selected-summary
+      >
+        {{#if this.selectAllOption}}
+          <button
+            type='button'
+            class='picker-before-options__option'
+            data-test-boxel-picker-select-all
+            {{on 'click' (fn this.handleToggleItem this.selectAllOption)}}
+          >
+            <PickerOptionRow
+              @option={{this.selectAllOption}}
+              @isSelected={{this.isSelectAllActive}}
+            />
+          </button>
+        {{/if}}
+        {{#each this.selectedItems as |item|}}
+          <button
+            type='button'
+            class='picker-before-options__option'
+            data-test-boxel-picker-summary-item={{item.id}}
+            {{on 'click' (fn this.handleToggleItem item)}}
+          >
+            <PickerOptionRow @option={{item}} @isSelected={{true}} />
+          </button>
+        {{/each}}
+      </div>
 
       <div class='picker-divider' data-test-boxel-picker-divider></div>
     </div>
@@ -116,14 +109,13 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
     <style scoped>
       .picker-before-options {
         background-color: var(--boxel-light);
-        padding: 0 var(--boxel-sp-2xs);
       }
 
       .picker-before-options__search {
         --boxel-input-search-color: var(--boxel-dark);
         --boxel-input-search-background-color: transparent;
         --icon-full-length: var(--boxel-icon-xs);
-        padding: 0 var(--boxel-sp-2xs);
+        padding: 0 calc(2 * var(--boxel-sp-2xs));
       }
 
       .picker-before-options__search :deep(.input-container) {
@@ -155,19 +147,24 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
         display: block;
         width: 100%;
         cursor: pointer;
-        padding: 0 var(--boxel-sp-2xs);
         box-sizing: border-box;
+        border-radius: 4px;
+      }
+
+      .picker-before-options__option:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: -2px;
       }
 
       .picker-before-options__selected-summary {
         max-height: 150px;
         overflow-y: auto;
+        padding: 0 var(--boxel-sp-2xs) var(--boxel-sp-2xs) var(--boxel-sp-2xs);
       }
 
       .picker-divider {
         height: 1px;
         background-color: var(--boxel-200);
-        margin: var(--boxel-sp-2xs) 0;
         width: 100%;
       }
     </style>
