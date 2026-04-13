@@ -15,3 +15,15 @@ export function createRealmFetch(realmUrl: string): typeof globalThis.fetch {
   return ((input, init) =>
     pm.authedFetch(input, init, { realmUrl })) as typeof globalThis.fetch;
 }
+
+/**
+ * Returns a `fetch`-shaped function that auto-attaches the realm-server-level
+ * JWT (the one obtained via Matrix OpenID -> _server-session). Use this for
+ * realm-server endpoints that are not scoped to a single realm — e.g.
+ * `_run-command`. Per-realm endpoints should use `createRealmFetch` instead.
+ */
+export function createServerFetch(): typeof globalThis.fetch {
+  let pm = getProfileManager();
+  return ((input, init) =>
+    pm.authedFetch(input, init)) as typeof globalThis.fetch;
+}

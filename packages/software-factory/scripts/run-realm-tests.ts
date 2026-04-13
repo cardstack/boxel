@@ -15,7 +15,11 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 
-import { getActiveProfile, parseArgs } from '../src/boxel';
+import {
+  ensureActiveProfile,
+  getActiveProfileSummary,
+} from '@cardstack/boxel-cli';
+import { parseArgs } from '../src/boxel';
 import { ensureTrailingSlash } from '../src/realm-operations';
 
 type CommandOptions = {
@@ -223,98 +227,108 @@ let endpoint =
   typeof args.endpoint === 'string'
     ? args.endpoint
     : `${sourceRealmName}-test-${timestampSlug()}`;
-let credentials = getActiveProfile();
-let scratchRoot = resolve(
-  typeof args['scratch-root'] === 'string'
-    ? args['scratch-root']
-    : join(
-        'realms',
-        new URL(credentials.realmServerUrl).hostname,
-        credentials.username,
-      ),
-);
-let scratchPath = join(scratchRoot, endpoint);
+main().catch((error: unknown) => {
+  let message =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
+  process.stderr.write(`${message}\n`);
+  process.exit(1);
+});
 
-if (existsSync(scratchPath)) {
-  throw new Error(`Scratch realm path already exists: ${scratchPath}`);
-}
+async function main(): Promise<void> {
+  await ensureActiveProfile();
+  let credentials = getActiveProfileSummary();
+  let scratchRoot = resolve(
+    typeof args['scratch-root'] === 'string'
+      ? args['scratch-root']
+      : join(
+          'realms',
+          new URL(credentials.realmServerUrl).hostname,
+          credentials.username,
+        ),
+  );
+  let scratchPath = join(scratchRoot, endpoint);
 
-let specFiles = findSpecFiles(specRoot);
-if (specFiles.length === 0) {
-  throw new Error(`No realm-hosted spec files were found under ${specRoot}`);
-}
+  if (existsSync(scratchPath)) {
+    throw new Error(`Scratch realm path already exists: ${scratchPath}`);
+  }
 
-let scratchRealmUrl = ensureTrailingSlash(
-  typeof args['scratch-url'] === 'string'
-    ? args['scratch-url']
-    : new URL(
-        `${credentials.username}/${endpoint}/`,
-        credentials.realmServerUrl,
-      ).href,
-);
-let scratchName =
-  typeof args.name === 'string'
-    ? args.name
-    : `${sourceRealmName} Test ${new Date().toISOString()}`;
+  let specFiles = findSpecFiles(specRoot);
+  if (specFiles.length === 0) {
+    throw new Error(`No realm-hosted spec files were found under ${specRoot}`);
+  }
 
-mkdirSync(scratchRoot, { recursive: true });
+  let scratchRealmUrl = ensureTrailingSlash(
+    typeof args['scratch-url'] === 'string'
+      ? args['scratch-url']
+      : new URL(
+          `${credentials.username}/${endpoint}/`,
+          credentials.realmServerUrl,
+        ).href,
+  );
+  let scratchName =
+    typeof args.name === 'string'
+      ? args.name
+      : `${sourceRealmName} Test ${new Date().toISOString()}`;
 
-runCommand('boxel', ['create', endpoint, scratchName]);
-runCommand('boxel', ['pull', scratchRealmUrl, scratchPath]);
+  mkdirSync(scratchRoot, { recursive: true });
 
-let copiedFixtures = copyTreeContents(fixturesRoot, scratchPath);
-runCommand('boxel', ['sync', scratchPath, scratchRealmUrl, '--prefer-local']);
+  runCommand('boxel', ['create', endpoint, scratchName]);
+  runCommand('boxel', ['pull', scratchRealmUrl, scratchPath]);
 
-let reportFile = join(tmpdir(), `${endpoint}-playwright-report.json`);
-let playwrightConfig = resolve(process.cwd(), 'playwright.realm.config.ts');
-let playwrightEnv: NodeJS.ProcessEnv = {
-  BOXEL_SOURCE_REALM_PATH: sourceRealmPath,
-  BOXEL_SOURCE_REALM_URL: sourceRealmUrl,
-  BOXEL_TEST_REALM_PATH: scratchPath,
-  BOXEL_TEST_REALM_URL: scratchRealmUrl,
-  PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
-};
-let relativeSpecFiles = specFiles.map((filePath) =>
-  relative(sourceRealmPath, filePath),
-);
+  let copiedFixtures = copyTreeContents(fixturesRoot, scratchPath);
+  runCommand('boxel', ['sync', scratchPath, scratchRealmUrl, '--prefer-local']);
 
-let testRun = spawnSync(
-  'npx',
-  [
-    'playwright',
-    'test',
-    '--config',
-    playwrightConfig,
-    '--reporter=line,json',
-    ...relativeSpecFiles,
-  ],
-  {
-    cwd: sourceRealmPath,
-    encoding: 'utf8',
-    env: { ...process.env, ...playwrightEnv },
-  },
-);
+  let reportFile = join(tmpdir(), `${endpoint}-playwright-report.json`);
+  let playwrightConfig = resolve(process.cwd(), 'playwright.realm.config.ts');
+  let playwrightEnv: NodeJS.ProcessEnv = {
+    BOXEL_SOURCE_REALM_PATH: sourceRealmPath,
+    BOXEL_SOURCE_REALM_URL: sourceRealmUrl,
+    BOXEL_TEST_REALM_PATH: scratchPath,
+    BOXEL_TEST_REALM_URL: scratchRealmUrl,
+    PLAYWRIGHT_JSON_OUTPUT_FILE: reportFile,
+  };
+  let relativeSpecFiles = specFiles.map((filePath) =>
+    relative(sourceRealmPath, filePath),
+  );
 
-let report: PlaywrightReport = existsSync(reportFile)
-  ? (JSON.parse(readFileSync(reportFile, 'utf8')) as PlaywrightReport)
-  : { stats: {}, suites: [] };
-let failures = summarizeFailures(report);
+  let testRun = spawnSync(
+    'npx',
+    [
+      'playwright',
+      'test',
+      '--config',
+      playwrightConfig,
+      '--reporter=line,json',
+      ...relativeSpecFiles,
+    ],
+    {
+      cwd: sourceRealmPath,
+      encoding: 'utf8',
+      env: { ...process.env, ...playwrightEnv },
+    },
+  );
 
-let summary = {
-  sourceRealmPath,
-  sourceRealmUrl,
-  scratchPath,
-  scratchRealmUrl,
-  specFiles: specFiles.map((filePath) => relative(process.cwd(), filePath)),
-  copiedFixtures,
-  expected: report.stats?.expected ?? 0,
-  unexpected: report.stats?.unexpected ?? failures.length,
-  skipped: report.stats?.skipped ?? 0,
-  failures,
-};
+  let report: PlaywrightReport = existsSync(reportFile)
+    ? (JSON.parse(readFileSync(reportFile, 'utf8')) as PlaywrightReport)
+    : { stats: {}, suites: [] };
+  let failures = summarizeFailures(report);
 
-process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+  let summary = {
+    sourceRealmPath,
+    sourceRealmUrl,
+    scratchPath,
+    scratchRealmUrl,
+    specFiles: specFiles.map((filePath) => relative(process.cwd(), filePath)),
+    copiedFixtures,
+    expected: report.stats?.expected ?? 0,
+    unexpected: report.stats?.unexpected ?? failures.length,
+    skipped: report.stats?.skipped ?? 0,
+    failures,
+  };
 
-if (testRun.status !== 0) {
-  process.exit(testRun.status ?? 1);
+  process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
+
+  if (testRun.status !== 0) {
+    process.exit(testRun.status ?? 1);
+  }
 }

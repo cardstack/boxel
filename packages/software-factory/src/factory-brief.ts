@@ -32,8 +32,11 @@ interface FactoryBriefCardAttributes {
 }
 
 interface FactoryBriefLoadOptions {
+  /**
+   * Auth-aware fetch (e.g. createBoxelRealmFetch from ./realm-auth).
+   * Brief URLs may live on a private realm; the caller decides.
+   */
   fetch?: typeof globalThis.fetch;
-  authorization?: string;
 }
 
 export class FactoryBriefError extends Error {
@@ -57,12 +60,7 @@ export async function loadFactoryBrief(
 
   try {
     response = await fetchImpl(sourceUrl, {
-      headers: {
-        accept: SupportedMimeType.CardSource,
-        ...(options?.authorization
-          ? { authorization: options.authorization }
-          : {}),
-      },
+      headers: { accept: SupportedMimeType.CardSource },
     });
   } catch (error) {
     throw new FactoryBriefError(

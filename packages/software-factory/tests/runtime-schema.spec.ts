@@ -17,6 +17,16 @@ import { runRealmCommand, ensureTrailingSlash } from '../src/realm-operations';
 import { fetchCardTypeSchema } from '../src/darkfactory-schemas';
 import { sourceRealmURLFor } from '../src/harness/shared';
 
+function withAuth(authorization: string): typeof globalThis.fetch {
+  return (async (input: unknown, init?: RequestInit) => {
+    let headers = new Headers(init?.headers);
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', authorization);
+    }
+    return globalThis.fetch(input as RequestInfo, { ...init, headers });
+  }) as typeof globalThis.fetch;
+}
+
 const GET_CARD_TYPE_SCHEMA_COMMAND =
   '@cardstack/boxel-host/commands/get-card-type-schema/default';
 
@@ -39,7 +49,7 @@ test('fetches Project schema via GetCardTypeSchemaCommand', async ({
         name: 'Project',
       },
     },
-    { authorization: `Bearer ${realm.ownerBearerToken}` },
+    { fetch: withAuth(`Bearer ${realm.ownerBearerToken}`) },
   );
 
   expect(response.status).toBe('ready');
@@ -66,7 +76,7 @@ test('fetches Issue schema with enum fields', async ({ realm }) => {
     realmServerUrl,
     sourceRealmUrl,
     { module: `${sourceRealmUrl}darkfactory`, name: 'Issue' },
-    { authorization: `Bearer ${realm.ownerBearerToken}` },
+    { fetch: withAuth(`Bearer ${realm.ownerBearerToken}`) },
   );
 
   expect(schema).toBeDefined();
@@ -91,7 +101,7 @@ test('fetches KnowledgeArticle schema', async ({ realm }) => {
     realmServerUrl,
     sourceRealmUrl,
     { module: `${sourceRealmUrl}darkfactory`, name: 'KnowledgeArticle' },
-    { authorization: `Bearer ${realm.ownerBearerToken}` },
+    { fetch: withAuth(`Bearer ${realm.ownerBearerToken}`) },
   );
 
   expect(schema).toBeDefined();

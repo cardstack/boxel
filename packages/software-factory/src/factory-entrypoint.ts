@@ -20,6 +20,10 @@ import {
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
 import { createBoxelRealmFetch } from './realm-auth';
+import {
+  ensureActiveProfile,
+  getActiveProfileSummary,
+} from '@cardstack/boxel-cli';
 
 const allowedModes = ['bootstrap', 'implement', 'resume'] as const;
 
@@ -203,11 +207,17 @@ export async function runFactoryEntrypoint(
   options: FactoryEntrypointOptions,
   dependencies?: RunFactoryEntrypointDependencies,
 ): Promise<FactoryEntrypointSummary> {
+  // Make sure boxel-cli has an active profile (creating one from MATRIX_*
+  // env vars if needed) before any code path tries to authenticate.
+  await ensureActiveProfile();
+  let activeProfile = getActiveProfileSummary();
+
   let targetRealmResolution = (
     dependencies?.resolveTargetRealm ?? resolveFactoryTargetRealm
   )({
     targetRealmUrl: options.targetRealmUrl,
     realmServerUrl: options.realmServerUrl,
+    activeProfile,
   });
   let fetchImpl = createBoxelRealmFetch(options.briefUrl, {
     fetch: dependencies?.fetch,
@@ -222,9 +232,7 @@ export async function runFactoryEntrypoint(
   )(targetRealmResolution);
 
   let realmFetch = createBoxelRealmFetch(targetRealm.url, {
-    authorization: targetRealm.authorization,
     fetch: dependencies?.fetch,
-    primeRealmURL: targetRealm.url,
   });
 
   let artifacts = await (
@@ -252,7 +260,6 @@ export async function runFactoryEntrypoint(
       targetRealmUrl: targetRealm.url,
       realmServerUrl: targetRealm.serverUrl,
       ownerUsername: targetRealm.ownerUsername,
-      authorization: targetRealm.authorization,
       bootstrapResult: artifacts,
       model: options.model,
       debug: options.debug,

@@ -1,36 +1,27 @@
 // This should be first
 import '../src/setup-logger';
 
-import {
-  buildBrowserAuth,
-  buildBrowserSession,
-  getAccessibleRealmTokens,
-  matrixLogin,
-  parseArgs,
-  printJson,
-} from '../src/boxel';
 import { logger } from '../src/logger';
 
 let log = logger('boxel-session');
 
-async function main(): Promise<void> {
-  let args = parseArgs(process.argv.slice(2));
-  let matrixAuth = await matrixLogin();
-  let realmTokens = await getAccessibleRealmTokens(matrixAuth);
-  let requestedRealms =
-    typeof args.realm === 'string'
-      ? [args.realm]
-      : Array.isArray(args.realm)
-        ? args.realm
-        : [];
-  let session = buildBrowserSession(realmTokens, requestedRealms);
+// boxel-session used to print Matrix + per-realm JWTs to stdout for browser
+// session handoff. After CS-10642 the factory no longer exposes raw tokens —
+// auth is handled by @cardstack/boxel-cli's ProfileManager singleton, and
+// browser-side flows that genuinely need a JWT in the document (Playwright
+// page.route, manual debugging) need a different surface.
+//
+// TODO: reimplement with a minimal `boxel session --realm <url>` exposed
+// from boxel-cli that prints the per-realm JWT only, with an explicit opt-in
+// flag. The script is left as a stub so callers fail fast with a clear
+// message rather than silently importing deleted helpers.
 
-  printJson({
-    profileId: matrixAuth.credentials.profileId,
-    username: matrixAuth.credentials.username,
-    auth: buildBrowserAuth(matrixAuth),
-    boxelSession: session,
-  });
+async function main(): Promise<void> {
+  log.error(
+    'boxel-session is not available after CS-10642. Use `boxel profile` ' +
+      'or @cardstack/boxel-cli APIs directly.',
+  );
+  process.exit(1);
 }
 
 main().catch((error: unknown) => {

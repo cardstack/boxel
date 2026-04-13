@@ -39,7 +39,6 @@ export async function resolveTestRun(
   let realmOptions: TestRunRealmOptions = {
     targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
-    authorization: options.authorization,
     fetch: options.fetch,
   };
 
@@ -101,7 +100,7 @@ async function findResumableTestRun(
       sort: [{ by: 'sequenceNumber', direction: 'desc' }],
       page: { size: 1 },
     },
-    { authorization: options.authorization, fetch: options.fetch },
+    { fetch: options.fetch },
   );
 
   if (!result?.ok) {
@@ -155,7 +154,7 @@ async function getNextSequenceNumber(
       sort: [{ by: 'sequenceNumber', direction: 'desc' }],
       page: { size: 1 },
     },
-    { authorization: options.authorization, fetch: options.fetch },
+    { fetch: options.fetch },
   );
 
   let latest = result?.ok
@@ -417,7 +416,6 @@ export async function executeTestRunFromRealm(
   let realmOptions: TestRunRealmOptions = {
     targetRealmUrl: options.targetRealmUrl,
     testResultsModuleUrl: options.testResultsModuleUrl,
-    authorization: options.authorization,
     fetch: options.fetch,
   };
   let completeOptions = {

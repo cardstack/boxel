@@ -3,7 +3,16 @@
   "version": "0.0.1",
   "license": "MIT",
   "description": "CLI tools for Boxel workspace management",
-  "main": "./dist/index.js",
+  "main": "./dist/api.js",
+  "types": "./dist/api.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/api.d.ts",
+      "import": "./dist/api.js",
+      "require": "./dist/api.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "boxel": "./dist/index.js"
   },

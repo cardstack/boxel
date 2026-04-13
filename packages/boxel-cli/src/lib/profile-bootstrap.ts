@@ -1,11 +1,12 @@
 import { getProfileManager, getUsernameFromMatrixId } from './profile-manager';
 
 export class NoActiveProfileError extends Error {
-  readonly code = 'no_active_profile' as const;
+  readonly code: 'no_active_profile';
   constructor() {
     super(
       'No active Boxel profile. Run `boxel profile add` or set MATRIX_URL, MATRIX_USERNAME, MATRIX_PASSWORD, and REALM_SERVER_URL.',
     );
+    this.code = 'no_active_profile';
   }
 }
 

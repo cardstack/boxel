@@ -23,8 +23,7 @@ import type {
 
 const TARGET_REALM = 'https://realms.example.test/user/target/';
 const TEST_REALM = 'https://realms.example.test/user/target-tests/';
-const TARGET_TOKEN = 'Bearer target-jwt-123';
-const TEST_TOKEN = 'Bearer test-jwt-456';
+void TEST_REALM;
 
 const DEFAULT_CARD_TYPE_SCHEMAS = new Map<
   string,
@@ -66,10 +65,6 @@ function makeConfig(overrides?: Partial<ToolBuilderConfig>): ToolBuilderConfig {
   return {
     targetRealmUrl: TARGET_REALM,
     realmServerUrl: 'https://realms.example.test/',
-    realmTokens: {
-      [TARGET_REALM]: TARGET_TOKEN,
-      [TEST_REALM]: TEST_TOKEN,
-    },
     cardTypeSchemas: DEFAULT_CARD_TYPE_SCHEMAS,
     ...overrides,
   };
@@ -273,98 +268,11 @@ module('factory-tool-builder > write_file', function () {
 // Realm targeting (target vs test) + JWT auth
 // ---------------------------------------------------------------------------
 
-module('factory-tool-builder > realm targeting and auth', function () {
-  test('write_file defaults to target realm with target JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({ path: 'card.gts', content: 'content' });
-
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}card.gts`);
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('read_file uses correct JWT for target realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {
-      data: { attributes: {} },
-    });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let readTool = findTool(tools, 'read_file');
-
-    await readTool.execute({ path: 'card.gts' });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('update_issue uses target realm JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let updateTool = findTool(tools, 'update_issue');
-
-    await updateTool.execute({
-      path: 'Issues/1.json',
-      attributes: { status: 'done' },
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}Issues/1.json`);
-  });
-
-  test('create_knowledge uses target realm JWT', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let knowledgeTool = findTool(tools, 'create_knowledge');
-
-    await knowledgeTool.execute({
-      path: 'Knowledge/deploy.json',
-      attributes: { articleTitle: 'Guide' },
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-    assert.strictEqual(requests[0].url, `${TARGET_REALM}Knowledge/deploy.json`);
-  });
-
-  test('search_realm uses correct JWT for target realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, { data: [] });
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchTool = findTool(tools, 'search_realm');
-
-    await searchTool.execute({
-      query: { filter: { type: { name: 'Issue' } } },
-    });
-
-    assert.strictEqual(requests[0].headers['Authorization'], TARGET_TOKEN);
-  });
-
-  test('omits Authorization when token not found for realm', async function (assert) {
-    let { fetch: mockFetch, requests } = createMockFetch(200, {});
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({ fetch: mockFetch, realmTokens: {} });
-    let tools = buildFactoryTools(config, executor, registry);
-    let writeTool = findTool(tools, 'write_file');
-
-    await writeTool.execute({ path: 'card.gts', content: 'content' });
-
-    assert.strictEqual(requests[0].headers['Authorization'], undefined);
-  });
-});
+// 'realm targeting and auth' tests removed in CS-10642. They asserted that
+// the tool builder looks up per-realm JWTs from a `realmTokens` map and
+// inserts them into outbound headers — both of which are now boxel-cli's
+// concern (createRealmFetch wraps fetch with auth before reaching this
+// layer). Tools see only an already-auth'd fetch.
 
 // ---------------------------------------------------------------------------
 // Signal tools
@@ -429,178 +337,11 @@ module('factory-tool-builder > registered tool delegation', function () {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Registered tool per-realm JWT resolution
-// ---------------------------------------------------------------------------
-
-const SERVER_TOKEN = 'Bearer server-jwt-789';
-
-module('factory-tool-builder > registered tool JWT resolution', function () {
-  test('realm-api tool with realm-url gets per-realm JWT for target realm', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-read',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-read', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmReadTool = findTool(tools, 'realm-read');
-
-    await realmReadTool.execute({
-      'realm-url': TARGET_REALM,
-      path: 'card.gts',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      TARGET_TOKEN,
-      'should use target realm JWT',
-    );
-  });
-
-  test('realm-api tool with realm-url gets per-realm JWT for test realm', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-read',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-read', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmReadTool = findTool(tools, 'realm-read');
-
-    await realmReadTool.execute({
-      'realm-url': TEST_REALM,
-      path: 'Tests/spec.ts',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      TEST_TOKEN,
-      'should use test realm JWT',
-    );
-  });
-
-  test('realm-server-url tools get server JWT instead of per-realm JWT', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-auth',
-      exitCode: 0,
-      output: { tokens: {} },
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-auth', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmAuthTool = findTool(tools, 'realm-auth');
-
-    await realmAuthTool.execute({
-      'realm-server-url': 'https://realms.example.test/',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      SERVER_TOKEN,
-      'should use server JWT for realm-server-url tools',
-    );
-  });
-
-  test('realm-create gets server JWT', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-create',
-      exitCode: 0,
-      output: { data: { id: 'https://realms.example.test/new/' } },
-      durationMs: 10,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-create', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmCreateTool = findTool(tools, 'realm-create');
-
-    await realmCreateTool.execute({
-      'realm-server-url': 'https://realms.example.test/',
-      name: 'New Realm',
-      endpoint: 'new-realm',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      SERVER_TOKEN,
-      'should use server JWT for realm-create',
-    );
-  });
-
-  test('script tools do not get per-realm JWT override', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'search-realm',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['search-realm', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let searchRealmTool = findTool(tools, 'search-realm');
-
-    await searchRealmTool.execute({ realm: TARGET_REALM });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      undefined,
-      'script tools should not get auth override — they handle auth internally',
-    );
-  });
-
-  test('realm-api tool with unknown realm URL gets no auth override', async function (assert) {
-    let toolResult: ToolResult = {
-      tool: 'realm-read',
-      exitCode: 0,
-      output: {},
-      durationMs: 5,
-    };
-    let { executor, calls } = createMockToolExecutor(
-      new Map([['realm-read', toolResult]]),
-    );
-    let registry = new ToolRegistry();
-    let config = makeConfig({ serverToken: SERVER_TOKEN });
-    let tools = buildFactoryTools(config, executor, registry);
-    let realmReadTool = findTool(tools, 'realm-read');
-
-    await realmReadTool.execute({
-      'realm-url': 'https://unknown.example.test/realm/',
-      path: 'file.gts',
-    });
-
-    assert.strictEqual(calls.length, 1);
-    assert.strictEqual(
-      calls[0].authorization,
-      undefined,
-      'unknown realm URL should not get auth override',
-    );
-  });
-});
+// 'registered tool JWT resolution' tests removed in CS-10642 — the tool
+// builder no longer resolves per-realm or server JWTs (boxel-cli's
+// createRealmFetch / createServerFetch own that). The realm-create,
+// realm-server-session, and realm-auth tools were also removed from the
+// executor's realm-api dispatcher.
 
 // ---------------------------------------------------------------------------
 // Card tool schemas and document assembly
@@ -792,7 +533,6 @@ module('factory-tool-builder > run_tests', function () {
     let registry = new ToolRegistry();
     let { executor } = createMockToolExecutor(new Map());
     let config = makeConfig({
-      serverToken: 'Bearer server-jwt',
       testResultsModuleUrl:
         'https://realms.example.test/user/target/test-results',
       executeTestRun: async (options: ExecuteTestRunOptions) => {
@@ -817,7 +557,6 @@ module('factory-tool-builder > run_tests', function () {
     );
     assert.strictEqual(capturedOptions!.slug, 'define-sticky-note');
     assert.deepEqual(capturedOptions!.testNames, ['renders fitted view']);
-    assert.strictEqual(capturedOptions!.authorization, TARGET_TOKEN);
     assert.strictEqual(
       capturedOptions!.projectCardUrl,
       'https://realms.example.test/user/target/Project/mvp',
@@ -853,28 +592,7 @@ module('factory-tool-builder > run_tests', function () {
     );
   });
 
-  test('run_tests uses target realm JWT for authorization', async function (assert) {
-    let capturedOptions: ExecuteTestRunOptions | undefined;
-
-    let registry = new ToolRegistry();
-    let { executor } = createMockToolExecutor(new Map());
-    let config = makeConfig({
-      executeTestRun: async (options: ExecuteTestRunOptions) => {
-        capturedOptions = options;
-        return { testRunId: 'TestRun/run-1', status: 'passed' as const };
-      },
-    });
-    let tools = buildFactoryTools(config, executor, registry);
-    let runTestsTool = findTool(tools, 'run_tests');
-
-    await runTestsTool.execute({
-      slug: 'auth-test',
-    });
-
-    assert.strictEqual(
-      capturedOptions!.authorization,
-      TARGET_TOKEN,
-      'should use target realm JWT',
-    );
-  });
+  // 'run_tests uses target realm JWT for authorization' removed in
+  // CS-10642 — the tool builder no longer threads JWTs (the run_tests
+  // call passes config.fetch through; auth is the fetch wrapper's job).
 });

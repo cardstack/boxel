@@ -109,9 +109,7 @@ export class ToolUseFactoryAgent implements LoopAgent {
         return globalThis.fetch(input, { ...init, headers });
       }) as typeof globalThis.fetch;
     } else {
-      this.fetchImpl = createBoxelRealmFetch(config.realmServerUrl, {
-        authorization: config.authorization?.trim() || undefined,
-      });
+      this.fetchImpl = createBoxelRealmFetch(config.realmServerUrl);
     }
   }
 

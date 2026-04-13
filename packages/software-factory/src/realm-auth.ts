@@ -1,42 +1,24 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+/**
+ * Thin wrapper that returns an auth-aware fetch for a Boxel resource URL.
+ *
+ * Auth lives in `@cardstack/boxel-cli` (ProfileManager singleton). When the
+ * resource URL is on the active profile's realm server, we extract the
+ * containing realm URL (`{server}/{owner}/{realm}/`) from the card URL and
+ * hand back `createRealmFetch(realmUrl)` so per-realm JWT attachment works
+ * for any card-path under that realm. Otherwise the resource is treated as
+ * public and the caller's plain fetch is returned unchanged.
+ *
+ * This file used to own the full Matrix login + realm-auth flow. That code
+ * is gone; boxel-cli does it now.
+ */
 
-import { authorizationMiddleware } from '@cardstack/runtime-common/authorization-middleware';
-import { fetcher } from '@cardstack/runtime-common/fetcher';
 import {
-  getMatrixUsername,
-  MatrixClient,
-} from '@cardstack/runtime-common/matrix-client';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
-import { RealmAuthDataSource } from '@cardstack/runtime-common/realm-auth-data-source';
-
-interface BoxelStoredProfile {
-  matrixUrl: string;
-  realmServerUrl: string;
-  password: string;
-}
-
-interface BoxelProfilesConfig {
-  profiles: {
-    [profileId: string]: BoxelStoredProfile;
-  };
-  activeProfile: string | null;
-}
-
-export interface ActiveBoxelProfile {
-  profileId: string | null;
-  username: string;
-  matrixUrl: string;
-  realmServerUrl: string;
-  password: string;
-}
+  createRealmFetch,
+  getActiveProfileSummary,
+} from '@cardstack/boxel-cli';
 
 export interface CreateBoxelRealmFetchOptions {
-  authorization?: string;
   fetch?: typeof globalThis.fetch;
-  profile?: ActiveBoxelProfile | null;
-  primeRealmURL?: string;
 }
 
 export function createBoxelRealmFetch(
@@ -49,182 +31,27 @@ export function createBoxelRealmFetch(
     throw new Error('Global fetch is not available');
   }
 
-  let explicitAuthorization = normalizeOptionalString(options?.authorization);
-
-  if (explicitAuthorization) {
-    return withAuthorization(fetchImpl, explicitAuthorization);
-  }
-
-  let profile =
-    options && 'profile' in options
-      ? (options.profile ?? undefined)
-      : getOptionalActiveProfile(resourceUrl);
-
-  if (!profile || !sharesOrigin(resourceUrl, profile.realmServerUrl)) {
+  let active;
+  try {
+    active = getActiveProfileSummary();
+  } catch {
     return fetchImpl;
   }
 
-  let matrixClient = new MatrixClient({
-    matrixURL: new URL(profile.matrixUrl),
-    username: profile.username,
-    password: profile.password,
-  });
-  let realmAuthDataSource = new RealmAuthDataSource(
-    matrixClient,
-    () => fetchImpl,
-  );
-  let authedFetch = fetcher(fetchImpl, [
-    authorizationMiddleware(realmAuthDataSource),
-  ]);
-  let primedRealmURL = normalizeOptionalString(options?.primeRealmURL);
-  let primeRequest =
-    primedRealmURL != null
-      ? realmAuthDataSource.reauthenticate(
-          ensureTrailingSlash(
-            normalizeProfileUrl(primedRealmURL, 'primeRealmURL'),
-          ),
-        )
-      : undefined;
-
-  if (!primeRequest) {
-    return authedFetch;
+  if (!sharesOrigin(resourceUrl, active.realmServerUrl)) {
+    return fetchImpl;
   }
 
-  return async (input, init) => {
-    await primeRequest;
-    return await authedFetch(input, init);
-  };
-}
-
-function getOptionalActiveProfile(
-  resourceUrl: string,
-): ActiveBoxelProfile | undefined {
-  let envProfile = buildEnvProfile(resourceUrl);
-
-  if (envProfile) {
-    return envProfile;
+  // Extract the realm URL from the card URL. Boxel realms live at
+  // `{realmServer}/{owner}/{realm}/`; per-realm JWTs from `_realm-auth`
+  // are keyed by that URL. A card URL like
+  // `{realmServer}/{owner}/{realm}/Card/instance.json` needs to be
+  // resolved to its containing realm URL before we can look up its JWT.
+  let realmUrl = extractRealmUrl(resourceUrl, active.realmServerUrl);
+  if (!realmUrl) {
+    return fetchImpl;
   }
-
-  let config = parseProfilesConfig();
-
-  if (config.activeProfile && config.profiles[config.activeProfile]) {
-    let profile = config.profiles[config.activeProfile];
-
-    return {
-      profileId: config.activeProfile,
-      username: getMatrixUsername(config.activeProfile),
-      matrixUrl: normalizeProfileUrl(profile.matrixUrl, 'matrixUrl'),
-      realmServerUrl: normalizeProfileUrl(
-        profile.realmServerUrl,
-        'realmServerUrl',
-      ),
-      password: profile.password,
-    };
-  }
-
-  return undefined;
-}
-
-function parseProfilesConfig(): BoxelProfilesConfig {
-  let profilesFile = getProfilesFile();
-
-  if (!existsSync(profilesFile)) {
-    return { profiles: {}, activeProfile: null };
-  }
-
-  try {
-    return JSON.parse(
-      readFileSync(profilesFile, 'utf8'),
-    ) as BoxelProfilesConfig;
-  } catch (error) {
-    throw new Error(
-      `Failed to parse Boxel profiles config at ${profilesFile}: ${
-        error instanceof Error ? error.message : String(error)
-      }. Fix or remove the file, or provide auth via environment variables.`,
-    );
-  }
-}
-
-function withAuthorization(
-  fetchImpl: typeof globalThis.fetch,
-  authorization: string,
-): typeof globalThis.fetch {
-  return async (input, init) => {
-    if (input instanceof Request) {
-      let request = new Request(input, init);
-
-      if (!request.headers.has('Authorization')) {
-        request.headers.set('Authorization', authorization);
-      }
-
-      return await fetchImpl(request);
-    }
-
-    let headers = new Headers(init?.headers);
-
-    if (!headers.has('Authorization')) {
-      headers.set('Authorization', authorization);
-    }
-
-    return await fetchImpl(input, {
-      ...init,
-      headers,
-    });
-  };
-}
-
-function getProfilesFile(): string {
-  return join(homedir(), '.boxel-cli', 'profiles.json');
-}
-
-function normalizeProfileUrl(value: string, label: string): string {
-  try {
-    return ensureTrailingSlash(new URL(value).href);
-  } catch (error) {
-    throw new Error(
-      `Invalid ${label} in Boxel auth configuration: "${value}". Expected an absolute URL.`,
-    );
-  }
-}
-
-function buildEnvProfile(resourceUrl: string): ActiveBoxelProfile | undefined {
-  let matrixUrl = normalizeOptionalString(process.env.MATRIX_URL);
-  let username = normalizeOptionalString(process.env.MATRIX_USERNAME);
-  let password = normalizeOptionalString(process.env.MATRIX_PASSWORD);
-  let realmServerUrl = normalizeOptionalString(process.env.REALM_SERVER_URL);
-
-  if (!matrixUrl) {
-    return undefined;
-  }
-
-  let normalizedMatrixUrl = normalizeProfileUrl(matrixUrl, 'MATRIX_URL');
-  let normalizedRealmServerUrl = realmServerUrl
-    ? normalizeProfileUrl(realmServerUrl, 'REALM_SERVER_URL')
-    : normalizeProfileUrl(new URL('/', resourceUrl).href, 'resourceUrl origin');
-
-  if (!username || !password) {
-    return undefined;
-  }
-
-  return {
-    profileId: null,
-    username: getMatrixUsername(username),
-    matrixUrl: normalizedMatrixUrl,
-    realmServerUrl: normalizedRealmServerUrl,
-    password,
-  };
-}
-
-function normalizeOptionalString(
-  value: string | undefined,
-): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  let trimmed = value.trim();
-
-  return trimmed === '' ? undefined : trimmed;
+  return createRealmFetch(realmUrl);
 }
 
 function sharesOrigin(left: string, right: string): boolean {
@@ -236,5 +63,28 @@ function sharesOrigin(left: string, right: string): boolean {
         error instanceof Error ? error.message : String(error)
       }`,
     );
+  }
+}
+
+function extractRealmUrl(
+  resourceUrl: string,
+  realmServerUrl: string,
+): string | undefined {
+  try {
+    let resource = new URL(resourceUrl);
+    let server = new URL(realmServerUrl);
+    let serverPath = server.pathname.endsWith('/')
+      ? server.pathname
+      : `${server.pathname}/`;
+    let resourcePath = resource.pathname.startsWith(serverPath)
+      ? resource.pathname.slice(serverPath.length)
+      : resource.pathname.replace(/^\/+/, '');
+    let segments = resourcePath.split('/').filter(Boolean);
+    if (segments.length < 2) {
+      return undefined;
+    }
+    return `${resource.origin}${serverPath}${segments[0]}/${segments[1]}/`;
+  } catch {
+    return undefined;
   }
 }

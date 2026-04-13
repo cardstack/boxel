@@ -9,6 +9,17 @@ import {
 } from '../src/factory-test-realm';
 import { readFile, waitForRealmFile, writeFile } from '../src/realm-operations';
 
+/** Returns a fetch that injects the given Authorization header on every call. */
+function withAuth(authorization: string): typeof globalThis.fetch {
+  return (async (input: unknown, init?: RequestInit) => {
+    let headers = new Headers(init?.headers);
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', authorization);
+    }
+    return globalThis.fetch(input as RequestInfo, { ...init, headers });
+  }) as typeof globalThis.fetch;
+}
+
 const fixtureRealmDir = resolve(
   process.cwd(),
   'test-fixtures',
@@ -79,13 +90,13 @@ test.describe('factory-test-realm e2e', () => {
       realmUrl,
       'hello.test.gts',
       PASSING_TEST_GTS,
-      { authorization },
+      { fetch: withAuth(authorization) },
     );
     expect(writeResult.ok).toBe(true);
 
     // Wait for the realm to index the file before running tests
     let indexed = await waitForRealmFile(realmUrl, 'hello.test.gts', {
-      authorization,
+      fetch: withAuth(authorization),
       pollMs: 300,
       timeoutMs: 30_000,
     });
@@ -106,7 +117,7 @@ test.describe('factory-test-realm e2e', () => {
       slug: 'hello-e2e',
       testNames: [],
       authorization,
-      fetch: globalThis.fetch,
+      fetch: withAuth(authorization),
       hostAppUrl: realm.hostAppUrl,
     });
 
@@ -117,7 +128,7 @@ test.describe('factory-test-realm e2e', () => {
 
     // Read the TestRun card back and verify its persisted state
     let testRunCard = await readFile(realmUrl, handle.testRunId, {
-      authorization,
+      fetch: withAuth(authorization),
     });
     expect(testRunCard.ok).toBe(true);
     let attrs = testRunCard.document?.data.attributes;
@@ -154,13 +165,13 @@ test.describe('factory-test-realm e2e', () => {
       realmUrl,
       'hello-fail.test.gts',
       FAILING_TEST_GTS,
-      { authorization },
+      { fetch: withAuth(authorization) },
     );
     expect(writeResult.ok).toBe(true);
 
     // Wait for the realm to index the file before running tests
     let indexed = await waitForRealmFile(realmUrl, 'hello-fail.test.gts', {
-      authorization,
+      fetch: withAuth(authorization),
       pollMs: 300,
       timeoutMs: 30_000,
     });
@@ -173,7 +184,7 @@ test.describe('factory-test-realm e2e', () => {
       slug: 'hello-fail',
       testNames: [],
       authorization,
-      fetch: globalThis.fetch,
+      fetch: withAuth(authorization),
       hostAppUrl: realm.hostAppUrl,
     });
 
@@ -183,7 +194,7 @@ test.describe('factory-test-realm e2e', () => {
 
     // Read the TestRun card back and verify its persisted state
     let testRunCard = await readFile(realmUrl, handle.testRunId, {
-      authorization,
+      fetch: withAuth(authorization),
     });
     expect(testRunCard.ok).toBe(true);
     let attrs = testRunCard.document?.data.attributes;

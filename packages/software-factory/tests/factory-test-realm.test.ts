@@ -333,7 +333,6 @@ module('factory-test-realm > createTestRun', function () {
       ['test A', 'test B'],
       {
         ...testRealmOptions,
-        authorization: 'Bearer test-token',
         fetch: mockFetch,
         sequenceNumber: 1,
       },
@@ -349,7 +348,10 @@ module('factory-test-realm > createTestRun', function () {
 
     let headers = capturedInit?.headers as Record<string, string>;
     assert.strictEqual(headers['Content-Type'], SupportedMimeType.CardSource);
-    assert.strictEqual(headers['Authorization'], 'Bearer test-token');
+    // Authorization is no longer inserted by realm-operations after
+    // CS-10642 — the caller passes an already-auth'd fetch (typically
+    // createRealmFetch from boxel-cli). The mock fetch above does not
+    // add it, so no Authorization header is observed.
 
     let body = JSON.parse(capturedInit?.body as string);
     assert.strictEqual(body.data.meta.adoptsFrom.name, 'TestRun');
@@ -798,10 +800,13 @@ module('factory-test-realm > pullRealmFiles', function () {
 
     await pullRealmFiles('https://example.test/realm/', '/tmp/unused', {
       fetch: mockFetch,
-      authorization: 'Bearer my-token',
     });
 
-    assert.strictEqual(capturedHeaders[0]['Authorization'], 'Bearer my-token');
+    // After CS-10642 the realm-operations layer no longer attaches auth
+    // headers itself — that is the caller's fetch's responsibility. The
+    // mock fetch above does not inject anything, so no Authorization header
+    // is observed.
+    assert.strictEqual(capturedHeaders[0]['Authorization'], undefined);
   });
 
   test('returns error on _mtimes HTTP failure', async function (assert) {

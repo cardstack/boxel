@@ -35,11 +35,12 @@ export interface CreateRealmResult {
  * can catch this and proceed against the existing realm.
  */
 export class RealmAlreadyExistsError extends Error {
-  readonly code = 'realm_already_exists' as const;
+  readonly code: 'realm_already_exists';
   readonly realmName: string;
   readonly realmServerUrl: string;
   constructor(realmName: string, realmServerUrl: string) {
     super(`Realm "${realmName}" already exists on ${realmServerUrl}`);
+    this.code = 'realm_already_exists';
     this.realmName = realmName;
     this.realmServerUrl = realmServerUrl;
   }

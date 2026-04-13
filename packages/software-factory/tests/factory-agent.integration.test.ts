@@ -134,7 +134,6 @@ module(
         let agent = new OpenRouterFactoryAgent({
           model: 'anthropic/claude-sonnet-4',
           realmServerUrl: `${origin}/`,
-          authorization: 'Bearer test-jwt-token',
         });
 
         assert.false(
@@ -151,12 +150,11 @@ module(
         assert.strictEqual(actions[0].path, 'HelloWorld/hello.gts');
         assert.strictEqual(actions[1].type, 'done');
 
-        // Verify auth header was sent
-        assert.strictEqual(
-          capturedAuthHeader,
-          'Bearer test-jwt-token',
-          'Authorization header sent to proxy',
-        );
+        // After CS-10642 the agent no longer takes an explicit authorization
+        // option — auth is handled by createBoxelRealmFetch via boxel-cli's
+        // ProfileManager singleton (when an active profile exists). With no
+        // profile in this test process, the request goes out unauthenticated.
+        void capturedAuthHeader;
 
         // Verify proxy body structure
         assert.ok(capturedProxyBody, 'proxy body was captured');
@@ -206,7 +204,6 @@ module(
         let agent = new OpenRouterFactoryAgent({
           model: 'anthropic/claude-sonnet-4',
           realmServerUrl: `${origin}/`,
-          authorization: 'Bearer test-jwt-token',
         });
 
         let ctx = makeMinimalContext();
@@ -260,7 +257,6 @@ module(
         let agent = new OpenRouterFactoryAgent({
           model: 'anthropic/claude-sonnet-4',
           realmServerUrl: `${origin}/`,
-          authorization: 'Bearer test-jwt-token',
         });
 
         let ctx = makeMinimalContext();

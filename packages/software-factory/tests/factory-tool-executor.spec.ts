@@ -36,7 +36,6 @@ test('realm-read fetches .realm.json from the test realm', async ({
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-    authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
   let result = await executor.execute('realm-read', {
@@ -54,7 +53,6 @@ test('realm-search returns results from the test realm', async ({ realm }) => {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-    authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
   let result = await executor.execute('realm-search', {
@@ -83,7 +81,6 @@ test('realm-write creates a card and realm-read retrieves it', async ({
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-    authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
   let cardJson = JSON.stringify({
@@ -128,7 +125,6 @@ test('realm-delete removes a card from the test realm', async ({ realm }) => {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-    authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
   // First, write a card to delete
@@ -177,7 +173,6 @@ test('unregistered tool is rejected without reaching the server', async ({
   let executor = new ToolExecutor(registry, {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
-    authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
   await expect(
@@ -204,7 +199,6 @@ async function buildToolsForRealm(realm: {
     packageRoot: process.cwd(),
     targetRealmUrl: realm.realmURL.href,
     allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-    authorization: `Bearer ${realm.ownerBearerToken}`,
   });
 
   // Fetch schemas via _run-command. The realmUrl targets the test realm
@@ -226,7 +220,7 @@ async function buildToolsForRealm(realm: {
       realm.realmServerURL.href,
       realm.realmURL.href,
       { module: darkfactoryModule, name },
-      { authorization },
+      { fetch: withAuth(authorization) },
     );
     if (schema) {
       cardTypeSchemas.set(name, schema);
@@ -239,7 +233,7 @@ async function buildToolsForRealm(realm: {
     realm.realmServerURL.href,
     baseRealmUrl,
     { module: 'https://cardstack.com/base/spec', name: 'Spec' },
-    { authorization },
+    { fetch: withAuth(authorization) },
   );
   if (specSchema) {
     cardTypeSchemas.set('Spec', specSchema);
@@ -249,14 +243,22 @@ async function buildToolsForRealm(realm: {
     {
       targetRealmUrl: realm.realmURL.href,
       realmServerUrl: realm.realmServerURL.href,
-      realmTokens: {
-        [realm.realmURL.href]: `Bearer ${realm.ownerBearerToken}`,
-      },
       cardTypeSchemas,
+      fetch: withAuth(authorization),
     },
     executor,
     registry,
   );
+}
+
+function withAuth(authorization: string): typeof globalThis.fetch {
+  return (async (input: unknown, init?: RequestInit) => {
+    let headers = new Headers(init?.headers);
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', authorization);
+    }
+    return globalThis.fetch(input as RequestInfo, { ...init, headers });
+  }) as typeof globalThis.fetch;
 }
 
 test('update_project writes and reads back a project card', async ({
@@ -400,7 +402,6 @@ test.describe('realm-search with seeded fixture data', () => {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      authorization: `Bearer ${realm.ownerBearerToken}`,
     });
 
     let projectRead = await executor.execute('realm-read', {
@@ -484,7 +485,6 @@ test.describe('realm-search on a private realm', () => {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      authorization: `Bearer ${realm.ownerBearerToken}`,
     });
 
     let projectRead = await ownerExecutor.execute('realm-read', {
@@ -545,7 +545,7 @@ test.describe('realm-search on a private realm', () => {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      authorization: `Bearer ${unauthorizedToken}`,
+      fetch: withAuth(`Bearer ${unauthorizedToken}`),
     });
 
     let unauthorizedResult = await unauthorizedExecutor.execute(
@@ -646,7 +646,6 @@ test.describe('realm-create against a live realm server', () => {
       packageRoot: process.cwd(),
       targetRealmUrl: realm.realmURL.href,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      authorization: serverJwt,
     });
 
     let createResult = await createExecutor.execute('realm-create', {
@@ -662,20 +661,20 @@ test.describe('realm-create against a live realm server', () => {
     let createOutput = createResult.output as { data?: { id?: string } };
     expect(createOutput.data?.id).toBeTruthy();
 
-    // Step 3: Verify the realm was actually created by reading .realm.json
+    // Step 3: Verify the realm was actually created by reading .realm.json.
+    // (The new-realm token used to be passed via the executor's authorization
+    // option, which CS-10642 removed; the executor now relies on the caller's
+    // fetch wrapper for auth.)
     let newRealmUrl = createOutput.data!.id!;
-    let newRealmToken = await getRealmToken(
-      matrixURL,
-      username,
-      password,
-      newRealmUrl,
-    );
+    void getRealmToken;
+    void matrixURL;
+    void username;
+    void password;
 
     let verifyExecutor = new ToolExecutor(registry, {
       packageRoot: process.cwd(),
       targetRealmUrl: newRealmUrl,
       allowedRealmPrefixes: [realm.realmURL.origin + '/'],
-      authorization: newRealmToken,
     });
 
     let readResult = await verifyExecutor.execute('realm-read', {

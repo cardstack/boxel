@@ -28,15 +28,7 @@ import {
   ToolUseFactoryAgent,
   type FactoryAgentConfig,
 } from './factory-agent';
-import {
-  getActiveProfile,
-  matrixLogin,
-  getRealmServerToken,
-  getAccessibleRealmTokens,
-  type ActiveBoxelProfile,
-  type MatrixAuth,
-  type RealmTokens,
-} from './boxel';
+import { createRealmFetch, createServerFetch } from '@cardstack/boxel-cli';
 import { ContextBuilder } from './factory-context-builder';
 import {
   runFactoryLoop,
@@ -90,8 +82,6 @@ export interface ImplementConfig {
   realmServerUrl: string;
   /** Owner username (Matrix user). */
   ownerUsername: string;
-  /** Per-realm JWT for the target realm (from bootstrap). */
-  authorization: string;
   /** Bootstrap result with project/ticket/knowledge IDs. */
   bootstrapResult: FactoryBootstrapResult;
   /** OpenRouter model ID (e.g., "anthropic/claude-sonnet-4"). */
@@ -100,7 +90,11 @@ export interface ImplementConfig {
   maxIterations?: number;
   /** Log LLM prompts and responses to stderr. */
   debug?: boolean;
-  /** Fetch implementation (injectable for testing). */
+  /**
+   * Override fetch (testing only). Production code uses createRealmFetch /
+   * createServerFetch from @cardstack/boxel-cli, which already attach the
+   * correct JWT for each call.
+   */
   fetch?: typeof globalThis.fetch;
   /** Override the agent (injectable for testing). */
   agent?: LoopAgent;
@@ -108,12 +102,6 @@ export interface ImplementConfig {
   testRunner?: TestRunner;
   /** Host app URL for QUnit live-test page. Defaults to compat proxy URL. */
   hostAppUrl?: string;
-  /** Override Matrix auth (injectable for testing). */
-  matrixAuth?: MatrixAuth;
-  /** Override per-realm tokens (injectable for testing). */
-  realmTokens?: RealmTokens;
-  /** Override server token (injectable for testing). */
-  serverToken?: string;
 }
 
 export interface ImplementResult {
@@ -135,29 +123,25 @@ export async function runFactoryImplement(
 ): Promise<ImplementResult> {
   let targetRealmUrl = ensureTrailingSlash(config.targetRealmUrl);
   let realmServerUrl = ensureTrailingSlash(config.realmServerUrl);
-  let fetchImpl = config.fetch ?? globalThis.fetch;
+  // Production: an auth-aware fetch bound to the target realm. Tests can
+  // inject a stub via config.fetch to bypass the network entirely.
+  let fetchImpl = config.fetch ?? createRealmFetch(targetRealmUrl);
+  let serverFetch = config.fetch ?? createServerFetch();
 
-  // 1. Auth: get Matrix auth, server token, and per-realm JWTs
-  let { serverToken, realmTokens } = await resolveAuth(config);
-
-  // 2. Fetch card data from the realm
-  let fetchOptions: RealmFetchOptions = {
-    authorization: config.authorization,
-    fetch: fetchImpl,
-  };
+  // 1. Fetch card data from the realm
+  let fetchOptions: RealmFetchOptions = { fetch: fetchImpl };
   let { project, issue, knowledge } = await fetchCardData(
     targetRealmUrl,
     config.bootstrapResult,
     fetchOptions,
   );
 
-  // 3. Build tool infrastructure
+  // 2. Build tool infrastructure
   let toolRegistry = new ToolRegistry([...SCRIPT_TOOLS, ...REALM_API_TOOLS]);
   let toolExecutor = new ToolExecutor(toolRegistry, {
     packageRoot: PACKAGE_ROOT,
     targetRealmUrl,
     fetch: fetchImpl,
-    authorization: config.authorization,
   });
 
   // Fetch card type schemas for typed tool parameters.
@@ -170,7 +154,7 @@ export async function runFactoryImplement(
     realmServerUrl,
     targetRealmUrl,
     darkfactoryModuleBase,
-    { authorization: serverToken, fetch: fetchImpl },
+    { fetch: serverFetch },
   );
 
   let testResultsModuleUrl = `${new URL('software-factory/test-results', realmServerUrl).href}`;
@@ -178,10 +162,9 @@ export async function runFactoryImplement(
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
     realmServerUrl,
-    realmTokens,
-    serverToken,
     testResultsModuleUrl,
     fetch: fetchImpl,
+    serverFetch,
     cardTypeSchemas,
     hostAppUrl,
   };
@@ -192,24 +175,23 @@ export async function runFactoryImplement(
     toolRegistry,
   );
 
-  // 4. Build context infrastructure
+  // 3. Build context infrastructure
   let contextBuilder = new ContextBuilder({
     skillResolver: new DefaultSkillResolver(),
     skillLoader: new SkillLoader(),
   });
 
-  // 5. Build agent
+  // 4. Build agent
   let model = resolveFactoryModel(config.model);
   let agent: LoopAgent =
     config.agent ??
     new ToolUseFactoryAgent({
       model,
       realmServerUrl,
-      authorization: config.authorization,
       debug: config.debug,
     } satisfies FactoryAgentConfig);
 
-  // 6. Set up test runner with a shared tool call log.
+  // 5. Set up test runner with a shared tool call log.
   // Wrap the agent to intercept tool calls so the TestRunner
   // can find which test files the agent wrote.
   let sharedToolCallLog: ToolCallEntry[] = [];
@@ -223,7 +205,6 @@ export async function runFactoryImplement(
   let testRunner: TestRunner =
     config.testRunner ??
     buildTestRunner(targetRealmUrl, issue, sharedToolCallLog, {
-      authorization: config.authorization,
       fetch: fetchImpl,
       realmServerUrl,
       hostAppUrl,
@@ -242,7 +223,7 @@ export async function runFactoryImplement(
     maxIterations: config.maxIterations,
   });
 
-  // 8. Post-loop: update issue status on success
+  // 6. Post-loop: update issue status on success
   if (loopResult.outcome === 'tests_passed' || loopResult.outcome === 'done') {
     try {
       await updateIssueStatus(targetRealmUrl, issue.id, 'done', fetchOptions);
@@ -263,108 +244,6 @@ export async function runFactoryImplement(
     testResults: loopResult.testResults,
     message: loopResult.message,
     issueId: issue.id,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Auth resolution
-// ---------------------------------------------------------------------------
-
-async function resolveAuth(config: ImplementConfig): Promise<{
-  matrixAuth: MatrixAuth | undefined;
-  serverToken: string | undefined;
-  realmTokens: RealmTokens;
-}> {
-  // Allow full override for testing
-  if (config.realmTokens) {
-    return {
-      matrixAuth: config.matrixAuth,
-      serverToken: config.serverToken,
-      realmTokens: config.realmTokens,
-    };
-  }
-
-  // Production path: build a profile using the CLI-derived realmServerUrl
-  // instead of relying on getActiveProfile() which requires REALM_SERVER_URL
-  // env var. The realm server URL should always come from --realm-server-url
-  // (or inferred from --target-realm-url), never from an env var.
-  let matrixAuth: MatrixAuth;
-  try {
-    if (config.matrixAuth) {
-      matrixAuth = config.matrixAuth;
-    } else {
-      let profile = buildProfileWithCliRealmServer(config.realmServerUrl);
-      matrixAuth = await matrixLogin(profile);
-    }
-  } catch (error) {
-    throw new Error(
-      `Matrix login failed during implement mode. Ensure MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD are set, ` +
-        `and pass --realm-server-url on the CLI.\n${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
-  }
-
-  let serverToken: string;
-  try {
-    serverToken = config.serverToken ?? (await getRealmServerToken(matrixAuth));
-  } catch (error) {
-    throw new Error(
-      `Failed to get realm server token: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-
-  let realmTokens: RealmTokens;
-  try {
-    realmTokens = await getAccessibleRealmTokens(matrixAuth);
-  } catch (error) {
-    throw new Error(
-      `Failed to get realm tokens: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-
-  return { matrixAuth, serverToken, realmTokens };
-}
-
-/**
- * Build an ActiveBoxelProfile using the CLI-derived realmServerUrl.
- * Tries the active Boxel profile first (from ~/.boxel-cli/profiles.json),
- * then falls back to MATRIX_URL / MATRIX_USERNAME / MATRIX_PASSWORD env vars.
- * Never reads REALM_SERVER_URL from the environment.
- */
-function buildProfileWithCliRealmServer(
-  realmServerUrl: string,
-): ActiveBoxelProfile {
-  // Try active Boxel profile first
-  try {
-    let profile = getActiveProfile();
-    // Override the profile's realmServerUrl with the CLI-derived one
-    return { ...profile, realmServerUrl };
-  } catch {
-    // No active profile — fall back to env vars
-  }
-
-  let matrixUrl = process.env.MATRIX_URL?.trim();
-  let username = process.env.MATRIX_USERNAME?.trim();
-  let password = process.env.MATRIX_PASSWORD?.trim();
-
-  if (!matrixUrl || !username || !password) {
-    throw new Error(
-      'No active Boxel profile found and MATRIX_URL/MATRIX_USERNAME/MATRIX_PASSWORD are not fully set. ' +
-        'The realm server URL is taken from --realm-server-url (not from an env var).',
-    );
-  }
-
-  return {
-    profileId: null,
-    username,
-    matrixUrl,
-    realmServerUrl,
-    password,
   };
 }
 
@@ -439,7 +318,6 @@ async function fetchCard(
 // ---------------------------------------------------------------------------
 
 interface TestRunnerConfig {
-  authorization?: string;
   fetch?: typeof globalThis.fetch;
   realmServerUrl: string;
   hostAppUrl: string;
@@ -498,7 +376,6 @@ function buildTestRunner(
 
     for (let testPath of testFilePaths) {
       await waitForRealmFile(targetRealmUrl, testPath, {
-        authorization: runConfig.authorization,
         fetch: runConfig.fetch,
         pollMs: 300,
         timeoutMs: 30_000,
@@ -516,7 +393,6 @@ function buildTestRunner(
         testResultsModuleUrl: `${ensureTrailingSlash(runConfig.realmServerUrl)}software-factory/test-results`,
         slug,
         testNames: [],
-        authorization: runConfig.authorization,
         fetch: runConfig.fetch,
         realmServerUrl: runConfig.realmServerUrl,
         hostAppUrl: runConfig.hostAppUrl,
@@ -546,7 +422,7 @@ function buildTestRunner(
         let failures = await readTestRunFailures(
           targetRealmUrl,
           handle.testRunId,
-          { authorization: runConfig.authorization, fetch: runConfig.fetch },
+          { fetch: runConfig.fetch },
         );
         return {
           status: 'failed',
@@ -739,7 +615,7 @@ async function loadDarkFactorySchemas(
   realmServerUrl: string,
   commandRealmUrl: string,
   darkfactoryModuleBase: string,
-  options: { authorization?: string; fetch?: typeof globalThis.fetch },
+  options: { fetch?: typeof globalThis.fetch },
 ): Promise<
   | Map<
       string,

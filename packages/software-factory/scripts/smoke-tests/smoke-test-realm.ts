@@ -37,14 +37,16 @@
 // This should be first
 import '../setup-logger';
 
-import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
-import { logger } from '../../src/logger';
-import { executeTestRunFromRealm } from '../../src/test-run-execution';
 import {
   createRealm,
-  getRealmScopedAuth,
-  writeFile,
-} from '../../src/realm-operations';
+  createRealmFetch,
+  ensureActiveProfile,
+  RealmAlreadyExistsError,
+} from '@cardstack/boxel-cli';
+import { parseArgs } from '../../src/boxel';
+import { logger } from '../../src/logger';
+import { executeTestRunFromRealm } from '../../src/test-run-execution';
+import { writeFile } from '../../src/realm-operations';
 
 // ---------------------------------------------------------------------------
 // Sample LLM output -- what the agent would produce in the implementation phase
@@ -195,13 +197,8 @@ async function main() {
   log.info(`Realm server: ${realmServerUrl}`);
   log.info(`Test results module: ${testResultsModuleUrl}`);
 
-  // Authenticate via Matrix to get a realm server JWT for realm creation
-  let matrixAuth = await matrixLogin();
-  let serverToken = await getRealmServerToken(matrixAuth);
-  log.info(`Auth: server token obtained\n`);
-
-  let fetchImpl = globalThis.fetch;
-  let authorization: string | undefined = serverToken;
+  await ensureActiveProfile();
+  log.info(`Auth: active profile resolved.\n`);
 
   // -------------------------------------------------------------------------
   // Phase 0: Ensure the target realm exists
@@ -211,48 +208,25 @@ async function main() {
 
   let realmDisplayName = realmEndpoint.replace(/-/g, ' ');
   log.info(`  Creating realm: ${realmEndpoint}...`);
-  let createResult = await createRealm(realmServerUrl, {
-    name: realmDisplayName,
-    endpoint: realmEndpoint,
-    authorization: authorization ?? '',
-    matrixAuth: {
-      userId: matrixAuth.userId,
-      accessToken: matrixAuth.accessToken,
-      matrixUrl: matrixAuth.credentials.matrixUrl,
-    },
-  });
-
-  if (createResult.created) {
-    log.info(`  Created: ${createResult.realmUrl}\n`);
-  } else if (createResult.error?.includes('already exists')) {
-    log.info(`  Realm already exists.\n`);
-  } else {
-    log.error(`  Failed to create realm: ${createResult.error}`);
-    process.exit(1);
-  }
-
-  // Get realm-scoped JWT now that the realm exists
-  log.info('  Authenticating with new realm...');
-  let realmAuth = await getRealmScopedAuth(realmServerUrl, serverToken);
-  if (realmAuth.error) {
-    log.warn(`  Warning: could not get realm-scoped auth: ${realmAuth.error}`);
-  } else {
-    // Find the token for our target realm
-    let realmToken = realmAuth.tokens[targetRealmUrl];
-    if (realmToken) {
-      authorization = realmToken;
-      log.info('  Realm-scoped JWT obtained.\n');
+  try {
+    let result = await createRealm({
+      realmName: realmEndpoint,
+      displayName: realmDisplayName,
+      waitForReady: true,
+    });
+    log.info(`  Created: ${result.url}\n`);
+  } catch (e: unknown) {
+    if (e instanceof RealmAlreadyExistsError) {
+      log.info(`  Realm already exists.\n`);
     } else {
-      log.warn(
-        `  Warning: no token for ${targetRealmUrl} in realm-auth response\n`,
+      log.error(
+        `  Failed to create realm: ${e instanceof Error ? e.message : String(e)}`,
       );
+      process.exit(1);
     }
   }
 
-  let fetchOptions = {
-    authorization,
-    fetch: fetchImpl,
-  };
+  let fetchOptions = { fetch: createRealmFetch(targetRealmUrl) };
 
   // -------------------------------------------------------------------------
   // Phase 1: Simulate LLM implementation output
@@ -331,8 +305,7 @@ async function main() {
     testResultsModuleUrl,
     slug: 'hello-smoke',
     testNames: [],
-    authorization,
-    fetch: fetchImpl,
+    fetch: fetchOptions.fetch,
     forceNew: true,
     realmServerUrl,
     hostAppUrl: realmServerUrl,

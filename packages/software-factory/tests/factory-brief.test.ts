@@ -91,13 +91,12 @@ module('factory-brief', function () {
     );
   });
 
-  test('loadFactoryBrief passes an explicit authorization header when fetching and normalizing a brief', async function (assert) {
-    assert.expect(4);
+  test('loadFactoryBrief uses the supplied fetch (no built-in auth header insertion)', async function (assert) {
+    assert.expect(3);
 
     let server = createServer((request, response) => {
       assert.strictEqual(request.url, '/software-factory/Wiki/sticky-note');
       assert.strictEqual(request.headers.accept, SupportedMimeType.CardSource);
-      assert.strictEqual(request.headers.authorization, 'Bearer brief-token');
       response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
       response.end(JSON.stringify(stickyNoteFixture));
     });
@@ -112,11 +111,11 @@ module('factory-brief', function () {
     }
 
     try {
+      // After CS-10642, loadFactoryBrief no longer takes an authorization
+      // option — callers wrap fetch instead. This test now hits an open
+      // brief endpoint without auth.
       let brief = await loadFactoryBrief(
         `http://127.0.0.1:${address.port}/software-factory/Wiki/sticky-note`,
-        {
-          authorization: 'Bearer brief-token',
-        },
       );
 
       assert.strictEqual(brief.title, 'Sticky Note');

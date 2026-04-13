@@ -1,11 +1,10 @@
 // This should be first
 import '../src/setup-logger';
 
+import { ensureActiveProfile, createRealmFetch } from '@cardstack/boxel-cli';
 import {
   fieldPairs,
   forceArray,
-  getAccessibleRealmTokens,
-  matrixLogin,
   parseArgs,
   printJson,
   searchRealm,
@@ -24,10 +23,9 @@ async function main(): Promise<void> {
     );
   }
 
-  let matrixAuth = await matrixLogin();
-  let realmTokens = await getAccessibleRealmTokens(matrixAuth);
+  await ensureActiveProfile();
   let realmUrl = args.realm;
-  let jwt = realmTokens[realmUrl.endsWith('/') ? realmUrl : `${realmUrl}/`];
+  let realmFetch = createRealmFetch(realmUrl);
 
   let query: SearchQuery = {};
   let filter: Record<string, unknown> = {};
@@ -88,8 +86,19 @@ async function main(): Promise<void> {
     }
   }
 
-  let results = await searchRealm({ realmUrl, jwt, query });
-  printJson(results);
+  // searchRealm in src/boxel.ts builds its own headers via the optional
+  // `jwt` field. We want auth via createRealmFetch instead — patch
+  // globalThis.fetch for the duration of the call so searchRealm picks
+  // up our auth-aware fetch transparently. The script is short-lived;
+  // there are no other concurrent fetches to worry about.
+  let originalFetch = globalThis.fetch;
+  globalThis.fetch = realmFetch;
+  try {
+    let results = await searchRealm({ realmUrl, query });
+    printJson(results);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 main().catch((error: unknown) => {

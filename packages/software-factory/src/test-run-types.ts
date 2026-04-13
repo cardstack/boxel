@@ -34,7 +34,6 @@ export interface TestRunRealmOptions {
   targetRealmUrl: string;
   /** URL to the test-results module in the source realm. Required, never inferred. */
   testResultsModuleUrl: string;
-  authorization?: string;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -128,6 +127,13 @@ export interface ExecuteTestRunOptions {
   testResultsModuleUrl: string;
   slug: string;
   testNames: string[];
+  /**
+   * JWT injected into Playwright's page.route for browser-side requests to
+   * the realm. The browser cannot use boxel-cli's createRealmFetch directly,
+   * so the caller passes the token explicitly here. Optional — public realms
+   * don't need it. (CS-10642 follow-up: route the browser through a
+   * page.route interceptor backed by createRealmFetch to remove this.)
+   */
   authorization?: string;
   fetch?: typeof globalThis.fetch;
   forceNew?: boolean;

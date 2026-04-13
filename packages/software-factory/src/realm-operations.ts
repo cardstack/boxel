@@ -8,19 +8,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { logger } from './logger';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import {
-  iconURLFor,
-  getRandomBackgroundURL,
-} from '@cardstack/runtime-common/realm-display-defaults';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 export { SupportedMimeType };
-
-let log = logger('realm-operations');
 
 export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
@@ -30,8 +22,13 @@ export function ensureTrailingSlash(url: string): string {
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Realm operations use a caller-supplied `fetch` that is already
+ * authenticated for the realm being targeted. Production callers pass
+ * `createRealmFetch(realmUrl)` (from `@cardstack/boxel-cli`); tests pass
+ * a stub. The functions in this module never touch JWTs themselves.
+ */
 export interface RealmFetchOptions {
-  authorization?: string;
   fetch?: typeof globalThis.fetch;
 }
 
@@ -53,27 +50,16 @@ export interface RunCommandResponse {
 // ---------------------------------------------------------------------------
 
 export function buildAuthHeaders(
-  authorization?: string,
   accept = SupportedMimeType.JSON,
 ): Record<string, string> {
-  let headers: Record<string, string> = { Accept: accept };
-  if (authorization) {
-    headers['Authorization'] = authorization;
-  }
-  return headers;
+  return { Accept: accept };
 }
 
-export function buildCardSourceHeaders(
-  authorization?: string,
-): Record<string, string> {
-  let headers: Record<string, string> = {
+export function buildCardSourceHeaders(): Record<string, string> {
+  return {
     Accept: SupportedMimeType.CardSource,
     'Content-Type': SupportedMimeType.CardSource,
   };
-  if (authorization) {
-    headers['Authorization'] = authorization;
-  }
-  return headers;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,9 +86,6 @@ export async function searchRealm(
     Accept: SupportedMimeType.CardJson,
     'Content-Type': SupportedMimeType.JSON,
   };
-  if (options?.authorization) {
-    headers['Authorization'] = options.authorization;
-  }
 
   try {
     let response = await fetchImpl(searchUrl, {
@@ -171,9 +154,6 @@ export async function runRealmCommand(
     'Content-Type': 'application/vnd.api+json',
     Accept: 'application/vnd.api+json',
   };
-  if (options?.authorization) {
-    headers['Authorization'] = options.authorization;
-  }
 
   let response: Response;
   try {
@@ -239,10 +219,7 @@ export async function readFile(
   try {
     let response = await fetchImpl(url, {
       method: 'GET',
-      headers: buildAuthHeaders(
-        options?.authorization,
-        SupportedMimeType.CardSource,
-      ),
+      headers: buildAuthHeaders(SupportedMimeType.CardSource),
     });
 
     if (!response.ok) {
@@ -285,7 +262,7 @@ export async function writeFile(
   try {
     let response = await fetchImpl(url, {
       method: 'POST',
-      headers: buildCardSourceHeaders(options?.authorization),
+      headers: buildCardSourceHeaders(),
       body: content,
     });
 
@@ -324,10 +301,7 @@ export async function deleteFile(
   try {
     let response = await fetchImpl(url, {
       method: 'DELETE',
-      headers: buildAuthHeaders(
-        options?.authorization,
-        SupportedMimeType.CardSource,
-      ),
+      headers: buildAuthHeaders(SupportedMimeType.CardSource),
     });
 
     if (!response.ok) {
@@ -368,9 +342,6 @@ export async function atomicOperation(
     Accept: SupportedMimeType.JSONAPI,
     'Content-Type': SupportedMimeType.JSONAPI,
   };
-  if (options?.authorization) {
-    headers['Authorization'] = options.authorization;
-  }
 
   try {
     let response = await fetchImpl(atomicUrl, {
@@ -398,82 +369,6 @@ export async function atomicOperation(
 }
 
 // ---------------------------------------------------------------------------
-// Realm Server Session
-// ---------------------------------------------------------------------------
-
-/**
- * Obtain a realm server JWT by calling `_server-session`.
- * Requires a Matrix OpenID token.
- */
-export async function getServerSession(
-  realmServerUrl: string,
-  openidToken: string,
-  options?: { fetch?: typeof globalThis.fetch; authorization?: string },
-): Promise<{ token?: string; error?: string }> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
-
-  let headers: Record<string, string> = {
-    Accept: SupportedMimeType.JSON,
-    'Content-Type': SupportedMimeType.JSON,
-  };
-  if (options?.authorization) {
-    headers['Authorization'] = options.authorization;
-  }
-
-  try {
-    let response = await fetchImpl(`${normalizedUrl}_server-session`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ access_token: openidToken }),
-    });
-
-    if (!response.ok) {
-      let body = await response.text();
-      return {
-        error: `_server-session returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-      };
-    }
-
-    // The server session JWT is returned in the Authorization header
-    let authorizationHeader = response.headers.get('authorization');
-    if (authorizationHeader) {
-      return { token: authorizationHeader };
-    }
-
-    // Fallback: check response body
-    let bodyText = await response.text();
-    if (!bodyText.trim()) {
-      return {
-        error: '_server-session succeeded but no token was returned',
-      };
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(bodyText);
-    } catch {
-      return {
-        error: '_server-session succeeded but response body was not valid JSON',
-      };
-    }
-
-    let data = parsed as { token?: string };
-    if (typeof data.token === 'string' && data.token.length > 0) {
-      return { token: data.token };
-    }
-
-    return {
-      error: '_server-session succeeded but no token was returned',
-    };
-  } catch (err) {
-    return {
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Indexing Job Management
 // ---------------------------------------------------------------------------
 
@@ -493,9 +388,6 @@ export async function cancelAllIndexingJobs(
     Accept: SupportedMimeType.JSON,
     'Content-Type': SupportedMimeType.JSON,
   };
-  if (options?.authorization) {
-    headers['Authorization'] = options.authorization;
-  }
 
   try {
     let response = await fetchImpl(cancelUrl, {
@@ -522,193 +414,8 @@ export async function cancelAllIndexingJobs(
 }
 
 // ---------------------------------------------------------------------------
-// Realm Creation
+// File polling
 // ---------------------------------------------------------------------------
-
-/**
- * Create a new realm on the realm server via `_create-realm`.
- * Returns the canonical realm URL on success.
- *
- * When `matrixAuth` is provided, the new realm URL is automatically
- * added to the user's Matrix account data so it appears in their
- * workspace list in Boxel.
- */
-export async function createRealm(
-  realmServerUrl: string,
-  options: {
-    name: string;
-    endpoint: string;
-    iconURL?: string;
-    backgroundURL?: string;
-    authorization: string;
-    fetch?: typeof globalThis.fetch;
-    matrixAuth?: {
-      userId: string;
-      accessToken: string;
-      matrixUrl: string;
-    };
-  },
-): Promise<{ realmUrl: string; created: boolean; error?: string }> {
-  let fetchImpl = options.fetch ?? globalThis.fetch;
-  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
-
-  let headers: Record<string, string> = {
-    Accept: SupportedMimeType.JSONAPI,
-    'Content-Type': SupportedMimeType.JSONAPI,
-    Authorization: options.authorization,
-  };
-
-  let attributes: Record<string, unknown> = {
-    name: options.name,
-    endpoint: options.endpoint,
-    iconURL: options.iconURL ?? iconURLFor(options.name),
-    backgroundURL: options.backgroundURL ?? getRandomBackgroundURL(),
-  };
-
-  try {
-    let response = await fetchImpl(`${normalizedUrl}_create-realm`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        data: { type: 'realm', attributes },
-      }),
-    });
-
-    let matrixAuth = options.matrixAuth;
-
-    if (response.ok) {
-      let result = (await response.json()) as { data?: { id?: string } };
-      let realmUrl = result.data?.id ?? '';
-
-      if (realmUrl && matrixAuth) {
-        await addRealmToMatrixAccountData(
-          matrixAuth,
-          ensureTrailingSlash(realmUrl),
-          fetchImpl,
-        );
-      }
-
-      return { realmUrl, created: true };
-    }
-
-    let body: string;
-    try {
-      body = await response.text();
-    } catch {
-      body = 'server returned a non-serialized object body';
-    }
-    if (body.includes('[object Object]')) {
-      body = 'server returned a non-serialized object body';
-    }
-
-    // When the realm already exists, ensure it's still registered in the
-    // user's Matrix account data so it appears in the Boxel dashboard.
-    if (body.includes('already exists') && matrixAuth) {
-      let urlMatch = body.match(/'(https?:\/\/[^']+)'/);
-      if (urlMatch) {
-        await addRealmToMatrixAccountData(
-          matrixAuth,
-          ensureTrailingSlash(urlMatch[1]),
-          fetchImpl,
-        );
-      }
-    }
-
-    return {
-      realmUrl: '',
-      created: false,
-      error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-    };
-  } catch (err) {
-    return {
-      realmUrl: '',
-      created: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Realm Authentication
-// ---------------------------------------------------------------------------
-
-/**
- * Get a realm-scoped JWT by calling `_realm-auth` on the realm server.
- * Requires a server-level JWT (from `_server-session`).
- */
-export async function getRealmScopedAuth(
-  realmServerUrl: string,
-  serverToken: string,
-  options?: { fetch?: typeof globalThis.fetch },
-): Promise<{ tokens: Record<string, string>; error?: string }> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
-
-  try {
-    let response = await fetchImpl(`${normalizedUrl}_realm-auth`, {
-      method: 'POST',
-      headers: {
-        Accept: SupportedMimeType.JSON,
-        'Content-Type': SupportedMimeType.JSON,
-        Authorization: serverToken,
-      },
-    });
-
-    if (!response.ok) {
-      let body = await response.text();
-      return {
-        tokens: {},
-        error: `_realm-auth returned HTTP ${response.status}: ${body.slice(0, 300)}`,
-      };
-    }
-
-    let data = (await response.json()) as Record<string, string>;
-    return { tokens: data };
-  } catch (err) {
-    return {
-      tokens: {},
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Realm Readiness
-// ---------------------------------------------------------------------------
-
-/**
- * Wait for a realm to be ready by polling `_readiness-check` until it
- * returns 200 or the timeout is reached.
- */
-export async function waitForRealmReady(
-  realmUrl: string,
-  options?: RealmFetchOptions & { timeoutMs?: number },
-): Promise<{ ready: boolean; error?: string }> {
-  let fetchImpl = options?.fetch ?? globalThis.fetch;
-  let normalizedUrl = ensureTrailingSlash(realmUrl);
-  let readinessUrl = `${normalizedUrl}_readiness-check`;
-  let timeoutMs = options?.timeoutMs ?? 30_000;
-  let startedAt = Date.now();
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      let response = await fetchImpl(readinessUrl, {
-        headers: buildAuthHeaders(options?.authorization),
-      });
-      if (response.ok) {
-        return { ready: true };
-      }
-    } catch {
-      // retry
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-
-  return {
-    ready: false,
-    error: `Realm not ready after ${timeoutMs}ms: ${readinessUrl}`,
-  };
-}
 
 /**
  * Poll a specific realm file path until it exists (non-404), or the
@@ -738,61 +445,6 @@ export async function waitForRealmFile(
 }
 
 // ---------------------------------------------------------------------------
-// Matrix Account Data
-// ---------------------------------------------------------------------------
-
-/**
- * Add a realm URL to the user's Matrix account data so it shows up
- * in their Boxel workspace list.
- */
-async function addRealmToMatrixAccountData(
-  matrixAuth: { userId: string; accessToken: string; matrixUrl: string },
-  realmUrl: string,
-  fetchImpl: typeof globalThis.fetch,
-): Promise<void> {
-  let accountDataUrl = new URL(
-    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
-    matrixAuth.matrixUrl,
-  ).href;
-
-  let existingRealms: string[] = [];
-  try {
-    let getResponse = await fetchImpl(accountDataUrl, {
-      headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
-    });
-    if (getResponse.ok) {
-      let data = (await getResponse.json()) as { realms?: string[] };
-      existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
-    }
-  } catch {
-    // Best-effort — if we can't read existing realms, start fresh
-  }
-
-  if (!existingRealms.includes(realmUrl)) {
-    existingRealms.push(realmUrl);
-    try {
-      let putResponse = await fetchImpl(accountDataUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': SupportedMimeType.JSON,
-          Authorization: `Bearer ${matrixAuth.accessToken}`,
-        },
-        body: JSON.stringify({ realms: existingRealms }),
-      });
-      if (!putResponse.ok) {
-        log.warn(
-          `Warning: failed to update Matrix account data for realm ${realmUrl}: HTTP ${putResponse.status}`,
-        );
-      }
-    } catch (err) {
-      log.warn(
-        `Warning: failed to update Matrix account data for realm ${realmUrl}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Pull Realm Files
 // ---------------------------------------------------------------------------
 
@@ -812,10 +464,7 @@ export async function pullRealmFiles(
   let fetchImpl = options?.fetch ?? globalThis.fetch;
   let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
 
-  let headers = buildAuthHeaders(
-    options?.authorization,
-    SupportedMimeType.JSONAPI,
-  );
+  let headers = buildAuthHeaders(SupportedMimeType.JSONAPI);
 
   // Fetch mtimes to discover all file paths.
   let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
@@ -865,10 +514,7 @@ export async function pullRealmFiles(
     try {
       let fileResponse = await fetchImpl(fullUrl, {
         method: 'GET',
-        headers: buildAuthHeaders(
-          options?.authorization,
-          SupportedMimeType.CardSource,
-        ),
+        headers: buildAuthHeaders(SupportedMimeType.CardSource),
       });
 
       if (!fileResponse.ok) {

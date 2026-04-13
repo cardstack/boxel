@@ -9,9 +9,6 @@ import {
   writeFile,
   deleteFile,
   searchRealm,
-  createRealm,
-  getServerSession,
-  getRealmScopedAuth,
 } from './realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -55,20 +52,16 @@ export interface ToolExecutorConfig {
   allowedRealmPrefixes?: string[];
   /** Source realm URL — tools must NEVER target this realm. */
   sourceRealmUrl?: string;
-  /** Fetch implementation for realm API calls. */
+  /**
+   * Fetch implementation for realm API calls. Production callers pass an
+   * auth-aware fetch (createRealmFetch from @cardstack/boxel-cli); tests
+   * pass a stub. The executor never inserts Authorization headers itself.
+   */
   fetch?: typeof globalThis.fetch;
-  /** Authorization header value for realm API calls. */
-  authorization?: string;
   /** Per-invocation timeout in ms (default: 60 000). */
   timeoutMs?: number;
   /** Optional log function for auditability. */
   log?: (entry: ToolExecutionLogEntry) => void;
-  /** Matrix homeserver URL (for post-create account data update). */
-  matrixUrl?: string;
-  /** Matrix access token (from Matrix login). */
-  matrixAccessToken?: string;
-  /** Matrix user ID (e.g. @factory:localhost). */
-  matrixUserId?: string;
 }
 
 export interface ToolExecutionLogEntry {
@@ -133,7 +126,6 @@ export class ToolExecutor {
   async execute(
     toolName: string,
     toolArgs: Record<string, unknown> = {},
-    options?: { authorization?: string },
   ): Promise<ToolResult> {
     if (!toolName) {
       throw new ToolNotFoundError('(empty)');
@@ -155,10 +147,6 @@ export class ToolExecutor {
     // Safety: reject source realm targeting
     this.enforceRealmSafety(toolName, toolArgs);
 
-    // Per-call authorization override (used by ToolBuilder to inject
-    // the correct per-realm JWT). Falls back to config.authorization.
-    let authorization = options?.authorization ?? this.config.authorization;
-
     let start = Date.now();
     let result: ToolResult;
 
@@ -171,11 +159,7 @@ export class ToolExecutor {
           result = await this.executeBoxelCli(toolName, toolArgs);
           break;
         case 'realm-api':
-          result = await this.executeRealmApi(
-            toolName,
-            toolArgs,
-            authorization,
-          );
+          result = await this.executeRealmApi(toolName, toolArgs);
           break;
         default:
           throw new Error(`Unknown tool category: ${manifest.category}`);
@@ -399,7 +383,6 @@ export class ToolExecutor {
   private async executeRealmApi(
     toolName: string,
     toolArgs: Record<string, unknown>,
-    authorization?: string,
   ): Promise<ToolResult> {
     let baseFetch = this.config.fetch ?? globalThis.fetch;
     let start = Date.now();
@@ -411,7 +394,7 @@ export class ToolExecutor {
       return baseFetch(input, { ...init, signal: controller.signal });
     }) as typeof globalThis.fetch;
 
-    let fetchOptions = { authorization, fetch: fetchImpl };
+    let fetchOptions = { fetch: fetchImpl };
 
     try {
       let output: unknown;
@@ -485,57 +468,10 @@ export class ToolExecutor {
           break;
         }
 
-        case 'realm-create': {
-          let name = String(toolArgs['name']);
-          let endpoint = String(toolArgs['endpoint']);
-          let matrixAuth =
-            this.config.matrixUrl &&
-            this.config.matrixAccessToken &&
-            this.config.matrixUserId
-              ? {
-                  userId: this.config.matrixUserId,
-                  accessToken: this.config.matrixAccessToken,
-                  matrixUrl: this.config.matrixUrl,
-                }
-              : undefined;
-          let result = await createRealm(String(toolArgs['realm-server-url']), {
-            name,
-            endpoint,
-            iconURL: toolArgs['iconURL'] as string | undefined,
-            backgroundURL: toolArgs['backgroundURL'] as string | undefined,
-            authorization: authorization ?? '',
-            fetch: fetchImpl,
-            matrixAuth,
-          });
-          ok = result.created;
-          output = ok
-            ? { data: { id: result.realmUrl } }
-            : { error: result.error };
-          break;
-        }
-
-        case 'realm-server-session': {
-          let result = await getServerSession(
-            String(toolArgs['realm-server-url']),
-            String(toolArgs['openid-token']),
-            { fetch: fetchImpl, authorization },
-          );
-          ok = !!result.token;
-          output = ok ? { token: result.token } : { error: result.error };
-          break;
-        }
-
-        case 'realm-auth': {
-          let result = await getRealmScopedAuth(
-            String(toolArgs['realm-server-url']),
-            authorization ?? '',
-            { fetch: fetchImpl },
-          );
-          ok = !result.error;
-          output = ok ? result.tokens : { error: result.error };
-          break;
-        }
-
+        // realm-create / realm-server-session / realm-auth used to live here
+        // and called dedicated factory helpers. Auth is now owned by
+        // @cardstack/boxel-cli — these tools are no longer needed at the
+        // executor level. Removed in CS-10642.
         default:
           throw new Error(`Unknown realm-api tool: "${toolName}"`);
       }

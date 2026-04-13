@@ -52,7 +52,6 @@ export type ActionRealm = (typeof VALID_REALMS)[number];
 export interface FactoryAgentConfig {
   model: string;
   realmServerUrl: string;
-  authorization?: string;
   maxSkillTokens?: number;
   /** Call OpenRouter directly with this API key instead of going through the
    *  realm server _request-forward proxy. Useful for local dev / CI. */

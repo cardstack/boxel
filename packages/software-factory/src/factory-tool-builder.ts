@@ -47,14 +47,20 @@ export interface FactoryTool {
 
 export interface ToolBuilderConfig {
   targetRealmUrl: string;
-  /** Per-realm JWTs obtained via getRealmScopedAuth(). */
-  realmTokens: Record<string, string>;
-  /** Realm server JWT for server-level operations (_create-realm, _realm-auth, _server-session). */
-  serverToken?: string;
   /** Module URL for the TestRun card definition (e.g., `<realmUrl>test-results`). */
   testResultsModuleUrl?: string;
-  /** Fetch implementation (injectable for testing). */
+  /**
+   * Fetch bound to the target realm (auth-aware). Production callers pass
+   * `createRealmFetch(targetRealmUrl)` from @cardstack/boxel-cli; tests
+   * pass a stub.
+   */
   fetch?: typeof globalThis.fetch;
+  /**
+   * Fetch authenticated with the realm-server-level JWT. Used by tools that
+   * hit realm-server endpoints (e.g. `_run-command`). Production callers
+   * pass `createServerFetch()`.
+   */
+  serverFetch?: typeof globalThis.fetch;
   /** Override for executeTestRunFromRealm (injectable for testing). */
   executeTestRun?: (options: ExecuteTestRunOptions) => Promise<TestRunHandle>;
   /** Realm server URL. Required — never inferred from realm URLs. */
@@ -455,7 +461,6 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
     execute: async (args) => {
       let slug = args.slug as string;
       let targetRealmUrl = config.targetRealmUrl;
-      let authorization = resolveAuthForUrl(config, targetRealmUrl);
       let testResultsModuleUrl =
         config.testResultsModuleUrl ??
         `${ensureTrailingSlash(targetRealmUrl)}test-results`;
@@ -467,7 +472,6 @@ function buildRunTestsTool(config: ToolBuilderConfig): FactoryTool {
         slug,
         hostAppUrl: config.hostAppUrl ?? config.realmServerUrl,
         testNames: (args.testNames as string[]) ?? [],
-        authorization,
         fetch: config.fetch,
         projectCardUrl: args.projectCardUrl as string | undefined,
         realmServerUrl: config.realmServerUrl,
@@ -546,21 +550,12 @@ function buildRunCommandTool(config: ToolBuilderConfig): FactoryTool {
       required: ['command'],
     },
     execute: async (args) => {
-      if (!config.serverToken) {
-        return {
-          status: 'error',
-          error: 'run_command requires serverToken in config',
-        };
-      }
       return runRealmCommand(
         config.realmServerUrl,
         config.targetRealmUrl,
         args.command as string,
         args.commandInput as Record<string, unknown> | undefined,
-        {
-          authorization: config.serverToken,
-          fetch: config.fetch,
-        },
+        { fetch: config.serverFetch ?? config.fetch },
       );
     },
   };
@@ -583,7 +578,7 @@ function buildRegisteredTool(
     }[];
   },
   toolExecutor: ToolExecutor,
-  config: ToolBuilderConfig,
+  _config: ToolBuilderConfig,
 ): FactoryTool {
   let properties: Record<string, unknown> = {};
   let required: string[] = [];
@@ -607,26 +602,7 @@ function buildRegisteredTool(
       ...(required.length > 0 ? { required } : {}),
     },
     execute: async (args) => {
-      // For realm-api tools, resolve the correct JWT:
-      // - Tools with realm-server-url (realm-create, realm-server-session,
-      //   realm-auth) use the server JWT
-      // - Tools with realm-url use the per-realm JWT
-      let authorization: string | undefined;
-      if (manifest.category === 'realm-api') {
-        let serverUrl = args['realm-server-url'] as string | undefined;
-        let realmUrl = args['realm-url'] as string | undefined;
-        if (serverUrl) {
-          authorization = config.serverToken;
-        } else if (realmUrl) {
-          authorization = resolveAuthForUrl(config, realmUrl);
-        }
-      }
-
-      let result: ToolResult = await toolExecutor.execute(
-        manifest.name,
-        args,
-        authorization ? { authorization } : undefined,
-      );
+      let result: ToolResult = await toolExecutor.execute(manifest.name, args);
       return result;
     },
   };
@@ -645,34 +621,7 @@ function resolveRealmUrl(
 
 function buildFetchOptions(
   config: ToolBuilderConfig,
-  realmUrl: string,
+  _realmUrl: string,
 ): RealmFetchOptions {
-  return {
-    authorization: resolveAuthForUrl(config, realmUrl),
-    fetch: config.fetch,
-  };
-}
-
-/**
- * Resolve the correct JWT for a realm URL. Tries an exact match in
- * realmTokens first, then tries with trailing slash normalization.
- */
-function resolveAuthForUrl(
-  config: ToolBuilderConfig,
-  url: string,
-): string | undefined {
-  // Exact match
-  if (config.realmTokens[url]) {
-    return config.realmTokens[url];
-  }
-  // Try with/without trailing slash
-  let normalized = url.endsWith('/') ? url : `${url}/`;
-  if (config.realmTokens[normalized]) {
-    return config.realmTokens[normalized];
-  }
-  let withoutSlash = url.endsWith('/') ? url.slice(0, -1) : url;
-  if (config.realmTokens[withoutSlash]) {
-    return config.realmTokens[withoutSlash];
-  }
-  return undefined;
+  return { fetch: config.fetch };
 }

@@ -17,7 +17,7 @@ import type {
 import {
   runRealmCommand,
   ensureTrailingSlash,
-  type RunCommandOptions,
+  type RealmFetchOptions,
 } from './realm-operations';
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ export async function fetchCardTypeSchema(
   realmServerUrl: string,
   realmUrl: string,
   codeRef: ResolvedCodeRef,
-  options: RunCommandOptions,
+  options: RealmFetchOptions,
 ): Promise<
   | {
       attributes: Record<string, unknown>;

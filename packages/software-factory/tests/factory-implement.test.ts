@@ -140,16 +140,10 @@ function makeConfig(overrides?: Partial<ImplementConfig>): ImplementConfig {
     targetRealmUrl: 'http://localhost:4201/test-user/my-realm/',
     realmServerUrl: 'http://localhost:4201/',
     ownerUsername: 'test-user',
-    authorization: 'Bearer test-token',
     bootstrapResult,
     model: 'anthropic/claude-sonnet-4',
-    // Inject mock auth to skip real Matrix login
-    realmTokens: {
-      'http://localhost:4201/test-user/my-realm/': 'Bearer realm-token',
-      'http://localhost:4201/test-user/my-realm-test-artifacts/':
-        'Bearer test-realm-token',
-    },
-    serverToken: 'Bearer server-token',
+    // Tests inject a mock fetch — production uses createRealmFetch from
+    // @cardstack/boxel-cli for auth-aware requests.
     fetch: makeMockFetch(cards),
     ...overrides,
   };

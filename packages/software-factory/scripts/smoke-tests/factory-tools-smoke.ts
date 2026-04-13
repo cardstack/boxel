@@ -256,10 +256,6 @@ async function main(): Promise<void> {
     {
       targetRealmUrl: 'https://realms.example.test/user/target/',
       realmServerUrl: 'https://realms.example.test/',
-      realmTokens: {
-        'https://realms.example.test/user/target/': 'Bearer target-jwt',
-        'https://realms.example.test/user/target-tests/': 'Bearer test-jwt',
-      },
       fetch: toolBuilderFetch,
     },
     toolBuilderExecutor,

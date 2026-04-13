@@ -36,7 +36,7 @@ export async function createTestRun(
     options.targetRealmUrl,
     `${testRunId}.json`,
     JSON.stringify(document, null, 2),
-    { authorization: options.authorization, fetch: options.fetch },
+    { fetch: options.fetch },
   );
 
   if (!result.ok) {
@@ -54,10 +54,7 @@ export async function completeTestRun(
   attrs: TestRunAttributes,
   options: TestRunRealmOptions & { projectCardUrl?: string },
 ): Promise<{ updated: boolean; error?: string }> {
-  let fetchOptions = {
-    authorization: options.authorization,
-    fetch: options.fetch,
-  };
+  let fetchOptions = { fetch: options.fetch };
 
   // Retry the read — after a long spawnSync (Playwright), TCP connections
   // may be stale causing the first fetch to fail with "fetch failed".

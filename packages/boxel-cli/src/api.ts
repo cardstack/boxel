@@ -5,7 +5,7 @@ export {
   type CreateRealmResult,
 } from './lib/create-realm';
 
-export { createRealmFetch } from './lib/realm-fetch';
+export { createRealmFetch, createServerFetch } from './lib/realm-fetch';
 
 export {
   ensureActiveProfile,

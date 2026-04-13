@@ -1,7 +1,14 @@
-import { readFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -11,6 +18,41 @@ const stickyNoteFixture = readFileSync(
   resolve(__dirname, '../realm/Wiki/sticky-note.json'),
   'utf8',
 );
+
+/**
+ * Create a throwaway HOME directory containing ~/.boxel-cli/profiles.json
+ * with an active profile pointing at `serverOrigin`. Used by integration
+ * tests so the spawned `factory:go` subprocess does not inherit (and
+ * authenticate against) the developer's real Boxel profile.
+ */
+function makeTempHomeWithProfile(
+  serverOrigin: string,
+  matrixId = '@hassan:localhost',
+): string {
+  let tempHome = mkdtempSync(join(tmpdir(), 'factory-test-home-'));
+  let profilesDir = join(tempHome, '.boxel-cli');
+  mkdirSync(profilesDir, { recursive: true });
+  writeFileSync(
+    join(profilesDir, 'profiles.json'),
+    JSON.stringify({
+      activeProfile: matrixId,
+      profiles: {
+        [matrixId]: {
+          displayName: 'integration test',
+          matrixUrl: serverOrigin,
+          realmServerUrl: `${serverOrigin}/`,
+          password: 'secret',
+        },
+      },
+    }),
+    { mode: 0o600 },
+  );
+  return tempHome;
+}
+
+function makeTempHomeWithoutProfile(): string {
+  return mkdtempSync(join(tmpdir(), 'factory-test-home-empty-'));
+}
 
 interface FactoryEntrypointIntegrationSummary {
   command: string;
@@ -126,6 +168,9 @@ module('factory-entrypoint integration', function () {
         response.end(
           JSON.stringify({
             [canonicalTargetRealmUrl]: 'Bearer target-realm-token',
+            // The brief lives on a separate realm; include it so the
+            // factory's per-realm auth lookup succeeds for the brief URL.
+            [`${origin}/software-factory/Wiki/`]: 'Bearer brief-realm-token',
           }),
         );
       } else if (
@@ -204,6 +249,11 @@ module('factory-entrypoint integration', function () {
     targetRealmUrl = `${origin}/typed-by-user/personal/`;
     canonicalTargetRealmUrl = `${origin}/hassan/personal/`;
 
+    // Isolate HOME so the subprocess does not inherit the developer's real
+    // ~/.boxel-cli/profiles.json. Seed a synthetic profile pointing at the
+    // test server — this is what @cardstack/boxel-cli authenticates with.
+    let tempHome = makeTempHomeWithProfile(origin);
+
     try {
       let result = await runCommand(
         'pnpm',
@@ -225,6 +275,7 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
+            HOME: tempHome,
             MATRIX_USERNAME: 'hassan',
             MATRIX_PASSWORD: 'secret',
             MATRIX_URL: origin,
@@ -267,6 +318,7 @@ module('factory-entrypoint integration', function () {
         nextStep: 'bootstrap-and-select-active-issue',
       });
     } finally {
+      rmSync(tempHome, { recursive: true, force: true });
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),
       );
@@ -322,6 +374,12 @@ module('factory-entrypoint integration', function () {
       throw new Error('Expected test server to bind to a TCP port');
     }
 
+    // Isolate HOME so the subprocess cannot pick up the developer's real
+    // ~/.boxel-cli/profiles.json — without isolation, ensureActiveProfile
+    // would silently use that profile and the missing-MATRIX_USERNAME
+    // assertion would never fire.
+    let tempHome = makeTempHomeWithoutProfile();
+
     try {
       let briefUrl = `http://127.0.0.1:${address.port}/software-factory/Wiki/sticky-note`;
       let targetRealmUrl = `http://127.0.0.1:${address.port}/hassan/personal/`;
@@ -341,6 +399,7 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
+            HOME: tempHome,
             MATRIX_USERNAME: '',
           },
         },
@@ -348,9 +407,11 @@ module('factory-entrypoint integration', function () {
 
       assert.strictEqual(result.status, 1);
       assert.true(
-        /Set MATRIX_USERNAME before running factory:go/.test(result.stderr),
+        /No active Boxel profile/.test(result.stderr),
+        `expected stderr to mention "No active Boxel profile", got: ${result.stderr}`,
       );
     } finally {
+      rmSync(tempHome, { recursive: true, force: true });
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),
       );

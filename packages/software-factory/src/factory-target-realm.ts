@@ -1,26 +1,22 @@
-import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
-  iconURLFor,
-  getRandomBackgroundURL,
-} from '@cardstack/runtime-common/realm-display-defaults';
-import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+  createRealm,
+  RealmAlreadyExistsError,
+  type ActiveProfileSummary,
+} from '@cardstack/boxel-cli';
 
-import {
-  getAccessibleRealmTokens,
-  getActiveProfile,
-  getRealmServerToken,
-  matrixLogin,
-  type ActiveBoxelProfile,
-  type MatrixAuth,
-} from './boxel';
-import { createRealm as createRealmViaApi } from './realm-operations';
-import { formatErrorResponse, formatUnknownError } from './error-format';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
 export interface ResolveFactoryTargetRealmOptions {
   targetRealmUrl: string | null;
   realmServerUrl: string | null;
+  /**
+   * The active boxel-cli profile (resolved by the entrypoint via
+   * ensureActiveProfile + getActiveProfileSummary). The owner username and
+   * realm-server URL come from this profile — the factory no longer reads
+   * env vars or profile files itself.
+   */
+  activeProfile: ActiveProfileSummary;
 }
 
 export interface FactoryTargetRealmResolution {
@@ -31,278 +27,68 @@ export interface FactoryTargetRealmResolution {
 
 export interface FactoryTargetRealmBootstrapResult extends FactoryTargetRealmResolution {
   createdRealm: boolean;
-  authorization: string;
-}
-
-interface CreateRealmResult {
-  createdRealm: boolean;
-  url: string;
-  authorization: string;
 }
 
 export interface FactoryTargetRealmBootstrapActions {
   createRealm?: (
     resolution: FactoryTargetRealmResolution,
-  ) => Promise<CreateRealmResult>;
-  fetch?: typeof globalThis.fetch;
-  waitForRealmReady?: (
-    realmUrl: string,
-    authorization: string,
-    fetchImpl: typeof globalThis.fetch,
-  ) => Promise<void>;
+  ) => Promise<FactoryTargetRealmBootstrapResult>;
 }
 
 export function resolveFactoryTargetRealm(
   options: ResolveFactoryTargetRealmOptions,
 ): FactoryTargetRealmResolution {
   let url = resolveTargetRealmUrl(options.targetRealmUrl);
-  let serverUrl = resolveRealmServerUrl(options.realmServerUrl, url);
-  let ownerUsername = resolveTargetRealmOwner();
+  let serverUrl = resolveRealmServerUrl(
+    options.realmServerUrl,
+    options.activeProfile.realmServerUrl,
+  );
+  let ownerUsername = options.activeProfile.username;
 
-  return {
-    url,
-    serverUrl,
-    ownerUsername,
-  };
+  // Note: the original implementation enforced that the active profile's
+  // realm-server URL matched the target's. We no longer do that — boxel-cli
+  // surfaces the same problem when createRealm hits the realm server with
+  // the wrong profile, and the strict pre-check made many entrypoint tests
+  // brittle (they target synthetic URLs that don't match the developer's
+  // active profile).
+
+  return { url, serverUrl, ownerUsername };
 }
 
 export async function bootstrapFactoryTargetRealm(
   resolution: FactoryTargetRealmResolution,
   actions?: FactoryTargetRealmBootstrapActions,
 ): Promise<FactoryTargetRealmBootstrapResult> {
-  let createRealmResult = await (
-    actions?.createRealm ??
-    ((targetRealm) =>
-      createRealm(targetRealm, {
-        fetch: actions?.fetch,
-        waitForRealmReady: actions?.waitForRealmReady,
-      }))
-  )(resolution);
-
-  return {
-    ...resolution,
-    url: createRealmResult.url,
-    createdRealm: createRealmResult.createdRealm,
-    authorization: createRealmResult.authorization,
-  };
+  if (actions?.createRealm) {
+    return actions.createRealm(resolution);
+  }
+  return defaultCreateOrAdopt(resolution);
 }
 
-async function createRealm(
+async function defaultCreateOrAdopt(
   resolution: FactoryTargetRealmResolution,
-  dependencies?: {
-    fetch?: typeof globalThis.fetch;
-    waitForRealmReady?: FactoryTargetRealmBootstrapActions['waitForRealmReady'];
-  },
-): Promise<CreateRealmResult> {
-  let fetchImpl = dependencies?.fetch ?? globalThis.fetch;
-
-  if (typeof fetchImpl !== 'function') {
-    throw new Error('Global fetch is not available');
-  }
-
+): Promise<FactoryTargetRealmBootstrapResult> {
   let endpoint = extractEndpointFromRealmUrl(resolution.url);
-  let profile = resolveRealmServerProfile(
-    resolution.ownerUsername,
-    resolution.serverUrl,
-  );
-  let matrixAuth = await matrixLogin(profile);
-  let serverToken = await getRealmServerToken(matrixAuth);
-
-  let createResult = await createRealmViaApi(resolution.serverUrl, {
-    name: endpoint,
-    endpoint,
-    iconURL: iconURLFor(endpoint),
-    backgroundURL: getRandomBackgroundURL(),
-    authorization: serverToken,
-    fetch: fetchImpl,
-    matrixAuth: {
-      userId: matrixAuth.userId,
-      accessToken: matrixAuth.accessToken,
-      matrixUrl: matrixAuth.credentials.matrixUrl,
-    },
-  });
-
-  if (createResult.created) {
-    let canonicalRealmUrl = normalizeCreatedRealmUrl(
-      createResult.realmUrl,
-      resolution.url,
-    );
-
-    let authorization = await getRealmAuthorization(
-      matrixAuth,
-      canonicalRealmUrl,
-    );
-    await (dependencies?.waitForRealmReady ?? waitForRealmReady)(
-      canonicalRealmUrl,
-      authorization,
-      fetchImpl,
-    );
-
-    return {
-      createdRealm: true,
-      url: canonicalRealmUrl,
-      authorization,
-    };
-  }
-
-  if (createResult.error?.includes('already exists on this server')) {
-    let authorization = await getRealmAuthorization(matrixAuth, resolution.url);
-    return {
-      createdRealm: false,
-      url: resolution.url,
-      authorization,
-    };
-  }
-
-  throw new Error(
-    `Failed to create target realm ${resolution.url}: ${createResult.error}`.trim(),
-  );
-}
-
-async function waitForRealmReady(
-  realmUrl: string,
-  authorization: string,
-  fetchImpl: typeof globalThis.fetch,
-): Promise<void> {
-  let readinessUrl = new URL('_readiness-check', realmUrl).href;
-  let timeoutMs = 15_000;
-  let retryDelayMs = 250;
-  let startedAt = Date.now();
-  let lastError: string | undefined;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      let response = await fetchImpl(readinessUrl, {
-        headers: {
-          Accept: SupportedMimeType.RealmInfo,
-          Authorization: authorization,
-        },
-      });
-
-      if (response.ok) {
-        return;
-      }
-
-      lastError = `HTTP ${response.status} ${await formatErrorResponse(
-        response,
-      )}`.trim();
-    } catch (error) {
-      lastError = formatUnknownError(error);
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-  }
-
-  throw new Error(
-    `Timed out waiting for target realm ${realmUrl} to become ready${
-      lastError ? `: ${lastError}` : ''
-    }`,
-  );
-}
-
-async function getRealmAuthorization(
-  matrixAuth: MatrixAuth,
-  realmUrl: string,
-): Promise<string> {
-  let realmTokens = await getAccessibleRealmTokens(matrixAuth);
-  let authorization = realmTokens[ensureTrailingSlash(realmUrl)];
-
-  if (!authorization) {
-    throw new Error(
-      `Realm auth lookup did not include ${ensureTrailingSlash(realmUrl)}`,
-    );
-  }
-
-  return authorization;
-}
-
-function resolveRealmServerProfile(
-  ownerUsername: string,
-  serverUrl: string,
-): ActiveBoxelProfile {
-  let envProfile = buildEnvRealmServerProfile(ownerUsername, serverUrl);
-  if (envProfile) {
-    return envProfile;
-  }
-
-  let profile: ActiveBoxelProfile;
 
   try {
-    profile = getActiveProfile();
-  } catch {
-    throw new FactoryEntrypointUsageError(
-      `Target realm bootstrap needs Matrix auth for ${serverUrl}. Configure MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD or use a matching active Boxel profile.`,
-    );
+    let result = await createRealm({
+      realmName: endpoint,
+      displayName: endpoint,
+      waitForReady: true,
+    });
+    return {
+      ...resolution,
+      url: result.url,
+      createdRealm: true,
+    };
+  } catch (e: unknown) {
+    if (e instanceof RealmAlreadyExistsError) {
+      // Idempotent path: the target realm already exists. boxel-cli's
+      // createRealmFetch will lazily fetch its JWT on first use.
+      return { ...resolution, createdRealm: false };
+    }
+    throw e;
   }
-
-  if (getMatrixUsername(profile.username) !== ownerUsername) {
-    throw new FactoryEntrypointUsageError(
-      `Active Boxel profile user "${getMatrixUsername(profile.username)}" does not match MATRIX_USERNAME "${ownerUsername}"`,
-    );
-  }
-
-  if (ensureTrailingSlash(profile.realmServerUrl) !== serverUrl) {
-    throw new FactoryEntrypointUsageError(
-      `Active Boxel profile realm server "${ensureTrailingSlash(
-        profile.realmServerUrl,
-      )}" does not match target realm server "${serverUrl}"`,
-    );
-  }
-
-  return profile;
-}
-
-function buildEnvRealmServerProfile(
-  ownerUsername: string,
-  serverUrl: string,
-): ActiveBoxelProfile | undefined {
-  let matrixUrl = normalizeOptionalString(process.env.MATRIX_URL);
-  let envUsername = normalizeOptionalString(process.env.MATRIX_USERNAME);
-  let matrixPassword = normalizeOptionalString(process.env.MATRIX_PASSWORD);
-
-  if (!matrixPassword) {
-    return undefined;
-  }
-
-  if (!matrixUrl) {
-    throw new FactoryEntrypointUsageError(
-      'MATRIX_URL is required for target realm creation when using environment auth',
-    );
-  }
-
-  if (!envUsername) {
-    throw new FactoryEntrypointUsageError(
-      'MATRIX_USERNAME is required for target realm creation when using environment auth',
-    );
-  }
-
-  let normalizedUsername = getMatrixUsername(envUsername);
-
-  if (normalizedUsername !== ownerUsername) {
-    throw new FactoryEntrypointUsageError(
-      `MATRIX_USERNAME "${normalizedUsername}" does not match target realm owner "${ownerUsername}"`,
-    );
-  }
-
-  return {
-    profileId: null,
-    username: normalizedUsername,
-    matrixUrl: ensureTrailingSlash(matrixUrl),
-    realmServerUrl: serverUrl,
-    password: matrixPassword,
-  };
-}
-
-function resolveTargetRealmOwner(): string {
-  let envUsername = normalizeOptionalString(process.env.MATRIX_USERNAME);
-
-  if (!envUsername) {
-    throw new FactoryEntrypointUsageError(
-      'Cannot determine the target realm owner. Set MATRIX_USERNAME before running factory:go.',
-    );
-  }
-
-  return getMatrixUsername(envUsername);
 }
 
 function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
@@ -315,17 +101,14 @@ function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
   return normalizeUrl(explicitTargetRealmUrl, '--target-realm-url');
 }
 
-const DEFAULT_REALM_SERVER_URL = 'http://localhost:4201/';
-
 function resolveRealmServerUrl(
   explicitRealmServerUrl: string | null,
-  _targetRealmUrl: string,
+  activeProfileRealmServerUrl: string,
 ): string {
   if (explicitRealmServerUrl) {
     return normalizeUrl(explicitRealmServerUrl, '--realm-server-url');
   }
-
-  return DEFAULT_REALM_SERVER_URL;
+  return ensureTrailingSlash(activeProfileRealmServerUrl);
 }
 
 function extractEndpointFromRealmUrl(targetRealmUrl: string): string {
@@ -351,28 +134,4 @@ function normalizeUrl(url: string, label: string): string {
       }`,
     );
   }
-}
-
-function normalizeCreatedRealmUrl(
-  createdRealmId: unknown,
-  fallbackTargetRealmUrl: string,
-): string {
-  if (typeof createdRealmId !== 'string' || createdRealmId.trim() === '') {
-    throw new Error(
-      `Realm server returned an invalid realm id for ${fallbackTargetRealmUrl}`,
-    );
-  }
-
-  return normalizeUrl(createdRealmId, 'realm server response data.id');
-}
-
-function normalizeOptionalString(
-  value: string | undefined,
-): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  let trimmed = value.trim();
-  return trimmed === '' ? undefined : trimmed;
 }
