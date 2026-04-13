@@ -19,6 +19,7 @@ import type {
 import {
   cardTypeIcon,
   identifyCard,
+  isRealmIndexCard,
   isResolvedCodeRef,
   realmURL,
 } from '@cardstack/runtime-common';
@@ -72,7 +73,7 @@ export function getDefaultCardMenuItems(
   }
   if (params.menuContext === 'interact') {
     if (
-      !isIndexCard(card) && // workspace index card cannot be deleted
+      !isRealmIndexCard(card) && // workspace index card cannot be deleted
       cardId &&
       params.canEdit
     ) {
@@ -154,7 +155,7 @@ export function getDefaultCardMenuItems(
       disabled: !cardId,
     });
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (!isIndexCard(card)) {
+    if (!isRealmIndexCard(card)) {
       menuItems.push({
         label: `Create Listing`,
         action: async () => {
@@ -216,12 +217,4 @@ function getSampleDataMenuItems(
     });
   }
   return menuItems;
-}
-
-function isIndexCard(card: CardDef): boolean {
-  let cardRealmURL = card[realmURL];
-  if (!cardRealmURL) {
-    return false;
-  }
-  return (card.id as unknown as string) === `${cardRealmURL.href}index`;
 }
