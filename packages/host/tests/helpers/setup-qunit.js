@@ -11,31 +11,30 @@ export function setupQUnit() {
   setup(QUnit.assert);
   QUnit.config.autostart = false;
 
-  // TEMPORARY leak-hunting probe: after each test, force GC (via --expose-gc
-  // when available) and emit a marker line with memory stats. The marker is
-  // watched by scripts/heap-snapshot-runner.js; the memory stats give per-test
-  // heap deltas in CI logs (needs --enable-precise-memory-info to be exact).
+  // After each test, force GC (via --expose-gc) so V8 can release
+  // per-test allocations before the next test starts. Without this, V8's
+  // opportunistic GC can't keep up and the heap drifts toward the 4GB
+  // ceiling in long shards. Every 10 tests we also log a memory line so
+  // regressions are visible in CI output.
   let probeCount = 0;
-  QUnit.testDone((details) => {
+  QUnit.testDone(() => {
     probeCount++;
     if (typeof globalThis.gc === 'function') {
       globalThis.gc();
       globalThis.gc();
     }
-    let mem = '';
-    try {
-      let pm = performance && performance.memory;
-      if (pm) {
-        let used = (pm.usedJSHeapSize / 1048576).toFixed(1);
-        let total = (pm.totalJSHeapSize / 1048576).toFixed(1);
-        mem = ` used=${used}MB total=${total}MB`;
+    if (probeCount % 10 === 0) {
+      try {
+        let pm = performance && performance.memory;
+        if (pm) {
+          let used = (pm.usedJSHeapSize / 1048576).toFixed(1);
+          let total = (pm.totalJSHeapSize / 1048576).toFixed(1);
+          // eslint-disable-next-line no-console
+          console.log(`MEMPROBE t=${probeCount} used=${used}MB total=${total}MB`);
+        }
+      } catch (_) {
+        /* ignore */
       }
-    } catch (_) {
-      /* ignore */
     }
-    // eslint-disable-next-line no-console
-    console.log(
-      `PROBE t=${probeCount}${mem} name="${details && details.name ? details.name : ''}"`,
-    );
   });
 }
