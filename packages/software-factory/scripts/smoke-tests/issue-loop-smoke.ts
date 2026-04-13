@@ -719,7 +719,7 @@ async function scenarioBootstrapSeedIssue(): Promise<void> {
     contextBuilder: new StubContextBuilder(),
     tools: TOOLS,
     issueStore: store,
-    validator: new NoOpValidator(),
+    createValidator: () => new NoOpValidator(),
     targetRealmUrl: 'https://example.test/target/',
     briefUrl: 'https://example.test/brief/',
   });
