@@ -190,6 +190,7 @@ module('factory-tool-builder > tool building', function () {
     assert.true(toolNames.includes('read_file'));
     assert.true(toolNames.includes('search_realm'));
     assert.true(toolNames.includes('update_issue'));
+    assert.true(toolNames.includes('add_comment'));
     assert.true(toolNames.includes('create_knowledge'));
     assert.true(toolNames.includes('signal_done'));
     assert.true(toolNames.includes('request_clarification'));
@@ -951,3 +952,278 @@ module(
 // pipeline runs tests automatically via executeTestRunFromRealm after
 // each agent turn. The former buildRunTestsTool implementation has been
 // removed and is no longer part of buildFactoryTools.
+
+// ---------------------------------------------------------------------------
+// add_comment tool
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates a mock fetch that returns different responses depending on
+ * the HTTP method (GET for read, POST for write).
+ */
+function createReadWriteMockFetch(
+  readStatus: number,
+  readBody: unknown,
+  writeStatus: number,
+  writeBody: unknown,
+): {
+  fetch: typeof globalThis.fetch;
+  requests: CapturedRequest[];
+} {
+  let requests: CapturedRequest[] = [];
+
+  let mockFetch = (async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    let url = typeof input === 'string' ? input : input.toString();
+    let method = init?.method ?? 'GET';
+    let headers: Record<string, string> = {};
+    if (init?.headers) {
+      let h = init.headers as Record<string, string>;
+      for (let [k, v] of Object.entries(h)) {
+        headers[k] = v;
+      }
+    }
+    requests.push({
+      url,
+      method,
+      headers,
+      body: typeof init?.body === 'string' ? init.body : '',
+    });
+
+    let isRead = method === 'GET';
+    let status = isRead ? readStatus : writeStatus;
+    let body = isRead ? readBody : writeBody;
+
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof globalThis.fetch;
+
+  return { fetch: mockFetch, requests };
+}
+
+module('factory-tool-builder > add_comment', function () {
+  test('add_comment tool is always built (no schema required)', function (assert) {
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ cardTypeSchemas: undefined });
+    let tools = buildFactoryTools(config, executor, registry);
+    let toolNames = tools.map((t) => t.name);
+
+    assert.true(
+      toolNames.includes('add_comment'),
+      'add_comment should be present even without cardTypeSchemas',
+    );
+  });
+
+  test('add_comment appends a comment to an issue with no existing comments', async function (assert) {
+    let existingIssue = {
+      data: {
+        type: 'card',
+        attributes: {
+          summary: 'Test issue',
+          status: 'in_progress',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${TARGET_REALM}darkfactory`,
+            name: 'Issue',
+          },
+        },
+      },
+    };
+
+    let { fetch: mockFetch, requests } = createReadWriteMockFetch(
+      200,
+      existingIssue,
+      200,
+      {},
+    );
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    let result = (await tool.execute({
+      path: 'Issues/test-issue.json',
+      body: 'Starting implementation',
+      author: 'factory-agent',
+    })) as { ok: boolean };
+
+    assert.true(result.ok);
+    assert.strictEqual(requests.length, 2, 'one read + one write');
+    assert.strictEqual(requests[0].method, 'GET');
+    assert.strictEqual(requests[1].method, 'POST');
+
+    let writtenBody = JSON.parse(requests[1].body);
+    assert.strictEqual(writtenBody.data.attributes.summary, 'Test issue');
+    assert.strictEqual(writtenBody.data.attributes.status, 'in_progress');
+    assert.strictEqual(writtenBody.data.attributes.comments.length, 1);
+    assert.strictEqual(
+      writtenBody.data.attributes.comments[0].body,
+      'Starting implementation',
+    );
+    assert.strictEqual(
+      writtenBody.data.attributes.comments[0].author,
+      'factory-agent',
+    );
+    assert.ok(
+      writtenBody.data.attributes.comments[0].datetime,
+      'datetime should be set',
+    );
+    assert.strictEqual(writtenBody.data.meta.adoptsFrom.name, 'Issue');
+    assert.strictEqual(
+      writtenBody.data.meta.adoptsFrom.module,
+      'https://realms.example.test/software-factory/darkfactory',
+    );
+  });
+
+  test('add_comment appends to existing comments without losing them', async function (assert) {
+    let existingIssue = {
+      data: {
+        type: 'card',
+        attributes: {
+          summary: 'Test issue',
+          comments: [
+            {
+              body: 'First comment',
+              author: 'human',
+              datetime: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${TARGET_REALM}darkfactory`,
+            name: 'Issue',
+          },
+        },
+      },
+    };
+
+    let { fetch: mockFetch, requests } = createReadWriteMockFetch(
+      200,
+      existingIssue,
+      200,
+      {},
+    );
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    let result = (await tool.execute({
+      path: 'Issues/test-issue.json',
+      body: 'Second comment',
+      author: 'factory-agent',
+    })) as { ok: boolean };
+
+    assert.true(result.ok);
+
+    let writtenBody = JSON.parse(requests[1].body);
+    assert.strictEqual(
+      writtenBody.data.attributes.comments.length,
+      2,
+      'should have both old and new comments',
+    );
+    assert.strictEqual(
+      writtenBody.data.attributes.comments[0].body,
+      'First comment',
+    );
+    assert.strictEqual(writtenBody.data.attributes.comments[0].author, 'human');
+    assert.strictEqual(
+      writtenBody.data.attributes.comments[1].body,
+      'Second comment',
+    );
+    assert.strictEqual(
+      writtenBody.data.attributes.comments[1].author,
+      'factory-agent',
+    );
+  });
+
+  test('add_comment returns error when issue does not exist', async function (assert) {
+    let { fetch: mockFetch } = createReadWriteMockFetch(
+      404,
+      { errors: [{ detail: 'Not Found' }] },
+      200,
+      {},
+    );
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    let result = (await tool.execute({
+      path: 'Issues/nonexistent.json',
+      body: 'This should fail',
+      author: 'factory-agent',
+    })) as { ok: boolean; error?: string };
+
+    assert.false(result.ok);
+    assert.ok(result.error, 'should contain error message');
+    assert.true(
+      result.error!.includes('Failed to read issue'),
+      `error message should describe the failure: ${result.error}`,
+    );
+  });
+
+  test('add_comment preserves existing relationships', async function (assert) {
+    let existingIssue = {
+      data: {
+        type: 'card',
+        attributes: {
+          summary: 'Linked issue',
+        },
+        relationships: {
+          project: {
+            links: {
+              self: `${TARGET_REALM}Project/mvp`,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${TARGET_REALM}darkfactory`,
+            name: 'Issue',
+          },
+        },
+      },
+    };
+
+    let { fetch: mockFetch, requests } = createReadWriteMockFetch(
+      200,
+      existingIssue,
+      200,
+      {},
+    );
+    let registry = new ToolRegistry();
+    let { executor } = createMockToolExecutor(new Map());
+    let config = makeConfig({ fetch: mockFetch });
+    let tools = buildFactoryTools(config, executor, registry);
+    let tool = findTool(tools, 'add_comment');
+
+    let result = (await tool.execute({
+      path: 'Issues/linked.json',
+      body: 'Comment on linked issue',
+      author: 'factory-agent',
+    })) as { ok: boolean };
+
+    assert.true(result.ok);
+
+    let writtenBody = JSON.parse(requests[1].body);
+    assert.ok(
+      writtenBody.data.relationships,
+      'relationships should be preserved',
+    );
+    assert.ok(
+      writtenBody.data.relationships.project,
+      'project relationship should be preserved',
+    );
+  });
+});

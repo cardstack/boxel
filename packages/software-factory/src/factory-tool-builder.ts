@@ -114,6 +114,9 @@ export function buildFactoryTools(
     buildRequestClarificationTool(),
   ];
 
+  // add_comment doesn't need runtime schemas — it reads/patches directly.
+  tools.push(buildAddCommentTool(config));
+
   // Card tools are only available when runtime schemas have been fetched.
   let schemas = config.cardTypeSchemas;
   let cardToolEntries: [string, string, () => FactoryTool][] = [
@@ -405,6 +408,85 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
         realmUrl,
         path,
         JSON.stringify(doc, null, 2),
+        fetchOptions,
+      );
+    },
+  };
+}
+
+function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'add_comment',
+    description:
+      'Append a comment to an existing issue. Use this to record context, feedback, or status updates without modifying the issue description.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Path to the issue card file (e.g., "Issues/bootstrap-seed.json")',
+        },
+        body: {
+          type: 'string',
+          description: 'The comment text (markdown supported)',
+        },
+        author: {
+          type: 'string',
+          description:
+            'Who is writing this comment (e.g., "factory-agent", "human")',
+        },
+      },
+      required: ['path', 'body', 'author'],
+    },
+    execute: async (args) => {
+      let path = ensureJsonExtension(args.path as string);
+      let body = args.body as string;
+      let author = args.author as string;
+
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+
+      // Read existing issue
+      let existing = await readFile(realmUrl, path, fetchOptions);
+      if (!existing.ok || !existing.document) {
+        return {
+          ok: false,
+          error: `Failed to read issue at ${path}: ${existing.error ?? 'no document'}`,
+        };
+      }
+
+      // Get existing comments or initialize empty array
+      let existingComments =
+        (existing.document.data?.attributes?.comments as unknown[]) ?? [];
+
+      // Append new comment
+      let newComment = {
+        body,
+        author,
+        datetime: new Date().toISOString(),
+      };
+      existingComments.push(newComment);
+
+      // Merge back
+      let updatedAttributes = {
+        ...existing.document.data?.attributes,
+        comments: existingComments,
+      };
+
+      let document = buildCardDocument(
+        'Issue',
+        config.darkfactoryModuleUrl,
+        updatedAttributes,
+        existing.document.data?.relationships as
+          | Record<string, unknown>
+          | undefined,
+      );
+
+      return writeFile(
+        realmUrl,
+        path,
+        JSON.stringify(document, null, 2),
         fetchOptions,
       );
     },
