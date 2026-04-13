@@ -81,26 +81,32 @@ Interior cards (field cards, helper cards, linked supporting cards) are
 implemented as part of their entry-point card's issue — they need tests but
 do not need their own catalog specs or separate issues.
 
+**Dependency ordering:** If one entry-point card depends on another (e.g.,
+card B uses card A as a field type or linked card), the depended-upon card's
+issue must come first. Set `order` so that dependency cards are processed
+before their consumers, and wire `blockedBy` so the consuming card's issue
+cannot start until the dependency card's issue is done.
+
 **Issue format** — for each entry-point card, create an issue at `Issues/<slug>-<card-slug>.json`:
-- `issueId` — `"<projectCode>-<N>"` (sequential)
+- `issueId` — `"<projectCode>-<N>"` (sequential, dependency-first ordering)
 - `summary` — `"Implement <card name> card with tests and catalog spec"`
 - `description` — describe the card to create, its fields, any interior/support cards, what tests to write, and what the catalog spec should contain
 - `issueType` — `"feature"`
 - `status` — `"backlog"`
 - `priority` — `"high"` for the first, `"medium"` for subsequent
-- `order` — sequential (1, 2, 3, ...)
+- `order` — sequential, respecting dependency order (cards with no dependencies first)
 - `acceptanceCriteria` — checklist covering card definition, tests, spec, and examples
 - Relationships:
   - `project` → `../Projects/<slug>-mvp`
   - `relatedKnowledge.0` → `../Knowledge Articles/<slug>-brief-context`
   - `relatedKnowledge.1` → `../Knowledge Articles/<slug>-agent-onboarding`
-  - `blockedBy` → reference any prior issues this card depends on (if it uses cards from an earlier issue)
+  - `blockedBy` → issues for any entry-point cards this card depends on
 
 adoptsFrom: the darkfactory `Issue` type.
 
 If the brief describes only one card, create one issue. If it describes multiple
-entry-point cards, create one issue per entry-point card with appropriate
-dependency ordering via `blockedBy`.
+entry-point cards, create one issue per entry-point card ordered so that
+dependency cards are implemented before cards that consume them.
 
 ## Instructions
 

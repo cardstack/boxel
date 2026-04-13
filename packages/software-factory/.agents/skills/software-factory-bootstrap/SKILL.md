@@ -94,9 +94,11 @@ Interior cards (field cards, helper cards, linked supporting types) are implemen
 - `project` → `{ links: { self: "../Projects/<slug>-mvp" } }`
 - `relatedKnowledge.0` → `{ links: { self: "../Knowledge Articles/<slug>-brief-context" } }`
 - `relatedKnowledge.1` → `{ links: { self: "../Knowledge Articles/<slug>-agent-onboarding" } }`
-- `blockedBy` → reference prior issues if this card depends on cards from earlier issues
+- `blockedBy` → issues for any entry-point cards this card depends on
 
-If the brief describes only one entry-point card, create one issue. If it describes multiple, create one per entry-point card with dependency ordering.
+**Dependency ordering:** If one entry-point card depends on another (e.g., card B uses card A as a field type or linked card), order the issues so the depended-upon card is implemented first. Set `order` values accordingly (dependency-free cards get lower order numbers) and wire `blockedBy` so consuming cards cannot start until their dependencies are done.
+
+If the brief describes only one entry-point card, create one issue. If it describes multiple, create one per entry-point card ordered so dependency cards come first.
 
 ## Why Relationships Matter
 

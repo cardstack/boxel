@@ -108,7 +108,7 @@ During task breakdown, the agent organizes implementation issues around **entry-
 
 Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do not need their own catalog specs or separate issues.
 
-If the brief describes only one entry-point card, there will be one implementation issue. If it describes multiple, there will be one per entry-point card with dependency ordering via `blockedBy`.
+If the brief describes only one entry-point card, there will be one implementation issue. If it describes multiple, there will be one per entry-point card. Issues are ordered so that **dependency cards are implemented before cards that consume them** — if card B uses card A as a field type or linked card, card A's issue gets a lower `order` and card B's issue has `blockedBy` pointing to card A's issue. This ensures the agent builds foundational cards first.
 
 Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
