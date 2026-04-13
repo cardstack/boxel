@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import { mkdirSync, chmodSync } from 'fs';
 import { builtinModules } from 'module';
+import { execSync } from 'child_process';
 
 // Node.js built-in modules (bare and node:-prefixed) that should remain external
 const nodeBuiltins = builtinModules.flatMap((m) => [m, `node:${m}`]);
@@ -29,7 +30,7 @@ async function buildCLI() {
   console.log('Building CLI executables...');
 
   try {
-    // Build CLI entry point
+    // Build CLI entry point (bundled, with shebang)
     console.log('Building boxel...');
     const cliResult = await build({
       ...commonConfig,
@@ -44,13 +45,32 @@ async function buildCLI() {
     console.log('Making CLI file executable...');
     chmodSync('dist/index.js', 0o755);
 
+    // Build library entry point (deps left external for consumers to resolve)
+    console.log('Building library...');
+    const libResult = await build({
+      ...commonConfig,
+      entryPoints: ['src/api.ts'],
+      outfile: 'dist/api.js',
+      packages: 'external',
+    });
+
+    // Emit type declarations alongside the library entry
+    console.log('Emitting type declarations...');
+    execSync('tsc -p tsconfig.build.json', { stdio: 'inherit' });
+
     console.log('Build complete!');
 
-    // Log bundle size
-    if (cliResult.metafile) {
-      const outputs = Object.values(cliResult.metafile.outputs);
-      const totalSize = outputs.reduce((sum, output) => sum + output.bytes, 0);
-      console.log(`\nBundle size: ${(totalSize / 1024).toFixed(1)} KB`);
+    for (const [label, result] of [
+      ['CLI', cliResult],
+      ['Library', libResult],
+    ] as const) {
+      if (result.metafile) {
+        const outputs = Object.values(result.metafile.outputs);
+        const totalSize = outputs.reduce((sum, o) => sum + o.bytes, 0);
+        console.log(
+          `${label} bundle size: ${(totalSize / 1024).toFixed(1)} KB`,
+        );
+      }
     }
   } catch (error) {
     console.error('Build failed:', error);
