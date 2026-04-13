@@ -366,28 +366,58 @@ test.describe('Room creation', () => {
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
     let newRoom: string | undefined;
-    // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
-    // which can consume the entire waitUntil budget in a single attempt.
-    // If the error UI appears (room creation timed out waiting for sync),
-    // click "Try Again" to retry just the creation step rather than
-    // restarting the entire test.
+    let pollCount = 0;
     await waitUntil(async () => {
+      pollCount++;
       try {
-        if ((await page.locator('[data-test-room-error]').count()) > 0) {
+        let errorCount = await page.locator('[data-test-room-error]').count();
+        let roomEl = page.locator('[data-test-room]');
+        let roomCount = await roomEl.count();
+        let roomId = roomCount > 0
+          ? await roomEl.getAttribute('data-test-room')
+          : null;
+        let settledCount = await page
+          .locator('[data-test-room-settled]')
+          .count();
+        let isEmptyCount = await page
+          .locator('[data-test-room-is-empty]')
+          .count();
+        let sessionErrorCount = await page
+          .locator('.session-error')
+          .count();
+
+        // Log state every 10th poll and on any interesting state
+        if (
+          pollCount % 10 === 1 ||
+          errorCount > 0 ||
+          roomCount > 0 ||
+          sessionErrorCount > 0
+        ) {
+          console.log(
+            `[poll #${pollCount}] room-error=${errorCount} room=${roomCount} roomId=${roomId} settled=${settledCount} isEmpty=${isEmptyCount} sessionError=${sessionErrorCount} deleted=[${room1},${room2},${room3}]`,
+          );
+        }
+
+        if (errorCount > 0) {
+          console.log(`[poll #${pollCount}] Clicking "Try Again" button`);
           await page
             .locator('[data-test-room-error] button:has-text("Try Again")')
             .click();
           return false;
         }
-        let roomEl = page.locator('[data-test-room]');
-        if ((await roomEl.count()) === 0) return false;
-        let roomId = await roomEl.getAttribute('data-test-room');
+        if (roomCount === 0) return false;
         if (roomId && roomId !== room1 && roomId !== room2 && roomId !== room3) {
+          console.log(
+            `[poll #${pollCount}] Found new room: ${roomId}`,
+          );
           newRoom = roomId;
           return true;
         }
         return false;
-      } catch {
+      } catch (e) {
+        console.log(
+          `[poll #${pollCount}] Error: ${e instanceof Error ? e.message : e}`,
+        );
         return false;
       }
     }, 60_000);
