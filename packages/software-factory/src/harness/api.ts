@@ -6,6 +6,26 @@ import {
   readPreparedTemplateMetadata,
   writePreparedTemplateMetadata,
 } from '../runtime-metadata';
+import { configureLogger } from '../logger';
+
+/**
+ * Suppress console.log/warn during a callback. Used during template DB builds
+ * to silence noisy third-party code (e.g. synapse docker helpers) that
+ * writes directly to the console instead of going through the logger.
+ */
+async function withSilentConsole<T>(fn: () => Promise<T>): Promise<T> {
+  let origLog = console.log;
+  let origWarn = console.warn;
+  console.log = () => {};
+  console.warn = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+  }
+}
+
 import {
   buildRealmToken,
   CACHE_VERSION,
@@ -51,7 +71,6 @@ import {
   resetQueueState,
   rewriteClonedRealmServerUrls,
   seedRealmPermissions,
-  warnIfSnapshotLooksCold,
 } from './database';
 import { startFactorySupportServices } from './support-services';
 import {
@@ -111,7 +130,7 @@ export async function startFactoryGlobalContext(
 }
 
 export async function ensureFactoryRealmTemplate(
-  options: FactoryRealmOptions = {},
+  options: FactoryRealmOptions & { forceRebuild?: boolean } = {},
 ): Promise<FactoryRealmTemplate> {
   return await logTimed(harnessLog, 'ensureFactoryRealmTemplate', async () => {
     let realmDir = resolve(options.realmDir ?? DEFAULT_REALM_DIR);
@@ -148,7 +167,11 @@ export async function ensureFactoryRealmTemplate(
       readPreparedTemplateMetadata(templateDatabaseName);
     let hasTemplateDatabase = await databaseExists(templateDatabaseName);
 
-    if (hasTemplateDatabase && cachedTemplateMetadata) {
+    if (
+      !options.forceRebuild &&
+      hasTemplateDatabase &&
+      cachedTemplateMetadata
+    ) {
       return {
         cacheKey,
         templateDatabaseName,
@@ -159,11 +182,21 @@ export async function ensureFactoryRealmTemplate(
       };
     }
 
-    let cacheMissReason = !cachedTemplateMetadata
-      ? hasTemplateDatabase
-        ? 'template metadata is missing'
-        : 'template database has not been prepared yet'
-      : 'template database is missing';
+    let cacheMissReason = options.forceRebuild
+      ? 'forced rebuild'
+      : !cachedTemplateMetadata
+        ? hasTemplateDatabase
+          ? 'template metadata is missing'
+          : 'template database has not been prepared yet'
+        : 'template database is missing';
+
+    // Full build from scratch.
+    // Suppress noisy support-service logging during the build.
+    let originalLogLevels = process.env.LOG_LEVELS || '*=info';
+    configureLogger(
+      originalLogLevels +
+        ',software-factory:harness:support=none,support-services=none',
+    );
 
     let ownedSupport:
       | {
@@ -172,12 +205,15 @@ export async function ensureFactoryRealmTemplate(
         }
       | undefined;
     let context = options.context;
-    if (!context) {
-      ownedSupport = await startFactorySupportServices();
-      context = ownedSupport.context;
-    }
 
     try {
+      if (!context) {
+        ownedSupport = await withSilentConsole(() =>
+          startFactorySupportServices(),
+        );
+        context = ownedSupport.context;
+      }
+
       await buildTemplateDatabase({
         realmDir,
         realmURL,
@@ -204,7 +240,8 @@ export async function ensureFactoryRealmTemplate(
         realmServerURL,
       };
     } finally {
-      await ownedSupport?.stop();
+      configureLogger(originalLogLevels);
+      await withSilentConsole(async () => ownedSupport?.stop());
     }
   });
 }
@@ -230,6 +267,7 @@ export async function ensureCombinedFactoryRealmTemplate(
     context?: FactorySupportContext;
     permissions?: Record<string, RealmAction[]>;
     cacheSalt?: string;
+    forceRebuild?: boolean;
   } = {},
 ): Promise<CombinedRealmTemplateResult> {
   return await logTimed(
@@ -270,7 +308,11 @@ export async function ensureCombinedFactoryRealmTemplate(
       let cachedTemplateMetadata =
         readPreparedTemplateMetadata(templateDatabaseName);
 
-      if (hasTemplateDatabase && cachedTemplateMetadata) {
+      if (
+        !options.forceRebuild &&
+        hasTemplateDatabase &&
+        cachedTemplateMetadata
+      ) {
         return {
           cacheKey,
           templateDatabaseName,
@@ -283,27 +325,44 @@ export async function ensureCombinedFactoryRealmTemplate(
         };
       }
 
-      let cacheMissReason = !cachedTemplateMetadata
-        ? hasTemplateDatabase
-          ? 'template metadata is missing'
-          : 'template database has not been prepared yet'
-        : 'template database is missing';
+      let cacheMissReason = options.forceRebuild
+        ? 'forced rebuild'
+        : !cachedTemplateMetadata
+          ? hasTemplateDatabase
+            ? 'template metadata is missing'
+            : 'template database has not been prepared yet'
+          : 'template database is missing';
+
+      let resolvedFixtures: CombinedRealmFixture[] = fixtures.map((f) => ({
+        realmDir: resolve(f.realmDir),
+        realmPath: f.realmPath,
+      }));
+
+      // Full build from scratch.
+      // Suppress noisy support-service logging during the build.
+      let originalLogLevels = process.env.LOG_LEVELS || '*=info';
+      configureLogger(
+        originalLogLevels +
+          ',software-factory:harness:support=none,support-services=none',
+      );
 
       let ownedSupport:
         | { context: FactorySupportContext; stop(): Promise<void> }
         | undefined;
       let context = options.context;
-      if (!context) {
-        ownedSupport = await startFactorySupportServices();
-        context = ownedSupport.context;
-      }
 
       try {
-        // Resolve realm URLs for each fixture.
-        let realmFixtures = fixtures.map((f) => {
+        if (!context) {
+          ownedSupport = await withSilentConsole(() =>
+            startFactorySupportServices(),
+          );
+          context = ownedSupport.context;
+        }
+
+        let realmFixtures = resolvedFixtures.map((f) => {
           let realmURL = new URL(f.realmPath, realmServerURL);
           return {
-            realmDir: resolve(f.realmDir),
+            realmDir: f.realmDir,
             realmURL,
           };
         });
@@ -317,7 +376,6 @@ export async function ensureCombinedFactoryRealmTemplate(
           templateDatabaseName,
         });
 
-        // Write metadata for the primary realm (for backward compat).
         writePreparedTemplateMetadata({
           realmDir: realmFixtures[0].realmDir,
           templateDatabaseName,
@@ -335,7 +393,8 @@ export async function ensureCombinedFactoryRealmTemplate(
           realmServerURL,
         };
       } finally {
-        await ownedSupport?.stop();
+        configureLogger(originalLogLevels);
+        await withSilentConsole(async () => ownedSupport?.stop());
       }
     },
   );
@@ -418,11 +477,6 @@ export async function startFactoryRealmServer(
       await resetQueueState(databaseName);
       await clearModuleCache(databaseName);
       await rebuildWorkingIndexFromIndex(databaseName);
-      await warnIfSnapshotLooksCold(databaseName, [
-        realmURL,
-        baseRealmURL,
-        sourceRealmURL,
-      ]);
       await seedRealmPermissions(
         databaseName,
         baseRealmURL,

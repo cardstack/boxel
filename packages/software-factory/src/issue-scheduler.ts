@@ -261,6 +261,7 @@ export class RealmIssueStore implements IssueStore {
     if (updates.description != null) {
       attrs.description = updates.description;
     }
+    attrs.updatedAt = new Date().toISOString();
 
     doc.data.attributes = attrs;
 

@@ -183,7 +183,6 @@ export async function runFactoryIssueLoop(
 
   // 6. Validator
   let validator = createDefaultPipeline({
-    targetRealmUrl,
     realmServerUrl,
     authorization: config.authorization,
     fetch: fetchImpl,

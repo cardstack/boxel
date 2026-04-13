@@ -9,7 +9,7 @@ import StringField from 'https://cardstack.com/base/string';
 
 const fileSearchQuery = {
   filter: {
-    type: { module: 'https://cardstack.com/base/file-api', name: 'FileDef' },
+    type: { module: 'https://cardstack.com/base/card-api', name: 'FileDef' },
   },
   realm: '$thisRealm',
 };

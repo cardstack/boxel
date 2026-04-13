@@ -321,7 +321,6 @@ export async function runIssueLoop(
         log.info(
           `  Validation still failing — blocking issue with failure context`,
         );
-        exitReason = 'blocked';
 
         try {
           let description = buildMaxIterationBlockedDescription(
@@ -333,6 +332,7 @@ export async function runIssueLoop(
             status: 'blocked',
             description,
           });
+          exitReason = 'blocked';
         } catch (err) {
           log.warn(
             `  Failed to update issue status to blocked: ${err instanceof Error ? err.message : String(err)}`,
