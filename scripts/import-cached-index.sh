@@ -55,6 +55,11 @@ if [ ! -f "$CACHE_FILE" ]; then
   exit 1
 fi
 
+# Clear any partial data before importing.
+echo "Truncating index tables..."
+docker exec boxel-pg psql -U postgres -d "$DB_NAME" --quiet --no-psqlrc -c \
+  "TRUNCATE boxel_index, realm_versions, realm_meta"
+
 # Import the cache into the local database.
 # In BOXEL_ENVIRONMENT mode, remap URLs from CI standard mode (localhost:4201)
 # to the environment's Traefik hostname.
