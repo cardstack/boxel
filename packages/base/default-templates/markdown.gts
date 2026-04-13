@@ -12,14 +12,16 @@ import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 import {
   cardTypeName,
   extractMermaidBlocks,
-  hasCodeBlocks,
-  markdownToHtml,
-  preloadMarkdownLanguages,
   processKatexPlaceholders,
   replaceMermaidSvgs,
   resolveCardReference,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
+import {
+  hasCodeBlocks,
+  markdownToHtml,
+  preloadMarkdownLanguages,
+} from '@cardstack/runtime-common/marked-sync';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
 import { CardContextConsumer } from '../field-component';
 function wrapTablesHtml(html: string | null | undefined): string {

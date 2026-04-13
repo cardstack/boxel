@@ -21,6 +21,7 @@ import {
   CodeRef,
   CommandContext,
   Deferred,
+  byteStreamToUint8Array,
   fields,
   fieldSerializer,
   fieldsUntracked,
@@ -31,6 +32,7 @@ import {
   getSerializer,
   humanReadable,
   identifyCard,
+  inferContentType,
   isBaseInstance,
   isCardError,
   isCardInstance as _isCardInstance,
@@ -51,6 +53,7 @@ import {
   relativeTo,
   SingleCardDocument,
   uuidv4,
+  NumberSerializer,
   type Format,
   type Meta,
   type CardFields,
@@ -102,7 +105,13 @@ import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
+import FileDefEditTemplate from './default-templates/file-def-edit';
+import ImageDefAtomTemplate from './default-templates/image-def-atom';
+import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
+import ImageDefFittedTemplate from './default-templates/image-def-fitted';
+import ImageDefIsolatedTemplate from './default-templates/image-def-isolated';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
+import FileIcon from '@cardstack/boxel-icons/file';
 import LetterCaseIcon from '@cardstack/boxel-icons/letter-case';
 import MarkdownIcon from '@cardstack/boxel-icons/align-box-left-middle';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -111,9 +120,11 @@ import ThemeIcon from '@cardstack/boxel-icons/palette';
 import ImportIcon from '@cardstack/boxel-icons/import';
 import FilePencilIcon from '@cardstack/boxel-icons/file-pencil';
 import WandIcon from '@cardstack/boxel-icons/wand';
+import HashIcon from '@cardstack/boxel-icons/hash';
 // normalizeEnumOptions used by enum moved to packages/base/enum.gts
 import PatchThemeCommand from '@cardstack/boxel-host/commands/patch-theme';
 import CopyAndEditCommand from '@cardstack/boxel-host/commands/copy-and-edit';
+import { md5 } from 'super-fast-md5';
 
 import {
   callSerializeHook,
@@ -153,13 +164,14 @@ import {
   setRealmContextOnField,
   type NotLoadedValue,
 } from './field-support';
+import { TextInputValidator } from './text-input-validator';
 import { type GetMenuItemParams, getDefaultCardMenuItems } from './menu-items';
+import { getDefaultFileMenuItems } from './file-menu-items';
 import {
   LinkableDocument,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { FileMetaResource } from '@cardstack/runtime-common';
-import type { FileDef } from './file-api';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
 
@@ -252,6 +264,17 @@ export type FieldFormats = {
   ['cardDef']: Format;
 };
 type Setter = (value: any) => void;
+
+export type SerializedFile<Extra extends object = {}> = {
+  sourceUrl: string;
+  url: string;
+  name: string;
+  contentType: string;
+  contentHash?: string;
+  contentSize?: number;
+} & Extra;
+
+export type ByteStream = ReadableStream<Uint8Array> | Uint8Array;
 
 interface Options {
   computeVia?: () => unknown;
@@ -506,6 +529,17 @@ function cardTypeFor(
     .constructor as typeof BaseDef;
 }
 
+function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
+  if (
+    !(primitive in cardClass) &&
+    Object.prototype.hasOwnProperty.call(cardClass, deserialize)
+  ) {
+    throw new Error(
+      `${cardClass.name} overrides [deserialize] directly. Composite fields must use a registered fieldSerializer instead.`,
+    );
+  }
+}
+
 class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
   FieldT,
   any[] | null
@@ -723,6 +757,17 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
             }
             return entry;
           } else {
+            if (fieldSerializer in this.card) {
+              assertIsSerializerName(this.card[fieldSerializer]);
+              let serializer = getSerializer(this.card[fieldSerializer]);
+              entry = await serializer.deserialize(
+                entry,
+                relativeTo,
+                doc,
+                store,
+                opts,
+              );
+            }
             let meta = metas[index];
             let resource: LooseCardResource = {
               attributes: entry,
@@ -745,9 +790,19 @@ class ContainsMany<FieldT extends FieldDefConstructor> implements Field<
                   }),
               );
             }
-            return (
-              await cardClassFromResource(resource, this.card, relativeTo)
-            )[deserialize](resource, relativeTo, doc, store, opts);
+            let cardClass = await cardClassFromResource(
+              resource,
+              this.card,
+              relativeTo,
+            );
+            assertNoDeserializeOverride(cardClass);
+            return cardClass[deserialize](
+              resource,
+              relativeTo,
+              doc,
+              store,
+              opts,
+            );
           }
         }),
       ),
@@ -959,6 +1014,11 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
       }
       return value;
     }
+    if (fieldSerializer in this.card) {
+      assertIsSerializerName(this.card[fieldSerializer]);
+      let serializer = getSerializer(this.card[fieldSerializer]);
+      value = await serializer.deserialize(value, relativeTo, doc, store, opts);
+    }
     if (fieldMeta && Array.isArray(fieldMeta)) {
       throw new Error(
         `fieldMeta for contains field '${
@@ -983,9 +1043,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
           ]),
       );
     }
-    return (await cardClassFromResource(resource, this.card, relativeTo))[
-      deserialize
-    ](resource, relativeTo, doc, store, opts);
+    let cardClass = await cardClassFromResource(
+      resource,
+      this.card,
+      relativeTo,
+    );
+    assertNoDeserializeOverride(cardClass);
+    return cardClass[deserialize](resource, relativeTo, doc, store, opts);
   }
 
   emptyValue(_instance: BaseDef) {
@@ -2163,7 +2227,10 @@ export class BaseDef {
           if (isNotLoadedValue(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = resolveCardReference(normalizedId, value[relativeTo]);
+              normalizedId = resolveCardReference(
+                normalizedId,
+                value[relativeTo],
+              );
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
@@ -2448,10 +2515,206 @@ export class MarkdownField extends StringField {
   };
 }
 
+export function deserializeForUI(value: string | number | null): number | null {
+  let validationError = NumberSerializer.validate(value);
+  if (validationError) {
+    return null;
+  }
+
+  return NumberSerializer.deserializeSync(value);
+}
+
+export function serializeForUI(val: number | null): string | undefined {
+  let serialized = NumberSerializer.serialize(val);
+  if (serialized != null) {
+    return String(serialized);
+  }
+  return undefined;
+}
+
+export class NumberField extends FieldDef {
+  static displayName = 'Number';
+  static icon = HashIcon;
+  static [primitive]: number;
+  static [fieldSerializer] = 'number';
+  static [useIndexBasedKey]: never;
+  static embedded = class View extends Component<typeof this> {
+    <template>{{@model}}</template>
+  };
+  static atom = this.embedded;
+
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <BoxelInput
+        @value={{this.textInputValidator.asString}}
+        @onInput={{this.textInputValidator.onInput}}
+        @errorMessage={{this.textInputValidator.errorMessage}}
+        @state={{if this.textInputValidator.isInvalid 'invalid' 'none'}}
+        @disabled={{not @canEdit}}
+      />
+    </template>
+
+    textInputValidator: TextInputValidator<number> = new TextInputValidator(
+      () => this.args.model,
+      (inputVal) => this.args.set(inputVal),
+      deserializeForUI,
+      serializeForUI,
+      NumberSerializer.validate,
+    );
+  };
+}
+
+export interface SerializedFileDef {
+  url?: string;
+  sourceUrl: string;
+  name?: string;
+  contentHash?: string;
+  contentSize?: number;
+  contentType?: string;
+  content?: string;
+  error?: string;
+}
+
+// Throw this error from extractAttributes when the file content doesn't match this FileDef's
+// expectations so the extractor can fall back to a superclass/base FileDef.
+export class FileContentMismatchError extends Error {
+  name = 'FileContentMismatchError';
+}
+
+export class FileDef extends BaseDef {
+  static displayName = 'File';
+  static isFileDef = true;
+  static icon = FileIcon;
+  [isSavedInstance] = true;
+
+  get [realmURL](): URL | undefined {
+    let realmURLString = getCardMeta(this, 'realmURL');
+    return realmURLString ? new URL(realmURLString) : undefined;
+  }
+
+  static assignInitialFieldValue(
+    instance: BaseDef,
+    fieldName: string,
+    value: any,
+  ) {
+    if (fieldName === 'id') {
+      // Similar to CardDef, set 'id' directly in the deserialized cache
+      // to avoid triggering recomputes during instantiation
+      let deserialized = getDataBucket(instance);
+      deserialized.set('id', value);
+    } else {
+      super.assignInitialFieldValue(instance, fieldName, value);
+    }
+  }
+
+  @field id = contains(ReadOnlyField);
+  @field sourceUrl = contains(StringField);
+  @field url = contains(StringField);
+  @field name = contains(StringField);
+  @field contentType = contains(StringField);
+  @field contentHash = contains(StringField);
+  @field contentSize = contains(NumberField);
+
+  static embedded: BaseDefComponent = class View extends Component<
+    typeof this
+  > {
+    <template>{{@model.name}}</template>
+  };
+  static fitted = this.embedded;
+  static isolated = this.embedded;
+  static atom = this.embedded;
+  static edit: BaseDefComponent = FileDefEditTemplate;
+
+  static async extractAttributes(
+    url: string,
+    getStream: () => Promise<ByteStream>,
+    options: { contentHash?: string; contentSize?: number } = {},
+  ): Promise<SerializedFile> {
+    let parsed = new URL(url);
+    let name = decodeURIComponent(
+      parsed.pathname.split('/').pop() ?? parsed.pathname,
+    );
+    let contentType = inferContentType(name);
+    let contentHash: string | undefined = options.contentHash;
+    let contentSize: number | undefined = options.contentSize;
+    if (!contentHash || contentSize === undefined) {
+      let bytes = await byteStreamToUint8Array(await getStream());
+      if (!contentHash) {
+        try {
+          contentHash = md5(bytes);
+        } catch {
+          contentHash = md5(new TextDecoder().decode(bytes));
+        }
+      }
+      if (contentSize === undefined) {
+        contentSize = bytes.byteLength;
+      }
+    }
+
+    return {
+      sourceUrl: url,
+      url,
+      name,
+      contentType,
+      contentHash,
+      contentSize,
+    };
+  }
+
+  serialize() {
+    return {
+      sourceUrl: this.sourceUrl,
+      url: this.url,
+      name: this.name,
+      contentType: this.contentType,
+      contentHash: this.contentHash,
+      contentSize: this.contentSize,
+    };
+  }
+
+  [getMenuItems](params: GetMenuItemParams): MenuItemOptions[] {
+    return getDefaultFileMenuItems(this, params);
+  }
+}
+
+export function createFileDef({
+  url,
+  sourceUrl,
+  name,
+  contentType,
+  contentHash,
+  contentSize,
+}: SerializedFileDef) {
+  return new FileDef({
+    url,
+    sourceUrl,
+    name,
+    contentType,
+    contentHash,
+    contentSize,
+  });
+}
+
+export { getDefaultFileMenuItems } from './file-menu-items';
+
+export class ImageDef extends FileDef {
+  static displayName = 'Image';
+  static acceptTypes = 'image/*';
+
+  @field width = contains(NumberField);
+  @field height = contains(NumberField);
+
+  static isolated: BaseDefComponent = ImageDefIsolatedTemplate;
+  static atom: BaseDefComponent = ImageDefAtomTemplate;
+  static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
+  static fitted: BaseDefComponent = ImageDefFittedTemplate;
+}
+
 export class CardInfoField extends FieldDef {
   static displayName = 'Card Info';
   @field name = contains(StringField);
   @field summary = contains(StringField);
+  @field cardThumbnail = linksTo(() => ImageDef);
   @field cardThumbnailURL = contains(MaybeBase64Field);
   @field theme = linksTo(() => Theme);
   @field notes = contains(MarkdownField);

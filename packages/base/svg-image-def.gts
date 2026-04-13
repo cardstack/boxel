@@ -1,5 +1,5 @@
 import { byteStreamToUint8Array } from '@cardstack/runtime-common';
-import { ImageDef } from './image-file-def';
+import ImageDef from './image-file-def';
 import { type ByteStream, type SerializedFile } from './file-api';
 import { extractSvgDimensions } from './svg-meta-extractor';
 

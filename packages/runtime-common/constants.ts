@@ -28,7 +28,7 @@ export const skillCardRef: ResolvedCodeRef = {
   name: 'Skill',
 };
 export const baseFileRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}file-api`,
+  module: `${baseRealm.url}card-api`,
   name: 'FileDef',
 };
 

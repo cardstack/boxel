@@ -797,8 +797,17 @@ jobs:
       - name: Build
         run: pnpm build
         working-directory: packages/boxel-cli
-      - name: Run tests
-        run: pnpm test
+      - name: Run unit tests
+        run: pnpm test:unit
+        working-directory: packages/boxel-cli
+      - name: Start Matrix
+        run: pnpm start:matrix
+        working-directory: packages/realm-server
+      - name: Create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
+      - name: Run integration tests
+        run: pnpm test:integration
         working-directory: packages/boxel-cli
 
   deploy:

@@ -211,6 +211,77 @@ describe('ProfileManager', () => {
   });
 });
 
+describe('token storage', () => {
+  let tmpDir: string;
+  let manager: ProfileManager;
+
+  beforeEach(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-profile-test-'));
+    manager = new ProfileManager(tmpDir);
+    await manager.addProfile(
+      '@test:localhost',
+      'pass',
+      'Test',
+      'http://localhost:8008',
+      'http://localhost:4201/',
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('stores and retrieves a realm token', () => {
+    manager.setRealmToken('http://localhost:4201/my-realm/', 'jwt-123');
+    expect(manager.getRealmToken('http://localhost:4201/my-realm/')).toBe(
+      'jwt-123',
+    );
+  });
+
+  it('stores and retrieves a realm server token', () => {
+    manager.setRealmServerToken('server-jwt-456');
+    expect(manager.getRealmServerToken()).toBe('server-jwt-456');
+  });
+
+  it('persists realm tokens to disk', () => {
+    manager.setRealmToken('http://localhost:4201/my-realm/', 'jwt-123');
+
+    let manager2 = new ProfileManager(tmpDir);
+    expect(manager2.getRealmToken('http://localhost:4201/my-realm/')).toBe(
+      'jwt-123',
+    );
+  });
+
+  it('persists realm server token to disk', () => {
+    manager.setRealmServerToken('server-jwt-456');
+
+    let manager2 = new ProfileManager(tmpDir);
+    expect(manager2.getRealmServerToken()).toBe('server-jwt-456');
+  });
+
+  it('stores multiple realm tokens independently', () => {
+    manager.setRealmToken('http://localhost:4201/realm-a/', 'jwt-a');
+    manager.setRealmToken('http://localhost:4201/realm-b/', 'jwt-b');
+
+    expect(manager.getRealmToken('http://localhost:4201/realm-a/')).toBe(
+      'jwt-a',
+    );
+    expect(manager.getRealmToken('http://localhost:4201/realm-b/')).toBe(
+      'jwt-b',
+    );
+  });
+
+  it('returns undefined for unknown realm token', () => {
+    expect(
+      manager.getRealmToken('http://localhost:4201/nonexistent/'),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined for realm server token when not set', () => {
+    expect(manager.getRealmServerToken()).toBeUndefined();
+  });
+});
+
 describe('environment helpers', () => {
   it('detects staging environment', () => {
     expect(getEnvironmentFromMatrixId('@user:stack.cards')).toBe('staging');
