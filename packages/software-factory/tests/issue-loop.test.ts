@@ -238,7 +238,7 @@ function makeLoopConfig(
   return {
     contextBuilder: new StubIssueContextBuilder(),
     tools: DEFAULT_TOOLS,
-    validator: new MockValidator([makePassingValidation()]),
+    createValidator: () => new MockValidator([makePassingValidation()]),
     targetRealmUrl: 'https://example.test/target/',
     maxIterationsPerIssue: 5,
     maxOuterCycles: 50,
@@ -272,7 +272,7 @@ module('issue-loop > happy path', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator([makePassingValidation()]),
+        createValidator: () => new MockValidator([makePassingValidation()]),
       }),
     );
 
@@ -324,10 +324,7 @@ module('issue-loop > multiple issues', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator([
-          makePassingValidation(),
-          makePassingValidation(),
-        ]),
+        createValidator: () => new MockValidator([makePassingValidation()]),
       }),
     );
 
@@ -379,10 +376,8 @@ module('issue-loop > validation failure', function () {
         agent,
         issueStore: store,
         contextBuilder,
-        validator: new MockValidator([
-          makeFailingValidation(),
-          makePassingValidation(),
-        ]),
+        createValidator: () =>
+          new MockValidator([makeFailingValidation(), makePassingValidation()]),
       }),
     );
 
@@ -436,10 +431,7 @@ module('issue-loop > blocked issue', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator([
-          makePassingValidation(),
-          makePassingValidation(),
-        ]),
+        createValidator: () => new MockValidator([makePassingValidation()]),
       }),
     );
 
@@ -484,7 +476,7 @@ module('issue-loop > max inner iterations', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator(validations),
+        createValidator: () => new MockValidator(validations),
         maxIterationsPerIssue: 3,
       }),
     );
@@ -524,7 +516,7 @@ module('issue-loop > max inner iterations', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator(validations),
+        createValidator: () => new MockValidator(validations),
         maxIterationsPerIssue: 3,
       }),
     );
@@ -557,7 +549,7 @@ module('issue-loop > max inner iterations', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator(validations),
+        createValidator: () => new MockValidator(validations),
         maxIterationsPerIssue: 2,
       }),
     );
@@ -653,7 +645,7 @@ module('issue-loop > NoOpValidator', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new NoOpValidator(),
+        createValidator: () => new NoOpValidator(),
         briefUrl: 'https://example.test/brief/',
       }),
     );
@@ -703,7 +695,8 @@ module('issue-loop > context threading', function () {
         agent,
         issueStore: store,
         contextBuilder,
-        validator: new MockValidator([failValidation, makePassingValidation()]),
+        createValidator: () =>
+          new MockValidator([failValidation, makePassingValidation()]),
       }),
     );
 
@@ -749,7 +742,7 @@ module('issue-loop > brief URL threading', function () {
         agent,
         issueStore: store,
         contextBuilder,
-        validator: new MockValidator([makePassingValidation()]),
+        createValidator: () => new MockValidator([makePassingValidation()]),
         briefUrl: 'https://example.test/brief/',
       }),
     );
@@ -822,10 +815,7 @@ module('issue-loop > new issues mid-loop', function () {
       makeLoopConfig({
         agent,
         issueStore: store,
-        validator: new MockValidator([
-          makePassingValidation(),
-          makePassingValidation(),
-        ]),
+        createValidator: () => new MockValidator([makePassingValidation()]),
       }),
     );
 
@@ -833,5 +823,72 @@ module('issue-loop > new issues mid-loop', function () {
     assert.strictEqual(result.outerCycles, 2);
     assert.strictEqual(result.issueResults[0].issueId, 'seed');
     assert.strictEqual(result.issueResults[1].issueId, 'new-1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. createValidator receives issue ID
+// ---------------------------------------------------------------------------
+
+module('issue-loop > createValidator receives issue ID', function () {
+  test('createValidator is called with the current issue ID', async function (assert) {
+    let store = new MockIssueStore([
+      makeIssue({
+        id: 'Issues/sticky-note-define-core',
+        status: 'backlog',
+        priority: 'high',
+        order: 1,
+      }),
+      makeIssue({
+        id: 'Issues/sticky-note-catalog-spec',
+        status: 'backlog',
+        priority: 'medium',
+        order: 2,
+      }),
+    ]);
+
+    let agent = new MockLoopAgent(
+      [
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'a.gts', content: '' } },
+          ],
+          updateIssue: {
+            id: 'Issues/sticky-note-define-core',
+            status: 'done',
+          },
+        },
+        {
+          toolCalls: [
+            { tool: 'write_file', args: { path: 'b.gts', content: '' } },
+          ],
+          updateIssue: {
+            id: 'Issues/sticky-note-catalog-spec',
+            status: 'done',
+          },
+        },
+      ],
+      store,
+    );
+
+    let receivedIssueIds: string[] = [];
+
+    let result = await runIssueLoop(
+      makeLoopConfig({
+        agent,
+        issueStore: store,
+        createValidator: (issueId: string) => {
+          receivedIssueIds.push(issueId);
+          return new MockValidator([makePassingValidation()]);
+        },
+      }),
+    );
+
+    assert.strictEqual(result.outcome, 'all_issues_done');
+    assert.deepEqual(
+      receivedIssueIds,
+      ['Issues/sticky-note-define-core', 'Issues/sticky-note-catalog-spec'],
+      'createValidator received the correct issue IDs in order',
+    );
   });
 });

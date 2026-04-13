@@ -268,6 +268,9 @@ export class TestRun extends CardDef {
           <strong>#{{@model.sequenceNumber}}</strong>
           <span class='status status-{{@model.status}}'>{{@model.status}}</span>
         </div>
+        {{#if @model.issue}}
+          <div class='issue-name'>{{@model.issue.summary}}</div>
+        {{/if}}
         <div class='counts'>
           {{@model.passedCount}}/{{this.total}}
           passed
@@ -320,6 +323,13 @@ export class TestRun extends CardDef {
         .status-running {
           color: var(--boxel-blue, #2563eb);
           background: #eff6ff;
+        }
+        .issue-name {
+          font-size: 0.8rem;
+          color: var(--muted-foreground);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
         .counts {
           font-size: 0.85rem;

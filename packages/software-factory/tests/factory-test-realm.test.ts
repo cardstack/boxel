@@ -567,7 +567,7 @@ module('factory-test-realm > resolveTestRun', function () {
       let urlStr = String(url);
       let method = init?.method ?? 'GET';
 
-      // Search endpoint
+      // Search endpoint (used by findResumableTestRun and getNextSequenceNumber)
       if (urlStr.includes('_search') && method === 'QUERY') {
         return new Response(
           JSON.stringify({
