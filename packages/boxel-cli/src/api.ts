@@ -4,6 +4,11 @@ export {
   type Profile,
 } from './lib/profile-manager';
 
-export { createRealm, type CreateOptions } from './commands/realm/create';
+export {
+  createRealm,
+  RealmAlreadyExistsError,
+  type CreateRealmOptions,
+  type CreateRealmResult,
+} from './lib/create-realm';
 
 export { createRealmFetch } from './lib/realm-fetch';

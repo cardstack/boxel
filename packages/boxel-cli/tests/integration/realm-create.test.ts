@@ -1,6 +1,6 @@
 import '../helpers/setup-realm-server';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createRealm } from '../../src/commands/realm/create';
+import { createRealm } from '../../src/lib/create-realm';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -31,7 +31,13 @@ describe('realm create (integration)', () => {
   it('creates a realm and stores the JWT in the profile', async () => {
     let realmName = uniqueRealmName();
 
-    await createRealm(realmName, `Test ${realmName}`, { profileManager });
+    let result = await createRealm({
+      realmName,
+      displayName: `Test ${realmName}`,
+      profileManager,
+    });
+
+    expect(result.url).toContain(realmName);
 
     let active = profileManager.getActiveProfile()!;
     let realmTokens = active.profile.realmTokens ?? {};
@@ -50,7 +56,11 @@ describe('realm create (integration)', () => {
 
     let realmName = uniqueRealmName();
 
-    await createRealm(realmName, `Test ${realmName}`, { profileManager });
+    await createRealm({
+      realmName,
+      displayName: `Test ${realmName}`,
+      profileManager,
+    });
 
     // Server token was reused, not re-fetched
     expect(profileManager.getRealmServerToken()).toBe(cachedToken);

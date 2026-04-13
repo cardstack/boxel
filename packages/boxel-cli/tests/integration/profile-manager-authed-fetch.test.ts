@@ -1,6 +1,6 @@
 import '../helpers/setup-realm-server';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createRealm } from '../../src/commands/realm/create';
+import { createRealm } from '../../src/lib/create-realm';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -30,7 +30,11 @@ afterAll(async () => {
 describe('ProfileManager.authedFetch with realmUrl routing (integration)', () => {
   it('attaches the stored per-realm JWT when given { realmUrl }', async () => {
     let endpoint = uniqueRealmName();
-    await createRealm(endpoint, `Test ${endpoint}`, { profileManager });
+    await createRealm({
+      realmName: endpoint,
+      displayName: `Test ${endpoint}`,
+      profileManager,
+    });
 
     let realmEntry = Object.entries(
       profileManager.getActiveProfile()!.profile.realmTokens ?? {},
