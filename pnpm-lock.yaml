@@ -2427,6 +2427,9 @@ importers:
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
