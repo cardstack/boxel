@@ -827,3 +827,41 @@ jobs:
     secrets: inherit
     with:
       environment: "staging"
+
+  cache-index:
+    name: Cache realm index
+    needs: [change-check, test-web-assets]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cache-index-${{ github.run_id }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/init
+      - name: Download test web assets
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
+        with:
+          name: ${{ needs.test-web-assets.outputs.artifact_name }}
+          path: .test-web-assets-artifact
+      - name: Restore test web assets into workspace
+        shell: bash
+        run: |
+          shopt -s dotglob
+          cp -a .test-web-assets-artifact/. ./
+      - name: Index all realms and dump tables
+        run: mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
+        timeout-minutes: 45
+      - name: Upload service logs
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        if: ${{ !cancelled() }}
+        with:
+          name: cache-index-log
+          path: /tmp/cache-index.log
+          retention-days: 7
+      - name: Upload index cache
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
+        with:
+          name: boxel-index-cache
+          path: /tmp/boxel-index-cache.sql.gz
+          retention-days: 30
