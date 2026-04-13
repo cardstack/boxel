@@ -1,10 +1,4 @@
 export {
-  ProfileManager,
-  getProfileManager,
-  type Profile,
-} from './lib/profile-manager';
-
-export {
   createRealm,
   RealmAlreadyExistsError,
   type CreateRealmOptions,
@@ -12,3 +6,10 @@ export {
 } from './lib/create-realm';
 
 export { createRealmFetch } from './lib/realm-fetch';
+
+export {
+  ensureActiveProfile,
+  getActiveProfileSummary,
+  NoActiveProfileError,
+  type ActiveProfileSummary,
+} from './lib/profile-bootstrap';
