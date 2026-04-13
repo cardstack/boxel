@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { modifier } from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
@@ -96,6 +97,27 @@ import type StoreService from '../../services/store';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
+const BOXEL_CARD_MIME = 'application/boxel-card-id';
+
+const cardDragMonitor = modifier(
+  (_element: Element, [onDragStart, onDragEnd]: [() => void, () => void]) => {
+    let handleDragStart = (e: Event) => {
+      if ((e as DragEvent).dataTransfer?.types.includes(BOXEL_CARD_MIME)) {
+        onDragStart();
+      }
+    };
+    let handleDragEnd = () => {
+      onDragEnd();
+    };
+    document.addEventListener('dragstart', handleDragStart);
+    document.addEventListener('dragend', handleDragEnd);
+    return () => {
+      document.removeEventListener('dragstart', handleDragStart);
+      document.removeEventListener('dragend', handleDragEnd);
+    };
+  },
+);
+
 export type Stack = StackItem[];
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
@@ -138,6 +160,7 @@ export default class InteractSubmode extends Component {
   @service declare private loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked private isDraggingCard = false;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
   @tracked private recentCardCollection:
     | ReturnType<getCardCollection>
@@ -634,6 +657,29 @@ export default class InteractSubmode extends Component {
     this.searchSheetTrigger = null;
   }
 
+  handleCardDragStart = () => {
+    // Defer hiding so the browser can capture the drag ghost image
+    // before the search sheet becomes invisible. Chrome cancels the drag
+    // if the source element becomes hidden during dragstart processing.
+    setTimeout(() => {
+      this.isDraggingCard = true;
+    }, 0);
+  };
+
+  handleCardDragEnd = () => {
+    this.isDraggingCard = false;
+  };
+
+  @action private handleDropOnNeighborTrigger(
+    selectCard: (cardId: string) => void,
+    triggerSide: SearchSheetTrigger,
+    cardId: string,
+  ) {
+    this.searchSheetTrigger = triggerSide;
+    this.isDraggingCard = false;
+    selectCard(cardId);
+  }
+
   @action private showSearchWithTrigger(
     openSearchCallback: () => void,
     searchSheetTrigger: SearchSheetTrigger,
@@ -776,23 +822,32 @@ export default class InteractSubmode extends Component {
   <template>
     {{consumeContext this.getRecentCardCollection}}
     <SubmodeLayout
-      class='interact-submode-layout'
+      class={{cn
+        'interact-submode-layout'
+        is-dragging-card=this.isDraggingCard
+      }}
       @onSearchSheetClosed={{this.clearSearchSheetTrigger}}
       @onCardSelectFromSearch={{perform this.openSelectedSearchResultInStack}}
       @newFileOptions={{this.newFileOptions}}
       data-test-interact-submode
       as |search|
     >
-      <div class='interact-submode' style={{this.backgroundImageStyle}}>
+      <div
+        class='interact-submode'
+        style={{this.backgroundImageStyle}}
+        {{cardDragMonitor this.handleCardDragStart this.handleCardDragEnd}}
+      >
         {{#if this.canCreateNeighborStack}}
           <NeighborStackTriggerButton
             class='neighbor-stack-trigger stack-trigger-left'
             @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
             @activeTrigger={{this.searchSheetTrigger}}
+            @isDragActive={{this.isDraggingCard}}
             @onTrigger={{fn
               this.showSearchWithTrigger
               search.openSearchToPrompt
             }}
+            @onDrop={{fn this.handleDropOnNeighborTrigger search.selectCard}}
           />
         {{/if}}
         <div class='stacks'>
@@ -848,10 +903,12 @@ export default class InteractSubmode extends Component {
             class='neighbor-stack-trigger stack-trigger-right'
             @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
             @activeTrigger={{this.searchSheetTrigger}}
+            @isDragActive={{this.isDraggingCard}}
             @onTrigger={{fn
               this.showSearchWithTrigger
               search.openSearchToPrompt
             }}
+            @onDrop={{fn this.handleDropOnNeighborTrigger search.selectCard}}
           />
         {{/if}}
         {{#if this.cardToDelete}}
@@ -878,6 +935,10 @@ export default class InteractSubmode extends Component {
 
       .interact-submode-layout :deep(.submode-layout-top-bar) {
         position: absolute;
+      }
+      .interact-submode-layout.is-dragging-card :deep(#search-sheet) {
+        visibility: hidden;
+        pointer-events: none;
       }
 
       .interact-submode {

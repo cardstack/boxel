@@ -393,6 +393,62 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-neighbor-stack-trigger]').doesNotExist();
     });
 
+    test('dragging a card from search results to the right neighbor trigger opens it in a new stack', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-add-card-right-stack]').exists();
+
+      // Open search and find a card
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      assert.dom('[data-test-search-sheet]').hasClass('results');
+
+      let cardId = `${testRealmURL}Pet/mango`;
+      let dataTransfer = {
+        types: ['application/boxel-card-id'],
+        getData: (type: string) =>
+          type === 'application/boxel-card-id' ? cardId : '',
+        setData: () => {},
+        setDragImage: () => {},
+        effectAllowed: 'copy',
+        dropEffect: 'copy',
+      };
+
+      // Drag the card from search results
+      await triggerEvent(
+        `[data-test-card-catalog-item="${cardId}"]`,
+        'dragstart',
+        { dataTransfer },
+      );
+
+      // Allow the deferred isDraggingCard state to apply
+      await new Promise((r) => setTimeout(r, 10));
+      await settled();
+
+      // Drop on the right neighbor trigger
+      await triggerEvent('[data-test-add-card-right-stack]', 'dragover', {
+        dataTransfer,
+      });
+      await triggerEvent('[data-test-add-card-right-stack]', 'drop', {
+        dataTransfer,
+      });
+
+      // Card opens in a new stack to the right
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango');
+    });
+
     test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
       await visitOperatorMode({
         stacks: [

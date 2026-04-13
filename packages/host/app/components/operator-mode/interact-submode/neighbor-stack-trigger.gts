@@ -1,6 +1,8 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { Button, Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
@@ -19,16 +21,46 @@ interface Signature {
     triggerSide: SearchSheetTrigger;
     activeTrigger: SearchSheetTrigger | null;
     onTrigger: (triggerSide: SearchSheetTrigger) => void;
+    isDragActive?: boolean;
+    onDrop?: (triggerSide: SearchSheetTrigger, cardId: string) => void;
   };
 }
 
 export default class NeighborStackTriggerButton extends Component<Signature> {
+  @tracked isDragOver = false;
+
   private get tooltipPlacement() {
     return this.args.triggerSide ===
       SearchSheetTriggers.DropCardToRightNeighborStackButton
       ? SearchSheetTriggers.DropCardToLeftNeighborStackButton
       : SearchSheetTriggers.DropCardToRightNeighborStackButton;
   }
+
+  @action handleDragOver(event: DragEvent) {
+    if (event.dataTransfer?.types.includes('application/boxel-card-id')) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      this.isDragOver = true;
+    }
+  }
+
+  @action handleDragLeave(event: DragEvent) {
+    let button = event.currentTarget as HTMLElement;
+    let relatedTarget = event.relatedTarget as Node | null;
+    if (!relatedTarget || !button.contains(relatedTarget)) {
+      this.isDragOver = false;
+    }
+  }
+
+  @action handleDrop(event: DragEvent) {
+    event.preventDefault();
+    this.isDragOver = false;
+    let cardId = event.dataTransfer?.getData('application/boxel-card-id');
+    if (cardId) {
+      this.args.onDrop?.(this.args.triggerSide, cardId);
+    }
+  }
+
   <template>
     <Tooltip @placement={{this.tooltipPlacement}} ...attributes>
       <:trigger>
@@ -36,8 +68,13 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
           class={{cn
             'add-card-to-neighbor-stack'
             add-card-to-neighbor-stack--active=(eq @activeTrigger @triggerSide)
+            add-card-to-neighbor-stack--drag-active=@isDragActive
+            add-card-to-neighbor-stack--drag-over=this.isDragOver
           }}
           {{on 'click' (fn @onTrigger @triggerSide)}}
+          {{on 'dragover' this.handleDragOver}}
+          {{on 'dragleave' this.handleDragLeave}}
+          {{on 'drop' this.handleDrop}}
           aria-label='Add card to {{@triggerSide}} stack'
           data-test-add-card-right-stack={{eq
             @triggerSide
@@ -66,6 +103,8 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
         --minimized-height: 20px;
         --expanded-width: 16px;
         --expanded-height: 66px;
+        --drag-target-width: 48px;
+        --drag-target-height: 200px;
         --boxel-transition: 100ms ease;
         --boxel-button-min-width: var(--expanded-width);
         --boxel-button-min-height: var(--minimized-height);
@@ -110,6 +149,34 @@ export default class NeighborStackTriggerButton extends Component<Signature> {
       .add-card-to-neighbor-stack:focus:focus-visible .add-icon,
       .add-card-to-neighbor-stack--active .add-icon {
         visibility: visible;
+      }
+
+      /* Drag target: bigger hit area for easy dropping */
+      .add-card-to-neighbor-stack--drag-active {
+        padding: 0;
+        height: var(--drag-target-height);
+        width: var(--drag-target-width);
+        --boxel-button-min-width: var(--drag-target-width);
+      }
+      .add-card-to-neighbor-stack--drag-active .icon-container {
+        width: var(--expanded-width);
+        height: var(--expanded-height);
+        pointer-events: none;
+      }
+      .add-card-to-neighbor-stack--drag-active .add-icon {
+        visibility: visible;
+        pointer-events: none;
+      }
+
+      /* Drag over: visual feedback when hovering over drop target */
+      .add-card-to-neighbor-stack--drag-over .icon-container {
+        background-color: var(--boxel-highlight);
+        box-shadow: 0 0 20px 8px var(--boxel-highlight);
+        border-color: var(--boxel-light);
+        transform: scale(1.3);
+        transition:
+          transform var(--boxel-transition),
+          box-shadow var(--boxel-transition);
       }
     </style>
   </template>

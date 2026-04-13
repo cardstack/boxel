@@ -3,7 +3,6 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
@@ -96,6 +95,10 @@ export default class ItemButton extends Component<Signature> {
     return this.args.itemId ?? this.cardItem?.id;
   }
 
+  private get isDraggable(): string {
+    return this.isNewCard ? 'false' : 'true';
+  }
+
   @action handleClick() {
     if (this.isNewCard) {
       // "Create New" always submits immediately, even in multi-select mode
@@ -128,18 +131,55 @@ export default class ItemButton extends Component<Signature> {
     }
   }
 
+  @action handleDragStart(event: DragEvent) {
+    if (!event.dataTransfer || this.isNewCard) {
+      return;
+    }
+    let cardUrl = this.resolvedItemId;
+    if (!cardUrl) {
+      return;
+    }
+    event.dataTransfer.setData('application/boxel-card-id', cardUrl);
+    event.dataTransfer.effectAllowed = 'copy';
+
+    // Create an unclipped drag ghost. The default ghost is clipped by
+    // ancestor overflow, so cards partially off-screen look cut off.
+    let source = event.currentTarget as HTMLElement;
+    let clone = source.cloneNode(true) as HTMLElement;
+    clone.style.position = 'fixed';
+    clone.style.top = '-9999px';
+    clone.style.width = `${source.offsetWidth}px`;
+    clone.style.height = `${source.offsetHeight}px`;
+    document.body.appendChild(clone);
+    let rect = source.getBoundingClientRect();
+    event.dataTransfer.setDragImage(
+      clone,
+      event.clientX - rect.left,
+      event.clientY - rect.top,
+    );
+    setTimeout(() => clone.remove(), 0);
+  }
+
   <template>
-    <Button
-      @rectangular={{true}}
+    {{!
+      Outer div handles ALL pointer interactions (click, dblclick, drag).
+      Inner content is pointer-events:none so mousedown always targets
+      this div — critical for reliable HTML5 drag initiation.
+    }}
+    <div
       class={{cn
         'catalog-item'
         selected=@isSelected
         create-new-button=this.isNewCard
         multi-select=@multiSelect
       }}
+      role='button'
+      tabindex='0'
+      draggable={{this.isDraggable}}
       {{on 'click' this.handleClick}}
       {{on 'dblclick' this.handleDblClick}}
       {{on 'keydown' this.handleKeydown}}
+      {{on 'dragstart' this.handleDragStart}}
       data-test-card-catalog-create-new-button={{this.newCardItem.realmURL}}
       data-test-card-catalog-item={{removeFileExtension this.resolvedItemId}}
       data-test-card-catalog-item-selected={{if @isSelected 'true'}}
@@ -173,25 +213,38 @@ export default class ItemButton extends Component<Signature> {
           data-test-search-result={{removeFileExtension this.resolvedItemId}}
         />
       {{/if}}
-    </Button>
+    </div>
     <style scoped>
       .catalog-item {
         height: 100%;
         width: 100%;
         max-width: 100%;
         position: relative;
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
+        cursor: pointer;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .catalog-item:not(.create-new-button) {
-        --boxel-button-padding: 0;
-
+        padding: 0;
         box-sizing: content-box;
         text-align: start;
       }
       .catalog-item :deep(*) {
         box-sizing: border-box;
       }
+      /* Prevent child elements from capturing drag or pointer events */
+      .catalog-item:not(.create-new-button) > :deep(*) {
+        pointer-events: none;
+        -webkit-user-drag: none;
+      }
       .catalog-item:focus {
-        --host-outline-offset: -1px;
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: -1px;
       }
       .catalog-item.selected {
         border-color: var(--boxel-highlight);
@@ -211,6 +264,7 @@ export default class ItemButton extends Component<Signature> {
         flex-wrap: nowrap;
         justify-content: flex-start;
         letter-spacing: var(--boxel-lsp-xs);
+        padding: var(--boxel-sp-xs);
       }
       .plus-icon > :deep(path) {
         stroke: none;

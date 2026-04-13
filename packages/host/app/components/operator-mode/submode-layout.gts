@@ -74,6 +74,7 @@ interface Signature {
         openSearchToPrompt: () => void;
         openSearchToResults: (term: string, typeRef?: ResolvedCodeRef) => void;
         updateSubmode: (submode: Submode) => void;
+        selectCard: (cardId: string) => void;
       },
     ];
     topBar: [];
@@ -479,6 +480,7 @@ export default class SubmodeLayout extends Component<Signature> {
               openSearchToPrompt=this.openSearchSheetToPrompt
               openSearchToResults=this.openSearchAndShowResults
               updateSubmode=this.updateSubmode
+              selectCard=this.handleCardSelectFromSearch
             )
           }}
           {{#if @onCardSelectFromSearch}}
