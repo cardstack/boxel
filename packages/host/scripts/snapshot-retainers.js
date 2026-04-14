@@ -166,9 +166,10 @@ function findTargets(h, pattern, opts) {
 function shortestPathToRoot(h, rev, target, maxDepth, strongOnly) {
   let visited = new Set();
   let queue = [{ node: target, path: [] }];
+  let head = 0;
   visited.add(target);
-  while (queue.length) {
-    let { node, path } = queue.shift();
+  while (head < queue.length) {
+    let { node, path } = queue[head++];
     if (path.length > maxDepth) return null;
     let nodeType = h.nodeTypes[h.nodes[node * h.NF + h.typeIdx]];
     if (node === 0 || (nodeType === 'synthetic' && path.length > 0)) {

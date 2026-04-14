@@ -56,7 +56,10 @@ let nextId = 1;
 function cdpCall(ws, method, params) {
   return new Promise((resolve, reject) => {
     const id = nextId++;
+    const idStr = `"id":${id}`;
     const onMessage = (event) => {
+      if (typeof event.data !== 'string' || event.data.indexOf(idStr) === -1)
+        return;
       let d = JSON.parse(event.data);
       if (d.id === id) {
         ws.removeEventListener('message', onMessage);
@@ -108,28 +111,33 @@ async function main() {
 
   let taken = new Set();
   ws.addEventListener('message', async (event) => {
+    if (
+      typeof event.data !== 'string' ||
+      event.data.indexOf('"method":"Runtime.consoleAPICalled"') === -1
+    ) {
+      return;
+    }
+
     let d = JSON.parse(event.data);
-    if (d.method === 'Runtime.consoleAPICalled') {
-      let args = d.params.args || [];
-      let text = args.map((a) => a.value || '').join(' ');
-      if (text.indexOf('MEMPROBE') !== -1) {
-        console.log(text);
-      }
-      let m = text.match(/PROBE t=(\d+)/);
-      if (m) {
-        let n = parseInt(m[1], 10);
-        if (TARGETS.includes(n) && !taken.has(n)) {
-          taken.add(n);
-          console.log(`taking snapshot at t=${n} ...`);
-          try {
-            await takeSnapshot(ws, `/tmp/snap-t${n}.heapsnapshot`);
-          } catch (e) {
-            console.error('snapshot failed', e);
-          }
-          if (taken.size === TARGETS.length) {
-            console.log('all snapshots taken; exiting');
-            process.exit(0);
-          }
+    let args = d.params.args || [];
+    let text = args.map((a) => a.value || '').join(' ');
+    if (text.indexOf('MEMPROBE') !== -1) {
+      console.log(text);
+    }
+    let m = text.match(/PROBE t=(\d+)/);
+    if (m) {
+      let n = parseInt(m[1], 10);
+      if (TARGETS.includes(n) && !taken.has(n)) {
+        taken.add(n);
+        console.log(`taking snapshot at t=${n} ...`);
+        try {
+          await takeSnapshot(ws, `/tmp/snap-t${n}.heapsnapshot`);
+        } catch (e) {
+          console.error('snapshot failed', e);
+        }
+        if (taken.size === TARGETS.length) {
+          console.log('all snapshots taken; exiting');
+          process.exit(0);
         }
       }
     }
