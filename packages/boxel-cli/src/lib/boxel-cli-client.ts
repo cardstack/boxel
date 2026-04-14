@@ -32,7 +32,11 @@ export class BoxelCLIClient {
    * BoxelCLIClient operations.
    */
   static async ensureProfile(): Promise<void> {
-    await getProfileManager().migrateFromEnv();
+    let pm = getProfileManager();
+    let result = await pm.migrateFromEnv();
+    if (result) {
+      pm.switchProfile(result.profileId);
+    }
   }
 
   async createRealm(options: CreateRealmOptions): Promise<CreateRealmResult> {
