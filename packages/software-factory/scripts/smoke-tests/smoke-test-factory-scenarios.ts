@@ -7,7 +7,7 @@
  *
  * Scenarios:
  *   1. Bootstrap complete, no code yet — agent implements from scratch
- *   2. Blocked issue with validation failures — agent retries via --retry-blocked
+ *   2. Blocked issue with validation failures — agent retries blocked work by default
  *   3. Completed project, new enhancement — agent picks up new backlog issue
  *
  * Prerequisites:

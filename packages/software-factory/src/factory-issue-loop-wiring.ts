@@ -51,7 +51,7 @@ import {
   type IssueLoopConfig,
   type IssueLoopResult,
 } from './issue-loop';
-import { RealmIssueStore } from './issue-scheduler';
+import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
 import {
   ensureTrailingSlash,
@@ -125,7 +125,7 @@ export async function runFactoryIssueLoop(
     options: fetchOptions,
   });
 
-  // 2b. Retry blocked issues (opt-in via --retry-blocked)
+  // 2b. Retry blocked issues (default on, opt out with --no-retry-blocked)
   if (config.retryBlocked) {
     await retryBlockedIssues(issueStore);
   }
@@ -229,18 +229,29 @@ export async function runFactoryIssueLoop(
 // Retry blocked issues
 // ---------------------------------------------------------------------------
 
-async function retryBlockedIssues(issueStore: RealmIssueStore): Promise<void> {
+async function retryBlockedIssues(issueStore: IssueStore): Promise<void> {
   let issues = await issueStore.listIssues();
   let resetCount = 0;
+
+  // Build a status map so we can check if blockers are actually unresolved
+  let statusMap = new Map<string, string>();
+  for (let issue of issues) {
+    statusMap.set(issue.id, issue.status);
+  }
 
   for (let issue of issues) {
     if (issue.status !== 'blocked') continue;
 
     // Only retry issues blocked by validation/max-iterations,
-    // NOT issues blocked by a dependency on another issue.
-    if (issue.blockedBy.length > 0) {
+    // NOT issues with unresolved dependency blockers.
+    // blockedBy relationships persist even after blockers complete,
+    // so we check whether any blocker is actually non-done.
+    let hasUnresolvedBlocker = issue.blockedBy.some(
+      (blockerId) => statusMap.get(blockerId) !== 'done',
+    );
+    if (hasUnresolvedBlocker) {
       log.info(
-        `Retry: skipping "${issue.id}" — blocked by dependency, not retrying`,
+        `Retry: skipping "${issue.id}" — has unresolved dependency blockers`,
       );
       continue;
     }
