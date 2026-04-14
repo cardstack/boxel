@@ -32,13 +32,14 @@ import {
 const groupByOptions: {
   value: string;
   label: string;
-  fieldName: string;
+  fieldName: string;      // field to read for column matching (may be computed)
+  writeFieldName: string; // field to write when dragging across columns (must be stored)
   orderField: string;
   options: { value: string; label: string }[];
 }[] = [
-  { value: 'status', label: 'Status', fieldName: 'computedStatus', orderField: 'statusBoardOrder', options: issueStatusOptions },
-  { value: 'priority', label: 'Priority', fieldName: 'priority', orderField: 'priorityBoardOrder', options: issuePriorityOptions },
-  { value: 'ticketType', label: 'Type', fieldName: 'ticketType', orderField: 'ticketTypeBoardOrder', options: issueTypeOptions },
+  { value: 'status', label: 'Status', fieldName: 'computedStatus', writeFieldName: 'status', orderField: 'statusBoardOrder', options: issueStatusOptions },
+  { value: 'priority', label: 'Priority', fieldName: 'priority', writeFieldName: 'priority', orderField: 'priorityBoardOrder', options: issuePriorityOptions },
+  { value: 'ticketType', label: 'Type', fieldName: 'ticketType', writeFieldName: 'ticketType', orderField: 'ticketTypeBoardOrder', options: issueTypeOptions },
 ];
 
 // Chromeless modifier
@@ -67,6 +68,7 @@ class Chromeless extends Modifier {
 class Isolated extends Component<typeof KanbanBoard> {
   @tracked selectedCardIndex: number | null = null;
   dragManager: KanbanDragManager | null = null;
+  private orderInitPending = false;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -94,20 +96,48 @@ class Isolated extends Component<typeof KanbanBoard> {
     const cards = this.args.model?.cards ?? [];
     const columns = this.args.model?.columns ?? [];
     if ((cards as any[]).length === 0) return [];
-    const colSortOrders: Record<number, number> = {};
+    const maxSortOrder: Record<number, number> = {};
     const groupBy = this.args.model?.groupBy;
     const source =
       groupByOptions.find((o) => o.value === groupBy) ?? groupByOptions[0]!;
-    return (cards as any[]).map((card: any, index: number) => {
+    const placements = (cards as any[]).map((card: any, index: number) => {
       const value = card[source.fieldName];
       const colIndex = (columns as any[]).findIndex(
         (col: any) => col.key === value,
       );
       const column = colIndex >= 0 ? colIndex : 0;
-      colSortOrders[column] = (colSortOrders[column] ?? 0) + 1;
-      const sortOrder = card[source.orderField] ?? colSortOrders[column];
+      const stored = card[source.orderField];
+      let sortOrder: number;
+      if (stored != null) {
+        sortOrder = stored;
+        maxSortOrder[column] = Math.max(maxSortOrder[column] ?? 0, stored);
+      } else {
+        maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
+        sortOrder = maxSortOrder[column];
+      }
       return { index, column, sortOrder };
     });
+
+    // Persist default order for cards that don't have one yet (e.g. newly added).
+    // Deferred so the write doesn't happen during rendering.
+    const uninitialized = placements.filter(
+      (p) => (cards as any[])[p.index]?.[source.orderField] == null,
+    );
+    if (uninitialized.length > 0 && !this.orderInitPending) {
+      this.orderInitPending = true;
+      const orderField = source.orderField;
+      Promise.resolve().then(() => {
+        this.orderInitPending = false;
+        for (const p of uninitialized) {
+          const card = (cards as any[])[p.index];
+          if (card && card[orderField] == null) {
+            card[orderField] = p.sortOrder;
+          }
+        }
+      });
+    }
+
+    return placements;
   }
 
   get manager(): KanbanDragManager {
@@ -132,14 +162,15 @@ class Isolated extends Component<typeof KanbanBoard> {
     const cards = model.cards as any[];
     const columns = model.columns as any[];
     if (!cards || !columns) return;
+    const source =
+      groupByOptions.find((o) => o.value === (model as any).groupBy) ??
+      groupByOptions[0]!;
     for (const np of newPlacements) {
       const card = cards[np.index];
       const col = columns[np.column];
       if (card && col) {
-        const source =
-          groupByOptions.find((o) => o.value === (model as any).groupBy) ??
-          groupByOptions[0]!;
-        if (card[source.fieldName] !== col.key) card[source.fieldName] = col.key;
+        if (card[source.writeFieldName] !== col.key)
+          card[source.writeFieldName] = col.key;
         if (card[source.orderField] !== np.sortOrder)
           card[source.orderField] = np.sortOrder;
       }

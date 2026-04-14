@@ -15,7 +15,7 @@ import NumberField from '../number';
 import DateField from '../date';
 import MarkdownField from '../markdown';
 
-import { Pill } from '@cardstack/boxel-ui/components';
+import { FieldContainer, Pill } from '@cardstack/boxel-ui/components';
 
 export const issueStatusOptions = [
   { value: 'backlog', label: 'Backlog' },
@@ -163,11 +163,82 @@ export class Issue extends CardDef {
 
   static embedded = this.fitted;
 
+  static edit = class Edit extends Component<typeof Issue> {
+    <template>
+      <div class='issue-edit'>
+        <div class='meta-row'>
+          <div class='meta-cell'>
+            <FieldContainer @label='Ticket ID' @vertical={{true}}>
+              <@fields.ticketId />
+            </FieldContainer>
+          </div>
+          <div class='meta-cell'>
+            <FieldContainer @label='Status' @vertical={{true}}>
+              <@fields.status />
+            </FieldContainer>
+          </div>
+          <div class='meta-cell'>
+            <FieldContainer @label='Type' @vertical={{true}}>
+              <@fields.ticketType />
+            </FieldContainer>
+          </div>
+          <div class='meta-cell'>
+            <FieldContainer @label='Priority' @vertical={{true}}>
+              <@fields.priority />
+            </FieldContainer>
+          </div>
+        </div>
+
+        <FieldContainer @label='Title' @vertical={{true}}>
+          <@fields.title />
+        </FieldContainer>
+
+        <FieldContainer @label='Description' @vertical={{true}}>
+          <@fields.description />
+        </FieldContainer>
+
+        <div class='bottom-row'>
+          <div class='bottom-cell'>
+            <FieldContainer @label='Project' @vertical={{true}}>
+              <@fields.project />
+            </FieldContainer>
+          </div>
+          <div class='bottom-cell'>
+            <FieldContainer @label='Related Tickets' @vertical={{true}}>
+              <@fields.relatedTickets />
+            </FieldContainer>
+          </div>
+        </div>
+      </div>
+      <style scoped>
+        .issue-edit {
+          display: grid;
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-xl);
+        }
+        .meta-row {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: var(--boxel-sp);
+        }
+        .bottom-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+        }
+        .meta-cell,
+        .bottom-cell {
+          min-width: 0;
+        }
+      </style>
+    </template>
+  };
+
   static isolated = class Isolated extends Component<typeof Issue> {
     <template>
-      <article class='surface'>
-        <header>
-          <div class='row'>
+      <article class='issue'>
+        <header class='issue-header'>
+          <div class='issue-pills'>
             <Pill @size='extra-small' @variant='secondary'>
               {{if @model.ticketId @model.ticketId 'TICKET'}}
             </Pill>
@@ -177,36 +248,97 @@ export class Issue extends CardDef {
             >
               <@fields.computedStatus @format='atom' />
             </Pill>
+            {{#if @model.ticketType}}
+              <Pill @size='extra-small' @variant='default'>
+                <@fields.ticketType @format='atom' />
+              </Pill>
+            {{/if}}
+            {{#if @model.priority}}
+              <Pill @size='extra-small' @variant='default'>
+                <@fields.priority @format='atom' />
+              </Pill>
+            {{/if}}
           </div>
-          <h1><@fields.cardTitle /></h1>
+          <h1 class='issue-title'><@fields.cardTitle /></h1>
+          {{#if @model.project}}
+            <div class='issue-project'>
+              <span class='dim-label'>Project</span>
+              <@fields.project @format='atom' />
+            </div>
+          {{/if}}
         </header>
-        {{#if @model.project}}
-          <section>
-            <h2>Project</h2>
-            <@fields.project />
-          </section>
-        {{/if}}
-        <section>
-          <h2>Description</h2>
+
+        <section class='issue-body'>
           <@fields.description />
         </section>
+
         {{#if @model.relatedTickets.length}}
-          <aside>
-            <h2>Related Tickets</h2>
+          <section class='issue-related'>
+            <h2 class='section-label'>Related Tickets</h2>
             <@fields.relatedTickets />
-          </aside>
+          </section>
         {{/if}}
       </article>
       <style scoped>
-        .surface {
-          padding: 1.5rem;
-          display: grid;
-          gap: 1rem;
-        }
-        .row {
+        .issue {
+          height: 100%;
+          overflow-y: auto;
           display: flex;
-          justify-content: space-between;
-          gap: 0.75rem;
+          flex-direction: column;
+          gap: var(--boxel-sp-xl);
+          max-width: 48rem;
+          margin: 0 auto;
+          padding: var(--boxel-sp-xl);
+        }
+        .issue-header {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+          padding-bottom: var(--boxel-sp-xl);
+          border-bottom: 1px solid var(--border);
+        }
+        .issue-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+        }
+        .issue-title {
+          font-size: 1.5rem;
+          font-weight: 700;
+          line-height: 1.3;
+          margin: var(--boxel-sp-xs) 0 0;
+          color: var(--foreground);
+        }
+        .issue-project {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          margin-top: var(--boxel-sp-xs);
+        }
+        .dim-label {
+          font-size: 0.75rem;
+          font-weight: 500;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .issue-body {
+          flex: 1;
+        }
+        .issue-related {
+          border-top: 1px solid var(--border);
+          padding-top: var(--boxel-sp-lg);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+        }
+        .section-label {
+          font-size: 0.75rem;
+          font-weight: 600;
+          color: var(--muted-foreground);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin: 0;
         }
       </style>
     </template>
