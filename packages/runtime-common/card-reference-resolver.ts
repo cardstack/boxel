@@ -65,6 +65,74 @@ export function resolveRRI(
   // ("$thisRealm/card", "https://home.boxel.ai/contact/users/") → https://home.boxel.ai/contact/card
   // ("card", "@cardstack/base") → @cardstack/base/card
   // ("card", "http://localhost:4201/realm/") → http://localhost:4201/realm/card
+
+  // Absolute URL — already resolved
+  if (reference.startsWith('http://') || reference.startsWith('https://')) {
+    return reference;
+  }
+
+  // Starts with a registered prefix — already resolved
+  if (isRegisteredPrefix(reference)) {
+    return reference;
+  }
+
+  // "/" and "~/" are not valid RRI reference forms
+  if (reference.startsWith('/') || reference.startsWith('~/')) {
+    throw new Error(
+      `Invalid RRI reference "${reference}" — "/" and "~/" prefixes are not supported`,
+    );
+  }
+
+  if (!relativeTo) {
+    throw new Error(`Cannot resolve "${reference}" without a relativeTo`);
+  }
+
+  let isUrlRelativeTo =
+    relativeTo.startsWith('http://') || relativeTo.startsWith('https://');
+
+  // $thisRealm/ — resolve against the realm root
+  if (reference.startsWith('$thisRealm/')) {
+    let path = reference.slice('$thisRealm/'.length);
+    if (isUrlRelativeTo) {
+      for (let [, target] of prefixMappings) {
+        if (relativeTo.startsWith(target)) {
+          return new URL(path, target).href as RealmResourceIdentifier;
+        }
+      }
+      throw new Error(
+        `Cannot resolve "$thisRealm/" — no realm root found for "${relativeTo}"`,
+      );
+    }
+    for (let [prefix] of prefixMappings) {
+      if (relativeTo.startsWith(prefix)) {
+        return (
+          prefix.endsWith('/') ? prefix + path : prefix + '/' + path
+        ) as RealmResourceIdentifier;
+      }
+    }
+    throw new Error(
+      `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
+    );
+  }
+
+  // relativeTo is a URL — standard URL resolution
+  if (isUrlRelativeTo) {
+    return new URL(reference, relativeTo).href as RealmResourceIdentifier;
+  }
+
+  // relativeTo starts with a registered prefix — resolve in prefix space
+  // by round-tripping through URL space: prefix→URL, resolve, URL→prefix
+  for (let [prefix] of prefixMappings) {
+    if (relativeTo.startsWith(prefix)) {
+      let baseURL = toNetworkURL(relativeTo);
+      let resolved = new URL(reference, baseURL);
+      return fromNetworkURL(resolved);
+    }
+  }
+
+  throw new Error(
+    `Cannot resolve "${reference}" — relativeTo "${relativeTo}" has no matching prefix mapping`,
+  );
 }
 
 export function toNetworkURL(
