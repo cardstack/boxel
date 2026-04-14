@@ -552,6 +552,7 @@ export default class CardPrerender extends Component {
       network: this.network,
       authGuard: this.#moduleAuthGuard,
       state: this.#moduleModelState(),
+      owner: this,
     };
   }
 
