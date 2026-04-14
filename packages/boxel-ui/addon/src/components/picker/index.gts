@@ -376,6 +376,20 @@ export default class Picker extends Component<PickerSignature> {
       .boxel-picker__dropdown .ember-power-select-options {
         padding-top: var(--boxel-sp-2xs);
         outline: none;
+        background:
+          /* Shadow cover TOP — moves with content */
+          linear-gradient(
+            var(--boxel-light) 30%,
+            rgba(255, 255, 255, 0)
+          )
+          center top / 100% 40px no-repeat local,
+          /* Shadow TOP — fixed at top */
+          radial-gradient(
+            farthest-side at 50% 0,
+            rgba(0, 0, 0, 0.12),
+            rgba(0, 0, 0, 0)
+          )
+          center top / 100% 20px no-repeat scroll;
       }
       .boxel-picker__dropdown .ember-power-select-option {
         padding: 0 var(--boxel-sp-2xs);
