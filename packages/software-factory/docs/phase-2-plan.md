@@ -110,7 +110,7 @@ The Phase 1 `testResults` field on `AgentContext` is deprecated. All validation 
 
 The lint validation step (`src/validators/lint-step.ts`) uses the realm's existing `_lint` endpoint — the same one the Monaco editor uses in code mode. For each lintable file discovered in the realm:
 
-1. Read the file source via `readFile()` 
+1. Read the file source via `readFile()`
 2. POST the source to `{realmUrl}_lint` with `X-Filename` header
 3. ESLint runs with `@cardstack/boxel` rules (missing invokables, missing card-api imports, no-duplicate-imports, etc.) and Prettier formatting
 4. Collect `messages` from the response where `severity === 2` (errors)
