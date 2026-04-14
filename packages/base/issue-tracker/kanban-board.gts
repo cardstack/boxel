@@ -11,17 +11,35 @@ import {
   linksToMany,
 } from '../card-api';
 import StringField from '../string';
+import enumField from '../enum';
 import { tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
 import { get } from '@ember/helper';
 import KanbanIcon from '@cardstack/boxel-icons/columns-3';
 
-import { GridPlacementField } from './grid-placement';
 import { KanbanColumnField } from './kanban-column';
 import { KanbanPlane } from './kanban-plane';
 import { KanbanDragManager } from './kanban-drag';
 import { type KanbanPlacement } from './kanban-engine';
-import { Project, Issue, issueStatusOptions } from './issue';
+import {
+  Project,
+  Issue,
+  issueStatusOptions,
+  issuePriorityOptions,
+  issueTypeOptions,
+} from './issue';
+
+const groupByOptions: {
+  value: string;
+  label: string;
+  fieldName: string;
+  orderField: string;
+  options: { value: string; label: string }[];
+}[] = [
+  { value: 'status', label: 'Status', fieldName: 'computedStatus', orderField: 'statusBoardOrder', options: issueStatusOptions },
+  { value: 'priority', label: 'Priority', fieldName: 'priority', orderField: 'priorityBoardOrder', options: issuePriorityOptions },
+  { value: 'ticketType', label: 'Type', fieldName: 'ticketType', orderField: 'ticketTypeBoardOrder', options: issueTypeOptions },
+];
 
 // Chromeless modifier
 class Chromeless extends Modifier {
@@ -45,15 +63,6 @@ class Chromeless extends Modifier {
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────── //
-
-function placementsToKanban(fields: GridPlacementField[]): KanbanPlacement[] {
-  return (fields ?? []).map((f, i) => ({
-    index: i, // array position = card index
-    column: 0, // derived from computedStatus at read time, not stored
-    sortOrder: f.row ?? 1,
-  }));
-}
 
 class Isolated extends Component<typeof KanbanBoard> {
   @tracked selectedCardIndex: number | null = null;
@@ -82,50 +91,23 @@ class Isolated extends Component<typeof KanbanBoard> {
   }
 
   get kanbanPlacements(): KanbanPlacement[] {
-    const fields = this.args.model?.placements;
     const cards = this.args.model?.cards ?? [];
     const columns = this.args.model?.columns ?? [];
-
-    if (!fields || fields.length === 0) {
-      if ((cards as any[]).length === 0) return [];
-      const colSortOrders: Record<number, number> = {};
-      return (cards as any[]).map((card: any, index: number) => {
-        const status = card.computedStatus;
-        const colIndex = (columns as any[]).findIndex(
-          (col: any) => col.key === status,
-        );
-        const column = colIndex >= 0 ? colIndex : 0;
-        colSortOrders[column] = (colSortOrders[column] ?? 0) + 1;
-        return { index, column, sortOrder: colSortOrders[column] };
-      });
-    }
-
-    // Reconcile saved placements with each card's current computedStatus so
-    // that editing a status outside the board moves the card to the right column.
-    const maxSortOrder: Record<number, number> = {};
-    const result = placementsToKanban(fields).map((p) => {
-      const card = (cards as any[])[p.index];
-      const status = card?.computedStatus;
+    if ((cards as any[]).length === 0) return [];
+    const colSortOrders: Record<number, number> = {};
+    const groupBy = this.args.model?.groupBy;
+    const source =
+      groupByOptions.find((o) => o.value === groupBy) ?? groupByOptions[0]!;
+    return (cards as any[]).map((card: any, index: number) => {
+      const value = card[source.fieldName];
       const colIndex = (columns as any[]).findIndex(
-        (col: any) => col.key === status,
+        (col: any) => col.key === value,
       );
       const column = colIndex >= 0 ? colIndex : 0;
-      maxSortOrder[column] = Math.max(maxSortOrder[column] ?? 0, p.sortOrder);
-      return { ...p, column };
+      colSortOrders[column] = (colSortOrders[column] ?? 0) + 1;
+      const sortOrder = card[source.orderField] ?? colSortOrders[column];
+      return { index, column, sortOrder };
     });
-
-    // Cards added after the last drag won't have a saved placement — append them.
-    (cards as any[]).slice(fields.length).forEach((card: any, i: number) => {
-      const status = card?.computedStatus;
-      const colIndex = (columns as any[]).findIndex(
-        (col: any) => col.key === status,
-      );
-      const column = colIndex >= 0 ? colIndex : 0;
-      maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
-      result.push({ index: fields.length + i, column, sortOrder: maxSortOrder[column] });
-    });
-
-    return result;
   }
 
   get manager(): KanbanDragManager {
@@ -145,47 +127,22 @@ class Isolated extends Component<typeof KanbanBoard> {
   // ── Persistence ──────────────────────────────────────────────────
 
   commitPlacements = (newPlacements: KanbanPlacement[]): void => {
-    try {
-      const model = this.args.model;
-      if (!model) return;
-
-      // Sync each card's status to match its new column
-      const cards = model.cards as any[];
-      const columns = model.columns as any[];
-      if (cards && columns) {
-        for (const np of newPlacements) {
-          const card = cards[np.index];
-          const col = columns[np.column];
-          if (card && col && card.status !== col.key) {
-            card.status = col.key;
-          }
-        }
+    const model = this.args.model;
+    if (!model) return;
+    const cards = model.cards as any[];
+    const columns = model.columns as any[];
+    if (!cards || !columns) return;
+    for (const np of newPlacements) {
+      const card = cards[np.index];
+      const col = columns[np.column];
+      if (card && col) {
+        const source =
+          groupByOptions.find((o) => o.value === (model as any).groupBy) ??
+          groupByOptions[0]!;
+        if (card[source.fieldName] !== col.key) card[source.fieldName] = col.key;
+        if (card[source.orderField] !== np.sortOrder)
+          card[source.orderField] = np.sortOrder;
       }
-
-      const existingFields = model.placements as
-        | GridPlacementField[]
-        | undefined;
-
-      if (existingFields && existingFields.length > 0) {
-        for (const np of newPlacements) {
-          const existing = existingFields[np.index]; // array position = card index
-          if (existing) {
-            existing.row = np.sortOrder; // col is derived from computedStatus, not stored
-          }
-        }
-      } else {
-        const fields = newPlacements
-          .slice()
-          .sort((a, b) => a.index - b.index) // ensure placements[i] = card i
-          .map((p) => {
-            const f = new GridPlacementField();
-            f.row = p.sortOrder; // col is derived from computedStatus, not stored
-            return f;
-          });
-        model.placements = fields;
-      }
-    } catch (e) {
-      console.error('Kanban: Failed to save placements', e);
     }
   };
 
@@ -321,6 +278,11 @@ export class KanbanBoard extends CardDef {
 
   @field title = contains(StringField);
   @field project = linksTo(() => Project);
+  @field groupBy = contains(
+    enumField(StringField, {
+      options: groupByOptions.map(({ value, label }) => ({ value, label })),
+    }),
+  );
   @field cards = linksToMany(Issue, {
     computeVia: function (this: KanbanBoard) {
       return this.project?.issues ?? [];
@@ -328,18 +290,14 @@ export class KanbanBoard extends CardDef {
   });
   @field columns = containsMany(KanbanColumnField, {
     computeVia: function (this: KanbanBoard) {
-      let cols = issueStatusOptions ?? [];
-      return cols.map(
-        (c) =>
-          new KanbanColumnField({
-            key: c.value,
-            label: c.label,
-          }),
+      const source =
+        groupByOptions.find((o) => o.value === this.groupBy) ??
+        groupByOptions[0]!;
+      return source.options.map(
+        (c) => new KanbanColumnField({ key: c.value, label: c.label }),
       );
     },
   });
-  @field placements = containsMany(GridPlacementField); // row = sort order within column; col is derived from computedStatus
-
   @field cardTitle = contains(StringField, {
     computeVia: function (this: KanbanBoard) {
       return this.cardInfo?.name ?? this.title ?? 'Untitled Kanban';

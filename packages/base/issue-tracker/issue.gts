@@ -33,23 +33,27 @@ const projectStatusOptions = [
   { value: 'archived', label: 'Archived' },
 ];
 
+export const issuePriorityOptions = [
+  { value: 'critical', label: 'Critical' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+];
+
+export const issueTypeOptions = [
+  { value: 'feature', label: 'Feature' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'task', label: 'Task' },
+  { value: 'research', label: 'Research' },
+  { value: 'infrastructure', label: 'Infrastructure' },
+];
+
 const IssuePriorityField = enumField(StringField, {
-  options: [
-    { value: 'critical', label: 'Critical' },
-    { value: 'high', label: 'High' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'low', label: 'Low' },
-  ],
+  options: issuePriorityOptions,
 });
 
 const IssueTypeField = enumField(StringField, {
-  options: [
-    { value: 'feature', label: 'Feature' },
-    { value: 'bug', label: 'Bug' },
-    { value: 'task', label: 'Task' },
-    { value: 'research', label: 'Research' },
-    { value: 'infrastructure', label: 'Infrastructure' },
-  ],
+  options: issueTypeOptions,
 });
 
 function getStatusVariant(statusId?: string) {
@@ -89,7 +93,9 @@ export class Issue extends CardDef {
       },
     },
   );
-  @field boardOrder = contains(NumberField);
+  @field statusBoardOrder = contains(NumberField);
+  @field priorityBoardOrder = contains(NumberField);
+  @field ticketTypeBoardOrder = contains(NumberField);
   @field priority = contains(IssuePriorityField);
   @field relatedTickets = linksToMany(() => Issue);
   @field project = linksTo(() => Project);
