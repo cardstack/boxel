@@ -68,13 +68,16 @@ export async function createRealm(
 
   let response: Response;
   try {
-    response = await pm.authedFetch(`${realmServerUrl}/_create-realm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/vnd.api+json' },
-      body: JSON.stringify({
-        data: { type: 'realm', attributes },
-      }),
-    });
+    response = await pm.authedRealmServerFetch(
+      `${realmServerUrl}/_create-realm`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/vnd.api+json' },
+        body: JSON.stringify({
+          data: { type: 'realm', attributes },
+        }),
+      },
+    );
   } catch (e: unknown) {
     console.error(`Error: failed to connect to realm server`);
     console.error(e instanceof Error ? e.message : String(e));

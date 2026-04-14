@@ -443,7 +443,8 @@ export async function runIssueLoop(
   // pre-existing blocked issues still exist.
   if (outcome === 'all_issues_done' && issueStore.updateProjectStatus) {
     let allIssues = await issueStore.listIssues();
-    let allRealmIssuesDone = allIssues.every((i) => i.status === 'done');
+    let allRealmIssuesDone =
+      allIssues.length > 0 && allIssues.every((i) => i.status === 'done');
     if (allRealmIssuesDone) {
       try {
         await issueStore.updateProjectStatus('completed');

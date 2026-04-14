@@ -253,8 +253,12 @@ export class RealmIssueStore implements IssueStore {
       this.options,
     );
     if (!readResult.ok || !readResult.document) {
+      let reason =
+        readResult.status === 404
+          ? 'issue not found'
+          : (readResult.error ?? 'no document returned');
       throw new Error(
-        `Failed to read issue "${issueId}" for update: ${readResult.error ?? 'no document returned'}`,
+        `Failed to read issue "${issueId}" for update: ${reason}`,
       );
     }
 
@@ -333,7 +337,7 @@ export class RealmIssueStore implements IssueStore {
     );
     if (!readResult.ok || !readResult.document) {
       log.warn(
-        `Failed to read project "${relativePath}" for status update: ${readResult.error ?? 'no document'}`,
+        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no document'}`,
       );
       return;
     }
