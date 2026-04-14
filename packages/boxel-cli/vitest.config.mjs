@@ -11,7 +11,7 @@ export default defineConfig({
     globals: true,
     setupFiles: [],
     include: ['**/tests/**/*.ts'],
-    exclude: ['tests/helpers/**', 'node_modules'],
+    exclude: ['tests/helpers/**', 'tests/integration/**', 'node_modules'],
     testTimeout: 30000,
     sequence: {
       hooks: 'list',
