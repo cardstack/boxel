@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
@@ -12,9 +13,8 @@ import type { PickerOption } from './index.gts';
 export interface OptionRowSignature {
   Args: {
     currentSelected?: PickerOption[];
+    isHighlighted?: boolean;
     isSelected: boolean;
-    onFocus?: (option: PickerOption | null) => void;
-    onLeave?: (option: PickerOption | null) => void;
     option: PickerOption;
     select?: Select;
   };
@@ -22,13 +22,32 @@ export interface OptionRowSignature {
 }
 
 export default class PickerOptionRow extends Component<OptionRowSignature> {
-  handleMouseEnter = () => {
-    this.args.onFocus?.(this.args.option);
-  };
+  @action
+  handleClick(event: Event) {
+    if (this.args.option.disabled) {
+      return;
+    }
+    if (!this.args.select) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    let el = event.currentTarget as HTMLElement;
+    this.args.select.actions.choose(this.args.option);
+    // Power-select moves focus after choose; if this row is the one that
+    // owned focus (e.g. a summary row activated via Enter), restore it.
+    if (el.hasAttribute('tabindex')) {
+      requestAnimationFrame(() => el.focus());
+    }
+  }
 
-  handleMouseLeave = () => {
-    this.args.onLeave?.(null);
-  };
+  @action
+  handleKeydown(event: Event) {
+    if (!(event instanceof KeyboardEvent)) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      this.handleClick(event);
+    }
+  }
 
   get icon() {
     return (
@@ -63,6 +82,7 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         'picker-option-row'
         picker-option-row--selected=@isSelected
         picker-option-row--disabled=@option.disabled
+        picker-option-row--highlighted=@isHighlighted
       }}
       data-test-boxel-picker-option-selected={{if @isSelected 'true' 'false'}}
       data-test-boxel-picker-option-disabled={{if
@@ -72,8 +92,10 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       }}
       data-test-boxel-picker-option-row={{@option.id}}
       data-test-boxel-picker-option-label={{@option.label}}
-      {{on 'mouseenter' this.handleMouseEnter}}
-      {{on 'mouseleave' this.handleMouseLeave}}
+      {{! template-lint-disable no-invalid-interactive }}
+      {{on 'click' this.handleClick}}
+      {{on 'keydown' this.handleKeydown}}
+      ...attributes
     >
       <div
         class={{cn
@@ -132,8 +154,14 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
       {{/if}}
     </div>
 
-    <style scoped>
+    {{! template-lint-disable require-scoped-style }}
+    <style>
       .picker-option-row {
+        background: none;
+        border: 0;
+        color: inherit;
+        font: inherit;
+        text-align: left;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-3xs);
@@ -143,7 +171,9 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
         width: 100%;
       }
 
-      .picker-option-row:hover {
+      .picker-option-row:hover,
+      .picker-option-row--highlighted,
+      .ember-power-select-option[aria-current='true'] .picker-option-row {
         color: var(--boxel-dark);
         background-color: var(--boxel-100);
         border-radius: 4px;
