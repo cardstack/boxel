@@ -2,8 +2,10 @@ import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 
 export interface CreateRealmOptions {
-  endpoint: string;
-  name: string;
+  /** URL slug for the realm (lowercase, numbers, hyphens). */
+  realmName: string;
+  /** Human-readable display name. */
+  displayName: string;
   backgroundURL?: string;
   iconURL?: string;
   /** Wait for the realm to pass its readiness check (default: true). */
@@ -34,13 +36,13 @@ export class BoxelCLIClient {
   static async ensureProfile(): Promise<void> {
     let pm = getProfileManager();
     let result = await pm.migrateFromEnv();
-    if (result) {
+    if (result?.created) {
       pm.switchProfile(result.profileId);
     }
   }
 
   async createRealm(options: CreateRealmOptions): Promise<CreateRealmResult> {
-    let result = await coreCreateRealm(options.endpoint, options.name, {
+    let result = await coreCreateRealm(options.realmName, options.displayName, {
       background: options.backgroundURL,
       icon: options.iconURL,
       profileManager: this.pm,

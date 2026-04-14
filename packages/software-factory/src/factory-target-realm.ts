@@ -65,10 +65,10 @@ export async function bootstrapFactoryTargetRealm(
 async function createRealm(
   resolution: FactoryTargetRealmResolution,
 ): Promise<CreateRealmResult> {
-  let endpoint = extractEndpointFromRealmUrl(resolution.url);
+  let realmName = extractEndpointFromRealmUrl(resolution.url);
 
   let client = new BoxelCLIClient();
-  let result = await client.createRealm({ endpoint, name: endpoint });
+  let result = await client.createRealm({ realmName, displayName: realmName });
 
   return {
     createdRealm: result.created,
