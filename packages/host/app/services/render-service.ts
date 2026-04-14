@@ -16,7 +16,7 @@ import {
   isLocalId,
   loadCardDocument,
   loadFileMetaDocument,
-  resolveCardReference,
+  toNetworkURL,
   type CardError,
   type CodeRef,
   type RuntimeDependencyTrackingContext,
@@ -154,7 +154,7 @@ function normalizeCardStoreKey(id: string): string {
 
 function normalizeCardStoreURL(id: string): string {
   let key = id.replace(/\.json$/, '');
-  return isLocalId(key) ? id : resolveCardReference(id, undefined);
+  return isLocalId(key) ? id : toNetworkURL(id, undefined);
 }
 
 export interface RenderCardParams {

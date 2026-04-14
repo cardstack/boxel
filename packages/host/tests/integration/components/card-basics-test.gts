@@ -83,7 +83,7 @@ import {
   subscribeToChanges,
   TextAreaField,
   unsubscribeFromChanges,
-  ReadOnlyField,
+  ReadOnlyIdField,
   instanceOf,
   CardInfoField,
 } from '../../helpers/base-realm';
@@ -4468,24 +4468,24 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
-    test('ReadOnlyField wont display input field', async function (assert) {
+    test('ReadOnlyIdField wont display input field', async function (assert) {
       class Person extends CardDef {
-        @field readOnlyField = contains(ReadOnlyField);
+        @field ReadOnlyIdField = contains(ReadOnlyIdField);
         @field name = contains(StringField);
 
         static isolated = class Isolated extends Component<typeof this> {
           <template>
-            {{@model.readOnlyField}}
+            {{@model.ReadOnlyIdField}}
             {{@model.name}}
           </template>
         };
       }
 
-      let person = new Person({ readOnlyField: 'Test', name: 'Mango' });
+      let person = new Person({ ReadOnlyIdField: 'Test', name: 'Mango' });
       await renderCard(loader, person, 'edit');
       assert.dom('[data-test-field="name"] input').exists({ count: 1 });
       assert
-        .dom('[data-test-field="readOnlyField"] input')
+        .dom('[data-test-field="ReadOnlyIdField"] input')
         .exists({ count: 0 });
     });
 

@@ -1,7 +1,7 @@
 import type { DependencyIndexRow, SearchIndexErrorEntry } from '../index';
 import type { ModuleCacheEntries } from '../definition-lookup';
 import type { SerializedError } from '../error';
-import { cardIdToURL } from '../card-reference-resolver';
+import { toNetworkURL } from '../card-reference-resolver';
 import { canonicalURL } from './dependency-url';
 import {
   canTraverseRelationshipDependency,
@@ -247,7 +247,7 @@ export class IndexBackedDependencyErrors {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = cardIdToURL(error.id);
+            base = toNetworkURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }

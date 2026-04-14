@@ -1,6 +1,6 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
-import { resolveCardReference } from './card-reference-resolver';
+import { toNetworkURL } from './card-reference-resolver';
 import type { Query } from './query';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
@@ -354,7 +354,7 @@ export function extractRelationshipIds(
   }
   let resolveId = (id: string) => {
     try {
-      return resolveCardReference(id, baseUrl);
+      return toNetworkURL(id, baseUrl);
     } catch {
       return id;
     }

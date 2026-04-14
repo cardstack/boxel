@@ -21,7 +21,7 @@ import {
   SupportedMimeType,
   isCardError,
   isBaseDefInstance,
-  cardIdToURL,
+  resolveCardReference,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
   type RenderError,
@@ -298,7 +298,7 @@ export default class RenderRoute extends Route<Model> {
       let instance = (await this.store.addFileMeta(
         resource,
         doc,
-        resource.id ? cardIdToURL(resource.id) : undefined,
+        resource.id ? resolveCardReference(resource.id) : undefined,
       )) as unknown as CardDef;
 
       let state = new TrackedMap<string, unknown>();
@@ -419,7 +419,7 @@ export default class RenderRoute extends Route<Model> {
           };
 
           let hydratedInstance = await this.store.add(enhancedDoc, {
-            relativeTo: cardIdToURL(id),
+            relativeTo: resolveCardReference(id),
             realm: realmURL,
             doNotPersist: true,
           });

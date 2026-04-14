@@ -2053,7 +2053,7 @@ export const cardDefinition: Definition['fields'] = {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
-      name: 'ReadOnlyField',
+      name: 'ReadOnlyIdField',
       module: 'https://cardstack.com/base/card-api',
     },
     isPrimitive: true,
@@ -2143,7 +2143,7 @@ export const cardDefinition: Definition['fields'] = {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
-      name: 'ReadOnlyField',
+      name: 'ReadOnlyIdField',
       module: 'https://cardstack.com/base/card-api',
     },
     isPrimitive: true,
@@ -2251,7 +2251,7 @@ export const cardDefinition: Definition['fields'] = {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
-      name: 'ReadOnlyField',
+      name: 'ReadOnlyIdField',
       module: 'https://cardstack.com/base/card-api',
     },
     isPrimitive: true,
@@ -2359,7 +2359,7 @@ export const cardDefinition: Definition['fields'] = {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
-      name: 'ReadOnlyField',
+      name: 'ReadOnlyIdField',
       module: 'https://cardstack.com/base/card-api',
     },
     isPrimitive: true,
@@ -2467,7 +2467,7 @@ export const cardDefinition: Definition['fields'] = {
     type: 'contains',
     isComputed: false,
     fieldOrCard: {
-      name: 'ReadOnlyField',
+      name: 'ReadOnlyIdField',
       module: 'https://cardstack.com/base/card-api',
     },
     isPrimitive: true,

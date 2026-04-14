@@ -23,12 +23,12 @@ import {
   baseRealm,
   maybeRelativeURL,
   trimExecutableExtension,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   baseCardRef,
   baseFieldRef,
   type CodeRef,
 } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import { toNetworkURL } from './card-reference-resolver';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -315,7 +315,7 @@ export class ModuleSyntax {
     if (classRef.type === 'external') {
       if (
         trimExecutableExtension(
-          new URL(resolveCardReference(classRef.module, this.url)),
+          new URL(toNetworkURL(classRef.module, this.url)),
         ) === this.url
       ) {
         return this.possibleCardsOrFields.find(
@@ -418,10 +418,10 @@ function makeNewField({
   if (
     (fieldType === 'linksTo' || fieldType === 'linksToMany') &&
     isEqual(
-      codeRefWithAbsoluteURL(fieldRef, moduleURL, {
+      codeRefWithAbsoluteIdentifier(fieldRef, moduleURL, {
         trimExecutableExtension: true,
       }),
-      codeRefWithAbsoluteURL(cardBeingModified, moduleURL, {
+      codeRefWithAbsoluteIdentifier(cardBeingModified, moduleURL, {
         trimExecutableExtension: true,
       }),
     )
@@ -433,7 +433,7 @@ function makeNewField({
   let relativeFieldModuleRef;
   if (incomingRelativeTo && outgoingRelativeTo) {
     relativeFieldModuleRef = maybeRelativeURL(
-      new URL(resolveCardReference(fieldRef.module, incomingRelativeTo)),
+      new URL(toNetworkURL(fieldRef.module, incomingRelativeTo)),
       outgoingRelativeTo,
       outgoingRealmURL,
     );

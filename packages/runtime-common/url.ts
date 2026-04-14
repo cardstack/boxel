@@ -1,7 +1,7 @@
 import type { LooseCardResource, FileMetaResource } from './index';
 import { relationshipEntries } from './relationship-utils';
 import { RealmPaths } from './paths';
-import { unresolveCardReference } from './card-reference-resolver';
+import { fromNetworkURL } from './card-reference-resolver';
 
 export function maybeURL(
   possibleURL: string,
@@ -96,12 +96,12 @@ export function unresolveResourceInstanceURLs(
   resourceJson: LooseCardResource | FileMetaResource,
 ): void {
   if (resourceJson.id) {
-    resourceJson.id = unresolveCardReference(resourceJson.id);
+    resourceJson.id = fromNetworkURL(resourceJson.id);
   }
   if (resourceJson.links) {
     let links = resourceJson.links;
     if (links.self) {
-      links.self = unresolveCardReference(links.self);
+      links.self = fromNetworkURL(links.self);
     }
   }
   let relationships = resourceJson.relationships;
@@ -109,7 +109,7 @@ export function unresolveResourceInstanceURLs(
     for (let { relationship } of relationshipEntries(relationships)) {
       let links = relationship.links;
       if (links && links.self) {
-        links.self = unresolveCardReference(links.self);
+        links.self = fromNetworkURL(links.self);
       }
       let data = relationship.data;
       if (data && typeof data === 'object') {
@@ -118,14 +118,14 @@ export function unresolveResourceInstanceURLs(
             if (item && typeof item === 'object' && 'id' in item) {
               let typedItem = item as { id?: string };
               if (typeof typedItem.id === 'string') {
-                typedItem.id = unresolveCardReference(typedItem.id);
+                typedItem.id = fromNetworkURL(typedItem.id);
               }
             }
           }
         } else if ('id' in data) {
           let typedData = data as { id?: string };
           if (typeof typedData.id === 'string') {
-            typedData.id = unresolveCardReference(typedData.id);
+            typedData.id = fromNetworkURL(typedData.id);
           }
         }
       }

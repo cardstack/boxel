@@ -8,7 +8,7 @@ import { isEqual } from 'lodash';
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
   baseRef,
-  cardIdToURL,
+  resolveCardReference,
   identifyCard,
   internalKeyFor,
   maybeRelativeURL,
@@ -58,8 +58,8 @@ export default class RenderMetaRoute extends Route<Model> {
       includeComputeds: true,
       maybeRelativeURL: (url: string) =>
         maybeRelativeURL(
-          cardIdToURL(url),
-          cardIdToURL(instance.id),
+          resolveCardReference(url),
+          resolveCardReference(instance.id),
           instance[realmURL],
         ),
     }) as SingleCardDocument;

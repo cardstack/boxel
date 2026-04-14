@@ -6,7 +6,7 @@ import {
   relationshipEntries,
   isCodeRef,
 } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import { toNetworkURL } from './card-reference-resolver';
 import type { CardFields, Meta } from './resource-types';
 import { serialize as serializeCodeRef } from './serializers/code-ref';
 import { maybeRelativeURL as makeRelativeURL } from './url';
@@ -223,7 +223,7 @@ function processRelationships({
         if (realmURL && selfLink) {
           try {
             selfLink = makeRelativeURL(
-              new URL(resolveCardReference(selfLink, relativeTo)),
+              new URL(toNetworkURL(selfLink, relativeTo)),
               relativeTo,
               realmURL,
             );

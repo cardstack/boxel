@@ -11,10 +11,7 @@ import {
   unixTime,
   logger,
 } from './index';
-import {
-  isRegisteredPrefix,
-  unresolveCardReference,
-} from './card-reference-resolver';
+import { isRegisteredPrefix, fromNetworkURL } from './card-reference-resolver';
 import { getCreatedTime, ensureFileCreatedAt } from './file-meta';
 import {
   type Expression,
@@ -897,7 +894,7 @@ export class Batch {
     let pageNumber = 0;
     // Also search for the prefix form of the path (e.g. @cardstack/catalog/...)
     // since deps may be stored in prefix form for portability
-    let unresolvedPath = unresolveCardReference(resolvedPath);
+    let unresolvedPath = fromNetworkURL(resolvedPath);
     let searchBothForms =
       unresolvedPath !== resolvedPath && isRegisteredPrefix(unresolvedPath);
     do {

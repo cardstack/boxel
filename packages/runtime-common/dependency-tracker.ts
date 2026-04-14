@@ -1,5 +1,5 @@
 import { logger } from './log';
-import { executableExtensions } from './index';
+import { executableExtensions, RealmResourceIdentifier } from './index';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
@@ -25,7 +25,7 @@ export interface RuntimeDependencyTrackerSnapshot {
 }
 
 export interface RuntimeDependencyConsumerContext {
-  consumer?: string;
+  consumer?: RealmResourceIdentifier;
   consumerKind?: Extract<RuntimeDependencyNodeKind, 'instance' | 'file'>;
 }
 

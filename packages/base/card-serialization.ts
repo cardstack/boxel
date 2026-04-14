@@ -11,6 +11,7 @@ import type {
   LooseSingleCardDocument,
   LooseSingleFileMetaDocument,
   Meta,
+  RealmResourceIdentifier,
   RuntimeDependencyTrackingContext,
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common';
@@ -30,7 +31,7 @@ import {
   humanReadable,
   identifyCard,
   isRegisteredPrefix,
-  cardIdToURL,
+  toNetworkURL,
   isSingleCardDocument,
   isSingleFileMetaDocument,
   loadCardDef,
@@ -100,7 +101,7 @@ function myLoader(): Loader {
 export async function cardClassFromResource<CardT extends BaseDefConstructor>(
   resource: LooseCardResource | CardResource | FileMetaResource | undefined,
   fallback: CardT,
-  relativeTo: URL | undefined,
+  relativeTo: RealmResourceIdentifier | undefined,
 ): Promise<CardT> {
   let cardIdentity = identifyCard(fallback);
   if (!cardIdentity) {
@@ -113,8 +114,7 @@ export async function cardClassFromResource<CardT extends BaseDefConstructor>(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),
-        relativeTo:
-          relativeTo ?? (resource.id ? cardIdToURL(resource.id) : undefined),
+        relativeTo: relativeTo ?? resource.id,
       },
     );
     if (!card) {
@@ -218,7 +218,7 @@ export function serializeCard(
   };
   let modelRelativeTo =
     model.id != null
-      ? cardIdToURL(model.id)
+      ? toNetworkURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(model, doc, {
     ...opts,
@@ -315,7 +315,7 @@ export function serializeFileDef(
   };
   let modelRelativeTo =
     model.id != null
-      ? cardIdToURL(model.id)
+      ? toNetworkURL(model.id)
       : (model[relativeTo] as URL | undefined);
   let data = serializeCardResource(
     model,
@@ -339,9 +339,7 @@ export function serializeFileDef(
             return url.href;
           }
           const realmURLString = getCardMeta(model, 'realmURL');
-          const realmURL = realmURLString
-            ? new URL(realmURLString)
-            : undefined;
+          const realmURL = realmURLString ? new URL(realmURLString) : undefined;
           return maybeRelativeURL(url, modelRelativeTo, realmURL);
         },
       },

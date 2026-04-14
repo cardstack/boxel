@@ -8,12 +8,12 @@ import {
   unixTime,
   maxLinkDepth,
   maybeURL,
-  resolveCardReference,
+  toNetworkURL,
   isRegisteredPrefix,
-  cardIdToURL,
-  unresolveCardReference,
+  toNetworkURL,
+  fromNetworkURL,
   IndexQueryEngine,
-  codeRefWithAbsoluteURL,
+  codeRefWithAbsoluteIdentifier,
   logger,
   CardResourceType,
   FileMetaResourceType,
@@ -110,7 +110,7 @@ function absolutizeInstanceURL(
     setURL(url);
     return;
   }
-  setURL(resolveCardReference(url, resourceId));
+  setURL(toNetworkURL(url, resourceId));
 }
 
 export class RealmIndexQueryEngine {
@@ -258,8 +258,11 @@ export class RealmIndexQueryEngine {
     if (!resource.meta?.adoptsFrom) {
       return false;
     }
-    let relativeTo = resource.id ? cardIdToURL(resource.id) : this.realmURL;
-    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    let relativeTo = resource.id ? toNetworkURL(resource.id) : this.realmURL;
+    let codeRef = codeRefWithAbsoluteIdentifier(
+      resource.meta.adoptsFrom,
+      relativeTo,
+    );
     if (!isResolvedCodeRef(codeRef)) {
       return false;
     }
@@ -486,8 +489,11 @@ export class RealmIndexQueryEngine {
       return;
     }
 
-    let relativeTo = resource.id ? cardIdToURL(resource.id) : realmURL;
-    let codeRef = codeRefWithAbsoluteURL(resource.meta.adoptsFrom, relativeTo);
+    let relativeTo = resource.id ? toNetworkURL(resource.id) : realmURL;
+    let codeRef = codeRefWithAbsoluteIdentifier(
+      resource.meta.adoptsFrom,
+      relativeTo,
+    );
     if (!isResolvedCodeRef(codeRef)) {
       return;
     }
@@ -605,7 +611,7 @@ export class RealmIndexQueryEngine {
       fieldName,
       fieldPath,
       resolvePathValue: (path) => getValueForResourcePath(resource, path),
-      relativeTo: resource.id ? cardIdToURL(resource.id) : realmURL,
+      relativeTo: resource.id ? toNetworkURL(resource.id) : realmURL,
     });
     if (!normalized) {
       return { results: [], errors: [], searchURL: '' };
@@ -932,9 +938,9 @@ export class RealmIndexQueryEngine {
         }
         processedRelationships.add(key);
         let linkURL = new URL(
-          resolveCardReference(
+          toNetworkURL(
             relationship.links.self,
-            resource.id ? cardIdToURL(resource.id) : realmURL,
+            resource.id ? toNetworkURL(resource.id) : realmURL,
           ),
         );
         let linkResource: CardResource<Saved> | FileMetaResource | undefined;
@@ -1033,10 +1039,7 @@ export class RealmIndexQueryEngine {
         }
         let resolvedSelf: string;
         try {
-          resolvedSelf = resolveCardReference(
-            relationship.links.self!,
-            resource.id,
-          );
+          resolvedSelf = toNetworkURL(relationship.links.self!, resource.id);
         } catch {
           throw new Error(
             `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`,
@@ -1050,7 +1053,7 @@ export class RealmIndexQueryEngine {
         }
         // Use prefix form (e.g. @cardstack/catalog/...) when available,
         // so relationship data.id stays portable across environments.
-        let relationshipIdStr = unresolveCardReference(relationshipId.href);
+        let relationshipIdStr = fromNetworkURL(relationshipId.href);
         if (
           foundLinks ||
           omit.includes(relationshipIdStr) ||
@@ -1159,14 +1162,14 @@ function relativizeResource(
 ) {
   // resource.id may be a registered prefix (e.g. @cardstack/openrouter/...)
   // which is not a valid URL base. Resolve it to a URL for relative resolution.
-  let resourceURL = resource.id ? cardIdToURL(resource.id) : primaryURL;
+  let resourceURL = resource.id ? toNetworkURL(resource.id) : primaryURL;
   visitInstanceURLs(resource, (url, setURL) => {
     // Registered prefix references (e.g. @cardstack/catalog/foo) are already
     // in their canonical portable form — don't resolve or relativize them.
     if (isRegisteredPrefix(url)) {
       return;
     }
-    let urlObj = new URL(resolveCardReference(url, resourceURL));
+    let urlObj = new URL(toNetworkURL(url, resourceURL));
     setURL(maybeRelativeURL(urlObj, primaryURL, realmURL));
   });
   visitModuleDeps(resource, (moduleURL, setModuleURL) => {
@@ -1175,9 +1178,7 @@ function relativizeResource(
     if (isRegisteredPrefix(moduleURL)) {
       return;
     }
-    let absoluteModuleURL = new URL(
-      resolveCardReference(moduleURL, resourceURL),
-    );
+    let absoluteModuleURL = new URL(toNetworkURL(moduleURL, resourceURL));
     setModuleURL(maybeRelativeURL(absoluteModuleURL, primaryURL, realmURL));
   });
 }

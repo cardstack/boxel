@@ -11,8 +11,8 @@ import type { RenderRouteOptions } from './render-route-options';
 import type { Definition } from './definitions';
 import type { SerializedError } from './error';
 import {
-  resolveCardReference,
-  unresolveCardReference,
+  toNetworkURL,
+  fromNetworkURL,
   isRegisteredPrefix,
 } from './card-reference-resolver';
 
@@ -184,10 +184,10 @@ export { validateWriteSize } from './write-size-validation';
 export {
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
-  resolveCardReference,
-  unresolveCardReference,
+  toNetworkURL as resolveCardReference,
+  fromNetworkURL as unresolveCardReference,
   isRegisteredPrefix,
-  cardIdToURL,
+  toNetworkURL as resolveCardReference,
 } from './card-reference-resolver';
 
 export interface ResourceObject {
@@ -681,11 +681,11 @@ export function internalKeyFor(
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
-    let resolved = resolveCardReference(ref.module, relativeTo);
+    let resolved = toNetworkURL(ref.module, relativeTo);
     let module = trimExecutableExtension(new URL(resolved)).href;
     // Use the prefix form (e.g. @cardstack/catalog/foo) as the canonical
     // internal key when a registered prefix mapping matches
-    module = unresolveCardReference(module);
+    module = fromNetworkURL(module);
     return `${module}/${ref.name}`;
   }
   switch (ref.type) {

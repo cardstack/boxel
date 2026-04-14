@@ -18,14 +18,17 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { meta, relativeTo } from './constants';
-import { cardIdToURL } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
-import { resolveCardReference } from './card-reference-resolver';
+import {
+  resolveRRI,
+  toNetworkURL,
+  type RealmResourceIdentifier,
+} from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
 };
 
@@ -158,15 +161,14 @@ export function isSpecCard(def: any) {
   return isBaseDef(def) && isSpec in def;
 }
 
-export function codeRefWithAbsoluteURL(
+export function codeRefWithAbsoluteIdentifier(
   ref: CodeRef,
-  relativeTo?: URL | undefined,
+  relativeTo?: RealmResourceIdentifier | undefined,
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
     try {
-      let moduleHref = resolveCardReference(ref.module, relativeTo);
-      let moduleURL = new URL(moduleHref);
+      let moduleURL = toNetworkURL(ref.module, relativeTo);
       if (opts?.trimExecutableExtension) {
         moduleURL = trimExecutableExtension(moduleURL);
       }
@@ -175,7 +177,7 @@ export function codeRefWithAbsoluteURL(
       return { ...ref };
     }
   }
-  return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+  return { ...ref, card: codeRefWithAbsoluteIdentifier(ref.card, relativeTo) };
 }
 
 export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
@@ -187,16 +189,16 @@ export async function loadCardDef(
   ref: CodeRef,
   opts: {
     loader: Loader;
-    relativeTo?: URL;
+    relativeTo?: RealmResourceIdentifier;
     dependencyTrackingContext?: RuntimeDependencyTrackingContext;
   },
 ): Promise<typeof BaseDef> {
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
-    let resolvedModuleURL = resolveCardReference(ref.module, opts?.relativeTo);
+    let resolvedModuleRRI = resolveRRI(ref.module, opts?.relativeTo);
     let module = await loader.import<Record<string, any>>(
-      resolvedModuleURL,
+      resolvedModuleRRI,
       opts.dependencyTrackingContext,
     );
     maybeCard = module[ref.name];
@@ -216,7 +218,7 @@ export async function loadCardDef(
   }
 
   let err = new CardError(
-    `Cannot find card ${humanReadable(ref)}. Make sure ${resolveCardReference(moduleFrom(ref), opts?.relativeTo)} exports ${exportFrom(ref)}`,
+    `Cannot find card ${humanReadable(ref)}. Make sure ${toNetworkURL(moduleFrom(ref), opts?.relativeTo)} exports ${exportFrom(ref)}`,
     {
       status: 404,
     },
@@ -413,9 +415,9 @@ export function resolveAdoptedCodeRef(instance: CardDef) {
   if (!adoptsFrom) {
     throw new Error('Instance missing adoptsFrom');
   }
-  let resolved = codeRefWithAbsoluteURL(
+  let resolved = codeRefWithAbsoluteIdentifier(
     adoptsFrom,
-    instance[relativeTo] || cardIdToURL(instance.id),
+    instance[relativeTo] || toNetworkURL(instance.id),
   );
   if (!isResolvedCodeRef(resolved)) {
     throw new Error('code ref is not resolved');
@@ -432,7 +434,7 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
       return undefined;
     }
     try {
-      return cardIdToURL(id);
+      return toNetworkURL(id);
     } catch {
       return undefined;
     }
@@ -441,7 +443,7 @@ export function resolveAdoptsFrom(card: CardDef): ResolvedCodeRef | undefined {
     if (!baseURL) {
       return undefined;
     }
-    let resolved = codeRefWithAbsoluteURL(ref, baseURL);
+    let resolved = codeRefWithAbsoluteIdentifier(ref, baseURL);
     return isResolvedCodeRef(resolved) ? resolved : undefined;
   };
   if (isResolvedCodeRef(adoptsFrom)) {

@@ -2,7 +2,7 @@ import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformAsync } from '@babel/core';
 import { Deferred } from './deferred';
 import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
-import { executableExtensions, logger } from './index';
+import { executableExtensions, logger, Realm } from './index';
 
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -11,8 +11,9 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker';
 import {
-  unresolveCardReference,
-  resolveCardReference,
+  fromNetworkURL,
+  type RealmResourceIdentifier,
+  toNetworkURL,
 } from './card-reference-resolver';
 
 type FetchingModule = {
@@ -47,19 +48,19 @@ type PreparingModule = {
   state: 'preparing';
   implementation: Function;
   moduleInstance: object;
-  consumedModules: Set<string>;
+  consumedModules: Set<RealmResourceIdentifier>;
 };
 
 type EvaluatedModule = {
   state: 'evaluated';
   moduleInstance: object;
-  consumedModules: Set<string>;
+  consumedModules: Set<RealmResourceIdentifier>;
 };
 
 type BrokenModule = {
   state: 'broken';
   exception: any;
-  consumedModules: Set<string>;
+  consumedModules: Set<RealmResourceIdentifier>;
 };
 
 type Module =
@@ -79,18 +80,18 @@ type EvaluatableModule =
   | BrokenModule;
 
 type UnregisteredDep =
-  | { type: 'dep'; moduleURL: URL }
+  | { type: 'dep'; moduleIdentifier: RealmResourceIdentifier }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
 type EvaluatableDep =
   | {
       type: 'dep';
-      moduleURL: URL;
+      moduleIdentifier: RealmResourceIdentifier;
     }
   | {
       type: 'completing-dep';
-      moduleURL: URL;
+      moduleIdentifier: RealmResourceIdentifier;
     }
   | { type: '__import_meta__' }
   | { type: 'exports' };
@@ -103,27 +104,37 @@ let nonce = 0;
 export class Loader {
   nonce = nonce++; // the nonce is a useful debugging tool that let's us compare loaders
   private log = logger('loader');
-  private modules = new Map<string, Module>();
+  private modules = new Map<RealmResourceIdentifier, Module>();
 
-  private moduleShims = new Map<string, Record<string, any>>();
-  private moduleCanonicalURLs = new Map<string, string>();
+  private moduleShims = new Map<RealmResourceIdentifier, Record<string, any>>();
+  private moduleCanonicalIdentifiers = new Map<
+    RealmResourceIdentifier,
+    RealmResourceIdentifier
+  >();
   // Cache the flattened dependency sets for evaluated modules. Once a module is
   // evaluated its consumedModules never change, so the result of
   // collectKnownModuleDependencies is stable and can be reused across repeated
   // loader.import() calls (e.g. when deserializing 22 cards of the same type).
-  private knownDepsCache = new Map<string, Set<string>>();
+  private knownDepsCache = new Map<
+    RealmResourceIdentifier,
+    Set<RealmResourceIdentifier>
+  >();
   private identities = new WeakMap<
     Function,
-    { module: string; name: string }
+    { module: RealmResourceIdentifier; name: string }
   >();
   private static loaders = new WeakMap<Function, Loader>();
 
   private fetchImplementation: Fetch;
-  private resolveImport: (moduleIdentifier: string) => string;
+  private resolveImport: (
+    moduleIdentifier: RealmResourceIdentifier,
+  ) => RealmResourceIdentifier;
 
   constructor(
     fetch: Fetch,
-    resolveImport?: (moduleIdentifier: string) => string,
+    resolveImport?: (
+      moduleIdentifier: RealmResourceIdentifier,
+    ) => RealmResourceIdentifier,
   ) {
     this.fetchImplementation = fetch;
     this.resolveImport =
@@ -142,10 +153,13 @@ export class Loader {
     return this.fetchImplementation;
   }
 
-  shimModule(moduleIdentifier: string, module: Record<string, any>) {
+  shimModule(
+    moduleIdentifier: RealmResourceIdentifier,
+    module: Record<RealmResourceIdentifier, any>,
+  ) {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
     this.captureIdentitiesOfModuleExports(module, moduleIdentifier);
-    this.setCanonicalModuleURL(moduleIdentifier, moduleIdentifier);
+    this.setCanonicalModuleIdentifier(moduleIdentifier, moduleIdentifier);
 
     this.moduleShims.set(moduleIdentifier, module);
 
@@ -157,34 +171,26 @@ export class Loader {
   }
 
   async getConsumedModules(
-    moduleIdentifier: string,
-    consumed: string[] = [],
+    moduleIdentifier: RealmResourceIdentifier,
+    consumed: RealmResourceIdentifier[] = [],
     initialIdentifier = moduleIdentifier,
-  ): Promise<string[]> {
-    // Normalize to resolved URL href so that prefix-form identifiers
-    // (e.g. @cardstack/catalog/...) and their resolved URL equivalents
-    // are treated as the same module for cycle detection and self-exclusion.
-    let resolvedHref = new URL(
-      resolveCardReference(moduleIdentifier, undefined),
-    ).href;
-    let resolvedInitial = new URL(
-      resolveCardReference(initialIdentifier, undefined),
-    ).href;
-
-    if (consumed.includes(resolvedHref)) {
+  ): Promise<RealmResourceIdentifier[]> {
+    if (consumed.includes(moduleIdentifier)) {
       return [];
     }
     // you can't consume yourself
-    if (resolvedHref !== resolvedInitial) {
-      consumed.push(resolvedHref);
+    if (moduleIdentifier !== initialIdentifier) {
+      consumed.push(moduleIdentifier);
     }
 
-    let module = this.getModule(resolvedHref);
+    let module = this.getModule(moduleIdentifier);
 
     if (!module || module.state === 'fetching') {
       // we haven't yet tried importing the module or we are still in the process of importing the module
       try {
-        await this.import<Record<string, any>>(moduleIdentifier);
+        await this.import<Record<RealmResourceIdentifier, any>>(
+          moduleIdentifier,
+        );
       } catch (err: any) {
         this.log.warn(
           `encountered an error trying to load the module ${moduleIdentifier}. The consumedModule result includes all the known consumed modules including the module that caused the error: ${err.message}`,
@@ -206,7 +212,7 @@ export class Loader {
 
   static identify(
     value: unknown,
-  ): { module: string; name: string } | undefined {
+  ): { module: RealmResourceIdentifier; name: string } | undefined {
     if (typeof value !== 'function') {
       return undefined;
     }
@@ -218,7 +224,9 @@ export class Loader {
     }
   }
 
-  identify(value: unknown): { module: string; name: string } | undefined {
+  identify(
+    value: unknown,
+  ): { module: RealmResourceIdentifier; name: string } | undefined {
     if (typeof value === 'function') {
       return this.identities.get(value);
     } else {
@@ -234,7 +242,7 @@ export class Loader {
   }
 
   async import<T extends object>(
-    moduleIdentifier: string,
+    moduleIdentifier: RealmResourceIdentifier,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     moduleIdentifier = this.resolveImport(moduleIdentifier);
@@ -350,7 +358,7 @@ export class Loader {
         case 'registered':
           for (let entry of module.dependencyList) {
             if (entry.type === 'dep') {
-              pending.push(entry.moduleURL.href);
+              pending.push(entry.moduleIdentifier.href);
             }
           }
           break;
@@ -358,7 +366,7 @@ export class Loader {
         case 'registered-with-deps':
           for (let entry of module.dependencies) {
             if (entry.type === 'dep' || entry.type === 'completing-dep') {
-              pending.push(entry.moduleURL.href);
+              pending.push(entry.moduleIdentifier.href);
             }
           }
           break;
@@ -407,18 +415,18 @@ export class Loader {
               maybeReadyDeps.push(entry);
               continue;
             }
-            let depModule = this.getModule(entry.moduleURL.href);
+            let depModule = this.getModule(entry.moduleIdentifier.href);
             if (!isEvaluatable(depModule)) {
               // we always only await the first dep that actually needs work and
               // then break back to the top-level state machine, so that we'll
               // be working from the latest state.
               if (
                 !stack['registered-completing-deps'].includes(
-                  entry.moduleURL.href,
+                  entry.moduleIdentifier.href,
                 )
               ) {
                 await this.advanceToState(
-                  entry.moduleURL,
+                  entry.moduleIdentifier,
                   'registered-completing-deps',
                   {
                     ...stack,
@@ -434,18 +442,18 @@ export class Loader {
               } else if (isRegistered(depModule)) {
                 maybeReadyDeps.push({
                   type: 'completing-dep',
-                  moduleURL: entry.moduleURL,
+                  moduleIdentifier: entry.moduleIdentifier,
                 });
               }
             } else if (depModule.state === 'registered-completing-deps') {
               maybeReadyDeps.push({
                 type: 'completing-dep',
-                moduleURL: entry.moduleURL,
+                moduleIdentifier: entry.moduleIdentifier,
               });
             } else {
               maybeReadyDeps.push({
                 type: 'dep',
-                moduleURL: entry.moduleURL,
+                moduleIdentifier: entry.moduleIdentifier,
               });
             }
           }
@@ -469,11 +477,11 @@ export class Loader {
               readyDeps.push(entry);
               continue;
             }
-            let depModule = this.getModule(entry.moduleURL.href);
+            let depModule = this.getModule(entry.moduleIdentifier.href);
             if (entry.type === 'dep') {
               readyDeps.push({
                 type: 'dep',
-                moduleURL: entry.moduleURL,
+                moduleIdentifier: entry.moduleIdentifier,
               });
               continue;
             }
@@ -482,14 +490,16 @@ export class Loader {
               case 'fetching':
               case 'registered':
                 throw new Error(
-                  `expected ${entry.moduleURL.href} to be 'registered-completing-deps' but was '${depModule?.state}'`,
+                  `expected ${entry.moduleIdentifier.href} to be 'registered-completing-deps' but was '${depModule?.state}'`,
                 );
               case 'registered-completing-deps': {
                 if (
-                  !stack['registered-with-deps'].includes(entry.moduleURL.href)
+                  !stack['registered-with-deps'].includes(
+                    entry.moduleIdentifier.href,
+                  )
                 ) {
                   await this.advanceToState(
-                    entry.moduleURL,
+                    entry.moduleIdentifier,
                     'registered-with-deps',
                     {
                       ...stack,
@@ -508,7 +518,7 @@ export class Loader {
                   // move the state of the dep to 'registered-with-deps'
                   readyDeps.push({
                     type: 'dep',
-                    moduleURL: entry.moduleURL,
+                    moduleIdentifier: entry.moduleIdentifier,
                   });
                 }
                 break;
@@ -516,7 +526,7 @@ export class Loader {
               default:
                 readyDeps.push({
                   type: 'dep',
-                  moduleURL: entry.moduleURL,
+                  moduleIdentifier: entry.moduleIdentifier,
                 });
             }
           }
@@ -593,27 +603,27 @@ export class Loader {
     this.modules.set(trimModuleIdentifier(moduleIdentifier), module);
   }
 
-  private setCanonicalModuleURL(
-    moduleIdentifier: string,
-    canonicalURL: string,
+  private setCanonicalModuleIdentifier(
+    moduleIdentifier: RealmResourceIdentifier,
+    canonicalIdentifier: RealmResourceIdentifier,
   ) {
-    this.moduleCanonicalURLs.set(
+    this.moduleCanonicalIdentifiers.set(
       trimModuleIdentifier(moduleIdentifier),
-      canonicalURL,
+      canonicalIdentifier,
     );
   }
 
   private getCanonicalModuleURL(moduleIdentifier: string): string | undefined {
-    return this.moduleCanonicalURLs.get(trimModuleIdentifier(moduleIdentifier));
+    return this.moduleCanonicalIdentifiers.get(
+      trimModuleIdentifier(moduleIdentifier),
+    );
   }
 
   private captureIdentitiesOfModuleExports(
     module: any,
     moduleIdentifier: string,
   ) {
-    let moduleId = unresolveCardReference(
-      trimModuleIdentifier(moduleIdentifier),
-    );
+    let moduleId = fromNetworkURL(trimModuleIdentifier(moduleIdentifier));
     for (let propName of Object.keys(module)) {
       let exportedEntity = module[propName];
       if (
@@ -677,7 +687,7 @@ export class Loader {
       loaded.url ||
       this.getCanonicalModuleURL(moduleIdentifier) ||
       moduleIdentifier;
-    this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
+    this.setCanonicalModuleIdentifier(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
@@ -779,7 +789,7 @@ export class Loader {
     let moduleProxy = this.readOnlyProxy(privateModuleInstance);
     let consumedModules = new Set(
       flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep' ? [dep.moduleURL.href] : [],
+        dep.type === 'dep' ? [dep.moduleIdentifier.href] : [],
       ),
     );
 
@@ -804,13 +814,13 @@ export class Loader {
             };
           case 'completing-dep':
           case 'dep': {
-            let depModule = this.getModule(entry.moduleURL.href);
+            let depModule = this.getModule(entry.moduleIdentifier.href);
             if (!isEvaluatable(depModule)) {
               throw new Error(
-                `Cannot evaluate the module ${entry.moduleURL.href}, it is not evaluatable--it is in state '${depModule?.state}'`,
+                `Cannot evaluate the module ${entry.moduleIdentifier.href}, it is not evaluatable--it is in state '${depModule?.state}'`,
               );
             }
-            return this.evaluate(entry.moduleURL.href, depModule!);
+            return this.evaluate(entry.moduleIdentifier.href, depModule!);
           }
           default:
             throw assertNever(entry);
@@ -877,7 +887,7 @@ export class Loader {
       if (entry.type !== 'dep') {
         continue;
       }
-      this.prefetchModule(entry.moduleURL);
+      this.prefetchModule(entry.moduleIdentifier);
     }
   }
 
@@ -904,8 +914,10 @@ function assertNever(value: never) {
 // Cache and use string operations to avoid expensive URL construction on every
 // getModule/setModule call. Module identifiers are always full URL strings so
 // we only need to strip executable extensions from the end.
-const trimCache = new Map<string, string>();
-function trimModuleIdentifier(moduleIdentifier: string): string {
+const trimCache = new Map<RealmResourceIdentifier, RealmResourceIdentifier>();
+function trimModuleIdentifier(
+  moduleIdentifier: RealmResourceIdentifier,
+): RealmResourceIdentifier {
   let cached = trimCache.get(moduleIdentifier);
   if (cached !== undefined) {
     return cached;
@@ -913,7 +925,10 @@ function trimModuleIdentifier(moduleIdentifier: string): string {
   let result = moduleIdentifier;
   for (let ext of executableExtensions) {
     if (moduleIdentifier.endsWith(ext)) {
-      result = moduleIdentifier.slice(0, -ext.length);
+      result = moduleIdentifier.slice(
+        0,
+        -ext.length,
+      ) as RealmResourceIdentifier;
       break;
     }
   }

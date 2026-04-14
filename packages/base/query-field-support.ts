@@ -13,7 +13,7 @@ import type {
   RuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
+  toNetworkURL,
   getField,
   getSingularRelationship,
   identifyCard,
@@ -362,7 +362,7 @@ function resolveQueryAndRealm(
     fieldPath,
     resolvePathValue: (path) => resolveInstancePathValue(instance, path),
     relativeTo: (instance as CardDef).id
-      ? cardIdToURL((instance as CardDef).id)
+      ? toNetworkURL((instance as CardDef).id)
       : realmURL,
   });
 

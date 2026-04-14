@@ -1,6 +1,6 @@
 import {
-  resolveCardReference,
-  unresolveCardReference,
+  toNetworkURL,
+  fromNetworkURL,
   isRegisteredPrefix,
 } from '../card-reference-resolver';
 
@@ -12,12 +12,12 @@ export function canonicalURL(url: string, relativeTo?: string): string {
       let stripped = url.split('#')[0] ?? url;
       return stripped.split('?')[0] ?? stripped;
     }
-    let resolved = resolveCardReference(url, relativeTo);
+    let resolved = toNetworkURL(url, relativeTo);
     let parsed = new URL(resolved);
     parsed.search = '';
     parsed.hash = '';
     // Convert resolved URLs back to prefix form if possible
-    return unresolveCardReference(parsed.href);
+    return fromNetworkURL(parsed.href);
   } catch (_e) {
     let stripped = url.split('#')[0] ?? url;
     return stripped.split('?')[0] ?? stripped;

@@ -8,7 +8,7 @@ import {
   isResolvedCodeRef,
   executableExtensions,
 } from '../index';
-import { resolveCardReference, cardIdToURL } from '../card-reference-resolver';
+import { toNetworkURL, toNetworkURL } from '../card-reference-resolver';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from 'https://cardstack.com/base/card-api';
@@ -35,7 +35,7 @@ export function serialize(
     opts?.relativeTo instanceof URL
       ? opts.relativeTo
       : doc?.data?.id && typeof doc.data.id === 'string'
-        ? cardIdToURL(doc.data.id)
+        ? toNetworkURL(doc.data.id)
         : undefined;
   return {
     ...codeRef,
@@ -84,7 +84,7 @@ function codeRefAdjustments(
   if (!isUrlLike(codeRef.module)) {
     // Try resolving via registered prefix mappings (e.g., @cardstack/catalog/)
     try {
-      let resolved = resolveCardReference(codeRef.module, relativeTo);
+      let resolved = toNetworkURL(codeRef.module, relativeTo);
       if (resolved !== codeRef.module) {
         let module = resolved;
         if (opts?.trimExecutableExtension) {
@@ -101,7 +101,7 @@ function codeRefAdjustments(
     return {};
   }
   if (relativeTo) {
-    let module = resolveCardReference(codeRef.module, relativeTo);
+    let module = toNetworkURL(codeRef.module, relativeTo);
     if (opts?.trimExecutableExtension) {
       module = trimExecutableExtension(module);
     }
@@ -121,7 +121,7 @@ function maybeSerializeCodeRef(
     let base =
       stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
     try {
-      let moduleHref = resolveCardReference(
+      let moduleHref = toNetworkURL(
         codeRef.module,
         base && typeof base === 'string' ? base : undefined,
       );

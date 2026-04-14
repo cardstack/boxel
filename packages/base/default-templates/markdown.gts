@@ -17,7 +17,7 @@ import {
   preloadMarkdownLanguages,
   processKatexPlaceholders,
   replaceMermaidSvgs,
-  resolveCardReference,
+  toNetworkURL,
   trimJsonExtension,
 } from '@cardstack/runtime-common';
 import { type BaseDef, type CardDef, getComponent } from '../card-api';
@@ -62,7 +62,7 @@ type RenderSlot =
 
 function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
   try {
-    return trimJsonExtension(resolveCardReference(raw, baseUrl || undefined));
+    return trimJsonExtension(toNetworkURL(raw, baseUrl || undefined));
   } catch {
     return trimJsonExtension(raw);
   }
@@ -256,9 +256,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
         // to avoid flashing Pills while linkedCards is still loading.
         if (!showFallback) return slots;
         for (let el of Array.from(
-          element.querySelectorAll<HTMLElement>(
-            '[data-boxel-bfm-type="card"]',
-          ),
+          element.querySelectorAll<HTMLElement>('[data-boxel-bfm-type="card"]'),
         )) {
           let url =
             el.dataset.boxelBfmInlineRef || el.dataset.boxelBfmBlockRef || '';
@@ -304,8 +302,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
             }
             if (!current.card && !slot.card) {
               return (
-                (current as UnresolvedSlot).url !==
-                (slot as UnresolvedSlot).url
+                (current as UnresolvedSlot).url !== (slot as UnresolvedSlot).url
               );
             }
             return false;
@@ -421,7 +418,7 @@ export default class MarkDownTemplate extends GlimmerComponent<{
     >
       {{this.renderedHtml}}
     </div>
-    {{#each this.renderSlots key="element" as |slot|}}
+    {{#each this.renderSlots key='element' as |slot|}}
       {{#in-element slot.element insertBefore=null}}
         {{#if slot.card}}
           <CardContextConsumer as |context|>

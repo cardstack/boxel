@@ -11,7 +11,7 @@ import {
   getAncestor,
   SupportedMimeType,
   isResolvedCodeRef,
-  cardIdToURL,
+  resolveCardReference,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -120,7 +120,7 @@ export default class CardTypeService extends Service {
       return cached;
     }
     let moduleIdentifier = moduleFrom(ref);
-    let moduleURL = cardIdToURL(moduleIdentifier);
+    let moduleURL = resolveCardReference(moduleIdentifier);
     let moduleInfo =
       this.moduleInfoCache.get(moduleURL.href) ??
       (await this.fetchModuleInfo(moduleURL));

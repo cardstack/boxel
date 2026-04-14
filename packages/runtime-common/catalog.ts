@@ -8,7 +8,7 @@ import { resolveAdoptedCodeRef } from './code-ref';
 import { realmURL } from './constants';
 import { logger } from './log';
 import type { LocalPath } from './paths';
-import { cardIdToURL } from './card-reference-resolver';
+import { toNetworkURL } from './card-reference-resolver';
 
 // @ts-ignore TODO: fix catalog types in runtime-common
 import type { Listing } from '@cardstack/catalog/listing/listing';
@@ -170,10 +170,10 @@ function resolveTargetCodeRef(
   codeRef: ResolvedCodeRef,
   resolver: ListingPathResolver,
 ): ResolvedCodeRef {
-  if (baseRealmPath.inRealm(cardIdToURL(codeRef.module))) {
+  if (baseRealmPath.inRealm(toNetworkURL(codeRef.module))) {
     return codeRef;
   } else {
-    let targetModule = resolver.target(cardIdToURL(codeRef.module).href);
+    let targetModule = resolver.target(toNetworkURL(codeRef.module).href);
     return {
       name: codeRef.name,
       module: targetModule,
@@ -192,7 +192,7 @@ export function planModuleInstall(
     return { module: s.moduleHref, name: s.ref.name };
   });
   let modulesCopy = codeRefs.flatMap((sourceCodeRef: ResolvedCodeRef) => {
-    if (baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (baseRealmPath.inRealm(toNetworkURL(sourceCodeRef.module))) {
       return [];
     }
     let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
@@ -213,11 +213,11 @@ export function planInstanceInstall(
   let modulesCopy: CopyMeta[] = [];
   for (let instance of instances) {
     let sourceCodeRef = resolveAdoptedCodeRef(instance);
-    let lid = resolver.local(cardIdToURL(instance.id).href);
-    if (baseRealmPath.inRealm(cardIdToURL(instance.id))) {
+    let lid = resolver.local(toNetworkURL(instance.id).href);
+    if (baseRealmPath.inRealm(toNetworkURL(instance.id))) {
       throw new Error('Cannot install instance from base realm');
     }
-    if (!baseRealmPath.inRealm(cardIdToURL(sourceCodeRef.module))) {
+    if (!baseRealmPath.inRealm(toNetworkURL(sourceCodeRef.module))) {
       let targetCodeRef = resolveTargetCodeRef(sourceCodeRef, resolver);
       modulesCopy.push({
         sourceCodeRef,

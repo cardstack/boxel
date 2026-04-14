@@ -27,8 +27,8 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   getMenuItems,
-  cardIdToURL,
-  codeRefWithAbsoluteURL,
+  toNetworkURL,
+  codeRefWithAbsoluteIdentifier,
   ensureExtension,
   isPrimitive,
   isResolvedCodeRef,
@@ -36,7 +36,7 @@ import {
   loadCardDef,
   Loader,
   realmURL,
-  resolveCardReference,
+  toNetworkURL,
   type CommandContext,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -86,9 +86,9 @@ class PopulateFieldSpecExampleCommand extends PopulateWithSampleDataCommand {
     if (!codeRef) {
       return [];
     }
-    codeRef = codeRefWithAbsoluteURL(
+    codeRef = codeRefWithAbsoluteIdentifier(
       codeRef,
-      cardIdToURL(card.id!),
+      toNetworkURL(card.id!),
     )! as ResolvedCodeRef;
     let cardOrFieldModuleURL = codeRef.module
       ? ensureExtension(codeRef.module, { default: '.gts' })
@@ -149,7 +149,7 @@ export class SpecHeader extends GlimmerComponent<SpecHeaderSignature> {
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
+            relativeTo: toNetworkURL(this.args.model.id),
           });
           cardDefObj.value = cardDef;
         }
@@ -381,7 +381,7 @@ export class SpecExamplesSection extends GlimmerComponent<SpecExamplesSectionSig
         if (this.args.model.ref && this.args.model.id) {
           let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
+            relativeTo: toNetworkURL(this.args.model.id),
           });
           cardDefObj.value = cardDef;
         }
@@ -658,8 +658,8 @@ class Isolated extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let url = cardIdToURL(this.args.model.id);
-    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    let url = toNetworkURL(this.args.model.id);
+    let ref = codeRefWithAbsoluteIdentifier(this.args.model.ref, url);
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
@@ -724,7 +724,7 @@ class Fitted extends Component<typeof Spec> {
         if (this.args.model.ref && this.args.model.id) {
           let card = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
-            relativeTo: cardIdToURL(this.args.model.id),
+            relativeTo: toNetworkURL(this.args.model.id),
           });
           icon.value = card.icon;
         }
@@ -769,8 +769,8 @@ class Edit extends Component<typeof Spec> {
     if (!this.args.model.ref || !this.args.model.id) {
       return undefined;
     }
-    let url = cardIdToURL(this.args.model.id);
-    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    let url = toNetworkURL(this.args.model.id);
+    let ref = codeRefWithAbsoluteIdentifier(this.args.model.ref, url);
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
@@ -924,7 +924,7 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      return resolveCardReference(this.ref.module, this.id ?? this[relativeTo]);
+      return toNetworkURL(this.ref.module, this.id ?? this[relativeTo]);
     },
   });
   @field linkedExamples = linksToMany(CardDef);
@@ -966,9 +966,9 @@ export class Spec extends CardDef {
               params.commandContext,
             ).execute({
               count: GENERATED_EXAMPLE_COUNT,
-              codeRef: codeRefWithAbsoluteURL(
+              codeRef: codeRefWithAbsoluteIdentifier(
                 this.ref,
-                cardIdToURL(this.id),
+                toNetworkURL(this.id),
               ) as ResolvedCodeRef,
               realm: this[realmURL]?.href,
               exampleCard: this,

@@ -27,8 +27,8 @@ import {
 } from './index';
 import {
   isRegisteredPrefix,
-  cardIdToURL,
-  resolveCardReference,
+  toNetworkURL,
+  toNetworkURL,
 } from './card-reference-resolver';
 import type { VirtualNetwork } from './virtual-network';
 
@@ -45,7 +45,7 @@ function canonicalURL(url: string, relativeTo?: string): string {
   // to real URLs so that realm-membership checks and DB lookups work.
   if (isRegisteredPrefix(url)) {
     try {
-      return resolveCardReference(url, undefined);
+      return toNetworkURL(url, undefined);
     } catch (_e) {
       // fall through to normal URL handling
     }
@@ -949,7 +949,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         let base = relativeTo;
         if (error.id) {
           try {
-            base = cardIdToURL(error.id);
+            base = toNetworkURL(error.id);
           } catch (_err) {
             base = relativeTo;
           }

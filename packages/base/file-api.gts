@@ -13,7 +13,7 @@ import {
   BaseDefComponent,
   Component,
   GetMenuItemParams,
-  ReadOnlyField,
+  ReadOnlyIdField,
   StringField,
   contains,
   field,
@@ -33,9 +33,7 @@ import CodeIcon from '@cardstack/boxel-icons/code';
 import { isSavedInstance } from './-private';
 
 class View extends Component<typeof FileDef> {
-  <template>
-    {{@model.name}}
-  </template>
+  <template>{{@model.name}}</template>
 }
 
 class Edit extends Component<typeof FileDef> {
@@ -101,7 +99,7 @@ export class FileDef extends BaseDef {
     }
   }
 
-  @field id = contains(ReadOnlyField);
+  @field id = contains(ReadOnlyIdField);
   @field sourceUrl = contains(StringField);
   @field url = contains(StringField);
   @field name = contains(StringField);
@@ -186,7 +184,14 @@ export function createFileDef({
   contentHash,
   contentSize,
 }: SerializedFileDef) {
-  return new FileDef({ url, sourceUrl, name, contentType, contentHash, contentSize });
+  return new FileDef({
+    url,
+    sourceUrl,
+    name,
+    contentType,
+    contentHash,
+    contentSize,
+  });
 }
 
 export function getDefaultFileMenuItems(

@@ -1,5 +1,5 @@
 import { escapeHtml } from './helpers/html';
-import { resolveCardReference } from './card-reference-resolver';
+import { toNetworkURL } from './card-reference-resolver';
 import { trimJsonExtension } from './url';
 import { FITTED_FORMATS } from './formats';
 import type { TokenizerAndRendererExtension } from 'marked';
@@ -13,7 +13,7 @@ const INLINE_CODE_RE = new RegExp('(`+)([\\s\\S]*?)\\1', 'g');
 
 function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
   try {
-    return resolveCardReference(ref, baseUrl || undefined);
+    return toNetworkURL(ref, baseUrl || undefined);
   } catch {
     return null;
   }

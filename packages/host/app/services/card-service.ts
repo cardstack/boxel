@@ -3,6 +3,7 @@ import Service, { service } from '@ember/service';
 
 import { v4 as uuidv4 } from 'uuid';
 
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
 import {
   formattedError,
   SupportedMimeType,
@@ -113,7 +114,7 @@ export default class CardService extends Service {
   }
 
   async fetchJSON(
-    url: string | URL,
+    id: RealmResourceIdentifier,
     args?: CardServiceRequestInit,
   ): Promise<CardDocument | undefined> {
     let {
@@ -149,7 +150,6 @@ export default class CardService extends Service {
       requestInit.method = 'POST';
       requestHeaders.set('X-HTTP-Method-Override', 'QUERY');
     }
-    let urlString = url instanceof URL ? url.href : url;
     let method = requestInit.method?.toUpperCase?.();
     if (
       !isReadOperation &&
@@ -160,10 +160,10 @@ export default class CardService extends Service {
         typeof requestInit.body === 'string'
           ? requestInit.body
           : JSON.stringify(requestInit.body, null, 2);
-      this.validateSizeLimit(urlString, jsonString, 'card');
+      this.validateSizeLimit(id, jsonString, 'card');
     }
 
-    let response = await this.network.authedFetch(url, requestInit);
+    let response = await this.network.authedFetch(id, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
       let err = new Error(

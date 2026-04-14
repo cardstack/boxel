@@ -18,7 +18,7 @@ import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 import {
   baseFileRef,
   CardError,
-  cardIdToURL,
+  toNetworkURL,
   isRegisteredPrefix,
   hasExecutableExtension,
   isCardError,
@@ -65,7 +65,7 @@ import {
   type StoreReadType,
   type CardResource,
   type Saved,
-  resolveCardReference,
+  toNetworkURL,
 } from '@cardstack/runtime-common';
 
 import type { CardDef, BaseDef } from 'https://cardstack.com/base/card-api';
@@ -278,7 +278,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     } else {
-      this.subscribeToRealm(cardIdToURL(id));
+      this.subscribeToRealm(toNetworkURL(id));
       // intentionally not awaiting this. we keep track of the promise in
       // this.newReferencePromises
       this.wireUpNewReference(id, readType);
@@ -600,7 +600,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let linkedCards = await this.loadPatchedInstances(
       patch,
-      instance.id ? cardIdToURL(instance.id) : undefined,
+      instance.id ? toNetworkURL(instance.id) : undefined,
     );
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
@@ -1327,7 +1327,7 @@ export default class StoreService extends Service implements StoreInterface {
       return this.createFileMetaFromSerialized(
         resource,
         doc,
-        cardIdToURL(resource.id),
+        toNetworkURL(resource.id),
         dependencyTrackingContext,
       ) as Promise<T>;
     }
@@ -1342,7 +1342,7 @@ export default class StoreService extends Service implements StoreInterface {
     (resource as any)[queryFieldSeedFromSearchSymbol] = true;
     return this.add({ data: resource } as SingleCardDocument, {
       doNotPersist: true,
-      relativeTo: cardIdToURL(resource.id),
+      relativeTo: toNetworkURL(resource.id),
       dependencyTrackingContext,
     }) as Promise<T>;
   }
@@ -1443,7 +1443,7 @@ export default class StoreService extends Service implements StoreInterface {
       }
       // Resolve registered prefix IDs (e.g. @cardstack/skills/...) to actual
       // URLs so they can be used for fetching.
-      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
+      let url = isRegisteredPrefix(id) ? toNetworkURL(id).href : id;
       let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
@@ -1451,7 +1451,7 @@ export default class StoreService extends Service implements StoreInterface {
         let json: CardDocument | undefined;
         if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
           let result = await this.cardService.getSource(
-            cardIdToURL(`${url}.json`),
+            toNetworkURL(`${url}.json`),
           );
           if (result.status === 200) {
             json = JSON.parse(result.content);
@@ -1477,7 +1477,7 @@ export default class StoreService extends Service implements StoreInterface {
           // Source-mode loads in render context don't include realm metadata.
           // Query-backed relationship fields require realmURL to build their
           // fallback search query.
-          let realmURL = this.realm.realmOfURL(cardIdToURL(url))?.href;
+          let realmURL = this.realm.realmOfURL(toNetworkURL(url))?.href;
           if (realmURL) {
             json.data.meta = {
               ...(json.data.meta ?? {}),
@@ -1490,7 +1490,7 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = await this.createFromSerialized(
         doc.data,
         doc,
-        cardIdToURL(doc.data.id!), // instances from the server will have id's
+        toNetworkURL(doc.data.id!), // instances from the server will have id's
         opts?.dependencyTrackingContext,
       );
       // in case the url is an alias for the id (like index card without the
@@ -1566,7 +1566,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (isLocalId(id) && !isRegisteredPrefix(id)) {
         throw new Error(`file-meta reads do not support local ids (${id})`);
       }
-      let url = isRegisteredPrefix(id) ? cardIdToURL(id).href : id;
+      let url = isRegisteredPrefix(id) ? toNetworkURL(id).href : id;
       let fileMetaDoc: SingleFileMetaDocument | CardError;
       if (this.isRenderStore && (globalThis as any).__boxelRenderContext) {
         fileMetaDoc = await this.extractFileMetaDirectly(url);
@@ -1582,7 +1582,7 @@ export default class StoreService extends Service implements StoreInterface {
       let fileInstance = await api.createFromSerialized(
         fileMetaDoc.data,
         fileMetaDoc,
-        fileMetaDoc.data.id ? cardIdToURL(fileMetaDoc.data.id) : new URL(url),
+        fileMetaDoc.data.id ? toNetworkURL(fileMetaDoc.data.id) : new URL(url),
         {
           store: this.store,
           dependencyTrackingContext: opts?.dependencyTrackingContext,
@@ -1886,7 +1886,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         if (isNew) {
           api.setId(instance, json.data.id!);
-          this.subscribeToRealm(cardIdToURL(instance.id));
+          this.subscribeToRealm(toNetworkURL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
           );
@@ -1895,7 +1895,7 @@ export default class StoreService extends Service implements StoreInterface {
           await this.startAutoSaving(instance);
         }
         if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(cardIdToURL(json.data.id!), json);
+          this.onSaveSubscriber(toNetworkURL(json.data.id!), json);
         }
         return instance;
       } catch (err) {
@@ -2030,7 +2030,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getCardInstance({
-      idOrDoc: resolveCardReference(id, relativeTo),
+      idOrDoc: toNetworkURL(id, relativeTo),
     });
     return isCardInstance(instance) ? instance : undefined;
   }
@@ -2093,7 +2093,7 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
     return urlOrDoc.data.id;
   }
   let id = urlOrDoc.replace(/\.json$/, '');
-  return isLocalId(id) ? id : resolveCardReference(id, undefined);
+  return isLocalId(id) ? id : toNetworkURL(id, undefined);
 }
 
 function isSystemCardDefaultId(

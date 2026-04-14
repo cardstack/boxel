@@ -14,7 +14,7 @@ import Captions from '@cardstack/boxel-icons/captions';
 import AllCardsIcon from '@cardstack/boxel-icons/square-stack';
 
 import {
-  cardIdToURL,
+  toNetworkURL,
   chooseCard,
   specRef,
   baseRealm,
@@ -259,7 +259,7 @@ class Isolated extends Component<typeof CardsGrid> {
     }
 
     if (spec && isCardInstance<Spec>(spec)) {
-      await this.args.createCard?.(spec.ref, cardIdToURL(spec.id!), {
+      await this.args.createCard?.(spec.ref, toNetworkURL(spec.id!), {
         realmURL: this.args.model[realmURL],
       });
     }

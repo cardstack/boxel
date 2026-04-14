@@ -26,7 +26,7 @@ import {
 } from './index';
 import { moduleFrom } from './code-ref';
 import type { CacheScope, DefinitionLookup } from './definition-lookup';
-import { resolveCardReference } from './card-reference-resolver';
+import { toNetworkURL } from './card-reference-resolver';
 import { isCardError } from './error';
 import type { IndexingProgressEvent } from './worker';
 import { IndexRunnerDependencyManager } from './index-runner/dependency-resolver';
@@ -470,7 +470,7 @@ export class IndexRunner {
         ...this.#jobInfo,
         url,
         realm: this.#realmURL.href,
-        deps: [resolveCardReference(moduleFrom(resource.meta.adoptsFrom), url)],
+        deps: [toNetworkURL(moduleFrom(resource.meta.adoptsFrom), url)],
       },
       status,
     );

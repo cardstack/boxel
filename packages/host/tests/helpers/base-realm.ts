@@ -111,7 +111,7 @@ let flushLogs: (typeof CardAPIModule)['flushLogs'];
 let queryableValue: (typeof CardAPIModule)['queryableValue'];
 let getFields: (typeof CardAPIModule)['getFields'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
-let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
+let ReadOnlyIdField: (typeof CardAPIModule)['ReadOnlyIdField'];
 let instanceOf: (typeof CardAPIModule)['instanceOf'];
 let CardInfoField: (typeof CardAPIModule)['CardInfoField'];
 let enumField: (typeof EnumModule)['default'];
@@ -241,7 +241,7 @@ async function initialize() {
     queryableValue,
     MaybeBase64Field,
     getFieldDescription,
-    ReadOnlyField,
+    ReadOnlyIdField,
     instanceOf,
     CardInfoField,
   } = cardAPI);
@@ -305,7 +305,7 @@ export {
   queryableValue,
   getFields,
   getFieldDescription,
-  ReadOnlyField,
+  ReadOnlyIdField,
   Skill,
   instanceOf,
   CardInfoField,

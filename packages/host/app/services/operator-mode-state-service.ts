@@ -13,7 +13,7 @@ import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import {
-  cardIdToURL,
+  toNetworkURL,
   RealmPaths,
   type LocalPath,
   isResolvedCodeRef,
@@ -329,7 +329,7 @@ export default class OperatorModeStateService extends Service {
       this.trimItemsFromStack(item);
     }
     let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(cardIdToURL(`${cardId}.json`));
+    let cardPath = realmPaths.local(toNetworkURL(`${cardId}.json`));
     this.recentFilesService.removeRecentFile(cardPath);
     this.recentCardsService.remove(cardId);
   }
@@ -511,7 +511,7 @@ export default class OperatorModeStateService extends Service {
 
   private getRealmURLFromItemId(itemId: string): string {
     try {
-      const url = cardIdToURL(itemId);
+      const url = toNetworkURL(itemId);
       return this.realm.realmOfURL(url)?.href ?? this.realmURL;
     } catch (error) {
       return this.realmURL;

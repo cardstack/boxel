@@ -84,7 +84,7 @@ module(basename(__filename), function () {
   // resolveCardReference, causing new URL() to throw when resolving
   // relative module deps like "../openrouter-model".
   //
-  // The fix uses cardIdToURL() in realm-index-query-engine.ts to resolve
+  // The fix uses resolveCardReference() in realm-index-query-engine.ts to resolve
   // the prefix to a real URL first, and resolveCardReference also handles
   // prefix-form relativeTo strings internally.
   module('relativizeDocument with prefix-form IDs', function (hooks) {

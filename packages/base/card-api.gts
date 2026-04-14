@@ -83,8 +83,8 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
-  resolveCardReference,
-  cardIdToURL,
+  toNetworkURL,
+  resolveRRI,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -159,6 +159,7 @@ import {
   SingleFileMetaDocument,
 } from '@cardstack/runtime-common/document-types';
 import type { FileMetaResource } from '@cardstack/runtime-common';
+import type { RealmResourceIdentifier } from '@cardstack/runtime-common/card-reference-resolver';
 import type { FileDef } from './file-api';
 
 export const BULK_GENERATED_ITEM_COUNT = 3;
@@ -1211,7 +1212,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     store: CardStore,
     _instancePromise: Promise<CardDef>,
     loadedValue: any,
-    relativeTo: URL | undefined,
+    relativeTo: RealmResourceIdentifier | undefined,
     opts: DeserializeOpts,
   ): Promise<BaseInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
@@ -1232,7 +1233,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     if (reference == null || reference === '') {
       return null;
     }
-    let href = resolveCardReference(reference, relativeTo);
+    let href = resolveRRI(reference as RealmResourceIdentifier, relativeTo);
     let cachedInstance = isFileDef(this.card)
       ? store.getFileMeta(href)
       : store.getCard(href);
@@ -1759,7 +1760,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         if (reference == null) {
           return null;
         }
-        let normalizedReference = resolveCardReference(reference, relativeTo);
+        let normalizedReference = toNetworkURL(reference, relativeTo);
         let cachedInstance = isFileDef(this.card)
           ? store.getFileMeta(normalizedReference)
           : store.getCard(normalizedReference);
@@ -2140,7 +2141,7 @@ export class BaseDef {
         if (!value[relativeTo]) {
           return maybeRelativeURL;
         }
-        return resolveCardReference(maybeRelativeURL, value[relativeTo]);
+        return toNetworkURL(maybeRelativeURL, value[relativeTo]);
       }
       return Object.fromEntries(
         Object.entries(
@@ -2163,7 +2164,7 @@ export class BaseDef {
           if (isNotLoadedValue(rawValue)) {
             let normalizedId = rawValue.reference;
             if (value[relativeTo]) {
-              normalizedId = resolveCardReference(normalizedId, value[relativeTo]);
+              normalizedId = toNetworkURL(normalizedId, value[relativeTo]);
             }
             return [fieldName, { id: makeAbsoluteURL(rawValue.reference) }];
           }
@@ -2300,8 +2301,8 @@ export class FieldDef extends BaseDef {
   static fitted: BaseDefComponent = MissingTemplate;
 }
 
-export class ReadOnlyField extends FieldDef {
-  static [primitive]: string;
+export class ReadOnlyIdField extends FieldDef {
+  static [primitive]: RealmResourceIdentifier;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
     <template>{{@model}}</template>
@@ -2476,7 +2477,7 @@ export class CardDef extends BaseDef {
     // notify glimmer to rerender this card
     notifyCardTracking(this);
   }
-  @field id = contains(ReadOnlyField);
+  @field id = contains(ReadOnlyIdField);
   @field cardInfo = contains(CardInfoField);
   @field cardTitle = contains(StringField, {
     computeVia: function (this: CardDef) {
@@ -2790,7 +2791,7 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = resolveCardReference(link, instance.id ?? instance[relativeTo]);
+  let reference = toNetworkURL(link, instance.id ?? instance[relativeTo]);
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   let store = getStore(instance);
@@ -2832,7 +2833,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           fileMetaDoc.data,
           fileMetaDoc,
-          cardIdToURL(fileMetaDoc.data.id!),
+          toNetworkURL(fileMetaDoc.data.id!),
           { store, dependencyTrackingContext },
         )) as FileDef;
       } else {
@@ -2848,7 +2849,7 @@ function lazilyLoadLink(
         fieldValue = (await createFromSerialized(
           cardDoc.data,
           cardDoc,
-          cardIdToURL(cardDoc.data.id!),
+          toNetworkURL(cardDoc.data.id!),
           { store, dependencyTrackingContext },
         )) as CardDef;
       }
@@ -2859,7 +2860,7 @@ function lazilyLoadLink(
           if (!isNotLoadedValue(item)) {
             continue;
           }
-          let notLoadedRef = resolveCardReference(
+          let notLoadedRef = toNetworkURL(
             item.reference,
             instance.id ?? instance[relativeTo],
           );
@@ -3173,7 +3174,7 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
 ): Promise<BaseInstanceType<T>> {
   stores.set(instance, store);
   if (!instance[relativeTo] && doc.data.id) {
-    instance[relativeTo] = cardIdToURL(doc.data.id);
+    instance[relativeTo] = toNetworkURL(doc.data.id);
   }
 
   if (isCardInstance(instance)) {
@@ -3299,7 +3300,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   let instanceRelativeTo =
     instance[relativeTo] ??
     ('id' in instance && typeof instance.id === 'string'
-      ? cardIdToURL(instance.id)
+      ? toNetworkURL(instance.id)
       : undefined);
 
   function getFieldMeta(
@@ -3371,7 +3372,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       relativeTo:
         instanceRelativeTo ??
         (resource.id && typeof resource.id === 'string'
-          ? cardIdToURL(resource.id)
+          ? toNetworkURL(resource.id)
           : undefined),
       dependencyTrackingContext: opts?.dependencyTrackingContext,
     });
@@ -3482,7 +3483,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       let relativeToVal =
         instance[relativeTo] ??
         ('id' in instance && typeof instance.id === 'string'
-          ? cardIdToURL(instance.id)
+          ? toNetworkURL(instance.id)
           : undefined);
       let deserializedValue = await getDeserializedValue({
         card,
@@ -3606,7 +3607,7 @@ function makeDescriptor<
   } else {
     descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
       if (
-        (field.card as typeof BaseDef) === ReadOnlyField &&
+        (field.card as typeof BaseDef) === ReadOnlyIdField &&
         isCardInstance(this) &&
         this[isSavedInstance]
       ) {

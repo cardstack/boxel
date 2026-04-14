@@ -1,3 +1,19 @@
+/**
+ * A card instance ID or module reference that may be either a full URL
+ * (e.g. "http://localhost:4201/base/card-api") or a registered prefix form
+ * (e.g. "@cardstack/base/card-api"). Use `resolveCardReference()` to safely convert
+ * to a URL — do NOT pass directly to `new URL()`.
+ */
+export type RealmResourceIdentifier = string & { __rriBrand: unknown };
+
+/**
+ * A realm URL that may be either a full HTTP URL
+ * (e.g. "http://localhost:4201/base/") or a registered prefix form
+ * (e.g. "@cardstack/base/"). Use `resolveCardReference()` to safely convert
+ * to a URL — do NOT pass directly to `new URL()`.
+ */
+export type RealmIdentifier = string & { __riBrand: unknown };
+
 const prefixMappings = new Map<string, string>();
 
 export function registerCardReferencePrefix(
@@ -29,59 +45,66 @@ function isUrlLikeReference(ref: string): boolean {
   );
 }
 
-export function resolveCardReference(
-  reference: string,
-  relativeTo: URL | string | undefined,
-): string {
+export function resolveRRI(
+  reference: RealmResourceIdentifier,
+  relativeTo?: RealmResourceIdentifier,
+): RealmResourceIdentifier {
+  // ("@cardstack/base/string") → @cardstack/base/string
+  // ("./string", "@cardstack/base") → @cardstack/base/string
+  // ??
+  // ("/string", "@cardstack/base/fields") → @cardstack/base/string
+  // ??
+  // ("~/card", "@cardstack/base/") → @cardstack/base/card
+  // ("@cardstack/base/string", "@cardstack/catalog") → @cardstack/base/string
+  // ("http://localhost:4201/realm/card") → http://localhost:4201/realm/card
+  // ("http://localhost:4201/realm/card", "@cardstack/base") → http://localhost:4201/realm/card
+  // ("./card", "http://localhost:4201/realm/") → http://localhost:4201/realm/card
+  // ("../card", "http://localhost:4201/realm/directory/") → http://localhost:4201/realm/card
+  // ??
+  // ("/card", "http://localhost:4201/realm/directory/") → http://localhost:4201/card
+  // ??
+  // ("~/card", "http://localhost:4201/realm/directory/") → http://localhost:4201/realm/card
+  // ("/card", "https://home.boxel.ai/contact/users") → https://home.boxel.ai/card
+  // ("card", "@cardstack/base") → @cardstack/base/card
+  // ("card", "http://localhost:4201/realm/") → http://localhost:4201/realm/card
+}
+
+export function toNetworkURL(
+  reference: RealmResourceIdentifier,
+  relativeTo?: RealmResourceIdentifier,
+): URL {
   for (let [prefix, target] of prefixMappings) {
     if (reference.startsWith(prefix)) {
-      return new URL(reference.slice(prefix.length), target).href;
+      return new URL(reference.slice(prefix.length), target);
     }
   }
+
   if (!isUrlLikeReference(reference)) {
     throw new Error(
       `Cannot resolve bare package specifier "${reference}" — no matching prefix mapping registered`,
     );
   }
+
   if (reference.startsWith('http://') || reference.startsWith('https://')) {
-    return new URL(reference).href;
+    return new URL(reference);
   }
-  // If relativeTo is a prefix-form ID (e.g. @cardstack/skills/Foo/bar),
-  // resolve it to a real URL before using it as a base.
-  if (typeof relativeTo === 'string') {
-    for (let [prefix, target] of prefixMappings) {
-      if (relativeTo.startsWith(prefix)) {
-        relativeTo = new URL(relativeTo.slice(prefix.length), target).href;
-        break;
-      }
-    }
-    // If relativeTo is still a non-URL-like string after attempting prefix
-    // resolution, provide a more actionable error instead of allowing
-    // new URL(reference, relativeTo) to throw a generic TypeError.
-    if (typeof relativeTo === 'string' && !isUrlLikeReference(relativeTo)) {
-      throw new Error(
-        `Cannot resolve "${reference}" relative to "${relativeTo}" — no matching prefix mapping registered for the base`,
-      );
-    }
-  }
-  return new URL(reference, relativeTo).href;
+
+  let relativeToUrl = relativeTo ? toNetworkURL(relativeTo) : undefined;
+  return new URL(reference, relativeToUrl);
 }
 
 // Reverse of resolveCardReference: converts a resolved URL back to
 // its registered prefix form if one matches.
 // e.g. "http://localhost:4201/catalog/foo" → "@cardstack/catalog/foo"
-export function unresolveCardReference(resolvedURL: string): string {
+export function fromNetworkURL(
+  resolvedURL: string | URL,
+): RealmResourceIdentifier {
+  let urlString = resolvedURL instanceof URL ? resolvedURL.href : resolvedURL;
   for (let [prefix, target] of prefixMappings) {
-    if (resolvedURL.startsWith(target)) {
-      return prefix + resolvedURL.slice(target.length);
+    if (urlString.startsWith(target)) {
+      return (prefix +
+        urlString.slice(target.length)) as RealmResourceIdentifier;
     }
   }
-  return resolvedURL;
-}
-
-// Converts a card instance ID (which may be a registered prefix like
-// @cardstack/catalog/foo or a regular URL) to a URL object by resolving
-// the prefix to a real URL when needed.
-export function cardIdToURL(id: string): URL {
-  return new URL(resolveCardReference(id, undefined));
+  return urlString as RealmResourceIdentifier;
 }
