@@ -81,7 +81,7 @@ export abstract class RealmSyncBase {
     try {
       const url = this.buildDirectoryUrl(dir);
 
-      const response = await this.profileManager.authedFetch(url, {
+      const response = await this.profileManager.authedRealmFetch(url, {
         headers: {
           Accept: 'application/vnd.api+json',
         },
@@ -149,7 +149,7 @@ export abstract class RealmSyncBase {
     try {
       const url = `${this.normalizedRealmUrl}_mtimes`;
 
-      const response = await this.profileManager.authedFetch(url, {
+      const response = await this.profileManager.authedRealmFetch(url, {
         headers: {
           Accept: SupportedMimeType.Mtimes,
         },
@@ -297,7 +297,7 @@ export abstract class RealmSyncBase {
     const content = fs.readFileSync(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.profileManager.authedFetch(url, {
+    const response = await this.profileManager.authedRealmFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain;charset=UTF-8',
@@ -328,7 +328,7 @@ export abstract class RealmSyncBase {
 
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.profileManager.authedFetch(url, {
+    const response = await this.profileManager.authedRealmFetch(url, {
       headers: {
         Accept: SupportedMimeType.CardSource,
       },
@@ -366,7 +366,7 @@ export abstract class RealmSyncBase {
 
     const url = this.buildFileUrl(relativePath);
 
-    const response = await this.profileManager.authedFetch(url, {
+    const response = await this.profileManager.authedRealmFetch(url, {
       method: 'DELETE',
       headers: {
         Accept: SupportedMimeType.CardSource,

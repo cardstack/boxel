@@ -71,6 +71,7 @@ class RealmPuller extends RealmSyncBase {
       }
     }
 
+    const deletedFiles: string[] = [];
     if (this.pullOptions.deleteLocal) {
       const filesToDelete = new Set(localFiles.keys());
       for (const relativePath of remoteFiles.keys()) {
@@ -105,6 +106,7 @@ class RealmPuller extends RealmSyncBase {
             const localPath = localFiles.get(relativePath);
             if (localPath) {
               await this.deleteLocalFile(localPath);
+              deletedFiles.push(relativePath);
               console.log(`  Deleted: ${relativePath}`);
             }
           } catch (error) {
@@ -121,9 +123,30 @@ class RealmPuller extends RealmSyncBase {
         file: f,
         status: 'modified' as const,
       }));
+      if (deletedFiles.length > 0) {
+        for (const f of deletedFiles) {
+          pullChanges.push({ file: f, status: 'deleted' as const });
+        }
+      }
       const checkpoint = checkpointManager.createCheckpoint(
         'remote',
         pullChanges,
+      );
+      if (checkpoint) {
+        const tag = checkpoint.isMajor ? '[MAJOR]' : '[minor]';
+        console.log(
+          `\nCheckpoint created: ${checkpoint.shortHash} ${tag} ${checkpoint.message}`,
+        );
+      }
+    } else if (!this.options.dryRun && deletedFiles.length > 0) {
+      const checkpointManager = new CheckpointManager(this.options.localDir);
+      const deleteChanges: CheckpointChange[] = deletedFiles.map((f) => ({
+        file: f,
+        status: 'deleted' as const,
+      }));
+      const checkpoint = checkpointManager.createCheckpoint(
+        'remote',
+        deleteChanges,
       );
       if (checkpoint) {
         const tag = checkpoint.isMajor ? '[MAJOR]' : '[minor]';

@@ -377,35 +377,26 @@ export class ProfileManager {
     }
   }
 
-  private async resolveTokenForUrl(url: string): Promise<string> {
-    // Check if URL matches a cached realm token
+  private async getRealmTokenForUrl(url: string): Promise<string | undefined> {
     let realmToken = this.findRealmTokenForUrl(url);
     if (realmToken) {
       return realmToken;
     }
 
-    // Fetch all realm tokens and try again
-    await this.fetchAndStoreAllRealmTokens();
-    realmToken = this.findRealmTokenForUrl(url);
-    if (realmToken) {
-      return realmToken;
+    try {
+      await this.fetchAndStoreAllRealmTokens();
+    } catch {
+      // Token prefetch failed (e.g. expired server token) — caller will handle 401 retry
+      return undefined;
     }
-
-    // Fall back to server token for server-level endpoints
-    return this.getOrRefreshServerToken();
+    return this.findRealmTokenForUrl(url);
   }
 
-  async authedFetch(
+  private buildHeaders(
     input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> {
-    let url =
-      input instanceof Request
-        ? input.url
-        : input instanceof URL
-          ? input.href
-          : input;
-    let token = await this.resolveTokenForUrl(url);
+    init: RequestInit | undefined,
+    token: string,
+  ): Headers {
     let baseHeaders =
       input instanceof Request ? new Headers(input.headers) : new Headers();
     let initHeaders = new Headers(init?.headers);
@@ -415,20 +406,63 @@ export class ProfileManager {
     if (!baseHeaders.has('Authorization')) {
       baseHeaders.set('Authorization', token);
     }
+    return baseHeaders;
+  }
 
-    let response = await fetch(input, { ...init, headers: baseHeaders });
+  async authedRealmFetch(
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> {
+    let url =
+      input instanceof Request
+        ? input.url
+        : input instanceof URL
+          ? input.href
+          : input;
+
+    let token = await this.getRealmTokenForUrl(url);
+    if (token) {
+      let headers = this.buildHeaders(input, init, token);
+      let response = await fetch(input, { ...init, headers });
+
+      if (response.status !== 401) {
+        return response;
+      }
+    }
+
+    // Either no cached realm token (e.g. server token was expired during
+    // prefetch) or the request got a 401. Refresh everything and retry.
+    let active = this.getActiveProfile();
+    if (active) {
+      active.profile.realmTokens = {};
+      active.profile.realmServerToken = undefined;
+      this.saveConfig();
+    }
+    await this.fetchAndStoreAllRealmTokens();
+    token = this.findRealmTokenForUrl(url);
+    if (!token) {
+      throw new Error(
+        `No realm token available for ${url}. The realm may not be accessible.`,
+      );
+    }
+    let headers = this.buildHeaders(input, init, token);
+    let response = await fetch(input, { ...init, headers });
+
+    return response;
+  }
+
+  async authedRealmServerFetch(
+    input: string | URL | Request,
+    init?: RequestInit,
+  ): Promise<Response> {
+    let token = await this.getOrRefreshServerToken();
+    let headers = this.buildHeaders(input, init, token);
+    let response = await fetch(input, { ...init, headers });
 
     if (response.status === 401) {
-      // Clear cached tokens and retry
-      let active = this.getActiveProfile();
-      if (active) {
-        active.profile.realmTokens = {};
-        active.profile.realmServerToken = undefined;
-        this.saveConfig();
-      }
-      token = await this.resolveTokenForUrl(url);
-      baseHeaders.set('Authorization', token);
-      response = await fetch(input, { ...init, headers: baseHeaders });
+      token = await this.refreshServerToken();
+      headers = this.buildHeaders(input, init, token);
+      response = await fetch(input, { ...init, headers });
     }
 
     return response;
