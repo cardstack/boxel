@@ -23,7 +23,6 @@ const DEFAULT_TIMEOUT_MS = 60_000;
  */
 const SCRIPT_FILE_MAP: Record<string, string> = {
   'search-realm': 'boxel-search.ts',
-  'get-session': 'boxel-session.ts',
   'run-realm-tests': 'run-realm-tests.ts',
 };
 

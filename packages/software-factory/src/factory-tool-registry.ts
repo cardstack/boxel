@@ -63,21 +63,6 @@ const SCRIPT_TOOLS: ToolManifest[] = [
     ],
   },
   {
-    name: 'get-session',
-    description:
-      'Generate authenticated browser session tokens for realm access.',
-    category: 'script',
-    outputFormat: 'json',
-    args: [
-      {
-        name: 'realm',
-        type: 'string',
-        required: false,
-        description: 'Specific realm URL to include (repeatable)',
-      },
-    ],
-  },
-  {
     name: 'run-realm-tests',
     description:
       'Execute Playwright tests in an isolated scratch realm with fixture setup and teardown.',

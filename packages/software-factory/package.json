@@ -6,7 +6,6 @@
   "description": "Software Factory workspace package",
   "scripts": {
     "boxel:search": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-search.ts",
-    "boxel:session": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/boxel-session.ts",
     "cache:prepare": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/cache-realm.ts",
     "factory:go": "NODE_NO_WARNINGS=1 ts-node --transpileOnly src/cli/factory-entrypoint.ts",
     "smoke:context": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/smoke-tests/factory-context-smoke.ts",
