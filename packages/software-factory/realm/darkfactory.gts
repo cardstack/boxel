@@ -1,5 +1,6 @@
 import {
   CardDef,
+  FieldDef,
   Component,
   field,
   contains,
@@ -241,6 +242,55 @@ export class KnowledgeArticle extends CardDef {
   };
 }
 
+export class Comment extends FieldDef {
+  static displayName = 'Comment';
+  @field body = contains(MarkdownField);
+  @field author = contains(StringField);
+  @field datetime = contains(DateTimeField);
+
+  static embedded = class Embedded extends Component<typeof Comment> {
+    <template>
+      <div class='comment'>
+        <div class='comment-header'>
+          <span class='comment-author'>{{@model.author}}</span>
+          {{#if @model.datetime}}
+            <span class='comment-date'>{{@model.datetime}}</span>
+          {{/if}}
+        </div>
+        <div class='comment-body'>
+          <@fields.body />
+        </div>
+      </div>
+      <style scoped>
+        .comment {
+          padding: 12px 0;
+          border-bottom: 1px solid var(--boxel-200);
+        }
+        .comment:last-child {
+          border-bottom: none;
+        }
+        .comment-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+        .comment-author {
+          font-weight: 600;
+          font-size: var(--boxel-font-size-sm);
+        }
+        .comment-date {
+          color: var(--boxel-400);
+          font-size: var(--boxel-font-size-xs);
+        }
+        .comment-body {
+          font-size: var(--boxel-font-size-sm);
+        }
+      </style>
+    </template>
+  };
+}
+
 export class Issue extends CardDef {
   static displayName = 'Issue';
 
@@ -257,6 +307,7 @@ export class Issue extends CardDef {
   @field order = contains(NumberField);
   @field createdAt = contains(DateTimeField);
   @field updatedAt = contains(DateTimeField);
+  @field comments = containsMany(Comment);
 
   @field title = contains(StringField, {
     computeVia: function (this: Issue) {
@@ -368,6 +419,12 @@ export class Issue extends CardDef {
             <@fields.blockedBy />
           </section>
         {{/if}}
+        {{#if @model.comments.length}}
+          <section class='comments-section'>
+            <h3>Comments</h3>
+            <@fields.comments />
+          </section>
+        {{/if}}
       </article>
       <style scoped>
         .surface {
@@ -406,6 +463,14 @@ export class Issue extends CardDef {
         .status-blocked {
           color: var(--boxel-red, #dc2626);
           background: #fef2f2;
+        }
+        .comments-section {
+          margin-top: 16px;
+        }
+        .comments-section h3 {
+          font-size: var(--boxel-font-size);
+          font-weight: 600;
+          margin-bottom: 8px;
         }
       </style>
     </template>

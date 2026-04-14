@@ -304,20 +304,21 @@ Rename `Ticket` to `Issue` throughout. Field renames: `ticketId` → `issueId`, 
 
 **Keep** (actively set or read):
 
-| Field                | Type                          | Used By                                                            |
-| -------------------- | ----------------------------- | ------------------------------------------------------------------ |
-| `issueId`            | String                        | Bootstrap, tests, templates (was `ticketId`)                       |
-| `summary`            | String                        | Bootstrap, prompts, templates                                      |
-| `description`        | MarkdownField                 | Bootstrap, templates                                               |
-| `issueType`          | IssueTypeField enum           | Bootstrap (set to 'feature'), tests (was `ticketType`)             |
-| `status`             | IssueStatusField enum         | Bootstrap, factory-implement.ts (updated post-completion), prompts |
-| `priority`           | IssuePriorityField enum       | Bootstrap, prompts, templates                                      |
-| `project`            | linksTo(Project)              | Bootstrap, skill loader                                            |
-| `assignedAgent`      | linksTo(AgentProfile)         | pick-ticket.ts (assignment workflow)                               |
-| `relatedKnowledge`   | linksToMany(KnowledgeArticle) | Skill loader (filters skills by knowledge tags)                    |
-| `acceptanceCriteria` | MarkdownField                 | Bootstrap, prompts                                                 |
-| `createdAt`          | DateTimeField                 | Bootstrap (set to context.now)                                     |
-| `updatedAt`          | DateTimeField                 | Bootstrap (set to context.now)                                     |
+| Field                | Type                          | Used By                                                             |
+| -------------------- | ----------------------------- | ------------------------------------------------------------------- |
+| `issueId`            | String                        | Bootstrap, tests, templates (was `ticketId`)                        |
+| `summary`            | String                        | Bootstrap, prompts, templates                                       |
+| `description`        | MarkdownField                 | Bootstrap, templates                                                |
+| `issueType`          | IssueTypeField enum           | Bootstrap (set to 'feature'), tests (was `ticketType`)              |
+| `status`             | IssueStatusField enum         | Bootstrap, factory-implement.ts (updated post-completion), prompts  |
+| `priority`           | IssuePriorityField enum       | Bootstrap, prompts, templates                                       |
+| `project`            | linksTo(Project)              | Bootstrap, skill loader                                             |
+| `assignedAgent`      | linksTo(AgentProfile)         | pick-ticket.ts (assignment workflow)                                |
+| `relatedKnowledge`   | linksToMany(KnowledgeArticle) | Skill loader (filters skills by knowledge tags)                     |
+| `acceptanceCriteria` | MarkdownField                 | Bootstrap, prompts                                                  |
+| `createdAt`          | DateTimeField                 | Bootstrap (set to context.now)                                      |
+| `updatedAt`          | DateTimeField                 | Bootstrap (set to context.now)                                      |
+| `comments`           | containsMany(Comment)         | Agent tool (add_comment), human replies, validation failure logging |
 
 **Drop** (defined but never set or read):
 
@@ -332,12 +333,30 @@ Rename `Ticket` to `Issue` throughout. Field renames: `ticketId` → `issueId`, 
 
 The issue-driven loop needs dependency tracking fields not in Phase 1:
 
-| Field       | Type               | Purpose                                                               |
-| ----------- | ------------------ | --------------------------------------------------------------------- |
-| `blockedBy` | linksToMany(Issue) | Explicit dependency edges — issue can't start until blockers are done |
-| `order`     | NumberField        | Sequence number for tie-breaking when priorities are equal            |
+| Field       | Type                  | Purpose                                                               |
+| ----------- | --------------------- | --------------------------------------------------------------------- |
+| `blockedBy` | linksToMany(Issue)    | Explicit dependency edges — issue can't start until blockers are done |
+| `order`     | NumberField           | Sequence number for tie-breaking when priorities are equal            |
+| `comments`  | containsMany(Comment) | Append-only log of structured comments on an issue                    |
 
 These were described in the "Issue Ordering and Dependencies" section above but need to be added to the Issue card definition.
+
+### Comment FieldDef and `add_comment` Tool
+
+`Comment` is a compound `FieldDef` (not a `CardDef`) with three fields:
+
+- `body` (MarkdownField) — the comment text
+- `author` (StringField) — who wrote the comment (e.g., "factory-agent", "human")
+- `datetime` (DateTimeField) — when the comment was created
+
+The `add_comment` factory tool appends comments to an existing issue. It reads the issue, appends a new comment to the `comments` array, and writes back the full document. This is an append-only log pattern: comments are never edited or deleted, only appended.
+
+**Why structured comments instead of modifying the description?**
+
+- The issue description captures the _original intent_ — what needs to be done. Comments capture _evolving context_ — what was tried, what feedback was given, what status updates occurred.
+- Append-only means no data loss: each comment is preserved with its author and timestamp.
+- The agent can add comments without risking accidental description corruption.
+- Human replies (e.g., resolving a clarification) are also modeled as comments, creating a unified conversation thread on the issue.
 
 ### Future: Adopt from Catalog Task Tracker Cards
 
@@ -375,7 +394,20 @@ The status transition rules are:
 | `in_progress` → `blocked` | Agent or Orchestrator | Agent sets `blocked` via `update_issue`, or max iterations reached with failing validation |
 | `blocked` → `backlog`     | Agent                 | Agent unblocks via `update_issue`                                                          |
 
-The `update_issue` tool strips disallowed status values — only `blocked` and `backlog` pass through. The agent signals completion via `signal_done()`, and the loop promotes to `done` only when validation also passes. If the agent signals done but validation fails, the loop continues iterating with the failure details.
+The `update_issue` tool strips disallowed status values — only `blocked` and `backlog` pass through. It also strips `description` — issue descriptions are immutable after creation (see below). The agent signals completion via `signal_done()`, and the loop promotes to `done` only when validation also passes. If the agent signals done but validation fails, the loop continues iterating with the failure details.
+
+### Issue Descriptions Are Immutable
+
+**Issue descriptions must never be modified after creation.** The description captures the original intent of the issue. All post-creation context — blocked reasons, validation failures, progress notes, human replies — must be added as **comments** via the `add_comment` tool or `IssueStore.addComment()`.
+
+This design principle is enforced at multiple levels:
+
+- The `update_issue` agent tool strips `description` from attributes before writing
+- The orchestrator's max-iteration blocking adds failure context as a comment (author: `orchestrator`), not by overwriting the description
+- The `IssueStore.updateIssue()` interface accepts only `{ status?: string }` — no `description` field
+- Skills and system prompts instruct the agent to use `add_comment` for all post-creation context
+
+The `add_comment` tool and `addCommentToIssue()` realm operation implement the centralized read-patch-write logic for appending comments. Both the agent tool and the orchestrator's `IssueStore` delegate to this single function.
 
 ### Project Completion
 
