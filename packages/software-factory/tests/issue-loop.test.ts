@@ -26,6 +26,10 @@ import {
 class MockIssueStore implements IssueStore {
   issues: SchedulableIssue[];
   updateCalls: { issueId: string; updates: Record<string, unknown> }[] = [];
+  commentCalls: {
+    issueId: string;
+    comment: { body: string; author: string };
+  }[] = [];
   projectStatusCalls: string[] = [];
 
   constructor(issues: SchedulableIssue[]) {
@@ -46,7 +50,7 @@ class MockIssueStore implements IssueStore {
 
   async updateIssue(
     issueId: string,
-    updates: { status?: string; description?: string },
+    updates: { status?: string },
   ): Promise<void> {
     this.updateCalls.push({ issueId, updates });
     // Apply status change so refreshIssue reflects it
@@ -54,6 +58,13 @@ class MockIssueStore implements IssueStore {
     if (issue && updates.status) {
       issue.status = updates.status as SchedulableIssue['status'];
     }
+  }
+
+  async addComment(
+    issueId: string,
+    comment: { body: string; author: string },
+  ): Promise<void> {
+    this.commentCalls.push({ issueId, comment });
   }
 
   async updateProjectStatus(projectStatus: string): Promise<void> {
@@ -570,11 +581,18 @@ module('issue-loop > max inner iterations', function () {
     );
     assert.ok(blockCall, 'updateIssue called with status: blocked');
     assert.strictEqual(blockCall!.issueId, 'iss-1');
+
+    // Failure context is now added as a comment, not overwriting description
+    let commentCall = store.commentCalls.find((c) => c.issueId === 'iss-1');
+    assert.ok(commentCall, 'addComment was called');
     assert.ok(
-      (blockCall!.updates.description as string).includes(
-        'max iteration limit',
-      ),
-      'description includes reason',
+      commentCall!.comment.body.includes('max iteration limit'),
+      'comment body includes reason',
+    );
+    assert.strictEqual(
+      commentCall!.comment.author,
+      'orchestrator',
+      'comment author is orchestrator',
     );
   });
 });

@@ -23,6 +23,7 @@ import {
   searchRealm,
   runRealmCommand,
   ensureJsonExtension,
+  addCommentToIssue,
   type RealmFetchOptions,
 } from './realm-operations';
 
@@ -113,6 +114,9 @@ export function buildFactoryTools(
     buildSignalDoneTool(),
     buildRequestClarificationTool(),
   ];
+
+  // add_comment doesn't need runtime schemas — it reads/patches directly.
+  tools.push(buildAddCommentTool(config));
 
   // Card tools are only available when runtime schemas have been fetched.
   let schemas = config.cardTypeSchemas;
@@ -386,6 +390,9 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
       ) {
         delete attributes.status;
       }
+      // Issue descriptions are immutable after creation. All post-creation
+      // context must go through add_comment instead.
+      delete attributes.description;
       let relationships = args.relationships as
         | Record<string, unknown>
         | undefined;
@@ -407,6 +414,44 @@ function buildUpdateIssueTool(config: ToolBuilderConfig): FactoryTool {
         JSON.stringify(doc, null, 2),
         fetchOptions,
       );
+    },
+  };
+}
+
+function buildAddCommentTool(config: ToolBuilderConfig): FactoryTool {
+  return {
+    name: 'add_comment',
+    description:
+      'Append a comment to an existing issue. Use this to record context, feedback, or status updates without modifying the issue description.',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description:
+            'Path to the issue card file (e.g., "Issues/bootstrap-seed.json")',
+        },
+        body: {
+          type: 'string',
+          description: 'The comment text (markdown supported)',
+        },
+        author: {
+          type: 'string',
+          description:
+            'Who is writing this comment (e.g., "factory-agent", "human")',
+        },
+      },
+      required: ['path', 'body', 'author'],
+    },
+    execute: async (args) => {
+      let path = args.path as string;
+      let body = args.body as string;
+      let author = args.author as string;
+
+      let realmUrl = config.targetRealmUrl;
+      let fetchOptions = buildFetchOptions(config, realmUrl);
+
+      return addCommentToIssue(realmUrl, path, { body, author }, fetchOptions);
     },
   };
 }

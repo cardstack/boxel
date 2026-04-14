@@ -157,10 +157,10 @@ function formatValidation(results: ValidationResults): string {
 }
 
 /**
- * Build a description for an issue blocked due to max iterations with
+ * Build the comment body for an issue blocked due to max iterations with
  * failing validation, including the formatted failure context.
  */
-function buildMaxIterationBlockedDescription(
+function buildMaxIterationBlockedComment(
   maxIterations: number,
   validationResults: ValidationResults,
   validator: Validator,
@@ -367,15 +367,26 @@ export async function runIssueLoop(
           `  Validation still failing — blocking issue with failure context`,
         );
 
+        // Comment is best-effort context; status transition is critical.
         try {
-          let description = buildMaxIterationBlockedDescription(
+          let commentBody = buildMaxIterationBlockedComment(
             maxIterationsPerIssue,
             validationResults,
             validator,
           );
+          await issueStore.addComment(issue.id, {
+            body: commentBody,
+            author: 'orchestrator',
+          });
+        } catch (err) {
+          log.warn(
+            `  Failed to add blocking comment to issue: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+
+        try {
           await issueStore.updateIssue(issue.id, {
             status: 'blocked',
-            description,
           });
           exitReason = 'blocked';
         } catch (err) {
