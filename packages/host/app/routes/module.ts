@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import type Transition from '@ember/routing/transition';
@@ -99,6 +100,7 @@ export interface ModuleModelContext {
   network: NetworkService;
   authGuard: ReturnType<typeof createAuthErrorGuard>;
   state: ModuleModelState;
+  owner: object;
 }
 export interface ModuleModelParams {
   id: string;
@@ -139,6 +141,11 @@ export default class ModuleRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__boxelRenderContext = true;
+    registerDestructor(this, () => {
+      if (isTesting()) {
+        (globalThis as any).__boxelRenderContext = undefined;
+      }
+    });
     this.#authGuard.register();
     if (!isTesting()) {
       await this.store.ensureSetupComplete();
@@ -183,6 +190,7 @@ export default class ModuleRoute extends Route<Model> {
           this.lastStoreResetKey = key;
         },
       },
+      owner: this,
     };
   }
 }
@@ -193,7 +201,7 @@ export async function buildModuleModel(
 ): Promise<Model> {
   let parsedOptions = renderOptions ?? {};
   let moduleURL = trimExecutableExtension(new URL(id));
-  registerBoxelTransitionTo(context.router);
+  registerBoxelTransitionTo(context.router, context.owner);
 
   if (parsedOptions.clearCache) {
     context.state.setTypesCache(
