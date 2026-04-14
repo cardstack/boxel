@@ -1,13 +1,13 @@
-import {
-  RealmSyncBase,
-  validateMatrixEnvVars,
-  isProtectedFile,
-  type SyncOptions,
-} from '../lib/realm-sync-base.js';
+import type { Command } from 'commander';
+import { RealmSyncBase, isProtectedFile, type SyncOptions } from '../../lib/realm-sync-base';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../lib/checkpoint-manager.js';
+} from '../../lib/checkpoint-manager';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../../lib/profile-manager';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -49,11 +49,9 @@ class RealmPusher extends RealmSyncBase {
 
   constructor(
     private pushOptions: PushOptions,
-    matrixUrl: string,
-    username: string,
-    password: string,
+    profileManager: ProfileManager,
   ) {
-    super(pushOptions, matrixUrl, username, password);
+    super(pushOptions, profileManager);
   }
 
   async sync(): Promise<void> {
@@ -68,7 +66,7 @@ class RealmPusher extends RealmSyncBase {
       console.error('Failed to access workspace:', error);
       throw new Error(
         'Cannot proceed with push: Authentication or access failed. ' +
-          'Please check your Matrix credentials and workspace permissions.',
+          'Please check your credentials and workspace permissions.',
       );
     }
     console.log('Workspace access verified');
@@ -203,6 +201,30 @@ export interface PushCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  profileManager?: ProfileManager;
+}
+
+export function registerPushCommand(realm: Command): void {
+  realm
+    .command('push')
+    .description('Push local files to a Boxel realm')
+    .argument('<local-dir>', 'The local directory containing files to sync')
+    .argument(
+      '<workspace-url>',
+      'The URL of the target workspace (e.g., https://app.boxel.ai/demo/)',
+    )
+    .option('--delete', 'Delete remote files that do not exist locally')
+    .option('--dry-run', 'Show what would be done without making changes')
+    .option('--force', 'Upload all files, even if unchanged')
+    .action(
+      async (
+        localDir: string,
+        workspaceUrl: string,
+        options: { delete?: boolean; dryRun?: boolean; force?: boolean },
+      ) => {
+        await pushCommand(localDir, workspaceUrl, options);
+      },
+    );
 }
 
 export async function pushCommand(
@@ -210,8 +232,14 @@ export async function pushCommand(
   workspaceUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
-  const { matrixUrl, username, password } =
-    await validateMatrixEnvVars(workspaceUrl);
+  let pm = options.profileManager ?? getProfileManager();
+  let active = pm.getActiveProfile();
+  if (!active) {
+    console.error(
+      'Error: no active profile. Run `boxel profile add` to create one.',
+    );
+    process.exit(1);
+  }
 
   if (!fs.existsSync(localDir)) {
     console.error(`Local directory does not exist: ${localDir}`);
@@ -227,12 +255,9 @@ export async function pushCommand(
         dryRun: options.dryRun,
         force: options.force,
       },
-      matrixUrl,
-      username,
-      password,
+      pm,
     );
 
-    await pusher.initialize();
     await pusher.sync();
 
     if (pusher.hasError) {
