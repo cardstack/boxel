@@ -1283,6 +1283,101 @@ module(basename(__filename), function () {
           );
         });
       });
+
+      module('cross-realm FileDef linksTo', function (hooks) {
+        let consumerRealm: Realm;
+
+        setupPermissionedRealmsCached(hooks, {
+          mode: 'before',
+          realms: [
+            // provider
+            {
+              realmURL: testRealm1URL,
+              permissions: {
+                ['@node-test_realm:localhost']: ['read'],
+              },
+              fileSystem: {
+                'cross-realm-note.txt': 'hello from provider realm',
+              },
+            },
+            // consumer
+            {
+              realmURL: testRealm2URL,
+              permissions: {
+                '*': ['read', 'write'],
+                '@node-test_realm:localhost': ['read', 'realm-owner'],
+              },
+              fileSystem: {
+                'file-linker.gts': `
+                  import { CardDef, field, linksTo } from "https://cardstack.com/base/card-api";
+                  import { FileDef } from "https://cardstack.com/base/file-api";
+
+                  export class FileLinker extends CardDef {
+                    @field attachment = linksTo(() => FileDef);
+                  }
+                `,
+                'file-linker-1.json': {
+                  data: {
+                    attributes: {},
+                    relationships: {
+                      attachment: {
+                        links: {
+                          self: `${testRealm1URL}cross-realm-note.txt`,
+                        },
+                        // Simulate stale relationship typing that can appear in index payloads.
+                        data: {
+                          type: 'card',
+                          id: `${testRealm1URL}cross-realm-note.txt`,
+                        },
+                      },
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: './file-linker',
+                        name: 'FileLinker',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+          onRealmSetup({ dbAdapter, realms }) {
+            permissionedDbAdapter = dbAdapter;
+            consumerRealm = realms.find(
+              ({ realm }) => realm.url === testRealm2URL,
+            )!.realm;
+          },
+        });
+
+        test('indexes cross-realm linksTo FileDef relationships', async function (assert) {
+          let entry = await consumerRealm.realmIndexQueryEngine.instance(
+            new URL(`${testRealm2URL}file-linker-1`),
+          );
+          assert.strictEqual(entry?.type, 'instance', 'instance indexes');
+
+          let rows = (await permissionedDbAdapter.execute(
+            `SELECT has_error
+             FROM boxel_index
+             WHERE url = $1
+               AND type = 'instance'
+               AND (is_deleted = FALSE OR is_deleted IS NULL)`,
+            { bind: [`${testRealm2URL}file-linker-1.json`] },
+          )) as { has_error: boolean | null }[];
+          assert.strictEqual(rows.length, 1, 'found one instance index row');
+          assert.false(Boolean(rows[0]?.has_error), 'instance row has no error');
+
+          let deps = await depsForIndexEntry(
+            permissionedDbAdapter,
+            `${testRealm2URL}file-linker-1.json`,
+            'instance',
+          );
+          assert.ok(
+            deps.includes(`${testRealm1URL}cross-realm-note.txt`),
+            'deps include cross-realm FileDef target URL',
+          );
+        });
+      });
     });
   });
 

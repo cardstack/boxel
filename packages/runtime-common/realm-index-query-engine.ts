@@ -41,7 +41,6 @@ import {
   type CodeRef,
 } from './code-ref';
 import {
-  isSingleCardDocument,
   type SingleCardDocument,
   type LinkableCollectionDocument,
   isLinkableCollectionDocument,
@@ -960,9 +959,18 @@ export class RealmIndexQueryEngine {
             }
           }
         } else {
-          let response = await this.#fetch(linkURL, {
-            headers: { Accept: SupportedMimeType.CardJson },
-          });
+          let response: Response;
+
+          if(expectsCard){
+            response = await this.#fetch(linkURL, {
+              headers: { Accept: SupportedMimeType.CardJson },
+            });
+          } else {
+            response = await this.#fetch(linkURL, {
+              headers: { Accept: SupportedMimeType.FileMeta },
+            });
+          }
+
           if (!response.ok) {
             let cardError = await CardError.fromFetchResponse(
               linkURL.href,
@@ -970,18 +978,8 @@ export class RealmIndexQueryEngine {
             );
             throw cardError;
           }
+
           let json = await response.json();
-          if (!isSingleCardDocument(json)) {
-            throw new Error(
-              `instance ${
-                linkURL.href
-              } is not a card document. it is: ${JSON.stringify(
-                json,
-                null,
-                2,
-              )}`,
-            );
-          }
           linkResource = {
             ...json.data,
             ...{ links: { self: json.data.id } },
