@@ -539,7 +539,8 @@ export class RealmServer {
 
   private serveHostApp = async (ctxt: Koa.Context, next: Koa.Next) => {
     let acceptHeader = (ctxt.header.accept ?? '').toLowerCase();
-    if (!acceptHeader.includes('text/html')) {
+    let isHead = ctxt.method === 'HEAD';
+    if (!isHead && !acceptHeader.includes('text/html')) {
       return next();
     }
 
