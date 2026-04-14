@@ -111,7 +111,7 @@ test.describe('factory-test-realm e2e', () => {
     });
 
     // Handle assertions
-    expect(handle.testRunId).toContain('Test Runs/hello-e2e');
+    expect(handle.testRunId).toContain('Validations/test_hello-e2e');
     expect(handle.status).toBe('passed');
     expect(handle.errorMessage).toBeUndefined();
 
@@ -178,7 +178,7 @@ test.describe('factory-test-realm e2e', () => {
     });
 
     // Handle assertions
-    expect(handle.testRunId).toContain('Test Runs/hello-fail');
+    expect(handle.testRunId).toContain('Validations/test_hello-fail');
     expect(handle.status).toBe('failed');
 
     // Read the TestRun card back and verify its persisted state

@@ -24,16 +24,16 @@ The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unbloc
 
 ### Target Realm Artifact Structure
 
-| Path                  | What it is                                                          |
-| --------------------- | ------------------------------------------------------------------- |
-| `Projects/`           | Project card with objective, scope, success criteria                |
-| `Issues/`             | Issue cards — bootstrap seed + implementation issues                |
-| `Knowledge Articles/` | Context articles derived from the brief                             |
-| `*.gts`               | Card definition files                                               |
-| `*.test.gts`          | Co-located QUnit test files                                         |
-| `CardName/`           | Sample card instances with realistic data                           |
-| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances |
-| `Test Runs/`          | TestRun cards with structured pass/fail results                     |
+| Path                  | What it is                                                           |
+| --------------------- | -------------------------------------------------------------------- |
+| `Projects/`           | Project card with objective, scope, success criteria                 |
+| `Issues/`             | Issue cards — bootstrap seed + implementation issues                 |
+| `Knowledge Articles/` | Context articles derived from the brief                              |
+| `*.gts`               | Card definition files                                                |
+| `*.test.gts`          | Co-located QUnit test files                                          |
+| `CardName/`           | Sample card instances with realistic data                            |
+| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances  |
+| `Validations/`        | Validation artifacts — TestRun cards (test results) and lint results |
 
 ## Prerequisites
 
@@ -99,7 +99,7 @@ The `--debug` flag shows LLM prompts, tool calls and their results, and `console
 | `*.test.gts`                 | Co-located QUnit test file(s)                                            |
 | `CardName/`                  | Sample card instance(s) with realistic data                              |
 | `Spec/`                      | Catalog Spec card(s) linking to the card definition and sample instances |
-| `Test Runs/`                 | TestRun card(s) with validation pipeline results (pass/fail per module)  |
+| `Validations/`               | Validation artifacts — TestRun cards and lint results (pass/fail)        |
 
 ## Architecture
 

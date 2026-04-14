@@ -147,7 +147,7 @@ module('TestValidationStep', function () {
       makeConfig({
         fetchFilenames: makeFetchFilenames(['hello.gts', 'hello.test.gts']),
         executeTestRun: makeExecuteTestRun({
-          testRunId: 'Test Runs/validation-1',
+          testRunId: 'Validations/test_validation-1',
           status: 'passed',
           sequenceNumber: 1,
         }),
@@ -163,7 +163,7 @@ module('TestValidationStep', function () {
     assert.ok(result.details, 'has details');
 
     let details = result.details as unknown as TestValidationDetails;
-    assert.strictEqual(details.testRunId, 'Test Runs/validation-1');
+    assert.strictEqual(details.testRunId, 'Validations/test_validation-1');
     assert.strictEqual(details.passedCount, 3);
     assert.strictEqual(details.failedCount, 0);
     assert.strictEqual(details.failures.length, 0);
@@ -196,7 +196,7 @@ module('TestValidationStep', function () {
       makeConfig({
         fetchFilenames: makeFetchFilenames(['hello.test.gts']),
         executeTestRun: makeExecuteTestRun({
-          testRunId: 'Test Runs/validation-1',
+          testRunId: 'Validations/test_validation-1',
           status: 'failed',
           sequenceNumber: 1,
         }),
@@ -256,7 +256,7 @@ module('TestValidationStep', function () {
         executeTestRun: async (options) => {
           capturedOptions.push(options);
           return {
-            testRunId: `Test Runs/validation-${capturedOptions.length}`,
+            testRunId: `Validations/test_validation-${capturedOptions.length}`,
             status: 'passed' as const,
             sequenceNumber: capturedOptions.length,
           };
@@ -284,7 +284,7 @@ module('TestValidationStep', function () {
       makeConfig({
         fetchFilenames: makeFetchFilenames(['hello.test.gts']),
         executeTestRun: makeExecuteTestRun({
-          testRunId: 'Test Runs/validation-1',
+          testRunId: 'Validations/test_validation-1',
           status: 'failed',
           errorMessage: '2 tests failed',
           sequenceNumber: 1,
@@ -309,7 +309,7 @@ module('TestValidationStep', function () {
       passed: true,
       errors: [],
       details: {
-        testRunId: 'Test Runs/validation-1',
+        testRunId: 'Validations/test_validation-1',
         passedCount: 5,
         failedCount: 0,
         skippedCount: 0,
@@ -335,7 +335,7 @@ module('TestValidationStep', function () {
       passed: true,
       errors: [],
       details: {
-        testRunId: 'Test Runs/validation-1',
+        testRunId: 'Validations/test_validation-1',
         passedCount: 3,
         failedCount: 0,
         skippedCount: 2,
@@ -358,7 +358,7 @@ module('TestValidationStep', function () {
       passed: false,
       errors: [{ message: 'shows author: Expected Alice but got empty' }],
       details: {
-        testRunId: 'Test Runs/validation-1',
+        testRunId: 'Validations/test_validation-1',
         passedCount: 2,
         failedCount: 1,
         skippedCount: 0,
@@ -389,7 +389,7 @@ module('TestValidationStep', function () {
       passed: false,
       errors: [{ message: 'shows author: Expected Alice but got empty' }],
       details: {
-        testRunId: 'Test Runs/validation-1',
+        testRunId: 'Validations/test_validation-1',
         passedCount: 2,
         failedCount: 1,
         skippedCount: 3,
@@ -433,7 +433,7 @@ module('TestValidationStep', function () {
         executeTestRun: async (options) => {
           capturedOptions = options;
           return {
-            testRunId: 'Test Runs/sticky-note-define-core-1',
+            testRunId: 'Validations/test_sticky-note-define-core-1',
             status: 'passed' as const,
             sequenceNumber: 1,
           };

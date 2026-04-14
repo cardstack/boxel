@@ -40,8 +40,8 @@ let log = logger('issue-loop');
  */
 export interface Validator {
   validate(targetRealmUrl: string): Promise<ValidationResults>;
-  /** Format validation results for LLM context or issue descriptions. */
-  formatForContext?(results: ValidationResults): string;
+  /** Format validation results for LLM context and issue descriptions. */
+  formatForContext(results: ValidationResults): string;
 }
 
 /**
@@ -51,6 +51,10 @@ export interface Validator {
 export class NoOpValidator implements Validator {
   async validate(): Promise<ValidationResults> {
     return { passed: true, steps: [] };
+  }
+
+  formatForContext(_results: ValidationResults): string {
+    return 'All validation steps passed.';
   }
 }
 
@@ -78,6 +82,8 @@ export interface IssueContextBuilderLike {
     issue: IssueData;
     targetRealmUrl: string;
     validationResults?: ValidationResults;
+    /** Pre-formatted validation context from Validator.formatForContext(). */
+    validationContext?: string;
     briefUrl?: string;
   }): Promise<AgentContext>;
 }
@@ -174,20 +180,7 @@ function buildMaxIterationBlockedComment(
     '',
   ];
 
-  if (validator.formatForContext) {
-    lines.push(validator.formatForContext(validationResults));
-  } else {
-    // Fallback: format from the raw results
-    for (let step of validationResults.steps) {
-      if (!step.passed) {
-        lines.push(`**${step.step}**: FAILED`);
-        for (let error of step.errors) {
-          lines.push(`- ${error.message}`);
-        }
-        lines.push('');
-      }
-    }
-  }
+  lines.push(validator.formatForContext(validationResults));
 
   return lines.join('\n');
 }
@@ -281,6 +274,7 @@ export async function runIssueLoop(
 
     let allToolCalls: ToolCallEntry[] = [];
     let validationResults: ValidationResults | undefined;
+    let validationContext: string | undefined;
     let exitReason: IssueIterationResult['exitReason'] = 'max_iterations';
     let innerIterations = 0;
 
@@ -291,11 +285,12 @@ export async function runIssueLoop(
         `  Inner iteration ${iteration}/${maxIterationsPerIssue} for issue ${issueSummaryLabel(issue)}`,
       );
 
-      // Build context — includes validation results from prior iteration
+      // Build context — includes pre-formatted validation context from prior iteration
       let context = await contextBuilder.buildForIssue({
         issue,
         targetRealmUrl,
         validationResults,
+        validationContext,
         briefUrl,
       });
 
@@ -307,6 +302,10 @@ export async function runIssueLoop(
 
       // Validation — runs after every agent turn
       validationResults = await validator.validate(targetRealmUrl);
+      validationContext =
+        validationResults && !validationResults.passed
+          ? validator.formatForContext(validationResults)
+          : undefined;
       log.info(`  Validation: ${formatValidation(validationResults)}`);
 
       // The loop owns issue status transitions. The agent signals

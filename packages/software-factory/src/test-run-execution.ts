@@ -169,7 +169,7 @@ async function getNextSequenceNumber(
   }
 
   let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
-  let prefix = `Test Runs/${slug}-`;
+  let prefix = `Validations/test_${slug}-`;
   let maxSeq = 0;
 
   for (let card of result.data) {

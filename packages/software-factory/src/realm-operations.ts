@@ -857,6 +857,68 @@ async function addRealmToMatrixAccountData(
 }
 
 // ---------------------------------------------------------------------------
+// Lint
+// ---------------------------------------------------------------------------
+
+/** A single lint diagnostic message (mirrors ESLint's Linter.LintMessage). */
+export interface LintMessage {
+  ruleId: string | null;
+  severity: 1 | 2; // 1 = warning, 2 = error
+  message: string;
+  line: number;
+  column: number;
+  endLine?: number;
+  endColumn?: number;
+}
+
+/** Response from the realm `_lint` endpoint (mirrors ESLint's Linter.FixReport). */
+export interface LintFileResponse {
+  fixed: boolean;
+  output: string;
+  messages: LintMessage[];
+}
+
+/**
+ * Lint a single file's source code via the realm's `_lint` endpoint.
+ * The endpoint runs ESLint with `@cardstack/boxel` rules and Prettier formatting.
+ */
+export async function lintFile(
+  realmUrl: string,
+  source: string,
+  filename: string,
+  options?: RealmFetchOptions,
+): Promise<LintFileResponse> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmUrl);
+  let lintUrl = `${normalizedUrl}_lint`;
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSON,
+    'Content-Type': SupportedMimeType.CardSource,
+    'X-Filename': filename,
+    'X-HTTP-Method-Override': 'QUERY',
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  let response = await fetchImpl(lintUrl, {
+    method: 'POST',
+    headers,
+    body: source,
+  });
+
+  if (!response.ok) {
+    let body = await response.text().catch(() => '(no body)');
+    throw new Error(
+      `_lint returned HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+
+  return (await response.json()) as LintFileResponse;
+}
+
+// ---------------------------------------------------------------------------
 // Fetch Realm Filenames
 // ---------------------------------------------------------------------------
 

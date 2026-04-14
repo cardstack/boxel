@@ -187,6 +187,16 @@ class MockValidator implements Validator {
     return this.results[this.callIndex++];
   }
 
+  formatForContext(results: ValidationResults): string {
+    if (results.passed) {
+      return 'All validation steps passed.';
+    }
+    let lines = results.steps
+      .filter((s) => !s.passed)
+      .map((s) => `${s.step}: ${s.errors.map((e) => e.message).join(', ')}`);
+    return lines.join('\n');
+  }
+
   get callCount(): number {
     return this.callIndex;
   }

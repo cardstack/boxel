@@ -491,19 +491,8 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
         summary: 'Define core card',
         description: 'Create the card definition.',
       },
-      testResults: {
-        status: 'failed',
-        passedCount: 1,
-        failedCount: 1,
-        failures: [
-          {
-            testName: 'renders card',
-            error: 'Element not found',
-            stackTrace: 'at test.spec.ts:10',
-          },
-        ],
-        durationMs: 3000,
-      },
+      validationContext:
+        '## Test Validation: FAILED\n1 passed, 1 failed\n\nFAILED: "renders card"\n  Element not found\n  at test.spec.ts:10',
     });
 
     let previousActions: AgentAction[] = [
@@ -543,15 +532,15 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
       'includes previous action content',
     );
 
-    // Test results
-    assert.ok(result.includes('failed'), 'includes test status');
+    // Validation context
+    assert.ok(result.includes('FAILED'), 'includes validation status');
     assert.ok(result.includes('renders card'), 'includes failure test name');
     assert.ok(result.includes('Element not found'), 'includes failure error');
     assert.ok(result.includes('at test.spec.ts:10'), 'includes stack trace');
 
     // Instructions
     assert.ok(
-      result.includes('Fix the failing tests'),
+      result.includes('Fix the validation failures'),
       'includes fix instructions',
     );
   });
@@ -606,13 +595,7 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
           outputFormat: 'json' as const,
         },
       ],
-      testResults: {
-        status: 'failed',
-        passedCount: 0,
-        failedCount: 1,
-        failures: [{ testName: 'basic', error: 'fail' }],
-        durationMs: 1000,
-      },
+      validationContext: '## Test Validation: FAILED\nbasic: fail',
       toolResults: [
         {
           tool: 'run-tests',
@@ -644,7 +627,7 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     );
   });
 
-  test('is self-contained: includes project, issue, actions, test results', function (assert) {
+  test('is self-contained: includes project, issue, actions, validation context', function (assert) {
     let loader = new FilePromptLoader();
     let ctx = makeMinimalContext({
       project: { id: 'Projects/app', objective: 'Build the app' },
@@ -653,16 +636,8 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
         summary: 'First issue',
         description: 'Do the thing.',
       },
-      testResults: {
-        status: 'failed',
-        passedCount: 0,
-        failedCount: 2,
-        failures: [
-          { testName: 'test-a', error: 'error-a' },
-          { testName: 'test-b', error: 'error-b' },
-        ],
-        durationMs: 5000,
-      },
+      validationContext:
+        '## Test Validation: FAILED\n0 passed, 2 failed\n\nFAILED: "test-a"\n  error-a\n\nFAILED: "test-b"\n  error-b',
     });
 
     let previousActions: AgentAction[] = [
@@ -688,9 +663,12 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     assert.ok(result.includes('Do the thing'), 'issue description');
     assert.ok(result.includes('iteration 3'), 'iteration number');
     assert.ok(result.includes('card.gts'), 'previous action');
-    assert.ok(result.includes('error-a'), 'test failure 1');
-    assert.ok(result.includes('error-b'), 'test failure 2');
-    assert.ok(result.includes('Fix the failing tests'), 'fix instructions');
+    assert.ok(result.includes('error-a'), 'validation failure 1');
+    assert.ok(result.includes('error-b'), 'validation failure 2');
+    assert.ok(
+      result.includes('Fix the validation failures'),
+      'fix instructions',
+    );
   });
 });
 
@@ -787,13 +765,8 @@ module(
           summary: 'First issue',
           description: 'Implement the feature.',
         },
-        testResults: {
-          status: 'failed',
-          passedCount: 0,
-          failedCount: 1,
-          failures: [{ testName: 'basic', error: 'boom' }],
-          durationMs: 2000,
-        },
+        validationContext:
+          '## Test Validation: FAILED\n0 passed, 1 failed\n\nFAILED: "basic"\n  boom',
       });
 
       let previousActions: AgentAction[] = [
@@ -824,7 +797,7 @@ module(
       assert.ok(messages[1].content.includes('Previous Attempt'));
       assert.ok(messages[1].content.includes('card.gts'));
       assert.ok(messages[1].content.includes('boom'));
-      assert.ok(messages[1].content.includes('Fix the failing tests'));
+      assert.ok(messages[1].content.includes('Fix the validation failures'));
     });
 
     test('each LLM call is exactly [system, user] — no multi-turn', function (assert) {
