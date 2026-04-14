@@ -16,7 +16,7 @@ import MarkdownField from '../markdown';
 
 import { Pill } from '@cardstack/boxel-ui/components';
 
-const issueStatusOptions = [
+export const issueStatusOptions = [
   { value: 'backlog', label: 'Backlog' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'blocked', label: 'Blocked' },
@@ -80,6 +80,14 @@ export class Issue extends CardDef {
   @field status = contains(
     enumField(StringField, { options: issueStatusOptions }),
   );
+  @field computedStatus = contains(
+    enumField(StringField, { options: issueStatusOptions }),
+    {
+      computeVia: function (this: Issue) {
+        return this.status ?? issueStatusOptions?.[0]?.value;
+      },
+    },
+  );
   @field priority = contains(IssuePriorityField);
   @field relatedTickets = linksToMany(() => Issue);
   @field project = linksTo(() => Project);
@@ -118,12 +126,11 @@ export class Issue extends CardDef {
           <Pill @size='extra-small' @variant='secondary'>
             {{if @model.ticketId @model.ticketId 'TICKET'}}
           </Pill>
-          <Pill @size='extra-small' @variant={{getStatusVariant @model.status}}>
-            {{#if @model.status}}
-              <@fields.status @format='atom' />
-            {{else}}
-              Backlog
-            {{/if}}
+          <Pill
+            @size='extra-small'
+            @variant={{getStatusVariant @model.computedStatus}}
+          >
+            <@fields.computedStatus @format='atom' />
           </Pill>
         </div>
         <div><@fields.cardTitle /></div>
@@ -158,13 +165,9 @@ export class Issue extends CardDef {
             </Pill>
             <Pill
               @size='extra-small'
-              @variant={{getStatusVariant @model.status}}
+              @variant={{getStatusVariant @model.computedStatus}}
             >
-              {{#if @model.status}}
-                <@fields.status @format='atom' />
-              {{else}}
-                Backlog
-              {{/if}}
+              <@fields.computedStatus @format='atom' />
             </Pill>
           </div>
           <h1><@fields.cardTitle /></h1>

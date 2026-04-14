@@ -21,7 +21,7 @@ import { KanbanColumnField } from './kanban-column';
 import { KanbanPlane } from './kanban-plane';
 import { KanbanDragManager } from './kanban-drag';
 import { type KanbanPlacement, autoPlaceKanban } from './kanban-engine';
-import { Project, Issue } from './issue';
+import { Project, Issue, issueStatusOptions } from './issue';
 
 // Chromeless modifier
 class Chromeless extends Modifier {
@@ -274,7 +274,18 @@ export class KanbanBoard extends CardDef {
       return this.project?.issues ?? [];
     },
   });
-  @field columns = containsMany(KanbanColumnField);
+  @field columns = containsMany(KanbanColumnField, {
+    computeVia: function (this: KanbanBoard) {
+      let cols = issueStatusOptions ?? [];
+      return cols.map(
+        (c) =>
+          new KanbanColumnField({
+            key: c.value,
+            label: c.label,
+          }),
+      );
+    },
+  });
   @field placements = containsMany(GridPlacementField); // reuse: col=column, row=sortOrder
 
   @field cardTitle = contains(StringField, {
