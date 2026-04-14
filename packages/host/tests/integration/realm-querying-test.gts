@@ -744,7 +744,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by FileDef type', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let fileDefRef = { module: `${baseRealm.url}card-api`, name: 'FileDef' };
     let result = (await queryEngine.searchCards({
       filter: {
         type: fileDefRef,
@@ -764,7 +764,7 @@ module(`Integration | realm querying`, function (hooks) {
   });
 
   test('can search for file-meta entries by url', async function (assert) {
-    let fileDefRef = { module: `${baseRealm.url}file-api`, name: 'FileDef' };
+    let fileDefRef = { module: `${baseRealm.url}card-api`, name: 'FileDef' };
     let targetUrl = `${testRealmURL}files/sample.txt`;
     let result = (await queryEngine.searchCards({
       filter: {

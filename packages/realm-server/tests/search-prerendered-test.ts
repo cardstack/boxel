@@ -159,7 +159,7 @@ module(basename(__filename), function () {
             let queryBase: Query = {
               filter: {
                 on: {
-                  module: `${baseRealm.url}file-api`,
+                  module: `${baseRealm.url}card-api`,
                   name: 'FileDef',
                 },
                 eq: {

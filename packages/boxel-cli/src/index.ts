@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { profileCommand } from './commands/profile';
+import { registerRealmCommand } from './commands/realm/index';
 
 const pkg = JSON.parse(
   readFileSync(resolve(__dirname, '../package.json'), 'utf-8'),
@@ -38,5 +39,7 @@ program
       await profileCommand(subcommand, arg, options);
     },
   );
+
+registerRealmCommand(program);
 
 program.parse();

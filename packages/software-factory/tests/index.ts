@@ -1,6 +1,3 @@
-import './factory-agent.test';
-import './factory-agent.integration.test';
-import './factory-bootstrap.test';
 import './factory-brief.test';
 import './factory-prompt-loader.test';
 import './factory-entrypoint.test';
@@ -13,6 +10,8 @@ import './factory-tool-executor.integration.test';
 import './factory-tool-registry.test';
 import './factory-context-builder.test';
 import './factory-tool-builder.test';
-import './factory-loop.test';
-import './factory-implement.test';
 import './realm-auth.test';
+import './issue-loop.test';
+import './issue-scheduler.test';
+import './validation-pipeline.test';
+import './test-step.test';

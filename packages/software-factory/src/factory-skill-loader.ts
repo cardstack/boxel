@@ -26,6 +26,7 @@ const CHARS_PER_TOKEN = 4;
  * Skills not in this list get appended at the end (lowest priority).
  */
 const SKILL_PRIORITY: readonly string[] = [
+  'software-factory-bootstrap',
   'boxel-development',
   'boxel-file-structure',
   'ember-best-practices',
@@ -152,6 +153,13 @@ export class DefaultSkillResolver implements SkillResolver {
    */
   resolve(issue: IssueData, project: ProjectData): string[] {
     let issueText = extractIssueText(issue);
+    let issueType = (issue as Record<string, unknown>).issueType;
+
+    // Bootstrap issues get the bootstrap skill instead of implementation skills
+    if (issueType === 'bootstrap') {
+      return ['software-factory-bootstrap', 'boxel-file-structure'];
+    }
+
     let skills: string[] = ['boxel-development', 'boxel-file-structure'];
 
     if (matchesAnyKeyword(issueText, GTS_KEYWORDS)) {

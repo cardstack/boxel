@@ -81,7 +81,7 @@ export function setupInteractSubmodeTests(
     let { Spec } = spec;
     let { CardsGrid } = cardsGrid;
     let { FileDef } = fileApi;
-    let { ImageDef } = imageFileApi;
+    let { default: ImageDef } = imageFileApi;
 
     class Pet extends CardDef {
       static displayName = 'Pet';

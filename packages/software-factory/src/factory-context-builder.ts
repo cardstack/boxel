@@ -141,9 +141,16 @@ export class ContextBuilder {
     ]);
 
     if (!project) {
-      throw new Error(
-        `Issue "${issue.id}" has no linked project — cannot build context`,
-      );
+      // Bootstrap issues have no project yet — the agent creates it.
+      // Supply a minimal stub so AgentContext.project stays required.
+      let issueType = (issue as Record<string, unknown>).issueType;
+      if (issueType === 'bootstrap') {
+        project = { id: 'bootstrap-pending' };
+      } else {
+        throw new Error(
+          `Issue "${issue.id}" has no linked project — cannot build context`,
+        );
+      }
     }
 
     // Step 2: Resolve and load skills

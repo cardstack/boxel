@@ -170,6 +170,24 @@ To use turbo mode but override a specific value:
 BOXEL_TURBO=true PRERENDER_COUNT=5 mise run dev
 ```
 
+##### Index cache
+
+When using `BOXEL_ENVIRONMENT` to work in an isolated worktree, the first startup normally indexes all realms from scratch, which is slow. Set `INDEX_CACHE=true` to download a pre-built index from CI instead:
+
+```bash
+INDEX_CACHE=true BOXEL_ENVIRONMENT=my-branch mise run dev-all
+```
+
+This downloads the latest `boxel_index` dump produced by CI on `main`, remaps URLs for your environment, and imports it into your local database. It also sets `REALM_SERVER_FULL_INDEX_ON_STARTUP=false` so the realm server skips the background reindex and relies on the file watcher for incremental updates. You can override this:
+
+```bash
+INDEX_CACHE=true REALM_SERVER_FULL_INDEX_ON_STARTUP=true BOXEL_ENVIRONMENT=my-branch mise run dev-all
+```
+
+Requires the `gh` CLI to be installed and authenticated.
+
+##### Services
+
 Here's what is spun up with `mise run dev`:
 
 | Port  | Description                                                                                   | `mise run dev` | `mise run services:realm-server-base` |

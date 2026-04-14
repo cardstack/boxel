@@ -11,7 +11,7 @@ import type {
   AgentContext,
   FactoryAgent,
 } from './factory-agent-types';
-import type { LoopAgent, AgentRunResult } from './factory-loop';
+import type { LoopAgent, AgentRunResult } from './factory-agent-types';
 import type { FactoryTool } from './factory-tool-builder';
 
 // ---------------------------------------------------------------------------

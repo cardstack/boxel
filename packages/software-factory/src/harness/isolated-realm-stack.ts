@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -14,6 +15,7 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import fsExtra from 'fs-extra';
 import { spawn } from 'node:child_process';
+import { matchesSourceRealmGlob } from './shared';
 
 import {
   baseRealmDir,
@@ -248,12 +250,25 @@ function copyRealmFixture(
   realmDir: string,
   destination: string,
   sourceRealmURL: URL,
+  options?: { fileFilter?: (relativePath: string) => boolean },
 ): void {
-  copySync(realmDir, destination, {
+  // Resolve symlinks so copySync sees the real directory, not the symlink itself.
+  let resolvedDir = realpathSync(realmDir);
+  copySync(resolvedDir, destination, {
     preserveTimestamps: true,
     filter(src) {
-      let relativePath = relative(realmDir, src).replace(/\\/g, '/');
-      return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
+      let relativePath = relative(resolvedDir, src).replace(/\\/g, '/');
+      if (relativePath !== '' && shouldIgnoreFixturePath(relativePath)) {
+        return false;
+      }
+      if (
+        relativePath !== '' &&
+        options?.fileFilter &&
+        !options.fileFilter(relativePath)
+      ) {
+        return false;
+      }
+      return true;
     },
   });
   rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
@@ -299,6 +314,15 @@ export async function startIsolatedRealmStack({
   prerenderURL?: string;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
+  // Create a filtered copy of the source realm — only card definitions
+  // (via SOURCE_REALM_GLOB), not instance data like wiki briefs or documents.
+  let filteredSourceRealmDir = join(rootDir, 'source-realm');
+  copyRealmFixture(
+    sourceRealmDir,
+    filteredSourceRealmDir,
+    new URL('https://placeholder/'),
+    { fileFilter: matchesSourceRealmGlob },
+  );
   let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
@@ -486,7 +510,7 @@ export async function startIsolatedRealmStack({
     `--fromUrl=${publicBaseRealmURL.href}`,
     `--toUrl=${actualBaseRealmURL.href}`,
     '--username=software_factory_realm',
-    `--path=${sourceRealmDir}`,
+    `--path=${filteredSourceRealmDir}`,
     `--fromUrl=${sourceRealmURL.href}`,
     `--toUrl=${actualSourceRealmURL.href}`,
     '--username=test_realm',
