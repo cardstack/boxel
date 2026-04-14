@@ -1,4 +1,4 @@
-import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/src/lib/boxel-cli-client';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
