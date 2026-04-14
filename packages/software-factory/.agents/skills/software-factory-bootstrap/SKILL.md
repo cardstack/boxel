@@ -24,13 +24,13 @@ Derive names from the brief title:
 
 ### Project Card
 
-**Path:** `Projects/<slug>-mvp.json`
+**Path:** `Projects/<slug>.json`
 **adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Project" }`
 
 | Field              | Type     | Example                                         |
 | ------------------ | -------- | ----------------------------------------------- |
 | `projectCode`      | String   | `"SN"`                                          |
-| `projectName`      | String   | `"Sticky Note MVP"`                             |
+| `projectName`      | String   | `"Sticky Note"`                                 |
 | `projectStatus`    | Enum     | `"active"`                                      |
 | `objective`        | String   | Brief content summary                           |
 | `scope`            | Markdown | Full brief content by sections                  |
@@ -63,10 +63,10 @@ Add more as the brief warrants (e.g., detailed visual design, deep domain knowle
 
 ### Issue Card — Organized by Entry-Point Card
 
-**Paths:** `Issues/<slug>-<card-slug>.json` (one per entry-point card)
+**Paths:** `Issues/<slug>-<card-name-slug>.json` (one per entry-point card, named after the card)
 **adoptsFrom:** `{ module: "<darkfactoryModuleUrl>", name: "Issue" }`
 
-Organize implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the catalog. Create **one issue per entry-point card**.
+Organize implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the catalog. Create **one issue per entry-point card**, named after that card.
 
 Each issue covers the full scope of its entry-point card:
 
@@ -76,22 +76,22 @@ Each issue covers the full scope of its entry-point card:
 
 Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do **not** need their own catalog specs or separate issues.
 
-| Field                | Type     | Description                                                  |
-| -------------------- | -------- | ------------------------------------------------------------ |
-| `issueId`            | String   | `"<projectCode>-<N>"` (sequential)                           |
-| `summary`            | String   | `"Implement <card name> card with tests and catalog spec"`   |
-| `description`        | Markdown | Card to create, fields, support cards, tests, spec, examples |
-| `issueType`          | Enum     | `"feature"`                                                  |
-| `status`             | Enum     | `"backlog"`                                                  |
-| `priority`           | Enum     | `"high"` for first, `"medium"` for subsequent                |
-| `order`              | Number   | Sequential (1, 2, 3, ...)                                    |
-| `acceptanceCriteria` | Markdown | Checklist: card def, support cards, tests, spec, examples    |
-| `createdAt`          | DateTime | ISO timestamp                                                |
-| `updatedAt`          | DateTime | ISO timestamp                                                |
+| Field                | Type     | Description                                                       |
+| -------------------- | -------- | ----------------------------------------------------------------- |
+| `issueId`            | String   | `"<projectCode>-<N>"` (sequential)                                |
+| `summary`            | String   | `"Implement <card name> card"` (named after the entry-point card) |
+| `description`        | Markdown | Card to create, fields, support cards, tests, spec, examples      |
+| `issueType`          | Enum     | `"feature"`                                                       |
+| `status`             | Enum     | `"backlog"`                                                       |
+| `priority`           | Enum     | `"high"` for first, `"medium"` for subsequent                     |
+| `order`              | Number   | Sequential (1, 2, 3, ...)                                         |
+| `acceptanceCriteria` | Markdown | Checklist: card def, support cards, tests, spec, examples         |
+| `createdAt`          | DateTime | ISO timestamp                                                     |
+| `updatedAt`          | DateTime | ISO timestamp                                                     |
 
 **Relationships for each issue:**
 
-- `project` → `{ links: { self: "../Projects/<slug>-mvp" } }`
+- `project` → `{ links: { self: "../Projects/<slug>" } }`
 - `relatedKnowledge.0` → `{ links: { self: "../Knowledge Articles/<slug>-brief-context" } }`
 - `relatedKnowledge.1` → `{ links: { self: "../Knowledge Articles/<slug>-agent-onboarding" } }`
 - `blockedBy` → issues for any entry-point cards this card depends on
@@ -118,7 +118,7 @@ Every card written via `write_file` must be a JSON:API document:
     "type": "card",
     "attributes": { ... },
     "relationships": {
-      "project": { "links": { "self": "../Projects/sticky-note-mvp" } },
+      "project": { "links": { "self": "../Projects/sticky-note" } },
       "relatedKnowledge.0": { "links": { "self": "../Knowledge Articles/sticky-note-brief-context" } }
     },
     "meta": {
@@ -135,13 +135,6 @@ Use relative paths (`../`) for relationship links since cards are in sibling dir
 
 ## Completion
 
-After creating all artifacts, mark the bootstrap issue as done. **Important:**
-`update_issue` writes the full card, not a partial patch. First `read_file` the
-issue to get its current attributes, then call `update_issue` with all existing
-attributes plus `status: "done"`:
-
-```
-// 1. read_file({ path: "Issues/bootstrap-seed" }) to get current attributes
-// 2. update_issue with all attributes:
-update_issue({ path: "Issues/bootstrap-seed", attributes: { ...existing, status: "done" } })
-```
+After creating all artifacts, call `signal_done()`. The orchestrator manages
+issue status transitions — do NOT set the issue status to "done" yourself.
+The orchestrator will mark the issue as done after validation passes.

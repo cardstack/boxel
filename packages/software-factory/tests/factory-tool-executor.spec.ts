@@ -248,6 +248,7 @@ async function buildToolsForRealm(realm: {
   return buildFactoryTools(
     {
       targetRealmUrl: realm.realmURL.href,
+      darkfactoryModuleUrl: `${realm.realmServerURL.href}software-factory/darkfactory`,
       realmServerUrl: realm.realmServerURL.href,
       realmTokens: {
         [realm.realmURL.href]: `Bearer ${realm.ownerBearerToken}`,
@@ -299,7 +300,7 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
     path: 'Issues/tool-test-issue.json',
     attributes: {
       summary: 'Test issue for update_issue tool',
-      status: 'in_progress',
+      status: 'blocked',
       priority: 'high',
     },
   })) as CardWriteResult;
@@ -314,7 +315,7 @@ test('update_issue writes and reads back an issue card', async ({ realm }) => {
   expect(readResult.document!.data.attributes!.summary).toBe(
     'Test issue for update_issue tool',
   );
-  expect(readResult.document!.data.attributes!.status).toBe('in_progress');
+  expect(readResult.document!.data.attributes!.status).toBe('blocked');
 });
 
 test('create_knowledge writes and reads back a knowledge article', async ({

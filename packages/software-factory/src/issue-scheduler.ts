@@ -16,6 +16,7 @@ import {
   searchRealm,
   readFile,
   writeFile,
+  ensureJsonExtension,
   type RealmFetchOptions,
 } from './realm-operations';
 import { logger } from './logger';
@@ -40,6 +41,8 @@ export interface IssueStore {
     issueId: string,
     updates: { status?: string; description?: string },
   ): Promise<void>;
+  /** Update a project's status in the realm. */
+  updateProjectStatus?(projectStatus: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +246,7 @@ export class RealmIssueStore implements IssueStore {
     // stripped relationships during indexing).
     let readResult = await readFile(
       this.realmUrl,
-      `${issueId}.json`,
+      ensureJsonExtension(issueId),
       this.options,
     );
     if (!readResult.ok || !readResult.document) {
@@ -267,7 +270,7 @@ export class RealmIssueStore implements IssueStore {
 
     let writeResult = await writeFile(
       this.realmUrl,
-      `${issueId}.json`,
+      ensureJsonExtension(issueId),
       JSON.stringify(doc, null, 2),
       this.options,
     );
@@ -279,6 +282,63 @@ export class RealmIssueStore implements IssueStore {
     }
 
     log.info(`Updated issue "${issueId}": ${JSON.stringify(updates)}`);
+  }
+
+  async updateProjectStatus(projectStatus: string): Promise<void> {
+    // We expect exactly one Project card per target realm.
+    let result = await searchRealm(
+      this.realmUrl,
+      {
+        filter: {
+          type: { module: this.darkfactoryModuleUrl, name: 'Project' },
+        },
+        sort: [{ by: 'lastModified', direction: 'desc' as const }],
+      },
+      this.options,
+    );
+
+    if (!result.ok || !result.data?.length) {
+      log.warn(
+        `No project found to update status: ${!result.ok ? result.error : 'no results'}`,
+      );
+      return;
+    }
+
+    let projectId = result.data[0].id as string;
+    // Strip the realm URL prefix to get the relative path
+    let relativePath = projectId.replace(this.realmUrl, '');
+
+    let readResult = await readFile(
+      this.realmUrl,
+      ensureJsonExtension(relativePath),
+      this.options,
+    );
+    if (!readResult.ok || !readResult.document) {
+      log.warn(
+        `Failed to read project "${relativePath}" for status update: ${readResult.error ?? 'no document'}`,
+      );
+      return;
+    }
+
+    let doc = readResult.document;
+    let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
+    attrs.projectStatus = projectStatus;
+    attrs.updatedAt = new Date().toISOString();
+    doc.data.attributes = attrs;
+
+    let writeResult = await writeFile(
+      this.realmUrl,
+      ensureJsonExtension(relativePath),
+      JSON.stringify(doc, null, 2),
+      this.options,
+    );
+
+    if (!writeResult.ok) {
+      log.warn(`Failed to update project status: ${writeResult.error}`);
+      return;
+    }
+
+    log.info(`Updated project "${relativePath}" status to "${projectStatus}"`);
   }
 }
 

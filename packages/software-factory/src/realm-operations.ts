@@ -26,6 +26,18 @@ export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
+/**
+ * Ensure a card instance path ends with `.json`. The realm API uses
+ * `card+source` content negotiation which requires the full file path
+ * including extension.
+ */
+export function ensureJsonExtension(path: string): string {
+  if (!path.endsWith('.json')) {
+    return `${path}.json`;
+  }
+  return path;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------

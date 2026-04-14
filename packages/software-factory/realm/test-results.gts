@@ -262,11 +262,20 @@ export class TestRun extends CardDef {
       );
     }
 
+    get displayStatus() {
+      if (this.total === 0 && this.args.model.status === 'passed') {
+        return 'empty';
+      }
+      return this.args.model.status;
+    }
+
     <template>
       <div class='test-run compact'>
         <div class='header'>
           <strong>#{{@model.sequenceNumber}}</strong>
-          <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          <span
+            class='status status-{{this.displayStatus}}'
+          >{{this.displayStatus}}</span>
         </div>
         {{#if @model.issue}}
           <div class='issue-name'>{{@model.issue.summary}}</div>
@@ -324,6 +333,10 @@ export class TestRun extends CardDef {
           color: var(--boxel-blue, #2563eb);
           background: #eff6ff;
         }
+        .status-empty {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
         .issue-name {
           font-size: 0.8rem;
           color: var(--muted-foreground);
@@ -358,14 +371,21 @@ export class TestRun extends CardDef {
       );
     }
 
+    get displayStatus() {
+      if (this.total === 0 && this.args.model.status === 'passed') {
+        return 'empty';
+      }
+      return this.args.model.status;
+    }
+
     <template>
       <article class='surface'>
         <header>
           <div class='header-row'>
             <strong>TestRun #{{@model.sequenceNumber}}</strong>
             <span
-              class='status status-{{@model.status}}'
-            >{{@model.status}}</span>
+              class='status status-{{this.displayStatus}}'
+            >{{this.displayStatus}}</span>
           </div>
           <div class='summary'>
             {{@model.passedCount}}/{{this.total}}
@@ -423,7 +443,11 @@ export class TestRun extends CardDef {
                   {{#if moduleResult.isComplete}}
                     <span
                       class='module-group-counts
-                        {{if moduleResult.failedCount "has-failures"}}'
+                        {{if
+                          moduleResult.failedCount
+                          "has-failures"
+                          (if moduleResult.passedCount "has-passes" "empty")
+                        }}'
                     >
                       {{#if moduleResult.failedCount}}
                         {{moduleResult.passedCount}}
@@ -512,6 +536,10 @@ export class TestRun extends CardDef {
           color: var(--boxel-blue, #2563eb);
           background: #eff6ff;
         }
+        .status-empty {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
         .summary {
           font-size: 0.9rem;
           color: var(--muted-foreground);
@@ -534,7 +562,6 @@ export class TestRun extends CardDef {
         }
         .module-has-failures {
           border-color: var(--boxel-red, #dc2626);
-          border-left-width: 3px;
         }
         .module-group-header {
           display: flex;
@@ -550,6 +577,9 @@ export class TestRun extends CardDef {
         }
         .module-group-counts {
           font-size: 0.8rem;
+          color: var(--boxel-400, #9ca3af);
+        }
+        .module-group-counts.has-passes {
           color: var(--boxel-green, #16a34a);
         }
         .module-group-counts.has-failures {

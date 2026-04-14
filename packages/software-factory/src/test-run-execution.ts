@@ -532,10 +532,13 @@ export async function executeTestRunFromRealm(
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
 
-    // Wait for QUnit to finish (results collected via inline script hooks)
+    // Wait for QUnit to finish (results collected via inline script hooks).
+    // Note: waitForFunction(fn, arg, options) — pass null as arg so the
+    // timeout option is correctly in the third position.
     await page.waitForFunction(
       () => (window as any).__qunitResults?.runEnd !== null,
-      { timeout: 120_000 },
+      null,
+      { timeout: 300_000 },
     );
 
     let qunitResults: QunitResults = await page.evaluate(

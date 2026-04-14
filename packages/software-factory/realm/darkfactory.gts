@@ -271,7 +271,9 @@ export class Issue extends CardDef {
       <div class='issue-card compact'>
         <div class='row'>
           <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
-          <span>{{if @model.status @model.status 'backlog'}}</span>
+          <span
+            class='status status-{{if @model.status @model.status "backlog"}}'
+          >{{if @model.status @model.status 'backlog'}}</span>
         </div>
         <div>{{if @model.summary @model.summary 'Untitled Issue'}}</div>
       </div>
@@ -289,8 +291,32 @@ export class Issue extends CardDef {
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
           font-size: 0.8rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-done {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-in_progress {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-backlog {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-blocked {
+          color: var(--boxel-red, #dc2626);
+          background: #fef2f2;
         }
       </style>
     </template>
@@ -304,14 +330,18 @@ export class Issue extends CardDef {
         <header>
           <div class='row'>
             <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
-            <span>{{if @model.status @model.status 'backlog'}}</span>
+            <span
+              class='status status-{{if @model.status @model.status "backlog"}}'
+            >{{if @model.status @model.status 'backlog'}}</span>
           </div>
           <h1>{{if @model.summary @model.summary 'Untitled Issue'}}</h1>
         </header>
         {{#if @model.project}}
           <section>
             <h2>Project</h2>
-            <@fields.project />
+            <div class='linked-card'>
+              <@fields.project @format='embedded' />
+            </div>
           </section>
         {{/if}}
         {{#if @model.description}}
@@ -345,10 +375,37 @@ export class Issue extends CardDef {
           display: grid;
           gap: 1rem;
         }
+        .linked-card {
+          margin-bottom: 0.5rem;
+        }
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-done {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-in_progress {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-backlog {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-blocked {
+          color: var(--boxel-red, #dc2626);
+          background: #fef2f2;
         }
       </style>
     </template>
@@ -398,11 +455,13 @@ export class Project extends CardDef {
               @model.projectCode
               'PROJECT'
             }}</strong>
-          <span>{{if
-              @model.projectStatus
-              @model.projectStatus
-              'planning'
-            }}</span>
+          <span
+            class='status status-{{if
+                @model.projectStatus
+                @model.projectStatus
+                "planning"
+              }}'
+          >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
         </div>
         <div>{{if
             @model.projectName
@@ -424,8 +483,36 @@ export class Project extends CardDef {
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
           font-size: 0.8rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-active {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-planning {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-completed {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-on_hold {
+          color: var(--boxel-orange, #ea580c);
+          background: #fff7ed;
+        }
+        .status-archived {
+          color: var(--boxel-400, #9ca3af);
+          background: #f3f4f6;
         }
       </style>
     </template>
@@ -443,11 +530,13 @@ export class Project extends CardDef {
                 @model.projectCode
                 'PROJECT'
               }}</strong>
-            <span>{{if
-                @model.projectStatus
-                @model.projectStatus
-                'planning'
-              }}</span>
+            <span
+              class='status status-{{if
+                  @model.projectStatus
+                  @model.projectStatus
+                  "planning"
+                }}'
+            >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
           </div>
           <h1>{{if
               @model.projectName
@@ -501,7 +590,35 @@ export class Project extends CardDef {
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-active {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-planning {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-completed {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-on_hold {
+          color: var(--boxel-orange, #ea580c);
+          background: #fff7ed;
+        }
+        .status-archived {
+          color: var(--boxel-400, #9ca3af);
+          background: #f3f4f6;
         }
       </style>
     </template>
