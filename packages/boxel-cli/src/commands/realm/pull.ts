@@ -1,12 +1,13 @@
-import {
-  RealmSyncBase,
-  validateMatrixEnvVars,
-  type SyncOptions,
-} from '../lib/realm-sync-base.js';
+import type { Command } from 'commander';
+import { RealmSyncBase, type SyncOptions } from '../../lib/realm-sync-base';
 import {
   CheckpointManager,
   type CheckpointChange,
-} from '../lib/checkpoint-manager.js';
+} from '../../lib/checkpoint-manager';
+import {
+  getProfileManager,
+  type ProfileManager,
+} from '../../lib/profile-manager';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -19,11 +20,9 @@ class RealmPuller extends RealmSyncBase {
 
   constructor(
     private pullOptions: PullOptions,
-    matrixUrl: string,
-    username: string,
-    password: string,
+    profileManager: ProfileManager,
   ) {
-    super(pullOptions, matrixUrl, username, password);
+    super(pullOptions, profileManager);
   }
 
   async sync(): Promise<void> {
@@ -141,6 +140,29 @@ class RealmPuller extends RealmSyncBase {
 export interface PullCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
+  profileManager?: ProfileManager;
+}
+
+export function registerPullCommand(realm: Command): void {
+  realm
+    .command('pull')
+    .description('Pull files from a Boxel realm to a local directory')
+    .argument(
+      '<workspace-url>',
+      'The URL of the source workspace (e.g., https://app.boxel.ai/demo/)',
+    )
+    .argument('<local-dir>', 'The local directory to sync files to')
+    .option('--delete', 'Delete local files that do not exist in the workspace')
+    .option('--dry-run', 'Show what would be done without making changes')
+    .action(
+      async (
+        workspaceUrl: string,
+        localDir: string,
+        options: { delete?: boolean; dryRun?: boolean },
+      ) => {
+        await pullCommand(workspaceUrl, localDir, options);
+      },
+    );
 }
 
 export async function pullCommand(
@@ -148,8 +170,14 @@ export async function pullCommand(
   localDir: string,
   options: PullCommandOptions,
 ): Promise<void> {
-  const { matrixUrl, username, password } =
-    await validateMatrixEnvVars(workspaceUrl);
+  let pm = options.profileManager ?? getProfileManager();
+  let active = pm.getActiveProfile();
+  if (!active) {
+    console.error(
+      'Error: no active profile. Run `boxel profile add` to create one.',
+    );
+    process.exit(1);
+  }
 
   try {
     const puller = new RealmPuller(
@@ -159,12 +187,9 @@ export async function pullCommand(
         deleteLocal: options.delete,
         dryRun: options.dryRun,
       },
-      matrixUrl,
-      username,
-      password,
+      pm,
     );
 
-    await puller.initialize();
     await puller.sync();
 
     if (puller.hasError) {

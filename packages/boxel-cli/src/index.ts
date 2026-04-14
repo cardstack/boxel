@@ -3,7 +3,6 @@ import { Command } from 'commander';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { profileCommand } from './commands/profile';
-import { pullCommand } from './commands/pull';
 import { registerRealmCommand } from './commands/realm/index';
 
 const pkg = JSON.parse(
@@ -42,29 +41,5 @@ program
   );
 
 registerRealmCommand(program);
-
-const workspace = program
-  .command('workspace')
-  .description('Workspace sync and management commands');
-
-workspace
-  .command('pull')
-  .description('Pull files from a Boxel workspace to a local directory')
-  .argument(
-    '<workspace-url>',
-    'The URL of the source workspace (e.g., https://app.boxel.ai/demo/)',
-  )
-  .argument('<local-dir>', 'The local directory to sync files to')
-  .option('--delete', 'Delete local files that do not exist in the workspace')
-  .option('--dry-run', 'Show what would be done without making changes')
-  .action(
-    async (
-      workspaceUrl: string,
-      localDir: string,
-      options: { delete?: boolean; dryRun?: boolean },
-    ) => {
-      await pullCommand(workspaceUrl, localDir, options);
-    },
-  );
 
 program.parse();

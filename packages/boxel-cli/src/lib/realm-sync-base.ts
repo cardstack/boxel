@@ -1,5 +1,4 @@
-import { MatrixClient, passwordFromSeed } from './matrix-client.js';
-import { RealmAuthClient } from './realm-auth-client.js';
+import type { ProfileManager } from './profile-manager';
 import * as fs from 'fs';
 import * as path from 'path';
 import ignoreModule from 'ignore';
@@ -28,35 +27,14 @@ export interface SyncOptions {
 }
 
 export abstract class RealmSyncBase {
-  protected matrixClient: MatrixClient;
-  protected realmAuthClient: RealmAuthClient;
   protected normalizedRealmUrl: string;
   private ignoreCache = new Map<string, Ignore>();
 
   constructor(
     protected options: SyncOptions,
-    matrixUrl: string,
-    username: string,
-    password: string,
+    protected profileManager: ProfileManager,
   ) {
-    this.matrixClient = new MatrixClient({
-      matrixURL: new URL(matrixUrl),
-      username,
-      password,
-    });
-
     this.normalizedRealmUrl = this.normalizeRealmUrl(options.workspaceUrl);
-
-    this.realmAuthClient = new RealmAuthClient(
-      new URL(this.normalizedRealmUrl),
-      this.matrixClient,
-    );
-  }
-
-  async initialize(): Promise<void> {
-    console.log('Logging into Matrix...');
-    await this.matrixClient.login();
-    console.log('Matrix login successful');
   }
 
   private normalizeRealmUrl(url: string): string {
@@ -102,12 +80,10 @@ export abstract class RealmSyncBase {
 
     try {
       const url = this.buildDirectoryUrl(dir);
-      const jwt = await this.realmAuthClient.getJWT();
 
-      const response = await fetch(url, {
+      const response = await this.profileManager.authedFetch(url, {
         headers: {
           Accept: 'application/vnd.api+json',
-          Authorization: jwt,
         },
       });
 
@@ -172,12 +148,10 @@ export abstract class RealmSyncBase {
 
     try {
       const url = `${this.normalizedRealmUrl}_mtimes`;
-      const jwt = await this.realmAuthClient.getJWT();
 
-      const response = await fetch(url, {
+      const response = await this.profileManager.authedFetch(url, {
         headers: {
           Accept: SupportedMimeType.Mtimes,
-          Authorization: jwt,
         },
       });
 
@@ -322,13 +296,11 @@ export abstract class RealmSyncBase {
 
     const content = fs.readFileSync(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
-    const jwt = await this.realmAuthClient.getJWT();
 
-    const response = await fetch(url, {
+    const response = await this.profileManager.authedFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain;charset=UTF-8',
-        Authorization: jwt,
         Accept: SupportedMimeType.CardSource,
       },
       body: content,
@@ -355,11 +327,9 @@ export abstract class RealmSyncBase {
     }
 
     const url = this.buildFileUrl(relativePath);
-    const jwt = await this.realmAuthClient.getJWT();
 
-    const response = await fetch(url, {
+    const response = await this.profileManager.authedFetch(url, {
       headers: {
-        Authorization: jwt,
         Accept: SupportedMimeType.CardSource,
       },
     });
@@ -395,12 +365,10 @@ export abstract class RealmSyncBase {
     }
 
     const url = this.buildFileUrl(relativePath);
-    const jwt = await this.realmAuthClient.getJWT();
 
-    const response = await fetch(url, {
+    const response = await this.profileManager.authedFetch(url, {
       method: 'DELETE',
       headers: {
-        Authorization: jwt,
         Accept: SupportedMimeType.CardSource,
       },
     });
@@ -500,94 +468,4 @@ export abstract class RealmSyncBase {
   }
 
   abstract sync(): Promise<void>;
-}
-
-function deriveRealmUsername(workspaceUrl: string): string {
-  let url: URL;
-  try {
-    url = new URL(workspaceUrl);
-  } catch {
-    throw new Error(`Invalid workspace URL: ${workspaceUrl}`);
-  }
-
-  const segments = url.pathname.split('/').filter(Boolean);
-  if (segments.length === 0) {
-    throw new Error(
-      `Cannot derive realm username from workspace URL (${workspaceUrl}). Please provide MATRIX_USERNAME`,
-    );
-  }
-
-  if (segments[0] === 'published') {
-    if (!segments[1]) {
-      throw new Error(
-        `Cannot derive published realm username from workspace URL (${workspaceUrl}). Missing published realm id.`,
-      );
-    }
-    return `realm/published_${segments[1]}`;
-  }
-
-  if (segments.length >= 2) {
-    return `realm/${segments[0]}_${segments[1]}`;
-  }
-
-  return `${segments[0]}_realm`;
-}
-
-export async function validateMatrixEnvVars(workspaceUrl: string): Promise<{
-  matrixUrl: string;
-  username: string;
-  password: string;
-}> {
-  const { getProfileManager } = await import('./profile-manager.js');
-  const profileManager = getProfileManager();
-  const credentials = await profileManager.getActiveCredentials();
-
-  if (credentials) {
-    return {
-      matrixUrl: credentials.matrixUrl,
-      username: credentials.username,
-      password: credentials.password,
-    };
-  }
-
-  const matrixUrl = process.env.MATRIX_URL;
-  const envUsername = process.env.MATRIX_USERNAME;
-  let password = process.env.MATRIX_PASSWORD;
-  const realmSecret = process.env.REALM_SECRET_SEED;
-  let username = envUsername;
-
-  if (!matrixUrl) {
-    console.error('MATRIX_URL environment variable is required');
-    console.error('Or run "boxel profile add" to create a profile.');
-    process.exit(1);
-  }
-
-  if (!username) {
-    if (!realmSecret) {
-      console.error(
-        'Either MATRIX_USERNAME or REALM_SECRET_SEED environment variable is required',
-      );
-      process.exit(1);
-    }
-    username = deriveRealmUsername(workspaceUrl);
-    console.log(
-      `Derived realm Matrix username '${username}' from workspace URL using REALM_SECRET_SEED`,
-    );
-  }
-
-  if (!password && realmSecret) {
-    password = await passwordFromSeed(username, realmSecret);
-    console.log(
-      'Generated password from REALM_SECRET_SEED for realm user authentication',
-    );
-  }
-
-  if (!password) {
-    console.error(
-      'Either MATRIX_PASSWORD or REALM_SECRET_SEED environment variable is required',
-    );
-    process.exit(1);
-  }
-
-  return { matrixUrl, username, password };
 }
