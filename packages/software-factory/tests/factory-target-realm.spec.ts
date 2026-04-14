@@ -67,6 +67,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   ).href;
 
   try {
+    // The factory always runs the issue loop after seed creation. Without
+    // OPENROUTER_API_KEY the loop will fail when it tries to invoke the LLM
+    // agent, so we expect a non-zero exit. The seed issue is still created
+    // before the loop starts — we verify that below by reading it from the realm.
     let result = await runCommand(
       'node',
       [
@@ -80,8 +84,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         targetRealmUrl,
         '--realm-server-url',
         realmServerURL,
-        '--mode',
-        'bootstrap',
+        '--no-retry-blocked',
       ],
       {
         cwd: packageRoot,
@@ -95,36 +98,23 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       },
     );
 
+    // The factory exits non-zero because the loop fails without an API key,
+    // but the seed issue and target realm were created before the loop ran.
     expect(
       result.status,
-      `factory:go failed (status=${result.status}).\nstderr:\n${result.stderr}\nstdout:\n${result.stdout}`,
-    ).toBe(0);
+      `factory:go unexpected status.\nstderr:\n${result.stderr}\nstdout:\n${result.stdout}`,
+    ).toBe(1);
 
-    let summary = JSON.parse(result.stdout) as {
-      command: string;
-      targetRealm: { url: string; ownerUsername: string };
-      seedIssue: {
-        seedIssueId: string;
-        seedIssueStatus: string;
-      };
-    };
-
-    expect(summary.command).toBe('factory:go');
-    expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
-    expect(summary.seedIssue.seedIssueId).toBe('Issues/bootstrap-seed');
-    expect(summary.seedIssue.seedIssueStatus).toBe('created');
-
-    // Verify the seed issue actually exists in the newly created target realm
+    // Verify the seed issue exists in the newly created target realm
     // by authenticating as the target user who owns the realm
     let targetRealmToken = await getRealmToken(
       matrixURL,
       targetUsername,
       targetPassword,
-      summary.targetRealm.url,
+      targetRealmUrl,
     );
 
-    let seedIssueUrl = new URL('Issues/bootstrap-seed', summary.targetRealm.url)
-      .href;
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmUrl).href;
     let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,
