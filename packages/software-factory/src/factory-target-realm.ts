@@ -1,4 +1,5 @@
 import { BoxelCLIClient } from '@cardstack/boxel-cli/src/lib/boxel-cli-client';
+import { getProfileManager } from '@cardstack/boxel-cli/src/lib/profile-manager';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -66,6 +67,17 @@ async function createRealm(
   resolution: FactoryTargetRealmResolution,
 ): Promise<CreateRealmResult> {
   let realmName = extractEndpointFromRealmUrl(resolution.url);
+
+  let active = getProfileManager().getActiveProfile();
+  if (
+    active &&
+    ensureTrailingSlash(active.profile.realmServerUrl) !==
+      resolution.serverUrl
+  ) {
+    throw new FactoryEntrypointUsageError(
+      `Active Boxel profile realm server "${ensureTrailingSlash(active.profile.realmServerUrl)}" does not match --realm-server-url "${resolution.serverUrl}"`,
+    );
+  }
 
   let client = new BoxelCLIClient();
   let result = await client.createRealm({ realmName, displayName: realmName });
