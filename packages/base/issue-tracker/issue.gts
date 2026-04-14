@@ -1,5 +1,6 @@
 import {
   CardDef,
+  FieldDef,
   Component,
   field,
   contains,
@@ -51,12 +52,49 @@ export const issueTypeOptions = [
   { value: 'infrastructure', label: 'Infrastructure' },
 ];
 
+export class IssueOptionField extends FieldDef {
+  static displayName = 'Issue Option';
+  @field value = contains(StringField);
+  @field label = contains(StringField);
+
+  static embedded = class Embedded extends Component<typeof IssueOptionField> {
+    <template>
+      <span class='option-item'>
+        <span class='option-label'>{{if @model.label @model.label '—'}}</span>
+        <span class='option-value'>{{@model.value}}</span>
+      </span>
+      <style scoped>
+        .option-item {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          font-size: 0.8125rem;
+        }
+        .option-label {
+          font-weight: 500;
+          color: var(--foreground);
+        }
+        .option-value {
+          font-size: 0.75rem;
+          color: var(--muted-foreground);
+        }
+      </style>
+    </template>
+  };
+}
+
+export class IssuePriorityOptions extends CardDef {
+  @field priorityOptions = containsMany(IssueOptionField);
+}
+
 const IssueStatusField = enumField(StringField, {
   options: issueStatusOptions,
 });
 
-const IssuePriorityField = enumField(StringField, {
-  options: issuePriorityOptions,
+export const IssuePriorityField = enumField(StringField, {
+  options: function (this: any) {
+    return this.project?.priorityOptions;
+  },
 });
 
 const IssueTypeField = enumField(StringField, {
@@ -384,6 +422,8 @@ export class Project extends CardDef {
   @field title = contains(StringField);
   @field description = contains(MarkdownField);
   @field dueDate = contains(DateField);
+  @field priorityOptions = containsMany(IssueOptionField);
+  @field statusOptions = containsMany(IssueOptionField);
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -403,6 +443,67 @@ export class Project extends CardDef {
         : (this.title ?? 'Untitled Project');
     },
   });
+
+  static edit = class Edit extends Component<typeof Project> {
+    constructor(owner: unknown, args: any) {
+      super(owner, args);
+      const model = this.args.model as any;
+      if (!model) return;
+      // const opts: IssueOptionField[] = model.priorityOptions ?? [];
+      // if (!opts.length) {
+      //   for (const defaults of issuePriorityOptions) {
+      //     if (!opts.find((o: any) => o.value === defaults.value)) {
+      //       opts.push(
+      //         new IssueOptionField({
+      //           value: defaults.value,
+      //           label: defaults.label,
+      //         }),
+      //       );
+      //     }
+      //   }
+      // }
+    }
+
+    <template>
+      <div class='project-edit'>
+        <div class='row'>
+          <FieldContainer @label='Title' @vertical={{true}}>
+            <@fields.title />
+          </FieldContainer>
+          <FieldContainer @label='Project Code' @vertical={{true}}>
+            <@fields.projectCode />
+          </FieldContainer>
+        </div>
+        <div class='row'>
+          <FieldContainer @label='Status' @vertical={{true}}>
+            <@fields.projectStatus />
+          </FieldContainer>
+          <FieldContainer @label='Due Date' @vertical={{true}}>
+            <@fields.dueDate />
+          </FieldContainer>
+        </div>
+        <FieldContainer @label='Description' @vertical={{true}}>
+          <@fields.description />
+        </FieldContainer>
+        <FieldContainer @label='Priority Options' @vertical={{true}}>
+          <@fields.priorityOptions />
+        </FieldContainer>
+      </div>
+      <style scoped>
+        .project-edit {
+          display: grid;
+          gap: var(--boxel-sp-xl);
+          padding: var(--boxel-sp-xl);
+        }
+        .row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+          min-width: 0;
+        }
+      </style>
+    </template>
+  };
 
   static fitted = class Fitted extends Component<typeof Project> {
     <template>
