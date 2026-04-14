@@ -259,6 +259,18 @@ export async function runIssueLoop(
       `Outer cycle ${outerCycles}: picked issue ${issueSummaryLabel(issue)} (status=${issue.status}, priority=${issue.priority})`,
     );
 
+    // Mark the issue as in_progress when the loop picks it up
+    if (issue.status !== 'in_progress') {
+      try {
+        await issueStore.updateIssue(issue.id, { status: 'in_progress' });
+        issue = await scheduler.refreshIssueState(issue);
+      } catch (err) {
+        log.warn(
+          `  Failed to set issue to in_progress: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     // Create a fresh validator scoped to this issue so that artifacts
     // (e.g. TestRun cards) are named per-issue rather than shared.
     let validator = createValidator(issue.id);
@@ -296,6 +308,30 @@ export async function runIssueLoop(
       // Validation — runs after every agent turn
       validationResults = await validator.validate(targetRealmUrl);
       log.info(`  Validation: ${formatValidation(validationResults)}`);
+
+      // The loop owns issue status transitions. The agent signals
+      // completion via signal_done; the loop promotes to "done" only
+      // when signal_done is called AND validation passes.
+      let agentSignaledDone = result.toolCalls.some(
+        (tc) => tc.tool === 'signal_done',
+      );
+
+      if (agentSignaledDone && validationResults?.passed) {
+        try {
+          await issueStore.updateIssue(issue.id, { status: 'done' });
+          log.info(
+            `  Issue marked done (agent called signal_done, validation passed)`,
+          );
+        } catch (err) {
+          log.warn(
+            `  Failed to mark issue as done: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      } else if (agentSignaledDone && !validationResults?.passed) {
+        log.info(
+          `  Agent signaled done but validation failed — continuing iteration`,
+        );
+      }
 
       // Refresh issue state from realm
       issue = await scheduler.refreshIssueState(issue);
@@ -390,6 +426,26 @@ export async function runIssueLoop(
   }
 
   log.info(`Outer loop finished: outcome=${outcome}, cycles=${outerCycles}`);
+
+  // Mark the project as completed only when ALL issues in the realm are done
+  // (not just the ones we processed). This prevents marking complete when
+  // pre-existing blocked issues still exist.
+  if (outcome === 'all_issues_done' && issueStore.updateProjectStatus) {
+    let allIssues = await issueStore.listIssues();
+    let allRealmIssuesDone =
+      allIssues.length > 0 && allIssues.every((i) => i.status === 'done');
+    if (allRealmIssuesDone) {
+      try {
+        await issueStore.updateProjectStatus('completed');
+      } catch (err) {
+        log.warn(
+          `Failed to update project status to completed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    } else {
+      log.info(`Not marking project completed — some issues are not done`);
+    }
+  }
 
   return { outcome, outerCycles, issueResults };
 }

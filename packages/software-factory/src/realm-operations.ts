@@ -26,6 +26,18 @@ export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
+/**
+ * Ensure a card instance path ends with `.json`. The realm API uses
+ * `card+source` content negotiation which requires the full file path
+ * including extension.
+ */
+export function ensureJsonExtension(path: string): string {
+  if (!path.endsWith('.json')) {
+    return `${path}.json`;
+  }
+  return path;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -228,6 +240,7 @@ export async function readFile(
   options?: RealmFetchOptions,
 ): Promise<{
   ok: boolean;
+  status?: number;
   document?: LooseSingleCardDocument;
   /** Raw text content for non-JSON files (e.g., .gts source). */
   content?: string;
@@ -249,6 +262,7 @@ export async function readFile(
       let body = await response.text();
       return {
         ok: false,
+        status: response.status,
         error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
       };
     }
@@ -256,10 +270,10 @@ export async function readFile(
     let text = await response.text();
     try {
       let document = JSON.parse(text) as LooseSingleCardDocument;
-      return { ok: true, document };
+      return { ok: true, status: response.status, document };
     } catch {
       // Non-JSON content (e.g., .gts source files) — return as raw text
-      return { ok: true, content: text };
+      return { ok: true, status: response.status, content: text };
     }
   } catch (err) {
     return {

@@ -14,11 +14,7 @@ import type {
   Relationship,
 } from '@cardstack/runtime-common';
 
-import {
-  runRealmCommand,
-  ensureTrailingSlash,
-  type RunCommandOptions,
-} from './realm-operations';
+import { runRealmCommand, type RunCommandOptions } from './realm-operations';
 
 // ---------------------------------------------------------------------------
 // Runtime schema fetching
@@ -99,16 +95,17 @@ export async function fetchCardTypeSchema(
 
 /**
  * Assemble a JSON:API card document from structured attributes and
- * relationships, with the correct `adoptsFrom` pointing to darkfactory
- * in the given realm.
+ * relationships, with the correct `adoptsFrom` pointing to the
+ * darkfactory module (which lives in the software-factory realm,
+ * NOT the target realm).
  */
 export function buildCardDocument(
   cardName: string,
-  realmUrl: string,
+  darkfactoryModuleUrl: string,
   attributes: Record<string, unknown>,
   relationships?: Record<string, unknown>,
 ): LooseSingleCardDocument {
-  let moduleUrl = `${ensureTrailingSlash(realmUrl)}darkfactory`;
+  let moduleUrl = darkfactoryModuleUrl;
   let doc: LooseSingleCardDocument = {
     data: {
       type: 'card',
