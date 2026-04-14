@@ -68,10 +68,23 @@ pnpm factory:go -- \
 
 The `--debug` flag shows LLM prompts, tool calls and their results, and `console.log` output from QUnit tests as they run.
 
+### Retrying blocked issues
+
+By default, the factory resets blocked issues to `backlog` with `critical` priority so the scheduler picks them up first. Only issues blocked by validation failures (not by dependency on another issue) are reset. Prior validation failure details are preserved in issue comments so the agent has context for the retry.
+
+To skip retrying blocked issues, use `--no-retry-blocked`:
+
+```bash
+pnpm factory:go -- \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm-url http://localhost:4201/your-username/my-test-realm/ \
+  --no-retry-blocked
+```
+
 ### What to expect on the command line
 
 ```
-[factory:go] mode=implement brief=http://localhost:4201/software-factory/Wiki/sticky-note
+[factory:go] brief=http://localhost:4201/software-factory/Wiki/sticky-note
 [factory:go] Starting seed issue + issue-driven loop...
 [factory-seed] Creating seed issue at Issues/bootstrap-seed.json
 [issue-loop] Starting issue loop: targetRealm=..., maxIterationsPerIssue=5

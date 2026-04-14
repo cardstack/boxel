@@ -91,6 +91,11 @@ export interface IssueLoopWiringConfig {
   maxIterationsPerIssue?: number;
   /** Max outer-loop cycles. Default: 50. */
   maxOuterCycles?: number;
+  /**
+   * Reset blocked issues (without blockedBy dependencies) to backlog before
+   * running the loop. Sets priority to critical for immediate pickup.
+   */
+  retryBlocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +124,11 @@ export async function runFactoryIssueLoop(
     darkfactoryModuleUrl,
     options: fetchOptions,
   });
+
+  // 2b. Retry blocked issues (opt-in via --retry-blocked)
+  if (config.retryBlocked) {
+    await retryBlockedIssues(issueStore);
+  }
 
   // 3. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
@@ -213,6 +223,48 @@ export async function runFactoryIssueLoop(
   };
 
   return runIssueLoop(issueLoopConfig);
+}
+
+// ---------------------------------------------------------------------------
+// Retry blocked issues
+// ---------------------------------------------------------------------------
+
+async function retryBlockedIssues(issueStore: RealmIssueStore): Promise<void> {
+  let issues = await issueStore.listIssues();
+  let resetCount = 0;
+
+  for (let issue of issues) {
+    if (issue.status !== 'blocked') continue;
+
+    // Only retry issues blocked by validation/max-iterations,
+    // NOT issues blocked by a dependency on another issue.
+    if (issue.blockedBy.length > 0) {
+      log.info(
+        `Retry: skipping "${issue.id}" — blocked by dependency, not retrying`,
+      );
+      continue;
+    }
+
+    await issueStore.addComment(issue.id, {
+      body: '**Retry:** resetting blocked status to backlog for another attempt.',
+      author: 'orchestrator',
+    });
+    // Set priority to critical so the scheduler picks retried issues first
+    await issueStore.updateIssue(issue.id, {
+      status: 'backlog',
+      priority: 'critical',
+    });
+    log.info(
+      `Retry: reset blocked issue "${issue.id}" to backlog (priority: critical)`,
+    );
+    resetCount++;
+  }
+
+  if (resetCount > 0) {
+    log.info(`Retry: reset ${resetCount} blocked issue(s) to backlog`);
+  } else {
+    log.info('Retry: no eligible blocked issues found to reset');
+  }
 }
 
 // ---------------------------------------------------------------------------

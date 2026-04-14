@@ -98,6 +98,16 @@ The inner loop continues until:
 
 The agent always has the option to create new issues via tool calls if it determines that a failure requires separate work (e.g., "this card definition depends on another card that doesn't exist yet — creating a new issue for it"). But the orchestrator does not force this — the agent decides.
 
+### Retrying Blocked Issues (default on, opt out with `--no-retry-blocked`)
+
+By default, the factory resets eligible blocked issues to `backlog` with `critical` priority before running the loop:
+
+- **Only issues blocked without `blockedBy` dependencies are reset** — issues blocked by another issue (dependency) are left alone. This distinguishes "blocked by validation failures" from "blocked by unfinished prerequisite work."
+- **Priority elevation to `critical`** ensures retried issues are picked up before other backlog items by `IssueScheduler.pickNextIssue()`.
+- **A comment is added** documenting the reset for traceability.
+- **Prior validation failure context in issue comments is preserved** — the agent sees what went wrong and has context for the retry.
+- **Opt out with `--no-retry-blocked`** — if you want blocked issues to stay blocked, pass this flag.
+
 ### What This Means for Task Breakdown
 
 During task breakdown, the agent organizes implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the Boxel catalog. The agent creates **one issue per entry-point card**, where each issue covers:
@@ -149,7 +159,7 @@ The flow becomes:
 4. The agent calls `signal_done()` — the orchestrator marks the seed issue as done after validation passes
 5. The orchestrator now has a populated issue backlog and continues the normal loop
 
-Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up.
+Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up. Because of this idempotency, the `--mode` flag (bootstrap / implement / resume) was removed from the CLI — there is no need to distinguish between a fresh run and a resume. The factory always creates the seed (no-op if it already exists) and runs the issue loop.
 
 The `ContextBuilder.buildForIssue()` handles the bootstrap case where no Project exists yet by supplying a minimal stub (`{ id: 'bootstrap-pending' }`) when `loadProject()` returns `undefined` and the issue has `issueType === 'bootstrap'`. This keeps `AgentContext.project` required (no type ripple) while the bootstrap prompt template doesn't reference project fields.
 
