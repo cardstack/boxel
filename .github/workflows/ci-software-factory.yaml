@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ci-software-factory.yaml"
+      - "packages/boxel-cli/**"
       - "packages/runtime-common/**"
       - "packages/base/**"
       - "packages/boxel-icons/**"
@@ -55,6 +56,9 @@ jobs:
         run: |
           shopt -s dotglob
           cp -a .test-web-assets-artifact/. ./
+      - name: Build boxel-cli (factory dependency)
+        run: pnpm build
+        working-directory: packages/boxel-cli
       - name: Install Playwright Browsers
         run: pnpm exec playwright install
         working-directory: packages/software-factory
