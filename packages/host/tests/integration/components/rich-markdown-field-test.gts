@@ -1,5 +1,5 @@
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { waitFor, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -83,7 +83,7 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert.dom(root.querySelector('strong')).hasText('bold');
   });
 
-  test('edit template renders textarea for content', async function (assert) {
+  test('edit template renders CodeMirror editor for content', async function (assert) {
     class TestCard extends CardDef {
       @field body = contains(RichMarkdownField);
       static edit = class Edit extends Component<typeof this> {
@@ -102,8 +102,15 @@ module('Integration | RichMarkdownField', function (hooks) {
       body: new RichMarkdownField({ content: 'Edit me' }),
     });
     let root = await renderCard(loader, card, 'edit');
-    assert.dom(root.querySelector('textarea')).exists('textarea is rendered');
-    assert.dom(root.querySelector('textarea')).hasValue('Edit me');
+    // CodeMirrorEditor shows a loading state or the editor depending on
+    // whether the lazy module is available in the test environment
+    let editor = root.querySelector('[data-test-codemirror-editor]');
+    let loading = root.querySelector('[data-test-codemirror-loading]');
+    let hasEditorOrLoading = editor !== null || loading !== null;
+    assert.true(
+      hasEditorOrLoading,
+      'CodeMirror editor or loading state is rendered',
+    );
   });
 
   test('renders with null content without error', async function (assert) {
@@ -651,5 +658,179 @@ module('Integration | RichMarkdownField', function (hooks) {
     assert
       .dom('[data-test-markdown-bfm-unresolved-block]')
       .doesNotExist('no unresolved Pill remains after card resolves (block)');
+  });
+
+  // ── Mode switcher tests ──
+
+  test('edit template renders mode switcher with Compose, Source, and Preview buttons', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    assert.dom('[data-test-mode-switcher]').exists('mode switcher is rendered');
+    assert
+      .dom('[data-test-mode-compose]')
+      .hasText('Compose', 'Compose button is rendered');
+    assert
+      .dom('[data-test-mode-source]')
+      .hasText('Source', 'Source button is rendered');
+    assert
+      .dom('[data-test-mode-preview]')
+      .hasText('Preview', 'Preview button is rendered');
+  });
+
+  test('default mode shows editor, not preview', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotExist('preview is not shown by default');
+    // CodeMirror editor should be present (either loaded or loading)
+    let editorOrLoading =
+      document.querySelector('[data-test-codemirror-editor]') ??
+      document.querySelector('[data-test-codemirror-loading]');
+    assert.ok(editorOrLoading, 'editor is shown by default (edit mode)');
+  });
+
+  test('clicking Preview shows rendered markdown and hides editor', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({
+        content: '# Hello World\n\nSome **bold** text.',
+      }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await click('[data-test-mode-preview]');
+
+    assert
+      .dom('[data-test-markdown-preview]')
+      .exists('markdown preview is rendered');
+    assert
+      .dom('[data-test-codemirror-editor]')
+      .doesNotExist('CodeMirror editor is not shown in preview mode');
+    assert
+      .dom('[data-test-codemirror-loading]')
+      .doesNotExist('CodeMirror loading is not shown in preview mode');
+    assert
+      .dom('[data-test-markdown-preview] h1')
+      .hasText('Hello World', 'heading is rendered as HTML');
+    assert
+      .dom('[data-test-markdown-preview] strong')
+      .hasText('bold', 'bold text is rendered as HTML');
+  });
+
+  test('clicking Source hides preview and shows editor', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    await click('[data-test-mode-source]');
+
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotExist('preview is not shown in source mode');
+    let editorOrLoading =
+      document.querySelector('[data-test-codemirror-editor]') ??
+      document.querySelector('[data-test-codemirror-loading]');
+    assert.ok(editorOrLoading, 'editor is shown in source mode');
+  });
+
+  test('switching from Preview back to Compose restores editor', async function (assert) {
+    class TestCard extends CardDef {
+      @field body = contains(RichMarkdownField);
+      static edit = class Edit extends Component<typeof this> {
+        <template><@fields.body /></template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-card.gts': { TestCard },
+      },
+    });
+
+    let card = new TestCard({
+      body: new RichMarkdownField({ content: 'Hello world' }),
+    });
+    await renderCard(loader, card, 'edit');
+
+    // Switch to Preview
+    await click('[data-test-mode-preview]');
+    assert.dom('[data-test-markdown-preview]').exists('preview is shown');
+
+    // Switch back to Compose
+    await click('[data-test-mode-compose]');
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotExist('preview is hidden after switching back');
+    let editorOrLoading =
+      document.querySelector('[data-test-codemirror-editor]') ??
+      document.querySelector('[data-test-codemirror-loading]');
+    assert.ok(
+      editorOrLoading,
+      'editor is restored after switching back to Compose',
+    );
   });
 });

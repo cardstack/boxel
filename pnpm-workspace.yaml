@@ -26,6 +26,12 @@ catalog:
   "@babel/traverse": 7.27.0
   "@cardstack/requirejs-monaco-ember-polyfill": ^0.0.1
   "@cardstack/view-transitions": ^0.2.0
+  "@codemirror/autocomplete": ^6.20.1
+  "@codemirror/commands": ^6.10.3
+  "@codemirror/lang-markdown": ^6.5.0
+  "@codemirror/language": ^6.12.3
+  "@codemirror/state": ^6.6.0
+  "@codemirror/view": ^6.41.0
   "@ember/string": ^4.0.1
   "@ember/test-helpers": ^5.4.1
   "@ember/test-waiters": ^4.1.1
@@ -36,6 +42,7 @@ catalog:
   "@glint/ember-tsc": ^1.5.0
   "@glint/template": ^1.7.7
 
+  "@lezer/markdown": ^1.6.3
   "@koa/cors": ^4.0.0
   "@koa/router": ^14.0.0
   "@lucide/lab": ^0.1.2
