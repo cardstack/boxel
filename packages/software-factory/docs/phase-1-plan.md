@@ -319,17 +319,17 @@ Test execution policy:
 
 - the orchestrator owns test execution — the agent writes test files via `write_file` tool calls, and the orchestrator triggers test execution as a separate phase after the agent finishes its turn
 - the Playwright browser navigates to the host's QUnit live-test page, which discovers `.test.gts` files via `_mtimes` and runs them in the browser
-- test results (pass/fail, error messages, stack traces) are saved as `TestRun` card instances in the target realm's `Validations/` folder
-- on failure, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (individual test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. The agent also has access to the `Validations/` folder via `search_realm` and `read_file` for historical test run analysis.
+- test results (pass/fail, error messages, stack traces) are saved as `TestRun` card instances in the target realm's `Test Runs/` folder
+- on failure, the orchestrator reads the `TestRun` card from the realm to extract detailed failure info (individual test names, error messages, stack traces) and feeds them back to the agent in the iterate prompt. The agent also has access to the `Test Runs/` folder via `search_realm` and `read_file` for historical test run analysis.
 - on success, the TestRun card serves as durable proof that the ticket was verified
 
 Target realm artifact structure (QUnit test files co-located with card definitions):
 
 - `<card-name>.test.gts` — the generated QUnit test source (co-located with card definitions in target realm)
-- `Validations/test_<ticket-slug>-<seq>.json` — TestRun card instance with status, results, timing (in target realm)
+- `Test Runs/<ticket-slug>-<seq>.json` — TestRun card instance with status, results, timing (in target realm)
 - `Spec/<card-name>.json` — Catalog Spec card for the top-level card (in target realm)
 
-All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Validations/`, `Spec/`.
+All card instance folders use plural display names: `Projects/`, `Tickets/`, `Knowledge Articles/`, `Agent Profiles/`, `Test Runs/`, `Spec/`.
 
 #### QUnit Test Page Architecture (CS-10599)
 
@@ -408,7 +408,7 @@ The current behavior is described in prose, but not encoded as a decision engine
 With executable tool functions, the agent handles sequential tool calls naturally — it calls tools in order, sees results, and reacts. However, the execution loop still involves long-running operations like test execution (~10 minutes per run) that require special handling:
 
 1. Write QUnit test file co-located with card definitions in the target realm (via `write_file`)
-2. Write a `TestRun` card to the target realm `Validations/` folder (via `write_file`)
+2. Write a `TestRun` card to the target realm `Test Runs/` folder (via `write_file`)
 3. Execute tests against the target realm (via `run-realm-tests`); the Playwright browser navigates to the QUnit live-test page
 4. Parse and save test results back to the `TestRun` card in the target realm
 5. Feed results back to the agent for the next iteration

@@ -919,6 +919,62 @@ export async function lintFile(
 }
 
 // ---------------------------------------------------------------------------
+// Validation Artifact Sequence Numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the next sequence number for a validation artifact by searching
+ * existing cards of the given type in the realm. Each slug (issue) gets its
+ * own independent sequence starting from 1.
+ *
+ * Shared by TestValidationStep and LintValidationStep so that sequence
+ * numbering is derived from realm state (survives process restarts).
+ */
+export async function getNextValidationSequenceNumber(
+  slug: string,
+  prefix: string,
+  moduleUrl: string,
+  cardName: string,
+  options: RealmFetchOptions & { targetRealmUrl: string },
+): Promise<number> {
+  let result = await searchRealm(
+    options.targetRealmUrl,
+    {
+      filter: {
+        on: { module: moduleUrl, name: cardName },
+      },
+      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
+    },
+    { authorization: options.authorization, fetch: options.fetch },
+  );
+
+  if (!result?.ok || !result.data) {
+    return 1;
+  }
+
+  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
+  let fullPrefix = `${prefix}${slug}-`;
+  let maxSeq = 0;
+
+  for (let card of result.data) {
+    let cardId = (card as { id?: string }).id ?? '';
+    let relativePath = cardId.startsWith(targetRealmUrl)
+      ? cardId.slice(targetRealmUrl.length)
+      : cardId;
+    if (relativePath.startsWith(fullPrefix)) {
+      let attrs = (card as { attributes?: { sequenceNumber?: number } })
+        .attributes;
+      let seq = attrs?.sequenceNumber ?? 0;
+      if (seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+
+  return maxSeq + 1;
+}
+
+// ---------------------------------------------------------------------------
 // Fetch Realm Filenames
 // ---------------------------------------------------------------------------
 

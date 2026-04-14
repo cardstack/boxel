@@ -6,7 +6,11 @@ import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
 
-import { ensureTrailingSlash, searchRealm } from './realm-operations';
+import {
+  ensureTrailingSlash,
+  getNextValidationSequenceNumber,
+  searchRealm,
+} from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseQunitResults } from './test-run-parsing';
 import type {
@@ -145,49 +149,26 @@ async function findResumableTestRun(
 
 /**
  * Get the next sequence number for a given slug by searching existing
- * TestRun cards in the realm and filtering by card ID. Each slug (issue)
- * gets its own independent sequence starting from 1.
+ * TestRun cards in the realm. Delegates to the shared utility in
+ * realm-operations.ts.
  */
 async function getNextSequenceNumber(
   slug: string,
   options: TestRunRealmOptions,
   minSequenceNumber = 0,
 ): Promise<number> {
-  let result = await searchRealm(
-    options.targetRealmUrl,
+  let seq = await getNextValidationSequenceNumber(
+    slug,
+    'Validations/test_',
+    options.testResultsModuleUrl,
+    'TestRun',
     {
-      filter: {
-        on: { module: options.testResultsModuleUrl, name: 'TestRun' },
-      },
-      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
+      targetRealmUrl: options.targetRealmUrl,
+      authorization: options.authorization,
+      fetch: options.fetch,
     },
-    { authorization: options.authorization, fetch: options.fetch },
   );
-
-  if (!result?.ok || !result.data) {
-    return minSequenceNumber + 1;
-  }
-
-  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
-  let prefix = `Validations/test_${slug}-`;
-  let maxSeq = 0;
-
-  for (let card of result.data) {
-    let cardId = (card as { id?: string }).id ?? '';
-    let relativePath = cardId.startsWith(targetRealmUrl)
-      ? cardId.slice(targetRealmUrl.length)
-      : cardId;
-    if (relativePath.startsWith(prefix)) {
-      let attrs = (card as { attributes?: { sequenceNumber?: number } })
-        .attributes;
-      let seq = attrs?.sequenceNumber ?? 0;
-      if (seq > maxSeq) {
-        maxSeq = seq;
-      }
-    }
-  }
-
-  return Math.max(maxSeq, minSequenceNumber) + 1;
+  return Math.max(seq, minSequenceNumber + 1);
 }
 
 // ---------------------------------------------------------------------------

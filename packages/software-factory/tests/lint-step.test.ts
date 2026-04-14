@@ -22,6 +22,8 @@ function makeConfig(
   return {
     realmServerUrl: 'https://example.test/',
     lintResultsModuleUrl: 'https://example.test/lint-result',
+    // Default to a no-op sequence resolver for unit tests
+    getNextSequenceNumber: async () => 1,
     ...overrides,
   };
 }
@@ -213,6 +215,38 @@ module('LintValidationStep', function () {
 
     assert.true(result.passed, 'warnings only should pass');
     assert.strictEqual(result.errors.length, 0, 'no errors for warnings');
+  });
+
+  test('file read failure treated as lint error (not silently skipped)', async function (assert) {
+    let step = new LintValidationStep(
+      makeConfig({
+        fetchFilenames: makeFetchFilenames(['hello.gts', 'broken.gts']),
+        readFileFn: makeReadFile({
+          'hello.gts': 'export class Hello {}',
+          // broken.gts not in map → readFile returns { ok: false }
+        }),
+        lintFileFn: makeLintFile({
+          'hello.gts': { fixed: false, output: '', messages: [] },
+        }),
+      }),
+    );
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.false(result.passed, 'read failure should cause lint failure');
+    assert.ok(result.errors.length > 0, 'has errors for unreadable file');
+    assert.ok(
+      result.errors[0].message.includes('broken.gts'),
+      'error mentions the unreadable file',
+    );
+
+    let details = result.details as unknown as LintValidationDetails;
+    assert.strictEqual(details.filesChecked, 2, 'both files counted');
+    assert.strictEqual(
+      details.filesWithErrors,
+      1,
+      'unreadable file counted as error',
+    );
   });
 
   test('lintFile throws returns failed with error message', async function (assert) {

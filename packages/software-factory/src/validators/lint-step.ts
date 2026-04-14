@@ -12,6 +12,7 @@ import { deriveIssueSlug } from '../factory-agent-types';
 
 import {
   fetchRealmFilenames,
+  getNextValidationSequenceNumber,
   lintFile,
   readFile,
   type LintFileResponse,
@@ -57,6 +58,11 @@ export interface LintValidationStepConfig {
     path: string,
     options?: RealmFetchOptions,
   ) => Promise<{ ok: boolean; content?: string; error?: string }>;
+  /** Injected for testing — defaults to getNextValidationSequenceNumber. */
+  getNextSequenceNumber?: (
+    slug: string,
+    targetRealmUrl: string,
+  ) => Promise<number>;
 }
 
 /** Flattened POJO for lint validation details — not a card, just data. */
@@ -78,7 +84,6 @@ export class LintValidationStep implements ValidationStepRunner {
   readonly step = 'lint' as const;
 
   private config: LintValidationStepConfig;
-  private lastSequenceNumber = 0;
 
   private fetchFilenamesFn: (
     realmUrl: string,
@@ -95,12 +100,30 @@ export class LintValidationStep implements ValidationStepRunner {
     path: string,
     options?: RealmFetchOptions,
   ) => Promise<{ ok: boolean; content?: string; error?: string }>;
+  private getNextSeqFn: (
+    slug: string,
+    targetRealmUrl: string,
+  ) => Promise<number>;
 
   constructor(config: LintValidationStepConfig) {
     this.config = config;
     this.fetchFilenamesFn = config.fetchFilenames ?? fetchRealmFilenames;
     this.lintFileFn = config.lintFileFn ?? lintFile;
     this.readFileFn = config.readFileFn ?? readFile;
+    this.getNextSeqFn =
+      config.getNextSequenceNumber ??
+      ((slug: string, targetRealmUrl: string) =>
+        getNextValidationSequenceNumber(
+          slug,
+          'Validations/lint_',
+          config.lintResultsModuleUrl,
+          'LintResult',
+          {
+            targetRealmUrl,
+            authorization: config.authorization,
+            fetch: config.fetch,
+          },
+        ));
   }
 
   async run(targetRealmUrl: string): Promise<ValidationStepResult> {
@@ -138,8 +161,18 @@ export class LintValidationStep implements ValidationStepRunner {
       ? new URL(this.config.issueId, targetRealmUrl).href
       : undefined;
 
-    let seq = this.lastSequenceNumber + 1;
+    let seq: number;
+    try {
+      seq = await this.getNextSeqFn(slug, targetRealmUrl);
+    } catch (err) {
+      log.warn(
+        `Failed to resolve sequence number, defaulting to 1: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      seq = 1;
+    }
+
     let lintResultId: string;
+    let artifactCreated = false;
     try {
       let createResult = await createLintResult(
         slug,
@@ -153,11 +186,14 @@ export class LintValidationStep implements ValidationStepRunner {
         },
       );
       lintResultId = createResult.lintResultId;
-      if (createResult.created) {
-        this.lastSequenceNumber = seq;
+      if (!createResult.created) {
+        log.warn(
+          `LintResult card creation returned created: false: ${createResult.error ?? 'unknown'}`,
+        );
+      } else {
+        artifactCreated = true;
       }
     } catch (err) {
-      // If card creation fails, still run lint but without artifact
       log.warn(
         `Failed to create LintResult card: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -176,10 +212,42 @@ export class LintValidationStep implements ValidationStepRunner {
     for (let file of lintableFiles) {
       try {
         let readResult = await this.readFileFn(targetRealmUrl, file, fetchOpts);
-        if (!readResult.ok || !readResult.content) {
-          log.warn(
-            `Could not read ${file}: ${readResult.error ?? 'no content'}`,
-          );
+        if (!readResult.ok) {
+          let message = `Could not read ${file}: ${readResult.error ?? 'read failed'}`;
+          log.warn(message);
+          allFileResults.push({
+            file,
+            violations: [
+              {
+                rule: 'lint-error',
+                file,
+                line: 0,
+                column: 0,
+                message,
+                severity: 'error',
+              },
+            ],
+          });
+          allViolations.push({ rule: 'lint-error', file, line: 0, message });
+          continue;
+        }
+        if (readResult.content == null) {
+          let message = `Could not read ${file}: no content`;
+          log.warn(message);
+          allFileResults.push({
+            file,
+            violations: [
+              {
+                rule: 'lint-error',
+                file,
+                line: 0,
+                column: 0,
+                message,
+                severity: 'error',
+              },
+            ],
+          });
+          allViolations.push({ rule: 'lint-error', file, line: 0, message });
           continue;
         }
 
@@ -215,9 +283,8 @@ export class LintValidationStep implements ValidationStepRunner {
           }
         }
       } catch (err) {
-        log.warn(
-          `Error linting ${file}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        let message = `Lint failed: ${err instanceof Error ? err.message : String(err)}`;
+        log.warn(`Error linting ${file}: ${message}`);
         allFileResults.push({
           file,
           violations: [
@@ -226,17 +293,12 @@ export class LintValidationStep implements ValidationStepRunner {
               file,
               line: 0,
               column: 0,
-              message: `Lint failed: ${err instanceof Error ? err.message : String(err)}`,
+              message,
               severity: 'error',
             },
           ],
         });
-        allViolations.push({
-          rule: 'lint-error',
-          file,
-          line: 0,
-          message: `Lint failed: ${err instanceof Error ? err.message : String(err)}`,
-        });
+        allViolations.push({ rule: 'lint-error', file, line: 0, message });
       }
     }
 
@@ -244,8 +306,8 @@ export class LintValidationStep implements ValidationStepRunner {
     let passed = allViolations.length === 0;
 
     // Step 4: Complete the LintResult card
-    try {
-      await completeLintResult(
+    if (artifactCreated) {
+      let completeResult = await completeLintResult(
         lintResultId,
         {
           status: passed ? 'passed' : 'failed',
@@ -258,10 +320,11 @@ export class LintValidationStep implements ValidationStepRunner {
           fetch: this.config.fetch,
         },
       );
-    } catch (err) {
-      log.warn(
-        `Failed to complete LintResult card: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      if (!completeResult.updated) {
+        log.warn(
+          `Failed to complete LintResult card ${lintResultId}: ${completeResult.error ?? 'unknown'}`,
+        );
+      }
     }
 
     // Step 5: Build result
@@ -339,8 +402,8 @@ export class LintValidationStep implements ValidationStepRunner {
       throw new Error(result.error);
     }
 
-    return result.filenames.filter((f) =>
-      LINTABLE_EXTENSIONS.some((ext) => f.endsWith(ext)),
-    );
+    return result.filenames
+      .filter((f) => LINTABLE_EXTENSIONS.some((ext) => f.endsWith(ext)))
+      .sort((a, b) => a.localeCompare(b));
   }
 }
