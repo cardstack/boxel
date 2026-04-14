@@ -88,6 +88,7 @@ export class RealmServer {
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
+  private indexHTMLHash: string | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -396,12 +397,19 @@ export class RealmServer {
       cardURL = new URL('index', requestURL);
     }
 
+    // Retrieve index HTML early so the shell hash is available for ETag.
+    // This is memoized in production, so it's cheap after the first call.
+    let indexHTML = await this.retrieveIndexHTML();
+
     // For published realms, support HTTP caching via ETag.
-    // The ETag is based on last_published_at — content is immutable between
-    // publishes, so a matching ETag means the response hasn't changed.
+    // The ETag includes both last_published_at and a hash of the host app
+    // shell, so a deploy that changes index.html invalidates cached responses.
     let publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
-    let etag = lastPublishedAt ? `"${lastPublishedAt}"` : null;
+    let etag =
+      lastPublishedAt && this.indexHTMLHash
+        ? `"${lastPublishedAt}-${this.indexHTMLHash}"`
+        : null;
 
     if (etag) {
       let ifNoneMatch = ctxt.get('If-None-Match');
@@ -413,8 +421,6 @@ export class RealmServer {
         return;
       }
     }
-
-    let indexHTML = await this.retrieveIndexHTML();
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
     if (!hasPublicPermissions) {
@@ -785,6 +791,14 @@ export class RealmServer {
     indexHTML = indexHTML
       .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
       .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
+
+    if (!this.indexHTMLHash) {
+      let { createHash } = await import('crypto');
+      this.indexHTMLHash = createHash('md5')
+        .update(indexHTML)
+        .digest('hex')
+        .slice(0, 8);
+    }
 
     deferred.fulfill(indexHTML);
     return indexHTML;
