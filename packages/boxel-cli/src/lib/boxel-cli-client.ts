@@ -1,7 +1,7 @@
 import {
   createRealm as coreCreateRealm,
 } from '../commands/realm/create';
-import { type ProfileManager, getProfileManager } from './profile-manager';
+import { getProfileManager, type ProfileManager } from './profile-manager';
 
 export interface CreateRealmOptions {
   endpoint: string;
@@ -26,6 +26,15 @@ export class BoxelCLIClient {
 
   constructor(pm?: ProfileManager) {
     this.pm = pm ?? getProfileManager();
+  }
+
+  /**
+   * Ensure a boxel profile exists, migrating from env vars if needed.
+   * Call once at process startup (e.g. factory entrypoint) before any
+   * BoxelCLIClient operations.
+   */
+  static async ensureProfile(): Promise<void> {
+    await getProfileManager().migrateFromEnv();
   }
 
   async createRealm(options: CreateRealmOptions): Promise<CreateRealmResult> {

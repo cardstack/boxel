@@ -1,6 +1,8 @@
 // This should be first
 import '../setup-logger';
 
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import {
   FactoryEntrypointUsageError,
   getFactoryEntrypointUsage,
@@ -19,6 +21,8 @@ async function main(): Promise<void> {
       console.log(getFactoryEntrypointUsage());
       return;
     }
+
+    await BoxelCLIClient.ensureProfile();
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
     log.info(`mode=${options.mode} brief=${options.briefUrl}`);

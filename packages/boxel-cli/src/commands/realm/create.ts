@@ -25,7 +25,7 @@ export function registerCreateCommand(realm: Command): void {
         displayName: string,
         options: CreateCommandOptions,
       ) => {
-        await createRealmCommand(realmName, displayName, options);
+        await executeCreateRealmCommand(realmName, displayName, options);
       },
     );
 }
@@ -198,7 +198,7 @@ async function waitForRealmReady(
  * CLI entry point for `boxel realm create`. Validates input, calls createRealm,
  * formats output, and exits on error.
  */
-async function createRealmCommand(
+async function executeCreateRealmCommand(
   realmName: string,
   displayName: string,
   options: CreateCommandOptions,
