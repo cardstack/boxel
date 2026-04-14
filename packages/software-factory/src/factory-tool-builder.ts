@@ -275,20 +275,20 @@ async function readPatchDocument(
     return doc;
   }
 
-  // Only create fresh on 404 (card doesn't exist yet).
-  // Other failures (auth, network, server error) are surfaced.
-  let is404 = existing.error?.startsWith('HTTP 404');
-  if (!existing.ok && is404) {
-    return buildCardDocument(
-      cardName,
-      darkfactoryModuleUrl,
-      attributes,
-      relationships,
+  // If the read failed with something other than 404, surface the error —
+  // including network errors where status is undefined.
+  if (!existing.ok && existing.status !== 404) {
+    throw new Error(
+      `Failed to read existing ${cardName} at "${path}": ${existing.error ?? `HTTP ${existing.status}`}`,
     );
   }
 
-  throw new Error(
-    `Failed to read existing ${cardName} at "${path}" before update: ${existing.error ?? 'unknown error'}`,
+  // 404 — card doesn't exist yet, create new document
+  return buildCardDocument(
+    cardName,
+    darkfactoryModuleUrl,
+    attributes,
+    relationships,
   );
 }
 
