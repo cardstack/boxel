@@ -17,13 +17,36 @@ import {
   PgQueueRunner,
   type PgAdapter,
 } from '@cardstack/postgres';
-import type { Prerenderer } from '@cardstack/runtime-common';
+import type {
+  Prerenderer,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import type { Server } from 'http';
 
 // CLI tests don't need card rendering — stub out the prerenderer
 // so we don't launch Chrome.
 const noopPrerenderer: Prerenderer = {
-  prerenderCard: async () => ({ html: '', status: 200 }) as any,
+  prerenderCard: async () => ({
+    serialized: null,
+    searchDoc: null,
+    displayNames: null,
+    deps: null,
+    types: null,
+    isolatedHTML: null,
+    headHTML: null,
+    atomHTML: null,
+    embeddedHTML: null,
+    fittedHTML: null,
+    iconHTML: null,
+    error: {
+      type: 'instance-error' as const,
+      error: {
+        message: 'Prerendering disabled in CLI tests',
+        status: 500,
+        additionalErrors: null,
+      },
+    },
+  }),
   prerenderModule: async () => ({ html: '', status: 200 }) as any,
   prerenderFileExtract: async () => ({ html: '', status: 200 }) as any,
   prerenderFileRender: async () => ({ html: '', status: 200 }) as any,
@@ -40,7 +63,9 @@ let dbAdapter: PgAdapter | undefined;
 let publisher: PgQueuePublisher | undefined;
 let runner: PgQueueRunner | undefined;
 
-export async function startTestRealmServer(): Promise<void> {
+export async function startTestRealmServer(options?: {
+  fileSystem?: Record<string, string | LooseSingleCardDocument>;
+}): Promise<void> {
   prepareTestDB();
   dbAdapter = await createTestPgAdapter();
   publisher = new PgQueuePublisher(dbAdapter);
@@ -57,6 +82,7 @@ export async function startTestRealmServer(): Promise<void> {
     realmsRootPath: fs.mkdtempSync(
       path.join(os.tmpdir(), 'boxel-cli-realms-root-'),
     ),
+    fileSystem: options?.fileSystem,
     realmURL,
     virtualNetwork,
     publisher,
