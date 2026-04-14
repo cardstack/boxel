@@ -42,10 +42,13 @@ The dev stack must already be up via `mise run dev-all`, with Chrome launched wi
 The test filter you choose dominates iteration time. Use a module that exercises the suspect code path AND completes ~1 second per test. Good defaults:
 
 - `card-basics` — 99 tests, ~1s/test, exercises card-api + Box trees (hits the most common leak shape)
+- `Integration | Store` — good for store/card-api-related leaks; reproduces ~20 MB/test for store service leaks that `card-basics` misses (~1.1 MB/test)
 - `Integration` — slower, broader, use only when narrower filters miss the signal
 - A specific module name from a failing CI shard
 
 Avoid filters that include realm-indexing-heavy tests (e.g. those that intentionally trigger errors) — those run at ~60s/test and crush iteration.
+
+**Important:** if `card-basics` doesn't reproduce the expected slope, try a heavier filter. Some leaks only trigger when specific service code paths are exercised (e.g. StoreService.setup() only fires when the store is actually used).
 
 ### 2. Start the snapshot runner
 
@@ -56,6 +59,8 @@ SNAPSHOT_AT="10,50,90" \
 ```
 
 Snapshots at `t=10` (warm) and `t=50` give a clean delta over 40 tests. Add `t=90` to confirm the t=10→t=50 slope continues (rules out one-time allocations).
+
+**`SNAPSHOT_AT` values must be multiples of 10** — the runner triggers on `MEMPROBE` log lines, which only fire every 10 tests. Values like `3` or `15` will be silently missed.
 
 ### 3. Open a fresh test tab
 
@@ -86,6 +91,7 @@ The top of the output sorted by retained-size delta tells you what's accumulatin
 - `+N copies` of `string::define("https://cardstack.com/base/...")` — a Registry/factory chain is pinning fresh-per-test card-api module sources. Almost always points back to `App._applicationInstances` retention.
 - `+N copies` of `JSArrayBufferData` (native) — usually downstream of the above (each pinned ApplicationInstance brings ArrayBuffers).
 - `+N` Box / FieldComponent / Glimmer-internal counts — Box tree retention.
+- `+N` of `native::DOMTimer` — orphaned `setInterval`/`setTimeout` from async service code that ran after the service was destroyed (see known-leaks.md #5).
 
 ### 6. Trace the retainer chain
 
@@ -109,7 +115,7 @@ If the slope flattens and the offending constructor count stops growing, you're 
 
 - **`getContext()` returns undefined at `QUnit.testDone`** because `unsetContext()` runs in `teardownContext` before the owner is destroyed. Don't snapshot `ctx.owner` in testDone — capture in `hooks.afterEach` of the test module, or read `getApplication()._applicationInstances` directly.
 - **WeakMap edges**. Heap snapshots show WeakMap key→value as a normal-looking edge. `snapshot-retainers.js` skips them when `--strong` is passed; otherwise you'll chase ghosts.
-- **V8 max string length on big snapshots**. `JSON.parse(fs.readFileSync(snap, 'utf8'))` works up to ~500MB, but `chunks.join('')` blows up around 300MB. The runner streams chunks straight to disk for this reason.
+- **V8 max string length on big snapshots**. `JSON.parse(fs.readFileSync(snap, 'utf8'))` works up to ~500MB, but `chunks.join('')` blows up around 300MB. The runner streams chunks straight to disk for this reason. The analysis scripts (`snapshot-diff.js`, `snapshot-retainers.js`) also hit this limit — if snapshots exceed ~500MB, take them earlier in the run (lower `SNAPSHOT_AT` values) to keep file sizes manageable.
 - **GC timing**. The `globalThis.gc(); globalThis.gc()` double-call in setup-qunit is intentional — V8 sometimes needs a second pass to actually collect. If a snapshot still shows the suspect, re-snap after a short wait.
 - **Stale tabs**. Each `/json/new?<URL>` call creates a NEW tab. The runner picks the first one. Close stale tabs before starting the runner.
 
