@@ -101,7 +101,11 @@ export async function createRealm(
     }
 
     if (errorBody.includes('already exists')) {
-      let realmUrl = extractRealmUrlFromError(errorBody, realmServerUrl, realmName);
+      let realmUrl = extractRealmUrlFromError(
+        errorBody,
+        realmServerUrl,
+        realmName,
+      );
       let realmToken = await fetchRealmToken(pm, realmUrl);
 
       try {
@@ -113,9 +117,7 @@ export async function createRealm(
       return { realmUrl, created: false, realmToken };
     }
 
-    throw new Error(
-      `Realm server returned ${response.status}: ${errorBody}`,
-    );
+    throw new Error(`Realm server returned ${response.status}: ${errorBody}`);
   }
 
   let result = await response.json();

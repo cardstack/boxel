@@ -1,6 +1,4 @@
-import {
-  createRealm as coreCreateRealm,
-} from '../commands/realm/create';
+import { createRealm as coreCreateRealm } from '../commands/realm/create';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 
 export interface CreateRealmOptions {
