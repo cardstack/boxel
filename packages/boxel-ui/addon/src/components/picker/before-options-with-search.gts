@@ -312,18 +312,15 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
         padding: 0 var(--boxel-sp-2xs) var(--boxel-sp-2xs) var(--boxel-sp-2xs);
         background:
           /* Shadow cover BOTTOM — moves with content */
-          linear-gradient(
-            rgba(255, 255, 255, 0),
-            var(--boxel-light) 70%
-          )
-          center bottom / 100% 40px no-repeat local,
+          linear-gradient(rgba(255, 255, 255, 0), var(--boxel-light) 70%) center
+            bottom / 100% 40px no-repeat local,
           /* Shadow BOTTOM — fixed at bottom */
           radial-gradient(
-            farthest-side at 50% 100%,
-            rgba(0, 0, 0, 0.12),
-            rgba(0, 0, 0, 0)
-          )
-          center bottom / 100% 20px no-repeat scroll;
+              farthest-side at 50% 100%,
+              rgba(0, 0, 0, 0.12),
+              rgba(0, 0, 0, 0)
+            )
+            center bottom / 100% 20px no-repeat scroll;
       }
 
       .picker-divider {

@@ -45,7 +45,6 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
   handleKeydown(event: Event) {
     if (!(event instanceof KeyboardEvent)) return;
     if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
       this.handleClick(event);
     }
   }
