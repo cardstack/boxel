@@ -15,6 +15,7 @@ import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
 
 import * as viewTransitions from '@cardstack/view-transitions';
+import * as floatingUiDom from '@floating-ui/dom';
 import * as awesomePhoneNumber from 'awesome-phonenumber';
 import * as dateFns from 'date-fns';
 import * as emberAnimated from 'ember-animated';
@@ -163,6 +164,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     default: class {},
   });
   virtualNetwork.shimModule('flat', flat);
+  virtualNetwork.shimModule('@floating-ui/dom', floatingUiDom);
   virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
   virtualNetwork.shimModule('rsvp', rsvp);

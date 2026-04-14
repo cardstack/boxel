@@ -72,7 +72,7 @@ function resolveUrl(raw: string, baseUrl: string | null | undefined): string {
 
 export default class MarkDownTemplate extends GlimmerComponent<{
   Args: {
-    content: string | null;
+    content: string | null | undefined;
     linkedCards?: CardDef[] | null;
     cardReferenceBaseUrl?: string | null;
   };
