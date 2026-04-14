@@ -69,7 +69,7 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:types": "tsc --noEmit",
     "test": "vitest run",
-    "test:unit": "vitest run",
+    "test:unit": "vitest run --exclude 'tests/helpers/**' --exclude 'tests/integration/**' --exclude 'node_modules'",
     "test:integration": "./tests/scripts/run-integration-with-test-pg.sh",
     "test:watch": "vitest",
     "version:patch": "npm version patch",
