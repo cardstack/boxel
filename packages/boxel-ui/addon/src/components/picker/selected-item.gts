@@ -74,6 +74,13 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
     }
   }
 
+  @action
+  handleKeydown(item: PickerOption, event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      this.remove(item, event as unknown as MouseEvent);
+    }
+  }
+
   get displayRemoveButton() {
     return this.args.option.type !== 'select-all';
   }
@@ -126,6 +133,7 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
             @height='14'
             class='picker-selected-item__remove'
             {{on 'click' (fn this.remove @option)}}
+            {{on 'keydown' (fn this.handleKeydown @option)}}
             data-test-boxel-picker-remove-button
           />
         {{/if}}

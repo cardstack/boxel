@@ -78,13 +78,16 @@ export async function createRealm(
     iconURL: options.icon ?? iconURLFor(displayName) ?? iconURLFor(realmName),
   };
 
-  let response = await pm.authedFetch(`${realmServerUrl}/_create-realm`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/vnd.api+json' },
-    body: JSON.stringify({
-      data: { type: 'realm', attributes },
-    }),
-  });
+  let response = await pm.authedRealmServerFetch(
+    `${realmServerUrl}/_create-realm`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/vnd.api+json' },
+      body: JSON.stringify({
+        data: { type: 'realm', attributes },
+      }),
+    },
+  );
 
   if (!response.ok) {
     let errorBody: string;
