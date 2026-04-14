@@ -134,6 +134,7 @@ export function runTests() {
 - No external realm writes during tests — all test data lives in browser memory
 - Use `data-test-*` attributes for DOM selectors when testing rendered output
 - Use QUnit assertions: `assert.dom()`, `assert.strictEqual()`, `assert.ok()`
+- **Never use `QUnit.skip()` or `QUnit.todo()`.** All tests must actually execute. Skipped/todo tests are flagged as `skipped` in the TestRun card and treated as a failure when no tests actually ran. The orchestrator will reject a TestRun where every test is skipped.
 
 ## Important Rules
 

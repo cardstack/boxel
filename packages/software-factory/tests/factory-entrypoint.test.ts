@@ -10,9 +10,9 @@ import {
   runFactoryEntrypoint,
   wantsFactoryEntrypointHelp,
 } from '../src/factory-entrypoint';
-import type { FactoryBootstrapResult } from '../src/factory-bootstrap';
 import type { FactoryBrief } from '../src/factory-brief';
 import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
+import type { SeedIssueResult } from '../src/factory-seed';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
@@ -32,21 +32,9 @@ const bootstrappedTargetRealm: FactoryTargetRealmBootstrapResult = {
   ownerUsername: 'hassan',
   createdRealm: true,
 };
-const mockBootstrapResult: FactoryBootstrapResult = {
-  project: { id: 'Projects/sticky-note-mvp', status: 'created' },
-  knowledgeArticles: [
-    { id: 'Knowledge Articles/sticky-note-brief-context', status: 'created' },
-    {
-      id: 'Knowledge Articles/sticky-note-agent-onboarding',
-      status: 'created',
-    },
-  ],
-  issues: [
-    { id: 'Issues/sticky-note-define-core', status: 'created' },
-    { id: 'Issues/sticky-note-design-views', status: 'created' },
-    { id: 'Issues/sticky-note-add-integration', status: 'created' },
-  ],
-  activeIssue: { id: 'Issues/sticky-note-define-core', status: 'created' },
+const mockSeedResult: SeedIssueResult = {
+  issueId: 'Issues/bootstrap-seed',
+  status: 'created',
 };
 
 module('factory-entrypoint', function (hooks) {
@@ -112,7 +100,7 @@ module('factory-entrypoint', function (hooks) {
       },
       normalizedBrief,
       bootstrappedTargetRealm,
-      mockBootstrapResult,
+      mockSeedResult,
     );
 
     assert.strictEqual(summary.command, 'factory:go');
@@ -135,19 +123,14 @@ module('factory-entrypoint', function (hooks) {
         'normalized-brief',
         'resolved-target-realm',
         'bootstrapped-target-realm',
-        'bootstrapped-project-artifacts',
+        'created-seed-issue',
       ],
     );
-    assert.strictEqual(summary.bootstrap.projectId, 'Projects/sticky-note-mvp');
-    assert.strictEqual(summary.bootstrap.issueIds.length, 3);
-    assert.strictEqual(
-      summary.bootstrap.activeIssue.id,
-      'Issues/sticky-note-define-core',
-    );
-    assert.strictEqual(summary.bootstrap.activeIssue.status, 'created');
+    assert.strictEqual(summary.seedIssue.seedIssueId, 'Issues/bootstrap-seed');
+    assert.strictEqual(summary.seedIssue.seedIssueStatus, 'created');
     assert.deepEqual(summary.result, {
       status: 'ready',
-      nextStep: 'bootstrap-target-realm',
+      nextStep: 'seed-issue-created',
     });
   });
 
@@ -171,7 +154,7 @@ module('factory-entrypoint', function (hooks) {
     assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 
-  test('runFactoryEntrypoint loads and includes normalized brief data', async function (assert) {
+  test('runFactoryEntrypoint creates seed issue and loads brief data', async function (assert) {
     process.env.MATRIX_USERNAME = 'hassan';
 
     let summary = await runFactoryEntrypoint(
@@ -188,12 +171,19 @@ module('factory-entrypoint', function (hooks) {
           serverUrl: resolution.serverUrl,
           createdRealm: false,
         }),
-        bootstrapArtifacts: async () => mockBootstrapResult,
-        implement: async () => ({
-          outcome: 'done' as const,
-          iterations: 1,
-          toolCallLog: [],
-          issueId: 'Issues/sticky-note-define-core',
+        createSeed: async () => mockSeedResult,
+        runIssueLoop: async () => ({
+          outcome: 'all_issues_done' as const,
+          outerCycles: 1,
+          issueResults: [
+            {
+              issueId: 'Issues/bootstrap-seed',
+              issueSummary: 'Process brief and create project artifacts',
+              exitReason: 'done' as const,
+              innerIterations: 1,
+              toolCallLog: [],
+            },
+          ],
         }),
         fetch: async (_input, init) => {
           assert.strictEqual(
@@ -230,14 +220,12 @@ module('factory-entrypoint', function (hooks) {
     assert.strictEqual(summary.brief.title, 'Sticky Note');
     assert.strictEqual(summary.brief.sourceUrl, briefUrl);
     assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
-    assert.strictEqual(
-      summary.brief.contentSummary,
-      'Colorful, short-form note designed for spatial arrangement on boards and artboards.',
-    );
-    assert.true(summary.brief.content.includes('structured drafting'));
+    assert.strictEqual(summary.seedIssue.seedIssueId, 'Issues/bootstrap-seed');
+    assert.strictEqual(summary.issueLoop?.outcome, 'all_issues_done');
+    assert.strictEqual(summary.result.status, 'completed');
   });
 
-  test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory artifacts', async function (assert) {
+  test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory module', async function (assert) {
     process.env.MATRIX_USERNAME = 'hassan';
 
     let capturedDarkfactoryModuleUrl: string | undefined;
@@ -247,7 +235,7 @@ module('factory-entrypoint', function (hooks) {
         briefUrl,
         targetRealmUrl,
         realmServerUrl: 'https://realms.example.test/app/',
-        mode: 'implement',
+        mode: 'bootstrap',
       },
       {
         bootstrapTargetRealm: async (resolution) => ({
@@ -257,16 +245,10 @@ module('factory-entrypoint', function (hooks) {
           createdRealm: false,
           authorization: 'Bearer target-realm-token',
         }),
-        bootstrapArtifacts: async (_brief, _targetRealmUrl, options) => {
-          capturedDarkfactoryModuleUrl = options?.darkfactoryModuleUrl;
-          return mockBootstrapResult;
+        createSeed: async (_brief, _url, options) => {
+          capturedDarkfactoryModuleUrl = options.darkfactoryModuleUrl;
+          return mockSeedResult;
         },
-        implement: async () => ({
-          outcome: 'done' as const,
-          iterations: 1,
-          toolCallLog: [],
-          issueId: 'Issues/sticky-note-define-core',
-        }),
         fetch: async () =>
           new Response(
             JSON.stringify({
@@ -292,9 +274,10 @@ module('factory-entrypoint', function (hooks) {
       },
     );
 
+    // inferDarkfactoryModuleUrl uses the target realm URL origin
     assert.strictEqual(
       capturedDarkfactoryModuleUrl,
-      'https://realms.example.test/app/software-factory/darkfactory',
+      'https://realms.example.test/software-factory/darkfactory',
     );
   });
 });

@@ -1,17 +1,13 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
-import {
-  bootstrapProjectArtifacts,
-  type FactoryBootstrapOptions,
-  type FactoryBootstrapResult,
-} from './factory-bootstrap';
+import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
-  runFactoryImplement,
-  type ImplementConfig,
-  type ImplementResult,
-} from './factory-implement';
+  runFactoryIssueLoop,
+  type IssueLoopWiringConfig,
+} from './factory-issue-loop-wiring';
+import { createSeedIssue, type SeedIssueResult } from './factory-seed';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
@@ -19,6 +15,7 @@ import {
   type FactoryTargetRealmResolution,
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
+import type { IssueLoopResult } from './issue-loop';
 import { createBoxelRealmFetch } from './realm-auth';
 import {
   ensureActiveProfile,
@@ -48,22 +45,20 @@ export interface FactoryEntrypointBriefSummary extends FactoryBrief {
   url: string;
 }
 
-export interface FactoryEntrypointBootstrapSummary {
-  projectId: string;
-  knowledgeArticleIds: string[];
-  issueIds: string[];
-  activeIssue: {
-    id: string;
-    status: string;
-  };
+export interface FactoryEntrypointSeedSummary {
+  seedIssueId: string;
+  seedIssueStatus: SeedIssueResult['status'];
 }
 
-export interface FactoryEntrypointImplementSummary {
-  outcome: ImplementResult['outcome'];
-  iterations: number;
-  issueId: string;
-  message?: string;
-  toolCallCount: number;
+export interface FactoryEntrypointIssueLoopSummary {
+  outcome: IssueLoopResult['outcome'];
+  outerCycles: number;
+  issueResults: {
+    issueId: string;
+    exitReason: string;
+    innerIterations: number;
+    toolCallCount: number;
+  }[];
 }
 
 export interface FactoryEntrypointSummary {
@@ -74,9 +69,9 @@ export interface FactoryEntrypointSummary {
     url: string;
     ownerUsername: string;
   };
-  bootstrap: FactoryEntrypointBootstrapSummary;
+  seedIssue: FactoryEntrypointSeedSummary;
   actions: FactoryEntrypointAction[];
-  implement?: FactoryEntrypointImplementSummary;
+  issueLoop?: FactoryEntrypointIssueLoopSummary;
   result: {
     status: 'ready' | 'completed' | 'failed';
     nextStep: string;
@@ -91,12 +86,12 @@ export interface RunFactoryEntrypointDependencies {
   bootstrapTargetRealm?: (
     resolution: FactoryTargetRealmResolution,
   ) => Promise<FactoryTargetRealmBootstrapResult>;
-  bootstrapArtifacts?: (
+  createSeed?: (
     brief: FactoryBrief,
     targetRealmUrl: string,
-    options?: FactoryBootstrapOptions,
-  ) => Promise<FactoryBootstrapResult>;
-  implement?: (config: ImplementConfig) => Promise<ImplementResult>;
+    options: { fetch?: typeof globalThis.fetch; darkfactoryModuleUrl: string },
+  ) => Promise<SeedIssueResult>;
+  runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
@@ -235,63 +230,63 @@ export async function runFactoryEntrypoint(
     fetch: dependencies?.fetch,
   });
 
-  let artifacts = await (
-    dependencies?.bootstrapArtifacts ?? bootstrapProjectArtifacts
-  )(brief, targetRealm.url, {
-    fetch: realmFetch,
-    darkfactoryModuleUrl: new URL(
-      'software-factory/darkfactory',
-      targetRealm.serverUrl,
-    ).href,
-  });
+  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
+
+  // Create the seed issue in the realm
+  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
+    brief,
+    targetRealm.url,
+    { fetch: realmFetch, darkfactoryModuleUrl },
+  );
 
   let summary = buildFactoryEntrypointSummary(
     options,
     brief,
     targetRealm,
-    artifacts,
+    seedResult,
   );
 
-  // Run implement mode if requested
+  // Run the issue-driven loop
   if (options.mode === 'implement') {
-    let implementFn = dependencies?.implement ?? runFactoryImplement;
-    let implementResult = await implementFn({
+    let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
+    let loopResult = await loopFn({
       briefUrl: options.briefUrl,
       targetRealmUrl: targetRealm.url,
       realmServerUrl: targetRealm.serverUrl,
       ownerUsername: targetRealm.ownerUsername,
-      bootstrapResult: artifacts,
       model: options.model,
       debug: options.debug,
       fetch: dependencies?.fetch,
     });
 
-    summary.implement = {
-      outcome: implementResult.outcome,
-      iterations: implementResult.iterations,
-      issueId: implementResult.issueId,
-      message: implementResult.message,
-      toolCallCount: implementResult.toolCallLog.length,
+    summary.issueLoop = {
+      outcome: loopResult.outcome,
+      outerCycles: loopResult.outerCycles,
+      issueResults: loopResult.issueResults.map((ir) => ({
+        issueId: ir.issueId,
+        exitReason: ir.exitReason,
+        innerIterations: ir.innerIterations,
+        toolCallCount: ir.toolCallLog.length,
+      })),
     };
 
-    let succeeded =
-      implementResult.outcome === 'tests_passed' ||
-      implementResult.outcome === 'done';
+    let succeeded = loopResult.outcome === 'all_issues_done';
     summary.result = {
       status: succeeded ? 'completed' : 'failed',
       nextStep: succeeded
-        ? 'advance-to-next-issue'
-        : `implement-${implementResult.outcome}`,
+        ? 'all-issues-completed'
+        : `loop-${loopResult.outcome}`,
     };
   }
 
   return summary;
 }
+
 export function buildFactoryEntrypointSummary(
   options: FactoryEntrypointOptions,
   brief: FactoryBrief,
   targetRealm: FactoryTargetRealmBootstrapResult,
-  artifacts: FactoryBootstrapResult,
+  seedResult: SeedIssueResult,
 ): FactoryEntrypointSummary {
   let actions: FactoryEntrypointAction[] = [
     {
@@ -327,9 +322,9 @@ export function buildFactoryEntrypointSummary(
         : 'target realm already existed',
     },
     {
-      name: 'bootstrapped-project-artifacts',
+      name: 'created-seed-issue',
       status: 'ok',
-      detail: `project=${artifacts.project.status} issues=${artifacts.issues.map((t) => t.status).join(',')}`,
+      detail: `${seedResult.issueId} (${seedResult.status})`,
     },
   ];
 
@@ -344,22 +339,15 @@ export function buildFactoryEntrypointSummary(
       url: targetRealm.url,
       ownerUsername: targetRealm.ownerUsername,
     },
-    bootstrap: {
-      projectId: artifacts.project.id,
-      knowledgeArticleIds: artifacts.knowledgeArticles.map((ka) => ka.id),
-      issueIds: artifacts.issues.map((t) => t.id),
-      activeIssue: {
-        id: artifacts.activeIssue.id,
-        status: artifacts.activeIssue.status,
-      },
+    seedIssue: {
+      seedIssueId: seedResult.issueId,
+      seedIssueStatus: seedResult.status,
     },
     actions,
     result: {
       status: 'ready',
       nextStep:
-        options.mode === 'bootstrap'
-          ? 'bootstrap-target-realm'
-          : 'bootstrap-and-select-active-issue',
+        options.mode === 'bootstrap' ? 'seed-issue-created' : 'run-issue-loop',
     },
   };
 }

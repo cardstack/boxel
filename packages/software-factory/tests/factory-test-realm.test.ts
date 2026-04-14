@@ -164,6 +164,81 @@ module('factory-test-realm > parseQunitResults', function () {
       Boolean(entry.stackTrace && entry.stackTrace.includes('at line 42')),
     );
   });
+
+  test('maps skipped QUnit tests to skipped status', function (assert) {
+    let results = parseQunitResults({
+      tests: [
+        {
+          name: 'real test',
+          module: 'Mod',
+          status: 'passed',
+          runtime: 50,
+          errors: [],
+        },
+        {
+          name: 'skipped test',
+          module: 'Mod',
+          status: 'skipped',
+          runtime: 0,
+          errors: [],
+        },
+        {
+          name: 'todo test',
+          module: 'Mod',
+          status: 'todo',
+          runtime: 0,
+          errors: [],
+        },
+      ],
+      runEnd: {
+        status: 'passed',
+        testCounts: { passed: 1, failed: 0, skipped: 1, todo: 1, total: 3 },
+        runtime: 50,
+      },
+    });
+    assert.strictEqual(results.status, 'passed');
+    assert.strictEqual(results.passedCount, 1);
+    assert.strictEqual(results.failedCount, 0);
+    assert.strictEqual(results.skippedCount, 2);
+    let entries = results.moduleResults[0].results;
+    assert.strictEqual(entries[0].status, 'passed');
+    assert.strictEqual(entries[1].status, 'skipped');
+    assert.strictEqual(entries[2].status, 'skipped');
+  });
+
+  test('all-skipped tests are treated as failed', function (assert) {
+    let results = parseQunitResults({
+      tests: [
+        {
+          name: 'skip A',
+          module: 'Mod',
+          status: 'skipped',
+          runtime: 0,
+          errors: [],
+        },
+        {
+          name: 'todo B',
+          module: 'Mod',
+          status: 'todo',
+          runtime: 0,
+          errors: [],
+        },
+      ],
+      runEnd: {
+        status: 'passed',
+        testCounts: { passed: 0, failed: 0, skipped: 1, todo: 1, total: 2 },
+        runtime: 0,
+      },
+    });
+    assert.strictEqual(
+      results.status,
+      'failed',
+      'all-skipped run should be failed',
+    );
+    assert.strictEqual(results.passedCount, 0);
+    assert.strictEqual(results.failedCount, 0);
+    assert.strictEqual(results.skippedCount, 2);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -494,7 +569,7 @@ module('factory-test-realm > resolveTestRun', function () {
       let urlStr = String(url);
       let method = init?.method ?? 'GET';
 
-      // Search endpoint
+      // Search endpoint (used by findResumableTestRun and getNextSequenceNumber)
       if (urlStr.includes('_search') && method === 'QUERY') {
         return new Response(
           JSON.stringify({
@@ -928,5 +1003,33 @@ module('factory-test-realm > formatTestResultSummary', function () {
 
     let summary = formatTestResultSummary(result);
     assert.true(summary.length < longStack.length);
+  });
+
+  test('includes skipped count when present', function (assert) {
+    let result: TestResult = {
+      status: 'passed',
+      passedCount: 3,
+      failedCount: 0,
+      skippedCount: 2,
+      failures: [],
+      durationMs: 1000,
+    };
+
+    let summary = formatTestResultSummary(result);
+    assert.true(summary.includes('Skipped: 2'));
+  });
+
+  test('omits skipped count when zero', function (assert) {
+    let result: TestResult = {
+      status: 'passed',
+      passedCount: 5,
+      failedCount: 0,
+      skippedCount: 0,
+      failures: [],
+      durationMs: 2000,
+    };
+
+    let summary = formatTestResultSummary(result);
+    assert.false(summary.includes('Skipped'));
   });
 });

@@ -1,26 +1,19 @@
 /**
- * Smoke test for the factory test realm management (QUnit).
+ * Smoke test for the validation pipeline with real QUnit test execution.
  *
- * Simulates the full factory workflow: implementation phase output followed
- * by the testing phase via executeTestRunFromRealm with QUnit .test.gts files.
+ * 1. Creates a target realm and writes simulated LLM output:
+ *    - A HelloCard definition (.gts)
+ *    - A Spec card instance pointing to the HelloCard definition
+ *    - A passing QUnit test (hello.test.gts)
+ *    - A deliberately failing QUnit test (hello-fail.test.gts)
  *
- * Phase 1 -- Simulate LLM implementation output:
- *   Writes to the target realm (what the LLM would have produced):
- *   1. A sample HelloCard definition (.gts)
- *   2. A Spec card instance pointing to the HelloCard definition
- *   3. A sample HelloCard instance (HelloCard/sample.json)
- *   4. A QUnit test file (hello.test.gts) -- passing
- *   5. A QUnit test file (hello-fail.test.gts) -- deliberately failing
+ * 2. Runs the full ValidationPipeline via createDefaultPipeline(), which
+ *    executes all validation steps (parse, lint, evaluate, instantiate
+ *    are NoOp placeholders; test step runs real QUnit tests via Playwright).
  *
- * Phase 2 -- Run the testing phase via QUnit:
- *   Calls executeTestRunFromRealm, which:
- *   - Creates a TestRun card (status: running) in the target realm
- *   - Launches a headless browser pointing at the host app QUnit page
- *   - Collects QUnit results (testEnd / runEnd events)
- *   - Completes the TestRun card with module results
- *   - The passing test produces a result with passedCount=1
- *   - The failing test produces a result with failedCount=1
- *   - The overall TestRun status is 'failed' (mixed results)
+ * 3. Verifies pipeline results: test step fails (deliberately), NoOp steps
+ *    pass, detailed failure data is read back from the TestRun card, and
+ *    formatForContext() produces LLM-friendly markdown.
  *
  * Prerequisites:
  *
@@ -35,7 +28,7 @@
  */
 
 // This should be first
-import '../setup-logger';
+import '../../src/setup-logger';
 
 import {
   createRealm,
@@ -45,8 +38,9 @@ import {
 } from '@cardstack/boxel-cli';
 import { parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
-import { executeTestRunFromRealm } from '../../src/test-run-execution';
 import { writeFile } from '../../src/realm-operations';
+import { createDefaultPipeline } from '../../src/validators/validation-pipeline';
+import type { TestValidationDetails } from '../../src/validators/test-step';
 
 // ---------------------------------------------------------------------------
 // Sample LLM output -- what the agent would produce in the implementation phase
@@ -293,60 +287,97 @@ async function main() {
   );
 
   // -------------------------------------------------------------------------
-  // Phase 2: Run QUnit tests via executeTestRunFromRealm
+  // Run validation pipeline against the realm
   // -------------------------------------------------------------------------
 
-  log.info(
-    '\n--- Phase 2: Running QUnit tests via executeTestRunFromRealm ---\n',
-  );
+  log.info('\n--- Running ValidationPipeline.validate() ---\n');
 
-  let handle = await executeTestRunFromRealm({
-    targetRealmUrl,
-    testResultsModuleUrl,
-    slug: 'hello-smoke',
-    testNames: [],
+  let pipeline = createDefaultPipeline({
     fetch: fetchOptions.fetch,
-    forceNew: true,
     realmServerUrl,
     hostAppUrl: realmServerUrl,
+    testResultsModuleUrl,
   });
 
-  log.info(`  TestRun ID:  ${handle.testRunId}`);
-  log.info(`  Status:      ${handle.status}`);
-  if (handle.errorMessage) {
-    log.info(`  Error:       ${handle.errorMessage}`);
-  }
-  if ((handle as unknown as Record<string, unknown>).error) {
-    log.info(
-      `  Complete error: ${(handle as unknown as Record<string, unknown>).error}`,
-    );
-  }
-
-  // -------------------------------------------------------------------------
-  // Results
-  // -------------------------------------------------------------------------
-
-  log.info('\n--- Results ---\n');
-
-  // The TestRun should have status 'failed' because it contains both a
-  // passing and a deliberately failing QUnit test. The module results inside
-  // should show one test passed and one test failed.
-  let expectedStatus = handle.status === 'failed';
+  let validationResults = await pipeline.validate(targetRealmUrl);
 
   log.info(
-    `  TestRun status: ${expectedStatus ? '✓ failed (as expected -- one test passes, one fails)' : `✗ expected failed, got ${handle.status}`}`,
+    `  Pipeline result: ${validationResults.passed ? 'PASSED' : 'FAILED'} (${validationResults.steps.length} steps)`,
   );
-  log.info(`\n  View in Boxel: ${targetRealmUrl}${handle.testRunId}`);
+  for (let step of validationResults.steps) {
+    let statusIcon = step.passed ? '✓' : '✗';
+    let detail = '';
+    if (step.details) {
+      let d = step.details as unknown as TestValidationDetails;
+      if (d.passedCount != null) {
+        detail = ` (${d.passedCount} passed, ${d.failedCount} failed)`;
+      }
+    }
+    log.info(
+      `    ${step.step}: ${statusIcon} ${step.passed ? 'passed' : 'failed'}${detail}`,
+    );
+  }
 
-  if (expectedStatus) {
-    log.info(
-      '\n✓ Smoke test passed! TestRun contains both pass and fail QUnit results.',
-    );
+  // Verify pipeline results
+  let pipelinePassed = true;
+
+  if (validationResults.passed) {
+    log.info('\n  ✗ Expected pipeline to fail (deliberately failing test)');
+    pipelinePassed = false;
   } else {
-    log.info('\n✗ Smoke test had unexpected results.');
-    log.info(
-      `  Expected "failed" (mixed pass/fail QUnit tests) but got "${handle.status}"`,
-    );
+    log.info('\n  ✓ Pipeline correctly reports failure');
+  }
+
+  let testStep = validationResults.steps.find((s) => s.step === 'test');
+  if (!testStep) {
+    log.info('  ✗ No test step in results');
+    pipelinePassed = false;
+  } else if (testStep.passed) {
+    log.info('  ✗ Test step should have failed');
+    pipelinePassed = false;
+  } else {
+    log.info('  ✓ Test step correctly failed');
+  }
+
+  let noOpSteps = validationResults.steps.filter((s) => s.step !== 'test');
+  let allNoOpsPassed = noOpSteps.every((s) => s.passed);
+  if (allNoOpsPassed) {
+    log.info('  ✓ All NoOp steps (parse, lint, evaluate, instantiate) passed');
+  } else {
+    log.info('  ✗ Some NoOp steps failed unexpectedly');
+    pipelinePassed = false;
+  }
+
+  if (testStep?.details) {
+    let details = testStep.details as unknown as TestValidationDetails;
+    if (details.passedCount > 0 && details.failedCount > 0) {
+      log.info(
+        `  ✓ Test details: ${details.passedCount} passed, ${details.failedCount} failed`,
+      );
+    } else {
+      log.info(
+        `  ✗ Expected both passing and failing tests, got passed=${details.passedCount} failed=${details.failedCount}`,
+      );
+      pipelinePassed = false;
+    }
+  } else {
+    log.info('  ✗ No test details available');
+    pipelinePassed = false;
+  }
+
+  // Show formatted context for LLM
+  let formatted = pipeline.formatForContext(validationResults);
+  log.info('\n  Formatted context for LLM:');
+  log.info('  ─────────────────────────');
+  for (let line of formatted.split('\n')) {
+    log.info(`  ${line}`);
+  }
+  log.info('  ─────────────────────────');
+
+  if (pipelinePassed) {
+    log.info('\n✓ Validation pipeline smoke test passed!');
+  } else {
+    log.info('\n✗ Validation pipeline smoke test failed.');
     process.exit(1);
   }
 }

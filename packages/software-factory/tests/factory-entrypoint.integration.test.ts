@@ -67,11 +67,9 @@ interface FactoryEntrypointIntegrationSummary {
     url: string;
     ownerUsername: string;
   };
-  bootstrap: {
-    projectId: string;
-    knowledgeArticleIds: string[];
-    issueIds: string[];
-    activeIssue: { id: string; status: string };
+  seedIssue: {
+    seedIssueId: string;
+    seedIssueStatus: string;
   };
   result: Record<string, string>;
 }
@@ -304,18 +302,13 @@ module('factory-entrypoint integration', function () {
       assert.strictEqual(summary.targetRealm.url, canonicalTargetRealmUrl);
       assert.strictEqual(summary.targetRealm.ownerUsername, 'hassan');
       assert.strictEqual(
-        summary.bootstrap.projectId,
-        'Projects/sticky-note-mvp',
+        summary.seedIssue.seedIssueId,
+        'Issues/bootstrap-seed',
       );
-      assert.strictEqual(summary.bootstrap.issueIds.length, 3);
-      assert.strictEqual(
-        summary.bootstrap.activeIssue.id,
-        'Issues/sticky-note-define-core',
-      );
-      assert.strictEqual(summary.bootstrap.activeIssue.status, 'created');
+      assert.strictEqual(summary.seedIssue.seedIssueStatus, 'created');
       assert.deepEqual(summary.result, {
         status: 'ready',
-        nextStep: 'bootstrap-and-select-active-issue',
+        nextStep: 'run-issue-loop',
       });
     } finally {
       rmSync(tempHome, { recursive: true, force: true });

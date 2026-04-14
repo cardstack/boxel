@@ -24,18 +24,19 @@ This makes the loop generic. It doesn't need to know whether an issue is "implem
 
 Issues need properties that let the orchestrator determine execution order. Possible fields (may use a combination):
 
-- **priority** — enum (`high`, `medium`, `low`), high = execute first
+- **priority** — enum (`critical`, `high`, `medium`, `low`), critical = execute first
 - **predecessors / blockedBy** — explicit dependency edges; an issue cannot start until its blockers are done
 - **order** — explicit sequence number for tie-breaking
 
-The selection algorithm:
+The selection algorithm (implemented in `IssueScheduler.pickNextIssue()`):
 
-1. Filter to issues with status `ready` or `in_progress`
+1. Filter to issues with status `backlog` or `in_progress`
 2. Exclude issues whose `blockedBy` list contains any non-completed issue
-3. Sort by priority (high first, then medium, then low), then by order (ascending)
-4. Pick the first one
+3. Exclude exhausted issues (hit `maxIterationsPerIssue` in the current run)
+4. Sort: `in_progress` first, then by priority (`critical` > `high` > `medium` > `low`), then by order (ascending)
+5. Pick the first one
 
-Resume semantics: if an issue is already `in_progress`, it takes priority over `ready` issues (the factory was interrupted and should continue where it left off).
+Resume semantics: if an issue is already `in_progress`, it takes priority over `backlog` issues (the factory was interrupted and should continue where it left off).
 
 ## Validation Phase After Every Iteration
 
@@ -56,6 +57,34 @@ After each agent turn in the inner loop, the orchestrator runs these checks dete
 4. **Card instantiation** — Verify that sample card instances can be instantiated from their definitions
 5. **Run existing tests** — Execute all QUnit `.test.gts` files in the target realm via the QUnit test page
 
+### Validation Architecture (CS-10675)
+
+The validation pipeline is implemented as a modular system in `src/validators/`:
+
+**`ValidationStepRunner` interface** — the contract every step must implement:
+
+```typescript
+interface ValidationStepRunner {
+  readonly step: ValidationStep;
+  run(targetRealmUrl: string): Promise<ValidationStepResult>;
+  formatForContext(result: ValidationStepResult): string;
+}
+```
+
+**`ValidationPipeline` class** — implements the `Validator` interface and composes step runners:
+
+- Steps run **concurrently** via `Promise.allSettled()` — a failure or exception in one step does not prevent others from running
+- Exceptions thrown by a step are captured as failed `ValidationStepResult` entries with the error message
+- `formatForContext()` delegates to each step runner to produce LLM-friendly markdown
+- `createDefaultPipeline(config)` factory function composes all 5 steps with config injection
+
+**Step-specific failure shapes** — each validation type carries its own structured data in `ValidationStepResult.details` (flattened POJOs, not cards):
+
+- **Test step**: `{ testRunId, passedCount, failedCount, failures: [{ testName, module, message, stackTrace }] }` — reads back the completed TestRun card from the realm for detailed failure data (will become cheap local filesystem reads after boxel-cli integration)
+- **Future parse/lint/evaluate/instantiate steps**: each defines its own `details` shape
+
+**Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
+
 ### Handling Failures
 
 Validation failures are fed back to the agent as context in the **next inner-loop iteration**. The orchestrator does not create fix issues for validation failures — it iterates with the failure details so the agent can self-correct. This mirrors Phase 1's approach (feed test results back, iterate) but with a broader validation pipeline.
@@ -64,18 +93,24 @@ The inner loop continues until:
 
 - The agent marks the issue as done (all validation passes)
 - The agent marks the issue as blocked (needs human input)
-- Max iterations are reached
+- Max iterations are reached with **failing validation** — the orchestrator blocks the issue with the reason ("max iteration limit reached") and the formatted validation failure context in the issue description, then moves to the next issue
+- Max iterations are reached with **passing validation** — the issue is exhausted but not blocked (agent did not mark done despite passing validation)
 
 The agent always has the option to create new issues via tool calls if it determines that a failure requires separate work (e.g., "this card definition depends on another card that doesn't exist yet — creating a new issue for it"). But the orchestrator does not force this — the agent decides.
 
 ### What This Means for Task Breakdown
 
-During task breakdown, the agent creates issues for implementation work:
+During task breakdown, the agent organizes implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the Boxel catalog. The agent creates **one issue per entry-point card**, where each issue covers:
 
-- "Implement StickyNote card definition" (type: implement)
-- "Create sample StickyNote instances" (type: implement)
-- "Write QUnit tests for StickyNote" (type: implement)
-- "Create Catalog Spec for StickyNote" (type: implement)
+- The card definition (`.gts`) and any interior/support cards it depends on
+- QUnit tests (`.test.gts`) for the entry-point card and all its support cards
+- A Catalog Spec (`Spec/<card-name>.json`) with realistic example instances linked via `linkedExamples`
+
+Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do not need their own catalog specs or separate issues.
+
+If the brief describes only one entry-point card, there will be one implementation issue. If it describes multiple, there will be one per entry-point card. Issues are ordered so that **dependency cards are implemented before cards that consume them** — if card B uses card A as a field type or linked card, card A's issue gets a lower `order` and card B's issue has `blockedBy` pointing to card A's issue. This ensures the agent builds foundational cards first.
+
+Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
 The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
 
@@ -106,15 +141,21 @@ In phase 1, bootstrap (creating the Project, KnowledgeArticles, and initial Tick
 The flow becomes:
 
 1. Factory starts with a brief URL and a target realm
-2. The orchestrator creates a single **seed issue**: "Process brief and create project artifacts"
+2. The orchestrator creates a single **seed issue** in the realm: `issueType: 'bootstrap'`, `status: 'backlog'`, `priority: 'critical'`, `order: 0` — this ensures `IssueScheduler.pickNextIssue()` picks it first
 3. The agent picks up this seed issue, reads the brief, and creates:
    - The Project card
-   - KnowledgeArticle cards
-   - The initial set of implementation issues (card definitions, instances, specs, tests)
-4. The agent marks the seed issue as done
+   - KnowledgeArticle cards (brief context + agent onboarding)
+   - One implementation issue per entry-point card, with `project` and `relatedKnowledge` relationships wired
+4. The agent marks the seed issue as done via `update_issue`
 5. The orchestrator now has a populated issue backlog and continues the normal loop
 
-This is the "quirk" where an issue's job is to create the project itself. But it's a natural fit — the LLM participates in brief processing and task breakdown as part of the loop, not as a separate hard-coded phase. This was already identified as a goal (the plan mentions LLM participation in brief processing / artifact creation).
+Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up.
+
+The `ContextBuilder.buildForIssue()` handles the bootstrap case where no Project exists yet by supplying a minimal stub (`{ id: 'bootstrap-pending' }`) when `loadProject()` returns `undefined` and the issue has `issueType === 'bootstrap'`. This keeps `AgentContext.project` required (no type ripple) while the bootstrap prompt template doesn't reference project fields.
+
+The `IssueTypeField` enum in `darkfactory.gts` includes `bootstrap` as a valid value so seed issues render correctly in the Boxel UI.
+
+This is the "quirk" where an issue's job is to create the project itself. But it's a natural fit — the LLM participates in brief processing and task breakdown as part of the loop, not as a separate hard-coded phase.
 
 ### Benefits
 
@@ -127,29 +168,94 @@ This is the "quirk" where an issue's job is to create the project itself. But it
 
 The phase 2 orchestrator is a thin scheduler with a built-in validation phase that runs after every agent turn:
 
-```
-while (hasUnblockedIssues()) {
-  let issue = pickNextIssue();
+```typescript
+// As implemented in runIssueLoop() — src/issue-loop.ts
+let exhaustedIssues = new Set<string>();
+
+while (
+  scheduler.hasUnblockedIssues(exhaustedIssues) &&
+  outerCycles < maxOuterCycles
+) {
+  let issue = scheduler.pickNextIssue(exhaustedIssues);
 
   // Inner loop: multiple iterations per issue
-  let validationResults = null;
-  while (issue.status !== 'done' && issue.status !== 'blocked' && iterations < maxIterations) {
-    await agent.run(contextForIssue(issue, validationResults), tools);
-    refreshIssueState(issue);
+  let validationResults = undefined;
+  let exitReason = 'max_iterations';
+  for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
+    let context = await contextBuilder.buildForIssue({
+      issue,
+      targetRealmUrl,
+      validationResults,
+      briefUrl,
+    });
+    let result = await agent.run(context, tools);
 
-    // Validation phase — runs after EVERY iteration
-    validationResults = await validate(targetRealm);  // parse, lint, evaluate, instantiate, run tests
-    // Failures are fed back as context in the next iteration — agent self-corrects
-    // Agent can also create new issues via tool calls if it decides to
+    // Validation phase — runs after EVERY agent turn
+    validationResults = await validator.validate(targetRealmUrl);
 
-    iterations++;
+    // Read issue state from realm (not from AgentRunResult.status)
+    issue = await scheduler.refreshIssueState(issue);
+
+    if (issue.status === 'done' || issue.status === 'blocked') {
+      exitReason = issue.status;
+      break;
+    }
   }
+
+  if (exitReason === 'max_iterations') {
+    // If validation still failing at max iterations, block the issue
+    // with the reason and failure context written to the realm
+    if (validationResults && !validationResults.passed) {
+      exitReason = 'blocked';
+      await issueStore.updateIssue(issue.id, {
+        status: 'blocked',
+        description: buildMaxIterationBlockedDescription(validationResults),
+      });
+    }
+    exhaustedIssues.add(issue.id);
+  }
+
+  // Reload to pick up new issues the agent may have created
+  await scheduler.loadIssues();
 }
 ```
 
 The agent signals progress by updating the issue — tagging it as blocked, marking it done, or leaving it in progress for another iteration. The orchestrator reads issue state from the realm after each agent turn, then runs validation. Validation failures are fed back as context in the next inner-loop iteration so the agent can self-correct. The agent can also create new issues via tool calls if it determines a failure requires separate work.
 
-All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, and validation.
+The orchestrator also **writes** to the realm in one case: when max iterations are reached with failing validation, it updates the issue's status to `blocked` and writes the formatted validation failure context into the issue description. This uses `IssueStore.updateIssue()`, which performs a read-modify-write against the realm card.
+
+All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, validation, and max-iteration blocking.
+
+### Issue Loading via searchRealm()
+
+`RealmIssueStore` loads issues from the target realm using `searchRealm()` from `realm-operations.ts`. The search filter uses the absolute darkfactory module URL (from `inferDarkfactoryModuleUrl(targetRealmUrl)`), which varies by environment (production, staging, localhost). The store maps JSON:API card responses to `SchedulableIssue` objects.
+
+Boxel encodes `linksToMany` relationships with dotted keys rather than JSON:API `data` arrays:
+
+```json
+{
+  "relationships": {
+    "blockedBy.0": { "links": { "self": "../Issues/issue-a" } },
+    "blockedBy.1": { "links": { "self": "../Issues/issue-b" } }
+  }
+}
+```
+
+The `extractLinksToManyIds()` helper parses this format to extract blocker IDs for dependency resolution.
+
+When `searchRealm()` fails (auth, network, query errors), the store logs at `warn` level and returns an empty list — preventing the loop from silently treating a failure as "no issues exist."
+
+### Loop Outcome Determination
+
+The loop distinguishes several terminal states:
+
+| Condition                                     | Outcome               |
+| --------------------------------------------- | --------------------- |
+| No issues loaded                              | `all_issues_done`     |
+| Issues exist but all blocked at startup       | `no_unblocked_issues` |
+| All issues completed successfully             | `all_issues_done`     |
+| Some issues done, others blocked or exhausted | `no_unblocked_issues` |
+| Safety guard hit                              | `max_outer_cycles`    |
 
 ## Schema Refinement: darkfactory.gts
 
@@ -237,24 +343,25 @@ CS-10671 trims and renames the current schema as a first step. The adoption from
 ## Issue Lifecycle
 
 ```
-created → ready → in_progress → done
-                → blocked (needs human input)
-                → failed (max retries exceeded)
+backlog → in_progress → done
+                      → blocked (needs human input or max iterations with failing validation)
+                      → review (optional)
 ```
 
 The agent manages its own transitions by updating the issue directly (e.g., tagging as blocked, marking done). The orchestrator reads the issue state after the agent exits to decide what to do next — it does not inspect the agent's return value for status.
 
+The orchestrator also transitions issues to `blocked` in one case: when max iterations are reached with validation still failing. It writes the reason ("max iteration limit reached") and the formatted validation failure context into the issue description via `IssueStore.updateIssue()`, making the blocking reason visible in the realm. Issues blocked this way are also added to an `exhaustedIssues` set to prevent re-selection within the same run.
+
 ## Migration Path from Phase 1
 
-Phase 1 and phase 2 can coexist:
+Phase 1 and phase 2 coexist during the transition. The implementation lives in separate files to avoid touching Phase 1 code:
 
-1. Phase 1 ships with the hard-coded pipeline (`factory-loop.ts`)
-2. Phase 2 introduces an `IssueScheduler` that replaces the fixed loop with issue-driven scheduling
-3. The `LoopAgent` interface (`run(context, tools)`) stays the same — only the orchestrator changes
-4. `ContextBuilder` gains an issue-aware mode that builds context from the current issue rather than a fixed ticket
-5. The `TestRunner` callback becomes a tool the agent can call, rather than a loop phase
+- `src/issue-scheduler.ts` — `IssueScheduler`, `IssueStore`, `RealmIssueStore`
+- `src/issue-loop.ts` — `runIssueLoop()`, `Validator`, `NoOpValidator`, config/result types
 
-The `FactoryTool[]` type from phase 1 carries forward unchanged. `AgentRunResult` may be simplified — in phase 2 the agent signals completion by updating the issue (tagging as blocked, marking done), so the orchestrator reads issue state rather than inspecting a return status. The agent just needs to exit; the orchestrator figures out what happened from the issue.
+The `LoopAgent` interface (`run(context, tools)`) is unchanged and reused by the issue loop. `LoopAgent`, `AgentRunResult`, and `AgentRunStatus` types are now in `factory-agent-types.ts` (relocated from `factory-loop.ts` to break the dependency). `LoopFactoryTool`/`LoopToolCallEntry` mirror interfaces in `factory-agent-types.ts` avoid circular imports with `factory-tool-builder.ts` — TypeScript's structural typing makes them assignment-compatible.
+
+CS-10673 + CS-10708 wired the issue loop into `factory:go`: `src/factory-issue-loop-wiring.ts` constructs all Phase 2 infrastructure (RealmIssueStore, RealmIssueRelationshipLoader, ContextBuilder, tools, agent, ValidationPipeline) and calls `runIssueLoop()`. The `factory-entrypoint.ts` now creates a seed issue then delegates to this wiring. Phase 1's `factory-loop.ts` and `factory-implement.ts` remain for backward compatibility but are no longer called from the main entrypoint.
 
 ## Refactor: request_clarification → Blocking Issue
 
@@ -406,7 +513,7 @@ The principle that boxel-cli owns the entire Boxel API surface extends to auth. 
 
 1. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
 
-2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — no `--jwt` flag, no token passing.
+2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
 
 3. **Programmatic auth API** — Export a `BoxelAuth` class (or similar) so the factory imports it and never constructs HTTP requests or manages tokens:
 
