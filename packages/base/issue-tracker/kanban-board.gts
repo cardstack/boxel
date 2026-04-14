@@ -20,7 +20,7 @@ import { GridPlacementField } from './grid-placement';
 import { KanbanColumnField } from './kanban-column';
 import { KanbanPlane } from './kanban-plane';
 import { KanbanDragManager } from './kanban-drag';
-import { type KanbanPlacement, autoPlaceKanban } from './kanban-engine';
+import { type KanbanPlacement } from './kanban-engine';
 import { Project, Issue, issueStatusOptions } from './issue';
 
 // Chromeless modifier
@@ -50,7 +50,7 @@ class Chromeless extends Modifier {
 function placementsToKanban(fields: GridPlacementField[]): KanbanPlacement[] {
   return (fields ?? []).map((f) => ({
     index: f.index ?? 0,
-    column: f.col ?? 0,
+    column: 0, // derived from computedStatus at read time, not stored
     sortOrder: f.row ?? 1,
   }));
 }
@@ -74,18 +74,42 @@ class Isolated extends Component<typeof KanbanBoard> {
       onSelect: (index) => {
         this.selectedCardIndex = index;
       },
+      onOpen: (index) => {
+        const card = (this.args.model?.cards as any[])?.[index];
+        if (card) this.args.viewCard?.(card, 'isolated');
+      },
     });
   }
 
   get kanbanPlacements(): KanbanPlacement[] {
     const fields = this.args.model?.placements;
+    const cards = this.args.model?.cards ?? [];
+    const columns = this.args.model?.columns ?? [];
+
     if (!fields || fields.length === 0) {
-      const cardCount = this.args.model?.cards?.length ?? 0;
-      const colCount = this.args.model?.columns?.length ?? 4;
-      if (cardCount > 0) return autoPlaceKanban(cardCount, colCount);
-      return [];
+      if ((cards as any[]).length === 0) return [];
+      const colSortOrders: Record<number, number> = {};
+      return (cards as any[]).map((card: any, index: number) => {
+        const status = card.computedStatus;
+        const colIndex = (columns as any[]).findIndex(
+          (col: any) => col.key === status,
+        );
+        const column = colIndex >= 0 ? colIndex : 0;
+        colSortOrders[column] = (colSortOrders[column] ?? 0) + 1;
+        return { index, column, sortOrder: colSortOrders[column] };
+      });
     }
-    return placementsToKanban(fields);
+
+    // Reconcile saved placements with each card's current computedStatus so
+    // that editing a status outside the board moves the card to the right column.
+    return placementsToKanban(fields).map((p) => {
+      const card = (cards as any[])[p.index];
+      const status = card?.computedStatus;
+      const colIndex = (columns as any[]).findIndex(
+        (col: any) => col.key === status,
+      );
+      return { ...p, column: colIndex >= 0 ? colIndex : 0 };
+    });
   }
 
   get manager(): KanbanDragManager {
@@ -108,6 +132,20 @@ class Isolated extends Component<typeof KanbanBoard> {
     try {
       const model = this.args.model;
       if (!model) return;
+
+      // Sync each card's status to match its new column
+      const cards = model.cards as any[];
+      const columns = model.columns as any[];
+      if (cards && columns) {
+        for (const np of newPlacements) {
+          const card = cards[np.index];
+          const col = columns[np.column];
+          if (card && col && card.status !== col.key) {
+            card.status = col.key;
+          }
+        }
+      }
+
       const existingFields = model.placements as
         | GridPlacementField[]
         | undefined;
@@ -118,16 +156,14 @@ class Isolated extends Component<typeof KanbanBoard> {
             (f: GridPlacementField) => f.index === np.index,
           );
           if (existing) {
-            existing.col = np.column; // col = kanban column
-            existing.row = np.sortOrder; // row = sort position
+            existing.row = np.sortOrder; // col is derived from computedStatus, not stored
           }
         }
       } else {
         const fields = newPlacements.map((p) => {
           const f = new GridPlacementField();
           f.index = p.index;
-          f.col = p.column;
-          f.row = p.sortOrder;
+          f.row = p.sortOrder; // col is derived from computedStatus, not stored
           return f;
         });
         model.placements = fields;
@@ -286,7 +322,7 @@ export class KanbanBoard extends CardDef {
       );
     },
   });
-  @field placements = containsMany(GridPlacementField); // reuse: col=column, row=sortOrder
+  @field placements = containsMany(GridPlacementField); // row = sort order within column; col is derived from computedStatus
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: KanbanBoard) {

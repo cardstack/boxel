@@ -1,5 +1,5 @@
 // GridPlacementField — Per-card placement within a Layout grid.
-// Stores grid position (col, row)
+// Stores sort position (row) within a column.
 
 import { FieldDef, field, contains, Component } from '../card-api';
 import BooleanField from '../boolean';
@@ -9,7 +9,6 @@ export class GridPlacementField extends FieldDef {
   static displayName = 'Grid Placement';
 
   @field index = contains(NumberField); // which card in linksToMany
-  @field col = contains(NumberField); // 1-based column start
   @field row = contains(NumberField); // 1-based row start
   @field hidden = contains(BooleanField);
 
@@ -20,7 +19,7 @@ export class GridPlacementField extends FieldDef {
       <span class='placement-pill'>
         {{if @model.index @model.index 0}}
         <span class='placement-pos'>
-          c{{if @model.col @model.col 1}}r{{if @model.row @model.row 1}}
+          r{{if @model.row @model.row 1}}
         </span>
       </span>
       <style scoped>

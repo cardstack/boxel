@@ -24,6 +24,7 @@ export interface KanbanDragManagerOptions {
   containerElement: () => HTMLElement | null;
   onChange: (placements: KanbanPlacement[]) => void;
   onSelect?: (index: number | null) => void;
+  onOpen?: (index: number) => void;
 }
 
 // ── KanbanDragManager ────────────────────────────────────────────────── //
@@ -35,6 +36,7 @@ export class KanbanDragManager {
   private containerFn: () => HTMLElement | null;
   private onChangeFn: (placements: KanbanPlacement[]) => void;
   private onSelectFn: ((index: number | null) => void) | undefined;
+  private onOpenFn: ((index: number) => void) | undefined;
 
   // ── Tracked State ──────────────────────────────────────────────────
   @tracked selectedIndex: number | null = null;
@@ -71,6 +73,7 @@ export class KanbanDragManager {
     this.containerFn = () => this.containerRef ?? opts.containerElement();
     this.onChangeFn = opts.onChange;
     this.onSelectFn = opts.onSelect;
+    this.onOpenFn = opts.onOpen;
   }
 
   registerContainer = (el: HTMLElement): void => {
@@ -160,18 +163,20 @@ export class KanbanDragManager {
     const container = this.containerFn();
     if (container) container.releasePointerCapture(e.pointerId);
 
-    // Tap: just select
+    // Tap: open the card
     if (this.interactionMode === 'pending') {
       if (this.holdTimer) {
         clearTimeout(this.holdTimer);
         this.holdTimer = null;
       }
+      const tappedIndex = this.dragIndex;
       this.interactionMode = 'idle';
       this.activePointerId = null;
       this.dragIndex = null;
       this.snapshotPlacements = null;
       document.body.style.userSelect = '';
       (document.body.style as any).webkitUserSelect = '';
+      if (tappedIndex !== null) this.onOpenFn?.(tappedIndex);
       return;
     }
 
