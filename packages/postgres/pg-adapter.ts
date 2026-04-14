@@ -161,9 +161,13 @@ export class PgAdapter implements DBAdapter {
       // before any query" errors for the next caller that picks it up.
       try {
         await client.query('ROLLBACK');
-      } catch {
+      } catch (rollbackError) {
         // ROLLBACK failed — the connection is in an unrecoverable state.
         // Destroy it instead of returning it to the pool.
+        log.error(
+          'ROLLBACK failed during connection cleanup, destroying client: %s',
+          rollbackError,
+        );
         client.release(true);
         released = true;
         throw e;
