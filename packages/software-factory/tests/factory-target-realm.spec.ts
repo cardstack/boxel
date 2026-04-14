@@ -133,7 +133,9 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       };
     };
     expect(issueJson.data.attributes.issueType).toBe('bootstrap');
-    expect(issueJson.data.attributes.status).toBe('backlog');
+    // The loop picks up the seed issue and sets it to in_progress before
+    // the agent fails (no OPENROUTER_API_KEY), so the status is in_progress.
+    expect(issueJson.data.attributes.status).toBe('in_progress');
     expect(issueJson.data.attributes.summary).toContain(
       'Process brief and create project artifacts',
     );
