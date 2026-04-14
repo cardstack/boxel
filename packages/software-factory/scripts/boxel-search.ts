@@ -7,10 +7,10 @@ import {
   forceArray,
   parseArgs,
   printJson,
-  searchRealm,
   type SearchQuery,
   type SearchSort,
 } from '../src/boxel';
+import { ensureTrailingSlash, SupportedMimeType } from '../src/realm-operations';
 import { logger } from '../src/logger';
 
 let log = logger('boxel-search');
@@ -86,19 +86,23 @@ async function main(): Promise<void> {
     }
   }
 
-  // searchRealm in src/boxel.ts builds its own headers via the optional
-  // `jwt` field. We want auth via createRealmFetch instead — patch
-  // globalThis.fetch for the duration of the call so searchRealm picks
-  // up our auth-aware fetch transparently. The script is short-lived;
-  // there are no other concurrent fetches to worry about.
-  let originalFetch = globalThis.fetch;
-  globalThis.fetch = realmFetch;
-  try {
-    let results = await searchRealm({ realmUrl, query });
-    printJson(results);
-  } finally {
-    globalThis.fetch = originalFetch;
+  let searchUrl = `${ensureTrailingSlash(realmUrl)}_search`;
+  let response = await realmFetch(searchUrl, {
+    method: 'QUERY',
+    headers: {
+      Accept: SupportedMimeType.CardJson,
+      'Content-Type': SupportedMimeType.JSON,
+    },
+    body: JSON.stringify(query),
+  });
+
+  if (!response.ok) {
+    let text = await response.text();
+    throw new Error(`Search failed: ${response.status} ${text}`);
   }
+
+  let results = await response.json();
+  printJson(results);
 }
 
 main().catch((error: unknown) => {
