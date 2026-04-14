@@ -18,12 +18,7 @@ import handleFetchUserRequest from './handlers/handle-fetch-user';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook';
 import handlePublishRealm from './handlers/handle-publish-realm';
 import handleUnpublishRealm from './handlers/handle-unpublish-realm';
-import {
-  healthCheck,
-  jwtMiddleware,
-  livenessCheck,
-  grafanaAuthorization,
-} from './middleware';
+import { healthCheck, jwtMiddleware, grafanaAuthorization } from './middleware';
 import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user';
 import handleQueueStatusRequest from './handlers/handle-queue-status';
