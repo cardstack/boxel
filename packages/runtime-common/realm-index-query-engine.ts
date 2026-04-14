@@ -961,7 +961,7 @@ export class RealmIndexQueryEngine {
         } else {
           let response: Response;
 
-          if(expectsCard){
+          if (expectsCard) {
             response = await this.#fetch(linkURL, {
               headers: { Accept: SupportedMimeType.CardJson },
             });
