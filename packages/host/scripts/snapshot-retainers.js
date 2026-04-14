@@ -186,8 +186,7 @@ function shortestPathToRoot(h, rev, target, maxDepth, strongOnly) {
       // retention. If strongOnly, skip entries of WeakMaps (the `from` node
       // is a WeakMap's hashtable array; the edge name contains "part of key").
       if (strongOnly && eType === 'internal') {
-        let nameStr =
-          h.strings[h.edges[edgeOffset + h.eNameIdx]] || '';
+        let nameStr = h.strings[h.edges[edgeOffset + h.eNameIdx]] || '';
         if (nameStr.indexOf('part of key') !== -1) continue;
       }
       visited.add(from);
