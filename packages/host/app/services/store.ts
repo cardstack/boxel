@@ -1,4 +1,4 @@
-import { registerDestructor } from '@ember/destroyable';
+import { isDestroyed, isDestroying, registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import Service, { service } from '@ember/service';
@@ -210,6 +210,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (!opts?.preserveReferences) {
       this.referenceCount = new Map();
     }
+    this.cardApiCache = undefined;
     this.autoSaveStates = new TrackedMap();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
@@ -1011,6 +1012,9 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async setup() {
     let api = await this.cardService.getAPI();
+    if (isDestroyed(this) || isDestroying(this)) {
+      return;
+    }
     this.gcInterval = setInterval(
       () => this.store.sweep(api),
       2 * 60_000,
