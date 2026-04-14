@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import Route from '@ember/routing/route';
 import type Transition from '@ember/routing/transition';
 import { service } from '@ember/service';
@@ -41,6 +42,11 @@ export default class RenderFileExtractRoute extends Route<Model> {
   async beforeModel(transition: Transition) {
     await super.beforeModel?.(transition);
     (globalThis as any).__boxelRenderContext = true;
+    registerDestructor(this, () => {
+      if (isTesting()) {
+        (globalThis as any).__boxelRenderContext = undefined;
+      }
+    });
     this.#authGuard.register();
     if (!isTesting()) {
       this.realm.restoreSessionsFromStorage();

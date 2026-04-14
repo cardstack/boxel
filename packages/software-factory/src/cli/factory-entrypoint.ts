@@ -24,17 +24,22 @@ async function main(): Promise<void> {
     log.info(`mode=${options.mode} brief=${options.briefUrl}`);
 
     if (options.mode === 'implement') {
-      log.info('Starting bootstrap + implement flow...');
+      log.info('Starting seed issue + issue-driven loop...');
     }
 
     let summary = await runFactoryEntrypoint(options);
 
-    if (summary.implement) {
+    if (summary.issueLoop) {
       log.info(
-        `Implement complete: outcome=${summary.implement.outcome} ` +
-          `iterations=${summary.implement.iterations} ` +
-          `toolCalls=${summary.implement.toolCallCount}`,
+        `Issue loop complete: outcome=${summary.issueLoop.outcome} ` +
+          `outerCycles=${summary.issueLoop.outerCycles} ` +
+          `issues=${summary.issueLoop.issueResults.length}`,
       );
+      for (let ir of summary.issueLoop.issueResults) {
+        log.info(
+          `  ${ir.issueId}: ${ir.exitReason} (${ir.innerIterations} iterations, ${ir.toolCallCount} tool calls)`,
+        );
+      }
     }
 
     let output = JSON.stringify(summary, null, 2) + '\n';

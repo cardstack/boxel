@@ -24,18 +24,19 @@ This makes the loop generic. It doesn't need to know whether an issue is "implem
 
 Issues need properties that let the orchestrator determine execution order. Possible fields (may use a combination):
 
-- **priority** — enum (`high`, `medium`, `low`), high = execute first
+- **priority** — enum (`critical`, `high`, `medium`, `low`), critical = execute first
 - **predecessors / blockedBy** — explicit dependency edges; an issue cannot start until its blockers are done
 - **order** — explicit sequence number for tie-breaking
 
-The selection algorithm:
+The selection algorithm (implemented in `IssueScheduler.pickNextIssue()`):
 
-1. Filter to issues with status `ready` or `in_progress`
+1. Filter to issues with status `backlog` or `in_progress`
 2. Exclude issues whose `blockedBy` list contains any non-completed issue
-3. Sort by priority (high first, then medium, then low), then by order (ascending)
-4. Pick the first one
+3. Exclude exhausted issues (hit `maxIterationsPerIssue` in the current run)
+4. Sort: `in_progress` first, then by priority (`critical` > `high` > `medium` > `low`), then by order (ascending)
+5. Pick the first one
 
-Resume semantics: if an issue is already `in_progress`, it takes priority over `ready` issues (the factory was interrupted and should continue where it left off).
+Resume semantics: if an issue is already `in_progress`, it takes priority over `backlog` issues (the factory was interrupted and should continue where it left off).
 
 ## Validation Phase After Every Iteration
 
@@ -56,6 +57,34 @@ After each agent turn in the inner loop, the orchestrator runs these checks dete
 4. **Card instantiation** — Verify that sample card instances can be instantiated from their definitions
 5. **Run existing tests** — Execute all QUnit `.test.gts` files in the target realm via the QUnit test page
 
+### Validation Architecture (CS-10675)
+
+The validation pipeline is implemented as a modular system in `src/validators/`:
+
+**`ValidationStepRunner` interface** — the contract every step must implement:
+
+```typescript
+interface ValidationStepRunner {
+  readonly step: ValidationStep;
+  run(targetRealmUrl: string): Promise<ValidationStepResult>;
+  formatForContext(result: ValidationStepResult): string;
+}
+```
+
+**`ValidationPipeline` class** — implements the `Validator` interface and composes step runners:
+
+- Steps run **concurrently** via `Promise.allSettled()` — a failure or exception in one step does not prevent others from running
+- Exceptions thrown by a step are captured as failed `ValidationStepResult` entries with the error message
+- `formatForContext()` delegates to each step runner to produce LLM-friendly markdown
+- `createDefaultPipeline(config)` factory function composes all 5 steps with config injection
+
+**Step-specific failure shapes** — each validation type carries its own structured data in `ValidationStepResult.details` (flattened POJOs, not cards):
+
+- **Test step**: `{ testRunId, passedCount, failedCount, failures: [{ testName, module, message, stackTrace }] }` — reads back the completed TestRun card from the realm for detailed failure data (will become cheap local filesystem reads after boxel-cli integration)
+- **Future parse/lint/evaluate/instantiate steps**: each defines its own `details` shape
+
+**Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
+
 ### Handling Failures
 
 Validation failures are fed back to the agent as context in the **next inner-loop iteration**. The orchestrator does not create fix issues for validation failures — it iterates with the failure details so the agent can self-correct. This mirrors Phase 1's approach (feed test results back, iterate) but with a broader validation pipeline.
@@ -64,18 +93,24 @@ The inner loop continues until:
 
 - The agent marks the issue as done (all validation passes)
 - The agent marks the issue as blocked (needs human input)
-- Max iterations are reached
+- Max iterations are reached with **failing validation** — the orchestrator blocks the issue with the reason ("max iteration limit reached") and the formatted validation failure context in the issue description, then moves to the next issue
+- Max iterations are reached with **passing validation** — the issue is exhausted but not blocked (agent did not mark done despite passing validation)
 
 The agent always has the option to create new issues via tool calls if it determines that a failure requires separate work (e.g., "this card definition depends on another card that doesn't exist yet — creating a new issue for it"). But the orchestrator does not force this — the agent decides.
 
 ### What This Means for Task Breakdown
 
-During task breakdown, the agent creates issues for implementation work:
+During task breakdown, the agent organizes implementation issues around **entry-point cards** — the top-level cards users interact with directly and that should be discoverable in the Boxel catalog. The agent creates **one issue per entry-point card**, where each issue covers:
 
-- "Implement StickyNote card definition" (type: implement)
-- "Create sample StickyNote instances" (type: implement)
-- "Write QUnit tests for StickyNote" (type: implement)
-- "Create Catalog Spec for StickyNote" (type: implement)
+- The card definition (`.gts`) and any interior/support cards it depends on
+- QUnit tests (`.test.gts`) for the entry-point card and all its support cards
+- A Catalog Spec (`Spec/<card-name>.json`) with realistic example instances linked via `linkedExamples`
+
+Interior cards (field cards, helper cards, linked supporting types) are implemented as part of their entry-point card's issue. They need tests but do not need their own catalog specs or separate issues.
+
+If the brief describes only one entry-point card, there will be one implementation issue. If it describes multiple, there will be one per entry-point card. Issues are ordered so that **dependency cards are implemented before cards that consume them** — if card B uses card A as a field type or linked card, card A's issue gets a lower `order` and card B's issue has `blockedBy` pointing to card A's issue. This ensures the agent builds foundational cards first.
+
+Each implementation issue must carry `project` and `relatedKnowledge` relationships pointing to the Project and KnowledgeArticle cards created during bootstrap. This is how `ContextBuilder.buildForIssue()` loads project scope and brief context for the agent when working on these issues.
 
 The agent does **not** need to create "run tests" issues. Test execution happens automatically as part of the validation phase after every inner-loop iteration.
 
@@ -106,15 +141,21 @@ In phase 1, bootstrap (creating the Project, KnowledgeArticles, and initial Tick
 The flow becomes:
 
 1. Factory starts with a brief URL and a target realm
-2. The orchestrator creates a single **seed issue**: "Process brief and create project artifacts"
+2. The orchestrator creates a single **seed issue** in the realm: `issueType: 'bootstrap'`, `status: 'backlog'`, `priority: 'critical'`, `order: 0` — this ensures `IssueScheduler.pickNextIssue()` picks it first
 3. The agent picks up this seed issue, reads the brief, and creates:
    - The Project card
-   - KnowledgeArticle cards
-   - The initial set of implementation issues (card definitions, instances, specs, tests)
-4. The agent marks the seed issue as done
+   - KnowledgeArticle cards (brief context + agent onboarding)
+   - One implementation issue per entry-point card, with `project` and `relatedKnowledge` relationships wired
+4. The agent calls `signal_done()` — the orchestrator marks the seed issue as done after validation passes
 5. The orchestrator now has a populated issue backlog and continues the normal loop
 
-This is the "quirk" where an issue's job is to create the project itself. But it's a natural fit — the LLM participates in brief processing and task breakdown as part of the loop, not as a separate hard-coded phase. This was already identified as a goal (the plan mentions LLM participation in brief processing / artifact creation).
+Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up.
+
+The `ContextBuilder.buildForIssue()` handles the bootstrap case where no Project exists yet by supplying a minimal stub (`{ id: 'bootstrap-pending' }`) when `loadProject()` returns `undefined` and the issue has `issueType === 'bootstrap'`. This keeps `AgentContext.project` required (no type ripple) while the bootstrap prompt template doesn't reference project fields.
+
+The `IssueTypeField` enum in `darkfactory.gts` includes `bootstrap` as a valid value so seed issues render correctly in the Boxel UI.
+
+This is the "quirk" where an issue's job is to create the project itself. But it's a natural fit — the LLM participates in brief processing and task breakdown as part of the loop, not as a separate hard-coded phase.
 
 ### Benefits
 
@@ -127,29 +168,105 @@ This is the "quirk" where an issue's job is to create the project itself. But it
 
 The phase 2 orchestrator is a thin scheduler with a built-in validation phase that runs after every agent turn:
 
-```
-while (hasUnblockedIssues()) {
-  let issue = pickNextIssue();
+```typescript
+// As implemented in runIssueLoop() — src/issue-loop.ts
+let exhaustedIssues = new Set<string>();
+
+while (
+  scheduler.hasUnblockedIssues(exhaustedIssues) &&
+  outerCycles < maxOuterCycles
+) {
+  let issue = scheduler.pickNextIssue(exhaustedIssues);
+
+  // Orchestrator sets in_progress on pickup
+  await issueStore.updateIssue(issue.id, { status: 'in_progress' });
 
   // Inner loop: multiple iterations per issue
-  let validationResults = null;
-  while (issue.status !== 'done' && issue.status !== 'blocked' && iterations < maxIterations) {
-    await agent.run(contextForIssue(issue, validationResults), tools);
-    refreshIssueState(issue);
+  let validationResults = undefined;
+  let exitReason = 'max_iterations';
+  for (let iteration = 1; iteration <= maxIterationsPerIssue; iteration++) {
+    let context = await contextBuilder.buildForIssue({
+      issue,
+      targetRealmUrl,
+      validationResults,
+      briefUrl,
+    });
+    let result = await agent.run(context, tools);
 
-    // Validation phase — runs after EVERY iteration
-    validationResults = await validate(targetRealm);  // parse, lint, evaluate, instantiate, run tests
-    // Failures are fed back as context in the next iteration — agent self-corrects
-    // Agent can also create new issues via tool calls if it decides to
+    // Validation phase — runs after EVERY agent turn
+    validationResults = await validator.validate(targetRealmUrl);
 
-    iterations++;
+    // Orchestrator promotes to done: signal_done + validation passed
+    let agentSignaledDone = result.toolCalls.some(
+      (tc) => tc.tool === 'signal_done',
+    );
+    if (agentSignaledDone && validationResults?.passed) {
+      await issueStore.updateIssue(issue.id, { status: 'done' });
+    }
+
+    issue = await scheduler.refreshIssueState(issue);
+
+    if (issue.status === 'done' || issue.status === 'blocked') {
+      exitReason = issue.status;
+      break;
+    }
+    // If agent signaled done but validation failed, continue iterating
+  }
+
+  if (exitReason === 'max_iterations') {
+    if (validationResults && !validationResults.passed) {
+      exitReason = 'blocked';
+      await issueStore.updateIssue(issue.id, {
+        status: 'blocked',
+        description: buildMaxIterationBlockedDescription(validationResults),
+      });
+    }
+    exhaustedIssues.add(issue.id);
+  }
+
+  await scheduler.loadIssues();
+}
+
+// Mark project completed when all issues done
+if (outcome === 'all_issues_done') {
+  await issueStore.updateProjectStatus('completed');
+}
+```
+
+The orchestrator owns all status transitions. The agent signals intent via `signal_done()` (for completion) or `update_issue({ status: 'blocked' })` (for blocking). The orchestrator decides whether to actually promote based on validation results. Validation failures are fed back as context in the next inner-loop iteration so the agent can self-correct.
+
+All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns: issue selection, status transitions, agent invocation, validation, project completion, and max-iteration blocking.
+
+### Issue Loading via searchRealm()
+
+`RealmIssueStore` loads issues from the target realm using `searchRealm()` from `realm-operations.ts`. The search filter uses the absolute darkfactory module URL (from `inferDarkfactoryModuleUrl(targetRealmUrl)`), which varies by environment (production, staging, localhost). The store maps JSON:API card responses to `SchedulableIssue` objects.
+
+Boxel encodes `linksToMany` relationships with dotted keys rather than JSON:API `data` arrays:
+
+```json
+{
+  "relationships": {
+    "blockedBy.0": { "links": { "self": "../Issues/issue-a" } },
+    "blockedBy.1": { "links": { "self": "../Issues/issue-b" } }
   }
 }
 ```
 
-The agent signals progress by updating the issue — tagging it as blocked, marking it done, or leaving it in progress for another iteration. The orchestrator reads issue state from the realm after each agent turn, then runs validation. Validation failures are fed back as context in the next inner-loop iteration so the agent can self-correct. The agent can also create new issues via tool calls if it determines a failure requires separate work.
+The `extractLinksToManyIds()` helper parses this format to extract blocker IDs for dependency resolution.
 
-All domain logic (what to implement, when to create sub-issues, when to tag as blocked) lives in the agent's prompt and skills. The orchestrator owns only: issue selection, agent invocation, and validation.
+When `searchRealm()` fails (auth, network, query errors), the store logs at `warn` level and returns an empty list — preventing the loop from silently treating a failure as "no issues exist."
+
+### Loop Outcome Determination
+
+The loop distinguishes several terminal states:
+
+| Condition                                     | Outcome               |
+| --------------------------------------------- | --------------------- |
+| No issues loaded                              | `all_issues_done`     |
+| Issues exist but all blocked at startup       | `no_unblocked_issues` |
+| All issues completed successfully             | `all_issues_done`     |
+| Some issues done, others blocked or exhausted | `no_unblocked_issues` |
+| Safety guard hit                              | `max_outer_cycles`    |
 
 ## Schema Refinement: darkfactory.gts
 
@@ -187,20 +304,21 @@ Rename `Ticket` to `Issue` throughout. Field renames: `ticketId` → `issueId`, 
 
 **Keep** (actively set or read):
 
-| Field                | Type                          | Used By                                                            |
-| -------------------- | ----------------------------- | ------------------------------------------------------------------ |
-| `issueId`            | String                        | Bootstrap, tests, templates (was `ticketId`)                       |
-| `summary`            | String                        | Bootstrap, prompts, templates                                      |
-| `description`        | MarkdownField                 | Bootstrap, templates                                               |
-| `issueType`          | IssueTypeField enum           | Bootstrap (set to 'feature'), tests (was `ticketType`)             |
-| `status`             | IssueStatusField enum         | Bootstrap, factory-implement.ts (updated post-completion), prompts |
-| `priority`           | IssuePriorityField enum       | Bootstrap, prompts, templates                                      |
-| `project`            | linksTo(Project)              | Bootstrap, skill loader                                            |
-| `assignedAgent`      | linksTo(AgentProfile)         | pick-ticket.ts (assignment workflow)                               |
-| `relatedKnowledge`   | linksToMany(KnowledgeArticle) | Skill loader (filters skills by knowledge tags)                    |
-| `acceptanceCriteria` | MarkdownField                 | Bootstrap, prompts                                                 |
-| `createdAt`          | DateTimeField                 | Bootstrap (set to context.now)                                     |
-| `updatedAt`          | DateTimeField                 | Bootstrap (set to context.now)                                     |
+| Field                | Type                          | Used By                                                             |
+| -------------------- | ----------------------------- | ------------------------------------------------------------------- |
+| `issueId`            | String                        | Bootstrap, tests, templates (was `ticketId`)                        |
+| `summary`            | String                        | Bootstrap, prompts, templates                                       |
+| `description`        | MarkdownField                 | Bootstrap, templates                                                |
+| `issueType`          | IssueTypeField enum           | Bootstrap (set to 'feature'), tests (was `ticketType`)              |
+| `status`             | IssueStatusField enum         | Bootstrap, factory-implement.ts (updated post-completion), prompts  |
+| `priority`           | IssuePriorityField enum       | Bootstrap, prompts, templates                                       |
+| `project`            | linksTo(Project)              | Bootstrap, skill loader                                             |
+| `assignedAgent`      | linksTo(AgentProfile)         | pick-ticket.ts (assignment workflow)                                |
+| `relatedKnowledge`   | linksToMany(KnowledgeArticle) | Skill loader (filters skills by knowledge tags)                     |
+| `acceptanceCriteria` | MarkdownField                 | Bootstrap, prompts                                                  |
+| `createdAt`          | DateTimeField                 | Bootstrap (set to context.now)                                      |
+| `updatedAt`          | DateTimeField                 | Bootstrap (set to context.now)                                      |
+| `comments`           | containsMany(Comment)         | Agent tool (add_comment), human replies, validation failure logging |
 
 **Drop** (defined but never set or read):
 
@@ -215,12 +333,30 @@ Rename `Ticket` to `Issue` throughout. Field renames: `ticketId` → `issueId`, 
 
 The issue-driven loop needs dependency tracking fields not in Phase 1:
 
-| Field       | Type               | Purpose                                                               |
-| ----------- | ------------------ | --------------------------------------------------------------------- |
-| `blockedBy` | linksToMany(Issue) | Explicit dependency edges — issue can't start until blockers are done |
-| `order`     | NumberField        | Sequence number for tie-breaking when priorities are equal            |
+| Field       | Type                  | Purpose                                                               |
+| ----------- | --------------------- | --------------------------------------------------------------------- |
+| `blockedBy` | linksToMany(Issue)    | Explicit dependency edges — issue can't start until blockers are done |
+| `order`     | NumberField           | Sequence number for tie-breaking when priorities are equal            |
+| `comments`  | containsMany(Comment) | Append-only log of structured comments on an issue                    |
 
 These were described in the "Issue Ordering and Dependencies" section above but need to be added to the Issue card definition.
+
+### Comment FieldDef and `add_comment` Tool
+
+`Comment` is a compound `FieldDef` (not a `CardDef`) with three fields:
+
+- `body` (MarkdownField) — the comment text
+- `author` (StringField) — who wrote the comment (e.g., "factory-agent", "human")
+- `datetime` (DateTimeField) — when the comment was created
+
+The `add_comment` factory tool appends comments to an existing issue. It reads the issue, appends a new comment to the `comments` array, and writes back the full document. This is an append-only log pattern: comments are never edited or deleted, only appended.
+
+**Why structured comments instead of modifying the description?**
+
+- The issue description captures the _original intent_ — what needs to be done. Comments capture _evolving context_ — what was tried, what feedback was given, what status updates occurred.
+- Append-only means no data loss: each comment is preserved with its author and timestamp.
+- The agent can add comments without risking accidental description corruption.
+- Human replies (e.g., resolving a clarification) are also modeled as comments, creating a unified conversation thread on the issue.
 
 ### Future: Adopt from Catalog Task Tracker Cards
 
@@ -237,24 +373,80 @@ CS-10671 trims and renames the current schema as a first step. The adoption from
 ## Issue Lifecycle
 
 ```
-created → ready → in_progress → done
-                → blocked (needs human input)
-                → failed (max retries exceeded)
+backlog → in_progress → done
+                      → blocked (needs human input or max iterations with failing validation)
 ```
 
-The agent manages its own transitions by updating the issue directly (e.g., tagging as blocked, marking done). The orchestrator reads the issue state after the agent exits to decide what to do next — it does not inspect the agent's return value for status.
+### Orchestrator Owns Status Transitions
+
+**The orchestrator — not the agent — manages issue status transitions.** This is a key design decision validated through end-to-end testing. Allowing the agent to set status directly caused multiple problems:
+
+- The agent would mark issues as `done` before validation passed, causing the loop to exit prematurely with failing tests
+- The `update_issue` tool's full-document write would clobber existing attributes when the agent only intended to update status
+- The agent's status updates conflicted with the orchestrator's view of issue state
+
+The status transition rules are:
+
+| Transition                | Owner                 | Trigger                                                                                    |
+| ------------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
+| `backlog` → `in_progress` | Orchestrator          | Issue picked up by the loop                                                                |
+| `in_progress` → `done`    | Orchestrator          | Agent calls `signal_done` AND validation passes                                            |
+| `in_progress` → `blocked` | Agent or Orchestrator | Agent sets `blocked` via `update_issue`, or max iterations reached with failing validation |
+| `blocked` → `backlog`     | Agent                 | Agent unblocks via `update_issue`                                                          |
+
+The `update_issue` tool strips disallowed status values — only `blocked` and `backlog` pass through. It also strips `description` — issue descriptions are immutable after creation (see below). The agent signals completion via `signal_done()`, and the loop promotes to `done` only when validation also passes. If the agent signals done but validation fails, the loop continues iterating with the failure details.
+
+### Issue Descriptions Are Immutable
+
+**Issue descriptions must never be modified after creation.** The description captures the original intent of the issue. All post-creation context — blocked reasons, validation failures, progress notes, human replies — must be added as **comments** via the `add_comment` tool or `IssueStore.addComment()`.
+
+This design principle is enforced at multiple levels:
+
+- The `update_issue` agent tool strips `description` from attributes before writing
+- The orchestrator's max-iteration blocking adds failure context as a comment (author: `orchestrator`), not by overwriting the description
+- The `IssueStore.updateIssue()` interface accepts only `{ status?: string }` — no `description` field
+- Skills and system prompts instruct the agent to use `add_comment` for all post-creation context
+
+The `add_comment` tool and `addCommentToIssue()` realm operation implement the centralized read-patch-write logic for appending comments. Both the agent tool and the orchestrator's `IssueStore` delegate to this single function.
+
+### Project Completion
+
+When the loop outcome is `all_issues_done`, the orchestrator automatically sets the project's `projectStatus` to `completed` via `IssueStore.updateProjectStatus()`.
+
+### Card Update Tools Use Read-Patch-Write
+
+The `update_issue`, `update_project`, and `create_knowledge` tools perform a **read-patch-write** cycle: they read the existing card source, merge the agent-provided attributes on top, and write back the merged document. This preserves attributes the agent didn't include in its update call. Earlier versions used a full-document write via `buildCardDocument()` which would clobber existing attributes — this was identified as a critical bug during e2e testing (bootstrap-seed issue was reduced to just `status` and `updatedAt` after an update).
+
+### run_tests Tool Removed from Agent
+
+The `run_tests` tool is **not exposed** to the agent. The validation pipeline runs tests automatically after every agent turn (after `signal_done`). Giving the agent the tool caused it to waste iterations running tests manually, sometimes before writing test files, and creating duplicate TestRun instances. The system prompt and skills inform the agent that the orchestrator handles test execution.
+
+The `run_command` tool description explicitly states it is for Boxel host commands only (format: `@cardstack/boxel-host/commands/<name>/default`), not shell commands or scripts.
+
+### Playwright waitForFunction Timeout
+
+The validation pipeline's test step uses Playwright's `page.waitForFunction()` to wait for QUnit completion. The timeout must be passed as the **third** argument (`page.waitForFunction(fn, null, { timeout })`) — passing it as the second argument treats it as `arg`, causing Playwright to use its 30s default. The timeout is set to 300s (5 minutes) to accommodate large test suites that can take 30-50s for 10-13 tests.
+
+### darkfactory Module URL
+
+The `buildCardDocument()` function takes the darkfactory module URL as a parameter — it must point to the `software-factory` realm (e.g., `http://localhost:4201/software-factory/darkfactory`), NOT the target realm. Earlier versions constructed the URL from the target realm URL, causing cards written via `update_issue` to have the wrong `adoptsFrom` module. This broke `refreshIssue()` searches which filter by type module URL.
+
+The correct URL is computed once via `inferDarkfactoryModuleUrl(targetRealmUrl)` and threaded through `ToolBuilderConfig.darkfactoryModuleUrl`.
+
+### File Path Extensions
+
+All card tool paths (in `update_issue`, `update_project`, `create_knowledge`, `create_catalog_spec`) are normalized with `ensureJsonExtension()` before being passed to realm operations. The realm API uses `card+source` content negotiation which requires the full file path including `.json` extension. Card IDs (used inside JSON documents) do NOT include extensions — this is a different concept.
 
 ## Migration Path from Phase 1
 
-Phase 1 and phase 2 can coexist:
+Phase 1 and phase 2 coexist during the transition. The implementation lives in separate files to avoid touching Phase 1 code:
 
-1. Phase 1 ships with the hard-coded pipeline (`factory-loop.ts`)
-2. Phase 2 introduces an `IssueScheduler` that replaces the fixed loop with issue-driven scheduling
-3. The `LoopAgent` interface (`run(context, tools)`) stays the same — only the orchestrator changes
-4. `ContextBuilder` gains an issue-aware mode that builds context from the current issue rather than a fixed ticket
-5. The `TestRunner` callback becomes a tool the agent can call, rather than a loop phase
+- `src/issue-scheduler.ts` — `IssueScheduler`, `IssueStore`, `RealmIssueStore`
+- `src/issue-loop.ts` — `runIssueLoop()`, `Validator`, `NoOpValidator`, config/result types
 
-The `FactoryTool[]` type from phase 1 carries forward unchanged. `AgentRunResult` may be simplified — in phase 2 the agent signals completion by updating the issue (tagging as blocked, marking done), so the orchestrator reads issue state rather than inspecting a return status. The agent just needs to exit; the orchestrator figures out what happened from the issue.
+The `LoopAgent` interface (`run(context, tools)`) is unchanged and reused by the issue loop. `LoopAgent`, `AgentRunResult`, and `AgentRunStatus` types are now in `factory-agent-types.ts` (relocated from `factory-loop.ts` to break the dependency). `LoopFactoryTool`/`LoopToolCallEntry` mirror interfaces in `factory-agent-types.ts` avoid circular imports with `factory-tool-builder.ts` — TypeScript's structural typing makes them assignment-compatible.
+
+CS-10673 + CS-10708 wired the issue loop into `factory:go`: `src/factory-issue-loop-wiring.ts` constructs all Phase 2 infrastructure (RealmIssueStore, RealmIssueRelationshipLoader, ContextBuilder, tools, agent, ValidationPipeline) and calls `runIssueLoop()`. The `factory-entrypoint.ts` now creates a seed issue then delegates to this wiring. Phase 1's `factory-loop.ts` and `factory-implement.ts` remain for backward compatibility but are no longer called from the main entrypoint.
 
 ## Refactor: request_clarification → Blocking Issue
 
@@ -406,7 +598,7 @@ The principle that boxel-cli owns the entire Boxel API surface extends to auth. 
 
 1. **Two-tier token model** — boxel-cli understands both realm server tokens (obtained via Matrix OpenID → `POST /_server-session`, grants server-level access) and per-realm tokens (obtained via `POST /_realm-auth`, grants access to specific realms). Both are cached and refreshed automatically.
 
-2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — no `--jwt` flag, no token passing.
+2. **Automatic token acquisition on realm creation** — When `boxel create-realm` creates a new realm, boxel-cli automatically waits for readiness, obtains the per-realm JWT, and stores it in its auth state. Subsequent `boxel pull`/`boxel sync` on that realm Just Work — tokens are managed internally by boxel-cli.
 
 3. **Programmatic auth API** — Export a `BoxelAuth` class (or similar) so the factory imports it and never constructs HTTP requests or manages tokens:
 

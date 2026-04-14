@@ -29,6 +29,7 @@ export const TestResultStatusField = enumField(StringField, {
     { value: 'passed', label: 'Passed' },
     { value: 'failed', label: 'Failed' },
     { value: 'error', label: 'Error' },
+    { value: 'skipped', label: 'Skipped' },
   ],
 });
 
@@ -49,6 +50,8 @@ export class TestResultEntry extends FieldDef {
         return '\u2717';
       case 'error':
         return '!';
+      case 'skipped':
+        return '\u2192';
       case 'pending':
         return '\u2013';
       default:
@@ -92,6 +95,10 @@ export class TestResultEntry extends FieldDef {
         .status-pending {
           color: var(--boxel-400, #9ca3af);
         }
+        .status-skipped {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
+        }
         .test-name {
           flex: 1;
         }
@@ -124,6 +131,12 @@ export class TestModuleResult extends FieldDef {
     },
   });
 
+  @field skippedCount = contains(NumberField, {
+    computeVia: function (this: TestModuleResult) {
+      return (this.results ?? []).filter((r) => r.status === 'skipped').length;
+    },
+  });
+
   get moduleName() {
     return this.moduleRef?.module ?? 'default';
   }
@@ -145,6 +158,12 @@ export class TestModuleResult extends FieldDef {
             <span class='module-counts'>
               {{@model.passedCount}}/{{@model.totalCount}}
               passed
+              {{#if this.args.model.skippedCount}}
+                <span class='skipped-label'>
+                  ({{this.args.model.skippedCount}}
+                  skipped)
+                </span>
+              {{/if}}
             </span>
           {{else}}
             <span class='module-counts'>running...</span>
@@ -173,6 +192,10 @@ export class TestModuleResult extends FieldDef {
         .module-counts {
           font-size: 0.8rem;
           color: var(--muted-foreground);
+        }
+        .skipped-label {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
         }
         .module-entries {
           padding-left: 0.5rem;
@@ -213,6 +236,15 @@ export class TestRun extends CardDef {
     },
   });
 
+  @field skippedCount = contains(NumberField, {
+    computeVia: function (this: TestRun) {
+      return (this.moduleResults ?? []).reduce(
+        (sum, sr) => sum + (sr.skippedCount ?? 0),
+        0,
+      );
+    },
+  });
+
   @field title = contains(StringField, {
     computeVia: function (this: TestRun) {
       let seq = this.sequenceNumber ?? '?';
@@ -224,19 +256,39 @@ export class TestRun extends CardDef {
   static fitted = class Fitted extends Component<typeof TestRun> {
     get total() {
       return (
-        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+        (this.args.model.passedCount ?? 0) +
+        (this.args.model.failedCount ?? 0) +
+        (this.args.model.skippedCount ?? 0)
       );
+    }
+
+    get displayStatus() {
+      if (this.total === 0 && this.args.model.status === 'passed') {
+        return 'empty';
+      }
+      return this.args.model.status;
     }
 
     <template>
       <div class='test-run compact'>
         <div class='header'>
           <strong>#{{@model.sequenceNumber}}</strong>
-          <span class='status status-{{@model.status}}'>{{@model.status}}</span>
+          <span
+            class='status status-{{this.displayStatus}}'
+          >{{this.displayStatus}}</span>
         </div>
+        {{#if @model.issue}}
+          <div class='issue-name'>{{@model.issue.summary}}</div>
+        {{/if}}
         <div class='counts'>
           {{@model.passedCount}}/{{this.total}}
           passed
+          {{#if @model.skippedCount}}
+            <span class='skipped-label'>
+              ({{@model.skippedCount}}
+              skipped)
+            </span>
+          {{/if}}
           {{#if @model.durationMs}}
             <span class='duration'>{{@model.durationMs}}ms</span>
           {{/if}}
@@ -281,9 +333,24 @@ export class TestRun extends CardDef {
           color: var(--boxel-blue, #2563eb);
           background: #eff6ff;
         }
+        .status-empty {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .issue-name {
+          font-size: 0.8rem;
+          color: var(--muted-foreground);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
         .counts {
           font-size: 0.85rem;
           color: var(--muted-foreground);
+        }
+        .skipped-label {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
         }
         .duration {
           margin-left: 0.5rem;
@@ -298,8 +365,17 @@ export class TestRun extends CardDef {
   static isolated = class Isolated extends Component<typeof TestRun> {
     get total() {
       return (
-        (this.args.model.passedCount ?? 0) + (this.args.model.failedCount ?? 0)
+        (this.args.model.passedCount ?? 0) +
+        (this.args.model.failedCount ?? 0) +
+        (this.args.model.skippedCount ?? 0)
       );
+    }
+
+    get displayStatus() {
+      if (this.total === 0 && this.args.model.status === 'passed') {
+        return 'empty';
+      }
+      return this.args.model.status;
     }
 
     <template>
@@ -308,12 +384,18 @@ export class TestRun extends CardDef {
           <div class='header-row'>
             <strong>TestRun #{{@model.sequenceNumber}}</strong>
             <span
-              class='status status-{{@model.status}}'
-            >{{@model.status}}</span>
+              class='status status-{{this.displayStatus}}'
+            >{{this.displayStatus}}</span>
           </div>
           <div class='summary'>
             {{@model.passedCount}}/{{this.total}}
             passed
+            {{#if @model.skippedCount}}
+              <span class='skipped-label'>
+                ({{@model.skippedCount}}
+                skipped)
+              </span>
+            {{/if}}
             {{#if @model.durationMs}}
               in
               {{@model.durationMs}}ms
@@ -361,7 +443,11 @@ export class TestRun extends CardDef {
                   {{#if moduleResult.isComplete}}
                     <span
                       class='module-group-counts
-                        {{if moduleResult.failedCount "has-failures"}}'
+                        {{if
+                          moduleResult.failedCount
+                          "has-failures"
+                          (if moduleResult.passedCount "has-passes" "empty")
+                        }}'
                     >
                       {{#if moduleResult.failedCount}}
                         {{moduleResult.passedCount}}
@@ -371,6 +457,12 @@ export class TestRun extends CardDef {
                       {{else}}
                         {{moduleResult.passedCount}}/{{moduleResult.totalCount}}
                         passed
+                      {{/if}}
+                      {{#if moduleResult.skippedCount}}
+                        <span class='skipped-label'>
+                          ({{moduleResult.skippedCount}}
+                          skipped)
+                        </span>
                       {{/if}}
                     </span>
                   {{else}}
@@ -444,9 +536,17 @@ export class TestRun extends CardDef {
           color: var(--boxel-blue, #2563eb);
           background: #eff6ff;
         }
+        .status-empty {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
         .summary {
           font-size: 0.9rem;
           color: var(--muted-foreground);
+        }
+        .skipped-label {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
         }
         .error-message {
           color: var(--boxel-red, #dc2626);
@@ -462,7 +562,6 @@ export class TestRun extends CardDef {
         }
         .module-has-failures {
           border-color: var(--boxel-red, #dc2626);
-          border-left-width: 3px;
         }
         .module-group-header {
           display: flex;
@@ -478,6 +577,9 @@ export class TestRun extends CardDef {
         }
         .module-group-counts {
           font-size: 0.8rem;
+          color: var(--boxel-400, #9ca3af);
+        }
+        .module-group-counts.has-passes {
           color: var(--boxel-green, #16a34a);
         }
         .module-group-counts.has-failures {
@@ -514,6 +616,10 @@ export class TestRun extends CardDef {
         }
         .test-status-icon.status-pending {
           color: var(--boxel-400, #9ca3af);
+        }
+        .test-status-icon.status-skipped {
+          color: var(--boxel-400, #9ca3af);
+          font-style: italic;
         }
         .test-item-name {
           flex: 1;

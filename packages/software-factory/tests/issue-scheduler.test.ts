@@ -26,6 +26,14 @@ class MockIssueStore implements IssueStore {
     }
     return { ...issue };
   }
+
+  async updateIssue(): Promise<void> {
+    // no-op for scheduler tests
+  }
+
+  async addComment(): Promise<void> {
+    // no-op for scheduler tests
+  }
 }
 
 // ---------------------------------------------------------------------------

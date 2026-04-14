@@ -12,7 +12,14 @@ import type {
   SchedulableIssue,
 } from './factory-agent-types';
 
-import { searchRealm, type RealmFetchOptions } from './realm-operations';
+import {
+  searchRealm,
+  readFile,
+  writeFile,
+  ensureJsonExtension,
+  addCommentToIssue,
+  type RealmFetchOptions,
+} from './realm-operations';
 import { logger } from './logger';
 
 let log = logger('issue-scheduler');
@@ -30,6 +37,15 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
+  /** Update issue fields in the realm (e.g., status). Descriptions are immutable — use addComment instead. */
+  updateIssue(issueId: string, updates: { status?: string }): Promise<void>;
+  /** Append a comment to an issue. All post-creation context goes through comments. */
+  addComment(
+    issueId: string,
+    comment: { body: string; author: string },
+  ): Promise<void>;
+  /** Update a project's status in the realm. */
+  updateProjectStatus?(projectStatus: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +240,128 @@ export class RealmIssueStore implements IssueStore {
 
     return mapCardToSchedulableIssue(result.data[0]);
   }
+
+  async updateIssue(
+    issueId: string,
+    updates: { status?: string },
+  ): Promise<void> {
+    // Read the source JSON file (not the indexed card, which can have
+    // stripped relationships during indexing).
+    let readResult = await readFile(
+      this.realmUrl,
+      ensureJsonExtension(issueId),
+      this.options,
+    );
+    if (!readResult.ok || !readResult.document) {
+      let reason =
+        readResult.status === 404
+          ? 'issue not found'
+          : (readResult.error ?? 'no document returned');
+      throw new Error(
+        `Failed to read issue "${issueId}" for update: ${reason}`,
+      );
+    }
+
+    let doc = readResult.document;
+    let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
+
+    if (updates.status != null) {
+      attrs.status = updates.status;
+    }
+    attrs.updatedAt = new Date().toISOString();
+
+    doc.data.attributes = attrs;
+
+    let writeResult = await writeFile(
+      this.realmUrl,
+      ensureJsonExtension(issueId),
+      JSON.stringify(doc, null, 2),
+      this.options,
+    );
+
+    if (!writeResult.ok) {
+      throw new Error(
+        `Failed to write issue "${issueId}": ${writeResult.error}`,
+      );
+    }
+
+    log.info(`Updated issue "${issueId}": ${JSON.stringify(updates)}`);
+  }
+
+  async addComment(
+    issueId: string,
+    comment: { body: string; author: string },
+  ): Promise<void> {
+    let result = await addCommentToIssue(
+      this.realmUrl,
+      issueId,
+      comment,
+      this.options,
+    );
+    if (!result.ok) {
+      throw new Error(
+        `Failed to add comment to issue "${issueId}": ${result.error}`,
+      );
+    }
+    log.info(`Added comment to issue "${issueId}" by ${comment.author}`);
+  }
+
+  async updateProjectStatus(projectStatus: string): Promise<void> {
+    // We expect exactly one Project card per target realm.
+    let result = await searchRealm(
+      this.realmUrl,
+      {
+        filter: {
+          type: { module: this.darkfactoryModuleUrl, name: 'Project' },
+        },
+        sort: [{ by: 'lastModified', direction: 'desc' as const }],
+      },
+      this.options,
+    );
+
+    if (!result.ok || !result.data?.length) {
+      log.warn(
+        `No project found to update status: ${!result.ok ? result.error : 'no results'}`,
+      );
+      return;
+    }
+
+    let projectId = result.data[0].id as string;
+    // Strip the realm URL prefix to get the relative path
+    let relativePath = projectId.replace(this.realmUrl, '');
+
+    let readResult = await readFile(
+      this.realmUrl,
+      ensureJsonExtension(relativePath),
+      this.options,
+    );
+    if (!readResult.ok || !readResult.document) {
+      log.warn(
+        `Failed to read project "${relativePath}" for status update (status ${readResult.status ?? 'N/A'}): ${readResult.error ?? 'no document'}`,
+      );
+      return;
+    }
+
+    let doc = readResult.document;
+    let attrs = (doc.data.attributes ?? {}) as Record<string, unknown>;
+    attrs.projectStatus = projectStatus;
+    attrs.updatedAt = new Date().toISOString();
+    doc.data.attributes = attrs;
+
+    let writeResult = await writeFile(
+      this.realmUrl,
+      ensureJsonExtension(relativePath),
+      JSON.stringify(doc, null, 2),
+      this.options,
+    );
+
+    if (!writeResult.ok) {
+      log.warn(`Failed to update project status: ${writeResult.error}`);
+      return;
+    }
+
+    log.info(`Updated project "${relativePath}" status to "${projectStatus}"`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -298,5 +436,6 @@ function mapCardToSchedulableIssue(
     blockedBy,
     order: (attrs.order as number) ?? 0,
     summary: (attrs.summary as string) ?? undefined,
+    issueType: (attrs.issueType as string) ?? undefined,
   };
 }
