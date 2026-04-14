@@ -8,8 +8,7 @@ import NumberField from '../number';
 export class GridPlacementField extends FieldDef {
   static displayName = 'Grid Placement';
 
-  @field index = contains(NumberField); // which card in linksToMany
-  @field row = contains(NumberField); // 1-based row start
+  @field row = contains(NumberField); // 1-based row start; position in array = card index
   @field hidden = contains(BooleanField);
 
   static embedded = class Embedded extends Component<
@@ -17,7 +16,6 @@ export class GridPlacementField extends FieldDef {
   > {
     <template>
       <span class='placement-pill'>
-        {{if @model.index @model.index 0}}
         <span class='placement-pos'>
           r{{if @model.row @model.row 1}}
         </span>

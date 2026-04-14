@@ -48,8 +48,8 @@ class Chromeless extends Modifier {
 // ── Helpers ──────────────────────────────────────────────────────────── //
 
 function placementsToKanban(fields: GridPlacementField[]): KanbanPlacement[] {
-  return (fields ?? []).map((f) => ({
-    index: f.index ?? 0,
+  return (fields ?? []).map((f, i) => ({
+    index: i, // array position = card index
     column: 0, // derived from computedStatus at read time, not stored
     sortOrder: f.row ?? 1,
   }));
@@ -102,14 +102,30 @@ class Isolated extends Component<typeof KanbanBoard> {
 
     // Reconcile saved placements with each card's current computedStatus so
     // that editing a status outside the board moves the card to the right column.
-    return placementsToKanban(fields).map((p) => {
+    const maxSortOrder: Record<number, number> = {};
+    const result = placementsToKanban(fields).map((p) => {
       const card = (cards as any[])[p.index];
       const status = card?.computedStatus;
       const colIndex = (columns as any[]).findIndex(
         (col: any) => col.key === status,
       );
-      return { ...p, column: colIndex >= 0 ? colIndex : 0 };
+      const column = colIndex >= 0 ? colIndex : 0;
+      maxSortOrder[column] = Math.max(maxSortOrder[column] ?? 0, p.sortOrder);
+      return { ...p, column };
     });
+
+    // Cards added after the last drag won't have a saved placement — append them.
+    (cards as any[]).slice(fields.length).forEach((card: any, i: number) => {
+      const status = card?.computedStatus;
+      const colIndex = (columns as any[]).findIndex(
+        (col: any) => col.key === status,
+      );
+      const column = colIndex >= 0 ? colIndex : 0;
+      maxSortOrder[column] = (maxSortOrder[column] ?? 0) + 1;
+      result.push({ index: fields.length + i, column, sortOrder: maxSortOrder[column] });
+    });
+
+    return result;
   }
 
   get manager(): KanbanDragManager {
@@ -152,20 +168,20 @@ class Isolated extends Component<typeof KanbanBoard> {
 
       if (existingFields && existingFields.length > 0) {
         for (const np of newPlacements) {
-          const existing = existingFields.find(
-            (f: GridPlacementField) => f.index === np.index,
-          );
+          const existing = existingFields[np.index]; // array position = card index
           if (existing) {
             existing.row = np.sortOrder; // col is derived from computedStatus, not stored
           }
         }
       } else {
-        const fields = newPlacements.map((p) => {
-          const f = new GridPlacementField();
-          f.index = p.index;
-          f.row = p.sortOrder; // col is derived from computedStatus, not stored
-          return f;
-        });
+        const fields = newPlacements
+          .slice()
+          .sort((a, b) => a.index - b.index) // ensure placements[i] = card i
+          .map((p) => {
+            const f = new GridPlacementField();
+            f.row = p.sortOrder; // col is derived from computedStatus, not stored
+            return f;
+          });
         model.placements = fields;
       }
     } catch (e) {

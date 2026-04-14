@@ -11,6 +11,7 @@ import {
 } from '../card-api';
 import enumField from '../enum';
 import StringField from '../string';
+import NumberField from '../number';
 import DateField from '../date';
 import MarkdownField from '../markdown';
 
@@ -88,6 +89,7 @@ export class Issue extends CardDef {
       },
     },
   );
+  @field boardOrder = contains(NumberField);
   @field priority = contains(IssuePriorityField);
   @field relatedTickets = linksToMany(() => Issue);
   @field project = linksTo(() => Project);
