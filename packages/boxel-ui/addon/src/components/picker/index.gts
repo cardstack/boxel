@@ -229,7 +229,6 @@ export default class Picker extends Component<PickerSignature> {
       selectAllOption: this.selectAllOption,
       selectedItems: this.selectedItems,
       isSelectAllActive: this.isSelectAllActive,
-      onToggleItem: this.onToggleItem,
     };
   }
 
@@ -323,7 +322,7 @@ export default class Picker extends Component<PickerSignature> {
       @renderInPlace={{this.renderInPlace}}
       @destination={{@destination}}
       @matchTriggerWidth={{@matchTriggerWidth}}
-      @searchEnabled={{false}}
+      @searchEnabled={{true}}
       @closeOnSelect={{false}}
       @eventType='click'
       @ariaLabel={{@label}}
@@ -333,12 +332,13 @@ export default class Picker extends Component<PickerSignature> {
       @afterOptionsComponent={{this.afterOptionsComponent}}
       @dropdownClass={{this.dropdownClass}}
       ...attributes
-      as |option|
+      as |option select|
     >
       <PickerOptionRow
         @option={{option}}
         @isSelected={{this.isSelected option}}
         @currentSelected={{@selected}}
+        @select={{select}}
       />
       {{#if (this.isLastOption option)}}
         {{#if @hasMore}}
@@ -375,6 +375,7 @@ export default class Picker extends Component<PickerSignature> {
 
       .boxel-picker__dropdown .ember-power-select-options {
         padding-top: var(--boxel-sp-2xs);
+        outline: none;
       }
       .boxel-picker__dropdown .ember-power-select-option {
         padding: 0 var(--boxel-sp-2xs);

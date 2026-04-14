@@ -5,6 +5,7 @@ import {
   render,
   waitFor,
   fillIn,
+  triggerKeyEvent,
   setupOnerror,
   resetOnerror,
 } from '@ember/test-helpers';
@@ -856,5 +857,519 @@ module('Integration | Component | picker', function (hooks) {
     assert
       .dom('[data-test-boxel-picker-divider]')
       .exists('Divider exists between before-options and main list');
+  });
+
+  test('ArrowDown highlights the first option in the main list', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // First ArrowDown highlights select-all in summary
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+
+    assert
+      .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
+      .exists('Select-all in summary is highlighted first');
+
+    // Second ArrowDown moves to the first main list option
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+
+    assert
+      .dom(
+        '.ember-power-select-options .ember-power-select-option[aria-current="true"]',
+      )
+      .exists('A main list option is highlighted after navigating past summary');
+  });
+
+  test('ArrowDown and ArrowUp move through options', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // Navigate past summary (selectAll) into main list
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // selectAll
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // first main
+
+    const firstHighlighted = document.querySelector(
+      '.ember-power-select-options .ember-power-select-option[aria-current="true"] [data-test-boxel-picker-option-row]',
+    );
+    const firstId = firstHighlighted?.getAttribute(
+      'data-test-boxel-picker-option-row',
+    );
+    assert.ok(firstId, 'A main list option is highlighted');
+
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // second main
+
+    const secondHighlighted = document.querySelector(
+      '.ember-power-select-options .ember-power-select-option[aria-current="true"] [data-test-boxel-picker-option-row]',
+    );
+    const secondId = secondHighlighted?.getAttribute(
+      'data-test-boxel-picker-option-row',
+    );
+
+    assert.notStrictEqual(
+      firstId,
+      secondId,
+      'ArrowDown moves highlight to a different option',
+    );
+
+    // Move back up
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowUp');
+
+    const thirdHighlighted = document.querySelector(
+      '.ember-power-select-options .ember-power-select-option[aria-current="true"] [data-test-boxel-picker-option-row]',
+    );
+    assert.strictEqual(
+      thirdHighlighted?.getAttribute('data-test-boxel-picker-option-row'),
+      firstId,
+      'ArrowUp returns to the previous option',
+    );
+  });
+
+  test('Enter selects the highlighted option and keeps dropdown open', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // Navigate past summary into main list, then press Enter
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // selectAll
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // first main
+
+    const highlighted = document.querySelector(
+      '.ember-power-select-options .ember-power-select-option[aria-current="true"] [data-test-boxel-picker-option-row]',
+    );
+    const highlightedId = highlighted?.getAttribute(
+      'data-test-boxel-picker-option-row',
+    );
+
+    await triggerKeyEvent(searchInput, 'keydown', 'Enter');
+
+    assert.true(
+      controller.selected.some((o) => o.id === highlightedId),
+      `Highlighted option ${highlightedId} is selected after Enter`,
+    );
+
+    // Dropdown should still be open
+    assert
+      .dom('.ember-power-select-options')
+      .exists('Dropdown remains open after Enter');
+  });
+
+  test('Enter on already-selected option deselects it without closing', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [testOptions[0], testOptions[1]];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+    const initialCount = controller.selected.length;
+
+    // Navigate to the highlighted option and press Enter to toggle it off
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+    await triggerKeyEvent(searchInput, 'keydown', 'Enter');
+
+    assert.notStrictEqual(
+      controller.selected.length,
+      initialCount,
+      'Selection changed after Enter on highlighted option',
+    );
+
+    // Dropdown should still be open
+    assert
+      .dom('.ember-power-select-options')
+      .exists('Dropdown remains open after toggling selection via Enter');
+  });
+
+  test('Escape closes the dropdown', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    await triggerKeyEvent(
+      '[data-test-boxel-picker-search] input',
+      'keydown',
+      'Escape',
+    );
+
+    assert
+      .dom('.ember-power-select-options')
+      .doesNotExist('Dropdown is closed after Escape');
+  });
+
+  test('Arrow keys skip disabled options', async function (assert) {
+    const optionsWithDisabled: PickerOption[] = [
+      selectAllOption,
+      { id: '1', label: 'Option 1' },
+      { id: '2', label: 'Option 2', disabled: true },
+      { id: '3', label: 'Option 3' },
+    ];
+
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{optionsWithDisabled}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // Navigate: selectAll(summary) → option1(main) → skip disabled option2 → option3(main)
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // selectAll
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // option1
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // skip option2(disabled) → option3
+
+    const highlighted = document.querySelector(
+      '.ember-power-select-options .ember-power-select-option[aria-current="true"] [data-test-boxel-picker-option-row]',
+    );
+    assert.strictEqual(
+      highlighted?.getAttribute('data-test-boxel-picker-option-row'),
+      '3',
+      'Disabled Option 2 is skipped, Option 3 is highlighted',
+    );
+  });
+
+  test('Search filtering with keyboard navigation works on filtered results', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    // Type to filter
+    await fillIn('[data-test-boxel-picker-search] input', '3');
+
+    // Only Option 3 should be in main list
+    assert.deepEqual(getMainListOptionIds(), ['3'], 'Only Option 3 in filtered list');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // ArrowDown past selectAll summary, then to filtered option, then Enter
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // selectAll
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown'); // option3
+    await triggerKeyEvent(searchInput, 'keydown', 'Enter');
+
+    assert.deepEqual(
+      controller.selected.map((o) => o.id),
+      ['3'],
+      'Filtered option is selected via keyboard',
+    );
+  });
+
+  test('ArrowUp from first main list option highlights last summary item', async function (assert) {
+    const selected = [testOptions[0], testOptions[1]];
+
+    class SelectionController {
+      @tracked selected: PickerOption[] = selected;
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // ArrowDown to highlight first main list option, then ArrowUp to go into summary
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+
+    // Keep pressing ArrowUp until we get into the summary section
+    // First ArrowUp should go to the last summary item (Option 2)
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowUp');
+
+    assert
+      .dom(
+        '[data-test-boxel-picker-selected-summary] .picker-option-row--highlighted',
+      )
+      .exists('A summary item is highlighted after ArrowUp from main list');
+  });
+
+  test('ArrowDown from last summary item highlights first main list option', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // First ArrowDown highlights select-all in summary
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+
+    assert
+      .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
+      .exists('Select-all is highlighted');
+
+    // Next ArrowDown should move to the first main list option
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+
+    assert
+      .dom(
+        '[data-test-boxel-picker-selected-summary] .picker-option-row--highlighted',
+      )
+      .doesNotExist('Summary highlight is cleared');
+
+    assert
+      .dom(
+        '.ember-power-select-options .ember-power-select-option[aria-current="true"]',
+      )
+      .exists('A main list option is highlighted');
+  });
+
+  test('Enter on highlighted summary select-all toggles it', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [testOptions[0]];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // ArrowDown to highlight select-all, then Enter
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+    await triggerKeyEvent(searchInput, 'keydown', 'Enter');
+
+    assert.deepEqual(
+      controller.selected.map((o) => o.id),
+      ['select-all'],
+      'Select-all is toggled on via keyboard Enter',
+    );
+
+    // Dropdown should still be open
+    assert
+      .dom('.ember-power-select-options')
+      .exists('Dropdown remains open after Enter on select-all');
+  });
+
+  test('ArrowUp from select-all does nothing (no wrap)', async function (assert) {
+    class SelectionController {
+      @tracked selected: PickerOption[] = [selectAllOption];
+    }
+
+    const controller = new SelectionController();
+
+    const onChange = (newSelected: PickerOption[]) => {
+      controller.selected = newSelected;
+    };
+
+    await render(
+      <template>
+        <Picker
+          @options={{testOptionsWithSelectAll}}
+          @selected={{controller.selected}}
+          @onChange={{onChange}}
+          @label='Test'
+        />
+      </template>,
+    );
+
+    await click('[data-test-boxel-picker-trigger]');
+    await waitFor('[data-test-boxel-picker-option-row]');
+
+    const searchInput = '[data-test-boxel-picker-search] input';
+
+    // ArrowDown to highlight select-all
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
+
+    assert
+      .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
+      .exists('Select-all is highlighted');
+
+    // ArrowUp should do nothing (already at top)
+    await triggerKeyEvent(searchInput, 'keydown', 'ArrowUp');
+
+    assert
+      .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
+      .exists('Select-all remains highlighted after ArrowUp at boundary');
   });
 });
