@@ -345,6 +345,18 @@ test.describe('Room creation', () => {
     // This test creates 3 rooms, sends messages, deletes all 3, then waits
     // for auto-creation — needs more than the default 60s timeout.
     test.setTimeout(120_000);
+    // Forward browser console to test stdout for diagnostic visibility
+    page.on('console', (msg) => {
+      let text = msg.text();
+      if (
+        text.includes('[doLeaveRoom]') ||
+        text.includes('[createNewSession]') ||
+        text.includes('[createFallbackRoom]') ||
+        text.includes('[doCreateRoom]')
+      ) {
+        console.log(`[browser] ${text}`);
+      }
+    });
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
