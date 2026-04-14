@@ -1196,22 +1196,17 @@ module(basename(__filename), function () {
         async prerenderModule(args: ModulePrerenderArgs) {
           calls++;
           if (shouldError) {
-            return buildModuleResponse(
-              args.url,
-              'TransientError',
-              [],
-              {
-                type: 'module-error',
-                error: {
-                  id: args.url,
-                  message: 'transient prerender failure',
-                  status: 500,
-                  title: 'Render timeout',
-                  deps: [],
-                  additionalErrors: null,
-                },
+            return buildModuleResponse(args.url, 'TransientError', [], {
+              type: 'module-error',
+              error: {
+                id: args.url,
+                message: 'transient prerender failure',
+                status: 500,
+                title: 'Render timeout',
+                deps: [],
+                additionalErrors: null,
               },
-            );
+            });
           }
           return buildModuleResponse(args.url, 'TransientError', []);
         },
@@ -1271,7 +1266,10 @@ module(basename(__filename), function () {
         module: moduleURL,
         name: 'TransientError',
       });
-      assert.ok(definition, 'lookup succeeds after stale error is re-prerendered');
+      assert.ok(
+        definition,
+        'lookup succeeds after stale error is re-prerendered',
+      );
       assert.strictEqual(definition?.displayName, 'TransientError');
       assert.strictEqual(
         calls,
