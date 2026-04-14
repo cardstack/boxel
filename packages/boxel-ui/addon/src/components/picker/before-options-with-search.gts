@@ -226,6 +226,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
           @value={{this.searchTerm}}
           @onInput={{this.updateSearchTerm}}
           @placeholder={{this.searchPlaceholder}}
+          @autocomplete='off'
           class='picker-before-options__search-input'
           {{autoFocus}}
           {{on 'keydown' this.handleKeydown}}
