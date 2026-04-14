@@ -610,11 +610,12 @@ Common issues are:
           }
           return;
         } finally {
-          // Resolve before releasing the lock so that any interrupted
-          // new-message handler waiting on completionPromise can
-          // immediately acquire the lock once it's released.
-          resolveGenerationCompletion();
+          // Release the lock first, then resolve the completionPromise.
+          // This ordering guarantees that any interrupted new-message
+          // handler waiting on completionPromise will observe the room
+          // lock as released before attempting to acquire it.
           await releaseRoomLock(assistant.pgAdapter, room.roomId);
+          resolveGenerationCompletion();
         }
       } catch (e) {
         log.error(e);
