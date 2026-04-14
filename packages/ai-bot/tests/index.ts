@@ -8,3 +8,4 @@ import './responding-test';
 import './matrix-util-test';
 import './modality-test';
 import './locking-test';
+import './interrupt-test';
