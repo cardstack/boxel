@@ -13,5 +13,6 @@ import './factory-tool-builder.test';
 import './realm-auth.test';
 import './issue-loop.test';
 import './issue-scheduler.test';
+import './retry-blocked-issues.test';
 import './validation-pipeline.test';
 import './test-step.test';

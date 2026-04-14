@@ -229,7 +229,9 @@ export async function runFactoryIssueLoop(
 // Retry blocked issues
 // ---------------------------------------------------------------------------
 
-async function retryBlockedIssues(issueStore: IssueStore): Promise<void> {
+export async function retryBlockedIssues(
+  issueStore: IssueStore,
+): Promise<void> {
   let issues = await issueStore.listIssues();
   let resetCount = 0;
 
