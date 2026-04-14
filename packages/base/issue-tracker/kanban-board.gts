@@ -13,6 +13,7 @@ import {
   CssImportField,
 } from '../card-api';
 import StringField from '../string';
+import BooleanField from '../boolean';
 import enumField from '../enum';
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/helper';
@@ -206,6 +207,7 @@ class Isolated extends Component<typeof KanbanBoard> {
           @placements={{this.kanbanPlacements}}
           @manager={{this.manager}}
           @interactive={{true}}
+          @hideEmpty={{@model.hideEmptyColumns}}
         >
           <:card as |placement|>
             {{#let (get @fields.cards placement.index) as |CardField|}}
@@ -243,6 +245,7 @@ class Isolated extends Component<typeof KanbanBoard> {
       .kanban-toolbar {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         padding: 10px 16px;
         border-bottom: 1px solid #e2e8f0;
         background: #fff;
@@ -306,6 +309,7 @@ export class KanbanBoard extends CardDef {
   static prefersWideFormat = true;
 
   @field title = contains(StringField);
+  @field hideEmptyColumns = contains(BooleanField);
   @field project = linksTo(() => Project);
   @field groupBy = contains(
     enumField(StringField, {
@@ -358,7 +362,6 @@ export class KanbanBoard extends CardDef {
   // ── Fitted ─────────────────────────────────────────────────────────
 
   static fitted = class Fitted extends Component<typeof KanbanBoard> {
-    // ²⁶
     get colCount(): number {
       return this.args.model?.columns?.length ?? 0;
     }

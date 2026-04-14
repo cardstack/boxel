@@ -27,6 +27,7 @@ export class KanbanPlane extends Component<{
     placements: KanbanPlacement[];
     manager: KanbanDragManager;
     interactive: boolean;
+    hideEmpty?: boolean;
   };
   Blocks: {
     card: [KanbanPlacement];
@@ -45,6 +46,11 @@ export class KanbanPlane extends Component<{
     cardsInColumn(colIndex, this.args.placements);
   columnCardCount = (colIndex: number): number =>
     colCount(colIndex, this.args.placements);
+
+  isColumnVisible = (colIndex: number): boolean => {
+    if (!this.args.hideEmpty) return true;
+    return this.columnCardCount(colIndex) > 0;
+  };
 
   isOverWip = (column: KanbanColumnField, colIndex: number): boolean => {
     const limit = column.wipLimit ?? 0;
@@ -158,65 +164,67 @@ export class KanbanPlane extends Component<{
       tabindex='0'
     >
       {{#each this.args.columns as |column colIdx|}}
-        <div
-          class='column
-            {{if (this.isTargetColumn colIdx) "is-target"}}
-            {{if (this.isOverWip column colIdx) "is-over-wip"}}'
-          data-kanban-column={{colIdx}}
-        >
-          <div class='col-header'>
-            <div class='col-header-left'>
-              <span
-                class='col-dot'
-                style='background: {{if column.color column.color "#94a3b8"}}'
-              ></span>
-              <span class='col-name'>{{if
-                  column.label
-                  column.label
-                  'Untitled'
-                }}</span>
-              <span class='col-count'>{{this.columnCardCount colIdx}}</span>
-            </div>
-            {{#if column.wipLimit}}
-              <span
-                class='col-wip {{if (this.isOverWip column colIdx) "over"}}'
-              >
-                max
-                {{column.wipLimit}}
-              </span>
-            {{/if}}
-          </div>
-
-          <div class='col-body'>
-            {{#if (this.showInsertionBox colIdx)}}
-              <div
-                class='insertion-box'
-                style={{this.insertionBoxStyle colIdx}}
-              ></div>
-            {{/if}}
-
-            {{#each (this.columnCards colIdx) as |placement|}}
-              <div
-                class='card
-                  {{if
-                    (eq placement.index this.args.manager.selectedIndex)
-                    "selected"
-                  }}
-                  {{if (this.isSource placement) "dragging"}}'
-                style={{this.cardShiftStyle placement}}
-                data-card-index={{placement.index}}
-              >
-                {{yield placement to='card'}}
+        {{#if (this.isColumnVisible colIdx)}}
+          <div
+            class='column
+              {{if (this.isTargetColumn colIdx) "is-target"}}
+              {{if (this.isOverWip column colIdx) "is-over-wip"}}'
+            data-kanban-column={{colIdx}}
+          >
+            <div class='col-header'>
+              <div class='col-header-left'>
+                <span
+                  class='col-dot'
+                  style='background: {{if column.color column.color "#94a3b8"}}'
+                ></span>
+                <span class='col-name'>{{if
+                    column.label
+                    column.label
+                    'Untitled'
+                  }}</span>
+                <span class='col-count'>{{this.columnCardCount colIdx}}</span>
               </div>
-            {{/each}}
+              {{#if column.wipLimit}}
+                <span
+                  class='col-wip {{if (this.isOverWip column colIdx) "over"}}'
+                >
+                  max
+                  {{column.wipLimit}}
+                </span>
+              {{/if}}
+            </div>
 
-            {{#unless (this.columnCardCount colIdx)}}
-              {{#unless this.isDragging}}
-                <div class='empty-col'>No cards</div>
+            <div class='col-body'>
+              {{#if (this.showInsertionBox colIdx)}}
+                <div
+                  class='insertion-box'
+                  style={{this.insertionBoxStyle colIdx}}
+                ></div>
+              {{/if}}
+
+              {{#each (this.columnCards colIdx) as |placement|}}
+                <div
+                  class='card
+                    {{if
+                      (eq placement.index this.args.manager.selectedIndex)
+                      "selected"
+                    }}
+                    {{if (this.isSource placement) "dragging"}}'
+                  style={{this.cardShiftStyle placement}}
+                  data-card-index={{placement.index}}
+                >
+                  {{yield placement to='card'}}
+                </div>
+              {{/each}}
+
+              {{#unless (this.columnCardCount colIdx)}}
+                {{#unless this.isDragging}}
+                  <div class='empty-col'>No cards</div>
+                {{/unless}}
               {{/unless}}
-            {{/unless}}
+            </div>
           </div>
-        </div>
+        {{/if}}
       {{/each}}
     </div>
 
