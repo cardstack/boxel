@@ -15,7 +15,6 @@ import {
   fields,
   fieldsUntracked,
   isBaseInstance,
-  realmURL,
   meta,
   relativeTo,
 } from './constants';
@@ -138,22 +137,6 @@ export function isListingDef(def: any): boolean {
 
 export function isListingInstance(card: any): boolean {
   return isListingDef(card?.constructor);
-}
-
-export function isRealmIndexCardId(
-  cardId: string | undefined,
-  realm: string | URL | undefined,
-): boolean {
-  if (!cardId || !realm) {
-    return false;
-  }
-  let realmHref = typeof realm === 'string' ? realm : realm.href;
-  return cardId === `${realmHref}index`;
-}
-
-export function isRealmIndexCard(card: CardDef | undefined): boolean {
-  let cardId = typeof card?.id === 'string' ? card.id : undefined;
-  return isRealmIndexCardId(cardId, card?.[realmURL]);
 }
 
 export function isFieldInstance<T extends FieldDef>(
