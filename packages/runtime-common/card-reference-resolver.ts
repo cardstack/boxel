@@ -51,20 +51,18 @@ export function resolveRRI(
 ): RealmResourceIdentifier {
   // ("@cardstack/base/string") → @cardstack/base/string
   // ("./string", "@cardstack/base") → @cardstack/base/string
-  // ??
-  // ("/string", "@cardstack/base/fields") → @cardstack/base/string
-  // ??
-  // ("~/card", "@cardstack/base/") → @cardstack/base/card
+  // ("/string", "@cardstack/base/fields") → invalid
+  // ("~/card", "@cardstack/base/") → invalid
+  // ("$thisRealm/string", "@cardstack/base/") → @cardstack/base/string
   // ("@cardstack/base/string", "@cardstack/catalog") → @cardstack/base/string
   // ("http://localhost:4201/realm/card") → http://localhost:4201/realm/card
   // ("http://localhost:4201/realm/card", "@cardstack/base") → http://localhost:4201/realm/card
   // ("./card", "http://localhost:4201/realm/") → http://localhost:4201/realm/card
   // ("../card", "http://localhost:4201/realm/directory/") → http://localhost:4201/realm/card
-  // ??
-  // ("/card", "http://localhost:4201/realm/directory/") → http://localhost:4201/card
-  // ??
-  // ("~/card", "http://localhost:4201/realm/directory/") → http://localhost:4201/realm/card
-  // ("/card", "https://home.boxel.ai/contact/users") → https://home.boxel.ai/card
+  // ("/card", "http://localhost:4201/realm/directory/") → invalid
+  // ("~/card", "http://localhost:4201/realm/directory/") → invalid
+  // ("/card", "https://home.boxel.ai/contact/users") → invalid
+  // ("$thisRealm/card", "https://home.boxel.ai/contact/users/") → https://home.boxel.ai/contact/card
   // ("card", "@cardstack/base") → @cardstack/base/card
   // ("card", "http://localhost:4201/realm/") → http://localhost:4201/realm/card
 }
