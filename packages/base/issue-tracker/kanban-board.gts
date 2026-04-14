@@ -9,6 +9,8 @@ import {
   containsMany,
   linksTo,
   linksToMany,
+  CSSField,
+  CssImportField,
 } from '../card-api';
 import StringField from '../string';
 import enumField from '../enum';
@@ -32,14 +34,35 @@ import {
 const groupByOptions: {
   value: string;
   label: string;
-  fieldName: string;      // field to read for column matching (may be computed)
+  fieldName: string; // field to read for column matching (may be computed)
   writeFieldName: string; // field to write when dragging across columns (must be stored)
   orderField: string;
   options: { value: string; label: string }[];
 }[] = [
-  { value: 'status', label: 'Status', fieldName: 'computedStatus', writeFieldName: 'status', orderField: 'statusBoardOrder', options: issueStatusOptions },
-  { value: 'priority', label: 'Priority', fieldName: 'priority', writeFieldName: 'priority', orderField: 'priorityBoardOrder', options: issuePriorityOptions },
-  { value: 'ticketType', label: 'Type', fieldName: 'ticketType', writeFieldName: 'ticketType', orderField: 'ticketTypeBoardOrder', options: issueTypeOptions },
+  {
+    value: 'status',
+    label: 'Status',
+    fieldName: 'computedStatus',
+    writeFieldName: 'status',
+    orderField: 'statusBoardOrder',
+    options: issueStatusOptions,
+  },
+  {
+    value: 'priority',
+    label: 'Priority',
+    fieldName: 'computedPriority',
+    writeFieldName: 'priority',
+    orderField: 'priorityBoardOrder',
+    options: issuePriorityOptions,
+  },
+  {
+    value: 'ticketType',
+    label: 'Type',
+    fieldName: 'computedTicketType',
+    writeFieldName: 'ticketType',
+    orderField: 'ticketTypeBoardOrder',
+    options: issueTypeOptions,
+  },
 ];
 
 // Chromeless modifier
@@ -63,7 +86,6 @@ class Chromeless extends Modifier {
     return () => observer.disconnect();
   }
 }
-
 
 class Isolated extends Component<typeof KanbanBoard> {
   @tracked selectedCardIndex: number | null = null;
@@ -332,6 +354,24 @@ export class KanbanBoard extends CardDef {
   @field cardTitle = contains(StringField, {
     computeVia: function (this: KanbanBoard) {
       return this.cardInfo?.name ?? this.title ?? 'Untitled Kanban';
+    },
+  });
+  @field cssVariables = contains(CSSField, {
+    computeVia: function (this: Issue) {
+      return (
+        this.cardInfo.theme?.cssVariables ??
+        this.project?.cardInfo?.theme?.cssVariables
+      );
+    },
+  });
+
+  @field cssImports = containsMany(CssImportField, {
+    computeVia: function (this: Issue) {
+      return (
+        this.cardInfo.theme?.cssImports ??
+        this.project?.cardInfo?.theme?.cssImports ??
+        []
+      );
     },
   });
 

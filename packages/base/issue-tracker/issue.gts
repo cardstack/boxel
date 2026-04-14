@@ -16,6 +16,7 @@ import DateField from '../date';
 import MarkdownField from '../markdown';
 
 import { FieldContainer, Pill } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 export const issueStatusOptions = [
   { value: 'backlog', label: 'Backlog' },
@@ -34,19 +35,25 @@ const projectStatusOptions = [
 ];
 
 export const issuePriorityOptions = [
-  { value: 'critical', label: 'Critical' },
-  { value: 'high', label: 'High' },
-  { value: 'medium', label: 'Medium' },
+  { value: 'unset', label: 'Unset' },
   { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
 ];
 
 export const issueTypeOptions = [
+  { value: 'unset', label: 'Unset' },
+  { value: 'task', label: 'Task' },
   { value: 'feature', label: 'Feature' },
   { value: 'bug', label: 'Bug' },
-  { value: 'task', label: 'Task' },
   { value: 'research', label: 'Research' },
   { value: 'infrastructure', label: 'Infrastructure' },
 ];
+
+const IssueStatusField = enumField(StringField, {
+  options: issueStatusOptions,
+});
 
 const IssuePriorityField = enumField(StringField, {
   options: issuePriorityOptions,
@@ -81,22 +88,27 @@ export class Issue extends CardDef {
   @field ticketId = contains(StringField);
   @field title = contains(StringField);
   @field description = contains(MarkdownField);
-  @field ticketType = contains(IssueTypeField);
-  @field status = contains(
-    enumField(StringField, { options: issueStatusOptions }),
-  );
-  @field computedStatus = contains(
-    enumField(StringField, { options: issueStatusOptions }),
-    {
-      computeVia: function (this: Issue) {
-        return this.status ?? issueStatusOptions?.[0]?.value;
-      },
+  @field status = contains(IssueStatusField);
+  @field computedStatus = contains(IssueStatusField, {
+    computeVia: function (this: Issue) {
+      return this.status ?? 'backlog';
     },
-  );
+  });
+  @field ticketType = contains(IssueTypeField);
+  @field computedTicketType = contains(IssueTypeField, {
+    computeVia: function (this: Issue) {
+      return this.ticketType ?? 'unset';
+    },
+  });
+  @field priority = contains(IssuePriorityField);
+  @field computedPriority = contains(IssuePriorityField, {
+    computeVia: function (this: Issue) {
+      return this.priority ?? 'unset';
+    },
+  });
   @field statusBoardOrder = contains(NumberField);
   @field priorityBoardOrder = contains(NumberField);
   @field ticketTypeBoardOrder = contains(NumberField);
-  @field priority = contains(IssuePriorityField);
   @field relatedTickets = linksToMany(() => Issue);
   @field project = linksTo(() => Project);
 
@@ -131,9 +143,23 @@ export class Issue extends CardDef {
     <template>
       <div class='ticket-card compact'>
         <div class='row'>
-          <Pill @size='extra-small' @variant='secondary'>
-            {{if @model.ticketId @model.ticketId 'TICKET'}}
-          </Pill>
+          <div>
+            {{#if @model.ticketId}}
+              <Pill @size='extra-small' @variant='secondary'>
+                <@fields.ticketId />
+              </Pill>
+            {{/if}}
+            {{#unless (eq @model.computedTicketType 'unset')}}
+              <Pill @size='extra-small' @variant='default'>
+                <@fields.computedTicketType @format='atom' />
+              </Pill>
+            {{/unless}}
+            {{#unless (eq @model.computedPriority 'unset')}}
+              <Pill @size='extra-small' @variant='default'>
+                <@fields.computedPriority @format='atom' />
+              </Pill>
+            {{/unless}}
+          </div>
           <Pill
             @size='extra-small'
             @variant={{getStatusVariant @model.computedStatus}}
@@ -239,25 +265,27 @@ export class Issue extends CardDef {
       <article class='issue'>
         <header class='issue-header'>
           <div class='issue-pills'>
-            <Pill @size='extra-small' @variant='secondary'>
-              {{if @model.ticketId @model.ticketId 'TICKET'}}
-            </Pill>
+            {{#if @model.ticketId}}
+              <Pill @size='extra-small' @variant='secondary'>
+                <@fields.ticketId />
+              </Pill>
+            {{/if}}
             <Pill
               @size='extra-small'
               @variant={{getStatusVariant @model.computedStatus}}
             >
               <@fields.computedStatus @format='atom' />
             </Pill>
-            {{#if @model.ticketType}}
+            {{#unless (eq @model.computedTicketType 'unset')}}
               <Pill @size='extra-small' @variant='default'>
-                <@fields.ticketType @format='atom' />
+                <@fields.computedTicketType @format='atom' />
               </Pill>
-            {{/if}}
-            {{#if @model.priority}}
+            {{/unless}}
+            {{#unless (eq @model.computedPriority 'unset')}}
               <Pill @size='extra-small' @variant='default'>
-                <@fields.priority @format='atom' />
+                <@fields.computedPriority @format='atom' />
               </Pill>
-            {{/if}}
+            {{/unless}}
           </div>
           <h1 class='issue-title'><@fields.cardTitle /></h1>
           {{#if @model.project}}
