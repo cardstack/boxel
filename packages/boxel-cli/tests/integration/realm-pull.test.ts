@@ -91,9 +91,9 @@ describe('realm pull (integration)', () => {
     await pullCommand(realmUrl, localDir, { profileManager });
 
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
-    expect(
-      fs.existsSync(path.join(localOnlyDir, 'local-only.json')),
-    ).toBe(true);
+    expect(fs.existsSync(path.join(localOnlyDir, 'local-only.json'))).toBe(
+      true,
+    );
   });
 
   it('removes local files missing from the realm when --delete is set', async () => {
@@ -117,14 +117,15 @@ describe('realm pull (integration)', () => {
     await pullCommand(realmUrl, localDir, { profileManager });
 
     expect(fs.existsSync(path.join(localDir, 'hello.gts'))).toBe(true);
-    expect(
-      fs.existsSync(path.join(localDir, 'nested', 'card.gts')),
-    ).toBe(true);
+    expect(fs.existsSync(path.join(localDir, 'nested', 'card.gts'))).toBe(true);
     expect(
       fs.existsSync(path.join(localDir, 'nested', 'deep', 'inner.gts')),
     ).toBe(true);
     expect(
-      fs.readFileSync(path.join(localDir, 'nested', 'deep', 'inner.gts'), 'utf8'),
+      fs.readFileSync(
+        path.join(localDir, 'nested', 'deep', 'inner.gts'),
+        'utf8',
+      ),
     ).toContain('inner = "deep"');
   });
 });

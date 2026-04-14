@@ -157,4 +157,3 @@ export function uniqueRealmName(): string {
   let rand = Math.random().toString(36).slice(2, 6);
   return `cli-test-${ts}-${rand}`;
 }
-
