@@ -16,10 +16,10 @@
  *   - OPENROUTER_API_KEY for the LLM agent
  *
  * Usage:
- *   pnpm smoke:factory-scenarios -- --scenario 1 [--debug]
- *   pnpm smoke:factory-scenarios -- --scenario 2 [--debug]
- *   pnpm smoke:factory-scenarios -- --scenario 3 [--debug]
- *   pnpm smoke:factory-scenarios -- --scenario all [--debug]
+ *   pnpm smoke:factory-scenarios --scenario 1 [--debug]
+ *   pnpm smoke:factory-scenarios --scenario 2 [--debug]
+ *   pnpm smoke:factory-scenarios --scenario 3 [--debug]
+ *   pnpm smoke:factory-scenarios --scenario all [--debug]
  */
 
 // This should be first

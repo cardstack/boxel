@@ -89,7 +89,7 @@ export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
-    '  pnpm factory:go -- --brief-url <url> --target-realm-url <url> [options]',
+    '  pnpm factory:go --brief-url <url> --target-realm-url <url> [options]',
     '',
     'Required:',
     '  --brief-url <url>           Absolute URL for the source brief card',

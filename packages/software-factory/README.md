@@ -60,7 +60,7 @@ Then run the factory:
 ```bash
 cd packages/software-factory
 
-pnpm factory:go -- \
+pnpm factory:go \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm-url http://localhost:4201/your-username/my-test-realm/ \
   --debug
@@ -75,7 +75,7 @@ By default, the factory resets blocked issues to `backlog` with `critical` prior
 To skip retrying blocked issues, use `--no-retry-blocked`:
 
 ```bash
-pnpm factory:go -- \
+pnpm factory:go \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm-url http://localhost:4201/your-username/my-test-realm/ \
   --no-retry-blocked
