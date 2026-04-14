@@ -15,7 +15,6 @@ import {
 import StringField from '../string';
 import enumField from '../enum';
 import { tracked } from '@glimmer/tracking';
-import Modifier from 'ember-modifier';
 import { get } from '@ember/helper';
 import KanbanIcon from '@cardstack/boxel-icons/columns-3';
 
@@ -65,28 +64,6 @@ const groupByOptions: {
   },
 ];
 
-// Chromeless modifier
-class Chromeless extends Modifier {
-  modify(el: HTMLElement) {
-    const strip = () => {
-      el.querySelectorAll(
-        '[data-test-card-header], [data-test-edit-button], [data-test-more-options-button], ' +
-          '.card-container-header, .operator-mode-card-header, .overlay-card-header, ' +
-          'header.card-header, .overlay-button, .card-container-overlay, ' +
-          '[data-test-overlay-card-header], .hover-button',
-      ).forEach((node) => ((node as HTMLElement).style.display = 'none'));
-      const firstChild = el.firstElementChild as HTMLElement | null;
-      if (firstChild) {
-        firstChild.style.width = '100%';
-      }
-    };
-    strip();
-    const observer = new MutationObserver(strip);
-    observer.observe(el, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }
-}
-
 class Isolated extends Component<typeof KanbanBoard> {
   @tracked selectedCardIndex: number | null = null;
   dragManager: KanbanDragManager | null = null;
@@ -98,7 +75,6 @@ class Isolated extends Component<typeof KanbanBoard> {
   }
 
   initManager(): void {
-    // ²⁰
     this.dragManager = new KanbanDragManager({
       placements: () => this.kanbanPlacements,
       columnCount: () => this.args.model?.columns?.length ?? 4,
@@ -234,7 +210,7 @@ class Isolated extends Component<typeof KanbanBoard> {
           <:card as |placement|>
             {{#let (get @fields.cards placement.index) as |CardField|}}
               {{#if CardField}}
-                <div class='kanban-card-wrap' {{Chromeless}}>
+                <div class='kanban-card-wrap'>
                   <CardField @format='fitted' />
                 </div>
               {{else}}
@@ -245,7 +221,7 @@ class Isolated extends Component<typeof KanbanBoard> {
           <:ghost as |dragIdx|>
             {{#let (get @fields.cards dragIdx) as |CardField|}}
               {{#if CardField}}
-                <div class='ghost-wrap' {{Chromeless}}>
+                <div class='ghost-wrap'>
                   <CardField @format='fitted' />
                 </div>
               {{/if}}
@@ -356,6 +332,7 @@ export class KanbanBoard extends CardDef {
       return this.cardInfo?.name ?? this.title ?? 'Untitled Kanban';
     },
   });
+  // TODO: better way to inherit project theme
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: Issue) {
       return (
@@ -364,7 +341,6 @@ export class KanbanBoard extends CardDef {
       );
     },
   });
-
   @field cssImports = containsMany(CssImportField, {
     computeVia: function (this: Issue) {
       return (
