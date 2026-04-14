@@ -89,7 +89,8 @@ export class CheckpointManager {
       for (const entry of entries) {
         if (
           entry.name === '.boxel-history' ||
-          entry.name === '.boxel-sync.json'
+          entry.name === '.boxel-sync.json' ||
+          entry.name === 'node_modules'
         ) {
           continue;
         }
