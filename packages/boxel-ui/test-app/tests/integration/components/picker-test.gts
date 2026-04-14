@@ -789,10 +789,14 @@ module('Integration | Component | picker', function (hooks) {
       .dom('[data-test-boxel-picker-select-all]')
       .exists('Select-all shown in before-options');
 
-    // Summary section should not exist
+    // No summary items other than select-all should exist in before-options
     assert
-      .dom('[data-test-boxel-picker-selected-summary]')
-      .doesNotExist('Summary hidden when select-all is active');
+      .dom(
+        '[data-test-boxel-picker-selected-summary] [data-test-boxel-picker-summary-item]',
+      )
+      .doesNotExist(
+        'No individual selected items in summary when select-all is active',
+      );
   });
 
   test('picker deselects item from summary section', async function (assert) {
@@ -886,21 +890,21 @@ module('Integration | Component | picker', function (hooks) {
 
     const searchInput = '[data-test-boxel-picker-search] input';
 
-    // First ArrowDown highlights select-all in summary
-    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
-
+    // Select-all is already highlighted on open via activateFirstItem
     assert
       .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
       .exists('Select-all in summary is highlighted first');
 
-    // Second ArrowDown moves to the first main list option
+    // ArrowDown moves to the first main list option
     await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
 
     assert
       .dom(
         '.ember-power-select-options .ember-power-select-option[aria-current="true"]',
       )
-      .exists('A main list option is highlighted after navigating past summary');
+      .exists(
+        'A main list option is highlighted after navigating past summary',
+      );
   });
 
   test('ArrowDown and ArrowUp move through options', async function (assert) {
@@ -1179,7 +1183,11 @@ module('Integration | Component | picker', function (hooks) {
     await fillIn('[data-test-boxel-picker-search] input', '3');
 
     // Only Option 3 should be in main list
-    assert.deepEqual(getMainListOptionIds(), ['3'], 'Only Option 3 in filtered list');
+    assert.deepEqual(
+      getMainListOptionIds(),
+      ['3'],
+      'Only Option 3 in filtered list',
+    );
 
     const searchInput = '[data-test-boxel-picker-search] input';
 
@@ -1265,14 +1273,12 @@ module('Integration | Component | picker', function (hooks) {
 
     const searchInput = '[data-test-boxel-picker-search] input';
 
-    // First ArrowDown highlights select-all in summary
-    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
-
+    // Select-all is already highlighted on open via activateFirstItem
     assert
       .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
       .exists('Select-all is highlighted');
 
-    // Next ArrowDown should move to the first main list option
+    // ArrowDown should move to the first main list option
     await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
 
     assert
@@ -1358,9 +1364,7 @@ module('Integration | Component | picker', function (hooks) {
 
     const searchInput = '[data-test-boxel-picker-search] input';
 
-    // ArrowDown to highlight select-all
-    await triggerKeyEvent(searchInput, 'keydown', 'ArrowDown');
-
+    // Select-all is already highlighted on open via activateFirstItem
     assert
       .dom('[data-test-boxel-picker-select-all].picker-option-row--highlighted')
       .exists('Select-all is highlighted');
