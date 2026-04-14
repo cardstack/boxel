@@ -1272,11 +1272,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.deepEqual(
             response.body.data.map((d: any) => d.id),
-            [
-              `${realmHref}book-a`,
-              `${realmHref}book-c`,
-              `${realmHref}book-b`,
-            ],
+            [`${realmHref}book-a`, `${realmHref}book-c`, `${realmHref}book-b`],
             'books sorted numerically: 3, 10, 200 (not lexicographic "10", "200", "3")',
           );
         });
