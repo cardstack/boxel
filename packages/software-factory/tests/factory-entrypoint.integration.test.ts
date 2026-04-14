@@ -226,6 +226,7 @@ module('factory-entrypoint integration', function () {
             MATRIX_USERNAME: 'hassan',
             MATRIX_PASSWORD: 'secret',
             MATRIX_URL: origin,
+            REALM_SERVER_URL: `${origin}/`,
           },
         },
       );
