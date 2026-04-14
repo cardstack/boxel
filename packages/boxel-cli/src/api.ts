@@ -13,3 +13,5 @@ export {
   NoActiveProfileError,
   type ActiveProfileSummary,
 } from './lib/profile-bootstrap';
+
+export { resetProfileManager } from './lib/profile-manager';

@@ -1,5 +1,9 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { module, test } from 'qunit';
 
+import { resetProfileManager } from '@cardstack/boxel-cli';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 import {
@@ -155,8 +159,32 @@ module('factory-entrypoint', function (hooks) {
   });
 
   test('runFactoryEntrypoint creates seed issue and loads brief data', async function (assert) {
+    // Isolate HOME so ensureActiveProfile finds a synthetic profile
+    // instead of the developer's real one (or none in CI).
+    let originalHome = process.env.HOME;
+    let tempHome = mkdtempSync(join(tmpdir(), 'factory-ep-test-'));
+    let profilesDir = join(tempHome, '.boxel-cli');
+    mkdirSync(profilesDir, { recursive: true });
+    writeFileSync(
+      join(profilesDir, 'profiles.json'),
+      JSON.stringify({
+        activeProfile: '@hassan:example.test',
+        profiles: {
+          '@hassan:example.test': {
+            displayName: 'test',
+            matrixUrl: 'https://matrix.example.test',
+            realmServerUrl: 'https://realms.example.test/',
+            password: 'test',
+          },
+        },
+      }),
+      { mode: 0o600 },
+    );
+    process.env.HOME = tempHome;
+    resetProfileManager();
     process.env.MATRIX_USERNAME = 'hassan';
 
+    try {
     let summary = await runFactoryEntrypoint(
       {
         briefUrl,
@@ -223,13 +251,40 @@ module('factory-entrypoint', function (hooks) {
     assert.strictEqual(summary.seedIssue.seedIssueId, 'Issues/bootstrap-seed');
     assert.strictEqual(summary.issueLoop?.outcome, 'all_issues_done');
     assert.strictEqual(summary.result.status, 'completed');
+    } finally {
+      process.env.HOME = originalHome;
+      resetProfileManager();
+      rmSync(tempHome, { recursive: true, force: true });
+    }
   });
 
   test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory module', async function (assert) {
+    let originalHome = process.env.HOME;
+    let tempHome = mkdtempSync(join(tmpdir(), 'factory-ep-test-'));
+    let profilesDir = join(tempHome, '.boxel-cli');
+    mkdirSync(profilesDir, { recursive: true });
+    writeFileSync(
+      join(profilesDir, 'profiles.json'),
+      JSON.stringify({
+        activeProfile: '@hassan:example.test',
+        profiles: {
+          '@hassan:example.test': {
+            displayName: 'test',
+            matrixUrl: 'https://matrix.example.test',
+            realmServerUrl: 'https://realms.example.test/app/',
+            password: 'test',
+          },
+        },
+      }),
+      { mode: 0o600 },
+    );
+    process.env.HOME = tempHome;
+    resetProfileManager();
     process.env.MATRIX_USERNAME = 'hassan';
 
     let capturedDarkfactoryModuleUrl: string | undefined;
 
+    try {
     await runFactoryEntrypoint(
       {
         briefUrl,
@@ -243,7 +298,6 @@ module('factory-entrypoint', function (hooks) {
           url: resolution.url,
           serverUrl: resolution.serverUrl,
           createdRealm: false,
-          authorization: 'Bearer target-realm-token',
         }),
         createSeed: async (_brief, _url, options) => {
           capturedDarkfactoryModuleUrl = options.darkfactoryModuleUrl;
@@ -279,5 +333,10 @@ module('factory-entrypoint', function (hooks) {
       capturedDarkfactoryModuleUrl,
       'https://realms.example.test/software-factory/darkfactory',
     );
+    } finally {
+      process.env.HOME = originalHome;
+      resetProfileManager();
+      rmSync(tempHome, { recursive: true, force: true });
+    }
   });
 });

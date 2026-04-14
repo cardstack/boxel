@@ -11,7 +11,9 @@ import {
   type MatrixAuth,
 } from './auth';
 
-const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.boxel-cli');
+function getDefaultConfigDir(): string {
+  return path.join(os.homedir(), '.boxel-cli');
+}
 const PROFILES_FILENAME = 'profiles.json';
 
 export interface Profile {
@@ -89,7 +91,7 @@ export class ProfileManager {
   private profilesFile: string;
 
   constructor(configDir?: string) {
-    this.configDir = configDir || DEFAULT_CONFIG_DIR;
+    this.configDir = configDir || getDefaultConfigDir();
     this.profilesFile = path.join(this.configDir, PROFILES_FILENAME);
     this.config = this.loadConfig();
   }
