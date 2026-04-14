@@ -126,7 +126,13 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   let router = new Router();
 
-  router.get('/', healthCheck, args.serveIndex, args.serveHostApp, args.serveFromRealm);
+  router.get(
+    '/',
+    healthCheck,
+    args.serveIndex,
+    args.serveHostApp,
+    args.serveFromRealm,
+  );
   router.get('/_standby', healthCheck, args.serveHostApp, args.serveFromRealm);
   router.post('/_server-session', handleCreateSessionRequest(args));
   router.post(
