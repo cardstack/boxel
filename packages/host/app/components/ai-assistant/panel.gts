@@ -64,6 +64,11 @@ export default class AiAssistantPanel extends Component<Signature> {
         data-test-ai-assistant-panel
         data-test-room-has-messages={{if this.roomResource.messages true false}}
         data-test-room-is-empty={{if this.roomResource.messages false true}}
+        data-test-has-current-room={{if this.matrixService.currentRoomId "true" "false"}}
+        data-test-has-room-resource={{if this.roomResource "true" "false"}}
+        data-test-is-ready={{if this.isReady "true" "false"}}
+        data-test-is-create-room-idle={{if this.aiAssistantPanelService.isCreateRoomIdle "true" "false"}}
+        data-test-loading-rooms={{if this.aiAssistantPanelService.loadingRooms "true" "false"}}
         ...attributes
       >
         <@resizeHandle class='ai-assistant-panel-resize-handle' />
