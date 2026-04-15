@@ -140,10 +140,6 @@ module('factory-target-realm', function (hooks) {
     );
     assert.strictEqual(result.authorization, 'Bearer target-realm-token');
   });
-
-  // NOTE: The full HTTP flow (Matrix login → server token → create-realm →
-  // realm-auth → readiness check) is tested in boxel-cli's integration tests.
-  // The factory's responsibility is just to delegate to BoxelCLIClient.
 });
 
 function restoreEnv(name: string, value: string | undefined): void {
