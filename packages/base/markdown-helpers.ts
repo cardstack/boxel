@@ -83,3 +83,49 @@ export function markdownLink(
   encodedHref = encodedHref.replace(/\(/g, '%28').replace(/\)/g, '%29');
   return `[${safeText}](${encodedHref})`;
 }
+
+// CS-10787: Build a fenced code block. The fence is made of at least three
+// backticks, expanded to be longer than any run of backticks in the content
+// so the fence isn't prematurely closed. An optional language identifier
+// labels the block for syntax highlighting consumers.
+export function fencedCodeBlock(
+  content: string | null | undefined,
+  language?: string,
+): string {
+  let body = content ?? '';
+  let longestRun = 0;
+  let match = body.match(/`+/g);
+  if (match) {
+    for (let run of match) {
+      if (run.length > longestRun) longestRun = run.length;
+    }
+  }
+  let fence = '`'.repeat(Math.max(3, longestRun + 1));
+  let lang = language ? language : '';
+  // Ensure the body ends with a newline so the closing fence sits on its own
+  // line. CommonMark allows omission, but normalizing avoids surprises.
+  let normalized = body.endsWith('\n') ? body : `${body}\n`;
+  return `${fence}${lang}\n${normalized}${fence}`;
+}
+
+// CS-10787: Build a markdown image reference `![alt](url)` with proper
+// escaping/encoding. If url is missing, fall back to a plain placeholder so
+// downstream consumers still get something meaningful.
+export function markdownImage(
+  alt: string | null | undefined,
+  url: string | null | undefined,
+): string {
+  if (!url) {
+    let safeAlt = markdownEscape(alt ?? '');
+    return safeAlt ? `[binary image: ${safeAlt}]` : '[binary image]';
+  }
+  let safeAlt = markdownEscape(alt ?? '');
+  let encodedHref: string;
+  try {
+    encodedHref = encodeURI(url);
+  } catch {
+    encodedHref = url;
+  }
+  encodedHref = encodedHref.replace(/\(/g, '%28').replace(/\)/g, '%29');
+  return `![${safeAlt}](${encodedHref})`;
+}

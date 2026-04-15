@@ -110,6 +110,7 @@ import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
 import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
+import { markdownImage } from './markdown-helpers';
 import FileDefEditTemplate from './default-templates/file-def-edit';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
@@ -2812,6 +2813,27 @@ export class ImageDef extends FileDef {
   static atom: BaseDefComponent = ImageDefAtomTemplate;
   static embedded: BaseDefComponent = ImageDefEmbeddedTemplate;
   static fitted: BaseDefComponent = ImageDefFittedTemplate;
+
+  // CS-10787: emit a markdown image reference. If no URL is available we
+  // fall back to a placeholder that names the image — useful to downstream
+  // consumers (e.g. an LLM ingesting the markdown) without a broken link.
+  static markdown: BaseDefComponent = class Markdown extends Component<
+    typeof ImageDef
+  > {
+    get text() {
+      let model = this.args.model;
+      if (!model) {
+        return '';
+      }
+      let url = model.url ?? model.sourceUrl ?? '';
+      let name = model.name ?? '';
+      if (!url && !name) {
+        return '';
+      }
+      return markdownImage(name, url);
+    }
+    <template>{{this.text}}</template>
+  };
 }
 
 export class CardInfoField extends FieldDef {
