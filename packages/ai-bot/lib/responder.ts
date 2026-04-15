@@ -185,15 +185,15 @@ export class Responder {
     error: OpenAIError | string,
     opts?: { reloadBillingData?: boolean },
   ) {
+    if (this.responseState.isStreamingFinished) {
+      return;
+    }
     Sentry.captureException(error, {
       extra: {
         roomId: this.matrixResponsePublisher.roomId,
         agentId: this.matrixResponsePublisher.agentId,
       },
     });
-    if (this.responseState.isStreamingFinished) {
-      return;
-    }
     return await this.matrixResponsePublisher.sendError(error, opts);
   }
 
