@@ -125,7 +125,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 isActive=(not state.dismissModal)
                 additionalElements=this.focusTrapAdditionalElements
                 focusTrapOptions=(hash
-                  initialFocus='[data-test-search-field]' allowOutsideClick=true
+                  initialFocus='[data-search-field]' allowOutsideClick=true
                 )
               }}
               {{on 'keydown' this.handleKeydown}}

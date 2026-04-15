@@ -1809,6 +1809,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+          data-boxel-card-container
           data-test-boxel-card-container
           style
           data-test-card="http://test-realm/test/germaine"
@@ -1835,6 +1836,7 @@ module(`Integration | realm indexing`, function (hooks) {
       ),
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+        data-boxel-card-container
         data-test-boxel-card-container
         style
         data-test-card="http://test-realm/test/germaine"
@@ -1851,6 +1853,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
       cleanWhiteSpace(`<div
         class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+        data-boxel-card-container
         data-test-boxel-card-container
         style
         data-test-card="http://test-realm/test/germaine"
@@ -1945,6 +1948,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(
         `<div
           class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
+          data-boxel-card-container
           data-test-boxel-card-container
           style
           data-test-card="http://test-realm/test/germaine"
@@ -1971,6 +1975,7 @@ module(`Integration | realm indexing`, function (hooks) {
       ),
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card fitted-format display-container-true"
+      data-boxel-card-container
       data-test-boxel-card-container
       style
       data-test-card="http://test-realm/test/germaine"
@@ -1987,6 +1992,7 @@ module(`Integration | realm indexing`, function (hooks) {
       cleanWhiteSpace(stripScopedCSSAttributes(embeddedHtml![cardDefRefURL])),
       cleanWhiteSpace(`<div
       class="ember-view boxel-card-container boxel-card-container--boundaries field-component-card embedded-format display-container-true"
+      data-boxel-card-container
       data-test-boxel-card-container
       style
       data-test-card="http://test-realm/test/germaine"
@@ -2582,9 +2588,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
-            cardInfo: {
-              theme: null,
-            },
+            cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/1`,
             publication: {
               id: `${testRealmURL}Publication/pacific`,
@@ -2598,9 +2602,7 @@ module(`Integration | realm indexing`, function (hooks) {
               fullName: ' ',
               cardTitle: ' ',
             },
-            cardInfo: {
-              theme: null,
-            },
+            cardInfo: { cardThumbnail: null, theme: null },
             id: `${testRealmURL}Post/2`,
             publication: {
               id: `${testRealmURL}Publication/pacific`,
@@ -2919,14 +2921,14 @@ module(`Integration | realm indexing`, function (hooks) {
             firstName: 'Mango',
             owner: null,
             cardTitle: 'Mango',
-            cardInfo: { theme: null },
+            cardInfo: { cardThumbnail: null, theme: null },
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
             firstName: 'Van Gogh',
             owner: null,
             cardTitle: 'Van Gogh',
-            cardInfo: { theme: null },
+            cardInfo: { cardThumbnail: null, theme: null },
           },
         ],
         friend: null,
@@ -2973,6 +2975,7 @@ module(`Integration | realm indexing`, function (hooks) {
     );
 
     if (card?.type === 'doc') {
+      // debug
       assert.deepEqual(card.doc, {
         data: {
           id: `${testRealmURL}PetPerson/burcu`,
@@ -3700,7 +3703,7 @@ module(`Integration | realm indexing`, function (hooks) {
             id: `${testRealmURL}Friend/mango`,
           },
           cardDescription: 'Dog owner',
-          cardInfo: { theme: null },
+          cardInfo: { cardThumbnail: null, theme: null },
         },
         cardInfo: { theme: null },
       });
@@ -4250,7 +4253,7 @@ module(`Integration | realm indexing`, function (hooks) {
                   cardInfo: { theme: null },
                 },
               ],
-              cardInfo: { theme: null },
+              cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
           cardInfo: { theme: null },
@@ -4423,6 +4426,7 @@ module(`Integration | realm indexing`, function (hooks) {
               friends: [
                 {
                   cardInfo: {
+                    cardThumbnail: null,
                     theme: null,
                   },
                   firstName: 'Mango',
@@ -4436,7 +4440,7 @@ module(`Integration | realm indexing`, function (hooks) {
                 },
                 { id: vanGoghID },
               ],
-              cardInfo: { theme: null },
+              cardInfo: { cardThumbnail: null, theme: null },
             },
           ],
           cardInfo: { theme: null },
@@ -4482,9 +4486,11 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file-pencil',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/folder-pen',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/hash',
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/image',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/import',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/letter-case',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/link',
@@ -4502,13 +4508,19 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/default-templates/card-info',
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
+        'https://cardstack.com/base/default-templates/file-def-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/head',
+        'https://cardstack.com/base/default-templates/image-def-atom',
+        'https://cardstack.com/base/default-templates/image-def-embedded',
+        'https://cardstack.com/base/default-templates/image-def-fitted',
+        'https://cardstack.com/base/default-templates/image-def-isolated',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/field-support',
+        'https://cardstack.com/base/file-menu-items',
         'https://cardstack.com/base/helpers/sanitized-html',
         'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
@@ -4522,6 +4534,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
+        'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
         'https://packages/@cardstack/boxel-host/commands/open-create-listing-modal',
@@ -4530,12 +4543,14 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
         'https://packages/@cardstack/boxel-host/commands/show-card',
+        'https://packages/@cardstack/boxel-host/commands/show-file',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
         'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
+        'https://packages/@cardstack/runtime-common/marked-sync',
         'https://packages/@ember/component',
         'https://packages/@ember/component/template-only',
         'https://packages/@ember/helper',
@@ -4552,6 +4567,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
         'https://packages/lodash',
+        'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
       ],
       'the card references for the instance are correct',
@@ -4610,10 +4626,12 @@ module(`Integration | realm indexing`, function (hooks) {
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/captions',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/code',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/eye',
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/file-pencil',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/folder-pen',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/git-branch',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/hash',
+        'http://localhost:4206/@cardstack/boxel-icons/v1/icons/image',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/import',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/layers-subtract',
         'http://localhost:4206/@cardstack/boxel-icons/v1/icons/layout-list',
@@ -4637,13 +4655,19 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/default-templates/card-info',
         'https://cardstack.com/base/default-templates/embedded',
         'https://cardstack.com/base/default-templates/field-edit',
+        'https://cardstack.com/base/default-templates/file-def-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/head',
+        'https://cardstack.com/base/default-templates/image-def-atom',
+        'https://cardstack.com/base/default-templates/image-def-embedded',
+        'https://cardstack.com/base/default-templates/image-def-fitted',
+        'https://cardstack.com/base/default-templates/image-def-isolated',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
         'https://cardstack.com/base/default-templates/markdown',
         'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/field-support',
+        'https://cardstack.com/base/file-menu-items',
         'https://cardstack.com/base/helpers/sanitized-html',
         'https://cardstack.com/base/helpers/set-background-image',
         'https://cardstack.com/base/links-to-editor',
@@ -4659,6 +4683,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://cardstack.com/base/watched-array',
         'https://packages/@cardstack/boxel-host/commands/copy-and-edit',
         'https://packages/@cardstack/boxel-host/commands/copy-card',
+        'https://packages/@cardstack/boxel-host/commands/copy-file-to-realm',
         'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
         'https://packages/@cardstack/boxel-host/commands/generate-example-cards',
         'https://packages/@cardstack/boxel-host/commands/generate-readme-spec',
@@ -4668,12 +4693,14 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/@cardstack/boxel-host/commands/populate-with-sample-data',
         'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
         'https://packages/@cardstack/boxel-host/commands/show-card',
+        'https://packages/@cardstack/boxel-host/commands/show-file',
         'https://packages/@cardstack/boxel-host/commands/switch-submode',
         'https://packages/@cardstack/boxel-ui/components',
         'https://packages/@cardstack/boxel-ui/helpers',
         'https://packages/@cardstack/boxel-ui/icons',
         'https://packages/@cardstack/boxel-ui/modifiers',
         'https://packages/@cardstack/runtime-common',
+        'https://packages/@cardstack/runtime-common/marked-sync',
         'https://packages/@ember/component',
         'https://packages/@ember/component/template-only',
         'https://packages/@ember/helper',
@@ -4691,6 +4718,7 @@ module(`Integration | realm indexing`, function (hooks) {
         'https://packages/ember-provide-consume-context',
         'https://packages/ember-resources',
         'https://packages/lodash',
+        'https://packages/super-fast-md5',
         'https://packages/tracked-built-ins',
       ],
       'the card references for the instance are correct',

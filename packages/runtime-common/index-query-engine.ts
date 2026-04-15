@@ -1155,6 +1155,7 @@ export class IndexQueryEngine {
     // used in the handleFieldArity (the multiple tableValuedTree expressions will
     // collapse into a single function)
     let rootPluralPath: string | undefined;
+    let isNumericField = false;
 
     let exp = await this.walkFilterFieldPath(
       definition,
@@ -1175,6 +1176,9 @@ export class IndexQueryEngine {
           ];
         } else if (!rootPluralPath) {
           let fieldName = currentField(pathTraveled);
+          isNumericField =
+            field.serializerName === 'number' ||
+            field.serializerName === 'big-integer';
           return [...expression, '->>', param(fieldName)];
         }
         return expression;
@@ -1207,7 +1211,22 @@ export class IndexQueryEngine {
       },
     );
     if (!rootPluralPath) {
-      exp = ['search_doc', ...exp];
+      // Numeric fields (NumberField, BigIntegerField) are stored as JSON
+      // numbers/strings but PostgreSQL's ->> extracts them as text. Cast to
+      // numeric so that ORDER BY and range comparisons use numeric ordering
+      // instead of lexicographic ordering (e.g. 100 > 20 > 3, not
+      // "100" < "20" < "3"). SQLite's ->> preserves the original JSON type so
+      // no cast is needed there.
+      if (isNumericField) {
+        exp = [
+          dbExpression({ pg: '(', sqlite: '' }),
+          'search_doc',
+          ...exp,
+          dbExpression({ pg: ')::numeric', sqlite: '' }),
+        ];
+      } else {
+        exp = ['search_doc', ...exp];
+      }
     }
     return exp;
   }

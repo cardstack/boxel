@@ -47,7 +47,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       return {
         filter: {
           type: {
-            module: `${baseRealm.url}file-api`,
+            module: `${baseRealm.url}card-api`,
             name: 'FileDef',
           },
         },
@@ -223,7 +223,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             .send({
               filter: {
                 on: {
-                  module: `${baseRealm.url}file-api`,
+                  module: `${baseRealm.url}card-api`,
                   name: 'FileDef',
                 },
                 eq: {
@@ -1171,6 +1171,109 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
             response.body.data[0].id,
             `${realmHref}vangogh`,
             'correct card returned',
+          );
+        });
+      });
+    });
+
+    module('numeric sort (postgres)', function () {
+      let testRealm: Realm;
+      let request: SuperTest<Test>;
+      let realmHref: string;
+      let searchPath: string;
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        request: SuperTest<Test>;
+      }) {
+        testRealm = args.testRealm;
+        request = args.request;
+        let realmURL = new URL(testRealm.url);
+        realmHref = realmURL.href;
+        searchPath = `${realmURL.pathname.replace(/\/$/, '')}/_search`;
+      }
+
+      function bookType() {
+        return {
+          module: `${realmHref}book`,
+          name: 'Book',
+        };
+      }
+
+      module('public readable realm', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          permissions: {
+            '*': ['read'],
+          },
+          realmURL: testRealmURLFor('numeric-sort-test/'),
+          fileSystem: {
+            'book.gts': `
+              import { contains, field, CardDef, Component } from 'https://cardstack.com/base/card-api';
+              import StringField from 'https://cardstack.com/base/string';
+              import NumberField from 'https://cardstack.com/base/number';
+              export class Book extends CardDef {
+                static displayName = 'Book';
+                @field title = contains(StringField);
+                @field editions = contains(NumberField);
+                static isolated = class Isolated extends Component<typeof this> {
+                  <template><h1><@fields.title /></h1></template>
+                };
+              }
+            `,
+            'book-a.json': {
+              data: {
+                type: 'card',
+                attributes: { title: 'Book A', editions: 3 },
+                meta: {
+                  adoptsFrom: { module: './book', name: 'Book' },
+                },
+              },
+            },
+            'book-b.json': {
+              data: {
+                type: 'card',
+                attributes: { title: 'Book B', editions: 200 },
+                meta: {
+                  adoptsFrom: { module: './book', name: 'Book' },
+                },
+              },
+            },
+            'book-c.json': {
+              data: {
+                type: 'card',
+                attributes: { title: 'Book C', editions: 10 },
+                meta: {
+                  adoptsFrom: { module: './book', name: 'Book' },
+                },
+              },
+            },
+          },
+          onRealmSetup,
+        });
+
+        test('sorts by numeric field in correct numeric order (not lexicographic)', async function (assert) {
+          let response = await request
+            .post(searchPath)
+            .set('Accept', 'application/vnd.card+json')
+            .set('X-HTTP-Method-Override', 'QUERY')
+            .send({
+              filter: {
+                type: bookType(),
+              },
+              sort: [
+                {
+                  by: 'editions',
+                  on: bookType(),
+                  direction: 'asc',
+                },
+              ],
+            });
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.deepEqual(
+            response.body.data.map((d: any) => d.id),
+            [`${realmHref}book-a`, `${realmHref}book-c`, `${realmHref}book-b`],
+            'books sorted numerically: 3, 10, 200 (not lexicographic "10", "200", "3")',
           );
         });
       });

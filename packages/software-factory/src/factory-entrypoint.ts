@@ -1,17 +1,13 @@
 import { parseArgs as parseNodeArgs } from 'node:util';
 
-import {
-  bootstrapProjectArtifacts,
-  type FactoryBootstrapOptions,
-  type FactoryBootstrapResult,
-} from './factory-bootstrap';
+import { inferDarkfactoryModuleUrl } from './factory-seed';
 import { loadFactoryBrief, type FactoryBrief } from './factory-brief';
 import { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 import {
-  runFactoryImplement,
-  type ImplementConfig,
-  type ImplementResult,
-} from './factory-implement';
+  runFactoryIssueLoop,
+  type IssueLoopWiringConfig,
+} from './factory-issue-loop-wiring';
+import { createSeedIssue, type SeedIssueResult } from './factory-seed';
 import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
@@ -19,19 +15,16 @@ import {
   type FactoryTargetRealmResolution,
   type ResolveFactoryTargetRealmOptions,
 } from './factory-target-realm';
+import type { IssueLoopResult } from './issue-loop';
 import { createBoxelRealmFetch } from './realm-auth';
-
-const allowedModes = ['bootstrap', 'implement', 'resume'] as const;
-
-export type FactoryEntrypointMode = (typeof allowedModes)[number];
 
 export interface FactoryEntrypointOptions {
   briefUrl: string;
   targetRealmUrl: string | null;
   realmServerUrl: string | null;
-  mode: FactoryEntrypointMode;
   model?: string;
   debug?: boolean;
+  retryBlocked?: boolean;
 }
 
 export interface FactoryEntrypointAction {
@@ -44,35 +37,32 @@ export interface FactoryEntrypointBriefSummary extends FactoryBrief {
   url: string;
 }
 
-export interface FactoryEntrypointBootstrapSummary {
-  projectId: string;
-  knowledgeArticleIds: string[];
-  issueIds: string[];
-  activeIssue: {
-    id: string;
-    status: string;
-  };
+export interface FactoryEntrypointSeedSummary {
+  seedIssueId: string;
+  seedIssueStatus: SeedIssueResult['status'];
 }
 
-export interface FactoryEntrypointImplementSummary {
-  outcome: ImplementResult['outcome'];
-  iterations: number;
-  issueId: string;
-  message?: string;
-  toolCallCount: number;
+export interface FactoryEntrypointIssueLoopSummary {
+  outcome: IssueLoopResult['outcome'];
+  outerCycles: number;
+  issueResults: {
+    issueId: string;
+    exitReason: string;
+    innerIterations: number;
+    toolCallCount: number;
+  }[];
 }
 
 export interface FactoryEntrypointSummary {
   command: 'factory:go';
-  mode: FactoryEntrypointMode;
   brief: FactoryEntrypointBriefSummary;
   targetRealm: {
     url: string;
     ownerUsername: string;
   };
-  bootstrap: FactoryEntrypointBootstrapSummary;
+  seedIssue: FactoryEntrypointSeedSummary;
   actions: FactoryEntrypointAction[];
-  implement?: FactoryEntrypointImplementSummary;
+  issueLoop?: FactoryEntrypointIssueLoopSummary;
   result: {
     status: 'ready' | 'completed' | 'failed';
     nextStep: string;
@@ -87,19 +77,19 @@ export interface RunFactoryEntrypointDependencies {
   bootstrapTargetRealm?: (
     resolution: FactoryTargetRealmResolution,
   ) => Promise<FactoryTargetRealmBootstrapResult>;
-  bootstrapArtifacts?: (
+  createSeed?: (
     brief: FactoryBrief,
     targetRealmUrl: string,
-    options?: FactoryBootstrapOptions,
-  ) => Promise<FactoryBootstrapResult>;
-  implement?: (config: ImplementConfig) => Promise<ImplementResult>;
+    options: { fetch?: typeof globalThis.fetch; darkfactoryModuleUrl: string },
+  ) => Promise<SeedIssueResult>;
+  runIssueLoop?: (config: IssueLoopWiringConfig) => Promise<IssueLoopResult>;
 }
 export { FactoryEntrypointUsageError } from './factory-entrypoint-errors';
 
 export function getFactoryEntrypointUsage(): string {
   return [
     'Usage:',
-    '  pnpm factory:go -- --brief-url <url> --target-realm-url <url> [options]',
+    '  pnpm factory:go --brief-url <url> --target-realm-url <url> [options]',
     '',
     'Required:',
     '  --brief-url <url>           Absolute URL for the source brief card',
@@ -107,7 +97,7 @@ export function getFactoryEntrypointUsage(): string {
     '',
     'Options:',
     '  --realm-server-url <url>   Realm server URL (default: http://localhost:4201/)',
-    '  --mode <mode>               One of: bootstrap, implement, resume',
+    '  --no-retry-blocked          Skip retrying blocked issues (by default, blocked issues are reset to backlog)',
     '  --model <model>             OpenRouter model ID (e.g., anthropic/claude-sonnet-4)',
     '  --debug                     Log LLM prompts and responses to stderr',
     '  --help                      Show this usage information',
@@ -147,8 +137,8 @@ export function parseFactoryEntrypointArgs(
         help: {
           type: 'boolean',
         },
-        mode: {
-          type: 'string',
+        'no-retry-blocked': {
+          type: 'boolean',
         },
         model: {
           type: 'string',
@@ -178,7 +168,6 @@ export function parseFactoryEntrypointArgs(
     typeof parsed.values['realm-server-url'] === 'string'
       ? normalizeUrl(parsed.values['realm-server-url'], '--realm-server-url')
       : null;
-  let mode = parseMode(parsed.values.mode);
   let model =
     typeof parsed.values.model === 'string'
       ? parsed.values.model.trim() || undefined
@@ -188,9 +177,9 @@ export function parseFactoryEntrypointArgs(
     briefUrl: normalizeUrl(briefUrl, '--brief-url'),
     targetRealmUrl: normalizeUrl(targetRealmUrl, '--target-realm-url'),
     realmServerUrl,
-    mode,
     model,
     debug: parsed.values.debug === true ? true : undefined,
+    retryBlocked: parsed.values['no-retry-blocked'] === true ? false : true,
   };
 }
 
@@ -227,64 +216,61 @@ export async function runFactoryEntrypoint(
     primeRealmURL: targetRealm.url,
   });
 
-  let artifacts = await (
-    dependencies?.bootstrapArtifacts ?? bootstrapProjectArtifacts
-  )(brief, targetRealm.url, {
-    fetch: realmFetch,
-    darkfactoryModuleUrl: new URL(
-      'software-factory/darkfactory',
-      targetRealm.serverUrl,
-    ).href,
-  });
+  let darkfactoryModuleUrl = inferDarkfactoryModuleUrl(targetRealm.url);
+
+  // Create the seed issue in the realm
+  let seedResult = await (dependencies?.createSeed ?? createSeedIssue)(
+    brief,
+    targetRealm.url,
+    { fetch: realmFetch, darkfactoryModuleUrl },
+  );
 
   let summary = buildFactoryEntrypointSummary(
     options,
     brief,
     targetRealm,
-    artifacts,
+    seedResult,
   );
 
-  // Run implement mode if requested
-  if (options.mode === 'implement') {
-    let implementFn = dependencies?.implement ?? runFactoryImplement;
-    let implementResult = await implementFn({
-      briefUrl: options.briefUrl,
-      targetRealmUrl: targetRealm.url,
-      realmServerUrl: targetRealm.serverUrl,
-      ownerUsername: targetRealm.ownerUsername,
-      authorization: targetRealm.authorization,
-      bootstrapResult: artifacts,
-      model: options.model,
-      debug: options.debug,
-      fetch: dependencies?.fetch,
-    });
+  // Run the issue-driven loop
+  let loopFn = dependencies?.runIssueLoop ?? runFactoryIssueLoop;
+  let loopResult = await loopFn({
+    briefUrl: options.briefUrl,
+    targetRealmUrl: targetRealm.url,
+    realmServerUrl: targetRealm.serverUrl,
+    ownerUsername: targetRealm.ownerUsername,
+    authorization: targetRealm.authorization,
+    model: options.model,
+    debug: options.debug,
+    retryBlocked: options.retryBlocked,
+    fetch: dependencies?.fetch,
+  });
 
-    summary.implement = {
-      outcome: implementResult.outcome,
-      iterations: implementResult.iterations,
-      issueId: implementResult.issueId,
-      message: implementResult.message,
-      toolCallCount: implementResult.toolCallLog.length,
-    };
+  summary.issueLoop = {
+    outcome: loopResult.outcome,
+    outerCycles: loopResult.outerCycles,
+    issueResults: loopResult.issueResults.map((ir) => ({
+      issueId: ir.issueId,
+      exitReason: ir.exitReason,
+      innerIterations: ir.innerIterations,
+      toolCallCount: ir.toolCallLog.length,
+    })),
+  };
 
-    let succeeded =
-      implementResult.outcome === 'tests_passed' ||
-      implementResult.outcome === 'done';
-    summary.result = {
-      status: succeeded ? 'completed' : 'failed',
-      nextStep: succeeded
-        ? 'advance-to-next-issue'
-        : `implement-${implementResult.outcome}`,
-    };
-  }
+  let succeeded = loopResult.outcome === 'all_issues_done';
+  summary.result = {
+    status: succeeded ? 'completed' : 'failed',
+    nextStep: succeeded ? 'all-issues-completed' : `loop-${loopResult.outcome}`,
+  };
 
   return summary;
 }
+
 export function buildFactoryEntrypointSummary(
-  options: FactoryEntrypointOptions,
+  _options: FactoryEntrypointOptions,
   brief: FactoryBrief,
   targetRealm: FactoryTargetRealmBootstrapResult,
-  artifacts: FactoryBootstrapResult,
+  seedResult: SeedIssueResult,
 ): FactoryEntrypointSummary {
   let actions: FactoryEntrypointAction[] = [
     {
@@ -320,15 +306,14 @@ export function buildFactoryEntrypointSummary(
         : 'target realm already existed',
     },
     {
-      name: 'bootstrapped-project-artifacts',
+      name: 'created-seed-issue',
       status: 'ok',
-      detail: `project=${artifacts.project.status} issues=${artifacts.issues.map((t) => t.status).join(',')}`,
+      detail: `${seedResult.issueId} (${seedResult.status})`,
     },
   ];
 
   return {
     command: 'factory:go',
-    mode: options.mode,
     brief: {
       ...brief,
       url: brief.sourceUrl,
@@ -337,22 +322,14 @@ export function buildFactoryEntrypointSummary(
       url: targetRealm.url,
       ownerUsername: targetRealm.ownerUsername,
     },
-    bootstrap: {
-      projectId: artifacts.project.id,
-      knowledgeArticleIds: artifacts.knowledgeArticles.map((ka) => ka.id),
-      issueIds: artifacts.issues.map((t) => t.id),
-      activeIssue: {
-        id: artifacts.activeIssue.id,
-        status: artifacts.activeIssue.status,
-      },
+    seedIssue: {
+      seedIssueId: seedResult.issueId,
+      seedIssueStatus: seedResult.status,
     },
     actions,
     result: {
       status: 'ready',
-      nextStep:
-        options.mode === 'bootstrap'
-          ? 'bootstrap-target-realm'
-          : 'bootstrap-and-select-active-issue',
+      nextStep: 'run-issue-loop',
     },
   };
 }
@@ -366,32 +343,6 @@ function requireStringValue(
   }
 
   throw new FactoryEntrypointUsageError(`Missing required ${flagName}`);
-}
-
-function parseMode(value: string | boolean | undefined): FactoryEntrypointMode {
-  if (value === undefined) {
-    return 'implement';
-  }
-
-  if (typeof value !== 'string') {
-    throw new FactoryEntrypointUsageError(
-      'Expected --mode to be a string value',
-    );
-  }
-
-  if (isFactoryEntrypointMode(value)) {
-    return value;
-  }
-
-  throw new FactoryEntrypointUsageError(
-    `Invalid --mode "${value}". Expected one of: ${allowedModes.join(', ')}`,
-  );
-}
-
-function isFactoryEntrypointMode(
-  value: string,
-): value is FactoryEntrypointMode {
-  return (allowedModes as readonly string[]).includes(value);
 }
 
 function normalizeUrl(rawUrl: string, flagName: string): string {

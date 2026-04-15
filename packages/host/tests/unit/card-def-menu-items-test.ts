@@ -5,6 +5,7 @@ import type { MenuItemOptions } from '@cardstack/boxel-ui/helpers';
 
 import {
   baseRealm,
+  realmURL,
   testRealmURL,
   type Loader,
 } from '@cardstack/runtime-common';
@@ -132,6 +133,27 @@ module('Unit | CardDef menu items', function (hooks) {
       hasSampleDataTagged,
       'contains items tagged playground-sample-data',
     );
+  });
+
+  test('code-mode-playground omits Create Listing for index card', function (assert: Assert) {
+    let card = new DummyCard(
+      `${testRealmURL}index`,
+      'Workspace Index',
+    ) as unknown as CardDef;
+    (card as unknown as Record<symbol, URL>)[realmURL] = new URL(testRealmURL);
+
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'code-mode-playground',
+      commandContext: {} as any,
+      format: 'isolated',
+    });
+
+    let hasCreateListing = items.some(
+      (i: MenuItemOptions) => i.label === 'Create Listing',
+    );
+    assert.notOk(hasCreateListing, 'does not contain Create Listing');
   });
 
   test('code-mode-preview includes Copy Card URL and Open in Interact Mode', function (assert: Assert) {

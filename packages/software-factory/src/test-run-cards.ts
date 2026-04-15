@@ -19,7 +19,7 @@ export async function createTestRun(
   options: TestRunRealmOptions & CreateTestRunOptions,
 ): Promise<{ testRunId: string; created: boolean; error?: string }> {
   let seq = options.sequenceNumber ?? 1;
-  let testRunId = `Test Runs/${slug}-${seq}`;
+  let testRunId = `Validations/test_${slug}-${seq}`;
 
   let document = buildTestRunCardDocument(
     testNames,

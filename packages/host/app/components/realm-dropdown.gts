@@ -49,6 +49,7 @@ export default class RealmDropdown extends Component<Signature> {
           @size='small'
           @disabled={{@disabled}}
           {{bindings}}
+          data-realm-dropdown-trigger
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
           title={{this.selectedItemText}}

@@ -36,9 +36,7 @@ export default class HeadFormatPreview extends Component<Signature> {
     let getMarkupSource = () => {
       // Remove the noise of the card container in the raw head preview
       return (
-        element.querySelector<HTMLElement>(
-          '[data-test-boxel-card-container]',
-        ) ??
+        element.querySelector<HTMLElement>('[data-boxel-card-container]') ??
         element.firstElementChild ??
         element
       );

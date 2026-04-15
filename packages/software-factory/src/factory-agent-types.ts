@@ -103,10 +103,12 @@ export interface TestFailure {
   stackTrace?: string;
 }
 
+/** @deprecated Use ValidationResults from the validation pipeline instead. */
 export interface TestResult {
   status: 'passed' | 'failed' | 'error';
   passedCount: number;
   failedCount: number;
+  skippedCount?: number;
   failures: TestFailure[];
   durationMs: number;
 }
@@ -135,6 +137,8 @@ export interface ValidationStepResult {
   passed: boolean;
   files?: string[];
   errors: ValidationError[];
+  /** Step-specific structured data for context formatting (POJOs, not cards). */
+  details?: Record<string, unknown>;
 }
 
 /** Aggregated results from a full validation run (all steps). */
@@ -165,6 +169,8 @@ export interface SchedulableIssue extends IssueData {
   order: number;
   /** Short summary for logging. */
   summary?: string;
+  /** Issue type (e.g., 'bootstrap', 'feature'). Used by context builder. */
+  issueType?: string;
 }
 
 export interface ToolResult {
@@ -181,6 +187,7 @@ export interface AgentContext {
   skills: ResolvedSkill[];
   /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
   tools?: ToolManifest[];
+  /** @deprecated Use validationResults/validationContext instead. */
   testResults?: TestResult;
   /** @deprecated Tool results are now returned inline during the agent's turn. */
   toolResults?: ToolResult[];
@@ -189,8 +196,10 @@ export interface AgentContext {
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
-  /** Validation results from the prior inner-loop iteration. */
+  /** Validation results from the prior inner-loop iteration (used for pass/fail checks). */
   validationResults?: ValidationResults;
+  /** Pre-formatted validation context from Validator.formatForContext() — the sole mechanism for validation reaching the LLM. */
+  validationContext?: string;
   /** Brief URL for bootstrap issues. */
   briefUrl?: string;
 }
@@ -222,6 +231,44 @@ export interface ChatMessage {
 }
 
 // ---------------------------------------------------------------------------
+// Loop agent types (relocated from factory-loop.ts for Phase 2)
+// ---------------------------------------------------------------------------
+
+/** Minimal tool call log entry (mirrors ToolCallEntry from factory-tool-builder). */
+export interface LoopToolCallEntry {
+  tool: string;
+  args: Record<string, unknown>;
+  result: unknown;
+  durationMs: number;
+}
+
+/** Minimal tool definition (mirrors FactoryTool from factory-tool-builder). */
+export interface LoopFactoryTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export type AgentRunStatus = 'done' | 'blocked' | 'needs_iteration';
+
+export interface AgentRunResult {
+  status: AgentRunStatus;
+  toolCalls: LoopToolCallEntry[];
+  /** Clarification message when status is 'blocked'. */
+  message?: string;
+}
+
+/**
+ * Agent interface required by the execution loop.
+ * The agent receives context and tools, calls tools during its turn,
+ * and returns a status signal with a log of tool calls made.
+ */
+export interface LoopAgent {
+  run(context: AgentContext, tools: LoopFactoryTool[]): Promise<AgentRunResult>;
+}
+
+// ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
 
@@ -240,4 +287,13 @@ export function resolveFactoryModel(cliModel?: string): string {
   }
 
   return FACTORY_DEFAULT_MODEL;
+}
+
+/**
+ * Derive a slug from an issue ID by taking the last path segment.
+ * e.g., "Issues/sticky-note-define-core" → "sticky-note-define-core"
+ */
+export function deriveIssueSlug(issueId: string): string {
+  let parts = issueId.split('/');
+  return parts[parts.length - 1];
 }

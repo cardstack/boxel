@@ -54,13 +54,13 @@ You previously invoked the following tools. Use these results to inform your imp
 
 # Instructions
 
-Implement this issue:
+Implement this issue in this order:
 
 1. Use search_realm and read_file to inspect existing realm state
-2. Use write_file to create or update card definitions (.gts) and/or card instances (.json) in the target realm
-3. Create a Catalog Spec card in the Spec/ folder for the top-level card (adoptsFrom https://cardstack.com/base/spec#Spec)
-4. Create at least one sample card instance and link it from the Catalog Spec via linkedExamples
-5. Use write_file to create QUnit test files (.test.gts) co-located with card definitions
+2. Use write_file to create or update card definitions (.gts) in the target realm
+3. Use write_file to create QUnit test files (.test.gts) co-located with card definitions — write tests BEFORE any sample instances or catalog specs
+4. Create at least one sample card instance (.json) in the target realm
+5. Create a Catalog Spec card in the Spec/ folder for the top-level card (adoptsFrom https://cardstack.com/base/spec#Spec), linking sample instances via linkedExamples
 6. Call signal_done when all implementation and test files have been written
 
-Start with the smallest working implementation, then add the test.
+The validation pipeline runs tests automatically after `signal_done` — write tests, then signal done, and the orchestrator handles the rest. Do NOT set the issue status to "done" yourself — the orchestrator manages issue status transitions based on validation results.

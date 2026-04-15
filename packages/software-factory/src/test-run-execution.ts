@@ -6,7 +6,11 @@ import { logger } from './logger';
 
 import { chromium } from '@playwright/test';
 
-import { ensureTrailingSlash, searchRealm } from './realm-operations';
+import {
+  ensureTrailingSlash,
+  getNextValidationSequenceNumber,
+  searchRealm,
+} from './realm-operations';
 import { createTestRun, completeTestRun } from './test-run-cards';
 import { parseQunitResults } from './test-run-parsing';
 import type {
@@ -58,6 +62,7 @@ export async function resolveTestRun(
   }
 
   let sequenceNumber = await getNextSequenceNumber(
+    options.slug,
     realmOptions,
     options.lastSequenceNumber,
   );
@@ -142,29 +147,28 @@ async function findResumableTestRun(
   };
 }
 
+/**
+ * Get the next sequence number for a given slug by searching existing
+ * TestRun cards in the realm. Delegates to the shared utility in
+ * realm-operations.ts.
+ */
 async function getNextSequenceNumber(
+  slug: string,
   options: TestRunRealmOptions,
   minSequenceNumber = 0,
 ): Promise<number> {
-  let result = await searchRealm(
-    options.targetRealmUrl,
+  let seq = await getNextValidationSequenceNumber(
+    slug,
+    'Validations/test_',
+    options.testResultsModuleUrl,
+    'TestRun',
     {
-      filter: {
-        on: { module: options.testResultsModuleUrl, name: 'TestRun' },
-      },
-      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
-      page: { size: 1 },
+      targetRealmUrl: options.targetRealmUrl,
+      authorization: options.authorization,
+      fetch: options.fetch,
     },
-    { authorization: options.authorization, fetch: options.fetch },
   );
-
-  let latest = result?.ok
-    ? (result.data?.[0] as
-        | { attributes?: { sequenceNumber?: number } }
-        | undefined)
-    : undefined;
-  let fromIndex = latest?.attributes?.sequenceNumber ?? 0;
-  return Math.max(fromIndex, minSequenceNumber) + 1;
+  return Math.max(seq, minSequenceNumber + 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +194,8 @@ function buildQunitTestPageHtml(opts: {
   targetRealmUrl: string;
   /** Browser-accessible URL of the realm server (compat proxy) */
   realmProxyUrl: string;
+  /** Optional slug identifying the issue under test — shown in the page title. */
+  slug?: string;
 }): string {
   let host = opts.assetServerUrl.replace(/\/$/, '');
   // Ember config URLs must use the browser-accessible realm proxy,
@@ -268,7 +274,7 @@ function buildQunitTestPageHtml(opts: {
 <head>
   <meta charset="utf-8">
   ${metaTags.join('\n  ')}
-  <title>Software Factory Card Tests</title>
+  <title>Software Factory Card Tests${opts.slug ? ` — ${opts.slug}` : ''}</title>
   ${linkTags.join('\n  ')}
 </head>
 <body>
@@ -466,6 +472,7 @@ export async function executeTestRunFromRealm(
       hostDistDir,
       targetRealmUrl: options.targetRealmUrl,
       realmProxyUrl: options.hostAppUrl,
+      slug: options.slug,
     });
     setHtml(html);
 
@@ -506,10 +513,13 @@ export async function executeTestRunFromRealm(
 
     await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
 
-    // Wait for QUnit to finish (results collected via inline script hooks)
+    // Wait for QUnit to finish (results collected via inline script hooks).
+    // Note: waitForFunction(fn, arg, options) — pass null as arg so the
+    // timeout option is correctly in the third position.
     await page.waitForFunction(
       () => (window as any).__qunitResults?.runEnd !== null,
-      { timeout: 120_000 },
+      null,
+      { timeout: 300_000 },
     );
 
     let qunitResults: QunitResults = await page.evaluate(

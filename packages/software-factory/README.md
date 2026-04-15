@@ -4,14 +4,17 @@ The software factory is an automated card-development system that takes a brief 
 
 ## How It Works
 
-The factory flow has four phases:
+The factory uses an **issue-driven agentic loop** where the LLM agent processes issues one at a time, with automated validation after every turn:
 
 1. **Intake** — Fetch a brief card from a source realm, normalize it into a structured representation
-2. **Bootstrap** — Create a target realm (if needed), populate it with a Project card, Knowledge Articles, and starter Issues
-3. **Implementation** — An LLM agent picks up the active issue and uses tool calls to write card definitions (`.gts`), sample instances (`.json`), catalog specs (`Spec/`), and QUnit test files (`.test.gts`) into the target realm
-4. **Verification** — The orchestrator runs QUnit tests via Playwright in a real browser, collects structured results into a TestRun card, and feeds failures back to the agent for iteration
+2. **Seed Issue** — Create a single bootstrap issue in the target realm (`Issues/bootstrap-seed`)
+3. **Bootstrap (via agent)** — The agent picks up the seed issue, reads the brief, and creates: a Project card, Knowledge Articles, and two implementation Issues
+4. **Implementation (via agent)** — The agent works through each implementation issue in priority/dependency order:
+   - Issue #1: Create card definition (`.gts`) and co-located QUnit tests (`.test.gts`)
+   - Issue #2: Create catalog spec (`Spec/`) with linked example instances
+5. **Validation (after every agent turn)** — The orchestrator runs a 5-step validation pipeline: parse, lint, evaluate, instantiate, and run tests. Failures are fed back to the agent for self-correction.
 
-The agent iterates (implement → test → fix) until tests pass or max iterations are reached. The orchestrator (the "ralph loop") controls iteration count, test execution, and issue selection deterministically — the LLM handles only the implementation work.
+The orchestrator (`runIssueLoop`) is a thin scheduler that picks the next unblocked issue, hands it to the agent, runs validation, and reads the updated issue state. All domain decisions (what to implement, when to create sub-issues, when to mark as blocked) live in the agent's prompt and skills.
 
 ### Realm Roles
 
@@ -21,16 +24,16 @@ The agent iterates (implement → test → fix) until tests pass or max iteratio
 
 ### Target Realm Artifact Structure
 
-| Path                  | What it is                                                          |
-| --------------------- | ------------------------------------------------------------------- |
-| `Projects/`           | Project card with objective, scope, success criteria                |
-| `Issues/`             | Issue cards tracking implementation work                            |
-| `Knowledge Articles/` | Context articles derived from the brief                             |
-| `*.gts`               | Card definition files                                               |
-| `*.test.gts`          | Co-located QUnit test files                                         |
-| `CardName/`           | Sample card instances with realistic data                           |
-| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances |
-| `Test Runs/`          | TestRun cards with structured pass/fail results                     |
+| Path                  | What it is                                                           |
+| --------------------- | -------------------------------------------------------------------- |
+| `Projects/`           | Project card with objective, scope, success criteria                 |
+| `Issues/`             | Issue cards — bootstrap seed + implementation issues                 |
+| `Knowledge Articles/` | Context articles derived from the brief                              |
+| `*.gts`               | Card definition files                                                |
+| `*.test.gts`          | Co-located QUnit test files                                          |
+| `CardName/`           | Sample card instances with realistic data                            |
+| `Spec/`               | Catalog Spec cards linking to card definitions and sample instances  |
+| `Validations/`        | Validation artifacts — TestRun cards (test results) and lint results |
 
 ## Prerequisites
 
@@ -57,7 +60,7 @@ Then run the factory:
 ```bash
 cd packages/software-factory
 
-pnpm factory:go -- \
+pnpm factory:go \
   --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
   --target-realm-url http://localhost:4201/your-username/my-test-realm/ \
   --debug
@@ -65,29 +68,72 @@ pnpm factory:go -- \
 
 The `--debug` flag shows LLM prompts, tool calls and their results, and `console.log` output from QUnit tests as they run.
 
+### Retrying blocked issues
+
+By default, the factory resets blocked issues to `backlog` with `critical` priority so the scheduler picks them up first. Only issues blocked by validation failures (not by dependency on another issue) are reset. Prior validation failure details are preserved in issue comments so the agent has context for the retry.
+
+To skip retrying blocked issues, use `--no-retry-blocked`:
+
+```bash
+pnpm factory:go \
+  --brief-url http://localhost:4201/software-factory/Wiki/sticky-note \
+  --target-realm-url http://localhost:4201/your-username/my-test-realm/ \
+  --no-retry-blocked
+```
+
 ### What to expect on the command line
 
 ```
-[factory:go] mode=implement brief=http://localhost:4201/software-factory/Wiki/sticky-note
-[factory:go] Starting bootstrap + implement flow...
-[test-run-execution] Serving QUnit page at http://127.0.0.1:<port> for realm ...
-[test-run-execution] QUnit completed in <N>ms: <N> test(s)
-[factory-implement] Updated ticket status to done
-[factory:go] Implement complete: outcome=tests_passed iterations=<N> toolCalls=<N>
+[factory:go] brief=http://localhost:4201/software-factory/Wiki/sticky-note
+[factory:go] Starting seed issue + issue-driven loop...
+[factory-seed] Creating seed issue at Issues/bootstrap-seed.json
+[issue-loop] Starting issue loop: targetRealm=..., maxIterationsPerIssue=5
+[issue-loop] Outer cycle 1: picked issue "Issues/bootstrap-seed" (status=backlog, priority=critical)
+[issue-loop]   Inner iteration 1/5 for issue "Issues/bootstrap-seed"
+  ... agent creates Project, Knowledge Articles, 2 implementation Issues ...
+[issue-loop] Outer cycle 2: picked issue "Issues/<slug>-define-card" (status=backlog, priority=high)
+  ... agent writes card definition + tests, validation pipeline runs ...
+[issue-loop] Outer cycle 3: picked issue "Issues/<slug>-catalog-spec" (status=backlog, priority=medium)
+  ... agent writes catalog spec + examples ...
+[issue-loop] Outer loop finished: outcome=all_issues_done, cycles=3
+[factory:go] Issue loop complete: outcome=all_issues_done outerCycles=3 issues=3
 ```
 
 ### What to expect in the Boxel host app (target realm)
 
-| Folder / File              | What it is                                                                |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `Projects/`                | A Project card with the brief's objective and success criteria            |
-| `Issues/`                  | Issue cards — the active issue should show status `done`                  |
-| `Knowledge Articles/`      | Context articles derived from the brief                                   |
-| `*.gts`                    | Card definition file(s) for the implemented card                          |
-| `*.test.gts`               | Co-located QUnit test file(s)                                             |
-| `StickyNote/` (or similar) | Sample card instance(s) with realistic data                               |
-| `Spec/`                    | Catalog Spec card(s) linking to the card definition and sample instances  |
-| `Test Runs/`               | TestRun card(s) with structured pass/fail results grouped by QUnit module |
+| Folder / File                | What it is                                                               |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `Projects/`                  | A Project card with the brief's objective and success criteria           |
+| `Issues/bootstrap-seed`      | Bootstrap issue — status `done`, issueType `bootstrap`                   |
+| `Issues/<slug>-define-card`  | Implementation issue #1 — card definition + tests                        |
+| `Issues/<slug>-catalog-spec` | Implementation issue #2 — catalog spec + examples                        |
+| `Knowledge Articles/`        | Brief context and agent onboarding articles                              |
+| `*.gts`                      | Card definition file(s) for the implemented card                         |
+| `*.test.gts`                 | Co-located QUnit test file(s)                                            |
+| `CardName/`                  | Sample card instance(s) with realistic data                              |
+| `Spec/`                      | Catalog Spec card(s) linking to the card definition and sample instances |
+| `Validations/`               | Validation artifacts — TestRun cards and lint results (pass/fail)        |
+
+## Architecture
+
+```
+factory:go → createSeedIssue() → runIssueLoop()
+                                    ├── IssueScheduler (picks next unblocked issue)
+                                    ├── ContextBuilder.buildForIssue() (loads project/knowledge from issue relationships)
+                                    ├── ToolUseFactoryAgent.run() (LLM calls tools)
+                                    └── ValidationPipeline.validate() (parse, lint, evaluate, instantiate, test)
+```
+
+Key modules:
+
+- `src/factory-entrypoint.ts` — CLI entrypoint, creates seed issue + runs issue loop
+- `src/factory-seed.ts` — creates the bootstrap seed issue in the realm
+- `src/factory-issue-loop-wiring.ts` — constructs all loop infrastructure (auth, tools, agent, validator)
+- `src/issue-loop.ts` — the two-level issue-driven loop (outer: issues, inner: iterations with validation)
+- `src/issue-scheduler.ts` — issue selection with priority/dependency ordering
+- `src/factory-agent-tool-use.ts` — LLM agent using native tool-use protocol
+- `src/factory-context-builder.ts` — assembles agent context from issue relationships
+- `src/validators/validation-pipeline.ts` — 5-step validation after every agent turn
 
 ## Layout
 

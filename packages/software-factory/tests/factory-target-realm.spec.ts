@@ -67,6 +67,10 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
   ).href;
 
   try {
+    // The factory always runs the issue loop after seed creation. Without
+    // OPENROUTER_API_KEY the loop will fail when it tries to invoke the LLM
+    // agent, so we expect a non-zero exit. The seed issue is still created
+    // before the loop starts — we verify that below by reading it from the realm.
     let result = await runCommand(
       'node',
       [
@@ -80,8 +84,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         targetRealmUrl,
         '--realm-server-url',
         realmServerURL,
-        '--mode',
-        'bootstrap',
+        '--no-retry-blocked',
       ],
       {
         cwd: packageRoot,
@@ -95,57 +98,47 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
       },
     );
 
+    // The factory exits non-zero because the loop fails without an API key,
+    // but the seed issue and target realm were created before the loop ran.
     expect(
       result.status,
-      `factory:go failed (status=${result.status}).\nstderr:\n${result.stderr}\nstdout:\n${result.stdout}`,
-    ).toBe(0);
+      `factory:go unexpected status.\nstderr:\n${result.stderr}\nstdout:\n${result.stdout}`,
+    ).toBe(1);
 
-    let summary = JSON.parse(result.stdout) as {
-      command: string;
-      targetRealm: { url: string; ownerUsername: string };
-      bootstrap: {
-        projectId: string;
-        issueIds: string[];
-        knowledgeArticleIds: string[];
-        activeIssue: { id: string; status: string };
-      };
-    };
-
-    expect(summary.command).toBe('factory:go');
-    expect(summary.targetRealm.ownerUsername).toBe(targetUsername);
-    expect(summary.bootstrap.projectId).toBe('Projects/sticky-note-mvp');
-    expect(summary.bootstrap.issueIds).toHaveLength(3);
-    expect(summary.bootstrap.knowledgeArticleIds).toHaveLength(2);
-    expect(summary.bootstrap.activeIssue.id).toBe(
-      'Issues/sticky-note-define-core',
-    );
-    expect(summary.bootstrap.activeIssue.status).toBe('created');
-
-    // Verify the project card actually exists in the newly created target realm
+    // Verify the seed issue exists in the newly created target realm
     // by authenticating as the target user who owns the realm
     let targetRealmToken = await getRealmToken(
       matrixURL,
       targetUsername,
       targetPassword,
-      summary.targetRealm.url,
+      targetRealmUrl,
     );
 
-    let projectUrl = new URL(
-      'Projects/sticky-note-mvp',
-      summary.targetRealm.url,
-    ).href;
-    let projectResponse = await fetch(projectUrl, {
+    let seedIssueUrl = new URL('Issues/bootstrap-seed', targetRealmUrl).href;
+    let seedIssueResponse = await fetch(seedIssueUrl, {
       headers: {
         Accept: SupportedMimeType.CardSource,
         Authorization: targetRealmToken,
       },
     });
 
-    expect(projectResponse.ok).toBe(true);
-    let projectJson = (await projectResponse.json()) as {
-      data: { attributes: { projectName: string } };
+    expect(seedIssueResponse.ok).toBe(true);
+    let issueJson = (await seedIssueResponse.json()) as {
+      data: {
+        attributes: {
+          issueType: string;
+          status: string;
+          summary: string;
+        };
+      };
     };
-    expect(projectJson.data.attributes.projectName).toBe('Sticky Note MVP');
+    expect(issueJson.data.attributes.issueType).toBe('bootstrap');
+    // The loop picks up the seed issue and sets it to in_progress before
+    // the agent fails (no OPENROUTER_API_KEY), so the status is in_progress.
+    expect(issueJson.data.attributes.status).toBe('in_progress');
+    expect(issueJson.data.attributes.summary).toContain(
+      'Process brief and create project artifacts',
+    );
   } finally {
     await new Promise<void>((r, reject) =>
       briefServer.close((err) => (err ? reject(err) : r())),

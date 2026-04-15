@@ -75,7 +75,7 @@ export class ContextBuilder {
     issue: IssueData;
     knowledge: KnowledgeArticleData[];
     targetRealmUrl: string;
-    /** Test results from the previous iteration, if any. */
+    /** @deprecated Use validationResults/validationContext via buildForIssue() instead. */
     testResults?: TestResult;
   }): Promise<AgentContext> {
     let { project, issue, knowledge, targetRealmUrl } = params;
@@ -101,7 +101,7 @@ export class ContextBuilder {
       targetRealmUrl,
     };
 
-    // Include test results when iterating after a failed test run
+    // @deprecated — Phase 1 test results. Use buildForIssue() with validationContext instead.
     if (params.testResults) {
       context.testResults = params.testResults;
     }
@@ -117,13 +117,15 @@ export class ContextBuilder {
    * - project from issue.project
    * - knowledge from issue.relatedKnowledge
    *
-   * Accepts optional validationResults from the prior inner-loop iteration
-   * so the agent can self-correct on failures.
+   * Accepts optional validationResults and pre-formatted validationContext
+   * from the prior inner-loop iteration so the agent can self-correct on failures.
    */
   async buildForIssue(params: {
     issue: IssueData;
     targetRealmUrl: string;
     validationResults?: ValidationResults;
+    /** Pre-formatted validation context string from Validator.formatForContext(). */
+    validationContext?: string;
     briefUrl?: string;
   }): Promise<AgentContext> {
     if (!this.issueLoader) {
@@ -141,9 +143,16 @@ export class ContextBuilder {
     ]);
 
     if (!project) {
-      throw new Error(
-        `Issue "${issue.id}" has no linked project — cannot build context`,
-      );
+      // Bootstrap issues have no project yet — the agent creates it.
+      // Supply a minimal stub so AgentContext.project stays required.
+      let issueType = (issue as Record<string, unknown>).issueType;
+      if (issueType === 'bootstrap') {
+        project = { id: 'bootstrap-pending' };
+      } else {
+        throw new Error(
+          `Issue "${issue.id}" has no linked project — cannot build context`,
+        );
+      }
     }
 
     // Step 2: Resolve and load skills
@@ -167,6 +176,10 @@ export class ContextBuilder {
 
     if (params.validationResults) {
       context.validationResults = params.validationResults;
+    }
+
+    if (params.validationContext) {
+      context.validationContext = params.validationContext;
     }
 
     if (params.briefUrl) {

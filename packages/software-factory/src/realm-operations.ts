@@ -2,7 +2,7 @@
  * Shared realm operations for the software-factory scripts.
  *
  * Centralizes HTTP-based realm API calls so they're easy to find and
- * refactor to boxel-cli tool calls when --jwt support is added (CS-10529).
+ * refactor to boxel-cli tool calls (CS-10529).
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -24,6 +24,18 @@ let log = logger('realm-operations');
 
 export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+/**
+ * Ensure a card instance path ends with `.json`. The realm API uses
+ * `card+source` content negotiation which requires the full file path
+ * including extension.
+ */
+export function ensureJsonExtension(path: string): string {
+  if (!path.endsWith('.json')) {
+    return `${path}.json`;
+  }
+  return path;
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +240,7 @@ export async function readFile(
   options?: RealmFetchOptions,
 ): Promise<{
   ok: boolean;
+  status?: number;
   document?: LooseSingleCardDocument;
   /** Raw text content for non-JSON files (e.g., .gts source). */
   content?: string;
@@ -249,6 +262,7 @@ export async function readFile(
       let body = await response.text();
       return {
         ok: false,
+        status: response.status,
         error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
       };
     }
@@ -256,10 +270,10 @@ export async function readFile(
     let text = await response.text();
     try {
       let document = JSON.parse(text) as LooseSingleCardDocument;
-      return { ok: true, document };
+      return { ok: true, status: response.status, document };
     } catch {
       // Non-JSON content (e.g., .gts source files) — return as raw text
-      return { ok: true, content: text };
+      return { ok: true, status: response.status, content: text };
     }
   } catch (err) {
     return {
@@ -304,6 +318,56 @@ export async function writeFile(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Issue Comments
+// ---------------------------------------------------------------------------
+
+/**
+ * Append a comment to an issue card using read-patch-write.
+ * Issue descriptions are immutable — all post-creation context goes through comments.
+ */
+export async function addCommentToIssue(
+  realmUrl: string,
+  path: string,
+  comment: { body: string; author: string; datetime?: string },
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; error?: string }> {
+  let filePath = ensureJsonExtension(path);
+
+  let existing = await readFile(realmUrl, filePath, options);
+  if (!existing.ok || !existing.document) {
+    return {
+      ok: false,
+      error: `Failed to read issue at ${filePath}: ${existing.error ?? 'no document'}`,
+    };
+  }
+
+  let attrs = (existing.document.data?.attributes ?? {}) as Record<
+    string,
+    unknown
+  >;
+  let existingComments = Array.isArray(attrs.comments)
+    ? (attrs.comments as unknown[])
+    : [];
+
+  existingComments.push({
+    body: comment.body,
+    author: comment.author,
+    datetime: comment.datetime ?? new Date().toISOString(),
+  });
+
+  attrs.comments = existingComments;
+  attrs.updatedAt = new Date().toISOString();
+  existing.document.data.attributes = attrs;
+
+  return writeFile(
+    realmUrl,
+    filePath,
+    JSON.stringify(existing.document, null, 2),
+    options,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -793,6 +857,192 @@ async function addRealmToMatrixAccountData(
 }
 
 // ---------------------------------------------------------------------------
+// Lint
+// ---------------------------------------------------------------------------
+
+/** A single lint diagnostic message (mirrors ESLint's Linter.LintMessage). */
+export interface LintMessage {
+  ruleId: string | null;
+  severity: 1 | 2; // 1 = warning, 2 = error
+  message: string;
+  line: number;
+  column: number;
+  endLine?: number;
+  endColumn?: number;
+}
+
+/** Response from the realm `_lint` endpoint (mirrors ESLint's Linter.FixReport). */
+export interface LintFileResponse {
+  fixed: boolean;
+  output: string;
+  messages: LintMessage[];
+}
+
+/**
+ * Lint a single file's source code via the realm's `_lint` endpoint.
+ * The endpoint runs ESLint with `@cardstack/boxel` rules and Prettier formatting.
+ */
+export async function lintFile(
+  realmUrl: string,
+  source: string,
+  filename: string,
+  options?: RealmFetchOptions,
+): Promise<LintFileResponse> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedUrl = ensureTrailingSlash(realmUrl);
+  let lintUrl = `${normalizedUrl}_lint`;
+
+  let headers: Record<string, string> = {
+    Accept: SupportedMimeType.JSON,
+    'Content-Type': SupportedMimeType.CardSource,
+    'X-Filename': filename,
+    'X-HTTP-Method-Override': 'QUERY',
+  };
+  if (options?.authorization) {
+    headers['Authorization'] = options.authorization;
+  }
+
+  let response = await fetchImpl(lintUrl, {
+    method: 'POST',
+    headers,
+    body: source,
+  });
+
+  if (!response.ok) {
+    let body = await response.text().catch(() => '(no body)');
+    throw new Error(
+      `_lint returned HTTP ${response.status}: ${body.slice(0, 300)}`,
+    );
+  }
+
+  return (await response.json()) as LintFileResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Validation Artifact Sequence Numbers
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the next sequence number for a validation artifact by searching
+ * existing cards of the given type in the realm. Each slug (issue) gets its
+ * own independent sequence starting from 1.
+ *
+ * Shared by TestValidationStep and LintValidationStep so that sequence
+ * numbering is derived from realm state (survives process restarts).
+ */
+export async function getNextValidationSequenceNumber(
+  slug: string,
+  prefix: string,
+  moduleUrl: string,
+  cardName: string,
+  options: RealmFetchOptions & { targetRealmUrl: string },
+): Promise<number> {
+  let result = await searchRealm(
+    options.targetRealmUrl,
+    {
+      filter: {
+        on: { module: moduleUrl, name: cardName },
+      },
+      sort: [{ by: 'sequenceNumber', direction: 'desc' }],
+    },
+    { authorization: options.authorization, fetch: options.fetch },
+  );
+
+  if (!result?.ok || !result.data) {
+    return 1;
+  }
+
+  let targetRealmUrl = ensureTrailingSlash(options.targetRealmUrl);
+  let fullPrefix = `${prefix}${slug}-`;
+  let maxSeq = 0;
+
+  for (let card of result.data) {
+    let cardId = (card as { id?: string }).id ?? '';
+    let relativePath = cardId.startsWith(targetRealmUrl)
+      ? cardId.slice(targetRealmUrl.length)
+      : cardId;
+    if (relativePath.startsWith(fullPrefix)) {
+      let attrs = (card as { attributes?: { sequenceNumber?: number } })
+        .attributes;
+      let seq = attrs?.sequenceNumber ?? 0;
+      if (seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  }
+
+  return maxSeq + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Fetch Realm Filenames
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the list of file paths from a realm via the `_mtimes` endpoint.
+ * Returns relative file paths (e.g., `hello.gts`, `Cards/my-card.json`).
+ */
+export async function fetchRealmFilenames(
+  realmUrl: string,
+  options?: RealmFetchOptions,
+): Promise<{ filenames: string[]; error?: string }> {
+  let fetchImpl = options?.fetch ?? globalThis.fetch;
+  let normalizedRealmUrl = ensureTrailingSlash(realmUrl);
+
+  let headers = buildAuthHeaders(
+    options?.authorization,
+    SupportedMimeType.JSONAPI,
+  );
+
+  let mtimesUrl = `${normalizedRealmUrl}_mtimes`;
+  let mtimesResponse: Response;
+  try {
+    mtimesResponse = await fetchImpl(mtimesUrl, { method: 'GET', headers });
+  } catch (err) {
+    return {
+      filenames: [],
+      error: `Failed to fetch _mtimes: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  if (!mtimesResponse.ok) {
+    let body = await mtimesResponse.text();
+    return {
+      filenames: [],
+      error: `_mtimes returned HTTP ${mtimesResponse.status}: ${body.slice(0, 300)}`,
+    };
+  }
+
+  let mtimes: Record<string, number>;
+  try {
+    let json = await mtimesResponse.json();
+    // _mtimes returns JSON:API format: { data: { attributes: { mtimes: {...} } } }
+    mtimes =
+      (json as { data?: { attributes?: { mtimes?: Record<string, number> } } })
+        ?.data?.attributes?.mtimes ?? json;
+  } catch {
+    return {
+      filenames: [],
+      error: 'Failed to parse _mtimes response as JSON',
+    };
+  }
+
+  let filenames: string[] = [];
+  for (let fullUrl of Object.keys(mtimes)) {
+    if (!fullUrl.startsWith(normalizedRealmUrl)) {
+      continue;
+    }
+    let relativePath = fullUrl.slice(normalizedRealmUrl.length);
+    if (!relativePath || relativePath.endsWith('/')) {
+      continue;
+    }
+    filenames.push(relativePath);
+  }
+
+  return { filenames: filenames.sort() };
+}
+
+// ---------------------------------------------------------------------------
 // Pull Realm Files
 // ---------------------------------------------------------------------------
 
@@ -800,7 +1050,7 @@ async function addRealmToMatrixAccountData(
  * Download all files from a remote realm to a local directory using the
  * `_mtimes` endpoint to discover file paths.
  *
- * TODO: Replace with `boxel pull --jwt <token>` once CS-10529 is implemented.
+ * TODO: Replace with `boxel pull` once CS-10529 is implemented.
  *
  * Returns the list of relative file paths that were downloaded.
  */

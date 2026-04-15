@@ -24,32 +24,15 @@ In the previous iteration, you made the following tool calls:
 
 {{/each}}
 
-# Test Results
+# Validation Results
 
-The orchestrator ran tests after your previous attempt. They failed.
+The orchestrator ran validation after your previous attempt. There were failures.
 
-Status: {{testResults.status}}
-Passed: {{testResults.passedCount}}
-Failed: {{testResults.failedCount}}
-Duration: {{testResults.durationMs}}ms
-
-{{#each testResults.failures}}
-
-## Failure: {{testName}}
-
-```
-{{error}}
-```
-
-{{#if stackTrace}}
-Stack trace:
-
-```
-{{stackTrace}}
-```
-
+{{#if validationContext}}
+{{validationContext}}
+{{else}}
+All validation steps passed.
 {{/if}}
-{{/each}}
 
 {{#if toolResults}}
 
@@ -68,11 +51,12 @@ Stack trace:
 
 # Instructions
 
-Fix the failing tests. You have the same tools available. You can:
+Fix the validation failures shown above. You have the same tools available. You can:
 
 - Use read_file to inspect the current state of your implementation
 - Use write_file to update implementation or test files
 - Use search_realm to check what cards exist
+- If a lint violation is in your code, fix the code to pass lint
 - If the test expectation is wrong, fix the test
 - If the implementation is wrong, fix the implementation
 

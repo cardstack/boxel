@@ -6,7 +6,6 @@ import type {
   AgentContext,
   ChatMessage,
   ResolvedSkill,
-  TestFailure,
   ToolManifest,
   ToolResult,
 } from './factory-agent';
@@ -314,6 +313,11 @@ export interface AssembleImplementPromptOptions {
   loader: PromptLoader;
 }
 
+export interface AssembleBootstrapPromptOptions {
+  context: AgentContext;
+  loader: PromptLoader;
+}
+
 export interface AssembleIteratePromptOptions {
   context: AgentContext;
   previousActions: AgentAction[];
@@ -411,6 +415,22 @@ export function assembleImplementPrompt(
 }
 
 /**
+ * Assemble the user prompt for a bootstrap issue.
+ * Includes brief URL and issue description so the agent knows what
+ * project artifacts to create.
+ */
+export function assembleBootstrapPrompt(
+  options: AssembleBootstrapPromptOptions,
+): string {
+  let { context, loader } = options;
+
+  return loader.load('bootstrap-implement', {
+    briefUrl: context.briefUrl,
+    issue: context.issue,
+  });
+}
+
+/**
  * Assemble the user prompt for a test generation pass.
  */
 export function assembleTestPrompt(options: AssembleTestPromptOptions): string {
@@ -437,14 +457,6 @@ export function assembleIteratePrompt(
     realm: a.realm ?? '(none)',
   }));
 
-  let testFailures = (context.testResults?.failures ?? []).map(
-    (f: TestFailure) => ({
-      testName: f.testName,
-      error: f.error,
-      stackTrace: f.stackTrace,
-    }),
-  );
-
   let toolResultsData = buildToolResultsData(context);
 
   return loader.load('ticket-iterate', {
@@ -452,15 +464,7 @@ export function assembleIteratePrompt(
     issue: context.issue,
     iteration,
     previousActions: previousActionsData,
-    testResults: context.testResults
-      ? {
-          status: context.testResults.status,
-          passedCount: context.testResults.passedCount,
-          failedCount: context.testResults.failedCount,
-          durationMs: context.testResults.durationMs,
-          failures: testFailures,
-        }
-      : undefined,
+    validationContext: context.validationContext,
     toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
   });
 }

@@ -14,8 +14,17 @@ import { logger } from '../logger';
 
 let log = logger('cache-realm');
 
+const KNOWN_FLAGS = new Set(['--force']);
+
 async function main(): Promise<void> {
+  let flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
+  let unknownFlags = flags.filter((f) => !KNOWN_FLAGS.has(f));
+  if (unknownFlags.length > 0) {
+    log.warn(`unknown flag(s): ${unknownFlags.join(', ')}`);
+  }
+  let forceRebuild = flags.includes('--force');
   let args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+
   let realmDirs = [
     ...new Set(
       (args.length > 0 ? args : ['test-fixtures/darkfactory-adopter']).map(
@@ -92,6 +101,7 @@ async function main(): Promise<void> {
 
     let result = await ensureCombinedFactoryRealmTemplate(fixtures, {
       context: supportContext,
+      forceRebuild,
     });
 
     payload = {
@@ -120,6 +130,7 @@ async function main(): Promise<void> {
     let template = await ensureFactoryRealmTemplate({
       realmDir: realmDirs[0],
       context: supportContext,
+      forceRebuild,
     });
 
     payload = {
@@ -153,10 +164,22 @@ async function main(): Promise<void> {
       JSON.stringify(payload, null, 2),
     );
   }
-  process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
+
+  // Print a concise summary instead of the full JSON blob.
+  let status = payload.cacheHit ? 'cache hit' : 'built';
+  log.info(
+    `${status}: ${payload.templateDatabaseName} (${payload.preparedTemplates.length} realm(s))`,
+  );
 }
 
-main().catch((error: unknown) => {
-  log.error(String(error));
-  process.exitCode = 1;
-});
+main()
+  .catch((error: unknown) => {
+    log.error(String(error));
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // Lingering handles (fetch keep-alive sockets, pg pool idle) can prevent
+    // the event loop from draining. Schedule a deferred exit so stdout/stderr
+    // have time to flush before the process terminates.
+    setTimeout(() => process.exit(process.exitCode ?? 0), 100).unref();
+  });
