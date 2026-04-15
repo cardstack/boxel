@@ -983,16 +983,27 @@ export async function captureResult(
           } as RenderCapture;
         }
         if (capture === 'textContent') {
-          // For markdown-format renders, the whitespace-preserving container
-          // (CS-10781) is the authoritative source of the markdown string.
-          // Prefer it over the [data-prerender] element so surrounding
-          // route-template whitespace does not leak into the captured output.
-          // renderMeta also uses textContent but its markup has no markdown
-          // container, so the fallback covers that case.
+          // For markdown-format renders, prefer the most specific container.
+          //   1. `[data-markdown-output]` (CS-10784) — emitted by the default
+          //      `static markdown` fallback on CardDef/FieldDef/FileDef. The
+          //      fallback also renders a hidden HTML source sibling that
+          //      `display:none` does NOT exclude from `textContent`, so we
+          //      MUST narrow the capture to this output node specifically;
+          //      otherwise the source HTML's text would contaminate the
+          //      converted markdown.
+          //   2. `[data-markdown-render-container]` (CS-10781) — the route-
+          //      level whitespace-preserving wrapper around any markdown
+          //      template's output. Authored markdown templates render
+          //      directly into this container.
+          //   3. The resolved element itself — covers `renderMeta`, which
+          //      uses textContent but has no markdown wrapper.
+          let markdownOutput = resolvedElement.querySelector(
+            '[data-markdown-output]',
+          ) as HTMLElement | null;
           let markdownContainer = resolvedElement.querySelector(
             '[data-markdown-render-container]',
           ) as HTMLElement | null;
-          let target = markdownContainer ?? resolvedElement;
+          let target = markdownOutput ?? markdownContainer ?? resolvedElement;
           return {
             status: finalStatus,
             value: target.textContent ?? '',

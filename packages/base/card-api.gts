@@ -105,6 +105,7 @@ import DefaultHeadTemplate from './default-templates/head';
 import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import MarkdownTemplate from './default-templates/markdown';
+import DefaultMarkdownFallbackTemplate from './default-templates/markdown-fallback';
 import FileDefEditTemplate from './default-templates/file-def-edit';
 import ImageDefAtomTemplate from './default-templates/image-def-atom';
 import ImageDefEmbeddedTemplate from './default-templates/image-def-embedded';
@@ -2369,6 +2370,11 @@ export class FieldDef extends BaseDef {
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
   static fitted: BaseDefComponent = MissingTemplate;
+  // Default `markdown` fallback (CS-10784): renders the field's HTML embedded
+  // template into a hidden source container, then converts it to markdown via
+  // turndown (registered on `globalThis` by `packages/host`). Subclasses can
+  // override `static markdown` to author bespoke markdown directly.
+  static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 }
 
 export class ReadOnlyField extends FieldDef {
@@ -2628,6 +2634,13 @@ export class FileDef extends BaseDef {
   static isolated = this.embedded;
   static atom = this.embedded;
   static edit: BaseDefComponent = FileDefEditTemplate;
+  // Default `markdown` fallback (CS-10784): inherits from FieldDef but
+  // restated explicitly so this class's own slot is set rather than relying on
+  // prototype lookup — the format-resolution code reads slots via bracket
+  // notation on the resolved class (`(cls as any)[format]`), which traverses
+  // the prototype chain, but having an own property keeps subclass overrides
+  // less surprising.
+  static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 
   static async extractAttributes(
     url: string,
@@ -2797,6 +2810,11 @@ export class CardDef extends BaseDef {
   static edit: BaseDefComponent = DefaultCardDefTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
   static head: BaseDefComponent = DefaultHeadTemplate;
+  // Default `markdown` fallback (CS-10784): renders the card's HTML isolated
+  // template into a hidden source container, then converts it to markdown via
+  // turndown (registered on `globalThis` by `packages/host`). Subclasses can
+  // override `static markdown` to author bespoke markdown directly.
+  static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
 
   static get hasCustomEditTemplate(): boolean {
     return this.edit !== CardDef.edit;
