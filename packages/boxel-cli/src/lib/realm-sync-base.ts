@@ -355,6 +355,115 @@ export abstract class RealmSyncBase {
     console.log(`  Uploaded: ${relativePath}`);
   }
 
+  // Batched upload via the realm's /_atomic endpoint. Returns the set of
+  // paths the server reported as written plus an optional error payload
+  // when the whole batch was rejected. The atomic endpoint validates
+  // every operation first (existence checks for add/update), so a 409 on
+  // any `add` or a 404 on any `update` causes the whole batch to fail
+  // with no side effects on the realm.
+  protected async uploadFilesAtomic(
+    files: Map<string, string>,
+    addPaths: Set<string>,
+  ): Promise<{
+    succeeded: string[];
+    error?: {
+      status: number;
+      perFile: Array<{ path: string; status: number; title: string }>;
+      message: string;
+    };
+  }> {
+    const entries = Array.from(files.entries()).filter(
+      ([relativePath]) => !isProtectedFile(relativePath),
+    );
+
+    if (entries.length === 0) {
+      return { succeeded: [] };
+    }
+
+    if (this.options.dryRun) {
+      for (const [relativePath] of entries) {
+        console.log(`[DRY RUN] Would upload ${relativePath}`);
+      }
+      return { succeeded: [] };
+    }
+
+    const operations = await Promise.all(
+      entries.map(async ([relativePath, localPath]) => {
+        const content = await fs.readFile(localPath, 'utf8');
+        return {
+          op: addPaths.has(relativePath)
+            ? ('add' as const)
+            : ('update' as const),
+          href: this.buildFileUrl(relativePath),
+          data: {
+            type: 'source' as const,
+            attributes: { content },
+            meta: {},
+          },
+        };
+      }),
+    );
+
+    const url = `${this.normalizedRealmUrl}_atomic`;
+    const response = await this.profileManager.authedRealmFetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/vnd.api+json',
+        Accept: 'application/vnd.api+json',
+      },
+      body: JSON.stringify({ 'atomic:operations': operations }),
+    });
+
+    if (response.status === 201) {
+      const body = (await response.json()) as {
+        'atomic:results'?: Array<{ data?: { id?: string } }>;
+      };
+      const hrefToRelative = new Map(
+        entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
+      );
+      const succeeded = (body['atomic:results'] ?? [])
+        .map((r) => r.data?.id)
+        .filter((id): id is string => typeof id === 'string')
+        .map((id) => hrefToRelative.get(id) ?? id);
+      for (const rel of succeeded) {
+        console.log(`  Uploaded: ${rel}`);
+      }
+      return { succeeded };
+    }
+
+    let errorBody: {
+      errors?: Array<{ title?: string; detail?: string; status?: number }>;
+    } = {};
+    try {
+      errorBody = (await response.json()) as typeof errorBody;
+    } catch {
+      // ignore JSON parse failures — fall through to the generic message
+    }
+
+    const perFile = (errorBody.errors ?? []).map((e) => {
+      const detail = e.detail ?? '';
+      const match = detail.match(/Resource (\S+) /);
+      const href = match ? match[1] : '';
+      const relMap = new Map(
+        entries.map(([rel]) => [this.buildFileUrl(rel), rel]),
+      );
+      return {
+        path: relMap.get(href) ?? href,
+        status: e.status ?? response.status,
+        title: e.title ?? 'Error',
+      };
+    });
+
+    return {
+      succeeded: [],
+      error: {
+        status: response.status,
+        perFile,
+        message: `Atomic upload failed: ${response.status} ${response.statusText}`,
+      },
+    };
+  }
+
   protected async downloadFile(
     relativePath: string,
     localPath: string,

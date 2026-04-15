@@ -19,6 +19,28 @@ import * as crypto from 'crypto';
 interface SyncManifest {
   realmUrl: string;
   files: Record<string, string>; // relativePath -> contentHash
+  remoteMtimes?: Record<string, number>; // relativePath -> last-seen server mtime
+}
+
+function isValidManifest(value: unknown): value is SyncManifest {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.realmUrl !== 'string') return false;
+  if (typeof v.files !== 'object' || v.files === null) return false;
+  for (const hash of Object.values(v.files as Record<string, unknown>)) {
+    if (typeof hash !== 'string') return false;
+  }
+  if (v.remoteMtimes !== undefined) {
+    if (typeof v.remoteMtimes !== 'object' || v.remoteMtimes === null) {
+      return false;
+    }
+    for (const mtime of Object.values(
+      v.remoteMtimes as Record<string, unknown>,
+    )) {
+      if (typeof mtime !== 'number') return false;
+    }
+  }
+  return true;
 }
 
 async function pathExists(p: string): Promise<boolean> {
@@ -37,17 +59,29 @@ async function computeFileHash(filePath: string): Promise<string> {
 
 async function loadManifest(localDir: string): Promise<SyncManifest | null> {
   const manifestPath = path.join(localDir, '.boxel-sync.json');
+  let content: string;
   try {
-    const content = await fs.readFile(manifestPath, 'utf8');
-    try {
-      return JSON.parse(content);
-    } catch {
-      return null;
-    }
+    content = await fs.readFile(manifestPath, 'utf8');
   } catch (err: any) {
     if (err.code === 'ENOENT') return null;
     throw err;
   }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    return null;
+  }
+
+  if (!isValidManifest(parsed)) {
+    console.warn(
+      'Warning: .boxel-sync.json is malformed or has an unexpected shape; falling back to a full upload.',
+    );
+    return null;
+  }
+
+  return parsed;
 }
 
 async function saveManifest(
@@ -79,8 +113,9 @@ class RealmPusher extends RealmSyncBase {
     );
 
     console.log('Testing realm access...');
+    let initialRemoteFiles: Map<string, boolean>;
     try {
-      await this.getRemoteFileList('');
+      initialRemoteFiles = await this.getRemoteFileList('');
     } catch (error) {
       console.error('Failed to access realm:', error);
       throw new Error(
@@ -97,15 +132,18 @@ class RealmPusher extends RealmSyncBase {
     const newManifest: SyncManifest = {
       realmUrl: this.options.realmUrl,
       files: {},
+      remoteMtimes: {},
     };
 
     const filesToUpload: Map<string, string> = new Map();
+    const driftedPaths: Set<string> = new Set();
 
-    if (
-      this.pushOptions.force ||
-      !manifest ||
-      manifest.realmUrl !== this.options.realmUrl
-    ) {
+    const canGoIncremental =
+      !this.pushOptions.force &&
+      manifest !== null &&
+      manifest.realmUrl === this.options.realmUrl;
+
+    if (!canGoIncremental) {
       if (this.pushOptions.force) {
         console.log('Force mode: uploading all files');
       } else if (!manifest) {
@@ -121,78 +159,144 @@ class RealmPusher extends RealmSyncBase {
       console.log('Checking for changed files...');
       let skipped = 0;
 
-      const hashResults = await Promise.all(
-        Array.from(localFiles.entries()).map(
-          async ([relativePath, localPath]) => {
-            if (isProtectedFile(relativePath)) {
+      const [remoteMtimes, hashResults] = await Promise.all([
+        this.getRemoteMtimes(),
+        Promise.all(
+          Array.from(localFiles.entries()).map(
+            async ([relativePath, localPath]) => {
+              if (isProtectedFile(relativePath)) {
+                return {
+                  relativePath,
+                  localPath,
+                  currentHash: '',
+                  protected: true,
+                };
+              }
+              const currentHash = await computeFileHash(localPath);
               return {
                 relativePath,
                 localPath,
-                currentHash: '',
-                protected: true,
+                currentHash,
+                protected: false,
               };
-            }
-            const currentHash = await computeFileHash(localPath);
-            return {
-              relativePath,
-              localPath,
-              currentHash,
-              protected: false,
-            };
-          },
+            },
+          ),
         ),
-      );
+      ]);
 
       for (const entry of hashResults) {
         if (entry.protected) {
           skipped++;
           continue;
         }
-        const previousHash = manifest.files[entry.relativePath];
-        if (previousHash !== entry.currentHash) {
+        const previousHash = manifest!.files[entry.relativePath];
+        const prevMtime = manifest!.remoteMtimes?.[entry.relativePath];
+        const currMtime = remoteMtimes.get(entry.relativePath);
+
+        const localChanged = previousHash !== entry.currentHash;
+        const remoteMissing =
+          previousHash !== undefined &&
+          !initialRemoteFiles.has(entry.relativePath);
+        const remoteMtimeChanged =
+          prevMtime !== undefined &&
+          currMtime !== undefined &&
+          currMtime !== prevMtime;
+
+        if (localChanged || remoteMissing || remoteMtimeChanged) {
           filesToUpload.set(entry.relativePath, entry.localPath);
+          if (!localChanged && (remoteMissing || remoteMtimeChanged)) {
+            driftedPaths.add(entry.relativePath);
+          }
         } else {
           skipped++;
           newManifest.files[entry.relativePath] = entry.currentHash;
+          if (prevMtime !== undefined) {
+            newManifest.remoteMtimes![entry.relativePath] = prevMtime;
+          }
         }
       }
 
       if (skipped > 0) {
         console.log(`Skipping ${skipped} unchanged files`);
       }
+
+      if (driftedPaths.size > 0) {
+        const list = Array.from(driftedPaths);
+        const preview = list.slice(0, 5).join(', ');
+        const suffix = list.length > 5 ? ', ...' : '';
+        console.warn(
+          `Warning: ${driftedPaths.size} file(s) changed on the realm since your last push; your local versions will overwrite them: ${preview}${suffix}`,
+        );
+      }
     }
+
+    let uploadFailed = false;
 
     if (filesToUpload.size === 0) {
       console.log('No files to upload - everything is up to date');
     } else {
-      console.log(`Uploading ${filesToUpload.size} file(s)...`);
+      console.log(`Uploading ${filesToUpload.size} file(s) via /_atomic...`);
 
-      const uploadResults = await Promise.all(
-        Array.from(filesToUpload.entries()).map(
-          async ([relativePath, localPath]) => {
-            try {
-              await this.uploadFile(relativePath, localPath);
-              const hash = await computeFileHash(localPath);
-              return { relativePath, hash };
-            } catch (error) {
-              this.hasError = true;
-              console.error(`Error uploading ${relativePath}:`, error);
-              return null;
-            }
-          },
-        ),
-      );
+      // Choose `op: add` vs `op: update` per file. When we have a
+      // manifest, the choice reflects our *intent* so the atomic
+      // endpoint can surface concurrent creation (409) and concurrent
+      // deletion (404):
+      //   - File not in our manifest         →  op: add
+      //   - File in manifest, remote-missing →  op: add (drift re-create)
+      //   - File in manifest, on the remote  →  op: update
+      // With `--force`, or when there is no manifest (first push, or
+      // recovery from a malformed manifest), we defer to the actual
+      // remote state to avoid spurious 409/404s from intent the user
+      // never expressed.
+      const addPaths = new Set<string>();
+      const deferToRemote = this.pushOptions.force || !manifest;
+      for (const relativePath of filesToUpload.keys()) {
+        if (deferToRemote) {
+          if (!initialRemoteFiles.has(relativePath)) {
+            addPaths.add(relativePath);
+          }
+        } else {
+          const knownToManifest = manifest!.files[relativePath] !== undefined;
+          const knownMissing =
+            knownToManifest && !initialRemoteFiles.has(relativePath);
+          if (!knownToManifest || knownMissing) {
+            addPaths.add(relativePath);
+          }
+        }
+      }
 
-      for (const result of uploadResults) {
-        if (result) {
-          newManifest.files[result.relativePath] = result.hash;
+      const result = await this.uploadFilesAtomic(filesToUpload, addPaths);
+
+      if (result.error) {
+        uploadFailed = true;
+        this.hasError = true;
+        console.error(result.error.message);
+        for (const entry of result.error.perFile) {
+          let hint: string;
+          if (entry.status === 409) {
+            hint = `${entry.path} was created on the realm concurrently — run with --force to overwrite.`;
+          } else if (entry.status === 404) {
+            hint = `${entry.path} was removed from the realm concurrently — run with --force to re-create it from your local copy.`;
+          } else {
+            hint = `${entry.path}: ${entry.title}`;
+          }
+          console.error(`  ${hint}`);
+        }
+      } else if (result.succeeded.length > 0) {
+        const uploaded = await Promise.all(
+          result.succeeded.map(async (rel) => ({
+            rel,
+            hash: await computeFileHash(filesToUpload.get(rel)!),
+          })),
+        );
+        for (const { rel, hash } of uploaded) {
+          newManifest.files[rel] = hash;
         }
       }
     }
 
     if (this.pushOptions.deleteRemote) {
-      const remoteFiles = await this.getRemoteFileList();
-      const filesToDelete = new Set(remoteFiles.keys());
+      const filesToDelete = new Set(initialRemoteFiles.keys());
 
       for (const relativePath of filesToDelete) {
         if (isProtectedFile(relativePath)) {
@@ -222,11 +326,32 @@ class RealmPusher extends RealmSyncBase {
       }
     }
 
-    if (!this.options.dryRun) {
+    if (!this.options.dryRun && !uploadFailed && filesToUpload.size > 0) {
+      try {
+        const freshMtimes = await this.getRemoteMtimes();
+        for (const rel of Object.keys(newManifest.files)) {
+          const mtime = freshMtimes.get(rel);
+          if (mtime !== undefined) {
+            newManifest.remoteMtimes![rel] = mtime;
+          }
+        }
+      } catch (error) {
+        console.warn('Could not refresh remote mtimes after upload:', error);
+      }
+    }
+
+    if (
+      newManifest.remoteMtimes &&
+      Object.keys(newManifest.remoteMtimes).length === 0
+    ) {
+      delete newManifest.remoteMtimes;
+    }
+
+    if (!this.options.dryRun && !uploadFailed) {
       await saveManifest(this.options.localDir, newManifest);
     }
 
-    if (!this.options.dryRun && filesToUpload.size > 0) {
+    if (!this.options.dryRun && filesToUpload.size > 0 && !uploadFailed) {
       const checkpointManager = new CheckpointManager(this.options.localDir);
       const pushChanges: CheckpointChange[] = Array.from(
         filesToUpload.keys(),
