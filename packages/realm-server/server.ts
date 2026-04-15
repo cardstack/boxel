@@ -802,7 +802,9 @@ export class RealmServer {
       .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
       .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
 
-    if (!this.indexHTMLHash) {
+    // Recompute the hash in dev mode (where index.html is not cached) so
+    // that changes to the shell are reflected in the ETag.
+    if (!this.indexHTMLHash || isDev) {
       let { createHash } = await import('crypto');
       this.indexHTMLHash = createHash('md5')
         .update(indexHTML)
