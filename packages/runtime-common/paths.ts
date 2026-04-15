@@ -100,8 +100,7 @@ export class RealmPaths {
       return false;
     }
     return (
-      decoded.startsWith(this.url) ||
-      decoded === this.url.replace(/\/$/, '')
+      decoded.startsWith(this.url) || decoded === this.url.replace(/\/$/, '')
     );
   }
 
