@@ -600,6 +600,34 @@ module(basename(__filename), function () {
           '@cardstack/base/fields/',
         );
       });
+
+      test('fileURL throws for scoped RealmIdentifier', function (assert) {
+        assert.throws(
+          () => paths.fileURL('card-api'),
+          /fileURL\(\) requires a URL-based RealmPaths/,
+        );
+      });
+
+      test('directoryURL throws for scoped RealmIdentifier', function (assert) {
+        assert.throws(
+          () => paths.directoryURL('fields'),
+          /directoryURL\(\) requires a URL-based RealmPaths/,
+        );
+      });
+
+      test('inRealm throws for scoped RealmIdentifier', function (assert) {
+        assert.throws(
+          () => paths.inRealm(new URL('http://example.com/foo')),
+          /inRealm\(\) requires a URL-based RealmPaths/,
+        );
+      });
+
+      test('local throws for scoped RealmIdentifier', function (assert) {
+        assert.throws(
+          () => paths.local(new URL('http://example.com/foo')),
+          /local\(\) requires a URL-based RealmPaths/,
+        );
+      });
     });
   });
 });

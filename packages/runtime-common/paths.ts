@@ -23,7 +23,20 @@ export class RealmPaths {
     return this.url as RealmIdentifier;
   }
 
+  private get isURLBased(): boolean {
+    return this.url.startsWith('http://') || this.url.startsWith('https://');
+  }
+
+  private assertURLBased(method: string): void {
+    if (!this.isURLBased) {
+      throw new Error(
+        `${method}() requires a URL-based RealmPaths, but this instance was constructed from a scoped RealmIdentifier ("${this.url}"). Use the RRI-aware methods instead (e.g. fileRRI, directoryRRI, localFromRRI, inRealmRRI).`,
+      );
+    }
+  }
+
   local(url: URL, opts: LocalOptions = {}): LocalPath {
+    this.assertURLBased('local');
     if (!this.inRealm(url)) {
       let error = new Error(`realm ${this.url} does not contain ${url.href}`);
       (error as any).status = 404;
@@ -47,10 +60,12 @@ export class RealmPaths {
   }
 
   fileURL(local: LocalPath): URL {
+    this.assertURLBased('fileURL');
     return new URL(local, this.url);
   }
 
   directoryURL(local: LocalPath): URL {
+    this.assertURLBased('directoryURL');
     if (local === '') {
       // this preserves a root that is not at the origin of the URL
       return new URL(this.url);
@@ -59,6 +74,7 @@ export class RealmPaths {
   }
 
   inRealm(url: URL): boolean {
+    this.assertURLBased('inRealm');
     let decodedHref: string;
     try {
       decodedHref = decodeURI(url.href);
