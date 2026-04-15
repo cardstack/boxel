@@ -124,12 +124,12 @@ export function resolveRRI(
 ): RealmResourceIdentifier {
   // Absolute URL — already resolved
   if (reference.startsWith('http://') || reference.startsWith('https://')) {
-    return reference;
+    return reference as RealmResourceIdentifier;
   }
 
   // Starts with a registered prefix — already resolved
   if (isRegisteredPrefix(reference)) {
-    return reference;
+    return reference as RealmResourceIdentifier;
   }
 
   // "/" and "~/" are not valid RRI reference forms
