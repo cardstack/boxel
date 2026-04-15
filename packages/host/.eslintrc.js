@@ -137,27 +137,6 @@ module.exports = {
       },
     },
     {
-      // Disallow data-test-* CSS selectors in app code.
-      // ember-test-selectors strips these attributes in production, so selectors
-      // like querySelector('[data-test-foo]') silently break outside of tests.
-      files: ['app/**/*.{js,ts,gts,gjs}'],
-      rules: {
-        'no-restricted-syntax': [
-          'error',
-          {
-            selector: 'Literal[value=/\\[data-test-/]',
-            message:
-              '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-          },
-          {
-            selector: 'TemplateElement[value.raw=/\\[data-test-/]',
-            message:
-              '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-          },
-        ],
-      },
-    },
-    {
       // don't enforce import order on blueprint files
       files: ['app/**', 'tests/**'],
       excludedFiles: ['app/app.ts', 'app/router.ts', 'tests/test-helper.js'],

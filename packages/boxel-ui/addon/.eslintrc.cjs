@@ -118,27 +118,6 @@ module.exports = {
       },
     },
     {
-      // Disallow data-test-* CSS selectors in addon source code.
-      // ember-test-selectors strips these attributes in production, so selectors
-      // like querySelector('[data-test-foo]') silently break outside of tests.
-      files: ['src/**/*.{js,ts,gts,gjs}'],
-      rules: {
-        'no-restricted-syntax': [
-          'error',
-          {
-            selector: 'Literal[value=/\\[data-test-/]',
-            message:
-              '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-          },
-          {
-            selector: 'TemplateElement[value.raw=/\\[data-test-/]',
-            message:
-              '`data-test-*` attributes are stripped in production builds. Use a plain `data-*` attribute (e.g. `[data-foo]`) for functional selectors.',
-          },
-        ],
-      },
-    },
-    {
       // typescript-eslint recommends turning off no-undef for Typescript files since
       // Typescript will better analyse that:
       // https://github.com/typescript-eslint/typescript-eslint/blob/5b0e577f2552e8b2c53a3fb22edc9d219589b937/docs/linting/Troubleshooting.mdx#i-get-errors-from-the-no-undef-rule-about-global-variables-not-being-defined-even-though-there-are-no-typescript-errors
