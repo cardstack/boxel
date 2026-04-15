@@ -11,6 +11,7 @@ interface Args {
   id: string;
   type?: StackItemType;
   closeAfterSaving?: boolean;
+  useBaseTemplate?: boolean;
   relationshipContext?: {
     fieldName?: string;
     fieldType?: 'linksTo' | 'linksToMany';
@@ -55,6 +56,7 @@ export class StackItem {
   request?: Deferred<string>;
   stackIndex: number;
   closeAfterSaving?: boolean;
+  useBaseTemplate?: boolean;
   type: StackItemType;
   #id: string;
   relationshipContext?:
@@ -72,6 +74,7 @@ export class StackItem {
       id,
       type,
       closeAfterSaving,
+      useBaseTemplate,
       relationshipContext,
     } = args;
 
@@ -81,6 +84,7 @@ export class StackItem {
     this.stackIndex = stackIndex;
     this.type = inferStackItemType(type);
     this.closeAfterSaving = closeAfterSaving;
+    this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
   }
 
@@ -97,6 +101,7 @@ export class StackItem {
       stackIndex,
       relationshipContext,
       type,
+      useBaseTemplate,
     } = this;
     return new StackItem({
       format,
@@ -106,6 +111,7 @@ export class StackItem {
       type,
       stackIndex,
       relationshipContext,
+      useBaseTemplate,
       ...args,
     });
   }

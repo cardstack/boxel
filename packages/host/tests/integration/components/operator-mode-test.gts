@@ -630,4 +630,64 @@ module('Integration | operator-mode | basics', function (hooks) {
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
+
+  test('can toggle between custom and base edit template', async function (assert) {
+    const cardId = `${testRealmURL}PublishingPacket/story`;
+    const customEdit = '[data-test-pubpacket-edit]';
+    const baseEdit = '[data-test-base-template="edit"]';
+
+    ctx.setCardInOperatorModeState(cardId, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    assert.dom(`[data-test-stack-card="${cardId}"]`).exists();
+    assert.dom(customEdit).exists('custom edit template is shown');
+    assert.dom(baseEdit).doesNotExist();
+
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Toggle Standard View"]');
+    assert.dom(baseEdit).exists('switched to base edit template');
+    assert.dom(customEdit).doesNotExist();
+
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Toggle Custom View"]');
+    assert.dom(customEdit).exists('custom edit template is restored');
+
+    await click('[data-test-more-options-button]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Toggle Standard View"]')
+      .exists('Toggle Standard View is offered again');
+  });
+
+  test('can toggle between custom and base isolated template', async function (assert) {
+    const cardId = `${testRealmURL}PublishingPacket/story`;
+    const customIsolated = '[data-test-pubpacket-isolated]';
+    const baseIsolated = '[data-test-base-template="isolated"]';
+
+    ctx.setCardInOperatorModeState(cardId);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    assert.dom(`[data-test-stack-card="${cardId}"]`).exists();
+    assert.dom(customIsolated).exists('custom isolated template is shown');
+    assert.dom(baseIsolated).doesNotExist();
+
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Toggle Standard View"]');
+    assert.dom(baseIsolated).exists('switched to base isolated template');
+    assert.dom(customIsolated).doesNotExist();
+
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Toggle Custom View"]');
+    assert.dom(customIsolated).exists('custom isolated template is restored');
+
+    await click('[data-test-more-options-button]');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Toggle Standard View"]')
+      .exists('Toggle Standard View is offered again');
+  });
 });

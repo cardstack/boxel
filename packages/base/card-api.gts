@@ -2306,10 +2306,14 @@ export type ViewCardFn = (
     stackIndex?: number;
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
     fieldName?: string;
+    useBaseTemplate?: boolean;
   },
 ) => void;
 
-export type EditCardFn = (card: CardDef) => void;
+export type EditCardFn = (
+  card: CardDef,
+  opts?: { useBaseTemplate?: boolean },
+) => void;
 
 export type SaveCardFn = (id: string) => void;
 
@@ -2794,6 +2798,14 @@ export class CardDef extends BaseDef {
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
   static head: BaseDefComponent = DefaultHeadTemplate;
 
+  static get hasCustomEditTemplate(): boolean {
+    return this.edit !== CardDef.edit;
+  }
+
+  static get hasCustomIsolatedTemplate(): boolean {
+    return this.isolated !== CardDef.isolated;
+  }
+
   static prefersWideFormat = false; // whether the card is full-width in the stack
   static headerColor: string | null = null; // set string color value if the stack-item header has a background color
 
@@ -3053,7 +3065,10 @@ function lazilyLoadLink(
     inflightLoads = new Map();
     inflightLinkLoads.set(instance, inflightLoads);
   }
-  let reference = resolveCardReference(link, instance.id ?? instance[relativeTo]);
+  let reference = resolveCardReference(
+    link,
+    instance.id ?? instance[relativeTo],
+  );
   let key = `${field.name}/${reference}`;
   let promise = inflightLoads.get(key);
   let store = getStore(instance);

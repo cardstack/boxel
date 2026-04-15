@@ -23,10 +23,16 @@ let getDefaultCardMenuItems: (
 ) => MenuItemOptions[];
 
 class DummyCard {
+  static hasCustomEditTemplate = false;
   constructor(
     public id?: string,
     public title?: string,
   ) {}
+}
+
+class DummyCardWithCustomTemplates extends DummyCard {
+  static hasCustomEditTemplate = true;
+  static hasCustomIsolatedTemplate = true;
 }
 
 module('Unit | CardDef menu items', function (hooks) {
@@ -60,6 +66,190 @@ module('Unit | CardDef menu items', function (hooks) {
       'contains New Card of This Type',
     );
     assert.ok(texts.includes('Delete'), 'contains Delete');
+  });
+
+  test('interact edit format includes "Toggle Standard View" for a card with a custom edit template', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-5',
+      'Five',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'edit',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(
+      texts.includes('Toggle Standard View'),
+      'contains Toggle Standard View',
+    );
+  });
+
+  test('interact edit format includes "Toggle Custom View" when already in standard view', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-5b',
+      'FiveB',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'edit',
+      useBaseTemplate: true,
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(
+      texts.includes('Toggle Custom View'),
+      'contains Toggle Custom View',
+    );
+  });
+
+  test('interact isolated format shows only the isolated toggle, not the edit toggle', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-6',
+      'Six',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'isolated',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.strictEqual(
+      texts.filter((t) => t === 'Toggle Standard View').length,
+      1,
+      'contains exactly one toggle (isolated, not edit)',
+    );
+  });
+
+  test('interact context omits toggle for a card without a custom edit template', function (assert: Assert) {
+    let card = new DummyCard(
+      'https://example.com/realm/card-6b',
+      'SixB',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'edit',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.notOk(
+      texts.includes('Toggle Standard View'),
+      'does not include Toggle Standard View when no custom edit template',
+    );
+  });
+
+  test('interact context omits toggle when not editable', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-7',
+      'Seven',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: false,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'edit',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.notOk(
+      texts.includes('Toggle Standard View'),
+      'does not include Toggle Standard View when canEdit is false',
+    );
+  });
+
+  test('interact isolated format includes "Toggle Standard View" for a card with a custom isolated template', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-8',
+      'Eight',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'isolated',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(
+      texts.includes('Toggle Standard View'),
+      'contains Toggle Standard View',
+    );
+  });
+
+  test('interact isolated format includes "Toggle Custom View" when already in standard view', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-8b',
+      'EightB',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'isolated',
+      useBaseTemplate: true,
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.ok(
+      texts.includes('Toggle Custom View'),
+      'contains Toggle Custom View',
+    );
+  });
+
+  test('interact edit format shows only the edit toggle, not the isolated toggle', function (assert: Assert) {
+    let card = new DummyCardWithCustomTemplates(
+      'https://example.com/realm/card-9',
+      'Nine',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'edit',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.strictEqual(
+      texts.filter((t) => t === 'Toggle Standard View').length,
+      1,
+      'contains exactly one toggle (edit, not isolated)',
+    );
+  });
+
+  test('interact context omits isolated toggle for a card without a custom isolated template', function (assert: Assert) {
+    let card = new DummyCard(
+      'https://example.com/realm/card-9b',
+      'NineB',
+    ) as unknown as CardDef;
+    let items = getDefaultCardMenuItems(card, {
+      canEdit: true,
+      cardCrudFunctions: {},
+      menuContext: 'interact',
+      commandContext: {} as any,
+      format: 'isolated',
+    });
+
+    let texts = items.map((i: MenuItemOptions) => i.label);
+    assert.notOk(
+      texts.includes('Toggle Standard View'),
+      'does not include Toggle Standard View when no custom isolated template',
+    );
   });
 
   test('ai-assistant context contains Copy to Workspace when editable', function (assert: Assert) {

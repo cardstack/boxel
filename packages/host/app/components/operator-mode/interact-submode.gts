@@ -206,6 +206,7 @@ export default class InteractSubmode extends Component {
       stackIndex?: number;
       fieldType?: 'linksTo' | 'linksToMany' | 'contains' | 'containsMany';
       fieldName?: string;
+      useBaseTemplate?: boolean;
     },
   ): void => {
     if (format instanceof Event) {
@@ -220,6 +221,20 @@ export default class InteractSubmode extends Component {
           : cardOrURL.id;
     if (!cardId) {
       return;
+    }
+    // When toggling the isolated template for a card already on the stack,
+    // replace the existing item in-place rather than pushing a new one.
+    if (format === 'isolated' && opts?.useBaseTemplate !== undefined) {
+      let stack = this.stacks[stackIndex];
+      let isOnStack = stack?.some((item) => item.id === cardId);
+      if (isOnStack) {
+        this.operatorModeStateService.viewCardOnStack(
+          stackIndex,
+          cardOrURL as CardDef,
+          { useBaseTemplate: opts.useBaseTemplate },
+        );
+        return;
+      }
     }
     if (opts?.openCardInRightMostStack) {
       stackIndex = this.stacks.length;
@@ -244,6 +259,7 @@ export default class InteractSubmode extends Component {
       format,
       stackIndex,
       type: stackItemType,
+      useBaseTemplate: opts?.useBaseTemplate,
       relationshipContext: opts?.fieldName
         ? {
             fieldName: opts.fieldName,
@@ -258,8 +274,18 @@ export default class InteractSubmode extends Component {
     this.operatorModeStateService.closeWorkspaceChooser();
   };
 
-  private editCard = (stackIndex: number, card: CardDef): void => {
-    this.operatorModeStateService.editCardOnStack(stackIndex, card);
+  private editCard = (
+    stackIndex: number,
+    card: CardDef,
+    opts?: { useBaseTemplate?: boolean },
+  ): void => {
+    let stack = this.stacks[stackIndex];
+    let isOnStack = stack?.some((item) => item.id === card.id);
+    if (isOnStack) {
+      this.operatorModeStateService.editCardOnStack(stackIndex, card, opts);
+    } else {
+      this.viewCard(stackIndex, card, 'edit', opts);
+    }
   };
 
   private getStackItemType(

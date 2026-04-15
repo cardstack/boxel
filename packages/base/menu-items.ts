@@ -28,6 +28,7 @@ import { resolveAdoptsFrom } from '@cardstack/runtime-common';
 import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import Eye from '@cardstack/boxel-icons/eye';
+import FormIcon from '@cardstack/boxel-icons/forms';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 import Wand from '@cardstack/boxel-icons/wand';
@@ -51,7 +52,28 @@ export type GetMenuItemParams = {
   cardCrudFunctions: Partial<CardCrudFunctions>;
   commandContext: CommandContext;
   format?: Format;
+  useBaseTemplate?: boolean;
 } & MenuContext;
+
+function makeToggleTemplateItem(
+  card: CardDef,
+  useBaseTemplate: boolean | undefined,
+  action: (useBaseTemplate: boolean) => void,
+): MenuItemOptions {
+  return useBaseTemplate
+    ? {
+        label: 'Toggle Custom View',
+        action: () => action(false),
+        icon: Eye,
+        disabled: !card.id,
+      }
+    : {
+        label: 'Toggle Standard View',
+        action: () => action(true),
+        icon: FormIcon,
+        disabled: !card.id,
+      };
+}
 
 export function getDefaultCardMenuItems(
   card: CardDef,
@@ -72,6 +94,37 @@ export function getDefaultCardMenuItems(
     });
   }
   if (params.menuContext === 'interact') {
+    if (
+      cardId &&
+      params.canEdit &&
+      params.format === 'edit' &&
+      (card.constructor as typeof CardDef).hasCustomEditTemplate
+    ) {
+      menuItems.push(
+        makeToggleTemplateItem(
+          card,
+          params.useBaseTemplate,
+          (useBaseTemplate) =>
+            params.cardCrudFunctions.editCard?.(card, { useBaseTemplate }),
+        ),
+      );
+    }
+    if (
+      cardId &&
+      params.format === 'isolated' &&
+      (card.constructor as typeof CardDef).hasCustomIsolatedTemplate
+    ) {
+      menuItems.push(
+        makeToggleTemplateItem(
+          card,
+          params.useBaseTemplate,
+          (useBaseTemplate) =>
+            params.cardCrudFunctions.viewCard?.(card, 'isolated', {
+              useBaseTemplate,
+            }),
+        ),
+      );
+    }
     if (
       !isRealmIndexCard(card) && // workspace index card cannot be deleted
       cardId &&

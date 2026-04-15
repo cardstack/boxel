@@ -437,7 +437,11 @@ export default class OperatorModeStateService extends Service {
     return item;
   }
 
-  editCardOnStack(stackIndex: number, card: CardDef): void {
+  editCardOnStack(
+    stackIndex: number,
+    card: CardDef,
+    opts?: { useBaseTemplate?: boolean },
+  ): void {
     let item = this.findCardInStack(card, stackIndex);
     if (item.type === 'file') {
       return;
@@ -447,6 +451,26 @@ export default class OperatorModeStateService extends Service {
       item.clone({
         request: new Deferred(),
         format: 'edit',
+        useBaseTemplate: opts?.useBaseTemplate,
+      }),
+    );
+  }
+
+  viewCardOnStack(
+    stackIndex: number,
+    card: CardDef,
+    opts?: { useBaseTemplate?: boolean },
+  ): void {
+    let item = this.findCardInStack(card, stackIndex);
+    if (item.type === 'file') {
+      return;
+    }
+    this.replaceItemInStack(
+      item,
+      item.clone({
+        request: new Deferred(),
+        format: 'isolated',
+        useBaseTemplate: opts?.useBaseTemplate,
       }),
     );
   }
