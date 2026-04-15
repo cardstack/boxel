@@ -4,8 +4,12 @@ import {
   registerCardReferencePrefix,
   unregisterCardReferencePrefix,
   resolveCardReference,
+  resolveRRI,
 } from '@cardstack/runtime-common';
-import type { SingleCardDocument } from '@cardstack/runtime-common';
+import type {
+  SingleCardDocument,
+  RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 import { relativizeDocument } from '@cardstack/runtime-common/realm-index-query-engine';
 
 module(basename(__filename), function () {
@@ -249,4 +253,211 @@ module(basename(__filename), function () {
       }
     });
   });
+
+  module('resolveRRI', function (hooks) {
+    let basePrefix = '@cardstack/base/' as RealmResourceIdentifier;
+    let catalogPrefix = '@cardstack/catalog/' as RealmResourceIdentifier;
+
+    hooks.beforeEach(function () {
+      registerCardReferencePrefix(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      registerCardReferencePrefix(
+        '@cardstack/catalog/',
+        'http://localhost:4201/catalog/',
+      );
+    });
+
+    hooks.afterEach(function () {
+      unregisterCardReferencePrefix('@cardstack/base/');
+      unregisterCardReferencePrefix('@cardstack/catalog/');
+    });
+
+    // --- Absolute references (return as-is) ---
+
+    test('absolute scoped identifier without relativeTo', function (assert) {
+      let result = resolveRRI(
+        '@cardstack/base/string' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, '@cardstack/base/string');
+    });
+
+    test('absolute scoped identifier with relativeTo is returned as-is', function (assert) {
+      let result = resolveRRI(
+        '@cardstack/base/string' as RealmResourceIdentifier,
+        catalogPrefix,
+      );
+      assert.strictEqual(result, '@cardstack/base/string');
+    });
+
+    test('absolute HTTP URL without relativeTo', function (assert) {
+      let result = resolveRRI(
+        'http://localhost:4201/realm/card' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, 'http://localhost:4201/realm/card');
+    });
+
+    test('absolute HTTP URL with relativeTo is returned as-is', function (assert) {
+      let result = resolveRRI(
+        'http://localhost:4201/realm/card' as RealmResourceIdentifier,
+        basePrefix,
+      );
+      assert.strictEqual(result, 'http://localhost:4201/realm/card');
+    });
+
+    test('absolute HTTPS URL is returned as-is', function (assert) {
+      let result = resolveRRI(
+        'https://example.com/card/123' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, 'https://example.com/card/123');
+    });
+
+    // --- Relative resolution against scoped base ---
+
+    test('dot-slash relative against scoped base', function (assert) {
+      let result = resolveRRI(
+        './string' as RealmResourceIdentifier,
+        '@cardstack/base/' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, '@cardstack/base/string');
+    });
+
+    test('bare name against scoped base', function (assert) {
+      let result = resolveRRI(
+        'card' as RealmResourceIdentifier,
+        '@cardstack/base/' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, '@cardstack/base/card');
+    });
+
+    test('dot-dot-slash against scoped base with subdirectory', function (assert) {
+      let result = resolveRRI(
+        '../card' as RealmResourceIdentifier,
+        '@cardstack/base/fields/' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, '@cardstack/base/card');
+    });
+
+    test('dot-slash against scoped base without trailing slash', function (assert) {
+      let result = resolveRRI(
+        './string' as RealmResourceIdentifier,
+        '@cardstack/base/card-api' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, '@cardstack/base/string');
+    });
+
+    // --- Relative resolution against URL base ---
+
+    test('dot-slash relative against URL base', function (assert) {
+      let result = resolveRRI(
+        './card' as RealmResourceIdentifier,
+        'http://localhost:4201/realm/' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, 'http://localhost:4201/realm/card');
+    });
+
+    test('dot-dot-slash against URL base with subdirectory', function (assert) {
+      let result = resolveRRI(
+        '../card' as RealmResourceIdentifier,
+        'http://localhost:4201/realm/directory/' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, 'http://localhost:4201/realm/card');
+    });
+
+    test('bare name against URL base', function (assert) {
+      let result = resolveRRI(
+        'card' as RealmResourceIdentifier,
+        'http://localhost:4201/realm/' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, 'http://localhost:4201/realm/card');
+    });
+
+    // --- $thisRealm resolution ---
+
+    test('$thisRealm against scoped base', function (assert) {
+      let result = resolveRRI(
+        '$thisRealm/string' as RealmResourceIdentifier,
+        '@cardstack/base/fields/number' as RealmResourceIdentifier,
+      );
+      assert.strictEqual(result, '@cardstack/base/string');
+    });
+
+    test('$thisRealm against URL base', function (assert) {
+      registerCardReferencePrefix(
+        '@test/contact/',
+        'https://home.boxel.ai/contact/',
+      );
+      try {
+        let result = resolveRRI(
+          '$thisRealm/card' as RealmResourceIdentifier,
+          'https://home.boxel.ai/contact/users/' as RealmResourceIdentifier,
+        );
+        assert.strictEqual(result, 'https://home.boxel.ai/contact/card');
+      } finally {
+        unregisterCardReferencePrefix('@test/contact/');
+      }
+    });
+
+    // --- Invalid references ---
+
+    test('throws for absolute path prefix', function (assert) {
+      assert.throws(
+        () =>
+          resolveRRI(
+            '/string' as RealmResourceIdentifier,
+            basePrefix,
+          ),
+        /"\/" and "~\/" prefixes are not supported/,
+      );
+    });
+
+    test('throws for tilde-slash prefix', function (assert) {
+      assert.throws(
+        () =>
+          resolveRRI(
+            '~/card' as RealmResourceIdentifier,
+            basePrefix,
+          ),
+        /"\/" and "~\/" prefixes are not supported/,
+      );
+    });
+
+    test('throws for absolute path against URL base', function (assert) {
+      assert.throws(
+        () =>
+          resolveRRI(
+            '/card' as RealmResourceIdentifier,
+            'http://localhost:4201/realm/directory/' as RealmResourceIdentifier,
+          ),
+        /"\/" and "~\/" prefixes are not supported/,
+      );
+    });
+
+    test('throws for tilde-slash against URL base', function (assert) {
+      assert.throws(
+        () =>
+          resolveRRI(
+            '~/card' as RealmResourceIdentifier,
+            'http://localhost:4201/realm/directory/' as RealmResourceIdentifier,
+          ),
+        /"\/" and "~\/" prefixes are not supported/,
+      );
+    });
+
+    test('throws when relativeTo is missing for relative reference', function (assert) {
+      assert.throws(
+        () => resolveRRI('./foo' as RealmResourceIdentifier),
+        /Cannot resolve "\.\/foo" without a relativeTo/,
+      );
+    });
+
+    test('throws when relativeTo is missing for bare name', function (assert) {
+      assert.throws(
+        () => resolveRRI('card' as RealmResourceIdentifier),
+        /Cannot resolve "card" without a relativeTo/,
+      );
+    });
+  });
+
 });
