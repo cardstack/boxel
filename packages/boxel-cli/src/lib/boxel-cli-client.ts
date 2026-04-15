@@ -41,7 +41,7 @@ export class BoxelCLIClient {
     }
     let pm = getProfileManager();
     let result = await pm.migrateFromEnv();
-    if (result?.created) {
+    if (result?.profileId) {
       pm.switchProfile(result.profileId);
     }
   }
