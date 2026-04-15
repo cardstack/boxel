@@ -51,7 +51,7 @@ Flow per issue:
 
 1. agent implements the card or feature in the target realm
 2. agent generates QUnit test files co-located with card definitions (`.test.gts`)
-3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Test Runs/<slug>-<seq>.json`) with `status: running` and pre-populated `moduleResults` containing pending entries
+3. `executeTestRunFromRealm` creates a TestRun card in the target realm (`Validations/test_<slug>-<seq>.json`) with `status: running` and pre-populated `moduleResults` containing pending entries
 4. Playwright browser navigates to the host's QUnit live-test page which discovers and runs `.test.gts` files via `_mtimes`
 5. card instances created during test execution live in browser memory only
 6. test results are parsed from the QUnit test output, grouped by module into `TestModuleResult` entries, and written back to the TestRun card's `moduleResults` field. Each TestModuleResult has a `moduleRef` (CodeRefField with `module` = test module URL, `name` = "default") and its own `passedCount`/`failedCount` computeds. TestRun's `passedCount`/`failedCount` are rolled up across all TestModuleResults.
@@ -299,7 +299,7 @@ Suggested acceptance cases:
    - one implementation artifact is created (card definition + card instance)
    - one Catalog Spec card is created in the `Spec/` folder
    - one QUnit test file is created co-located with the card definition (`.test.gts`)
-   - one TestRun card is created in the `Test Runs/` folder with verification results
+   - one TestRun card is created in the `Validations/` folder with verification results
 
 3. Resume after partial progress
    - rerun after partial state

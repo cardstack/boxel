@@ -17,8 +17,10 @@ import type { Validator } from '../issue-loop';
 
 import { NoOpStepRunner } from './noop-step';
 import { TestValidationStep } from './test-step';
+import { LintValidationStep } from './lint-step';
 
 import type { TestValidationStepConfig } from './test-step';
+import type { LintValidationStepConfig } from './lint-step';
 
 import { logger } from '../logger';
 
@@ -144,8 +146,9 @@ export interface ValidationPipelineConfig {
   realmServerUrl: string;
   hostAppUrl: string;
   testResultsModuleUrl: string;
+  lintResultsModuleUrl: string;
   issueId?: string;
-  /** Injected for testing — passed through to TestValidationStep. */
+  /** Injected for testing — passed through to TestValidationStep and LintValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
 }
 
@@ -166,9 +169,18 @@ export function createDefaultPipeline(
     fetchFilenames: config.fetchFilenames,
   };
 
+  let lintConfig: LintValidationStepConfig = {
+    authorization: config.authorization,
+    fetch: config.fetch,
+    realmServerUrl: config.realmServerUrl,
+    lintResultsModuleUrl: config.lintResultsModuleUrl,
+    issueId: config.issueId,
+    fetchFilenames: config.fetchFilenames,
+  };
+
   return new ValidationPipeline([
     new NoOpStepRunner('parse'),
-    new NoOpStepRunner('lint'),
+    new LintValidationStep(lintConfig),
     new NoOpStepRunner('evaluate'),
     new NoOpStepRunner('instantiate'),
     new TestValidationStep(testConfig),

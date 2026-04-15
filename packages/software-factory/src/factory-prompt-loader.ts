@@ -6,7 +6,6 @@ import type {
   AgentContext,
   ChatMessage,
   ResolvedSkill,
-  TestFailure,
   ToolManifest,
   ToolResult,
 } from './factory-agent';
@@ -458,14 +457,6 @@ export function assembleIteratePrompt(
     realm: a.realm ?? '(none)',
   }));
 
-  let testFailures = (context.testResults?.failures ?? []).map(
-    (f: TestFailure) => ({
-      testName: f.testName,
-      error: f.error,
-      stackTrace: f.stackTrace,
-    }),
-  );
-
   let toolResultsData = buildToolResultsData(context);
 
   return loader.load('ticket-iterate', {
@@ -473,16 +464,7 @@ export function assembleIteratePrompt(
     issue: context.issue,
     iteration,
     previousActions: previousActionsData,
-    testResults: context.testResults
-      ? {
-          status: context.testResults.status,
-          passedCount: context.testResults.passedCount,
-          failedCount: context.testResults.failedCount,
-          skippedCount: context.testResults.skippedCount,
-          durationMs: context.testResults.durationMs,
-          failures: testFailures,
-        }
-      : undefined,
+    validationContext: context.validationContext,
     toolResults: toolResultsData.length > 0 ? toolResultsData : undefined,
   });
 }

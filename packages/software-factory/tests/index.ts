@@ -16,3 +16,4 @@ import './issue-scheduler.test';
 import './retry-blocked-issues.test';
 import './validation-pipeline.test';
 import './test-step.test';
+import './lint-step.test';
