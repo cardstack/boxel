@@ -41,6 +41,13 @@ export default class Application extends Route {
         let mod = await import('mermaid');
         return mod.default;
       };
+      // Lazy-load CodeMirror for WYSIWYG editing in RichMarkdownField.
+      // The base package's CodeMirrorEditor component calls this via globalThis.
+      (globalThis as any).__loadCodeMirror ??= async () => {
+        // @ts-expect-error dynamic import resolved by Ember's build pipeline
+        let mod = await import('@cardstack/host/lib/codemirror-context');
+        return mod.default;
+      };
     }
   }
 
@@ -50,6 +57,7 @@ export default class Application extends Route {
       delete (globalThis as any).__loadMonacoForMarkdown;
       delete (globalThis as any).__loadKatex;
       delete (globalThis as any).__loadMermaid;
+      delete (globalThis as any).__loadCodeMirror;
     }
   }
 }

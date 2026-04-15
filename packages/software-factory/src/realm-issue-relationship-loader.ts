@@ -62,7 +62,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
 
     if (!result.ok || !result.document) {
       log.warn(
-        `Could not load project for issue "${issue.id}": ${result.error ?? 'not found'}`,
+        `Could not load project for issue "${issue.id}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
       );
       return undefined;
     }
@@ -105,7 +105,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
           } as KnowledgeArticleData);
         } else {
           log.warn(
-            `Could not load knowledge article "${cardId}": ${result.error ?? 'not found'}`,
+            `Could not load knowledge article "${cardId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
           );
         }
       } catch (error) {
@@ -129,7 +129,7 @@ export class RealmIssueRelationshipLoader implements IssueRelationshipLoader {
     let result = await readFile(this.realmUrl, issueId, this.options);
     if (!result.ok || !result.document) {
       log.warn(
-        `Could not fetch full issue "${issueId}": ${result.error ?? 'not found'}`,
+        `Could not fetch full issue "${issueId}" (status ${result.status ?? 'N/A'}): ${result.error ?? 'not found'}`,
       );
       return undefined;
     }

@@ -155,6 +155,7 @@ export async function runFactoryIssueLoop(
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
   let toolBuilderConfig: ToolBuilderConfig = {
     targetRealmUrl,
+    darkfactoryModuleUrl,
     realmServerUrl,
     realmTokens,
     serverToken,

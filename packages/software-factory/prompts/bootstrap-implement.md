@@ -23,12 +23,12 @@ Create the following artifacts in the target realm using the available tools
 
 ### 1. Project Card
 
-Write a Project card to `Projects/<slug>-mvp.json` where `<slug>` is derived
+Write a Project card to `Projects/<slug>.json` where `<slug>` is derived
 from the brief title (lowercase, hyphens for spaces/punctuation).
 
 Required attributes:
 - `projectCode` — 2-4 uppercase letters derived from title initials (e.g., "Sticky Note" → "SN")
-- `projectName` — `"<brief title> MVP"`
+- `projectName` — `"<brief title>"`
 - `projectStatus` — `"active"`
 - `objective` — brief content summary
 - `scope` — full brief content organized by sections
@@ -87,9 +87,9 @@ issue must come first. Set `order` so that dependency cards are processed
 before their consumers, and wire `blockedBy` so the consuming card's issue
 cannot start until the dependency card's issue is done.
 
-**Issue format** — for each entry-point card, create an issue at `Issues/<slug>-<card-slug>.json`:
+**Issue format** — for each entry-point card, create an issue named after the card at `Issues/<slug>-<card-name-slug>.json` (e.g., `Issues/sticky-note.json` for a "Sticky Note" card):
 - `issueId` — `"<projectCode>-<N>"` (sequential, dependency-first ordering)
-- `summary` — `"Implement <card name> card with tests and catalog spec"`
+- `summary` — `"Implement <card name> card"` (named after the entry-point card, e.g., "Implement Sticky Note card")
 - `description` — describe the card to create, its fields, any interior/support cards, what tests to write, and what the catalog spec should contain
 - `issueType` — `"feature"`
 - `status` — `"backlog"`
@@ -97,7 +97,7 @@ cannot start until the dependency card's issue is done.
 - `order` — sequential, respecting dependency order (cards with no dependencies first)
 - `acceptanceCriteria` — checklist covering card definition, tests, spec, and examples
 - Relationships:
-  - `project` → `../Projects/<slug>-mvp`
+  - `project` → `../Projects/<slug>`
   - `relatedKnowledge.0` → `../Knowledge Articles/<slug>-brief-context`
   - `relatedKnowledge.1` → `../Knowledge Articles/<slug>-agent-onboarding`
   - `blockedBy` → issues for any entry-point cards this card depends on
@@ -116,7 +116,7 @@ dependency cards are implemented before cards that consume them.
 4. Create Knowledge Article cards (at least brief context + agent onboarding)
 5. Identify entry-point cards from the brief — these are the top-level cards users interact with
 6. Create one implementation Issue per entry-point card, with all relationships wired
-7. Mark this bootstrap issue as done: first `read_file` the issue to get its current attributes, then call `update_issue` with **all existing attributes** plus `status: "done"` (update_issue writes the full card, not a partial patch)
+7. Call `signal_done()` — the orchestrator manages issue status transitions. Do NOT set the issue status yourself.
 
 Create artifacts in the order listed — Project first, then Knowledge Articles,
 then Issues — so that relationship targets exist when referenced.

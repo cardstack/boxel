@@ -36,6 +36,7 @@ import {
   isCardErrorJSONAPI,
   isListingDef,
   isListingInstance,
+  isRealmIndexCard,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -301,7 +302,8 @@ export default class DetailPanel extends Component<Signature> {
         handler: this.duplicateInstance,
       },
       ...(this.realm.canWrite(this.args.readyFile.url) &&
-      !isListingInstance(this.args.cardInstance)
+      !isListingInstance(this.args.cardInstance) &&
+      !this.isRealmIndexCardInstance
         ? [
             {
               label: 'Create Listing',
@@ -491,6 +493,10 @@ export default class DetailPanel extends Component<Signature> {
       isCardDocumentString(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
+  }
+
+  private get isRealmIndexCardInstance() {
+    return isRealmIndexCard(this.args.cardInstance);
   }
 
   private get isEmptyFile() {

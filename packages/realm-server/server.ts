@@ -88,6 +88,7 @@ export class RealmServer {
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
+  private indexHTMLHash: string | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
@@ -311,11 +312,17 @@ export class RealmServer {
       `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
     );
 
+    // Track published realm info from routing checks to avoid redundant
+    // DB queries in the ETag logic below.
+    let publishedRealmInfo: { lastPublishedAt: string | null } | null = null;
+    let publishedRealmInfoFetched = false;
+
     if (includesHtmlMimeType) {
       if (includesVndMimeType) {
-        let isHostModeRequest = await this.isHostModeRequest(requestURL);
+        publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+        publishedRealmInfoFetched = true;
 
-        if (isHostModeRequest) {
+        if (publishedRealmInfo) {
           return next();
         }
       }
@@ -328,9 +335,10 @@ export class RealmServer {
         return next();
       }
 
-      let isHostModeRequest = await this.isHostModeRequest(requestURL);
+      publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+      publishedRealmInfoFetched = true;
 
-      if (!isHostModeRequest) {
+      if (!publishedRealmInfo) {
         return next();
       }
 
@@ -396,7 +404,37 @@ export class RealmServer {
       cardURL = new URL('index', requestURL);
     }
 
+    // Retrieve index HTML early so the shell hash is available for ETag.
+    // This is memoized in production, so it's cheap after the first call.
     let indexHTML = await this.retrieveIndexHTML();
+
+    // For published realms, support HTTP caching via ETag.
+    // The ETag includes both last_published_at and a hash of the host app
+    // shell, so a deploy that changes index.html invalidates cached responses.
+    if (!publishedRealmInfoFetched) {
+      publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+    }
+    let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
+    let etag =
+      lastPublishedAt && this.indexHTMLHash
+        ? `"${lastPublishedAt}-${this.indexHTMLHash}"`
+        : null;
+
+    if (etag) {
+      let ifNoneMatch = ctxt.get('If-None-Match');
+      if (
+        ifNoneMatch === '*' ||
+        ifNoneMatch
+          .split(',')
+          .some((t) => t.trim().replace(/^W\//, '') === etag)
+      ) {
+        ctxt.status = 304;
+        ctxt.set('ETag', etag);
+        ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
+        ctxt.vary('Accept');
+        return;
+      }
+    }
     let hasPublicPermissions = await this.hasPublicPermissions(cardURL);
 
     if (!hasPublicPermissions) {
@@ -509,13 +547,20 @@ export class RealmServer {
       responseHTML = injectIsolatedHTML(responseHTML, isolatedHTML);
     }
 
+    if (etag) {
+      ctxt.set('ETag', etag);
+      ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
+      ctxt.vary('Accept');
+    }
+
     ctxt.body = responseHTML;
     return;
   };
 
   private serveHostApp = async (ctxt: Koa.Context, next: Koa.Next) => {
     let acceptHeader = (ctxt.header.accept ?? '').toLowerCase();
-    if (!acceptHeader.includes('text/html')) {
+    let isHead = ctxt.method === 'HEAD';
+    if (!isHead && !acceptHeader.includes('text/html')) {
       return next();
     }
 
@@ -534,18 +579,26 @@ export class RealmServer {
     });
   }
 
-  private async isHostModeRequest(requestURL: URL): Promise<boolean> {
+  private async getPublishedRealmInfo(
+    requestURL: URL,
+  ): Promise<{ lastPublishedAt: string | null } | null> {
     let realm = this.findRealmForRequestURL(requestURL);
     if (!realm) {
-      return false;
+      return null;
     }
 
     let rows = await query(this.dbAdapter, [
-      `SELECT published_realm_url FROM published_realms WHERE published_realm_url =`,
+      `SELECT last_published_at FROM published_realms WHERE published_realm_url =`,
       param(realm.url),
     ]);
 
-    return rows.length > 0;
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return {
+      lastPublishedAt: (rows[0].last_published_at as string) ?? null,
+    };
   }
 
   // Check if the URL corresponds to an indexed card instance.
@@ -748,6 +801,16 @@ export class RealmServer {
     indexHTML = indexHTML
       .replace(/<link[^>]*\brel="icon"[^>]*\/?>/gi, '')
       .replace(/<link[^>]*\brel="apple-touch-icon"[^>]*\/?>/gi, '');
+
+    // Recompute the hash in dev mode (where index.html is not cached) so
+    // that changes to the shell are reflected in the ETag.
+    if (!this.indexHTMLHash || isDev) {
+      let { createHash } = await import('crypto');
+      this.indexHTMLHash = createHash('md5')
+        .update(indexHTML)
+        .digest('hex')
+        .slice(0, 8);
+    }
 
     deferred.fulfill(indexHTML);
     return indexHTML;

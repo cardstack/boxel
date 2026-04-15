@@ -67,7 +67,7 @@ module(`Integration | realm querying`, function (hooks) {
         type: 'card',
         attributes: {
           author: { firstName: 'Cardy', lastName: 'Jones' },
-          editions: 1,
+          editions: 10,
           pubDate: '2023-09-01',
         },
         meta: {
@@ -130,7 +130,7 @@ module(`Integration | realm querying`, function (hooks) {
             firstName: 'Mango',
             lastName: 'Abdel-Rahman',
           },
-          editions: 1,
+          editions: 10,
           pubDate: '2022-07-01',
         },
         meta: {
@@ -149,7 +149,7 @@ module(`Integration | realm querying`, function (hooks) {
             firstName: 'Van Gogh',
             lastName: 'Abdel-Rahman',
           },
-          editions: 0,
+          editions: 3,
           pubDate: '2023-08-01',
         },
         meta: {
@@ -168,7 +168,7 @@ module(`Integration | realm querying`, function (hooks) {
             firstName: 'Jackie',
             lastName: 'Aguilar',
           },
-          editions: 2,
+          editions: 200,
           pubDate: '2022-08-01',
         },
         meta: {
@@ -1223,10 +1223,10 @@ module(`Integration | realm querying`, function (hooks) {
     assert.deepEqual(
       matching.map((m) => m.id),
       [
-        `${paths.url}books/2`, // 0
-        `${paths.url}books/1`, // 1
-        `${paths.url}card-2`, // 1
-        `${paths.url}books/3`, // 2
+        `${paths.url}books/2`, // 3
+        `${paths.url}books/1`, // 10 Abdel-Rahman
+        `${paths.url}card-2`, // 10 Jones
+        `${paths.url}books/3`, // 200
       ],
     );
   });
@@ -1279,10 +1279,10 @@ module(`Integration | realm querying`, function (hooks) {
     assert.deepEqual(
       matching.map((m) => m.id),
       [
-        `${paths.url}books/3`, // 2
-        `${paths.url}books/1`, // 1 // Ab
-        `${paths.url}card-2`, // 1 // Jo
-        `${paths.url}books/2`, // 0
+        `${paths.url}books/3`, // 200
+        `${paths.url}books/1`, // 10 Abdel-Rahman
+        `${paths.url}card-2`, // 10 Jones
+        `${paths.url}books/2`, // 3
       ],
     );
   });
@@ -1347,7 +1347,7 @@ module(`Integration | realm querying`, function (hooks) {
           },
           {
             on: { module: `${testModuleRealm}book`, name: 'Book' },
-            eq: { editions: 1 },
+            eq: { editions: 10 },
           },
         ],
       },

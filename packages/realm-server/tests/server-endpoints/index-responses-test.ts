@@ -1037,6 +1037,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
 
+      test('HEAD / returns 200 for non-host-mode server', async function (assert) {
+        let response = await request.head('/');
+
+        assert.strictEqual(
+          response.status,
+          200,
+          'HEAD / returns 200 (serves host app)',
+        );
+        assert.ok(
+          response.headers['content-type']?.includes('text/html'),
+          'content type is text/html',
+        );
+      });
+
       test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
         // First verify the card is indexed successfully and scoped CSS is served
         let initialResponse = await request
@@ -1150,13 +1164,16 @@ module(`server-endpoints/${basename(__filename)}`, function () {
     let realmURL = new URL('http://127.0.0.1:4444/published/');
     let request: SuperTest<Test>;
     let testRealm: Realm;
+    let dbAdapter: DBAdapter;
 
     function onRealmSetup(args: {
       request: SuperTest<Test>;
       testRealm: Realm;
+      dbAdapter: DBAdapter;
     }) {
       request = args.request;
       testRealm = args.testRealm;
+      dbAdapter = args.dbAdapter;
     }
 
     setupPermissionedRealmCached(hooks, {
@@ -1199,6 +1216,115 @@ module(`server-endpoints/${basename(__filename)}`, function () {
       assert.ok(
         response.headers['content-type']?.includes('application/vnd.card+json'),
         'content type is vendor JSON',
+      );
+    });
+
+    test('published realm response includes ETag and Cache-Control headers', async function (assert) {
+      let response = await request
+        .get('/published/')
+        .set('Accept', 'text/html');
+
+      assert.strictEqual(response.status, 200);
+      assert.ok(response.headers['etag'], 'ETag header is present');
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=0, must-revalidate',
+        'Cache-Control allows caching with revalidation',
+      );
+      assert.ok(
+        response.headers['vary']?.includes('Accept'),
+        'Vary header includes Accept',
+      );
+    });
+
+    test('HEAD request includes ETag and Cache-Control headers', async function (assert) {
+      let response = await request
+        .head('/published/')
+        .set('Accept', 'text/html');
+
+      assert.strictEqual(response.status, 200);
+      assert.ok(response.headers['etag'], 'ETag header is present');
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=0, must-revalidate',
+        'Cache-Control allows caching with revalidation',
+      );
+    });
+
+    test('returns 304 Not Modified when If-None-Match matches ETag', async function (assert) {
+      // First request to get the ETag
+      let firstResponse = await request
+        .get('/published/')
+        .set('Accept', 'text/html');
+
+      assert.strictEqual(firstResponse.status, 200);
+      let etag = firstResponse.headers['etag'];
+      assert.ok(etag, 'first response has ETag');
+
+      // Second request with matching If-None-Match
+      let secondResponse = await request
+        .get('/published/')
+        .set('Accept', 'text/html')
+        .set('If-None-Match', etag);
+
+      assert.strictEqual(
+        secondResponse.status,
+        304,
+        'returns 304 when ETag matches',
+      );
+      assert.strictEqual(
+        secondResponse.headers['etag'],
+        etag,
+        '304 response includes the ETag',
+      );
+      assert.strictEqual(
+        secondResponse.headers['cache-control'],
+        'public, max-age=0, must-revalidate',
+        '304 response includes Cache-Control',
+      );
+    });
+
+    test('returns 200 when If-None-Match does not match ETag', async function (assert) {
+      let response = await request
+        .get('/published/')
+        .set('Accept', 'text/html')
+        .set('If-None-Match', '"stale-etag-value"');
+
+      assert.strictEqual(
+        response.status,
+        200,
+        'returns 200 when ETag does not match',
+      );
+      assert.ok(response.headers['etag'], 'response includes a fresh ETag');
+      assert.notStrictEqual(
+        response.headers['etag'],
+        '"stale-etag-value"',
+        'fresh ETag differs from the stale one',
+      );
+    });
+
+    test('ETag changes after republishing', async function (assert) {
+      let firstResponse = await request
+        .get('/published/')
+        .set('Accept', 'text/html');
+
+      let firstEtag = firstResponse.headers['etag'];
+      assert.ok(firstEtag, 'first response has ETag');
+
+      // Simulate a republish by updating last_published_at
+      await dbAdapter.execute(
+        `UPDATE published_realms SET last_published_at = '${Date.now() + 1000}' WHERE published_realm_url = '${realmURL.href}'`,
+      );
+
+      let secondResponse = await request
+        .get('/published/')
+        .set('Accept', 'text/html');
+
+      assert.strictEqual(secondResponse.status, 200);
+      assert.notStrictEqual(
+        secondResponse.headers['etag'],
+        firstEtag,
+        'ETag changes after republish',
       );
     });
   });

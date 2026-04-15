@@ -18,6 +18,18 @@ export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
 }
 
+/**
+ * Ensure a card instance path ends with `.json`. The realm API uses
+ * `card+source` content negotiation which requires the full file path
+ * including extension.
+ */
+export function ensureJsonExtension(path: string): string {
+  if (!path.endsWith('.json')) {
+    return `${path}.json`;
+  }
+  return path;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -220,6 +232,7 @@ export async function readFile(
   options?: RealmFetchOptions,
 ): Promise<{
   ok: boolean;
+  status?: number;
   document?: LooseSingleCardDocument;
   /** Raw text content for non-JSON files (e.g., .gts source). */
   content?: string;
@@ -241,6 +254,7 @@ export async function readFile(
       let body = await response.text();
       return {
         ok: false,
+        status: response.status,
         error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
       };
     }
@@ -248,10 +262,10 @@ export async function readFile(
     let text = await response.text();
     try {
       let document = JSON.parse(text) as LooseSingleCardDocument;
-      return { ok: true, document };
+      return { ok: true, status: response.status, document };
     } catch {
       // Non-JSON content (e.g., .gts source files) — return as raw text
-      return { ok: true, content: text };
+      return { ok: true, status: response.status, content: text };
     }
   } catch (err) {
     return {
@@ -296,6 +310,56 @@ export async function writeFile(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Issue Comments
+// ---------------------------------------------------------------------------
+
+/**
+ * Append a comment to an issue card using read-patch-write.
+ * Issue descriptions are immutable — all post-creation context goes through comments.
+ */
+export async function addCommentToIssue(
+  realmUrl: string,
+  path: string,
+  comment: { body: string; author: string; datetime?: string },
+  options?: RealmFetchOptions,
+): Promise<{ ok: boolean; error?: string }> {
+  let filePath = ensureJsonExtension(path);
+
+  let existing = await readFile(realmUrl, filePath, options);
+  if (!existing.ok || !existing.document) {
+    return {
+      ok: false,
+      error: `Failed to read issue at ${filePath}: ${existing.error ?? 'no document'}`,
+    };
+  }
+
+  let attrs = (existing.document.data?.attributes ?? {}) as Record<
+    string,
+    unknown
+  >;
+  let existingComments = Array.isArray(attrs.comments)
+    ? (attrs.comments as unknown[])
+    : [];
+
+  existingComments.push({
+    body: comment.body,
+    author: comment.author,
+    datetime: comment.datetime ?? new Date().toISOString(),
+  });
+
+  attrs.comments = existingComments;
+  attrs.updatedAt = new Date().toISOString();
+  existing.document.data.attributes = attrs;
+
+  return writeFile(
+    realmUrl,
+    filePath,
+    JSON.stringify(existing.document, null, 2),
+    options,
+  );
 }
 
 // ---------------------------------------------------------------------------

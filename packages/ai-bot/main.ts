@@ -57,6 +57,7 @@ import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
 import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
+import { waitForPendingCreditTracking } from './lib/credit-tracking';
 
 let log = logger('ai-bot');
 
@@ -67,6 +68,7 @@ let activeGenerations = new Map<
     responder: Responder;
     runner: ChatCompletionStream;
     lastGeneratedChunkId: string | undefined;
+    completionPromise: Promise<void>;
   }
 >();
 
@@ -314,6 +316,15 @@ Common issues are:
           // Finalization, credit tracking, and cleanup are all
           // handled by the streaming code path's catch/finally
           // blocks after the APIUserAbortError is thrown.
+
+          if (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE) {
+            return; // Stop events don't need further processing
+          }
+
+          // For new messages that interrupted a generation, wait for the
+          // original handler to fully clean up and release the room lock
+          // before we attempt to acquire it for the new message.
+          await activeGeneration.completionPromise;
         }
 
         if (isShuttingDown()) {
@@ -337,6 +348,11 @@ Common issues are:
           // Some other instance is already processing a recent event in this room. Ignore it.
           return;
         }
+
+        let resolveGenerationCompletion!: () => void;
+        let generationCompletionPromise = new Promise<void>((resolve) => {
+          resolveGenerationCompletion = resolve;
+        });
 
         try {
           if (!Responder.eventMayTriggerResponse(event)) {
@@ -437,18 +453,15 @@ Common issues are:
           }
 
           // Do not generate new responses if previous ones' cost is still being reported
-          let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
-            senderMatrixUserId!,
-          );
-          if (pendingCreditsConsumptionPromise) {
-            try {
-              await pendingCreditsConsumptionPromise;
-            } catch (e) {
-              log.error(e);
-              return responder.onError(
-                'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
-              );
-            }
+          let { error: creditTrackingError } =
+            await waitForPendingCreditTracking(
+              trackAiUsageCostPromises,
+              senderMatrixUserId!,
+            );
+          if (creditTrackingError) {
+            return responder.onError(
+              'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+            );
           }
 
           const creditValidation = await profTime(
@@ -529,6 +542,7 @@ Common issues are:
             responder,
             runner,
             lastGeneratedChunkId: generationId,
+            completionPromise: generationCompletionPromise,
           });
 
           try {
@@ -594,7 +608,12 @@ Common issues are:
           }
           return;
         } finally {
+          // Release the lock first, then resolve the completionPromise.
+          // This ordering guarantees that any interrupted new-message
+          // handler waiting on completionPromise will observe the room
+          // lock as released before attempting to acquire it.
           await releaseRoomLock(assistant.pgAdapter, room.roomId);
+          resolveGenerationCompletion();
         }
       } catch (e) {
         log.error(e);

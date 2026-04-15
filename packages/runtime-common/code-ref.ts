@@ -15,9 +15,10 @@ import {
   fields,
   fieldsUntracked,
   isBaseInstance,
+  meta,
+  relativeTo,
 } from './constants';
 import { CardError } from './error';
-import { meta, relativeTo } from './constants';
 import { cardIdToURL } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
