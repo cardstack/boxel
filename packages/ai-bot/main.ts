@@ -57,6 +57,7 @@ import type { MatrixClient } from 'matrix-js-sdk';
 import { debug } from 'debug';
 import { profEnabled, profTime, profNote } from './lib/profiler';
 import { publishCodePatchCorrectnessMessage } from './lib/code-patch-correctness';
+import { waitForPendingCreditTracking } from './lib/credit-tracking';
 
 let log = logger('ai-bot');
 
@@ -452,18 +453,15 @@ Common issues are:
           }
 
           // Do not generate new responses if previous ones' cost is still being reported
-          let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
-            senderMatrixUserId!,
-          );
-          if (pendingCreditsConsumptionPromise) {
-            try {
-              await pendingCreditsConsumptionPromise;
-            } catch (e) {
-              log.error(e);
-              return responder.onError(
-                'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
-              );
-            }
+          let { error: creditTrackingError } =
+            await waitForPendingCreditTracking(
+              trackAiUsageCostPromises,
+              senderMatrixUserId!,
+            );
+          if (creditTrackingError) {
+            return responder.onError(
+              'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+            );
           }
 
           const creditValidation = await profTime(
