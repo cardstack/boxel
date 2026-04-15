@@ -107,12 +107,18 @@ export class RealmPaths {
   }
 
   fileRRI(local: LocalPath): RealmResourceIdentifier {
+    if (this.isURLBased) {
+      return new URL(local, this.url).href as RealmResourceIdentifier;
+    }
     return (this.url + local) as RealmResourceIdentifier;
   }
 
   directoryRRI(local: LocalPath): RealmResourceIdentifier {
     if (local === '') {
       return this.url as RealmResourceIdentifier;
+    }
+    if (this.isURLBased) {
+      return new URL(local + '/', this.url).href as RealmResourceIdentifier;
     }
     return (this.url + local + '/') as RealmResourceIdentifier;
   }
