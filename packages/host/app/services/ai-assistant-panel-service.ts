@@ -825,6 +825,9 @@ export default class AiAssistantPanelService extends Service {
       await this.matrixService.leave(roomId);
       await this.matrixService.forget(roomId);
     } catch (e) {
+      // Roll back local deletion state so the room reappears in the
+      // session list — the user still belongs to it on the server.
+      this.deletedRoomIds.delete(roomId);
       console.error(e);
       this.roomDeleteError = 'Error deleting room';
       if (isMatrixError(e)) {
