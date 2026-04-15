@@ -67,10 +67,16 @@ export class BoxelCLIClient {
       waitForReady: options.waitForReady !== false,
     });
 
+    if (!result.realmToken) {
+      throw new Error(
+        `Realm "${options.realmName}" was created, but no authorization token was returned.`,
+      );
+    }
+
     return {
       realmUrl: result.realmUrl,
       created: result.created,
-      authorization: result.realmToken ?? '',
+      authorization: result.realmToken,
     };
   }
 }
