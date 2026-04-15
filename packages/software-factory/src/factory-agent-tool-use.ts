@@ -287,9 +287,9 @@ export class ToolUseFactoryAgent implements LoopAgent {
         context,
         loader: this.promptLoader,
       });
-    } else if (context.testResults || context.validationResults) {
-      // Phase 1 testResults or Phase 2 validationResults — use iterate prompt
-      // so the agent receives structured failure context for self-correction
+    } else if (context.validationContext) {
+      // Validation failures from prior iteration — use iterate prompt
+      // so the agent receives formatted failure context for self-correction
       userPrompt = assembleIteratePrompt({
         context,
         previousActions: [],

@@ -134,7 +134,7 @@ Add `data-test-*` attributes to card templates for stable test selectors:
 
 When tests fail, the orchestrator feeds test failure details back to the agent. For more detail:
 
-- **TestRun cards** live in the target realm's `Test Runs/` folder. To find all test runs, search by the TestRun card type in the target realm. Each TestRun has a `sequenceNumber` that increases with each iteration. Use `read_file` on a specific TestRun for full details.
+- **TestRun cards** live in the target realm's `Validations/` folder with a `test_` prefix (e.g., `Validations/test_issue-slug-1.json`). To find all test runs, search by the TestRun card type in the target realm. Each TestRun has a `sequenceNumber` that increases with each iteration. Use `read_file` on a specific TestRun for full details.
 
 ## Rules
 

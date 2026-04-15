@@ -236,6 +236,7 @@ import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
+export * from './realm-index-card';
 export * from './cached-fetch';
 export * from './definition-lookup';
 export * from './definitions';
