@@ -630,11 +630,11 @@ export class PgQueueRunner implements QueueRunner {
           );
           await query(['BEGIN']);
           await query(['SET TRANSACTION ISOLATION LEVEL SERIALIZABLE']);
-          let [{ status: jobStatus }] = (await query([
+          let jobRows = (await query([
             'SELECT status FROM jobs WHERE id = ',
             param(jobToRun.id),
           ])) as Pick<JobsTable, 'status'>[];
-          if (jobStatus !== 'unfulfilled') {
+          if (jobRows.length === 0 || jobRows[0].status !== 'unfulfilled') {
             log.debug(
               '%s: rolling back because our job is already marked done',
               this.#workerId,
@@ -642,11 +642,11 @@ export class PgQueueRunner implements QueueRunner {
             await query(['ROLLBACK']);
             return;
           }
-          let [jobReservation] = (await query([
+          let reservationRows = (await query([
             'SELECT *, locked_until < NOW() as expired FROM job_reservations WHERE id = ',
             param(jobReservationId),
           ])) as unknown as (JobReservationsTable & { expired: boolean })[];
-          if (jobReservation.completed_at) {
+          if (reservationRows.length === 0 || reservationRows[0].completed_at) {
             log.debug(
               '%s: rolling back because someone else processed our job',
               this.#workerId,
@@ -654,6 +654,7 @@ export class PgQueueRunner implements QueueRunner {
             await query(['ROLLBACK']);
             return;
           }
+          let jobReservation = reservationRows[0];
           if (jobReservation.expired) {
             // check to see if there are any other reservations for this job
             let [{ total }] = (await query([

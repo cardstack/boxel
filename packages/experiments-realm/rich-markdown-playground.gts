@@ -20,6 +20,13 @@ export class RichMarkdownPlayground extends CardDef {
       <article class='playground'>
         <header>
           <h1>{{@model.title}}</h1>
+          <p class='subtitle'>
+            This playground exercises the
+            <code>RichMarkdownField</code>
+            with its CodeMirror editor. Switch to
+            <strong>Edit</strong>
+            mode to see the editor, or view the rendered markdown below.
+          </p>
         </header>
         <section class='body'>
           <@fields.body />
@@ -36,9 +43,20 @@ export class RichMarkdownPlayground extends CardDef {
           margin: 0 auto;
         }
         header h1 {
-          margin: 0;
+          margin: 0 0 var(--boxel-sp-xs);
           font-size: var(--boxel-font-lg);
           font-weight: 700;
+        }
+        .subtitle {
+          color: var(--boxel-400, #666);
+          margin: 0;
+          line-height: 1.5;
+        }
+        .subtitle code {
+          background: var(--boxel-100, #f5f5f5);
+          padding: 0.1em 0.4em;
+          border-radius: 3px;
+          font-size: 0.9em;
         }
         .body {
           border: 1px solid var(--boxel-200);
