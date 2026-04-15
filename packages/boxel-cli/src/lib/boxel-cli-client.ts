@@ -33,7 +33,12 @@ export class BoxelCLIClient {
    * Call once at process startup (e.g. factory entrypoint) before any
    * BoxelCLIClient operations.
    */
-  static async ensureProfile(): Promise<void> {
+  static async ensureProfile(opts?: {
+    realmServerUrl?: string;
+  }): Promise<void> {
+    if (opts?.realmServerUrl && !process.env.REALM_SERVER_URL) {
+      process.env.REALM_SERVER_URL = opts.realmServerUrl;
+    }
     let pm = getProfileManager();
     let result = await pm.migrateFromEnv();
     if (result?.created) {

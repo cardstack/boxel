@@ -22,9 +22,12 @@ async function main(): Promise<void> {
       return;
     }
 
-    await BoxelCLIClient.ensureProfile();
-
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
+
+    await BoxelCLIClient.ensureProfile({
+      realmServerUrl: options.realmServerUrl ?? undefined,
+    });
+
     log.info(`mode=${options.mode} brief=${options.briefUrl}`);
 
     if (options.mode === 'implement') {
