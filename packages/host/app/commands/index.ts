@@ -9,7 +9,6 @@ import * as CreateListingPRRequestCommandModule from './bot-requests/create-list
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
 import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
-import * as EvaluateModuleCommandModule from './evaluate-module';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
@@ -19,6 +18,7 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecCommandModule from './create-specs';
 import * as CreateSubmissionWorkflowCommandModule from './create-submission-workflow';
+import * as EvaluateModuleCommandModule from './evaluate-module';
 import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
