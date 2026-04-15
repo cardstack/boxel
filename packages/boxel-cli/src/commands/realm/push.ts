@@ -12,7 +12,7 @@ import {
   getProfileManager,
   type ProfileManager,
 } from '../../lib/profile-manager';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as crypto from 'crypto';
 
@@ -21,26 +21,41 @@ interface SyncManifest {
   files: Record<string, string>; // relativePath -> contentHash
 }
 
-function computeFileHash(filePath: string): string {
-  const content = fs.readFileSync(filePath);
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function computeFileHash(filePath: string): Promise<string> {
+  const content = await fs.readFile(filePath);
   return crypto.createHash('md5').update(content).digest('hex');
 }
 
-function loadManifest(localDir: string): SyncManifest | null {
+async function loadManifest(localDir: string): Promise<SyncManifest | null> {
   const manifestPath = path.join(localDir, '.boxel-sync.json');
-  if (fs.existsSync(manifestPath)) {
+  try {
+    const content = await fs.readFile(manifestPath, 'utf8');
     try {
-      return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      return JSON.parse(content);
     } catch {
       return null;
     }
+  } catch (err: any) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
   }
-  return null;
 }
 
-function saveManifest(localDir: string, manifest: SyncManifest): void {
+async function saveManifest(
+  localDir: string,
+  manifest: SyncManifest,
+): Promise<void> {
   const manifestPath = path.join(localDir, '.boxel-sync.json');
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 }
 
 interface PushOptions extends SyncOptions {
@@ -78,7 +93,7 @@ class RealmPusher extends RealmSyncBase {
     const localFiles = await this.getLocalFileList();
     console.log(`Found ${localFiles.size} files in local directory`);
 
-    const manifest = loadManifest(this.options.localDir);
+    const manifest = await loadManifest(this.options.localDir);
     const newManifest: SyncManifest = {
       realmUrl: this.options.realmUrl,
       files: {},
@@ -106,19 +121,39 @@ class RealmPusher extends RealmSyncBase {
       console.log('Checking for changed files...');
       let skipped = 0;
 
-      for (const [relativePath, localPath] of localFiles) {
-        if (isProtectedFile(relativePath)) {
+      const hashResults = await Promise.all(
+        Array.from(localFiles.entries()).map(
+          async ([relativePath, localPath]) => {
+            if (isProtectedFile(relativePath)) {
+              return {
+                relativePath,
+                localPath,
+                currentHash: '',
+                protected: true,
+              };
+            }
+            const currentHash = await computeFileHash(localPath);
+            return {
+              relativePath,
+              localPath,
+              currentHash,
+              protected: false,
+            };
+          },
+        ),
+      );
+
+      for (const entry of hashResults) {
+        if (entry.protected) {
           skipped++;
           continue;
         }
-        const currentHash = computeFileHash(localPath);
-        const previousHash = manifest.files[relativePath];
-
-        if (previousHash !== currentHash) {
-          filesToUpload.set(relativePath, localPath);
+        const previousHash = manifest.files[entry.relativePath];
+        if (previousHash !== entry.currentHash) {
+          filesToUpload.set(entry.relativePath, entry.localPath);
         } else {
           skipped++;
-          newManifest.files[relativePath] = currentHash;
+          newManifest.files[entry.relativePath] = entry.currentHash;
         }
       }
 
@@ -132,13 +167,25 @@ class RealmPusher extends RealmSyncBase {
     } else {
       console.log(`Uploading ${filesToUpload.size} file(s)...`);
 
-      for (const [relativePath, localPath] of filesToUpload) {
-        try {
-          await this.uploadFile(relativePath, localPath);
-          newManifest.files[relativePath] = computeFileHash(localPath);
-        } catch (error) {
-          this.hasError = true;
-          console.error(`Error uploading ${relativePath}:`, error);
+      const uploadResults = await Promise.all(
+        Array.from(filesToUpload.entries()).map(
+          async ([relativePath, localPath]) => {
+            try {
+              await this.uploadFile(relativePath, localPath);
+              const hash = await computeFileHash(localPath);
+              return { relativePath, hash };
+            } catch (error) {
+              this.hasError = true;
+              console.error(`Error uploading ${relativePath}:`, error);
+              return null;
+            }
+          },
+        ),
+      );
+
+      for (const result of uploadResults) {
+        if (result) {
+          newManifest.files[result.relativePath] = result.hash;
         }
       }
     }
@@ -162,19 +209,21 @@ class RealmPusher extends RealmSyncBase {
           `Deleting ${filesToDelete.size} remote files that don't exist locally`,
         );
 
-        for (const relativePath of filesToDelete) {
-          try {
-            await this.deleteFile(relativePath);
-          } catch (error) {
-            this.hasError = true;
-            console.error(`Error deleting ${relativePath}:`, error);
-          }
-        }
+        await Promise.all(
+          Array.from(filesToDelete).map(async (relativePath) => {
+            try {
+              await this.deleteFile(relativePath);
+            } catch (error) {
+              this.hasError = true;
+              console.error(`Error deleting ${relativePath}:`, error);
+            }
+          }),
+        );
       }
     }
 
     if (!this.options.dryRun) {
-      saveManifest(this.options.localDir, newManifest);
+      await saveManifest(this.options.localDir, newManifest);
     }
 
     if (!this.options.dryRun && filesToUpload.size > 0) {
@@ -185,7 +234,7 @@ class RealmPusher extends RealmSyncBase {
         file: f,
         status: 'modified' as const,
       }));
-      const checkpoint = checkpointManager.createCheckpoint(
+      const checkpoint = await checkpointManager.createCheckpoint(
         'local',
         pushChanges,
       );
@@ -245,7 +294,7 @@ export async function pushCommand(
     process.exit(1);
   }
 
-  if (!fs.existsSync(localDir)) {
+  if (!(await pathExists(localDir))) {
     console.error(`Local directory does not exist: ${localDir}`);
     process.exit(1);
   }

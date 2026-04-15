@@ -1,5 +1,5 @@
-import { spawnSync } from 'child_process';
-import * as fs from 'fs';
+import { spawn } from 'child_process';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import { isProtectedFile } from './realm-sync-base';
 
@@ -23,6 +23,15 @@ export interface CheckpointChange {
   status: 'added' | 'modified' | 'deleted';
 }
 
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class CheckpointManager {
   private workspaceDir: string;
   private gitDir: string;
@@ -32,17 +41,17 @@ export class CheckpointManager {
     this.gitDir = path.join(this.workspaceDir, '.boxel-history');
   }
 
-  init(): void {
-    if (!fs.existsSync(this.gitDir)) {
-      fs.mkdirSync(this.gitDir, { recursive: true });
+  async init(): Promise<void> {
+    if (!(await pathExists(this.gitDir))) {
+      await fs.mkdir(this.gitDir, { recursive: true });
     }
 
     const gitPath = path.join(this.gitDir, '.git');
-    if (!fs.existsSync(gitPath)) {
-      this.git('init');
-      this.git('config', 'user.email', 'boxel-cli@local');
-      this.git('config', 'user.name', 'Boxel CLI');
-      this.git(
+    if (!(await pathExists(gitPath))) {
+      await this.git('init');
+      await this.git('config', 'user.email', 'boxel-cli@local');
+      await this.git('config', 'user.name', 'Boxel CLI');
+      await this.git(
         'commit',
         '--allow-empty',
         '-m',
@@ -51,104 +60,127 @@ export class CheckpointManager {
     }
   }
 
-  isInitialized(): boolean {
-    return fs.existsSync(path.join(this.gitDir, '.git'));
+  async isInitialized(): Promise<boolean> {
+    return pathExists(path.join(this.gitDir, '.git'));
   }
 
-  private syncFilesToHistory(): void {
-    const files = this.getWorkspaceFiles();
+  private async syncFilesToHistory(): Promise<void> {
+    const files = await this.getWorkspaceFiles();
+    const fileSet = new Set(files);
 
-    const historyFiles = this.getHistoryFiles();
-    for (const file of historyFiles) {
-      if (!files.includes(file)) {
-        const historyPath = path.join(this.gitDir, file);
-        if (fs.existsSync(historyPath)) {
-          fs.unlinkSync(historyPath);
+    const historyFiles = await this.getHistoryFiles();
+    await Promise.all(
+      historyFiles.map(async (file) => {
+        if (!fileSet.has(file)) {
+          const historyPath = path.join(this.gitDir, file);
+          try {
+            await fs.unlink(historyPath);
+          } catch (err: any) {
+            if (err.code !== 'ENOENT') throw err;
+          }
         }
-      }
-    }
+      }),
+    );
 
-    for (const file of files) {
-      const srcPath = path.join(this.workspaceDir, file);
-      const destPath = path.join(this.gitDir, file);
+    await Promise.all(
+      files.map(async (file) => {
+        const srcPath = path.join(this.workspaceDir, file);
+        const destPath = path.join(this.gitDir, file);
 
-      const destDir = path.dirname(destPath);
-      if (!fs.existsSync(destDir)) {
-        fs.mkdirSync(destDir, { recursive: true });
-      }
+        const destDir = path.dirname(destPath);
+        await fs.mkdir(destDir, { recursive: true });
 
-      fs.copyFileSync(srcPath, destPath);
-    }
+        await fs.copyFile(srcPath, destPath);
+      }),
+    );
   }
 
-  private getWorkspaceFiles(): string[] {
+  private async getWorkspaceFiles(): Promise<string[]> {
     const files: string[] = [];
 
-    const scan = (dir: string, prefix = '') => {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (
-          entry.name === '.boxel-history' ||
-          entry.name === '.boxel-sync.json' ||
-          entry.name === 'node_modules'
-        ) {
-          continue;
-        }
-        if (entry.name.startsWith('.')) {
-          continue;
-        }
-
-        const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-
-        if (entry.isDirectory()) {
-          scan(path.join(dir, entry.name), relPath);
-        } else {
-          files.push(relPath);
-        }
+    const scan = async (dir: string, prefix = ''): Promise<void> => {
+      let entries;
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch (err: any) {
+        if (err.code === 'ENOENT') return;
+        throw err;
       }
+
+      await Promise.all(
+        entries.map(async (entry) => {
+          if (
+            entry.name === '.boxel-history' ||
+            entry.name === '.boxel-sync.json' ||
+            entry.name === 'node_modules'
+          ) {
+            return;
+          }
+          if (entry.name.startsWith('.')) {
+            return;
+          }
+
+          const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+          if (entry.isDirectory()) {
+            await scan(path.join(dir, entry.name), relPath);
+          } else {
+            files.push(relPath);
+          }
+        }),
+      );
     };
 
-    scan(this.workspaceDir);
+    await scan(this.workspaceDir);
     return files;
   }
 
-  private getHistoryFiles(): string[] {
+  private async getHistoryFiles(): Promise<string[]> {
     const files: string[] = [];
 
-    const scan = (dir: string, prefix = '') => {
-      if (!fs.existsSync(dir)) return;
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.name === '.git') continue;
-
-        const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-
-        if (entry.isDirectory()) {
-          scan(path.join(dir, entry.name), relPath);
-        } else {
-          files.push(relPath);
-        }
+    const scan = async (dir: string, prefix = ''): Promise<void> => {
+      let entries;
+      try {
+        entries = await fs.readdir(dir, { withFileTypes: true });
+      } catch (err: any) {
+        if (err.code === 'ENOENT') return;
+        throw err;
       }
+
+      await Promise.all(
+        entries.map(async (entry) => {
+          if (entry.name === '.git') return;
+
+          const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+          if (entry.isDirectory()) {
+            await scan(path.join(dir, entry.name), relPath);
+          } else {
+            files.push(relPath);
+          }
+        }),
+      );
     };
 
-    scan(this.gitDir);
+    await scan(this.gitDir);
     return files;
   }
 
-  detectCurrentChanges(): CheckpointChange[] {
-    if (!this.isInitialized()) {
-      const files = this.getWorkspaceFiles();
+  async detectCurrentChanges(): Promise<CheckpointChange[]> {
+    if (!(await this.isInitialized())) {
+      const files = await this.getWorkspaceFiles();
       return files.map((file) => ({ file, status: 'added' as const }));
     }
 
-    this.syncFilesToHistory();
+    await this.syncFilesToHistory();
 
-    const status = spawnSync('git', ['status', '--porcelain'], {
-      cwd: this.gitDir,
-      encoding: 'utf-8',
-    });
-
-    const statusOutput = status.stdout.trim();
+    // Do not trim leading whitespace: porcelain lines look like " M file"
+    // for unstaged modifications, and the leading space is part of the
+    // two-char status code.
+    const statusOutput = (await this.git('status', '--porcelain')).replace(
+      /\n+$/,
+      '',
+    );
     if (!statusOutput) {
       return [];
     }
@@ -191,25 +223,21 @@ export class CheckpointManager {
     return changes;
   }
 
-  createCheckpoint(
+  async createCheckpoint(
     source: 'local' | 'remote' | 'manual',
     changes: CheckpointChange[],
     customMessage?: string,
-  ): Checkpoint | null {
-    if (!this.isInitialized()) {
-      this.init();
+  ): Promise<Checkpoint | null> {
+    if (!(await this.isInitialized())) {
+      await this.init();
     }
 
-    this.syncFilesToHistory();
+    await this.syncFilesToHistory();
 
-    this.git('add', '-A');
+    await this.git('add', '-A');
 
-    const status = spawnSync('git', ['status', '--porcelain'], {
-      cwd: this.gitDir,
-      encoding: 'utf-8',
-    });
-
-    if (!status.stdout.trim()) {
+    const statusOutput = await this.git('status', '--porcelain');
+    if (!statusOutput.trim()) {
       return null;
     }
 
@@ -223,9 +251,9 @@ export class CheckpointManager {
     const sourceTag = `[${source}]`;
     const fullMessage = `${prefix} ${sourceTag} ${message}${description ? '\n\n' + description : ''}`;
 
-    this.git('commit', '-m', fullMessage);
+    await this.git('commit', '-m', fullMessage);
 
-    const hash = this.git('rev-parse', 'HEAD').trim();
+    const hash = (await this.git('rev-parse', 'HEAD')).trim();
     const shortHash = hash.substring(0, 7);
 
     return {
@@ -311,24 +339,32 @@ export class CheckpointManager {
     return { message, description: lines.join('\n') };
   }
 
-  getCheckpoints(limit = 50): Checkpoint[] {
-    if (!this.isInitialized()) {
+  async getCheckpoints(limit = 50): Promise<Checkpoint[]> {
+    if (!(await this.isInitialized())) {
       return [];
     }
 
     const format = '%H|%h|%s|%aI|%an';
-    const log = this.git('log', `--format=${format}`, `-${limit}`);
+    const log = await this.git('log', `--format=${format}`, `-${limit}`);
 
     if (!log.trim()) {
       return [];
     }
 
-    const milestones = this.getAllMilestones();
+    const milestones = await this.getAllMilestones();
 
-    return log
+    const lines = log
       .trim()
       .split('\n')
-      .map((line) => {
+      // The `[init]` bootstrap commit created by init() is an internal
+      // bookkeeping commit, not a user-visible checkpoint.
+      .filter((line) => {
+        const subject = line.split('|')[2] ?? '';
+        return !subject.startsWith('[init]');
+      });
+
+    return Promise.all(
+      lines.map(async (line) => {
         const [hash, shortHash, subject, dateStr] = line.split('|');
 
         const isMajor = subject.includes('[MAJOR]');
@@ -342,7 +378,7 @@ export class CheckpointManager {
           .replace(/\[(MAJOR|minor)\]\s*/i, '')
           .replace(/\[(local|remote|manual)\]\s*/i, '');
 
-        const stats = this.getCommitStats(hash);
+        const stats = await this.getCommitStats(hash);
 
         const milestoneName = milestones.get(hash);
         const isMilestone = !!milestoneName;
@@ -359,16 +395,17 @@ export class CheckpointManager {
           milestoneName,
           ...stats,
         };
-      });
+      }),
+    );
   }
 
-  private getCommitStats(hash: string): {
+  private async getCommitStats(hash: string): Promise<{
     filesChanged: number;
     insertions: number;
     deletions: number;
-  } {
+  }> {
     try {
-      const stat = this.git('show', '--stat', '--format=', hash);
+      const stat = await this.git('show', '--stat', '--format=', hash);
       const lines = stat.trim().split('\n');
       const summaryLine = lines[lines.length - 1] || '';
 
@@ -386,64 +423,75 @@ export class CheckpointManager {
     }
   }
 
-  getChangedFiles(hash: string): string[] {
-    const output = this.git('show', '--name-only', '--format=', hash);
+  async getChangedFiles(hash: string): Promise<string[]> {
+    const output = await this.git('show', '--name-only', '--format=', hash);
     return output.trim().split('\n').filter(Boolean);
   }
 
-  getDiff(hash: string): string {
+  async getDiff(hash: string): Promise<string> {
     return this.git('show', '--format=', hash);
   }
 
-  restore(hash: string): void {
-    const currentFiles = this.getHistoryFiles();
-    for (const file of currentFiles) {
-      const filePath = path.join(this.gitDir, file);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
+  async restore(hash: string): Promise<void> {
+    const currentFiles = await this.getHistoryFiles();
+    await Promise.all(
+      currentFiles.map(async (file) => {
+        const filePath = path.join(this.gitDir, file);
+        try {
+          await fs.unlink(filePath);
+        } catch (err: any) {
+          if (err.code !== 'ENOENT') throw err;
+        }
+      }),
+    );
 
-    this.git('checkout', hash, '--', '.');
+    await this.git('checkout', hash, '--', '.');
 
-    const historyFiles = this.getHistoryFiles();
-    const workspaceFiles = this.getWorkspaceFiles();
+    const historyFiles = await this.getHistoryFiles();
+    const historyFileSet = new Set(historyFiles);
+    const workspaceFiles = await this.getWorkspaceFiles();
 
-    for (const file of workspaceFiles) {
-      if (isProtectedFile(file)) continue;
-      if (!historyFiles.includes(file)) {
-        const filePath = path.join(this.workspaceDir, file);
-        fs.unlinkSync(filePath);
-      }
-    }
+    await Promise.all(
+      workspaceFiles.map(async (file) => {
+        if (isProtectedFile(file)) return;
+        if (!historyFileSet.has(file)) {
+          const filePath = path.join(this.workspaceDir, file);
+          try {
+            await fs.unlink(filePath);
+          } catch (err: any) {
+            if (err.code !== 'ENOENT') throw err;
+          }
+        }
+      }),
+    );
 
-    for (const file of historyFiles) {
-      if (isProtectedFile(file)) continue;
-      const srcPath = path.join(this.gitDir, file);
-      const destPath = path.join(this.workspaceDir, file);
+    await Promise.all(
+      historyFiles.map(async (file) => {
+        if (isProtectedFile(file)) return;
+        const srcPath = path.join(this.gitDir, file);
+        const destPath = path.join(this.workspaceDir, file);
 
-      const destDir = path.dirname(destPath);
-      if (!fs.existsSync(destDir)) {
-        fs.mkdirSync(destDir, { recursive: true });
-      }
+        const destDir = path.dirname(destPath);
+        await fs.mkdir(destDir, { recursive: true });
 
-      fs.copyFileSync(srcPath, destPath);
-    }
+        await fs.copyFile(srcPath, destPath);
+      }),
+    );
 
-    this.git('checkout', 'HEAD', '--', '.');
+    await this.git('checkout', 'HEAD', '--', '.');
   }
 
-  markMilestone(
+  async markMilestone(
     hashOrIndex: string | number,
     name: string,
-  ): { hash: string; name: string } | null {
-    if (!this.isInitialized()) {
+  ): Promise<{ hash: string; name: string } | null> {
+    if (!(await this.isInitialized())) {
       return null;
     }
 
     let hash: string;
     if (typeof hashOrIndex === 'number') {
-      const checkpoints = this.getCheckpoints(hashOrIndex + 1);
+      const checkpoints = await this.getCheckpoints(hashOrIndex + 1);
       if (hashOrIndex < 1 || hashOrIndex > checkpoints.length) {
         return null;
       }
@@ -455,21 +503,21 @@ export class CheckpointManager {
     const tagName = `milestone/${name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-_.]/g, '')}`;
 
     try {
-      this.git('tag', '-a', tagName, hash, '-m', `Milestone: ${name}`);
+      await this.git('tag', '-a', tagName, hash, '-m', `Milestone: ${name}`);
       return { hash, name };
     } catch {
       return null;
     }
   }
 
-  unmarkMilestone(hashOrIndex: string | number): boolean {
-    if (!this.isInitialized()) {
+  async unmarkMilestone(hashOrIndex: string | number): Promise<boolean> {
+    if (!(await this.isInitialized())) {
       return false;
     }
 
     let hash: string;
     if (typeof hashOrIndex === 'number') {
-      const checkpoints = this.getCheckpoints(hashOrIndex + 1);
+      const checkpoints = await this.getCheckpoints(hashOrIndex + 1);
       if (hashOrIndex < 1 || hashOrIndex > checkpoints.length) {
         return false;
       }
@@ -478,14 +526,14 @@ export class CheckpointManager {
       hash = hashOrIndex;
     }
 
-    const tags = this.getMilestoneTags(hash);
+    const tags = await this.getMilestoneTags(hash);
     if (tags.length === 0) {
       return false;
     }
 
     for (const tag of tags) {
       try {
-        this.git('tag', '-d', tag);
+        await this.git('tag', '-d', tag);
       } catch {
         // Ignore errors
       }
@@ -494,9 +542,9 @@ export class CheckpointManager {
     return true;
   }
 
-  private getMilestoneTags(hash: string): string[] {
+  private async getMilestoneTags(hash: string): Promise<string[]> {
     try {
-      const output = this.git('tag', '--points-at', hash);
+      const output = await this.git('tag', '--points-at', hash);
       return output
         .trim()
         .split('\n')
@@ -507,13 +555,13 @@ export class CheckpointManager {
     }
   }
 
-  private getAllMilestones(): Map<string, string> {
+  private async getAllMilestones(): Promise<Map<string, string>> {
     const milestones = new Map<string, string>();
     try {
-      const tags = this.git('tag', '-l', 'milestone/*');
+      const tags = await this.git('tag', '-l', 'milestone/*');
       for (const tag of tags.trim().split('\n').filter(Boolean)) {
         try {
-          const hash = this.git('rev-list', '-1', tag).trim();
+          const hash = (await this.git('rev-list', '-1', tag)).trim();
           const name = tag.replace('milestone/', '').replace(/-/g, ' ');
           milestones.set(hash, name);
         } catch {
@@ -526,25 +574,36 @@ export class CheckpointManager {
     return milestones;
   }
 
-  getMilestones(): Checkpoint[] {
-    const all = this.getCheckpoints(100);
+  async getMilestones(): Promise<Checkpoint[]> {
+    const all = await this.getCheckpoints(100);
     return all.filter((cp) => cp.isMilestone);
   }
 
-  private git(...args: string[]): string {
-    const result = spawnSync('git', args, {
-      cwd: this.gitDir,
-      encoding: 'utf-8',
+  private git(...args: string[]): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn('git', args, {
+        cwd: this.gitDir,
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString('utf-8');
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString('utf-8');
+      });
+
+      child.on('error', (err) => reject(err));
+
+      child.on('close', (code) => {
+        if (code !== 0 && !args.includes('status')) {
+          reject(new Error(`git ${args.join(' ')} failed: ${stderr}`));
+          return;
+        }
+        resolve(stdout);
+      });
     });
-
-    if (result.error) {
-      throw result.error;
-    }
-
-    if (result.status !== 0 && !args.includes('status')) {
-      throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
-    }
-
-    return result.stdout;
   }
 }

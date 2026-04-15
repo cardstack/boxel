@@ -38,9 +38,7 @@ async function createTestRealm(): Promise<string> {
 
   let realmTokens =
     profileManager.getActiveProfile()!.profile.realmTokens ?? {};
-  let entry = Object.entries(realmTokens).find(([url]) =>
-    url.includes(name),
-  );
+  let entry = Object.entries(realmTokens).find(([url]) => url.includes(name));
   if (!entry) {
     throw new Error(`No realm JWT stored for ${name}`);
   }
@@ -48,9 +46,7 @@ async function createTestRealm(): Promise<string> {
 }
 
 // Pull remote files into a temp dir and return a map of relativePath -> content
-async function pullRemoteFiles(
-  realmUrl: string,
-): Promise<Map<string, string>> {
+async function pullRemoteFiles(realmUrl: string): Promise<Map<string, string>> {
   let pullDir = makeLocalDir();
   await pullCommand(realmUrl, pullDir, { profileManager });
 
@@ -102,7 +98,7 @@ describe('realm push (integration)', () => {
     let manifest = JSON.parse(
       fs.readFileSync(path.join(localDir, '.boxel-sync.json'), 'utf8'),
     );
-    expect(manifest.workspaceUrl).toBe(realmUrl);
+    expect(manifest.realmUrl).toBe(realmUrl);
     expect(Object.keys(manifest.files)).toContain('card.gts');
     expect(Object.keys(manifest.files)).toContain('data.json');
 

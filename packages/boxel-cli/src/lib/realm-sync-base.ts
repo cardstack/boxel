@@ -1,5 +1,5 @@
 import type { ProfileManager } from './profile-manager';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
 
@@ -12,6 +12,15 @@ export const PROTECTED_FILES = new Set(['.realm.json']);
 export function isProtectedFile(relativePath: string): boolean {
   const normalizedPath = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
   return PROTECTED_FILES.has(normalizedPath);
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const SupportedMimeType = {
@@ -28,7 +37,7 @@ export interface SyncOptions {
 
 export abstract class RealmSyncBase {
   protected normalizedRealmUrl: string;
-  private ignoreCache = new Map<string, Ignore>();
+  private ignoreCache = new Map<string, Promise<Ignore>>();
 
   constructor(
     protected options: SyncOptions,
@@ -108,20 +117,30 @@ export abstract class RealmSyncBase {
       };
 
       if (data.data && data.data.relationships) {
-        for (const [name, info] of Object.entries(data.data.relationships)) {
-          const entry = info as { meta: { kind: string } };
-          const isFile = entry.meta.kind === 'file';
-          const entryPath = dir ? path.posix.join(dir, name) : name;
+        const entries = Object.entries(data.data.relationships);
+        const subResults = await Promise.all(
+          entries.map(async ([name, info]) => {
+            const entry = info as { meta: { kind: string } };
+            const isFile = entry.meta.kind === 'file';
+            const entryPath = dir ? path.posix.join(dir, name) : name;
 
-          if (isFile) {
-            if (!this.shouldIgnoreRemoteFile(entryPath)) {
-              files.set(entryPath, true);
+            if (isFile) {
+              if (!this.shouldIgnoreRemoteFile(entryPath)) {
+                return [[entryPath, true as boolean]] as Array<
+                  [string, boolean]
+                >;
+              }
+              return [] as Array<[string, boolean]>;
+            } else {
+              const subdirFiles = await this.getRemoteFileList(entryPath);
+              return Array.from(subdirFiles.entries());
             }
-          } else {
-            const subdirFiles = await this.getRemoteFileList(entryPath);
-            for (const [subPath, isFileEntry] of subdirFiles) {
-              files.set(subPath, isFileEntry);
-            }
+          }),
+        );
+
+        for (const pairs of subResults) {
+          for (const [p, isFileEntry] of pairs) {
+            files.set(p, isFileEntry);
           }
         }
       }
@@ -215,31 +234,42 @@ export abstract class RealmSyncBase {
     const files = new Map<string, { path: string; mtime: number }>();
     const fullDir = path.join(this.options.localDir, dir);
 
-    if (!fs.existsSync(fullDir)) {
-      return files;
+    let entries;
+    try {
+      entries = await fs.readdir(fullDir, { withFileTypes: true });
+    } catch (err: any) {
+      if (err.code === 'ENOENT') return files;
+      throw err;
     }
 
-    const entries = fs.readdirSync(fullDir);
+    const subResults = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = path.join(fullDir, entry.name);
+        const relativePath = dir
+          ? path.posix.join(dir, entry.name)
+          : entry.name;
 
-    for (const entry of entries) {
-      const fullPath = path.join(fullDir, entry);
-      const relativePath = dir ? path.posix.join(dir, entry) : entry;
-      const stats = fs.statSync(fullPath);
-
-      if (this.shouldIgnoreFile(relativePath, fullPath)) {
-        continue;
-      }
-
-      if (stats.isFile()) {
-        files.set(relativePath, {
-          path: fullPath,
-          mtime: stats.mtimeMs,
-        });
-      } else if (stats.isDirectory()) {
-        const subdirFiles = await this.getLocalFileListWithMtimes(relativePath);
-        for (const [subPath, fileInfo] of subdirFiles) {
-          files.set(subPath, fileInfo);
+        if (await this.shouldIgnoreFile(relativePath, fullPath)) {
+          return [] as Array<[string, { path: string; mtime: number }]>;
         }
+
+        if (entry.isFile()) {
+          const stats = await fs.stat(fullPath);
+          return [
+            [relativePath, { path: fullPath, mtime: stats.mtimeMs }],
+          ] as Array<[string, { path: string; mtime: number }]>;
+        } else if (entry.isDirectory()) {
+          const subdirFiles =
+            await this.getLocalFileListWithMtimes(relativePath);
+          return Array.from(subdirFiles.entries());
+        }
+        return [];
+      }),
+    );
+
+    for (const pairs of subResults) {
+      for (const [p, info] of pairs) {
+        files.set(p, info);
       }
     }
 
@@ -250,28 +280,38 @@ export abstract class RealmSyncBase {
     const files = new Map<string, string>();
     const fullDir = path.join(this.options.localDir, dir);
 
-    if (!fs.existsSync(fullDir)) {
-      return files;
+    let entries;
+    try {
+      entries = await fs.readdir(fullDir, { withFileTypes: true });
+    } catch (err: any) {
+      if (err.code === 'ENOENT') return files;
+      throw err;
     }
 
-    const entries = fs.readdirSync(fullDir);
+    const subResults = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = path.join(fullDir, entry.name);
+        const relativePath = dir
+          ? path.posix.join(dir, entry.name)
+          : entry.name;
 
-    for (const entry of entries) {
-      const fullPath = path.join(fullDir, entry);
-      const relativePath = dir ? path.posix.join(dir, entry) : entry;
-      const stats = fs.statSync(fullPath);
-
-      if (this.shouldIgnoreFile(relativePath, fullPath)) {
-        continue;
-      }
-
-      if (stats.isFile()) {
-        files.set(relativePath, fullPath);
-      } else if (stats.isDirectory()) {
-        const subdirFiles = await this.getLocalFileList(relativePath);
-        for (const [subPath, fullSubPath] of subdirFiles) {
-          files.set(subPath, fullSubPath);
+        if (await this.shouldIgnoreFile(relativePath, fullPath)) {
+          return [] as Array<[string, string]>;
         }
+
+        if (entry.isFile()) {
+          return [[relativePath, fullPath]] as Array<[string, string]>;
+        } else if (entry.isDirectory()) {
+          const subdirFiles = await this.getLocalFileList(relativePath);
+          return Array.from(subdirFiles.entries());
+        }
+        return [];
+      }),
+    );
+
+    for (const pairs of subResults) {
+      for (const [p, fullSubPath] of pairs) {
+        files.set(p, fullSubPath);
       }
     }
 
@@ -294,7 +334,7 @@ export abstract class RealmSyncBase {
       return;
     }
 
-    const content = fs.readFileSync(localPath, 'utf8');
+    const content = await fs.readFile(localPath, 'utf8');
     const url = this.buildFileUrl(relativePath);
 
     const response = await this.profileManager.authedRealmFetch(url, {
@@ -343,11 +383,9 @@ export abstract class RealmSyncBase {
     const content = await response.text();
 
     const localDir = path.dirname(localPath);
-    if (!fs.existsSync(localDir)) {
-      fs.mkdirSync(localDir, { recursive: true });
-    }
+    await fs.mkdir(localDir, { recursive: true });
 
-    fs.writeFileSync(localPath, content, 'utf8');
+    await fs.writeFile(localPath, content, 'utf8');
     console.log(`  Downloaded: ${relativePath}`);
   }
 
@@ -390,58 +428,69 @@ export abstract class RealmSyncBase {
       return;
     }
 
-    if (fs.existsSync(localPath)) {
-      fs.unlinkSync(localPath);
+    try {
+      await fs.unlink(localPath);
       console.log(`  Deleted: ${localPath}`);
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') throw err;
     }
   }
 
-  private getIgnoreInstance(dirPath: string): Ignore {
-    if (this.ignoreCache.has(dirPath)) {
-      return this.ignoreCache.get(dirPath)!;
-    }
+  private getIgnoreInstance(dirPath: string): Promise<Ignore> {
+    const cached = this.ignoreCache.get(dirPath);
+    if (cached) return cached;
 
-    const ig = ignore();
-    let currentPath = dirPath;
-    const rootPath = this.options.localDir;
+    const build = (async () => {
+      const ig = ignore();
+      let currentPath = dirPath;
+      const rootPath = this.options.localDir;
 
-    while (currentPath.startsWith(rootPath)) {
-      const gitignorePath = path.join(currentPath, '.gitignore');
-      if (fs.existsSync(gitignorePath)) {
-        try {
-          const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
-          ig.add(gitignoreContent);
-        } catch (error) {
-          console.warn(
-            `Warning: Could not read .gitignore file at ${gitignorePath}:`,
-            error,
-          );
+      while (currentPath.startsWith(rootPath)) {
+        const gitignorePath = path.join(currentPath, '.gitignore');
+        if (await pathExists(gitignorePath)) {
+          try {
+            const gitignoreContent = await fs.readFile(gitignorePath, 'utf8');
+            ig.add(gitignoreContent);
+          } catch (error) {
+            console.warn(
+              `Warning: Could not read .gitignore file at ${gitignorePath}:`,
+              error,
+            );
+          }
         }
+
+        const boxelignorePath = path.join(currentPath, '.boxelignore');
+        if (await pathExists(boxelignorePath)) {
+          try {
+            const boxelignoreContent = await fs.readFile(
+              boxelignorePath,
+              'utf8',
+            );
+            ig.add(boxelignoreContent);
+          } catch (error) {
+            console.warn(
+              `Warning: Could not read .boxelignore file at ${boxelignorePath}:`,
+              error,
+            );
+          }
+        }
+
+        const parentPath = path.dirname(currentPath);
+        if (parentPath === currentPath) break;
+        currentPath = parentPath;
       }
 
-      const boxelignorePath = path.join(currentPath, '.boxelignore');
-      if (fs.existsSync(boxelignorePath)) {
-        try {
-          const boxelignoreContent = fs.readFileSync(boxelignorePath, 'utf8');
-          ig.add(boxelignoreContent);
-        } catch (error) {
-          console.warn(
-            `Warning: Could not read .boxelignore file at ${boxelignorePath}:`,
-            error,
-          );
-        }
-      }
+      return ig;
+    })();
 
-      const parentPath = path.dirname(currentPath);
-      if (parentPath === currentPath) break;
-      currentPath = parentPath;
-    }
-
-    this.ignoreCache.set(dirPath, ig);
-    return ig;
+    this.ignoreCache.set(dirPath, build);
+    return build;
   }
 
-  private shouldIgnoreFile(relativePath: string, fullPath: string): boolean {
+  private async shouldIgnoreFile(
+    relativePath: string,
+    fullPath: string,
+  ): Promise<boolean> {
     const fileName = path.basename(relativePath);
 
     if (fileName === '.boxel-sync.json') {
@@ -453,7 +502,7 @@ export abstract class RealmSyncBase {
     }
 
     const dirPath = path.dirname(fullPath);
-    const ig = this.getIgnoreInstance(dirPath);
+    const ig = await this.getIgnoreInstance(dirPath);
     const normalizedPath = relativePath.replace(/\\/g, '/');
 
     return ig.ignores(normalizedPath);
