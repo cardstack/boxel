@@ -51,7 +51,7 @@ import {
   type IssueLoopConfig,
   type IssueLoopResult,
 } from './issue-loop';
-import { RealmIssueStore } from './issue-scheduler';
+import { RealmIssueStore, type IssueStore } from './issue-scheduler';
 import { RealmIssueRelationshipLoader } from './realm-issue-relationship-loader';
 import {
   ensureTrailingSlash,
@@ -91,6 +91,11 @@ export interface IssueLoopWiringConfig {
   maxIterationsPerIssue?: number;
   /** Max outer-loop cycles. Default: 50. */
   maxOuterCycles?: number;
+  /**
+   * Reset blocked issues (without blockedBy dependencies) to backlog before
+   * running the loop. Sets priority to critical for immediate pickup.
+   */
+  retryBlocked?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +124,11 @@ export async function runFactoryIssueLoop(
     darkfactoryModuleUrl,
     options: fetchOptions,
   });
+
+  // 2b. Retry blocked issues (default on, opt out with --no-retry-blocked)
+  if (config.retryBlocked) {
+    await retryBlockedIssues(issueStore);
+  }
 
   // 3. Context builder with issue relationship loader
   let issueLoader = new RealmIssueRelationshipLoader({
@@ -150,6 +160,10 @@ export async function runFactoryIssueLoop(
 
   let testResultsModuleUrl = new URL(
     'software-factory/test-results',
+    realmServerUrl,
+  ).href;
+  let lintResultsModuleUrl = new URL(
+    'software-factory/lint-result',
     realmServerUrl,
   ).href;
   let hostAppUrl = config.hostAppUrl ?? realmServerUrl;
@@ -190,6 +204,7 @@ export async function runFactoryIssueLoop(
       fetch: fetchImpl,
       hostAppUrl,
       testResultsModuleUrl,
+      lintResultsModuleUrl,
       issueId,
       fetchFilenames: (realmUrl: string) =>
         fetchRealmFilenames(realmUrl, fetchOptions),
@@ -213,6 +228,61 @@ export async function runFactoryIssueLoop(
   };
 
   return runIssueLoop(issueLoopConfig);
+}
+
+// ---------------------------------------------------------------------------
+// Retry blocked issues
+// ---------------------------------------------------------------------------
+
+export async function retryBlockedIssues(
+  issueStore: IssueStore,
+): Promise<void> {
+  let issues = await issueStore.listIssues();
+  let resetCount = 0;
+
+  // Build a status map so we can check if blockers are actually unresolved
+  let statusMap = new Map<string, string>();
+  for (let issue of issues) {
+    statusMap.set(issue.id, issue.status);
+  }
+
+  for (let issue of issues) {
+    if (issue.status !== 'blocked') continue;
+
+    // Only retry issues blocked by validation/max-iterations,
+    // NOT issues with unresolved dependency blockers.
+    // blockedBy relationships persist even after blockers complete,
+    // so we check whether any blocker is actually non-done.
+    let hasUnresolvedBlocker = issue.blockedBy.some(
+      (blockerId) => statusMap.get(blockerId) !== 'done',
+    );
+    if (hasUnresolvedBlocker) {
+      log.info(
+        `Retry: skipping "${issue.id}" — has unresolved dependency blockers`,
+      );
+      continue;
+    }
+
+    await issueStore.addComment(issue.id, {
+      body: '**Retry:** resetting blocked status to backlog for another attempt.',
+      author: 'orchestrator',
+    });
+    // Set priority to critical so the scheduler picks retried issues first
+    await issueStore.updateIssue(issue.id, {
+      status: 'backlog',
+      priority: 'critical',
+    });
+    log.info(
+      `Retry: reset blocked issue "${issue.id}" to backlog (priority: critical)`,
+    );
+    resetCount++;
+  }
+
+  if (resetCount > 0) {
+    log.info(`Retry: reset ${resetCount} blocked issue(s) to backlog`);
+  } else {
+    log.info('Retry: no eligible blocked issues found to reset');
+  }
 }
 
 // ---------------------------------------------------------------------------

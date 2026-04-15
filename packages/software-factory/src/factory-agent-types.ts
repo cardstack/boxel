@@ -103,6 +103,7 @@ export interface TestFailure {
   stackTrace?: string;
 }
 
+/** @deprecated Use ValidationResults from the validation pipeline instead. */
 export interface TestResult {
   status: 'passed' | 'failed' | 'error';
   passedCount: number;
@@ -186,6 +187,7 @@ export interface AgentContext {
   skills: ResolvedSkill[];
   /** @deprecated Tools are now provided separately as FactoryTool[] to agent.run(). */
   tools?: ToolManifest[];
+  /** @deprecated Use validationResults/validationContext instead. */
   testResults?: TestResult;
   /** @deprecated Tool results are now returned inline during the agent's turn. */
   toolResults?: ToolResult[];
@@ -194,8 +196,10 @@ export interface AgentContext {
   /** @deprecated Iteration tracking is now owned by the orchestrator. */
   iteration?: number;
   targetRealmUrl: string;
-  /** Validation results from the prior inner-loop iteration. */
+  /** Validation results from the prior inner-loop iteration (used for pass/fail checks). */
   validationResults?: ValidationResults;
+  /** Pre-formatted validation context from Validator.formatForContext() — the sole mechanism for validation reaching the LLM. */
+  validationContext?: string;
   /** Brief URL for bootstrap issues. */
   briefUrl?: string;
 }

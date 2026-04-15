@@ -85,8 +85,9 @@ target-realm/
 │   └── sample-instance.json         # Card instance
 ├── Spec/
 │   └── card-name.json               # Catalog Spec card
-├── Test Runs/
-│   └── issue-slug-1.json            # TestRun card
+├── Validations/
+│   ├── test_issue-slug-1.json       # TestRun card (test results)
+│   └── lint_issue-slug-1.json       # Lint result card
 ├── Projects/
 │   └── project-name.json            # Project card
 ├── Issues/

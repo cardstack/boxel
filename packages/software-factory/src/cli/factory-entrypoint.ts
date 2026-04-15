@@ -21,11 +21,8 @@ async function main(): Promise<void> {
     }
 
     let options = parseFactoryEntrypointArgs(process.argv.slice(2));
-    log.info(`mode=${options.mode} brief=${options.briefUrl}`);
-
-    if (options.mode === 'implement') {
-      log.info('Starting seed issue + issue-driven loop...');
-    }
+    log.info(`brief=${options.briefUrl}`);
+    log.info('Starting seed issue + issue-driven loop...');
 
     let summary = await runFactoryEntrypoint(options);
 

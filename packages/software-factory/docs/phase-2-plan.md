@@ -81,9 +81,41 @@ interface ValidationStepRunner {
 **Step-specific failure shapes** — each validation type carries its own structured data in `ValidationStepResult.details` (flattened POJOs, not cards):
 
 - **Test step**: `{ testRunId, passedCount, failedCount, failures: [{ testName, module, message, stackTrace }] }` — reads back the completed TestRun card from the realm for detailed failure data (will become cheap local filesystem reads after boxel-cli integration)
-- **Future parse/lint/evaluate/instantiate steps**: each defines its own `details` shape
+- **Lint step** (CS-10714): `{ lintResultId, filesChecked, filesWithErrors, totalViolations, violations: [{ rule, file, line, message }] }` — calls the realm's `_lint` endpoint (ESLint + Prettier + `@cardstack/boxel` rules) for each `.gts`, `.gjs`, `.ts`, `.js` file. Creates a `LintResult` card as a persistent artifact.
+- **Future parse/evaluate/instantiate steps**: each defines its own `details` shape
 
 **Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
+
+### Validation Artifacts: Naming and Storage
+
+All validation artifacts (test runs, lint results, future validation types) are stored in a shared `Validations/` directory in the target realm with type-prefixed names:
+
+- Test runs: `Validations/test_{issue-slug}-{seq}.json` (e.g., `Validations/test_sticky-note-define-core-1.json`)
+- Lint results: `Validations/lint_{issue-slug}-{seq}.json` (e.g., `Validations/lint_sticky-note-define-core-1.json`)
+
+Each artifact is a card instance (`TestRun` or `LintResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
+
+### Validation Context Flow
+
+`Validator.formatForContext()` is the **sole mechanism** for getting validation results into the LLM context:
+
+1. After each agent turn, `validator.validate(targetRealmUrl)` produces `ValidationResults` (used by the loop for pass/fail control flow)
+2. `validator.formatForContext(results)` produces combined markdown from all step runners
+3. This pre-formatted string is stored as `validationContext` on `AgentContext` and rendered in the `ticket-iterate.md` template
+4. The LLM never sees the raw `ValidationResults` struct — only the formatted markdown
+
+The Phase 1 `testResults` field on `AgentContext` is deprecated. All validation flows through `validationResults` (for the loop) and `validationContext` (for the LLM prompt).
+
+### Lint Step Details (CS-10714)
+
+The lint validation step (`src/validators/lint-step.ts`) uses the realm's existing `_lint` endpoint — the same one the Monaco editor uses in code mode. For each lintable file discovered in the realm:
+
+1. Read the file source via `readFile()`
+2. POST the source to `{realmUrl}_lint` with `X-Filename` header
+3. ESLint runs with `@cardstack/boxel` rules (missing invokables, missing card-api imports, no-duplicate-imports, etc.) and Prettier formatting
+4. Collect `messages` from the response where `severity === 2` (errors)
+
+The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
 
 ### Handling Failures
 
@@ -97,6 +129,16 @@ The inner loop continues until:
 - Max iterations are reached with **passing validation** — the issue is exhausted but not blocked (agent did not mark done despite passing validation)
 
 The agent always has the option to create new issues via tool calls if it determines that a failure requires separate work (e.g., "this card definition depends on another card that doesn't exist yet — creating a new issue for it"). But the orchestrator does not force this — the agent decides.
+
+### Retrying Blocked Issues (default on, opt out with `--no-retry-blocked`)
+
+By default, the factory resets eligible blocked issues to `backlog` with `critical` priority before running the loop:
+
+- **Only issues blocked without `blockedBy` dependencies are reset** — issues blocked by another issue (dependency) are left alone. This distinguishes "blocked by validation failures" from "blocked by unfinished prerequisite work."
+- **Priority elevation to `critical`** ensures retried issues are picked up before other backlog items by `IssueScheduler.pickNextIssue()`.
+- **A comment is added** documenting the reset for traceability.
+- **Prior validation failure context in issue comments is preserved** — the agent sees what went wrong and has context for the retry.
+- **Opt out with `--no-retry-blocked`** — if you want blocked issues to stay blocked, pass this flag.
 
 ### What This Means for Task Breakdown
 
@@ -149,7 +191,7 @@ The flow becomes:
 4. The agent calls `signal_done()` — the orchestrator marks the seed issue as done after validation passes
 5. The orchestrator now has a populated issue backlog and continues the normal loop
 
-Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up.
+Seed issue creation is **idempotent** — `createSeedIssue()` checks if `Issues/bootstrap-seed` already exists before writing. This supports crash recovery: if the factory restarts, the seed issue is already in the realm and the loop picks it up. Because of this idempotency, the `--mode` flag (bootstrap / implement / resume) was removed from the CLI — there is no need to distinguish between a fresh run and a resume. The factory always creates the seed (no-op if it already exists) and runs the issue loop.
 
 The `ContextBuilder.buildForIssue()` handles the bootstrap case where no Project exists yet by supplying a minimal stub (`{ id: 'bootstrap-pending' }`) when `loadProject()` returns `undefined` and the issue has `issueType === 'bootstrap'`. This keeps `AgentContext.project` required (no type ripple) while the bootstrap prompt template doesn't reference project fields.
 

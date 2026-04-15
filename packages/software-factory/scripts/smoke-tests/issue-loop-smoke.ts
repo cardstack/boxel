@@ -150,6 +150,16 @@ class MockValidator implements Validator {
     }
     return this.results[this.callIndex++];
   }
+
+  formatForContext(results: ValidationResults): string {
+    if (results.passed) {
+      return 'All validation steps passed.';
+    }
+    return results.steps
+      .filter((s) => !s.passed)
+      .map((s) => `${s.step}: ${s.errors.map((e) => e.message).join(', ')}`)
+      .join('\n');
+  }
 }
 
 class StubContextBuilder implements IssueContextBuilderLike {
