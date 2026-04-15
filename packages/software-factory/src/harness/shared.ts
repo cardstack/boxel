@@ -702,6 +702,24 @@ export function buildRealmToken(
   );
 }
 
+/**
+ * Build a JWT for `_run-command` and other server-level endpoints.
+ *
+ * The `_run-command` route uses `jwtMiddleware(args.realmSecretSeed)` which
+ * verifies with `REALM_SECRET_SEED` (not REALM_SERVER_SECRET_SEED). The
+ * middleware only checks for a valid `user` and `sessionRoom` in the payload.
+ */
+export function buildServerToken(user = DEFAULT_REALM_OWNER): string {
+  return jwt.sign(
+    {
+      user,
+      sessionRoom: `software-factory-session-room-for-${user}`,
+    },
+    REALM_SECRET_SEED,
+    { expiresIn: '7d' },
+  );
+}
+
 export function createProcessExitPromise(
   proc: SpawnedProcess,
   label: string,

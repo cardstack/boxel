@@ -82,7 +82,8 @@ interface ValidationStepRunner {
 
 - **Test step**: `{ testRunId, passedCount, failedCount, failures: [{ testName, module, message, stackTrace }] }` — reads back the completed TestRun card from the realm for detailed failure data (will become cheap local filesystem reads after boxel-cli integration)
 - **Lint step** (CS-10714): `{ lintResultId, filesChecked, filesWithErrors, totalViolations, violations: [{ rule, file, line, message }] }` — calls the realm's `_lint` endpoint (ESLint + Prettier + `@cardstack/boxel` rules) for each `.gts`, `.gjs`, `.ts`, `.js` file. Creates a `LintResult` card as a persistent artifact.
-- **Future parse/evaluate/instantiate steps**: each defines its own `details` shape
+- **Eval step** (CS-10715): `{ evalResultId, modulesChecked, modulesWithErrors, modules: [{ path, error, stackTrace? }] }` — evaluates each non-test `.gts` module via `_run-command` → `evaluate-module` host command → `/_prerender-module` (prerenderer sandbox). Creates an `EvalResult` card as a persistent artifact. Files matching `*.test.gts` are excluded.
+- **Future parse/instantiate steps**: each defines its own `details` shape
 
 **Adding a new validation step** = creating a new module file in `src/validators/` + replacing the `NoOpStepRunner` in `createDefaultPipeline()`.
 
@@ -92,6 +93,7 @@ All validation artifacts (test runs, lint results, future validation types) are 
 
 - Test runs: `Validations/test_{issue-slug}-{seq}.json` (e.g., `Validations/test_sticky-note-define-core-1.json`)
 - Lint results: `Validations/lint_{issue-slug}-{seq}.json` (e.g., `Validations/lint_sticky-note-define-core-1.json`)
+- Eval results: `Validations/eval_{issue-slug}-{seq}.json` (e.g., `Validations/eval_sticky-note-define-core-1.json`)
 
 Each artifact is a card instance (`TestRun` or `LintResult`) with `linksTo` relationships to the `Issue` and `Project` being validated.
 
@@ -116,6 +118,20 @@ The lint validation step (`src/validators/lint-step.ts`) uses the realm's existi
 4. Collect `messages` from the response where `severity === 2` (errors)
 
 The `LintResult` card definition (`realm/lint-result.gts`) mirrors the `TestRun` card structure with fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/lint-result-cards.ts`.
+
+### Eval Step Details (CS-10715)
+
+The eval validation step (`src/validators/eval-step.ts`) verifies that `.gts` modules load and evaluate without runtime errors. Module evaluation must happen in a sandbox — the prerenderer's headless Chrome — never directly in the factory's Node process. The step chains through three layers: `_run-command` → `evaluate-module` host command (`packages/host/app/commands/evaluate-module.ts`) → `/_prerender-module` endpoint. The prerenderer returns a `ModuleRenderResponse` with `status: 'ready' | 'error'` and structured error details including message and stack trace.
+
+For each non-test `.gts` file discovered in the realm (files matching `*.test.gts` are excluded — test files are the test step's responsibility):
+
+1. Construct the module URL (strip `.gts` extension, resolve against realm URL)
+2. Call the `evaluate-module` host command via `runRealmCommand()`
+3. The host command calls `/_prerender-module` on the realm server
+4. The prerenderer evaluates the module in headless Chrome and returns success/error
+5. Collect errors with module path, error message, and optional stack trace
+
+The `EvalResult` card definition (`realm/eval-result.gts`) follows the same structure as `LintResult` and `TestRun` — fitted/embedded/isolated templates, a running state, and links to Issue/Project. Card CRUD is in `src/eval-result-cards.ts`. Sequence numbers use the shared `getNextValidationSequenceNumber()` from `realm-operations.ts`.
 
 ### Handling Failures
 

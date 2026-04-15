@@ -9,6 +9,7 @@ import * as CreateListingPRRequestCommandModule from './bot-requests/create-list
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
 import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
+import * as EvaluateModuleCommandModule from './evaluate-module';
 import * as CopyAndEditCommandModule from './copy-and-edit';
 import * as CopyCardToRealmModule from './copy-card';
 import * as CopyCardToStackCommandModule from './copy-card-to-stack';
@@ -127,6 +128,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/check-correctness',
     CheckCorrectnessCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/evaluate-module',
+    EvaluateModuleCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/cancel-indexing-job',
@@ -462,6 +467,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   UnregisterBotCommandModule.default,
   CancelIndexingJobCommandModule.default,
   CheckCorrectnessCommandModule.default,
+  EvaluateModuleCommandModule.default,
   UpdateCodePathWithSelectionCommandModule.default,
   UpdatePlaygroundSelectionCommandModule.default,
   UpdateRoomSkillsCommandModule.default,

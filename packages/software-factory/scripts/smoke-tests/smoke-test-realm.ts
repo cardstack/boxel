@@ -322,14 +322,20 @@ async function main() {
     'software-factory/lint-result',
     realmServerUrl,
   ).href;
+  let evalResultsModuleUrl = new URL(
+    'software-factory/eval-result',
+    realmServerUrl,
+  ).href;
 
   let pipeline = createDefaultPipeline({
     authorization,
+    serverToken: authorization,
     fetch: fetchImpl,
     realmServerUrl,
     hostAppUrl: realmServerUrl,
     testResultsModuleUrl,
     lintResultsModuleUrl,
+    evalResultsModuleUrl,
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);

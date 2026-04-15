@@ -1,0 +1,204 @@
+import { resolve } from 'node:path';
+
+import { expect, test } from './fixtures';
+
+import { readFile, writeFile, waitForRealmFile } from '../src/realm-operations';
+import { EvalValidationStep } from '../src/validators/eval-step';
+import type { EvalValidationDetails } from '../src/validators/eval-step';
+
+const fixtureRealmDir = resolve(
+  process.cwd(),
+  'test-fixtures',
+  'test-realm-runner',
+);
+
+// A valid .gts card module that should evaluate successfully.
+const VALID_MODULE_GTS = `import {
+  CardDef,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
+import StringField from 'https://cardstack.com/base/string';
+
+export class ValidCard extends CardDef {
+  static displayName = 'Valid Card';
+  @field name = contains(StringField);
+}
+`;
+
+// A .gts module with a broken import that should fail evaluation.
+// Foo is consumed as a field type so the compiler can't tree-shake it.
+const BROKEN_MODULE_GTS = `import {
+  CardDef,
+  field,
+  contains,
+} from 'https://cardstack.com/base/card-api';
+import { Foo } from './does-not-exist';
+
+export class BrokenCard extends CardDef {
+  static displayName = 'Broken Card';
+  @field brokenField = contains(Foo);
+}
+`;
+
+test.use({ realmDir: fixtureRealmDir });
+test.use({ realmServerMode: 'isolated' });
+
+test.describe('eval-validation e2e', () => {
+  test('EvalValidationStep e2e: clean module evaluates successfully', async ({
+    realm,
+  }) => {
+    let realmUrl = realm.realmURL.href;
+    let realmServerUrl = realm.realmServerURL.href;
+    let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
+    let evalResultsModuleUrl = `${realmServerUrl}software-factory/eval-result`;
+
+    // Write a valid module
+    let writeResult = await writeFile(
+      realmUrl,
+      'valid-card.gts',
+      VALID_MODULE_GTS,
+      { authorization },
+    );
+    expect(writeResult.ok).toBe(true);
+
+    let indexed = await waitForRealmFile(realmUrl, 'valid-card.gts', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+    expect(indexed).toBe(true);
+
+    let step = new EvalValidationStep({
+      authorization,
+      serverToken,
+      fetch: globalThis.fetch,
+      realmServerUrl,
+      evalResultsModuleUrl,
+      issueId: 'Issues/eval-e2e',
+    });
+
+    let result = await step.run(realmUrl);
+
+    // Must pass — valid modules with correct imports
+    expect(result.step).toBe('evaluate');
+    expect(result.passed).toBe(true);
+    expect(result.files).toBeTruthy();
+    expect(result.files!.length).toBeGreaterThan(0);
+    expect(result.files).not.toContain('hello.test.gts');
+
+    let details = result.details as unknown as EvalValidationDetails;
+    expect(details).toBeTruthy();
+    expect(details.evalResultId).toContain('Validations/eval_eval-e2e');
+    expect(details.modulesChecked).toBeGreaterThan(0);
+    expect(details.modulesWithErrors).toBe(0);
+
+    // Read back the EvalResult card to verify persistence
+    let cardRead = await readFile(realmUrl, details.evalResultId, {
+      authorization,
+    });
+    expect(cardRead.ok).toBe(true);
+
+    let attrs = cardRead.document?.data.attributes;
+    expect(attrs).toBeTruthy();
+    expect(attrs?.status).toBe('passed');
+    expect(attrs?.sequenceNumber).toBe(1);
+    expect(attrs?.completedAt).toBeTruthy();
+  });
+
+  test('EvalValidationStep e2e: module with broken import fails evaluation', async ({
+    realm,
+  }) => {
+    let realmUrl = realm.realmURL.href;
+    let realmServerUrl = realm.realmServerURL.href;
+    let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
+    let evalResultsModuleUrl = `${realmServerUrl}software-factory/eval-result`;
+
+    // Write a module with a broken relative import that is consumed as a field
+    // type. The import must be consumed — unused imports get tree-shaken by the
+    // compiler and the Loader never sees them (lint catches unused imports).
+    let writeResult = await writeFile(
+      realmUrl,
+      'broken-module.gts',
+      BROKEN_MODULE_GTS,
+      { authorization },
+    );
+    expect(writeResult.ok).toBe(true);
+
+    let indexed = await waitForRealmFile(realmUrl, 'broken-module.gts', {
+      authorization,
+      pollMs: 300,
+      timeoutMs: 30_000,
+    });
+    expect(indexed).toBe(true);
+
+    let step = new EvalValidationStep({
+      authorization,
+      serverToken,
+      fetch: globalThis.fetch,
+      realmServerUrl,
+      evalResultsModuleUrl,
+      issueId: 'Issues/eval-fail-e2e',
+    });
+
+    let result = await step.run(realmUrl);
+
+    // Must fail — broken-module.gts imports from a non-existent module
+    expect(result.step).toBe('evaluate');
+    expect(result.passed).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+
+    let details = result.details as unknown as EvalValidationDetails;
+    expect(details).toBeTruthy();
+    expect(details.modulesWithErrors).toBeGreaterThan(0);
+
+    let brokenModule = details.modules.find((m) =>
+      m.path.includes('broken-module'),
+    );
+    expect(brokenModule).toBeTruthy();
+    expect(brokenModule!.error).toBeTruthy();
+    // The error should be a real eval failure from the sandbox, not infrastructure
+    expect(brokenModule!.error).not.toContain('unable to fetch');
+    expect(brokenModule!.error).not.toContain('Command runner failed');
+    expect(brokenModule!.error).not.toContain('Missing Authorization');
+
+    // Read back the EvalResult card to verify it was persisted as failed
+    let cardRead = await readFile(realmUrl, details.evalResultId, {
+      authorization,
+    });
+    expect(cardRead.ok).toBe(true);
+
+    let attrs = cardRead.document?.data.attributes;
+    expect(attrs).toBeTruthy();
+    expect(attrs?.status).toBe('failed');
+  });
+
+  test('EvalValidationStep e2e: test files are excluded', async ({ realm }) => {
+    let realmUrl = realm.realmURL.href;
+    let realmServerUrl = realm.realmServerURL.href;
+    let authorization = realm.authorizationHeaders()['Authorization'];
+    let serverToken = `Bearer ${realm.serverToken}`;
+    let evalResultsModuleUrl = `${realmServerUrl}software-factory/eval-result`;
+
+    let step = new EvalValidationStep({
+      authorization,
+      serverToken,
+      fetch: globalThis.fetch,
+      realmServerUrl,
+      evalResultsModuleUrl,
+      issueId: 'Issues/eval-exclude-e2e',
+    });
+
+    let result = await step.run(realmUrl);
+
+    // The fixture realm has hello.gts and hello.test.gts
+    // Only hello.gts (and home.gts) should be evaluated, not hello.test.gts
+    expect(result.step).toBe('evaluate');
+    expect(result.passed).toBe(true);
+    expect(result.files).toBeTruthy();
+    expect(result.files).toContain('hello.gts');
+    expect(result.files).not.toContain('hello.test.gts');
+  });
+});
