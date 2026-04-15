@@ -912,6 +912,12 @@ module(basename(__filename), function () {
             'realm is public readable',
           );
 
+          assert.ok(
+            json.data.meta.realmInfo.lastPublishedAt,
+            'lastPublishedAt is set for published realm',
+          );
+          json.data.meta.realmInfo.lastPublishedAt = null;
+
           assert.deepEqual(json, {
             data: {
               id: `${testRealmHref}person-1`,

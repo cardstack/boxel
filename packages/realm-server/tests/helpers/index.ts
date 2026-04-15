@@ -1532,13 +1532,14 @@ async function startPermissionedRealmFixture(
     await dbAdapter.execute(
       `INSERT INTO
         published_realms
-        (id, owner_username, source_realm_url, published_realm_url)
+        (id, owner_username, source_realm_url, published_realm_url, last_published_at)
         VALUES
         (
           '${publishedRealmId}',
           '@user:localhost',
           'http://example.localhost/source',
-          '${resolvedRealmURL.href}'
+          '${resolvedRealmURL.href}',
+          '${Date.now()}'
         )`,
     );
   } else {
