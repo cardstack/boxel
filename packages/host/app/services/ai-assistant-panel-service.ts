@@ -28,7 +28,7 @@ import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
 
 import SummarizeSessionCommand from '../commands/summarize-session';
 import { Submodes } from '../components/submode-switcher';
-import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
+import { isMatrixError } from '../lib/matrix-utils';
 import { importResource } from '../resources/import';
 import { NewSessionIdPersistenceKey } from '../utils/local-storage-keys';
 
@@ -531,10 +531,7 @@ export default class AiAssistantPanelService extends Service {
         30_000,
       ),
     );
-    let { room_id: roomId } = await Promise.race([
-      roomPromise,
-      timeoutPromise,
-    ]);
+    let { room_id: roomId } = await Promise.race([roomPromise, timeoutPromise]);
     return roomId;
   }
 
@@ -729,7 +726,7 @@ export default class AiAssistantPanelService extends Service {
       // Skip rooms the user has deleted this session, or rooms whose state
       // shows the user has left. Sync events can re-add deleted rooms to
       // the cache with stale state before the leave event propagates.
-      if (this.deletedRoomIds.has(resource.roomId)) {
+      if (resource.roomId && this.deletedRoomIds.has(resource.roomId)) {
         continue;
       }
       if (
