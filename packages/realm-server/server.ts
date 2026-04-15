@@ -312,11 +312,17 @@ export class RealmServer {
       `${ctxt.protocol}://${ctxt.host}${ctxt.originalUrl}`,
     );
 
+    // Track published realm info from routing checks to avoid redundant
+    // DB queries in the ETag logic below.
+    let publishedRealmInfo: { lastPublishedAt: string | null } | null = null;
+    let publishedRealmInfoFetched = false;
+
     if (includesHtmlMimeType) {
       if (includesVndMimeType) {
-        let isHostModeRequest = await this.isHostModeRequest(requestURL);
+        publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+        publishedRealmInfoFetched = true;
 
-        if (isHostModeRequest) {
+        if (publishedRealmInfo) {
           return next();
         }
       }
@@ -329,9 +335,10 @@ export class RealmServer {
         return next();
       }
 
-      let isHostModeRequest = await this.isHostModeRequest(requestURL);
+      publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+      publishedRealmInfoFetched = true;
 
-      if (!isHostModeRequest) {
+      if (!publishedRealmInfo) {
         return next();
       }
 
@@ -404,7 +411,9 @@ export class RealmServer {
     // For published realms, support HTTP caching via ETag.
     // The ETag includes both last_published_at and a hash of the host app
     // shell, so a deploy that changes index.html invalidates cached responses.
-    let publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+    if (!publishedRealmInfoFetched) {
+      publishedRealmInfo = await this.getPublishedRealmInfo(requestURL);
+    }
     let lastPublishedAt = publishedRealmInfo?.lastPublishedAt;
     let etag =
       lastPublishedAt && this.indexHTMLHash
@@ -590,10 +599,6 @@ export class RealmServer {
     return {
       lastPublishedAt: (rows[0].last_published_at as string) ?? null,
     };
-  }
-
-  private async isHostModeRequest(requestURL: URL): Promise<boolean> {
-    return (await this.getPublishedRealmInfo(requestURL)) !== null;
   }
 
   // Check if the URL corresponds to an indexed card instance.
