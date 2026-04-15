@@ -413,7 +413,12 @@ export class RealmServer {
 
     if (etag) {
       let ifNoneMatch = ctxt.get('If-None-Match');
-      if (ifNoneMatch === etag) {
+      if (
+        ifNoneMatch === '*' ||
+        ifNoneMatch
+          .split(',')
+          .some((t) => t.trim().replace(/^W\//, '') === etag)
+      ) {
         ctxt.status = 304;
         ctxt.set('ETag', etag);
         ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
