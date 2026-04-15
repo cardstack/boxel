@@ -27,7 +27,7 @@ export const issueStatusOptions = [
   { value: 'done', label: 'Done' },
 ];
 
-const projectStatusOptions = [
+export const projectStatusOptions = [
   { value: 'planning', label: 'Planning' },
   { value: 'active', label: 'Active' },
   { value: 'on_hold', label: 'On Hold' },
@@ -52,7 +52,7 @@ export const issueTypeOptions = [
   { value: 'infrastructure', label: 'Infrastructure' },
 ];
 
-export class IssueOptionField extends FieldDef {
+class IssueOptionField extends FieldDef {
   static displayName = 'Issue Option';
   @field value = contains(StringField);
   @field label = contains(StringField);
@@ -83,22 +83,29 @@ export class IssueOptionField extends FieldDef {
   };
 }
 
-export class IssuePriorityOptions extends CardDef {
-  @field priorityOptions = containsMany(IssueOptionField);
+function cloneIssueOptions(options: { value: string; label: string }[]) {
+  return options.map((option) => new IssueOptionField(option));
 }
 
 const IssueStatusField = enumField(StringField, {
-  options: issueStatusOptions,
+  options: function (this: any) {
+    const opts = this.project?.statusOptions;
+    return opts?.length ? opts : issueStatusOptions;
+  },
 });
 
-export const IssuePriorityField = enumField(StringField, {
+const IssuePriorityField = enumField(StringField, {
   options: function (this: any) {
-    return this.project?.priorityOptions;
+    const opts = this.project?.priorityOptions;
+    return opts?.length ? opts : issuePriorityOptions;
   },
 });
 
 const IssueTypeField = enumField(StringField, {
-  options: issueTypeOptions,
+  options: function (this: any) {
+    const opts = this.project?.typeOptions;
+    return opts?.length ? opts : issueTypeOptions;
+  },
 });
 
 function getStatusVariant(statusId?: string) {
@@ -129,19 +136,19 @@ export class Issue extends CardDef {
   @field status = contains(IssueStatusField);
   @field computedStatus = contains(IssueStatusField, {
     computeVia: function (this: Issue) {
-      return this.status ?? 'backlog';
+      return this.status;
     },
   });
   @field ticketType = contains(IssueTypeField);
   @field computedTicketType = contains(IssueTypeField, {
     computeVia: function (this: Issue) {
-      return this.ticketType ?? 'unset';
+      return this.ticketType;
     },
   });
   @field priority = contains(IssuePriorityField);
   @field computedPriority = contains(IssuePriorityField, {
     computeVia: function (this: Issue) {
-      return this.priority ?? 'unset';
+      return this.priority;
     },
   });
   @field statusBoardOrder = contains(NumberField);
@@ -417,13 +424,19 @@ export class Project extends CardDef {
 
   @field projectCode = contains(StringField);
   @field projectStatus = contains(
-    enumField(StringField, { options: projectStatusOptions }),
+    enumField(StringField, {
+      options: function (this: any) {
+        const opts = this.statusOptions;
+        return opts?.length ? opts : projectStatusOptions;
+      },
+    }),
   );
   @field title = contains(StringField);
   @field description = contains(MarkdownField);
   @field dueDate = contains(DateField);
   @field priorityOptions = containsMany(IssueOptionField);
   @field statusOptions = containsMany(IssueOptionField);
+  @field typeOptions = containsMany(IssueOptionField);
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -447,21 +460,20 @@ export class Project extends CardDef {
   static edit = class Edit extends Component<typeof Project> {
     constructor(owner: unknown, args: any) {
       super(owner, args);
-      const model = this.args.model as any;
-      if (!model) return;
-      // const opts: IssueOptionField[] = model.priorityOptions ?? [];
-      // if (!opts.length) {
-      //   for (const defaults of issuePriorityOptions) {
-      //     if (!opts.find((o: any) => o.value === defaults.value)) {
-      //       opts.push(
-      //         new IssueOptionField({
-      //           value: defaults.value,
-      //           label: defaults.label,
-      //         }),
-      //       );
-      //     }
-      //   }
-      // }
+      Promise.resolve().then(() => {
+        let model = this.args.model as Project | undefined;
+        if (!model) return;
+
+        if (!model.priorityOptions?.length) {
+          model.priorityOptions = cloneIssueOptions(issuePriorityOptions) as any;
+        }
+        if (!model.statusOptions?.length) {
+          model.statusOptions = cloneIssueOptions(projectStatusOptions) as any;
+        }
+        if (!model.typeOptions?.length) {
+          model.typeOptions = cloneIssueOptions(issueTypeOptions) as any;
+        }
+      });
     }
 
     <template>
@@ -485,9 +497,17 @@ export class Project extends CardDef {
         <FieldContainer @label='Description' @vertical={{true}}>
           <@fields.description />
         </FieldContainer>
-        <FieldContainer @label='Priority Options' @vertical={{true}}>
-          <@fields.priorityOptions />
-        </FieldContainer>
+        <div class='options-row'>
+          <FieldContainer @label='Priority Options' @vertical={{true}}>
+            <@fields.priorityOptions />
+          </FieldContainer>
+          <FieldContainer @label='Status Options' @vertical={{true}}>
+            <@fields.statusOptions />
+          </FieldContainer>
+          <FieldContainer @label='Type Options' @vertical={{true}}>
+            <@fields.typeOptions />
+          </FieldContainer>
+        </div>
       </div>
       <style scoped>
         .project-edit {
