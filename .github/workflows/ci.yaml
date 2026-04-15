@@ -325,8 +325,9 @@ jobs:
       matrix:
         shardIndex: [1, 2, 3]
         shardTotal: [3]
+        repeat: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]
     concurrency:
-      group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
+      group: matrix-client-test-${{ matrix.shardIndex }}-r${{ matrix.repeat }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -366,42 +367,42 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-realm-server-log-${{ matrix.shardIndex }}
+          name: matrix-test-realm-server-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload worker manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}
+          name: matrix-test-worker-manager-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/worker-manager.log
           retention-days: 30
       - name: Upload prerender server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}
+          name: matrix-test-prerender-server-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/prerender-server.log
           retention-days: 30
       - name: Upload prerender manager log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}
+          name: matrix-test-prerender-manager-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/prerender-manager.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-icon-server-log-${{ matrix.shardIndex }}
+          name: matrix-test-icon-server-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/icon-server.log
           retention-days: 30
       - name: Upload host-dist log
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
         with:
-          name: matrix-test-host-dist-log-${{ matrix.shardIndex }}
+          name: matrix-test-host-dist-log-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: /tmp/host-dist.log
           retention-days: 30
 
@@ -409,7 +410,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: blob-report-${{ matrix.shardIndex }}
+          name: blob-report-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: packages/matrix/blob-report
           retention-days: 1
 
@@ -417,7 +418,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: playwright-traces-${{ matrix.shardIndex }}
+          name: playwright-traces-${{ matrix.shardIndex }}-r${{ matrix.repeat }}
           path: packages/matrix/test-results/**/trace.zip
           retention-days: 30
           if-no-files-found: ignore
@@ -455,10 +456,16 @@ jobs:
         with:
           path: all-blob-reports
           pattern: blob-report-*
-          merge-multiple: true
+
+      - name: Flatten blob reports into a single directory
+        run: |
+          mkdir -p all-blob-reports-flat
+          i=0; for f in all-blob-reports/**/*.zip; do
+            cp "$f" "all-blob-reports-flat/$((i++))-$(basename "$f")"
+          done
 
       - name: Merge blobs into one single report
-        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports
+        run: pnpm exec playwright merge-reports --reporter html ./all-blob-reports-flat
 
       - name: Upload HTML report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
