@@ -1037,6 +1037,20 @@ module(`server-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 404, 'HTTP 404 status');
       });
 
+      test('HEAD / returns 200 for non-host-mode server', async function (assert) {
+        let response = await request.head('/');
+
+        assert.strictEqual(
+          response.status,
+          200,
+          'HEAD / returns 200 (serves host app)',
+        );
+        assert.ok(
+          response.headers['content-type']?.includes('text/html'),
+          'content type is text/html',
+        );
+      });
+
       test('preserves scoped CSS in HTML response after card enters error state', async function (assert) {
         // First verify the card is indexed successfully and scoped CSS is served
         let initialResponse = await request
