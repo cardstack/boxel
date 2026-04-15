@@ -1,3 +1,23 @@
+/**
+ * A card instance ID, module path, or any resource reference in a realm.
+ * May be either a scoped identifier (e.g. `@cardstack/base/card-api`)
+ * or a full URL (e.g. `https://my-realm.com/cards/person`).
+ *
+ * Do NOT pass directly to `new URL()` — use `resolveRRI()` or
+ * `toNetworkURL()` for safe resolution.
+ */
+export type RealmResourceIdentifier = string & { __rriBrand: unknown };
+
+/**
+ * A realm identifier — always has a trailing slash.
+ * May be either a scoped identifier (e.g. `@cardstack/base/`)
+ * or a full URL (e.g. `https://my-realm.com/foo/`).
+ *
+ * Do NOT pass directly to `new URL()` — use realm-aware utilities
+ * for safe resolution.
+ */
+export type RealmIdentifier = string & { __riBrand: unknown };
+
 const prefixMappings = new Map<string, string>();
 
 export function registerCardReferencePrefix(
