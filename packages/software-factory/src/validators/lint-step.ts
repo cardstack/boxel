@@ -84,6 +84,7 @@ export class LintValidationStep implements ValidationStepRunner {
   readonly step = 'lint' as const;
 
   private config: LintValidationStepConfig;
+  private lastSequenceNumber = 0;
 
   private fetchFilenamesFn: (
     realmUrl: string,
@@ -163,12 +164,16 @@ export class LintValidationStep implements ValidationStepRunner {
 
     let seq: number;
     try {
-      seq = await this.getNextSeqFn(slug, targetRealmUrl);
+      let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+      // Use the higher of realm state vs in-memory floor. The realm index
+      // may be stale if the prior lint run just completed (lint is fast),
+      // so the floor prevents sequence reuse / artifact overwrite.
+      seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
     } catch (err) {
       log.warn(
-        `Failed to resolve sequence number, defaulting to 1: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
       );
-      seq = 1;
+      seq = this.lastSequenceNumber + 1;
     }
 
     let lintResultId: string;
@@ -192,6 +197,7 @@ export class LintValidationStep implements ValidationStepRunner {
         );
       } else {
         artifactCreated = true;
+        this.lastSequenceNumber = seq;
       }
     } catch (err) {
       log.warn(
