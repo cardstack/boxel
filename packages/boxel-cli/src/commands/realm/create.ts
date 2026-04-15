@@ -233,7 +233,9 @@ function extractRealmUrlFromError(
   if (urlMatch) {
     return ensureTrailingSlash(urlMatch[1]);
   }
-  return ensureTrailingSlash(`${realmServerUrl}/${endpoint}`);
+  throw new Error(
+    `Could not determine realm URL from server error response for endpoint "${endpoint}" on "${realmServerUrl}". The response did not include an explicit realm URL.`,
+  );
 }
 
 function ensureTrailingSlash(url: string): string {
