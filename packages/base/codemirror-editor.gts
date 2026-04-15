@@ -220,7 +220,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
     // the wrong input when multiple editors exist on the page
     let container = this.editorView?.dom?.parentElement;
     let input = (container ?? document).querySelector(
-      '[data-test-card-search-input]',
+      '[data-codemirror-card-search-input]',
     ) as HTMLInputElement;
     input?.focus();
   };
@@ -362,13 +362,31 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
         let fromCoords = view.coordsAtPos(from);
         let toCoords = view.coordsAtPos(to);
         if (!fromCoords || !toCoords) {
-          return { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0 } as DOMRect;
+          return {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+          } as DOMRect;
         }
         let left = Math.min(fromCoords.left, toCoords.left);
         let top = fromCoords.top;
         let right = Math.max(fromCoords.right, toCoords.right);
         let bottom = toCoords.bottom;
-        return { x: left, y: top, width: right - left, height: bottom - top, top, left, right, bottom } as DOMRect;
+        return {
+          x: left,
+          y: top,
+          width: right - left,
+          height: bottom - top,
+          top,
+          left,
+          right,
+          bottom,
+        } as DOMRect;
       },
     };
 
@@ -377,7 +395,10 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       let scrollParent = view.dom.closest('.boxel-card-container');
       let parentRect = scrollParent?.getBoundingClientRect();
       let selRect = virtualEl.getBoundingClientRect();
-      if (parentRect && (selRect.bottom < parentRect.top || selRect.top > parentRect.bottom)) {
+      if (
+        parentRect &&
+        (selRect.bottom < parentRect.top || selRect.top > parentRect.bottom)
+      ) {
         element.style.display = 'none';
         return;
       }
@@ -510,7 +531,11 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
       let line = view.state.doc.line(i);
       if (allHavePrefix) {
         // Remove prefix from all lines
-        changes.push({ from: line.from, to: line.from + prefix.length, insert: '' });
+        changes.push({
+          from: line.from,
+          to: line.from + prefix.length,
+          insert: '',
+        });
       } else if (!line.text.startsWith(prefix)) {
         // Add prefix to lines that don't have it
         changes.push({ from: line.from, to: line.from, insert: prefix });
@@ -816,7 +841,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           data-test-floating-toolbar
         >
           <button
-            class='toolbar-btn {{if this.toolbarFormats.bold "toolbar-btn--active"}}'
+            class='toolbar-btn
+              {{if this.toolbarFormats.bold "toolbar-btn--active"}}'
             data-test-toolbar-bold
             title='Bold'
             aria-label='Bold'
@@ -825,7 +851,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             {{on 'click' this._wrapBold}}
           ><BoldIcon width='16' height='16' /></button>
           <button
-            class='toolbar-btn {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
+            class='toolbar-btn
+              {{if this.toolbarFormats.italic "toolbar-btn--active"}}'
             data-test-toolbar-italic
             title='Italic'
             aria-label='Italic'
@@ -834,7 +861,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             {{on 'click' this._wrapItalic}}
           ><ItalicIcon width='16' height='16' /></button>
           <button
-            class='toolbar-btn {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
+            class='toolbar-btn
+              {{if this.toolbarFormats.strikethrough "toolbar-btn--active"}}'
             data-test-toolbar-strikethrough
             title='Strikethrough'
             aria-label='Strikethrough'
@@ -843,7 +871,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             {{on 'click' this._wrapStrikethrough}}
           ><StrikethroughIcon width='16' height='16' /></button>
           <button
-            class='toolbar-btn {{if this.toolbarFormats.code "toolbar-btn--active"}}'
+            class='toolbar-btn
+              {{if this.toolbarFormats.code "toolbar-btn--active"}}'
             data-test-toolbar-code
             title='Code'
             aria-label='Code'
@@ -852,7 +881,8 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             {{on 'click' this._wrapCode}}
           ><CodeIcon width='16' height='16' /></button>
           <button
-            class='toolbar-btn {{if this.toolbarFormats.link "toolbar-btn--active"}}'
+            class='toolbar-btn
+              {{if this.toolbarFormats.link "toolbar-btn--active"}}'
             data-test-toolbar-link
             title='Link'
             aria-label='Link'
@@ -930,6 +960,7 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
             placeholder='Search cards or paste URL…'
             aria-label='Search cards or paste URL'
             value={{this._cardSearchText}}
+            data-codemirror-card-search-input
             data-test-card-search-input
             {{on 'input' this._handleCardSearchInput}}
             {{on 'keydown' this._handleCardSearchKeydown}}
@@ -1263,239 +1294,239 @@ export default class CodeMirrorEditor extends GlimmerComponent<CodeMirrorEditorS
           min-height: 40px;
         }
 
-        /* Card slot wrappers rendered via{{in-element}}*/
-             .codemirror-editor :deep(.codemirror-card-slot) {
-               contain: layout style paint;
-             }
+        /* Card slot wrappers rendered via in-element helper */
+        .codemirror-editor :deep(.codemirror-card-slot) {
+          contain: layout style paint;
+        }
 
-             .codemirror-editor :deep(.codemirror-card-slot--inline) {
-               display: inline-flex;
-               align-items: center;
-               gap: 4px;
-               background-color: var(--boxel-100, #f0f0f0);
-               border: 1px solid var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               padding: 1px 6px;
-               font-size: 0.85em;
-               cursor: pointer;
-             }
+        .codemirror-editor :deep(.codemirror-card-slot--inline) {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          background-color: var(--boxel-100, #f0f0f0);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          padding: 1px 6px;
+          font-size: 0.85em;
+          cursor: pointer;
+        }
 
-             .codemirror-editor :deep(.codemirror-card-slot--block) {
-               display: block;
-               border: 1px solid var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               overflow: hidden;
-             }
+        .codemirror-editor :deep(.codemirror-card-slot--block) {
+          display: block;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          overflow: hidden;
+        }
 
-             /* Fallback for unresolved card references */
-             .codemirror-editor :deep(.codemirror-card-fallback) {
-               display: inline-block;
-               padding: 1px 6px;
-               background-color: var(--boxel-100, #f0f0f0);
-               border: 1px dashed var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               font-size: 0.85em;
-               color: var(--boxel-400, #666);
-               word-break: break-all;
-             }
+        /* Fallback for unresolved card references */
+        .codemirror-editor :deep(.codemirror-card-fallback) {
+          display: inline-block;
+          padding: 1px 6px;
+          background-color: var(--boxel-100, #f0f0f0);
+          border: 1px dashed var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          font-size: 0.85em;
+          color: var(--boxel-400, #666);
+          word-break: break-all;
+        }
 
-             /* ── Floating toolbar ── */
-             .codemirror-floating-toolbar {
-               position: fixed;
-               z-index: 110;
-               display: flex;
-               align-items: center;
-               gap: 2px;
-               padding: 4px 6px;
-               background: var(--boxel-dark, #27272a);
-               border-radius: 8px;
-               box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
-               pointer-events: auto;
-               width: max-content;
-               top: 0;
-               left: 0;
-             }
+        /* ── Floating toolbar ── */
+        .codemirror-floating-toolbar {
+          position: fixed;
+          z-index: 110;
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          padding: 4px 6px;
+          background: var(--boxel-dark, #27272a);
+          border-radius: 8px;
+          box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+          pointer-events: auto;
+          width: max-content;
+          top: 0;
+          left: 0;
+        }
 
-             .toolbar-btn {
-               display: flex;
-               align-items: center;
-               justify-content: center;
-               width: 28px;
-               height: 28px;
-               border: none;
-               border-radius: 4px;
-               background: transparent;
-               color: var(--boxel-light, #fafafa);
-               cursor: pointer;
-               padding: 0;
-               transition: background-color 0.1s;
-             }
+        .toolbar-btn {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 28px;
+          height: 28px;
+          border: none;
+          border-radius: 4px;
+          background: transparent;
+          color: var(--boxel-light, #fafafa);
+          cursor: pointer;
+          padding: 0;
+          transition: background-color 0.1s;
+        }
 
-             .toolbar-btn:hover {
-               background: rgb(255 255 255 / 0.15);
-             }
+        .toolbar-btn:hover {
+          background: rgb(255 255 255 / 0.15);
+        }
 
-             .toolbar-btn--active {
-               background: rgb(255 255 255 / 0.2);
-               color: var(--boxel-highlight, #6366f1);
-             }
+        .toolbar-btn--active {
+          background: rgb(255 255 255 / 0.2);
+          color: var(--boxel-highlight, #6366f1);
+        }
 
-             .toolbar-divider {
-               width: 1px;
-               height: 18px;
-               background: rgb(255 255 255 / 0.2);
-               margin: 0 4px;
-             }
+        .toolbar-divider {
+          width: 1px;
+          height: 18px;
+          background: rgb(255 255 255 / 0.2);
+          margin: 0 4px;
+        }
 
-             .codemirror-editor-loading {
-               min-height: 120px;
-               display: flex;
-               align-items: center;
-               justify-content: center;
-               color: var(--boxel-400, #999);
-               font-style: italic;
-             }
+        .codemirror-editor-loading {
+          min-height: 120px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: var(--boxel-400, #999);
+          font-style: italic;
+        }
 
-             /* ── Card search popup ── */
-             .codemirror-card-search {
-               position: absolute;
-               z-index: 100;
-               background: var(--boxel-light, #fff);
-               border: 1px solid var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-               min-width: 280px;
-               max-width: 400px;
-               padding: 8px;
-             }
+        /* ── Card search popup ── */
+        .codemirror-card-search {
+          position: absolute;
+          z-index: 100;
+          background: var(--boxel-light, #fff);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+          min-width: 280px;
+          max-width: 400px;
+          padding: 8px;
+        }
 
-             .codemirror-card-search-input {
-               width: 100%;
-               padding: 6px 10px;
-               border: 1px solid var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               font: inherit;
-               font-size: 0.9em;
-               outline: none;
-               box-sizing: border-box;
-             }
+        .codemirror-card-search-input {
+          width: 100%;
+          padding: 6px 10px;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          font: inherit;
+          font-size: 0.9em;
+          outline: none;
+          box-sizing: border-box;
+        }
 
-             .codemirror-card-search-input:focus {
-               border-color: var(--boxel-highlight, #0078d4);
-               box-shadow: 0 0 0 1px var(--boxel-highlight, #0078d4);
-             }
+        .codemirror-card-search-input:focus {
+          border-color: var(--boxel-highlight, #0078d4);
+          box-shadow: 0 0 0 1px var(--boxel-highlight, #0078d4);
+        }
 
-             .codemirror-card-search-loading {
-               padding: 8px 4px;
-               color: var(--boxel-400, #666);
-               font-size: 0.85em;
-               font-style: italic;
-             }
+        .codemirror-card-search-loading {
+          padding: 8px 4px;
+          color: var(--boxel-400, #666);
+          font-size: 0.85em;
+          font-style: italic;
+        }
 
-             .codemirror-card-search-results {
-               margin-top: 4px;
-               max-height: 240px;
-               overflow-y: auto;
-             }
+        .codemirror-card-search-results {
+          margin-top: 4px;
+          max-height: 240px;
+          overflow-y: auto;
+        }
 
-             .codemirror-card-search-result {
-               display: flex;
-               flex-direction: column;
-               align-items: flex-start;
-               width: 100%;
-               padding: 6px 10px;
-               border: none;
-               background: transparent;
-               cursor: pointer;
-               border-radius: var(--boxel-border-radius, 4px);
-               text-align: left;
-               font: inherit;
-             }
+        .codemirror-card-search-result {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          width: 100%;
+          padding: 6px 10px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          border-radius: var(--boxel-border-radius, 4px);
+          text-align: left;
+          font: inherit;
+        }
 
-             .codemirror-card-search-result:hover,
-             .codemirror-card-search-result.selected {
-               background: var(--boxel-highlight-hover, #e8f0fe);
-             }
+        .codemirror-card-search-result:hover,
+        .codemirror-card-search-result.selected {
+          background: var(--boxel-highlight-hover, #e8f0fe);
+        }
 
-             .search-result-title {
-               font-weight: 500;
-               font-size: 0.9em;
-             }
+        .search-result-title {
+          font-weight: 500;
+          font-size: 0.9em;
+        }
 
-             .search-result-url {
-               font-size: 0.75em;
-               color: var(--boxel-400, #666);
-               word-break: break-all;
-             }
+        .search-result-url {
+          font-size: 0.75em;
+          color: var(--boxel-400, #666);
+          word-break: break-all;
+        }
 
-             /* ── Format picker popup ── */
-             .codemirror-format-picker {
-               position: absolute;
-               z-index: 100;
-               background: var(--boxel-light, #fff);
-               border: 1px solid var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
-               padding: 12px;
-               min-width: 220px;
-             }
+        /* ── Format picker popup ── */
+        .codemirror-format-picker {
+          position: absolute;
+          z-index: 100;
+          background: var(--boxel-light, #fff);
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+          padding: 12px;
+          min-width: 220px;
+        }
 
-             .format-picker-label {
-               display: block;
-               font-size: 0.85em;
-               color: var(--boxel-400, #666);
-               margin-bottom: 8px;
-               word-break: break-word;
-             }
+        .format-picker-label {
+          display: block;
+          font-size: 0.85em;
+          color: var(--boxel-400, #666);
+          margin-bottom: 8px;
+          word-break: break-word;
+        }
 
-             .format-picker-buttons {
-               display: flex;
-               gap: 8px;
-               margin-bottom: 8px;
-             }
+        .format-picker-buttons {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
 
-             .format-picker-btn {
-               flex: 1;
-               padding: 6px 12px;
-               border: 1px solid var(--boxel-border-color, #c4c4c4);
-               border-radius: var(--boxel-border-radius, 4px);
-               background: var(--boxel-light, #fff);
-               cursor: pointer;
-               font: inherit;
-               font-size: 0.9em;
-             }
+        .format-picker-btn {
+          flex: 1;
+          padding: 6px 12px;
+          border: 1px solid var(--boxel-border-color, #c4c4c4);
+          border-radius: var(--boxel-border-radius, 4px);
+          background: var(--boxel-light, #fff);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.9em;
+        }
 
-             .format-picker-btn:hover {
-               background: var(--boxel-highlight-hover, #e8f0fe);
-             }
+        .format-picker-btn:hover {
+          background: var(--boxel-highlight-hover, #e8f0fe);
+        }
 
-             .format-picker-btn--primary {
-               background: var(--boxel-highlight, #0078d4);
-               color: white;
-               border-color: var(--boxel-highlight, #0078d4);
-             }
+        .format-picker-btn--primary {
+          background: var(--boxel-highlight, #0078d4);
+          color: white;
+          border-color: var(--boxel-highlight, #0078d4);
+        }
 
-             .format-picker-btn--primary:hover {
-               opacity: 0.9;
-             }
+        .format-picker-btn--primary:hover {
+          opacity: 0.9;
+        }
 
-             .format-picker-dismiss {
-               display: block;
-               width: 100%;
-               padding: 4px;
-               border: none;
-               background: transparent;
-               color: var(--boxel-400, #666);
-               cursor: pointer;
-               font: inherit;
-               font-size: 0.8em;
-               text-align: center;
-             }
+        .format-picker-dismiss {
+          display: block;
+          width: 100%;
+          padding: 4px;
+          border: none;
+          background: transparent;
+          color: var(--boxel-400, #666);
+          cursor: pointer;
+          font: inherit;
+          font-size: 0.8em;
+          text-align: center;
+        }
 
-             .format-picker-dismiss:hover {
-               color: var(--boxel-dark, #333);
-             }
-           }
+        .format-picker-dismiss:hover {
+          color: var(--boxel-dark, #333);
+        }
+      }
     </style>
   </template>
 }
