@@ -32,6 +32,12 @@ import type { RealmServerMockRoute, RealmServerMockState } from './types';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
 
+let catalogRealmURLOverrides: string[] = [];
+
+export function setCatalogRealmURL(...urls: string[]) {
+  catalogRealmURLOverrides = urls.map(ensureTrailingSlash);
+}
+
 type SearchableRealm = {
   url?: string;
   search: (query: Query) => Promise<LinkableCollectionDocument>;
@@ -307,10 +313,10 @@ function registerCatalogRoutes() {
   registerRealmServerRoute({
     path: '/_catalog-realms',
     handler: async () => {
-      let catalogURLs = [
-        ENV.resolvedCatalogRealmURL,
-        ENV.resolvedSkillsRealmURL,
-      ]
+      let catalogURLs = (catalogRealmURLOverrides.length > 0
+        ? [...catalogRealmURLOverrides, ENV.resolvedSkillsRealmURL]
+        : [ENV.resolvedCatalogRealmURL, ENV.resolvedSkillsRealmURL]
+      )
         .filter(Boolean)
         .map((url) => ensureTrailingSlash(url as string));
       let data = catalogURLs.map((realmURL) => ({
