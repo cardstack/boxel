@@ -32,6 +32,7 @@ import {
 import {
   systemError,
   notFound,
+  notAcceptable,
   methodNotAllowed,
   badRequest,
   CardError,
@@ -689,6 +690,7 @@ export class Realm {
       )
       .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .get('/.*', SupportedMimeType.CardJson, this.getCard.bind(this))
+      .get('/.*', SupportedMimeType.Markdown, this.getCardMarkdown.bind(this))
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -3225,6 +3227,51 @@ export class Realm {
     } finally {
       this.#logRequestPerformance(request, start);
     }
+  }
+
+  private async getCardMarkdown(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let requestedLocalPath = this.paths.local(new URL(request.url));
+    let localPath = requestedLocalPath;
+    if (localPath === '') {
+      localPath = 'index';
+    }
+    localPath = localPath.replace(/\.json$/, '');
+    let url = this.paths.fileURL(localPath);
+    let entry = await this.#realmIndexQueryEngine.instance(url, {
+      includeErrors: true,
+    });
+    if (!entry) {
+      if (await this.nonJsonFileExists(localPath)) {
+        return unsupportedMediaType(request, requestContext);
+      }
+      return notFound(request, requestContext);
+    }
+    if (entry.type === 'instance-error') {
+      return notAcceptable(
+        request,
+        requestContext,
+        `markdown representation unavailable: ${request.url} has an indexing error`,
+      );
+    }
+    if (entry.markdown == null) {
+      return notAcceptable(
+        request,
+        requestContext,
+        `markdown representation not available for ${request.url}`,
+      );
+    }
+    return createResponse({
+      body: entry.markdown,
+      init: {
+        headers: {
+          'content-type': 'text/markdown; charset=utf-8',
+        },
+      },
+      requestContext,
+    });
   }
 
   private async removeCard(
