@@ -183,6 +183,7 @@ import './realm-endpoints/directory-test';
 import './realm-endpoints/info-test';
 import './realm-endpoints/invalidate-urls-test';
 import './realm-endpoints/lint-test';
+import './realm-endpoints/markdown-test';
 import './realm-endpoints/mtimes-test';
 import './realm-endpoints/permissions-test';
 import './realm-endpoints/cancel-indexing-job-test';
