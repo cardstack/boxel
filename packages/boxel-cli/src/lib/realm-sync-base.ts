@@ -21,7 +21,7 @@ export const SupportedMimeType = {
 } as const;
 
 export interface SyncOptions {
-  workspaceUrl: string;
+  realmUrl: string;
   localDir: string;
   dryRun?: boolean;
 }
@@ -34,7 +34,7 @@ export abstract class RealmSyncBase {
     protected options: SyncOptions,
     protected profileManager: ProfileManager,
   ) {
-    this.normalizedRealmUrl = this.normalizeRealmUrl(options.workspaceUrl);
+    this.normalizedRealmUrl = this.normalizeRealmUrl(options.realmUrl);
   }
 
   private normalizeRealmUrl(url: string): string {

@@ -27,23 +27,23 @@ class RealmPuller extends RealmSyncBase {
 
   async sync(): Promise<void> {
     console.log(
-      `Starting pull from ${this.options.workspaceUrl} to ${this.options.localDir}`,
+      `Starting pull from ${this.options.realmUrl} to ${this.options.localDir}`,
     );
 
-    console.log('Testing workspace access...');
+    console.log('Testing realm access...');
     try {
       await this.getRemoteFileList('');
     } catch (error) {
-      console.error('Failed to access workspace:', error);
+      console.error('Failed to access realm:', error);
       throw new Error(
         'Cannot proceed with pull: Authentication or access failed. ' +
-          'Please check your Matrix credentials and workspace permissions.',
+          'Please check your Matrix credentials and realm permissions.',
       );
     }
-    console.log('Workspace access verified');
+    console.log('Realm access verified');
 
     const remoteFiles = await this.getRemoteFileList();
-    console.log(`Found ${remoteFiles.size} files in remote workspace`);
+    console.log(`Found ${remoteFiles.size} files in remote realm`);
 
     const localFiles = await this.getLocalFileList();
     console.log(`Found ${localFiles.size} files in local directory`);
@@ -56,6 +56,36 @@ class RealmPuller extends RealmSyncBase {
       } else {
         fs.mkdirSync(this.options.localDir, { recursive: true });
         console.log(`Created directory: ${this.options.localDir}`);
+      }
+    }
+
+    const filesToDelete = new Set<string>();
+    if (this.pullOptions.deleteLocal) {
+      for (const relativePath of localFiles.keys()) {
+        if (!remoteFiles.has(relativePath)) {
+          filesToDelete.add(relativePath);
+        }
+      }
+    }
+
+    const checkpointManager = new CheckpointManager(this.options.localDir);
+
+    if (filesToDelete.size > 0) {
+      const deleteChanges: CheckpointChange[] = Array.from(filesToDelete).map(
+        (f) => ({
+          file: f,
+          status: 'deleted' as const,
+        }),
+      );
+      const preDeleteCheckpoint = checkpointManager.createCheckpoint(
+        'remote',
+        deleteChanges,
+        `Pre-delete checkpoint: ${filesToDelete.size} files not on server`,
+      );
+      if (preDeleteCheckpoint) {
+        console.log(
+          `\nCheckpoint created before deletion: ${preDeleteCheckpoint.shortHash}`,
+        );
       }
     }
 
@@ -72,81 +102,43 @@ class RealmPuller extends RealmSyncBase {
     }
 
     const deletedFiles: string[] = [];
-    if (this.pullOptions.deleteLocal) {
-      const filesToDelete = new Set(localFiles.keys());
-      for (const relativePath of remoteFiles.keys()) {
-        filesToDelete.delete(relativePath);
-      }
+    if (filesToDelete.size > 0) {
+      console.log(
+        `\nDeleting ${filesToDelete.size} local files that don't exist in realm...`,
+      );
 
-      if (filesToDelete.size > 0) {
-        const checkpointManager = new CheckpointManager(this.options.localDir);
-        const deleteChanges: CheckpointChange[] = Array.from(filesToDelete).map(
-          (f) => ({
-            file: f,
-            status: 'deleted' as const,
-          }),
-        );
-        const preDeleteCheckpoint = checkpointManager.createCheckpoint(
-          'remote',
-          deleteChanges,
-          `Pre-delete checkpoint: ${filesToDelete.size} files not on server`,
-        );
-        if (preDeleteCheckpoint) {
-          console.log(
-            `\nCheckpoint created before deletion: ${preDeleteCheckpoint.shortHash}`,
-          );
-        }
-
-        console.log(
-          `\nDeleting ${filesToDelete.size} local files that don't exist in workspace...`,
-        );
-
-        for (const relativePath of filesToDelete) {
-          try {
-            const localPath = localFiles.get(relativePath);
-            if (localPath) {
-              await this.deleteLocalFile(localPath);
-              deletedFiles.push(relativePath);
-              console.log(`  Deleted: ${relativePath}`);
-            }
-          } catch (error) {
-            this.hasError = true;
-            console.error(`Error deleting local file ${relativePath}:`, error);
+      for (const relativePath of filesToDelete) {
+        try {
+          const localPath = localFiles.get(relativePath);
+          if (localPath) {
+            await this.deleteLocalFile(localPath);
+            deletedFiles.push(relativePath);
+            console.log(`  Deleted: ${relativePath}`);
           }
+        } catch (error) {
+          this.hasError = true;
+          console.error(`Error deleting local file ${relativePath}:`, error);
         }
       }
     }
 
-    if (!this.options.dryRun && downloadedFiles.length > 0) {
-      const checkpointManager = new CheckpointManager(this.options.localDir);
-      const pullChanges: CheckpointChange[] = downloadedFiles.map((f) => ({
-        file: f,
-        status: 'modified' as const,
-      }));
-      if (deletedFiles.length > 0) {
-        for (const f of deletedFiles) {
-          pullChanges.push({ file: f, status: 'deleted' as const });
-        }
-      }
+    if (
+      !this.options.dryRun &&
+      downloadedFiles.length + deletedFiles.length > 0
+    ) {
+      const pullChanges: CheckpointChange[] = [
+        ...downloadedFiles.map((f) => ({
+          file: f,
+          status: 'modified' as const,
+        })),
+        ...deletedFiles.map((f) => ({
+          file: f,
+          status: 'deleted' as const,
+        })),
+      ];
       const checkpoint = checkpointManager.createCheckpoint(
         'remote',
         pullChanges,
-      );
-      if (checkpoint) {
-        const tag = checkpoint.isMajor ? '[MAJOR]' : '[minor]';
-        console.log(
-          `\nCheckpoint created: ${checkpoint.shortHash} ${tag} ${checkpoint.message}`,
-        );
-      }
-    } else if (!this.options.dryRun && deletedFiles.length > 0) {
-      const checkpointManager = new CheckpointManager(this.options.localDir);
-      const deleteChanges: CheckpointChange[] = deletedFiles.map((f) => ({
-        file: f,
-        status: 'deleted' as const,
-      }));
-      const checkpoint = checkpointManager.createCheckpoint(
-        'remote',
-        deleteChanges,
       );
       if (checkpoint) {
         const tag = checkpoint.isMajor ? '[MAJOR]' : '[minor]';
@@ -171,25 +163,25 @@ export function registerPullCommand(realm: Command): void {
     .command('pull')
     .description('Pull files from a Boxel realm to a local directory')
     .argument(
-      '<workspace-url>',
-      'The URL of the source workspace (e.g., https://app.boxel.ai/demo/)',
+      '<realm-url>',
+      'The URL of the source realm (e.g., https://app.boxel.ai/demo/)',
     )
     .argument('<local-dir>', 'The local directory to sync files to')
-    .option('--delete', 'Delete local files that do not exist in the workspace')
+    .option('--delete', 'Delete local files that do not exist in the realm')
     .option('--dry-run', 'Show what would be done without making changes')
     .action(
       async (
-        workspaceUrl: string,
+        realmUrl: string,
         localDir: string,
         options: { delete?: boolean; dryRun?: boolean },
       ) => {
-        await pullCommand(workspaceUrl, localDir, options);
+        await pullCommand(realmUrl, localDir, options);
       },
     );
 }
 
 export async function pullCommand(
-  workspaceUrl: string,
+  realmUrl: string,
   localDir: string,
   options: PullCommandOptions,
 ): Promise<void> {
@@ -205,7 +197,7 @@ export async function pullCommand(
   try {
     const puller = new RealmPuller(
       {
-        workspaceUrl,
+        realmUrl,
         localDir,
         deleteLocal: options.delete,
         dryRun: options.dryRun,

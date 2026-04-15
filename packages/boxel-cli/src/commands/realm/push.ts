@@ -1,5 +1,9 @@
 import type { Command } from 'commander';
-import { RealmSyncBase, isProtectedFile, type SyncOptions } from '../../lib/realm-sync-base';
+import {
+  RealmSyncBase,
+  isProtectedFile,
+  type SyncOptions,
+} from '../../lib/realm-sync-base';
 import {
   CheckpointManager,
   type CheckpointChange,
@@ -13,7 +17,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 
 interface SyncManifest {
-  workspaceUrl: string;
+  realmUrl: string;
   files: Record<string, string>; // relativePath -> contentHash
 }
 
@@ -56,27 +60,27 @@ class RealmPusher extends RealmSyncBase {
 
   async sync(): Promise<void> {
     console.log(
-      `Starting push from ${this.options.localDir} to ${this.options.workspaceUrl}`,
+      `Starting push from ${this.options.localDir} to ${this.options.realmUrl}`,
     );
 
-    console.log('Testing workspace access...');
+    console.log('Testing realm access...');
     try {
       await this.getRemoteFileList('');
     } catch (error) {
-      console.error('Failed to access workspace:', error);
+      console.error('Failed to access realm:', error);
       throw new Error(
         'Cannot proceed with push: Authentication or access failed. ' +
-          'Please check your credentials and workspace permissions.',
+          'Please check your credentials and realm permissions.',
       );
     }
-    console.log('Workspace access verified');
+    console.log('Realm access verified');
 
     const localFiles = await this.getLocalFileList();
     console.log(`Found ${localFiles.size} files in local directory`);
 
     const manifest = loadManifest(this.options.localDir);
     const newManifest: SyncManifest = {
-      workspaceUrl: this.options.workspaceUrl,
+      realmUrl: this.options.realmUrl,
       files: {},
     };
 
@@ -85,14 +89,14 @@ class RealmPusher extends RealmSyncBase {
     if (
       this.pushOptions.force ||
       !manifest ||
-      manifest.workspaceUrl !== this.options.workspaceUrl
+      manifest.realmUrl !== this.options.realmUrl
     ) {
       if (this.pushOptions.force) {
         console.log('Force mode: uploading all files');
       } else if (!manifest) {
         console.log('No sync manifest found, will upload all files');
       } else {
-        console.log('Workspace URL changed, will upload all files');
+        console.log('Realm URL changed, will upload all files');
       }
       for (const [relativePath, localPath] of localFiles) {
         if (isProtectedFile(relativePath)) continue;
@@ -210,8 +214,8 @@ export function registerPushCommand(realm: Command): void {
     .description('Push local files to a Boxel realm')
     .argument('<local-dir>', 'The local directory containing files to sync')
     .argument(
-      '<workspace-url>',
-      'The URL of the target workspace (e.g., https://app.boxel.ai/demo/)',
+      '<realm-url>',
+      'The URL of the target realm (e.g., https://app.boxel.ai/demo/)',
     )
     .option('--delete', 'Delete remote files that do not exist locally')
     .option('--dry-run', 'Show what would be done without making changes')
@@ -219,17 +223,17 @@ export function registerPushCommand(realm: Command): void {
     .action(
       async (
         localDir: string,
-        workspaceUrl: string,
+        realmUrl: string,
         options: { delete?: boolean; dryRun?: boolean; force?: boolean },
       ) => {
-        await pushCommand(localDir, workspaceUrl, options);
+        await pushCommand(localDir, realmUrl, options);
       },
     );
 }
 
 export async function pushCommand(
   localDir: string,
-  workspaceUrl: string,
+  realmUrl: string,
   options: PushCommandOptions,
 ): Promise<void> {
   let pm = options.profileManager ?? getProfileManager();
@@ -249,7 +253,7 @@ export async function pushCommand(
   try {
     const pusher = new RealmPusher(
       {
-        workspaceUrl,
+        realmUrl,
         localDir,
         deleteRemote: options.delete,
         dryRun: options.dryRun,
