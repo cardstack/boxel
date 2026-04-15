@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -87,6 +88,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         cwd: packageRoot,
         env: {
           ...process.env,
+          HOME: mkdtempSync(join(tmpdir(), 'boxel-test-')),
           MATRIX_USERNAME: targetUsername,
           MATRIX_PASSWORD: targetPassword,
           MATRIX_URL: matrixURL,
