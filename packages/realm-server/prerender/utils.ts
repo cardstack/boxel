@@ -100,11 +100,18 @@ export async function renderHTML(
   log.debug(
     `renderHTML capture format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
   );
-  let result = await captureResult(
-    page,
-    ['isolated', 'atom', 'head'].includes(format) ? 'innerHTML' : 'outerHTML',
-    opts,
-  );
+  let captureMode: 'textContent' | 'innerHTML' | 'outerHTML';
+  if (format === 'markdown') {
+    // Markdown renders into a whitespace-preserving container (see CS-10781);
+    // we capture textContent so the extracted string matches what the template
+    // author wrote, without HTML markup or whitespace collapsing.
+    captureMode = 'textContent';
+  } else if (['isolated', 'atom', 'head'].includes(format)) {
+    captureMode = 'innerHTML';
+  } else {
+    captureMode = 'outerHTML';
+  }
+  let result = await captureResult(page, captureMode, opts);
   log.debug(
     `renderHTML captured format=${format} ancestorLevel=${ancestorLevel} status=${result.status} id=${result.id} nonce=${result.nonce}`,
   );
@@ -114,7 +121,9 @@ export async function renderHTML(
   log.debug(
     `renderHTML success format=${format} ancestorLevel=${ancestorLevel} length=${result.value.length}`,
   );
-  return cleanCapturedHTML(result.value);
+  // Markdown output is plain text; the Ember-id/empty-data-attr cleanup only
+  // makes sense for HTML captures, so pass markdown through untouched.
+  return format === 'markdown' ? result.value : cleanCapturedHTML(result.value);
 }
 
 export async function renderIcon(
@@ -974,9 +983,19 @@ export async function captureResult(
           } as RenderCapture;
         }
         if (capture === 'textContent') {
+          // For markdown-format renders, the whitespace-preserving container
+          // (CS-10781) is the authoritative source of the markdown string.
+          // Prefer it over the [data-prerender] element so surrounding
+          // route-template whitespace does not leak into the captured output.
+          // renderMeta also uses textContent but its markup has no markdown
+          // container, so the fallback covers that case.
+          let markdownContainer = resolvedElement.querySelector(
+            '[data-markdown-render-container]',
+          ) as HTMLElement | null;
+          let target = markdownContainer ?? resolvedElement;
           return {
             status: finalStatus,
-            value: resolvedElement.textContent ?? '',
+            value: target.textContent ?? '',
             alive,
             id: resolvedElement.dataset.prerenderId ?? undefined,
             nonce: resolvedElement.dataset.prerenderNonce ?? undefined,
