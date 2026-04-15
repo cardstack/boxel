@@ -37,8 +37,11 @@ export interface IssueStore {
   listIssues(): Promise<SchedulableIssue[]>;
   /** Re-read a single issue's current state from the realm. */
   refreshIssue(issueId: string): Promise<SchedulableIssue>;
-  /** Update issue fields in the realm (e.g., status). Descriptions are immutable — use addComment instead. */
-  updateIssue(issueId: string, updates: { status?: string }): Promise<void>;
+  /** Update issue fields in the realm (e.g., status, priority). Descriptions are immutable — use addComment instead. */
+  updateIssue(
+    issueId: string,
+    updates: { status?: string; priority?: string },
+  ): Promise<void>;
   /** Append a comment to an issue. All post-creation context goes through comments. */
   addComment(
     issueId: string,
@@ -243,7 +246,7 @@ export class RealmIssueStore implements IssueStore {
 
   async updateIssue(
     issueId: string,
-    updates: { status?: string },
+    updates: { status?: string; priority?: string },
   ): Promise<void> {
     // Read the source JSON file (not the indexed card, which can have
     // stripped relationships during indexing).
@@ -267,6 +270,9 @@ export class RealmIssueStore implements IssueStore {
 
     if (updates.status != null) {
       attrs.status = updates.status;
+    }
+    if (updates.priority != null) {
+      attrs.priority = updates.priority;
     }
     attrs.updatedAt = new Date().toISOString();
 
