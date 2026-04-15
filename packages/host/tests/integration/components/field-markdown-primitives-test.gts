@@ -123,12 +123,13 @@ module('Integration | field markdown primitives', function (hooks) {
       };
     }
 
-    // `-3.14` → leading `-` would look like a bullet marker at line start;
-    // `3.` would look like an ordered list prefix. markdownEscape handles
-    // both: `-` becomes `\-`, and `3.` at line start becomes `3\.`.
+    // `-3.14` → leading `-` would look like a bullet marker at line start,
+    // so `markdownEscape` emits `\-`. The `.` mid-string doesn't need
+    // escaping because the digits aren't at line start once the `\-` is
+    // emitted (numeric-list-prefix detection is line-anchored).
     let card = new Sample({ value: -3.14 });
     await renderCard(loader, card, 'isolated');
-    assert.strictEqual(readMarkdown(this.element), '\\-3\\.14');
+    assert.strictEqual(readMarkdown(this.element), '\\-3.14');
   });
 
   test('TextAreaField markdown preserves line breaks as CommonMark hard breaks', async function (this: RenderingTestContext, assert) {
@@ -144,10 +145,15 @@ module('Integration | field markdown primitives', function (hooks) {
     let card = new Sample({ value: 'Line 1\nLine 2\nLine 3' });
     await renderCard(loader, card, 'isolated');
 
-    let el = this.element.querySelector('[data-test-md]');
-    // Use raw textContent (not trim/collapse) so we can inspect whitespace.
-    let raw = el?.textContent ?? '';
-    assert.strictEqual(raw, 'Line 1  \nLine 2  \nLine 3');
+    // The FieldComponent wrapper chain (CardContextConsumer →
+    // CardCrudFunctionsConsumer → ... → DefaultFormatsProvider → Markdown)
+    // pads the rendered content with leading/trailing whitespace from each
+    // wrapping `<template>`. Trim that off and verify the inner content,
+    // including the two-space-then-newline hard breaks our template emits.
+    assert.strictEqual(
+      readMarkdown(this.element),
+      'Line 1  \nLine 2  \nLine 3',
+    );
   });
 
   test('TextAreaField markdown escapes metacharacters per line', async function (this: RenderingTestContext, assert) {
@@ -162,9 +168,10 @@ module('Integration | field markdown primitives', function (hooks) {
 
     let card = new Sample({ value: '# not a heading\n* not a bullet' });
     await renderCard(loader, card, 'isolated');
-    let el = this.element.querySelector('[data-test-md]');
-    let raw = el?.textContent ?? '';
-    assert.strictEqual(raw, '\\# not a heading  \n\\* not a bullet');
+    assert.strictEqual(
+      readMarkdown(this.element),
+      '\\# not a heading  \n\\* not a bullet',
+    );
   });
 
   test('MarkdownField passes through content unescaped', async function (this: RenderingTestContext, assert) {
@@ -181,9 +188,10 @@ module('Integration | field markdown primitives', function (hooks) {
     // escaping. Downstream consumers render it as markdown.
     let card = new Sample({ value: '# Heading\n\n- item 1\n- item 2' });
     await renderCard(loader, card, 'isolated');
-    let el = this.element.querySelector('[data-test-md]');
-    let raw = el?.textContent ?? '';
-    assert.strictEqual(raw, '# Heading\n\n- item 1\n- item 2');
+    assert.strictEqual(
+      readMarkdown(this.element),
+      '# Heading\n\n- item 1\n- item 2',
+    );
   });
 
   test('CSSField markdown emits a fenced code block with css info-string', async function (this: RenderingTestContext, assert) {
@@ -198,9 +206,10 @@ module('Integration | field markdown primitives', function (hooks) {
 
     let card = new Sample({ styles: '.foo { color: red; }' });
     await renderCard(loader, card, 'isolated');
-    let el = this.element.querySelector('[data-test-md]');
-    let raw = el?.textContent ?? '';
-    assert.strictEqual(raw, '```css\n.foo { color: red; }\n```');
+    assert.strictEqual(
+      readMarkdown(this.element),
+      '```css\n.foo { color: red; }\n```',
+    );
   });
 
   test('CSSField markdown extends the fence when content contains triple backticks', async function (this: RenderingTestContext, assert) {
@@ -219,10 +228,11 @@ module('Integration | field markdown primitives', function (hooks) {
     let weird = '/* ' + '`'.repeat(3) + ' */';
     let card = new Sample({ styles: weird });
     await renderCard(loader, card, 'isolated');
-    let el = this.element.querySelector('[data-test-md]');
-    let raw = el?.textContent ?? '';
     let fence = '`'.repeat(4);
-    assert.strictEqual(raw, `${fence}css\n${weird}\n${fence}`);
+    assert.strictEqual(
+      readMarkdown(this.element),
+      `${fence}css\n${weird}\n${fence}`,
+    );
   });
 
   test('MaybeBase64Field markdown emits placeholder for data: URIs', async function (this: RenderingTestContext, assert) {
