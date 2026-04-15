@@ -403,22 +403,14 @@ module(basename(__filename), function () {
 
     test('throws for absolute path prefix', function (assert) {
       assert.throws(
-        () =>
-          resolveRRI(
-            '/string' as RealmResourceIdentifier,
-            basePrefix,
-          ),
+        () => resolveRRI('/string' as RealmResourceIdentifier, basePrefix),
         /"\/" and "~\/" prefixes are not supported/,
       );
     });
 
     test('throws for tilde-slash prefix', function (assert) {
       assert.throws(
-        () =>
-          resolveRRI(
-            '~/card' as RealmResourceIdentifier,
-            basePrefix,
-          ),
+        () => resolveRRI('~/card' as RealmResourceIdentifier, basePrefix),
         /"\/" and "~\/" prefixes are not supported/,
       );
     });
@@ -459,5 +451,4 @@ module(basename(__filename), function () {
       );
     });
   });
-
 });
