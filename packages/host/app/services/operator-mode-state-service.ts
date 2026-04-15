@@ -18,6 +18,7 @@ import {
   type LocalPath,
   isResolvedCodeRef,
   isCardInstance,
+  isRealmIndexCardId,
   isLocalId,
   localId as localIdSymbol,
   Deferred,
@@ -370,7 +371,7 @@ export default class OperatorModeStateService extends Service {
 
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
-      const isIndexCard = this.isIndexCard(realmURL, item);
+      const isIndexCard = isRealmIndexCardId(item.id, realmURL);
       if (isIndexCard) {
         // Only open workspace chooser if the trimmed item was an index card
         this._state.workspaceChooserOpened = true;
@@ -516,11 +517,6 @@ export default class OperatorModeStateService extends Service {
     } catch (error) {
       return this.realmURL;
     }
-  }
-
-  private isIndexCard(realmURL: string, item: StackItem): boolean {
-    const itemUrl = item.id;
-    return itemUrl === `${realmURL}index`;
   }
 
   get isViewingCardInCodeMode() {
