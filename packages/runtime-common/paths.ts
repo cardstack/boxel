@@ -93,7 +93,16 @@ export class RealmPaths {
   // ---- RRI-aware methods (Phase 0 — additive, existing methods unchanged) ----
 
   inRealmRRI(rri: RealmResourceIdentifier): boolean {
-    return rri.startsWith(this.url) || rri === this.url.replace(/\/$/, '');
+    let decoded: string;
+    try {
+      decoded = decodeURI(rri);
+    } catch {
+      return false;
+    }
+    return (
+      decoded.startsWith(this.url) ||
+      decoded === this.url.replace(/\/$/, '')
+    );
   }
 
   localFromRRI(rri: RealmResourceIdentifier): LocalPath {
@@ -102,7 +111,7 @@ export class RealmPaths {
       (error as any).status = 404;
       throw error;
     }
-    let local = rri.slice(this.url.length);
+    let local = decodeURI(rri).slice(this.url.length);
     return local.replace(/\/+$/, '');
   }
 
