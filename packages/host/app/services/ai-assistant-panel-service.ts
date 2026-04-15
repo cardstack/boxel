@@ -484,9 +484,7 @@ export default class AiAssistantPanelService extends Service {
   private async createFallbackRoom(name: string): Promise<string> {
     let userId = this.matrixService.userId;
     if (!userId) {
-      throw new Error(
-        'Requires userId to create a fallback room',
-      );
+      throw new Error('Requires userId to create a fallback room');
     }
     let aiBotFullId = this.matrixService.aiBotUserId;
     let llmMode = this.getPreferredLLMMode();
