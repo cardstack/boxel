@@ -101,14 +101,6 @@ test.describe('evaluate-module command', () => {
     expect(response.status).toBe(201);
     let body = await response.json();
     let attrs = body?.data?.attributes;
-    console.log(
-      'VALID MODULE prerender:',
-      JSON.stringify(
-        { status: attrs?.status, error: attrs?.error, deps: attrs?.deps },
-        null,
-        2,
-      ),
-    );
     expect(attrs?.status).toBe('ready');
     expect(attrs?.error).toBeFalsy();
   });
@@ -150,14 +142,6 @@ test.describe('evaluate-module command', () => {
     expect(response.status).toBe(201);
     let body = await response.json();
     let attrs = body?.data?.attributes;
-    console.log(
-      'BROKEN IMPORT prerender:',
-      JSON.stringify(
-        { status: attrs?.status, error: attrs?.error, deps: attrs?.deps },
-        null,
-        2,
-      ),
-    );
 
     // This is what we WANT: the prerender should detect the broken import
     // If this assertion fails, it means the prerender/Loader silently
@@ -204,10 +188,6 @@ test.describe('evaluate-module command', () => {
     expect(response.status).toBe(201);
     let body = await response.json();
     let attrs = body?.data?.attributes;
-    console.log(
-      'BROKEN EVAL prerender:',
-      JSON.stringify({ status: attrs?.status, error: attrs?.error }, null, 2),
-    );
     expect(attrs?.status).toBe('error');
     expect(attrs?.error?.error?.message).toBeTruthy();
   });
@@ -229,18 +209,6 @@ test.describe('evaluate-module command', () => {
       { authorization: serverToken },
     );
 
-    console.log(
-      'RUN-COMMAND valid:',
-      JSON.stringify(
-        {
-          status: response.status,
-          error: response.error,
-          result: response.result?.slice(0, 300),
-        },
-        null,
-        2,
-      ),
-    );
     expect(response.status).toBe('ready');
     let result = JSON.parse(response.result!);
     let attrs = result?.data?.attributes ?? result;
@@ -271,24 +239,10 @@ test.describe('evaluate-module command', () => {
       { authorization: serverToken },
     );
 
-    console.log(
-      'RUN-COMMAND broken import:',
-      JSON.stringify(
-        {
-          status: response.status,
-          error: response.error,
-          result: response.result?.slice(0, 500),
-        },
-        null,
-        2,
-      ),
-    );
-
     // If the prerender catches the broken import, the command should return passed=false
     if (response.status === 'ready' && response.result) {
       let result = JSON.parse(response.result);
       let attrs = result?.data?.attributes ?? result;
-      console.log('COMMAND RESULT attrs:', JSON.stringify(attrs, null, 2));
       expect(attrs.passed).toBe(false);
     } else {
       // Command itself errored

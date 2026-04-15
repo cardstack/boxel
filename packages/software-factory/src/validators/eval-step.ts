@@ -348,6 +348,13 @@ export class EvalValidationStep implements ValidationStepRunner {
     moduleUrl: string,
     realmUrl: string,
   ): Promise<EvalModuleResult> {
+    if (!this.config.serverToken) {
+      return {
+        passed: false,
+        error: 'serverToken is required for eval validation via _run-command',
+      };
+    }
+
     let response = await runRealmCommand(
       this.config.realmServerUrl,
       realmUrl,
@@ -363,10 +370,11 @@ export class EvalValidationStep implements ValidationStepRunner {
       `run-command response for ${moduleUrl}: status=${response.status}, error=${response.error}, result=${response.result?.slice(0, 300)}`,
     );
 
-    if (response.status === 'error') {
+    if (response.status !== 'ready') {
       return {
         passed: false,
-        error: response.error ?? 'run-command returned error status',
+        error:
+          response.error ?? `run-command returned ${response.status} status`,
       };
     }
 
@@ -387,11 +395,18 @@ export class EvalValidationStep implements ValidationStepRunner {
         log.warn(
           `Failed to parse run-command result for ${moduleUrl}: ${response.result?.slice(0, 200)}`,
         );
-        return { passed: true };
+        return {
+          passed: false,
+          error:
+            'run-command returned an unparsable result — treating as failure',
+        };
       }
     }
 
-    return { passed: true };
+    return {
+      passed: false,
+      error: 'run-command did not return a result — treating as failure',
+    };
   }
 }
 

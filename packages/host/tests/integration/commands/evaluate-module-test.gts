@@ -85,10 +85,5 @@ module('Integration | commands | evaluate-module', function (hooks) {
 
     assert.false(result.passed, 'broken import module should fail');
     assert.ok(result.error, 'should have an error message');
-    console.log('BROKEN IMPORT RESULT:', {
-      passed: result.passed,
-      error: result.error,
-      exports: Object.keys(result),
-    });
   });
 });
