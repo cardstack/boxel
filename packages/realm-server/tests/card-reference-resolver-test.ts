@@ -280,14 +280,14 @@ module(basename(__filename), function () {
 
     test('absolute scoped identifier without relativeTo', function (assert) {
       let result = resolveRRI(
-        '@cardstack/base/string' as RealmResourceIdentifier,
+        '@cardstack/base/string',
       );
       assert.strictEqual(result, '@cardstack/base/string');
     });
 
     test('absolute scoped identifier with relativeTo is returned as-is', function (assert) {
       let result = resolveRRI(
-        '@cardstack/base/string' as RealmResourceIdentifier,
+        '@cardstack/base/string',
         catalogPrefix,
       );
       assert.strictEqual(result, '@cardstack/base/string');
@@ -295,14 +295,14 @@ module(basename(__filename), function () {
 
     test('absolute HTTP URL without relativeTo', function (assert) {
       let result = resolveRRI(
-        'http://localhost:4201/realm/card' as RealmResourceIdentifier,
+        'http://localhost:4201/realm/card',
       );
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
     });
 
     test('absolute HTTP URL with relativeTo is returned as-is', function (assert) {
       let result = resolveRRI(
-        'http://localhost:4201/realm/card' as RealmResourceIdentifier,
+        'http://localhost:4201/realm/card',
         basePrefix,
       );
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
@@ -310,7 +310,7 @@ module(basename(__filename), function () {
 
     test('absolute HTTPS URL is returned as-is', function (assert) {
       let result = resolveRRI(
-        'https://example.com/card/123' as RealmResourceIdentifier,
+        'https://example.com/card/123',
       );
       assert.strictEqual(result, 'https://example.com/card/123');
     });
@@ -319,7 +319,7 @@ module(basename(__filename), function () {
 
     test('dot-slash relative against scoped base', function (assert) {
       let result = resolveRRI(
-        './string' as RealmResourceIdentifier,
+        './string',
         '@cardstack/base/' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, '@cardstack/base/string');
@@ -327,7 +327,7 @@ module(basename(__filename), function () {
 
     test('bare name against scoped base', function (assert) {
       let result = resolveRRI(
-        'card' as RealmResourceIdentifier,
+        'card',
         '@cardstack/base/' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, '@cardstack/base/card');
@@ -335,7 +335,7 @@ module(basename(__filename), function () {
 
     test('dot-dot-slash against scoped base with subdirectory', function (assert) {
       let result = resolveRRI(
-        '../card' as RealmResourceIdentifier,
+        '../card',
         '@cardstack/base/fields/' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, '@cardstack/base/card');
@@ -343,7 +343,7 @@ module(basename(__filename), function () {
 
     test('dot-slash against scoped base without trailing slash', function (assert) {
       let result = resolveRRI(
-        './string' as RealmResourceIdentifier,
+        './string',
         '@cardstack/base/card-api' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, '@cardstack/base/string');
@@ -353,7 +353,7 @@ module(basename(__filename), function () {
 
     test('dot-slash relative against URL base', function (assert) {
       let result = resolveRRI(
-        './card' as RealmResourceIdentifier,
+        './card',
         'http://localhost:4201/realm/' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
@@ -361,7 +361,7 @@ module(basename(__filename), function () {
 
     test('dot-dot-slash against URL base with subdirectory', function (assert) {
       let result = resolveRRI(
-        '../card' as RealmResourceIdentifier,
+        '../card',
         'http://localhost:4201/realm/directory/' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
@@ -369,7 +369,7 @@ module(basename(__filename), function () {
 
     test('bare name against URL base', function (assert) {
       let result = resolveRRI(
-        'card' as RealmResourceIdentifier,
+        'card',
         'http://localhost:4201/realm/' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, 'http://localhost:4201/realm/card');
@@ -379,7 +379,7 @@ module(basename(__filename), function () {
 
     test('$thisRealm against scoped base', function (assert) {
       let result = resolveRRI(
-        '$thisRealm/string' as RealmResourceIdentifier,
+        '$thisRealm/string',
         '@cardstack/base/fields/number' as RealmResourceIdentifier,
       );
       assert.strictEqual(result, '@cardstack/base/string');
@@ -392,7 +392,7 @@ module(basename(__filename), function () {
       );
       try {
         let result = resolveRRI(
-          '$thisRealm/card' as RealmResourceIdentifier,
+          '$thisRealm/card',
           'https://home.boxel.ai/contact/users/' as RealmResourceIdentifier,
         );
         assert.strictEqual(result, 'https://home.boxel.ai/contact/card');
@@ -405,14 +405,14 @@ module(basename(__filename), function () {
 
     test('throws for absolute path prefix', function (assert) {
       assert.throws(
-        () => resolveRRI('/string' as RealmResourceIdentifier, basePrefix),
+        () => resolveRRI('/string', basePrefix),
         /"\/" and "~\/" prefixes are not supported/,
       );
     });
 
     test('throws for tilde-slash prefix', function (assert) {
       assert.throws(
-        () => resolveRRI('~/card' as RealmResourceIdentifier, basePrefix),
+        () => resolveRRI('~/card', basePrefix),
         /"\/" and "~\/" prefixes are not supported/,
       );
     });
@@ -421,7 +421,7 @@ module(basename(__filename), function () {
       assert.throws(
         () =>
           resolveRRI(
-            '/card' as RealmResourceIdentifier,
+            '/card',
             'http://localhost:4201/realm/directory/' as RealmResourceIdentifier,
           ),
         /"\/" and "~\/" prefixes are not supported/,
@@ -441,14 +441,14 @@ module(basename(__filename), function () {
 
     test('throws when relativeTo is missing for relative reference', function (assert) {
       assert.throws(
-        () => resolveRRI('./foo' as RealmResourceIdentifier),
+        () => resolveRRI('./foo'),
         /Cannot resolve "\.\/foo" without a relativeTo/,
       );
     });
 
     test('throws when relativeTo is missing for bare name', function (assert) {
       assert.throws(
-        () => resolveRRI('card' as RealmResourceIdentifier),
+        () => resolveRRI('card'),
         /Cannot resolve "card" without a relativeTo/,
       );
     });

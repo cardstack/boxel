@@ -119,7 +119,7 @@ export function cardIdToURL(id: string): URL {
  * - `/` or `~/` prefixed → throw (not valid RRI forms)
  */
 export function resolveRRI(
-  reference: RealmResourceIdentifier,
+  reference: string,
   relativeTo?: RealmResourceIdentifier,
 ): RealmResourceIdentifier {
   // Absolute URL — already resolved
