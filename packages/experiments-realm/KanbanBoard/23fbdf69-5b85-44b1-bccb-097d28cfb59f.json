@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "KanbanBoard",
+        "module": "https://cardstack.com/base/issue-tracker/kanban-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Personal Kanban",
+      "groupBy": "priority",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "hideEmptyColumns": false
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/96a4ec3e-53d7-450f-8a5b-e67ae5cabf33"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

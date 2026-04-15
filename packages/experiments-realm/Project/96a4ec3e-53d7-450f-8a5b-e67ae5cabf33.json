@@ -1,0 +1,48 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Project",
+        "module": "https://cardstack.com/base/issue-tracker/issue"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Personal Project",
+      "dueDate": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "description": null,
+      "projectCode": "BN",
+      "typeOptions": [],
+      "projectStatus": null,
+      "statusOptions": [],
+      "priorityOptions": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

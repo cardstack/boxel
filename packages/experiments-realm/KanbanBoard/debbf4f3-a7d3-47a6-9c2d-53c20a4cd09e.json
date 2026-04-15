@@ -1,0 +1,157 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "KanbanBoard",
+        "module": "https://cardstack.com/base/issue-tracker/kanban-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "groupBy": "ticketType",
+      "cardInfo": {
+        "name": "My Kanban",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "hideEmptyColumns": true,
+      "typeColumnConfig": [
+        {
+          "key": "task",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 1
+        },
+        {
+          "key": "feature",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 2
+        },
+        {
+          "key": "bug",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 3
+        },
+        {
+          "key": "research",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 4
+        },
+        {
+          "key": "infrastructure",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 5
+        }
+      ],
+      "statusColumnConfig": [
+        {
+          "key": null,
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "backlog",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 0
+        },
+        {
+          "key": "in_progress",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 1
+        },
+        {
+          "key": "blocked",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 2
+        },
+        {
+          "key": "review",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 3
+        },
+        {
+          "key": "done",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 4
+        }
+      ],
+      "priorityColumnConfig": [
+        {
+          "key": "low",
+          "color": "#1a181b",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 0
+        },
+        {
+          "key": "high",
+          "color": "#f0dc05",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "medium",
+          "color": "#753e89",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 1
+        },
+        {
+          "key": "critical",
+          "color": "#fa0505",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 4
+        },
+        {
+          "key": "unset",
+          "color": null,
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": 0
+        }
+      ]
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/44f10566-6bde-4bf4-b3a7-d347a65c2d53"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

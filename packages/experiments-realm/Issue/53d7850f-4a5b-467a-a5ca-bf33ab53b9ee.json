@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Issue",
+        "module": "https://cardstack.com/base/issue-tracker/issue"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "N400 Application",
+      "status": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "priority": "high",
+      "ticketId": null,
+      "ticketType": null,
+      "description": null,
+      "statusBoardOrder": 1,
+      "priorityBoardOrder": 1,
+      "ticketTypeBoardOrder": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/96a4ec3e-53d7-450f-8a5b-e67ae5cabf33"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "relatedTickets": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

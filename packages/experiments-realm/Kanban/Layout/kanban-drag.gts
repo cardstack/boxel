@@ -1,0 +1,362 @@
+// ═══ [EDIT TRACKING: ON] Mark all changes with ⁿ ═══
+// ¹ KanbanDragManager — Drag interaction for Kanban boards.
+// Uses insertion model: cards insert BETWEEN other cards.
+// Shares hold-to-drag timing and ghost lifecycle with GridManager.
+
+import { tracked } from '@glimmer/tracking'; // ²
+import {
+  type KanbanPlacement,
+  type InsertionPoint,
+  findInsertionFromPointer,
+  resolveInsertion,
+} from './kanban-engine'; // ³
+
+// ── Constants ────────────────────────────────────────────────────────── // ⁴
+const DRAG_THRESHOLD_PX = 4;
+const HOLD_DELAY_MS = 180;
+
+// ── Types ────────────────────────────────────────────────────────────── // ⁵
+
+export type KanbanInteractionMode = 'idle' | 'pending' | 'drag';
+
+export interface KanbanDragManagerOptions {
+  // ⁶
+  placements: () => KanbanPlacement[];
+  columnCount: () => number;
+  containerElement: () => HTMLElement | null;
+  onChange: (placements: KanbanPlacement[]) => void;
+  onSelect?: (index: number | null) => void;
+}
+
+// ── KanbanDragManager ────────────────────────────────────────────────── // ⁷
+
+export class KanbanDragManager {
+  // ── Dependencies ───────────────────────────────────────────────────
+  private placementsFn: () => KanbanPlacement[]; // ⁸
+  private columnCountFn: () => number;
+  private containerFn: () => HTMLElement | null;
+  private onChangeFn: (placements: KanbanPlacement[]) => void;
+  private onSelectFn: ((index: number | null) => void) | undefined;
+
+  // ── Tracked State ──────────────────────────────────────────────────
+  @tracked selectedIndex: number | null = null; // ⁹
+  @tracked interactionMode: KanbanInteractionMode = 'idle';
+  @tracked activeDragIndex: number | null = null;
+  @tracked pointerClientX = 0;
+  @tracked pointerClientY = 0;
+  @tracked dragGhostWidth = 0;
+  @tracked dragGhostHeight = 0;
+  @tracked dragOffsetX = 0;
+  @tracked dragOffsetY = 0;
+  @tracked insertion: InsertionPoint | null = null; // ¹⁰ current insertion point
+  @tracked isSettling = false;
+  @tracked settleX = 0;
+  @tracked settleY = 0;
+  @tracked settleWidth = 0;
+  @tracked settleHeight = 0;
+
+  // ── Non-tracked ────────────────────────────────────────────────────
+  private activePointerId: number | null = null; // ¹¹
+  private startClientX = 0;
+  private startClientY = 0;
+  private dragIndex: number | null = null;
+  private holdTimer: ReturnType<typeof setTimeout> | null = null;
+  private snapshotPlacements: KanbanPlacement[] | null = null;
+
+  // ── Public container ref ───────────────────────────────────────────
+  containerRef: HTMLElement | null = null; // ¹²
+
+  constructor(opts: KanbanDragManagerOptions) {
+    // ¹³
+    this.placementsFn = opts.placements;
+    this.columnCountFn = opts.columnCount;
+    this.containerFn = () => this.containerRef ?? opts.containerElement();
+    this.onChangeFn = opts.onChange;
+    this.onSelectFn = opts.onSelect;
+  }
+
+  registerContainer = (el: HTMLElement): void => {
+    this.containerRef = el;
+  };
+
+  // ── Pointer Handlers ───────────────────────────────────────────────
+
+  onPointerDown = (e: PointerEvent): void => {
+    // ¹⁴
+    if (e.button !== 0 || this.interactionMode !== 'idle') return;
+
+    const container = this.containerFn();
+    if (!container) return;
+
+    // Find which card was clicked via DOM
+    const targetEl = e.target as HTMLElement;
+    const cardEl = targetEl?.closest?.(
+      '[data-card-index]',
+    ) as HTMLElement | null;
+    if (!cardEl) {
+      this.selectedIndex = null;
+      this.onSelectFn?.(null);
+      return;
+    }
+
+    const hitIndex = parseInt(cardEl.getAttribute('data-card-index')!, 10);
+    this.activePointerId = e.pointerId;
+    this.startClientX = e.clientX;
+    this.startClientY = e.clientY;
+    this.dragIndex = hitIndex;
+    this.selectedIndex = hitIndex;
+    this.onSelectFn?.(hitIndex);
+    this.interactionMode = 'pending';
+
+    document.body.style.userSelect = 'none';
+    (document.body.style as any).webkitUserSelect = 'none';
+
+    // Hold timer
+    this.holdTimer = setTimeout(() => {
+      if (this.interactionMode === 'pending') {
+        this.activateDrag(container);
+      }
+    }, HOLD_DELAY_MS);
+
+    container.setPointerCapture(e.pointerId);
+  };
+
+  onPointerMove = (e: PointerEvent): void => {
+    // ¹⁵
+    if (e.pointerId !== this.activePointerId || this.interactionMode === 'idle')
+      return;
+
+    this.pointerClientX = e.clientX;
+    this.pointerClientY = e.clientY;
+
+    // Pending → drag on movement
+    if (this.interactionMode === 'pending') {
+      const dx = e.clientX - this.startClientX;
+      const dy = e.clientY - this.startClientY;
+      if (Math.sqrt(dx * dx + dy * dy) >= DRAG_THRESHOLD_PX) {
+        const container = this.containerFn();
+        if (container) this.activateDrag(container);
+      }
+      return;
+    }
+
+    // Active drag: find insertion point
+    const container = this.containerFn();
+    if (!container || this.dragIndex === null) return;
+
+    const placements = this.placementsFn();
+    const point = findInsertionFromPointer(
+      e.clientX,
+      e.clientY,
+      container,
+      placements,
+      this.dragIndex,
+      this.columnCountFn(),
+    );
+    this.insertion = point;
+  };
+
+  onPointerUp = (e: PointerEvent): void => {
+    // ¹⁶
+    if (e.pointerId !== this.activePointerId) return;
+
+    const container = this.containerFn();
+    if (container) container.releasePointerCapture(e.pointerId);
+
+    // Tap: just select
+    if (this.interactionMode === 'pending') {
+      if (this.holdTimer) {
+        clearTimeout(this.holdTimer);
+        this.holdTimer = null;
+      }
+      this.interactionMode = 'idle';
+      this.activePointerId = null;
+      this.dragIndex = null;
+      this.snapshotPlacements = null;
+      document.body.style.userSelect = '';
+      (document.body.style as any).webkitUserSelect = '';
+      return;
+    }
+
+    if (this.interactionMode !== 'drag' || this.dragIndex === null) {
+      this.resetSession();
+      return;
+    }
+
+    // Find settle position: measure the insertion gap
+    if (container && this.insertion) {
+      this.measureSettlePosition(container);
+    }
+
+    this.isSettling = true;
+
+    const pendingInsertion = this.insertion;
+    const pendingDragIndex = this.dragIndex;
+
+    setTimeout(() => {
+      // Commit insertion
+      if (pendingInsertion && pendingDragIndex !== null) {
+        const placements = this.placementsFn();
+        const newPlacements = resolveInsertion(
+          pendingDragIndex,
+          pendingInsertion,
+          placements,
+        );
+        this.onChangeFn(newPlacements);
+      }
+
+      requestAnimationFrame(() => {
+        this.resetSession();
+      });
+    }, 200);
+  };
+
+  // ── Keyboard ───────────────────────────────────────────────────────
+
+  onKeyDown = (e: KeyboardEvent): void => {
+    // ¹⁷
+    if (e.key === 'Escape') {
+      if (this.interactionMode !== 'idle') {
+        e.preventDefault();
+        this.cancelDrag();
+      } else {
+        this.selectedIndex = null;
+        this.onSelectFn?.(null);
+      }
+    }
+  };
+
+  // ── Actions ────────────────────────────────────────────────────────
+
+  select = (index: number | null): void => {
+    // ¹⁸
+    this.selectedIndex = index;
+    this.onSelectFn?.(index);
+  };
+
+  // ── Private ────────────────────────────────────────────────────────
+
+  private activateDrag(container: HTMLElement): void {
+    // ¹⁹
+    if (this.holdTimer) {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+    this.interactionMode = 'drag';
+    this.activeDragIndex = this.dragIndex;
+    this.snapshotPlacements = this.placementsFn().map((p) => ({ ...p }));
+
+    const cardEl = container.querySelector(
+      `[data-card-index="${this.dragIndex}"]`,
+    ) as HTMLElement | null;
+    if (cardEl) {
+      const rect = cardEl.getBoundingClientRect();
+      this.dragGhostWidth = rect.width;
+      this.dragGhostHeight = rect.height;
+      this.dragOffsetX = this.pointerClientX - rect.left;
+      this.dragOffsetY = this.pointerClientY - rect.top;
+    }
+  }
+
+  private measureSettlePosition(container: HTMLElement): void {
+    // ²⁰
+    if (!this.insertion) return;
+    const { column, position } = this.insertion;
+    const placements = this.placementsFn();
+    const colCards = placements
+      .filter((p) => p.column === column && p.index !== this.dragIndex)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    // Find the card element just before the insertion position
+    const colEl = container.querySelector(
+      `[data-kanban-column="${column}"]`,
+    ) as HTMLElement | null;
+    if (!colEl) return;
+
+    const bodyEl = colEl.querySelector('.col-body') as HTMLElement | null;
+    if (!bodyEl) return;
+
+    if (colCards.length === 0) {
+      // Empty column: settle at top of body
+      const bodyRect = bodyEl.getBoundingClientRect();
+      this.settleX = bodyRect.left + 4;
+      this.settleY = bodyRect.top + 8;
+      this.settleWidth = bodyRect.width - 8;
+      this.settleHeight = this.dragGhostHeight;
+      return;
+    }
+
+    const insertIdx = Math.min(position - 1, colCards.length);
+
+    if (insertIdx >= colCards.length) {
+      // Insert at end: settle below last card (subtract transform)
+      const lastCardEl = container.querySelector(
+        `[data-card-index="${colCards[colCards.length - 1].index}"]`,
+      ) as HTMLElement | null;
+      if (lastCardEl) {
+        const rect = lastCardEl.getBoundingClientRect();
+        const cs = getComputedStyle(lastCardEl);
+        const matrix = new DOMMatrix(cs.transform);
+        this.settleX = rect.left - matrix.m41;
+        this.settleY = rect.bottom - matrix.m42 + 6;
+        this.settleWidth = rect.width;
+        this.settleHeight = this.dragGhostHeight;
+      }
+    } else {
+      // Insert before a card: settle at that card's true position (subtract transform)
+      const beforeCardEl = container.querySelector(
+        `[data-card-index="${colCards[insertIdx].index}"]`,
+      ) as HTMLElement | null;
+      if (beforeCardEl) {
+        const rect = beforeCardEl.getBoundingClientRect();
+        const cs = getComputedStyle(beforeCardEl);
+        const matrix = new DOMMatrix(cs.transform);
+        this.settleX = rect.left - matrix.m41;
+        this.settleY = rect.top - matrix.m42;
+        this.settleWidth = rect.width;
+        this.settleHeight = this.dragGhostHeight;
+      }
+    }
+  }
+
+  private cancelDrag(): void {
+    // ²¹
+    if (this.snapshotPlacements) {
+      this.onChangeFn(this.snapshotPlacements);
+    }
+    const container = this.containerFn();
+    if (container && this.activePointerId !== null) {
+      try {
+        container.releasePointerCapture(this.activePointerId);
+      } catch (_) {
+        /* ok */
+      }
+    }
+    this.resetSession();
+  }
+
+  private resetSession(): void {
+    // ²²
+    this.activePointerId = null;
+    this.activeDragIndex = null;
+    this.insertion = null;
+    this.isSettling = false;
+    this.settleX = 0;
+    this.settleY = 0;
+    this.settleWidth = 0;
+    this.settleHeight = 0;
+    this.dragGhostWidth = 0;
+    this.dragGhostHeight = 0;
+    this.dragOffsetX = 0;
+    this.dragOffsetY = 0;
+    this.dragIndex = null;
+    this.snapshotPlacements = null;
+    this.interactionMode = 'idle';
+    if (this.holdTimer) {
+      clearTimeout(this.holdTimer);
+      this.holdTimer = null;
+    }
+    document.body.style.userSelect = '';
+    (document.body.style as any).webkitUserSelect = '';
+  }
+}

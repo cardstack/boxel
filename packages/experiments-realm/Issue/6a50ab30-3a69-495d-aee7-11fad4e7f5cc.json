@@ -1,0 +1,50 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Issue",
+        "module": "https://cardstack.com/base/issue-tracker/issue"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "status": "review",
+      "cardInfo": {
+        "name": "Issue 5",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "priority": "unset",
+      "ticketId": "cs-5",
+      "ticketType": "unset",
+      "description": null,
+      "statusBoardOrder": 2,
+      "priorityBoardOrder": 2,
+      "ticketTypeBoardOrder": 5
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/44f10566-6bde-4bf4-b3a7-d347a65c2d53"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "relatedTickets": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

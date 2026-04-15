@@ -1,0 +1,58 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Project",
+        "module": "https://cardstack.com/base/issue-tracker/issue"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": null,
+      "dueDate": null,
+      "cardInfo": {
+        "name": "Project 1",
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "description": null,
+      "projectCode": "PCS",
+      "projectStatus": null,
+      "priorityOptions": [
+        {
+          "value": "low",
+          "label": "Low"
+        },
+        {
+          "value": "medium",
+          "label": "Medium"
+        },
+        {
+          "value": "high",
+          "label": "High"
+        },
+        {
+          "value": "critical",
+          "label": "Critical"
+        },
+        {
+          "value": "unset",
+          "label": "Unset"
+        }
+      ]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../BrandGuide/1fc32354-8201-4f79-b400-c7c94b507174"
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

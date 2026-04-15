@@ -1,0 +1,59 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "KanbanBoard",
+        "module": "https://cardstack.com/base/issue-tracker/kanban-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "Personal Board",
+      "groupBy": "ticketType",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "hideEmptyColumns": false,
+      "typeColumnConfig": [],
+      "statusColumnConfig": [],
+      "priorityColumnConfig": [
+        {
+          "key": "low",
+          "label": null,
+          "color": "#111112",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "high",
+          "label": null,
+          "color": "#f91f06",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        }
+      ]
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/96a4ec3e-53d7-450f-8a5b-e67ae5cabf33"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

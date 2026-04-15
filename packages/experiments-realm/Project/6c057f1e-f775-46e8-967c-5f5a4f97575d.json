@@ -1,0 +1,39 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "Project",
+        "module": "https://cardstack.com/base/issue-tracker/issue"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "To Do List",
+      "dueDate": null,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "description": null,
+      "projectCode": null,
+      "typeOptions": [],
+      "projectStatus": null,
+      "statusOptions": [],
+      "priorityOptions": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
