@@ -147,7 +147,7 @@ module('Integration | markdown-fallback', function (hooks) {
     assert.true(md.includes('let x = 1;'), `expected code body in: ${md}`);
   });
 
-  test('CardDef subclass override of `static markdown` wins over the fallback', async function (assert) {
+  test('CardDef subclass override of `static markdown` wins over the fallback', async function (this: RenderingTestContext, assert) {
     class Custom extends CardDef {
       @field title = contains(StringField);
       static isolated = class extends Component<typeof this> {
@@ -173,11 +173,11 @@ module('Integration | markdown-fallback', function (hooks) {
       .dom('[data-markdown-output]')
       .doesNotExist('fallback output container should not render');
 
-    // The render-route wraps the markdown component in
-    // [data-markdown-render-container]; the prerender capture extracts text
-    // from there. The authored markdown should be what we see.
-    let container = document.querySelector('[data-markdown-render-container]');
-    let text = cleanWhiteSpace(container?.textContent ?? '');
+    // The render route wraps format='markdown' in [data-markdown-render-container],
+    // but that wrapper is route-only (packages/host/app/templates/render/html.gts).
+    // In rendering tests we query the root test element directly — the authored
+    // markdown is the only text content in the render.
+    let text = cleanWhiteSpace(this.element.textContent ?? '');
     assert.strictEqual(text, '# Override (authored)');
   });
 
