@@ -810,6 +810,7 @@ export class RenderRunner {
         let iconHTML: string | null = null;
         let embeddedHTML: Record<string, string> | null = null;
         let fittedHTML: Record<string, string> | null = null;
+        let markdown: string | null = null;
 
         if (!cardShortCircuit) {
           const formatSteps = [
@@ -832,6 +833,13 @@ export class RenderRunner {
               cb: () => renderIcon(page, captureOptions),
               assign: (v: string) => {
                 iconHTML = v;
+              },
+            },
+            {
+              name: 'visit card markdown render',
+              cb: () => renderHTML(page, 'markdown', 0, captureOptions),
+              assign: (v: string) => {
+                markdown = v;
               },
             },
           ];
@@ -910,6 +918,7 @@ export class RenderRunner {
           atomHTML,
           embeddedHTML,
           fittedHTML,
+          markdown,
         };
         cardResponse.error = this.#mergeConsoleErrors(
           pageId,
@@ -954,6 +963,7 @@ export class RenderRunner {
             embeddedHTML: null,
             fittedHTML: null,
             iconHTML: null,
+            markdown: null,
             error: {
               type: 'file-error',
               error: {
@@ -992,6 +1002,7 @@ export class RenderRunner {
           let iconHTML: string | null = null;
           let embeddedHTML: Record<string, string> | null = null;
           let fittedHTML: Record<string, string> | null = null;
+          let markdown: string | null = null;
 
           let applyStepError = (stepError: RenderError, evicted: boolean) => {
             fileError = fileError ?? stepError;
@@ -1117,6 +1128,13 @@ export class RenderRunner {
                   iconHTML = v as string;
                 },
               },
+              {
+                name: 'visit file markdown render',
+                cb: () => renderHTML(page, 'markdown', 0, captureOptions),
+                assign: (v) => {
+                  markdown = v as string;
+                },
+              },
             );
 
             for (let step of steps) {
@@ -1141,6 +1159,7 @@ export class RenderRunner {
             atomHTML,
             embeddedHTML,
             fittedHTML,
+            markdown,
           };
           fileResponse.error = this.#mergeConsoleErrors(
             pageId,
