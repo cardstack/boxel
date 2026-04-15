@@ -89,6 +89,7 @@ export default class AiAssistantPanelService extends Service {
     this.roomToRename = undefined;
     this.roomToDelete = undefined;
     this.roomDeleteError = undefined;
+    this.deletedRoomIds.clear();
     window.localStorage.removeItem(NewSessionIdPersistenceKey);
     this.loadRoomsTask.cancelAll();
     this.doCreateRoom.cancelAll();
@@ -482,6 +483,11 @@ export default class AiAssistantPanelService extends Service {
 
   private async createFallbackRoom(name: string): Promise<string> {
     let userId = this.matrixService.userId;
+    if (!userId) {
+      throw new Error(
+        'Requires userId to create a fallback room',
+      );
+    }
     let aiBotFullId = this.matrixService.aiBotUserId;
     let llmMode = this.getPreferredLLMMode();
     let systemCard = this.matrixService.systemCard;
@@ -498,7 +504,7 @@ export default class AiAssistantPanelService extends Service {
       ),
       power_level_content_override: {
         users: {
-          [userId!]: 100,
+          [userId]: 100,
           [aiBotFullId]: this.matrixService.aiBotPowerLevel,
         },
       },
