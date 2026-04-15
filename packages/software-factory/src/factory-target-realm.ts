@@ -69,14 +69,19 @@ async function createRealm(
   let realmName = extractEndpointFromRealmUrl(resolution.url);
 
   let active = getProfileManager().getActiveProfile();
-  if (
-    active &&
-    ensureTrailingSlash(active.profile.realmServerUrl) !==
-      resolution.serverUrl
-  ) {
-    throw new FactoryEntrypointUsageError(
-      `Active Boxel profile realm server "${ensureTrailingSlash(active.profile.realmServerUrl)}" does not match --realm-server-url "${resolution.serverUrl}"`,
-    );
+  if (active) {
+    let activeServerUrl = ensureTrailingSlash(active.profile.realmServerUrl);
+    if (activeServerUrl !== resolution.serverUrl) {
+      throw new FactoryEntrypointUsageError(
+        `Active Boxel profile realm server "${activeServerUrl}" does not match --realm-server-url "${resolution.serverUrl}"`,
+      );
+    }
+    let activeUsername = getMatrixUsername(active.id);
+    if (activeUsername !== resolution.ownerUsername) {
+      throw new FactoryEntrypointUsageError(
+        `Active Boxel profile user "${activeUsername}" does not match MATRIX_USERNAME "${resolution.ownerUsername}"`,
+      );
+    }
   }
 
   let client = new BoxelCLIClient();
