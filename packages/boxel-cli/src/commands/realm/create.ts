@@ -121,26 +121,28 @@ export async function createRealm(
   }
 
   let result = await response.json();
-  let realmUrl = result?.data?.id;
-  let normalizedRealmUrl = realmUrl ? ensureTrailingSlash(realmUrl) : undefined;
+  let rawRealmUrl = result?.data?.id;
+  if (typeof rawRealmUrl !== 'string' || rawRealmUrl.trim() === '') {
+    throw new Error(
+      `Realm server response did not include a realm URL (data.id) for "${realmName}".`,
+    );
+  }
+  let realmUrl = ensureTrailingSlash(rawRealmUrl);
 
-  let realmToken: string | undefined;
-  if (normalizedRealmUrl) {
-    realmToken = await fetchRealmToken(pm, normalizedRealmUrl);
+  let realmToken = await fetchRealmToken(pm, realmUrl);
 
-    try {
-      await pm.addToUserRealms(normalizedRealmUrl);
-    } catch {
-      // Non-critical — realm still works without dashboard registration
-    }
+  try {
+    await pm.addToUserRealms(realmUrl);
+  } catch {
+    // Non-critical — realm still works without dashboard registration
   }
 
-  if (options.waitForReady && normalizedRealmUrl && realmToken) {
-    await waitForRealmReady(normalizedRealmUrl, realmToken);
+  if (options.waitForReady && realmToken) {
+    await waitForRealmReady(realmUrl, realmToken);
   }
 
   return {
-    realmUrl: normalizedRealmUrl ?? realmName,
+    realmUrl,
     created: true,
     realmToken,
   };
