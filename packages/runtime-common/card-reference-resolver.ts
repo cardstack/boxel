@@ -3,7 +3,7 @@
  * May be either a scoped identifier (e.g. `@cardstack/base/card-api`)
  * or a full URL (e.g. `https://my-realm.com/cards/person`).
  *
- * Do NOT pass directly to `new URL()` — use `resolveRRI()` (forthcoming).
+ * Do NOT pass directly to `new URL()` — use `resolveCardReference()`.
  */
 export type RealmResourceIdentifier = string & { __rriBrand: unknown };
 
