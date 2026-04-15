@@ -1,11 +1,26 @@
+import type {
+  RealmIdentifier,
+  RealmResourceIdentifier,
+} from './card-reference-resolver';
+
 interface LocalOptions {
   preserveQuerystring?: boolean;
 }
 export class RealmPaths {
   readonly url: string;
 
-  constructor(realmURL: URL) {
-    this.url = ensureTrailingSlash(decodeURI(realmURL.href));
+  constructor(realmURL: URL);
+  constructor(realmId: RealmIdentifier);
+  constructor(realmURLOrId: URL | RealmIdentifier) {
+    if (realmURLOrId instanceof URL) {
+      this.url = ensureTrailingSlash(decodeURI(realmURLOrId.href));
+    } else {
+      this.url = ensureTrailingSlash(realmURLOrId);
+    }
+  }
+
+  get realmId(): RealmIdentifier {
+    return this.url as RealmIdentifier;
   }
 
   local(url: URL, opts: LocalOptions = {}): LocalPath {
@@ -57,6 +72,35 @@ export class RealmPaths {
       decodedHref.startsWith(this.url) ||
       decodedHref.split('?')[0] == this.url.replace(/\/$/, '') // check if url without querystring same as realm url without trailing slash (for detecting root realm urls with missing trailing slash)
     );
+  }
+
+  // ---- RRI-aware methods (Phase 0 — additive, existing methods unchanged) ----
+
+  inRealmRRI(rri: RealmResourceIdentifier): boolean {
+    return (
+      rri.startsWith(this.url) || rri === this.url.replace(/\/$/, '')
+    );
+  }
+
+  localFromRRI(rri: RealmResourceIdentifier): LocalPath {
+    if (!this.inRealmRRI(rri)) {
+      let error = new Error(`realm ${this.url} does not contain ${rri}`);
+      (error as any).status = 404;
+      throw error;
+    }
+    let local = rri.slice(this.url.length);
+    return local.replace(/\/+$/, '');
+  }
+
+  fileRRI(local: LocalPath): RealmResourceIdentifier {
+    return (this.url + local) as RealmResourceIdentifier;
+  }
+
+  directoryRRI(local: LocalPath): RealmResourceIdentifier {
+    if (local === '') {
+      return this.url as RealmResourceIdentifier;
+    }
+    return (this.url + local + '/') as RealmResourceIdentifier;
   }
 }
 

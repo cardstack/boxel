@@ -5,10 +5,12 @@ import {
   unregisterCardReferencePrefix,
   resolveCardReference,
   resolveRRI,
+  RealmPaths,
 } from '@cardstack/runtime-common';
 import type {
   SingleCardDocument,
   RealmResourceIdentifier,
+  RealmIdentifier,
 } from '@cardstack/runtime-common';
 import { relativizeDocument } from '@cardstack/runtime-common/realm-index-query-engine';
 
@@ -449,6 +451,159 @@ module(basename(__filename), function () {
         () => resolveRRI('card' as RealmResourceIdentifier),
         /Cannot resolve "card" without a relativeTo/,
       );
+    });
+  });
+
+  module('RealmPaths RRI methods', function () {
+    module('constructed from URL', function () {
+      let paths = new RealmPaths(new URL('http://localhost:4201/base/'));
+
+      test('realmId returns RealmIdentifier', function (assert) {
+        assert.strictEqual(paths.realmId, 'http://localhost:4201/base/');
+      });
+
+      test('inRealmRRI matches resource in realm', function (assert) {
+        assert.true(
+          paths.inRealmRRI(
+            'http://localhost:4201/base/card-api' as RealmResourceIdentifier,
+          ),
+        );
+      });
+
+      test('inRealmRRI matches realm root without trailing slash', function (assert) {
+        assert.true(
+          paths.inRealmRRI(
+            'http://localhost:4201/base' as RealmResourceIdentifier,
+          ),
+        );
+      });
+
+      test('inRealmRRI rejects resource outside realm', function (assert) {
+        assert.false(
+          paths.inRealmRRI(
+            'http://localhost:4201/other/card' as RealmResourceIdentifier,
+          ),
+        );
+      });
+
+      test('localFromRRI strips realm prefix', function (assert) {
+        assert.strictEqual(
+          paths.localFromRRI(
+            'http://localhost:4201/base/Card/my-instance' as RealmResourceIdentifier,
+          ),
+          'Card/my-instance',
+        );
+      });
+
+      test('localFromRRI strips trailing slashes', function (assert) {
+        assert.strictEqual(
+          paths.localFromRRI(
+            'http://localhost:4201/base/directory/' as RealmResourceIdentifier,
+          ),
+          'directory',
+        );
+      });
+
+      test('localFromRRI returns empty string for realm root', function (assert) {
+        assert.strictEqual(
+          paths.localFromRRI(
+            'http://localhost:4201/base/' as RealmResourceIdentifier,
+          ),
+          '',
+        );
+      });
+
+      test('localFromRRI throws for resource outside realm', function (assert) {
+        assert.throws(
+          () =>
+            paths.localFromRRI(
+              'http://localhost:4201/other/card' as RealmResourceIdentifier,
+            ),
+          /does not contain/,
+        );
+      });
+
+      test('fileRRI joins realm prefix and local path', function (assert) {
+        assert.strictEqual(
+          paths.fileRRI('Card/my-instance'),
+          'http://localhost:4201/base/Card/my-instance',
+        );
+      });
+
+      test('directoryRRI joins realm prefix, local path, and trailing slash', function (assert) {
+        assert.strictEqual(
+          paths.directoryRRI('Card'),
+          'http://localhost:4201/base/Card/',
+        );
+      });
+
+      test('directoryRRI returns realm root for empty path', function (assert) {
+        assert.strictEqual(
+          paths.directoryRRI(''),
+          'http://localhost:4201/base/',
+        );
+      });
+    });
+
+    module('constructed from RealmIdentifier', function () {
+      let paths = new RealmPaths(
+        '@cardstack/base/' as RealmIdentifier,
+      );
+
+      test('realmId returns the scoped identifier', function (assert) {
+        assert.strictEqual(paths.realmId, '@cardstack/base/');
+      });
+
+      test('url stores the scoped identifier', function (assert) {
+        assert.strictEqual(paths.url, '@cardstack/base/');
+      });
+
+      test('inRealmRRI matches scoped resource', function (assert) {
+        assert.true(
+          paths.inRealmRRI(
+            '@cardstack/base/card-api' as RealmResourceIdentifier,
+          ),
+        );
+      });
+
+      test('inRealmRRI matches realm root without trailing slash', function (assert) {
+        assert.true(
+          paths.inRealmRRI(
+            '@cardstack/base' as RealmResourceIdentifier,
+          ),
+        );
+      });
+
+      test('inRealmRRI rejects resource in different scope', function (assert) {
+        assert.false(
+          paths.inRealmRRI(
+            '@cardstack/catalog/card' as RealmResourceIdentifier,
+          ),
+        );
+      });
+
+      test('localFromRRI strips scoped prefix', function (assert) {
+        assert.strictEqual(
+          paths.localFromRRI(
+            '@cardstack/base/Card/my-instance' as RealmResourceIdentifier,
+          ),
+          'Card/my-instance',
+        );
+      });
+
+      test('fileRRI joins scoped prefix and local path', function (assert) {
+        assert.strictEqual(
+          paths.fileRRI('card-api'),
+          '@cardstack/base/card-api',
+        );
+      });
+
+      test('directoryRRI joins scoped prefix, local path, and trailing slash', function (assert) {
+        assert.strictEqual(
+          paths.directoryRRI('fields'),
+          '@cardstack/base/fields/',
+        );
+      });
     });
   });
 });
