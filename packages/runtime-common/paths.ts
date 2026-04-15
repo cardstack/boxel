@@ -77,9 +77,7 @@ export class RealmPaths {
   // ---- RRI-aware methods (Phase 0 — additive, existing methods unchanged) ----
 
   inRealmRRI(rri: RealmResourceIdentifier): boolean {
-    return (
-      rri.startsWith(this.url) || rri === this.url.replace(/\/$/, '')
-    );
+    return rri.startsWith(this.url) || rri === this.url.replace(/\/$/, '');
   }
 
   localFromRRI(rri: RealmResourceIdentifier): LocalPath {

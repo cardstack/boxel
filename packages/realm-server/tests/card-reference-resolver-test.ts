@@ -546,9 +546,7 @@ module(basename(__filename), function () {
     });
 
     module('constructed from RealmIdentifier', function () {
-      let paths = new RealmPaths(
-        '@cardstack/base/' as RealmIdentifier,
-      );
+      let paths = new RealmPaths('@cardstack/base/' as RealmIdentifier);
 
       test('realmId returns the scoped identifier', function (assert) {
         assert.strictEqual(paths.realmId, '@cardstack/base/');
@@ -568,9 +566,7 @@ module(basename(__filename), function () {
 
       test('inRealmRRI matches realm root without trailing slash', function (assert) {
         assert.true(
-          paths.inRealmRRI(
-            '@cardstack/base' as RealmResourceIdentifier,
-          ),
+          paths.inRealmRRI('@cardstack/base' as RealmResourceIdentifier),
         );
       });
 
