@@ -254,9 +254,6 @@ export default class AiAssistantPanelService extends Service {
     },
   ) {
     this.displayRoomError = false;
-    console.log(
-      `[createNewSession] newSessionId=${this.newSessionId ?? 'none'} deferDefaultSkills=${opts.deferDefaultSkills ?? false}`,
-    );
     if (
       this.newSessionId &&
       !opts.addSameSkills &&
@@ -475,9 +472,8 @@ export default class AiAssistantPanelService extends Service {
           });
         }
       } catch (e) {
-        console.error('[doCreateRoom] error:', e);
+        console.error(e);
         this.displayRoomError = true;
-        console.log('[doCreateRoom] displayRoomError set to true');
       }
 
       return undefined;
@@ -493,7 +489,6 @@ export default class AiAssistantPanelService extends Service {
       systemCard?.defaultModelConfiguration ??
       systemCard?.modelConfigurations?.[0];
 
-    console.log('[createFallbackRoom] starting Matrix room creation');
     let roomPromise = this.matrixService.createRoom({
       preset: this.matrixService.privateChatPreset,
       invite: [aiBotFullId],
@@ -531,16 +526,15 @@ export default class AiAssistantPanelService extends Service {
       ],
     });
     let timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => {
-        console.log('[createFallbackRoom] 30s timeout fired');
-        reject(new Error('Room creation timed out waiting for sync'));
-      }, 30_000),
+      setTimeout(
+        () => reject(new Error('Room creation timed out waiting for sync')),
+        30_000,
+      ),
     );
     let { room_id: roomId } = await Promise.race([
       roomPromise,
       timeoutPromise,
     ]);
-    console.log(`[createFallbackRoom] room created: ${roomId}`);
     return roomId;
   }
 
@@ -816,26 +810,17 @@ export default class AiAssistantPanelService extends Service {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
-      let isCurrentRoom = this.matrixService.currentRoomId === roomId;
-      let latest = this.latestRoom;
-      console.log(
-        `[doLeaveRoom] roomId=${roomId} isCurrentRoom=${isCurrentRoom} latestRoom=${latest?.roomId ?? 'none'} newSessionId=${this.newSessionId ?? 'none'}`,
-      );
-
-      if (isCurrentRoom) {
+      if (this.matrixService.currentRoomId === roomId) {
         this.localPersistenceService.setCurrentRoomId(undefined);
-        if (latest) {
-          console.log(`[doLeaveRoom] entering latest room ${latest.roomId}`);
-          this.enterRoom(latest.roomId, false);
+        if (this.latestRoom) {
+          this.enterRoom(this.latestRoom.roomId, false);
         } else {
-          console.log('[doLeaveRoom] no rooms left, creating new session');
           await this.createNewSession({
             addSameSkills: false,
             shouldCopyFileHistory: false,
             shouldSummarizeSession: false,
             deferDefaultSkills: true,
           });
-          console.log('[doLeaveRoom] createNewSession completed');
         }
       }
       this.roomToDelete = undefined;

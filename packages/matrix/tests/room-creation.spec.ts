@@ -345,18 +345,6 @@ test.describe('Room creation', () => {
     // This test creates 3 rooms, sends messages, deletes all 3, then waits
     // for auto-creation — needs more than the default 60s timeout.
     test.setTimeout(120_000);
-    // Forward browser console to test stdout for diagnostic visibility
-    page.on('console', (msg) => {
-      let text = msg.text();
-      if (
-        text.includes('[doLeaveRoom]') ||
-        text.includes('[createNewSession]') ||
-        text.includes('[createFallbackRoom]') ||
-        text.includes('[doCreateRoom]')
-      ) {
-        console.log(`[browser] ${text}`);
-      }
-    });
     await login(page, firstUser.username, firstUser.password, { url: appURL });
     await page.locator(`[data-test-room-settled]`).waitFor();
     let room1 = await getRoomId(page);
@@ -378,51 +366,25 @@ test.describe('Room creation', () => {
     await deleteRoom(page, room2); // current room is deleted
     await page.locator('[data-test-ai-assistant-panel]').click();
     let newRoom: string | undefined;
-    let pollCount = 0;
+    // Poll without using getRoomId — it blocks on waitFor('[data-test-room-settled]')
+    // which can consume the entire waitUntil budget in a single attempt.
     await waitUntil(async () => {
-      pollCount++;
       try {
-        let panel = page.locator('[data-test-ai-assistant-panel]');
-        let errorCount = await page.locator('[data-test-room-error]').count();
-        let roomEl = page.locator('[data-test-room]');
-        let roomCount = await roomEl.count();
-        let roomId = roomCount > 0
-          ? await roomEl.getAttribute('data-test-room')
-          : null;
-
-        // Read isReady breakdown from data-test attributes
-        let hasCurrentRoom = await panel.getAttribute('data-test-has-current-room');
-        let hasRoomResource = await panel.getAttribute('data-test-has-room-resource');
-        let isReady = await panel.getAttribute('data-test-is-ready');
-        let isCreateIdle = await panel.getAttribute('data-test-is-create-room-idle');
-        let loadingRooms = await panel.getAttribute('data-test-loading-rooms');
-
-        if (pollCount % 10 === 1 || errorCount > 0 || roomCount > 0) {
-          console.log(
-            `[poll #${pollCount}] room=${roomCount} roomId=${roomId} isReady=${isReady} currentRoom=${hasCurrentRoom} resource=${hasRoomResource} createIdle=${isCreateIdle} loading=${loadingRooms} error=${errorCount}`,
-          );
-        }
-
-        if (errorCount > 0) {
-          console.log(`[poll #${pollCount}] Clicking "Try Again" button`);
+        if ((await page.locator('[data-test-room-error]').count()) > 0) {
           await page
             .locator('[data-test-room-error] button:has-text("Try Again")')
             .click();
           return false;
         }
-        if (roomCount === 0) return false;
+        let roomEl = page.locator('[data-test-room]');
+        if ((await roomEl.count()) === 0) return false;
+        let roomId = await roomEl.getAttribute('data-test-room');
         if (roomId && roomId !== room1 && roomId !== room2 && roomId !== room3) {
-          console.log(
-            `[poll #${pollCount}] Found new room: ${roomId}`,
-          );
           newRoom = roomId;
           return true;
         }
         return false;
-      } catch (e) {
-        console.log(
-          `[poll #${pollCount}] Error: ${e instanceof Error ? e.message : e}`,
-        );
+      } catch {
         return false;
       }
     }, 60_000);
