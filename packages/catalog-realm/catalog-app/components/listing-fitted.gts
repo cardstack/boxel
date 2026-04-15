@@ -98,7 +98,8 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       : undefined;
   }
 
-  viewDetails = () => {
+  viewDetails = (event: Event) => {
+    event.stopPropagation();
     this.listingActions?.view();
   };
 

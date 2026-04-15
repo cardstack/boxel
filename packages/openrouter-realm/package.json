@@ -8,6 +8,7 @@
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
+    "concurrently": "catalog:",
     "ember-template-lint": "catalog:"
   },
   "scripts": {

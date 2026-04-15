@@ -595,7 +595,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${baseRealm.url}file-api`,
+          module: `${baseRealm.url}card-api`,
           name: 'FileDef',
         },
       },
@@ -634,7 +634,7 @@ module(`Integration | search resource`, function (hooks) {
     let query: Query = {
       filter: {
         type: {
-          module: `${baseRealm.url}file-api`,
+          module: `${baseRealm.url}card-api`,
           name: 'FileDef',
         },
       },

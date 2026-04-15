@@ -9,6 +9,7 @@ import * as NumberSerializer from './number';
 import * as EmailSerializer from './email';
 import * as ImageSizeSerializer from './image-size';
 import * as PhoneSerializer from './phone';
+import * as StringToContentSerializer from './string-to-content';
 
 import type { CardDocument } from '../index';
 import type {
@@ -33,6 +34,7 @@ export {
   ImageSizeSerializer,
   EmailSerializer,
   PhoneSerializer,
+  StringToContentSerializer,
 };
 
 interface Serializer {
@@ -65,6 +67,7 @@ const serializerMapping: { [name: string]: Serializer } = {
   'image-size': ImageSizeSerializer,
   email: EmailSerializer,
   phone: PhoneSerializer,
+  'string-to-content': StringToContentSerializer,
 };
 
 export type SerializerName =
@@ -78,7 +81,8 @@ export type SerializerName =
   | 'number'
   | 'image-size'
   | 'email'
-  | 'phone';
+  | 'phone'
+  | 'string-to-content';
 
 export function getSerializer(name: SerializerName): Serializer {
   assertIsSerializerName(name);

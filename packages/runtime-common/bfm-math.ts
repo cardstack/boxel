@@ -1,5 +1,8 @@
 import { escapeHtml } from './helpers/html';
-import type { MarkedExtension, TokenizerAndRendererExtension } from 'marked';
+import type {
+  MarkedExtension,
+  TokenizerAndRendererExtension,
+} from './marked.mts';
 
 // Regex patterns adapted from marked-katex-extension.
 // Inline: $...$ or $$...$$ on one line, with standard spacing rules.

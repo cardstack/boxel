@@ -92,6 +92,7 @@ function resolveSubmissionWorkflowState(
   ciAllPassed: boolean,
   ciHasFailure: boolean,
   ciInProgress: boolean,
+  ciIsLoading: boolean,
   reviewState: string | null,
   isMerged: boolean,
   isClosed: boolean,
@@ -119,6 +120,9 @@ function resolveSubmissionWorkflowState(
         if (hasPr && ciInProgress) {
           inProgress = true;
           statusDetail = 'Checks are running...';
+        } else if (hasPr && ciIsLoading && !ciAllPassed && !ciHasFailure) {
+          inProgress = true;
+          statusDetail = 'Loading check status...';
         }
         break;
       case 'reviewer-approve':
@@ -416,6 +420,13 @@ export class SubmissionWorkflowCard extends CardDef {
       return this.ciItems.some((i) => i.state === 'in_progress');
     }
 
+    get ciIsLoading() {
+      return (
+        this.checkRunEventData?.isLoading ||
+        this.checkSuiteEventData?.isLoading
+      ) ?? false;
+    }
+
     // ── Review state ──
     get latestReviewByReviewer() {
       return buildLatestReviewByReviewer(
@@ -436,6 +447,7 @@ export class SubmissionWorkflowCard extends CardDef {
         this.ciAllPassed,
         this.ciHasFailure,
         this.ciInProgress,
+        this.ciIsLoading,
         this.reviewState,
         this.isMerged,
         this.isClosed,
@@ -491,7 +503,7 @@ export class SubmissionWorkflowCard extends CardDef {
 
           {{! ── Step tracker ── }}
           <div class='sw-steps'>
-            {{#each this.workflowState.steps as |step idx|}}
+            {{#each this.workflowState.steps key="key" as |step idx|}}
               <div class={{concat 'sw-step ' step.status}}>
                 <div class='sw-step-indicator'>
                   {{#if (eq step.status 'completed')}}
@@ -611,7 +623,7 @@ export class SubmissionWorkflowCard extends CardDef {
           {{! Step summary }}
           <div class='sw-sidebar-section'>
             <div class='sw-sidebar-heading'>Steps</div>
-            {{#each this.workflowState.steps as |step|}}
+            {{#each this.workflowState.steps key="key" as |step|}}
               <div class={{concat 'sw-sidebar-step ' step.status}}>
                 {{#if (eq step.status 'completed')}}
                   <span class='sw-sidebar-icon completed'>

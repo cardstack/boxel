@@ -1081,8 +1081,10 @@ export default class BrandGuide extends DetailedStyleRef {
 
   @field cardThumbnailURL = contains(StringField, {
     computeVia: function (this: BrandGuide) {
-      return this.cardInfo?.cardThumbnailURL?.length
-        ? this.cardInfo?.cardThumbnailURL
+      let thumbnailURL =
+        this.cardInfo?.cardThumbnail?.url ?? this.cardInfo?.cardThumbnailURL;
+      return thumbnailURL?.length
+        ? thumbnailURL
         : this.markUsage?.socialMediaProfileIcon;
     },
   });

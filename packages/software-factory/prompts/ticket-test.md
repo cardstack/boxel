@@ -1,6 +1,6 @@
 # Test Generation
 
-You implemented the following files for ticket {{ticket.id}}:
+You implemented the following files for issue {{issue.id}}:
 
 {{#each implementedFiles}}
 

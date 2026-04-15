@@ -1277,7 +1277,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/file-api',
+                    module: 'https://cardstack.com/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1293,7 +1293,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/file-api',
+                    module: 'https://cardstack.com/base/card-api',
                     name: 'FileDef',
                   },
                 },
@@ -1309,7 +1309,7 @@ module('Integration | Store', function (hooks) {
                 },
                 meta: {
                   adoptsFrom: {
-                    module: 'https://cardstack.com/base/file-api',
+                    module: 'https://cardstack.com/base/card-api',
                     name: 'FileDef',
                   },
                 },

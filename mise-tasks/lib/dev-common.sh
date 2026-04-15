@@ -3,6 +3,8 @@
 # Sourced (not executed) — sets variables and bootstraps infra.
 # Expects to run with MISE dir=packages/realm-server.
 
+export PATH="./node_modules/.bin:$PATH"
+
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 
 # Phase 1 readiness URLs
@@ -35,5 +37,10 @@ if [ -n "$BOXEL_ENVIRONMENT" ]; then
   "$REPO_ROOT/scripts/ensure-branch-db.sh"
   echo "Running database migrations…"
   pnpm migrate
+  if [ "${INDEX_CACHE:-}" = "true" ]; then
+    if "$REPO_ROOT/scripts/import-cached-index.sh"; then
+      export REALM_SERVER_FULL_INDEX_ON_STARTUP="${REALM_SERVER_FULL_INDEX_ON_STARTUP:-false}"
+    fi
+  fi
   ./scripts/start-matrix.sh
 fi

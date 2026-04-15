@@ -49,7 +49,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
     :global(.boxel-card-container) {
       position: relative;
       background-color: var(--background, var(--boxel-light));
-      border-radius: var(--radius, var(--boxel-border-radius));
+      border-radius: var(--_boxel-radius);
       color: var(--foreground, var(--boxel-dark));
       transition:
         max-width var(--boxel-transition),
@@ -57,6 +57,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       height: 100%;
       width: 100%;
       overflow: hidden;
+      z-index: 0;
     }
     :global(.boxel-card-container--boundaries:not(.hide-boundaries)) {
       box-shadow: 0 0 0 1px var(--border, var(--boxel-border-color));

@@ -740,6 +740,11 @@ module(basename(__filename), function () {
                 self: './ringo',
               },
             },
+            'cardInfo.cardThumbnail': {
+              links: {
+                self: null,
+              },
+            },
             'cardInfo.theme': {
               links: {
                 self: null,
@@ -774,6 +779,7 @@ module(basename(__filename), function () {
             firstName: 'Hassan',
             cardTitle: 'Untitled Card',
             cardInfo: {
+              cardThumbnail: null,
               theme: null,
             },
           },
@@ -1078,7 +1084,7 @@ module(basename(__filename), function () {
       // Mutate the index row so we can validate that the response must come from the index,
       // not from filesystem metadata.
       await testDbAdapter.execute(
-        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/file-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
+        `UPDATE boxel_index SET search_doc = '{"name":"from-index.txt","contentType":"application/x-index-test"}'::jsonb, pristine_doc = '{"id":"${testRealm}random-file.txt","type":"file-meta","attributes":{"name":"from-pristine.txt","contentType":"application/x-pristine","custom":"present"},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/card-api","name":"FileDef"}}}'::jsonb WHERE url = '${testRealm}random-file.txt'`,
       );
       let response = await fetch(`${testRealm}random-file.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },

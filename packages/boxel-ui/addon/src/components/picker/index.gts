@@ -131,8 +131,6 @@ class PickerLoadingOverlay extends Component<PickerAfterOptionsSignature> {
 
 export default class Picker extends Component<PickerSignature> {
   @tracked searchTerm = '';
-  @tracked private pinnedOption: PickerOption | null = null;
-  @tracked private pinnedToSection: 'selected' | 'unselected' | null = null;
 
   constructor(owner: Owner, args: PickerSignature['Args']) {
     super(owner, args);
@@ -166,98 +164,41 @@ export default class Picker extends Component<PickerSignature> {
     }
   }
 
-  // When there is a search term:
-  // - Always keep any "select-all" (search-all) option at the very top
-  // - Then list already-selected options (so they stay visible even if they don't match the term)
-  // - Then list unselected options that match the search term, in their original order
-  get filteredOptions(): PickerOption[] {
+  // Returns non-select-all options in original order, filtered by search term.
+  // Select-all is rendered in the before-options section, not in the main list.
+  get displayOptions(): PickerOption[] {
+    const nonSelectAll = this.args.options.filter(
+      (o) => o.type !== 'select-all',
+    );
     if (!this.searchTerm || this.args.disableClientSideSearch) {
-      return this.args.options;
+      return nonSelectAll;
     }
-
-    const selectAll = this.args.options.filter((o) => o.type === 'select-all');
-    const selectedOptions = this.args.options.filter(
-      (o) => this.args.selected.includes(o) && o.type !== 'select-all',
-    );
-    const unselectedOptions = this.args.options.filter(
-      (o) => !this.args.selected.includes(o) && o.type !== 'select-all',
-    );
-
     const term = this.searchTerm.toLowerCase();
-    return [
-      ...selectAll,
-      ...selectedOptions,
-      ...unselectedOptions.filter((option) => {
-        const text = option.label.toLowerCase();
-        return text.includes(term);
-      }),
-    ];
-  }
-
-  // Reorders the already-filtered options so that:
-  // - "select-all" (search-all) options are always first
-  // - Selected regular options come next (including pinned items that were in selected section)
-  // - Unselected regular options are listed last (including pinned items that were in unselected section)
-  get sortedOptions(): PickerOption[] {
-    const options = this.filteredOptions;
-    const { pinnedOption, pinnedToSection } = this;
-
-    const selected = options.filter((o) => {
-      if (o.type === 'select-all') return false;
-      if (pinnedOption && o.id === pinnedOption.id) {
-        return pinnedToSection === 'selected';
-      }
-      return this.args.selected.includes(o);
+    return nonSelectAll.filter((option) => {
+      return option.label.toLowerCase().includes(term);
     });
-
-    const unselected = options.filter((o) => {
-      if (o.type === 'select-all') return false;
-      if (pinnedOption && o.id === pinnedOption.id) {
-        return pinnedToSection === 'unselected';
-      }
-      return !this.args.selected.includes(o);
-    });
-
-    const selectAll = options.filter((o) => o.type === 'select-all');
-
-    return [...selectAll, ...selected, ...unselected];
   }
 
-  private isVisuallyInSelectedSection(option: PickerOption): boolean {
-    if (option.type === 'select-all') return false;
-    if (this.pinnedOption && option.id === this.pinnedOption.id) {
-      return this.pinnedToSection === 'selected';
-    }
-    return this.args.selected.includes(option);
+  get selectAllOption(): PickerOption | undefined {
+    return this.args.options.find((o) => o.type === 'select-all');
   }
 
-  get selectedInSortedOptions(): PickerOption[] {
-    return this.sortedOptions.filter((o) =>
-      this.isVisuallyInSelectedSection(o),
-    );
+  get selectedItems(): PickerOption[] {
+    return this.args.selected.filter((o) => o.type !== 'select-all');
+  }
+
+  get isSelectAllActive(): boolean {
+    return this.args.selected.some((o) => o.type === 'select-all');
   }
 
   get isSelected() {
     return (option: PickerOption) => includes(this.args.selected, option);
   }
 
-  isLastSelected = (option: PickerOption) => {
-    const selectedInSorted = this.selectedInSortedOptions;
-    const lastSelected = selectedInSorted[selectedInSorted.length - 1];
-    return lastSelected === option;
-  };
-
   isLastOption = (option: PickerOption): boolean => {
-    const sorted = this.sortedOptions;
-    return sorted.length > 0 && sorted[sorted.length - 1] === option;
+    const display = this.displayOptions;
+    return display.length > 0 && display[display.length - 1] === option;
   };
-
-  get hasUnselected() {
-    const unselected = this.sortedOptions.filter(
-      (o) => o.type !== 'select-all' && !this.isVisuallyInSelectedSection(o),
-    );
-    return unselected.length > 0;
-  }
 
   get triggerComponent() {
     return PickerLabeledTrigger;
@@ -268,23 +209,11 @@ export default class Picker extends Component<PickerSignature> {
     this.args.onSearchTermChange?.(term);
   };
 
-  onOptionHover = (option: PickerOption | null) => {
-    if (
-      option &&
-      option.type !== 'select-all' &&
-      this.pinnedOption?.id !== option.id
-    ) {
-      // Remember where the option was when hover started
-      this.pinnedOption = option;
-      this.pinnedToSection = this.args.selected.includes(option)
-        ? 'selected'
-        : 'unselected';
+  onClose = () => {
+    if (this.searchTerm !== '') {
+      this.searchTerm = '';
+      this.args.onSearchTermChange?.('');
     }
-  };
-
-  resetPinnedOption = () => {
-    this.pinnedOption = null;
-    this.pinnedToSection = null;
     return true;
   };
 
@@ -297,6 +226,9 @@ export default class Picker extends Component<PickerSignature> {
       onSearchTermChange: this.onSearchTermChange,
       maxSelectedDisplay: this.args.maxSelectedDisplay,
       isLoading: this.args.isLoading,
+      selectAllOption: this.selectAllOption,
+      selectedItems: this.selectedItems,
+      isSelectAllActive: this.isSelectAllActive,
     };
   }
 
@@ -317,6 +249,17 @@ export default class Picker extends Component<PickerSignature> {
     }
     return undefined;
   }
+
+  onToggleItem = (item: PickerOption) => {
+    const isCurrentlySelected = this.args.selected.includes(item);
+    let newSelected: PickerOption[];
+    if (isCurrentlySelected) {
+      newSelected = this.args.selected.filter((o) => o !== item);
+    } else {
+      newSelected = [...this.args.selected, item];
+    }
+    this.onChange(newSelected);
+  };
 
   onChange = (selected: PickerOption[]) => {
     // Ignore clicks on disabled options
@@ -368,27 +311,18 @@ export default class Picker extends Component<PickerSignature> {
     this.args.onChange(selected);
   };
 
-  displayDivider = (option: PickerOption) => {
-    return (
-      (this.isLastSelected(option) && this.hasUnselected) ||
-      (option.type === 'select-all' &&
-        this.selectedInSortedOptions.length === 0)
-    );
-  };
-
   <template>
     <BoxelMultiSelectBasic
-      @options={{this.sortedOptions}}
+      @options={{this.displayOptions}}
       @selected={{@selected}}
       @onChange={{this.onChange}}
-      @onBlur={{this.resetPinnedOption}}
-      @onClose={{this.resetPinnedOption}}
+      @onClose={{this.onClose}}
       @placeholder={{@placeholder}}
       @disabled={{@disabled}}
       @renderInPlace={{this.renderInPlace}}
       @destination={{@destination}}
       @matchTriggerWidth={{@matchTriggerWidth}}
-      @searchEnabled={{false}}
+      @searchEnabled={{true}}
       @closeOnSelect={{false}}
       @eventType='click'
       @ariaLabel={{@label}}
@@ -404,12 +338,7 @@ export default class Picker extends Component<PickerSignature> {
         @option={{option}}
         @isSelected={{this.isSelected option}}
         @currentSelected={{@selected}}
-        @onFocus={{this.onOptionHover}}
-        @onLeave={{this.resetPinnedOption}}
       />
-      {{#if (this.displayDivider option)}}
-        <div class='picker-divider' data-test-boxel-picker-divider></div>
-      {{/if}}
       {{#if (this.isLastOption option)}}
         {{#if @hasMore}}
           <div
@@ -429,13 +358,6 @@ export default class Picker extends Component<PickerSignature> {
 
     {{! template-lint-disable require-scoped-style }}
     <style>
-      .picker-divider {
-        height: 1px;
-        background-color: var(--boxel-200);
-        margin: var(--boxel-sp-2xs) 0;
-        width: 100%;
-      }
-
       .boxel-picker__dropdown {
         padding-bottom: var(--boxel-sp-3xs);
       }
@@ -449,10 +371,22 @@ export default class Picker extends Component<PickerSignature> {
         .ember-power-select-option:not(:first-child) {
         display: none;
       }
-      .boxel-picker__dropdown--loading .picker-divider:not(:last-child) {
-        display: none;
-      }
 
+      .boxel-picker__dropdown .ember-power-select-options {
+        padding-top: var(--boxel-sp-2xs);
+        outline: none;
+        background:
+          /* Shadow cover TOP — moves with content */
+          linear-gradient(var(--boxel-light) 30%, rgba(255, 255, 255, 0)) center
+            top / 100% 40px no-repeat local,
+          /* Shadow TOP — fixed at top */
+          radial-gradient(
+              farthest-side at 50% 0,
+              rgba(0, 0, 0, 0.12),
+              rgba(0, 0, 0, 0)
+            )
+            center top / 100% 20px no-repeat scroll;
+      }
       .boxel-picker__dropdown .ember-power-select-option {
         padding: 0 var(--boxel-sp-2xs);
         display: flex;

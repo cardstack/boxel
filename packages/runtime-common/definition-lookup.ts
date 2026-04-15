@@ -34,6 +34,10 @@ import type { VirtualNetwork } from './virtual-network';
 
 const MODULES_TABLE = 'modules';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
+// Cached module errors expire after this interval. When a stale error entry
+// is encountered, the prerenderer is called again to get a fresh result.
+// This prevents transient prerender failures from being permanently cached.
+const ERROR_CACHE_TTL_MS = 30_000; // 30 seconds
 const modulesTableCoerceTypes: TypeCoercion = Object.freeze({
   definitions: 'JSON',
   deps: 'JSON',
@@ -97,6 +101,7 @@ export interface ModuleCacheEntry {
   cacheScope: CacheScope;
   authUserId?: string;
   resolvedRealmURL: string;
+  createdAt?: number;
 }
 
 export interface ModuleCacheEntryQuery {
@@ -281,7 +286,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId,
       resolvedRealmURL,
     );
-    if (cached) {
+    if (cached && !this.isExpiredErrorEntry(cached)) {
       return cached;
     }
 
@@ -293,7 +298,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           cacheUserId,
           resolvedRealmURL,
         );
-        if (candidateCached) {
+        if (candidateCached && !this.isExpiredErrorEntry(candidateCached)) {
           return candidateCached;
         }
       }
@@ -317,6 +322,21 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       );
     }
     return undefined;
+  }
+
+  // Returns true if the cached entry has a top-level error and has exceeded
+  // the error TTL. This causes the entry to be treated as a cache miss so
+  // the prerenderer is called again to get a fresh result. This prevents
+  // transient prerender failures from being permanently cached.
+  private isExpiredErrorEntry(entry: ModuleCacheEntry): boolean {
+    if (!entry.error) {
+      return false;
+    }
+    if (entry.createdAt == null) {
+      // No timestamp — treat as expired so we re-validate
+      return true;
+    }
+    return Date.now() - entry.createdAt > ERROR_CACHE_TTL_MS;
   }
 
   private populationCandidates(moduleURL: string): string[] {
@@ -588,7 +608,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     let moduleAlias = normalizeExecutableURL(moduleUrl);
     let rows = (await this.query(
       [
-        'SELECT definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url',
+        'SELECT definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url, created_at',
         'FROM',
         MODULES_TABLE,
         'WHERE',
@@ -610,6 +630,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cache_scope: CacheScope;
       auth_user_id: string | null;
       resolved_realm_url: string | null;
+      created_at: string | null;
     }[];
 
     if (!rows.length) {
@@ -626,6 +647,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       deps = [];
     }
     let error = parseJsonValue<ErrorEntry>(row.error_doc) ?? undefined;
+    let createdAt = row.created_at ? parseInt(row.created_at) : undefined;
     return {
       definitions,
       deps,
@@ -633,6 +655,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope: row.cache_scope,
       authUserId: row.auth_user_id || undefined,
       resolvedRealmURL: row.resolved_realm_url || '',
+      createdAt,
     };
   }
 

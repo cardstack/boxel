@@ -522,6 +522,11 @@ module('Integration | operator-mode | links', function (hooks) {
             },
           },
           relationships: {
+            'cardInfo.cardThumbnail': {
+              links: {
+                self: null,
+              },
+            },
             'cardInfo.theme': {
               links: {
                 self: null,

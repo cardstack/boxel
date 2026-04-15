@@ -14,6 +14,7 @@ import {
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 import { OpenAIError } from 'openai';
+import * as Sentry from '@sentry/node';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -1129,6 +1130,107 @@ module('Responding', (hooks) => {
     assert.equal(
       (result[result.length - 1] as { errorMessage: string }).errorMessage,
       'MatrixError: something went wrong',
+    );
+  });
+
+  test('onError does not report to Sentry when streaming is already finished', async () => {
+    let sentryCalls: any[] = [];
+    let originalCaptureException = Sentry.captureException;
+    (Sentry as any).captureException = (...args: any[]) => {
+      sentryCalls.push(args);
+      return '';
+    };
+
+    try {
+      await responder.ensureThinkingMessageSent();
+      await responder.onChunk({} as any, snapshotWithContent('hello'));
+      clock.tick(250);
+
+      // Finalize first (sets isStreamingFinished = true)
+      await responder.finalize();
+      sentryCalls = []; // Clear any calls from finalize
+
+      // Now call onError — it should NOT report to Sentry
+      await responder.onError(new OpenAIError('should not be reported'));
+
+      assert.equal(
+        sentryCalls.length,
+        0,
+        'Sentry should not be called when streaming is already finished',
+      );
+
+      // Verify no error event was sent to Matrix either
+      let sentEvents = fakeMatrixClient.getSentEvents();
+      let errorEvents = sentEvents.filter((e) => e.content.errorMessage);
+      assert.equal(
+        errorEvents.length,
+        0,
+        'No error events should be sent to Matrix',
+      );
+    } finally {
+      (Sentry as any).captureException = originalCaptureException;
+    }
+  });
+
+  test('onError reports to Sentry when streaming is not finished', async () => {
+    let sentryCalls: any[] = [];
+    let originalCaptureException = Sentry.captureException;
+    (Sentry as any).captureException = (...args: any[]) => {
+      sentryCalls.push(args);
+      return '';
+    };
+
+    try {
+      await responder.ensureThinkingMessageSent();
+
+      // Call onError before finalize — it SHOULD report to Sentry
+      await responder.onError(new OpenAIError('should be reported'));
+
+      assert.equal(
+        sentryCalls.length,
+        1,
+        'Sentry should be called when streaming is not finished',
+      );
+    } finally {
+      (Sentry as any).captureException = originalCaptureException;
+    }
+  });
+
+  test('finalize with isCanceled sets the canceled flag on the response', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('partial'));
+    clock.tick(250);
+
+    await responder.finalize({ isCanceled: true });
+    clock.tick(250);
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    let lastEvent = sentEvents[sentEvents.length - 1];
+    assert.true(
+      lastEvent.content.isCanceled,
+      'Last event should have isCanceled set to true',
+    );
+    assert.true(
+      lastEvent.content.isStreamingFinished,
+      'Last event should have isStreamingFinished set to true',
+    );
+  });
+
+  test('finalize is idempotent — calling it twice does not double-send', async () => {
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent('hello'));
+    clock.tick(250);
+
+    await responder.finalize();
+    let countAfterFirst = fakeMatrixClient.getSentEvents().length;
+
+    await responder.finalize();
+    let countAfterSecond = fakeMatrixClient.getSentEvents().length;
+
+    assert.equal(
+      countAfterFirst,
+      countAfterSecond,
+      'Second finalize should not send additional events',
     );
   });
 

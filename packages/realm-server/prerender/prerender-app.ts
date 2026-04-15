@@ -886,7 +886,7 @@ export function createPrerenderHttpServer(options?: {
     } catch (e: any) {
       log.warn('Error closing server during fatal shutdown:', e);
     }
-    setTimeout(() => process.exit(1), 100).unref();
+    setTimeout(() => process.exit(1), 100);
   }
 
   const uncaughtExceptionHandler = (err: unknown) =>

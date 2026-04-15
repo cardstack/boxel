@@ -45,7 +45,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
 export interface Signature<ItemT> {
   Args: BoxelMultiSelectArgs<ItemT>;
   Blocks: {
-    default: [any];
+    default: [any, Select];
   };
   Element: HTMLElement;
 }
@@ -105,9 +105,9 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
         (component BeforeOptions)
       }}
       ...attributes
-      as |option|
+      as |option select|
     >
-      {{yield option}}
+      {{yield option select}}
     </PowerSelect>
     {{! template-lint-disable require-scoped-style }}
     <style>
@@ -223,9 +223,9 @@ export default class BoxelMultiSelect<ItemT> extends Component<
       @beforeOptionsComponent={{component BeforeOptions}}
       @afterOptionsComponent={{component BoxelAfterOptionsComponent}}
       ...attributes
-      as |option|
+      as |option select|
     >
-      {{yield option}}
+      {{yield option select}}
     </BoxelMultiSelectBasic>
   </template>
 }

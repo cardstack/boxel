@@ -207,7 +207,7 @@ module(`Integration | search data resource`, function (hooks) {
     let query: DataQuery = {
       filter: {
         type: {
-          module: `${baseRealm.url}file-api`,
+          module: `${baseRealm.url}card-api`,
           name: 'FileDef',
         },
       },

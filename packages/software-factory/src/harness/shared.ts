@@ -6,22 +6,25 @@ import {
 import { createHash } from 'node:crypto';
 import { createServer as createNetServer } from 'node:net';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 import jwt from 'jsonwebtoken';
 import '../setup-logger';
 import { logger } from '../logger';
 
 // Strip ambient env vars that could break the hermetic test seal.
-// The harness always sets HOST_URL explicitly via context.hostURL when
-// spawning child processes — an ambient HOST_URL (e.g. from a dev shell
-// that sets HOST_URL=http://localhost:4200) would be inherited by child
-// processes that don't explicitly override it, causing them to talk to
-// a different Matrix/realm server than the hermetic test infrastructure.
+// The harness always passes port values explicitly through CLI args or
+// function parameters — ambient env vars (e.g. from a dev shell running
+// mise dev-all) would be inherited by child processes, overriding the
+// dynamically allocated ports and breaking test isolation.
 // This module is only imported by harness code (test infrastructure),
 // so it's safe to strip unconditionally — NODE_ENV may be 'test' or
 // 'development' depending on how the harness is invoked.
 delete process.env.HOST_URL;
+delete process.env.SOFTWARE_FACTORY_REALM_PORT;
+delete process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT;
+delete process.env.SOFTWARE_FACTORY_PRERENDER_PORT;
+delete process.env.SOFTWARE_FACTORY_PRERENDER_URL;
 
 export type RealmAction = 'read' | 'write' | 'realm-owner' | 'assume-user';
 
@@ -49,6 +52,12 @@ export interface FactoryRealmOptions {
   cacheSalt?: string;
   templateDatabaseName?: string;
   context?: FactoryTestContext | FactorySupportContext;
+  /** Explicit compat realm-server port (the public-facing proxy port). */
+  compatRealmServerPort?: number;
+  /** Explicit realm-server port (the internal realm-server listen port). */
+  realmServerPort?: number;
+  /** Explicit prerender URL to reuse instead of starting a new prerender. */
+  prerenderURL?: string;
 }
 
 export interface FactoryRealmTemplate {
@@ -137,6 +146,7 @@ export const sourceRealmDir = resolve(
   process.env.SOFTWARE_FACTORY_SOURCE_REALM_DIR ?? 'realm',
 );
 export const boxelIconsDir = resolve(packageRoot, '..', 'boxel-icons');
+export const dbSnapshotDir = resolve(packageRoot, 'db-snapshots');
 export const prepareTestPgScript = resolve(
   realmServerDir,
   'tests',
@@ -145,12 +155,6 @@ export const prepareTestPgScript = resolve(
 );
 
 export const CACHE_VERSION = 8;
-export const DEFAULT_REALM_SERVER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_REALM_PORT ?? 0,
-);
-export const DEFAULT_COMPAT_REALM_SERVER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_COMPAT_REALM_PORT ?? 0,
-);
 export const CONFIGURED_REALM_URL = process.env.SOFTWARE_FACTORY_REALM_URL
   ? new URL(process.env.SOFTWARE_FACTORY_REALM_URL)
   : undefined;
@@ -176,13 +180,6 @@ export const DEFAULT_PG_HOST =
   process.env.SOFTWARE_FACTORY_PGHOST ?? '127.0.0.1';
 export const DEFAULT_PG_USER =
   process.env.SOFTWARE_FACTORY_PGUSER ?? 'postgres';
-export const DEFAULT_PRERENDER_PORT = Number(
-  process.env.SOFTWARE_FACTORY_PRERENDER_PORT ?? 0,
-);
-export const CONFIGURED_PRERENDER_URL = process.env
-  .SOFTWARE_FACTORY_PRERENDER_URL
-  ? new URL(process.env.SOFTWARE_FACTORY_PRERENDER_URL)
-  : undefined;
 // The seeded test Postgres used by the harness runs with max_connections=50, so
 // isolated workers need a smaller per-process pool cap to keep workers=3 stable.
 export const DEFAULT_PG_POOL_MAX = Number(
@@ -230,6 +227,29 @@ export const harnessLog = logger('software-factory:harness');
 export const supportLog = logger('software-factory:harness:support');
 export const templateLog = logger('software-factory:harness:template');
 export const realmLog = logger('software-factory:harness:realm');
+
+/**
+ * Space-separated glob controlling which source realm files are copied into
+ * the isolated realm stack. Only core card definitions are needed for tests.
+ * Prefix a pattern with ! to exclude. Last matching pattern wins.
+ */
+export const SOURCE_REALM_GLOB = '*.gts .realm.json !document.gts !wiki.gts';
+
+export function matchesSourceRealmGlob(relativePath: string): boolean {
+  let filename = relativePath.split('/').pop() ?? relativePath;
+  let included = false;
+  for (let pattern of SOURCE_REALM_GLOB.split(/\s+/)) {
+    let negate = pattern.startsWith('!');
+    let glob = negate ? pattern.slice(1) : pattern;
+    let hit = glob.startsWith('*')
+      ? filename.endsWith(glob.slice(1))
+      : filename === glob;
+    if (hit) {
+      included = !negate;
+    }
+  }
+  return included;
+}
 
 export function formatElapsedMs(elapsedMs: number): string {
   return `${(elapsedMs / 1000).toFixed(1)}s`;
@@ -299,6 +319,7 @@ export async function findAvailablePort(): Promise<number> {
 
 export async function resolveFactoryRealmServerURL(
   realmServerURL?: URL,
+  compatRealmServerPort?: number,
 ): Promise<URL> {
   if (realmServerURL) {
     return new URL(realmServerURL.href);
@@ -309,15 +330,16 @@ export async function resolveFactoryRealmServerURL(
   }
 
   let port =
-    DEFAULT_COMPAT_REALM_SERVER_PORT === 0
-      ? await findAvailablePort()
-      : DEFAULT_COMPAT_REALM_SERVER_PORT;
+    compatRealmServerPort && compatRealmServerPort !== 0
+      ? compatRealmServerPort
+      : await findAvailablePort();
   return new URL(`http://localhost:${port}/`);
 }
 
 export async function resolveFactoryRealmLocation(options: {
   realmURL?: URL;
   realmServerURL?: URL;
+  compatRealmServerPort?: number;
 }): Promise<{
   realmURL: URL;
   realmServerURL: URL;
@@ -334,7 +356,10 @@ export async function resolveFactoryRealmLocation(options: {
       : undefined;
 
   if (!realmURL && !realmServerURL) {
-    realmServerURL = await resolveFactoryRealmServerURL();
+    realmServerURL = await resolveFactoryRealmServerURL(
+      undefined,
+      options.compatRealmServerPort,
+    );
     realmURL = new URL('test/', realmServerURL);
   } else if (!realmServerURL) {
     throw new Error(
@@ -411,7 +436,10 @@ export function shouldIgnoreFixturePath(relativePath: string): boolean {
     );
 }
 
-export function hashRealmFixture(realmDir: string): string {
+export function hashRealmFixture(
+  realmDir: string,
+  options?: { fileFilter?: (relativePath: string) => boolean },
+): string {
   let entries: string[] = [];
 
   function visit(currentDir: string) {
@@ -426,6 +454,9 @@ export function hashRealmFixture(realmDir: string): string {
         continue;
       }
       if (!entry.isFile()) {
+        continue;
+      }
+      if (options?.fileFilter && !options.fileFilter(relativePath)) {
         continue;
       }
       let stats = statSync(absolutePath);
@@ -603,66 +634,13 @@ export function maybeRequire(specifier: string) {
   return undefined;
 }
 
-export function fileExists(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
-}
-
-export function findRootRepoCheckoutDir(): string | undefined {
-  let result = spawnSync(
-    'git',
-    ['rev-parse', '--path-format=absolute', '--git-common-dir'],
-    {
-      cwd: workspaceRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    },
-  );
-
-  if (result.status !== 0) {
-    return undefined;
-  }
-
-  let commonDir = result.stdout.trim();
-  if (!commonDir.endsWith(`${join('.git')}`)) {
-    return undefined;
-  }
-
-  return dirname(commonDir);
-}
-
-export function findHostDistPackageDir(): string | undefined {
-  let rootRepoCheckoutDir = findRootRepoCheckoutDir();
-  let rootRepoHostDir =
-    rootRepoCheckoutDir && rootRepoCheckoutDir !== workspaceRoot
-      ? resolve(rootRepoCheckoutDir, 'packages', 'host')
-      : undefined;
-
-  let candidates = [
-    process.env.SOFTWARE_FACTORY_HOST_DIST_PACKAGE_DIR,
-    hostDir,
-    rootRepoHostDir,
-  ]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => resolve(value));
-
-  let seen = new Set<string>();
-  for (let candidate of candidates) {
-    if (seen.has(candidate)) {
-      continue;
-    }
-    seen.add(candidate);
-
-    if (fileExists(join(candidate, 'dist', 'index.html'))) {
-      return candidate;
-    }
-  }
-
-  return undefined;
-}
+// Re-export host dist utilities from the side-effect-free module so
+// existing harness consumers don't need to change their imports.
+export {
+  fileExists,
+  findRootRepoCheckoutDir,
+  findHostDistPackageDir,
+} from '../host-dist';
 
 export function browserPassword(username: string): string {
   let cleanUsername = username.replace(/^@/, '').replace(/:.*$/, '');

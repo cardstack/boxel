@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 import type { CiStatus, CiGroup } from '../../utils';
 
 // ── Sub-components ──────────────────────────────────────────────────────
@@ -144,31 +145,41 @@ class CiStatusLabel extends GlimmerComponent<CiStatusLabelSignature> {
 interface CiSectionSignature {
   Args: {
     ciGroups: CiGroup[];
+    isLoading?: boolean;
   };
 }
 
 export class CiSection extends GlimmerComponent<CiSectionSignature> {
+  @cached get flatItems() {
+    return this.args.ciGroups.flatMap((g) => g.items);
+  }
+
   <template>
     <div class='ci-section'>
       <h2 class='section-heading'>CI Checks</h2>
 
-      {{#if @ciGroups.length}}
+      {{#if this.flatItems.length}}
         <ul class='ci-group' role='list'>
-          {{#each @ciGroups as |group|}}
-            {{#each group.items as |item|}}
-              <li class='ci-item'>
-                <CiDot @state={{item.state}} />
-                <div class='ci-item-detail'>
-                  <span class='ci-item-name'>{{item.name}}</span>
-                  <CiStatusLabel
-                    @state={{item.state}}
-                    @text={{item.statusText}}
-                  />
-                </div>
-              </li>
-            {{/each}}
+          {{#each this.flatItems key='name' as |item|}}
+            <li class='ci-item'>
+              <CiDot @state={{item.state}} />
+              <div class='ci-item-detail'>
+                <span class='ci-item-name'>{{item.name}}</span>
+                <CiStatusLabel
+                  @state={{item.state}}
+                  @text={{item.statusText}}
+                />
+              </div>
+            </li>
           {{/each}}
         </ul>
+      {{else if @isLoading}}
+        <div class='ci-item loading-state'>
+          <CiDot @state='in_progress' />
+          <div class='ci-item-detail'>
+            <span class='ci-item-name loading-text'>Loading CI checks...</span>
+          </div>
+        </div>
       {{else}}
         <div class='empty-state'>
           <span class='empty-state-icon' aria-hidden='true'>
@@ -255,6 +266,12 @@ export class CiSection extends GlimmerComponent<CiSectionSignature> {
       }
       .empty-state-text {
         font-size: var(--boxel-font-xs);
+        color: var(--muted-foreground, #656d76);
+      }
+      .loading-state {
+        border-radius: var(--radius, 6px);
+      }
+      .loading-text {
         color: var(--muted-foreground, #656d76);
       }
     </style>

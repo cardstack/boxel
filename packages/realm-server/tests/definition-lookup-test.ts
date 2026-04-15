@@ -1172,5 +1172,122 @@ module(basename(__filename), function () {
         virtualNetwork.unmount(handler);
       }
     });
+
+    test('re-prerenders when cached error entry expires', async function (assert) {
+      await dbAdapter.execute('DELETE FROM modules');
+
+      let moduleURL = `${realmURL}transient-error.gts`;
+      let calls = 0;
+      let shouldError = true;
+
+      let prerenderer: Prerenderer = {
+        async prerenderCard() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderFileExtract() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderFileRender() {
+          throw new Error('Not implemented in mock');
+        },
+        async runCommand() {
+          throw new Error('Not implemented in mock');
+        },
+        async prerenderModule(args: ModulePrerenderArgs) {
+          calls++;
+          if (shouldError) {
+            return buildModuleResponse(args.url, 'TransientError', [], {
+              type: 'module-error',
+              error: {
+                id: args.url,
+                message: 'transient prerender failure',
+                status: 500,
+                title: 'Render timeout',
+                deps: [],
+                additionalErrors: null,
+              },
+            });
+          }
+          return buildModuleResponse(args.url, 'TransientError', []);
+        },
+      };
+
+      let lookup = new CachingDefinitionLookup(
+        dbAdapter,
+        prerenderer,
+        virtualNetwork,
+        testCreatePrerenderAuth,
+      );
+      lookup.registerRealm({
+        url: realmURL,
+        async getRealmOwnerUserId() {
+          return testUserId;
+        },
+        async visibility() {
+          return 'private';
+        },
+      });
+
+      // 1. First lookup caches the error
+      await assert.rejects(
+        lookup.lookupDefinition({
+          module: moduleURL,
+          name: 'TransientError',
+        }),
+        /nonexistent type/,
+        'lookup fails with cached error',
+      );
+      assert.strictEqual(calls, 1, 'prerenderModule called once');
+
+      // 2. Error is fresh (within TTL) — should still be served from cache
+      shouldError = false;
+      await assert.rejects(
+        lookup.lookupDefinition({
+          module: moduleURL,
+          name: 'TransientError',
+        }),
+        /nonexistent type/,
+        'lookup still fails with fresh cached error',
+      );
+      assert.strictEqual(
+        calls,
+        1,
+        'prerenderModule not called again — error is still fresh',
+      );
+
+      // 3. Backdate created_at to simulate expired error
+      await dbAdapter.execute(
+        `UPDATE modules SET created_at = $1 WHERE url = $2`,
+        { bind: [Date.now() - 60_000, moduleURL] },
+      );
+
+      // 4. Now the stale error should trigger a re-prerender which succeeds
+      let definition = await lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'TransientError',
+      });
+      assert.ok(
+        definition,
+        'lookup succeeds after stale error is re-prerendered',
+      );
+      assert.strictEqual(definition?.displayName, 'TransientError');
+      assert.strictEqual(
+        calls,
+        2,
+        'prerenderModule called again after error TTL expired',
+      );
+
+      // 5. Subsequent lookups should use the now-healthy cache
+      definition = await lookup.lookupDefinition({
+        module: moduleURL,
+        name: 'TransientError',
+      });
+      assert.ok(definition, 'lookup succeeds from healthy cache');
+      assert.strictEqual(
+        calls,
+        2,
+        'prerenderModule not called again — healthy entry is cached',
+      );
+    });
   });
 });

@@ -518,55 +518,6 @@ export async function rebuildWorkingIndexFromIndex(
   );
 }
 
-export async function warnIfSnapshotLooksCold(
-  databaseName: string,
-  realmURLs: URL[],
-): Promise<void> {
-  await logTimed(
-    templateLog,
-    `warnIfSnapshotLooksCold ${databaseName}`,
-    async () => {
-      let client = new PgClient(pgAdminConnectionConfig(databaseName));
-      try {
-        await client.connect();
-
-        let missing: string[] = [];
-        for (let realmURL of realmURLs) {
-          let indexResult = await client.query<{ count: number }>(
-            `SELECT COUNT(*)::int AS count
-             FROM boxel_index
-             WHERE realm_url = $1`,
-            [realmURL.href],
-          );
-          let versionResult = await client.query<{ count: number }>(
-            `SELECT COUNT(*)::int AS count
-             FROM realm_versions
-             WHERE realm_url = $1`,
-            [realmURL.href],
-          );
-
-          if (
-            (indexResult.rows[0]?.count ?? 0) === 0 ||
-            (versionResult.rows[0]?.count ?? 0) === 0
-          ) {
-            missing.push(realmURL.href);
-          }
-        }
-
-        if (missing.length > 0) {
-          templateLog.warn(
-            `cloned harness snapshot is missing preindexed coverage for ${missing.join(
-              ', ',
-            )}; runtime may do a cold/full index. If schema or persisted index fields changed, update rewriteClonedRealmServerUrls() and rebuildWorkingIndexFromIndex().`,
-          );
-        }
-      } finally {
-        await client.end();
-      }
-    },
-  );
-}
-
 interface IndexingStatus {
   active: {
     realmURL: string;

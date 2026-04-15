@@ -1,30 +1,16 @@
-import { Marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
 import { escapeHtml } from './helpers/html';
 import { bfmCardReferenceExtensions } from './bfm-card-references';
 import { markedKatexPlaceholder } from './bfm-math';
-/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
-// These packages declare "type": "module" which causes TS1479 under Node16
-// module resolution (runtime-common lacks "type": "module"). Load via CJS.
-// Unwrap .default for ESM default exports — webpack unwraps automatically but
-// esbuild (used by workspace-sync-cli) preserves the { default: fn } wrapper.
-type MarkedExtensionFactory = (
-  opts?: object,
-) => import('marked').MarkedExtension;
-function unwrapDefault<T>(mod: T | { default: T }): T {
-  return (mod as { default: T }).default ?? (mod as T);
-}
-const markedAlert = unwrapDefault(
-  require('marked-alert'),
-) as MarkedExtensionFactory;
-const markedFootnote = unwrapDefault(
-  require('marked-footnote'),
-) as MarkedExtensionFactory;
-const markedExtendedTables = unwrapDefault(
-  require('marked-extended-tables/lib/index.cjs'),
-) as () => import('marked').MarkedExtension;
-/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires */
-import { gfmHeadingId } from 'marked-gfm-heading-id';
+
+import {
+  Marked,
+  gfmHeadingId,
+  markedAlert,
+  markedFootnote,
+  markedExtendedTables,
+} from './marked.mts';
+
 import type * as _MonacoSDK from 'monaco-editor';
 type MonacoSDK = typeof _MonacoSDK;
 
@@ -87,11 +73,11 @@ const DEFAULT_MARKED_SYNC_OPTIONS = {
 
 /**
  * Renders code with syntax highlighting using the Monaco editor SDK.
- * 
+ *
  * This function tokenizes code using Monaco's editor capabilities to generate
  * HTML with syntax highlighting spans. Each line is colorized separately and
  * combined into a pre/code block with Monaco token classes.
- * 
+ *
  * @param code - The source code string to highlight
  * @param language - The programming language for syntax highlighting (e.g., 'typescript', 'javascript')
  * @param opts - Configuration options
@@ -99,11 +85,11 @@ const DEFAULT_MARKED_SYNC_OPTIONS = {
  * @param opts.monacoTheme - Optional theme name to apply before colorizing (e.g., 'vs-dark', 'vs-light')
  * @param opts.tabSize - Optional tab size for indentation rendering
  * @param opts.enableMonacoSyntaxHighlighting - Flag to enable/disable Monaco syntax highlighting. If false, function returns null immediately
- * 
+ *
   let editor = monaco?.editor;
   if (monaco === null || !editor?.createModel || !editor?.colorizeModelLine) {
  * or an error occurs during colorization
- * 
+ *
  * @throws Does not throw; catches all errors and returns null instead
  */
 function renderWithMonaco(

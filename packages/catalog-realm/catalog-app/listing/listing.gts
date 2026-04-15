@@ -583,6 +583,14 @@ export class Listing extends CardDef {
     },
   });
 
+  @field cardThumbnailURL = contains(StringField, {
+    computeVia(this: Listing) {
+      return (
+        this.cardInfo?.cardThumbnail?.url ?? this.cardInfo?.cardThumbnailURL
+      );
+    },
+  });
+
   protected getGenerateExampleMenuItem(
     params: GetMenuItemParams,
   ): MenuItemOptions | undefined {
@@ -673,7 +681,9 @@ export class Listing extends CardDef {
     return {
       label: 'Make a PR',
       action: async () => {
-        await new CreateAndOpenSubmissionWorkflowCardCommand(params.commandContext).execute({
+        await new CreateAndOpenSubmissionWorkflowCardCommand(
+          params.commandContext,
+        ).execute({
           listingId: this.id,
           realm: this[realmURL]!.href,
           listingName: this.name,

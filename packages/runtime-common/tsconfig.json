@@ -4,6 +4,7 @@
     "allowJs": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -23,18 +24,10 @@
     "experimentalDecorators": true,
     "skipLibCheck": true,
     "paths": {
-      "https://cardstack.com/base/*": [
-        "../base/*"
-      ],
-      "@cardstack/boxel-ui": [
-        "../boxel-ui/addon/declarations"
-      ],
-      "@cardstack/boxel-ui/*": [
-        "../boxel-ui/addon/declarations/*"
-      ]
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui/addon/declarations"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/declarations/*"]
     },
-    "types": [
-      "@cardstack/local-types"
-    ]
+    "types": ["@cardstack/local-types"]
   }
 }

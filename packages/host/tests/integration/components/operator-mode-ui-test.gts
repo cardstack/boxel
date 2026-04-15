@@ -570,12 +570,12 @@ module('Integration | operator-mode | ui', function (hooks) {
       .dom('[data-test-boxel-picker-option-row="select-all"]')
       .containsText('Any Type (', 'type picker shows total type count');
     const allTypeOptions = document.querySelectorAll(
-      '[data-test-boxel-picker-option-row]',
+      '.ember-power-select-options [data-test-boxel-picker-option-row]',
     ).length;
     assert.strictEqual(
       allTypeOptions,
-      14,
-      `type picker shows 14 types (got ${allTypeOptions})`,
+      13,
+      `type picker shows 13 types (got ${allTypeOptions})`,
     );
   });
 
@@ -1414,7 +1414,7 @@ module('Integration | operator-mode | ui', function (hooks) {
     // All types should be restored
     await waitFor('[data-test-boxel-picker-option-label="Person"]');
     let restoredOptionCount = document.querySelectorAll(
-      '[data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
+      '.ember-power-select-options [data-test-boxel-picker-option-row]:not([data-test-boxel-picker-option-row="select-all"])',
     ).length;
     assert.strictEqual(
       restoredOptionCount,

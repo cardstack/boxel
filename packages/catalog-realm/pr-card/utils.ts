@@ -122,7 +122,9 @@ export function buildCiItemFromEvent(event: any, type: CiEventType): CiItem {
   const statusText =
     conclusion != null
       ? `${formatCiValue(status)} - ${formatCiValue(conclusion)}`
-      : formatCiValue(status);
+      : state === 'in_progress'
+        ? 'In Progress'
+        : formatCiValue(status);
 
   return {
     name,
@@ -192,7 +194,7 @@ function latestEventsByCheckId(
 
 /**
  * Build CI items from check_run and check_suite event instances,
- * deduped by name and sorted by most recent.
+ * deduped by name and sorted alphabetically for stable ordering.
  */
 export function buildCiItems(
   checkRunInstances: any[],
@@ -216,6 +218,7 @@ export function buildCiItems(
     events.push({ event, type: 'check_run' });
   }
 
+  // Sort by most recent first so deduplication keeps the latest event per name
   events.sort(
     (a, b) => eventLastModified(b.event) - eventLastModified(a.event),
   );
@@ -230,6 +233,9 @@ export function buildCiItems(
     seenNames.add(name);
     items.push(buildCiItemFromEvent(event, type));
   }
+
+  // Sort alphabetically by name for stable display order across refreshes
+  items.sort((a, b) => a.name.localeCompare(b.name));
 
   return items;
 }

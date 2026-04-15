@@ -134,7 +134,7 @@ module('Unit | Service | render-service', function (hooks) {
         type: 'file-meta',
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/file-api',
+            module: 'https://cardstack.com/base/card-api',
             name: 'FileDef',
           },
         },

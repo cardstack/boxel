@@ -14,7 +14,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { BoxelButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type LocalPersistenceService from '@cardstack/host/services/local-persistence-service';

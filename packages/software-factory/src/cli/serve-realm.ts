@@ -1,4 +1,8 @@
+// This should be first
+import '../setup-logger';
+
 import { readSupportContext } from '../runtime-metadata';
+import { logger } from '../logger';
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -6,10 +10,32 @@ import type { RealmPermissions } from '@cardstack/runtime-common';
 
 import { startFactoryRealmServer } from '../harness';
 
+let log = logger('serve-realm');
+
+function parseCliArg(name: string): string | undefined {
+  let prefix = `--${name}=`;
+  let arg = process.argv.find((a) => a.startsWith(prefix));
+  return arg ? arg.slice(prefix.length) : undefined;
+}
+
+function parseCliNumber(name: string): number | undefined {
+  let value = parseCliArg(name);
+  if (value == null) {
+    return undefined;
+  }
+  let parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`--${name} must be a valid number, received: ${value}`);
+  }
+  return parsed;
+}
+
 async function main(): Promise<void> {
+  // First positional arg is realmDir (skip --flags)
+  let positional = process.argv.slice(2).filter((a) => !a.startsWith('--'));
   let realmDir = resolve(
     process.cwd(),
-    process.argv[2] ?? 'test-fixtures/darkfactory-adopter',
+    positional[0] ?? 'test-fixtures/darkfactory-adopter',
   );
 
   if (!process.env.SOFTWARE_FACTORY_CONTEXT) {
@@ -38,6 +64,9 @@ async function main(): Promise<void> {
       .SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL
       ? new URL(process.env.SOFTWARE_FACTORY_TEMPLATE_REALM_SERVER_URL)
       : undefined,
+    realmServerPort: parseCliNumber('realmServerPort'),
+    compatRealmServerPort: parseCliNumber('compatRealmServerPort'),
+    prerenderURL: parseCliArg('prerenderURL'),
   });
 
   let payload = {
@@ -57,7 +86,7 @@ async function main(): Promise<void> {
     );
   }
 
-  console.log(JSON.stringify(payload, null, 2));
+  process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
 
   let cleanExit = false;
   process.on('exit', () => {
@@ -91,6 +120,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  console.error(error);
+  if (error instanceof Error) {
+    log.error(error.stack ?? error.message);
+  } else {
+    log.error(String(error));
+  }
   process.exitCode = 1;
 });

@@ -82,10 +82,6 @@ const defaultRealmDir = resolve(
   packageRoot,
   process.env.SOFTWARE_FACTORY_REALM_DIR ?? 'test-fixtures/darkfactory-adopter',
 );
-const testSourceRealmDir = resolve(
-  packageRoot,
-  'test-fixtures/public-software-factory-source',
-);
 const sharedRealms = new Map<string, Promise<SharedRealmHandle>>();
 const testWorkerPortBlockSize = 10;
 const testWorkerPortSearchStride = 200;
@@ -278,7 +274,14 @@ async function startRealmProcess(
 
   let child = spawn(
     tsNodeBin,
-    ['--transpileOnly', 'src/cli/serve-realm.ts', realmDir],
+    [
+      '--transpileOnly',
+      'src/cli/serve-realm.ts',
+      realmDir,
+      `--compatRealmServerPort=${testWorkerPortSet.compatRealmServerPort}`,
+      `--realmServerPort=${testWorkerPortSet.realmServerPort}`,
+      `--prerenderURL=${testWorkerPrerenderURL}`,
+    ],
     {
       cwd: packageRoot,
       detached: true,
@@ -286,15 +289,6 @@ async function startRealmProcess(
         ...process.env,
         NODE_NO_WARNINGS: '1',
         SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
-        SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
-        SOFTWARE_FACTORY_COMPAT_REALM_PORT: String(
-          testWorkerPortSet.compatRealmServerPort,
-        ),
-        SOFTWARE_FACTORY_REALM_PORT: String(testWorkerPortSet.realmServerPort),
-        SOFTWARE_FACTORY_PRERENDER_PORT: String(
-          testWorkerPortSet.prerenderPort,
-        ),
-        SOFTWARE_FACTORY_PRERENDER_URL: testWorkerPrerenderURL,
         ...(supportMetadata?.context
           ? {
               SOFTWARE_FACTORY_CONTEXT: JSON.stringify(supportMetadata.context),

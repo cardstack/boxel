@@ -23,6 +23,7 @@
     "ember-template-lint": "catalog:",
     "matrix-js-sdk": "catalog:",
     "super-fast-md5": "catalog:",
+    "@floating-ui/dom": "catalog:",
     "tracked-built-ins": "catalog:"
   },
   "peerDependencies": {

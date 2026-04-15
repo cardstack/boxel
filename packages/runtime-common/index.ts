@@ -236,6 +236,7 @@ import type { LocalPath } from './paths';
 import type { CardTypeFilter, Query, DataQuery, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './paths';
+export * from './realm-index-card';
 export * from './cached-fetch';
 export * from './definition-lookup';
 export * from './definitions';
@@ -371,12 +372,7 @@ export {
 
 export type { JWTPayload } from './realm-auth-client';
 export { sanitizeHtml } from './dompurify-runtime';
-export {
-  hasCodeBlocks,
-  markedSync,
-  markdownToHtml,
-  preloadMarkdownLanguages,
-} from './marked-sync';
+
 export { getPlural } from './pluralize-runtime';
 
 import type {

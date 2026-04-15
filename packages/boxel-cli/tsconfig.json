@@ -22,5 +22,5 @@
     "types": ["@cardstack/local-types", "node"]
   },
   "include": ["./**/*"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "tests/helpers/integration.ts", "tests/helpers/setup-realm-server.ts", "tests/integration"]
 }

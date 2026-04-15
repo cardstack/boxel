@@ -8,6 +8,6 @@ export default class StandbyRoute extends Route {
   @service declare router: RouterService;
 
   async beforeModel() {
-    registerBoxelTransitionTo(this.router);
+    registerBoxelTransitionTo(this.router, this);
   }
 }

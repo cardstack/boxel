@@ -2743,6 +2743,23 @@ export class ExportedCard extends ExportedCardParent {
       .hasText('Add Examples', 'button remains the default label');
   });
 
+  test('Create listing action is not displayed for index.json card instance', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}index.json`,
+    });
+
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-card-instance-definition]');
+
+    assert
+      .dom('[data-test-action-button="Create Listing"]')
+      .doesNotExist(
+        'index.json card instances do not display a Create Listing button',
+      );
+  });
+
   test('cancel button in Create Listing modal closes the modal', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],

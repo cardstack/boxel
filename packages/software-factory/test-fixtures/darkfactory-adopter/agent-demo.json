@@ -3,7 +3,7 @@
     "type": "card",
     "attributes": {
       "agentId": "codex-darkfactory",
-      "capabilities": ["ticket triage", "ui verification"],
+      "capabilities": ["issue triage", "ui verification"],
       "specialization": "Boxel tracker workflows",
       "notes": "Primary test agent for DarkFactory rendering coverage."
     },

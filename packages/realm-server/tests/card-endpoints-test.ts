@@ -182,6 +182,11 @@ module(basename(__filename), function () {
                 cardThumbnailURL: null,
               },
               relationships: {
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -907,6 +912,12 @@ module(basename(__filename), function () {
             'realm is public readable',
           );
 
+          assert.ok(
+            json.data.meta.realmInfo.lastPublishedAt,
+            'lastPublishedAt is set for published realm',
+          );
+          json.data.meta.realmInfo.lastPublishedAt = null;
+
           assert.deepEqual(json, {
             data: {
               id: `${testRealmHref}person-1`,
@@ -927,6 +938,11 @@ module(basename(__filename), function () {
                 realmURL: testRealmHref,
               },
               relationships: {
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -1488,6 +1504,11 @@ module(basename(__filename), function () {
                     id: `${testRealmHref}Friend/local-id-1`,
                   },
                 },
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -1551,6 +1572,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -1580,6 +1606,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -1605,6 +1636,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.cardThumbnail': {
                       links: {
                         self: null,
                       },
@@ -1675,6 +1711,11 @@ module(basename(__filename), function () {
                     self: null,
                   },
                 },
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -1720,6 +1761,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -1745,6 +1791,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.cardThumbnail': {
                       links: {
                         self: null,
                       },
@@ -1798,6 +1849,11 @@ module(basename(__filename), function () {
                       self: null,
                     },
                   },
+                  'cardInfo.cardThumbnail': {
+                    links: {
+                      self: null,
+                    },
+                  },
                   'cardInfo.theme': {
                     links: {
                       self: null,
@@ -1846,6 +1902,11 @@ module(basename(__filename), function () {
                 },
                 relationships: {
                   friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                  'cardInfo.cardThumbnail': {
                     links: {
                       self: null,
                     },
@@ -2064,6 +2125,11 @@ module(basename(__filename), function () {
                     self: null,
                   },
                 },
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -2243,6 +2309,11 @@ module(basename(__filename), function () {
                   cardInfo,
                 },
                 relationships: {
+                  'cardInfo.cardThumbnail': {
+                    links: {
+                      self: null,
+                    },
+                  },
                   'cardInfo.theme': {
                     links: {
                       self: null,
@@ -2597,6 +2668,11 @@ module(basename(__filename), function () {
                         self: './Friend/local-id-1',
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -2748,6 +2824,11 @@ module(basename(__filename), function () {
                     id: `${testRealmHref}Friend/local-id-1`,
                   },
                 },
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -2811,6 +2892,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -2840,6 +2926,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -2865,6 +2956,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.cardThumbnail': {
                       links: {
                         self: null,
                       },
@@ -2935,6 +3031,11 @@ module(basename(__filename), function () {
                     self: null,
                   },
                 },
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -2980,6 +3081,11 @@ module(basename(__filename), function () {
                         self: null,
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -3005,6 +3111,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.cardThumbnail': {
                       links: {
                         self: null,
                       },
@@ -3058,6 +3169,11 @@ module(basename(__filename), function () {
                       self: null,
                     },
                   },
+                  'cardInfo.cardThumbnail': {
+                    links: {
+                      self: null,
+                    },
+                  },
                   'cardInfo.theme': {
                     links: {
                       self: null,
@@ -3106,6 +3222,11 @@ module(basename(__filename), function () {
                 },
                 relationships: {
                   friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                  'cardInfo.cardThumbnail': {
                     links: {
                       self: null,
                     },
@@ -3228,6 +3349,11 @@ module(basename(__filename), function () {
                         self: './FriendWithUsedLink/local-id-1',
                       },
                     },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,
@@ -3311,6 +3437,11 @@ module(basename(__filename), function () {
                     id: `${testRealmHref}FriendWithUsedLink/local-id-1`,
                   },
                 },
+                'cardInfo.cardThumbnail': {
+                  links: {
+                    self: null,
+                  },
+                },
                 'cardInfo.theme': {
                   links: {
                     self: null,
@@ -3353,6 +3484,11 @@ module(basename(__filename), function () {
                   },
                   relationships: {
                     friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                    'cardInfo.cardThumbnail': {
                       links: {
                         self: null,
                       },
@@ -3402,6 +3538,11 @@ module(basename(__filename), function () {
               },
               relationships: {
                 friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+                'cardInfo.cardThumbnail': {
                   links: {
                     self: null,
                   },
@@ -3503,6 +3644,11 @@ module(basename(__filename), function () {
                   relationships: {
                     friend: {
                       links: { self: './jade' },
+                    },
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
                     },
                     'cardInfo.theme': {
                       links: {

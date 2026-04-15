@@ -937,10 +937,11 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     }
     context.__cardPrerenderElement = undefined;
     context.__hasMountedCardPrerender = undefined;
-    // reference counts should balance out automatically as components are destroyed
-    store.resetCache({ preserveReferences: true });
+    // In large suites, preserved references can accumulate across tests and
+    // keep GC pressure high enough to cause late test timeouts.
+    store.resetCache();
     let renderStore = getService('render-store');
-    renderStore.resetCache({ preserveReferences: true });
+    renderStore.resetCache();
     let loaderService = getService('loader-service');
     loaderService.resetLoader({
       clearFetchCache: true,

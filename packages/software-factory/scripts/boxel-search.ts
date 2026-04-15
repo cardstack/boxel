@@ -1,3 +1,6 @@
+// This should be first
+import '../src/setup-logger';
+
 import {
   fieldPairs,
   forceArray,
@@ -8,13 +11,16 @@ import {
   searchRealm,
   type SearchQuery,
   type SearchSort,
-} from './lib/boxel';
+} from '../src/boxel';
+import { logger } from '../src/logger';
+
+let log = logger('boxel-search');
 
 async function main(): Promise<void> {
   let args = parseArgs(process.argv.slice(2));
   if (typeof args.realm !== 'string') {
     throw new Error(
-      'Usage: npm run boxel:search -- --realm <realm-url> [--type-name Ticket --type-module <module>] [--eq field=value] [--contains field=value]',
+      'Usage: npm run boxel:search -- --realm <realm-url> [--type-name Issue --type-module <module>] [--eq field=value] [--contains field=value]',
     );
   }
 
@@ -89,6 +95,6 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   let message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
-  console.error(message);
+  log.error(message);
   process.exit(1);
 });

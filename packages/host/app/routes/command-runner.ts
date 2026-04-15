@@ -1,3 +1,4 @@
+import { registerDestructor } from '@ember/destroyable';
 import { getOwner, setOwner } from '@ember/owner';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
@@ -81,8 +82,11 @@ export default class CommandRunnerRoute extends Route<CommandRunnerModel> {
   @service declare realm: RealmService;
 
   async beforeModel() {
-    registerBoxelTransitionTo(this.router);
+    registerBoxelTransitionTo(this.router, this);
     (globalThis as any).__boxelRenderContext = true;
+    registerDestructor(this, () => {
+      (globalThis as any).__boxelRenderContext = undefined;
+    });
     this.realm.restoreSessionsFromStorage();
   }
 

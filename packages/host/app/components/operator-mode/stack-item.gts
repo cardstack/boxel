@@ -51,6 +51,7 @@ import {
   GetCardsContextName,
   GetCardCollectionContextName,
   cardTypeIcon,
+  isRealmIndexCardId,
   realmURL,
   localId as localIdSymbol,
   CardContextName,
@@ -266,10 +267,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get isIndexCard() {
-    if (!this.realmURL) {
-      return false;
-    }
-    return this.url === `${this.realmURL.href}index`;
+    return isRealmIndexCardId(this.url, this.realmURL);
   }
 
   @provide(CardContextName)

@@ -36,7 +36,10 @@ interface Signature {
 
 let manageHandleRegistration = modifier((element, [handle]: [Handle]) => {
   handle.element = element as HTMLButtonElement;
-  handle.registerHandle();
+  const unregister = handle.registerHandle();
+  return () => {
+    unregister?.();
+  };
 });
 
 export default class Handle extends Component<Signature> {
@@ -155,7 +158,7 @@ export default class Handle extends Component<Signature> {
       }
     };
 
-    registerResizeHandle(
+    return registerResizeHandle(
       this.id,
       this.element,
       this.args.orientation,

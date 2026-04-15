@@ -1,4 +1,5 @@
 import type Controller from '@ember/controller';
+import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
@@ -184,6 +185,7 @@ export default class RenderRoute extends Route<Model> {
     // activate() doesn't run early enough for this to be set before the model()
     // hook is run
     (globalThis as any).__boxelRenderContext = true;
+    this.#registerGlobalsDestructor();
     this.#authGuard.register();
     if (!isTesting()) {
       await this.store.ensureSetupComplete();
@@ -800,10 +802,31 @@ export default class RenderRoute extends Route<Model> {
   // pass the canonical base params; for render.* routes we strip any existing
   // base params (or establish them first if they changed) before handing off
   // to the router. Everything runs inside Ember's run loop via join().
+  #transitionHelperDestructorRegistered = false;
+  #lastTransitionFn: Function | undefined;
+  #globalsDestructorRegistered = false;
+
+  #registerGlobalsDestructor() {
+    if (this.#globalsDestructorRegistered) {
+      return;
+    }
+    this.#globalsDestructorRegistered = true;
+    registerDestructor(this, () => {
+      // Clear globals on owner destroy. deactivate() also clears these on
+      // normal route teardown, but in tests the owner can be destroyed
+      // without deactivate firing, leaving these closures pinning `this`
+      // (and the entire ApplicationInstance) on globalThis.
+      (globalThis as any).__boxelRenderContext = undefined;
+      (globalThis as any).__renderModel = undefined;
+      (globalThis as any).__docsInFlight = undefined;
+      (globalThis as any).__waitForRenderLoadStability = undefined;
+    });
+  }
+
   #setupTransitionHelper(id: string, nonce: string, options: string) {
     let baseParams: [string, string, string] = [id, nonce, options];
     this.renderBaseParams = baseParams;
-    (globalThis as any).boxelTransitionTo = (
+    let transitionFn = (
       routeName: Parameters<RouterService['transitionTo']>[0],
       ...params: any[]
     ) => {
@@ -843,6 +866,19 @@ export default class RenderRoute extends Route<Model> {
         this.router.transitionTo(routeName as never, ...(params as never[])),
       );
     };
+    (globalThis as any).boxelTransitionTo = transitionFn;
+    this.#lastTransitionFn = transitionFn;
+    if (!this.#transitionHelperDestructorRegistered) {
+      this.#transitionHelperDestructorRegistered = true;
+      registerDestructor(this, () => {
+        // Only clear if the global still points at the last function we
+        // installed. This avoids both pinning this route (and its owner)
+        // via globalThis and clobbering another live route's helper.
+        if ((globalThis as any).boxelTransitionTo === this.#lastTransitionFn) {
+          delete (globalThis as any).boxelTransitionTo;
+        }
+      });
+    }
   }
 
   @action

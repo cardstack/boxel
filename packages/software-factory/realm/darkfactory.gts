@@ -1,5 +1,6 @@
 import {
   CardDef,
+  FieldDef,
   Component,
   field,
   contains,
@@ -10,12 +11,11 @@ import {
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
-import DateField from 'https://cardstack.com/base/date';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import enumField from 'https://cardstack.com/base/enum';
 
-export const TicketStatusField = enumField(StringField, {
+export const IssueStatusField = enumField(StringField, {
   options: [
     { value: 'backlog', label: 'Backlog' },
     { value: 'in_progress', label: 'In Progress' },
@@ -25,7 +25,7 @@ export const TicketStatusField = enumField(StringField, {
   ],
 });
 
-export const TicketPriorityField = enumField(StringField, {
+export const IssuePriorityField = enumField(StringField, {
   options: [
     { value: 'critical', label: 'Critical' },
     { value: 'high', label: 'High' },
@@ -34,8 +34,9 @@ export const TicketPriorityField = enumField(StringField, {
   ],
 });
 
-export const TicketTypeField = enumField(StringField, {
+export const IssueTypeField = enumField(StringField, {
   options: [
+    { value: 'bootstrap', label: 'Bootstrap' },
     { value: 'feature', label: 'Feature' },
     { value: 'bug', label: 'Bug' },
     { value: 'task', label: 'Task' },
@@ -241,45 +242,94 @@ export class KnowledgeArticle extends CardDef {
   };
 }
 
-export class Ticket extends CardDef {
-  static displayName = 'Ticket';
+export class Comment extends FieldDef {
+  static displayName = 'Comment';
+  @field body = contains(MarkdownField);
+  @field author = contains(StringField);
+  @field datetime = contains(DateTimeField);
 
-  @field ticketId = contains(StringField);
+  static embedded = class Embedded extends Component<typeof Comment> {
+    <template>
+      <div class='comment'>
+        <div class='comment-header'>
+          <span class='comment-author'>{{@model.author}}</span>
+          {{#if @model.datetime}}
+            <span class='comment-date'>{{@model.datetime}}</span>
+          {{/if}}
+        </div>
+        <div class='comment-body'>
+          <@fields.body />
+        </div>
+      </div>
+      <style scoped>
+        .comment {
+          padding: 12px 0;
+          border-bottom: 1px solid var(--boxel-200);
+        }
+        .comment:last-child {
+          border-bottom: none;
+        }
+        .comment-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 4px;
+        }
+        .comment-author {
+          font-weight: 600;
+          font-size: var(--boxel-font-size-sm);
+        }
+        .comment-date {
+          color: var(--boxel-400);
+          font-size: var(--boxel-font-size-xs);
+        }
+        .comment-body {
+          font-size: var(--boxel-font-size-sm);
+        }
+      </style>
+    </template>
+  };
+}
+
+export class Issue extends CardDef {
+  static displayName = 'Issue';
+
+  @field issueId = contains(StringField);
   @field summary = contains(StringField);
   @field description = contains(MarkdownField);
-  @field ticketType = contains(TicketTypeField);
-  @field status = contains(TicketStatusField);
-  @field priority = contains(TicketPriorityField);
+  @field issueType = contains(IssueTypeField);
+  @field status = contains(IssueStatusField);
+  @field priority = contains(IssuePriorityField);
   @field project = linksTo(() => Project);
-  @field assignedAgent = linksTo(() => AgentProfile);
-  @field relatedTickets = linksToMany(() => Ticket);
+  @field blockedBy = linksToMany(() => Issue);
   @field relatedKnowledge = linksToMany(() => KnowledgeArticle);
   @field acceptanceCriteria = contains(MarkdownField);
-  @field agentNotes = contains(MarkdownField);
-  @field estimatedHours = contains(NumberField);
-  @field actualHours = contains(NumberField);
+  @field order = contains(NumberField);
   @field createdAt = contains(DateTimeField);
   @field updatedAt = contains(DateTimeField);
+  @field comments = containsMany(Comment);
 
   @field title = contains(StringField, {
-    computeVia: function (this: Ticket) {
+    computeVia: function (this: Issue) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
-        : (this.summary ?? 'Untitled Ticket');
+        : (this.summary ?? 'Untitled Issue');
     },
   });
 
-  static fitted = class Fitted extends Component<typeof Ticket> {
+  static fitted = class Fitted extends Component<typeof Issue> {
     <template>
-      <div class='ticket-card compact'>
+      <div class='issue-card compact'>
         <div class='row'>
-          <strong>{{if @model.ticketId @model.ticketId 'TICKET'}}</strong>
-          <span>{{if @model.status @model.status 'backlog'}}</span>
+          <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
+          <span
+            class='status status-{{if @model.status @model.status "backlog"}}'
+          >{{if @model.status @model.status 'backlog'}}</span>
         </div>
-        <div>{{if @model.summary @model.summary 'Untitled Ticket'}}</div>
+        <div>{{if @model.summary @model.summary 'Untitled Issue'}}</div>
       </div>
       <style scoped>
-        .ticket-card {
+        .issue-card {
           display: grid;
           gap: 0.35rem;
         }
@@ -292,8 +342,32 @@ export class Ticket extends CardDef {
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
           font-size: 0.8rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-done {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-in_progress {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-backlog {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-blocked {
+          color: var(--boxel-red, #dc2626);
+          background: #fef2f2;
         }
       </style>
     </template>
@@ -301,20 +375,24 @@ export class Ticket extends CardDef {
 
   static embedded = this.fitted;
 
-  static isolated = class Isolated extends Component<typeof Ticket> {
+  static isolated = class Isolated extends Component<typeof Issue> {
     <template>
       <article class='surface'>
         <header>
           <div class='row'>
-            <strong>{{if @model.ticketId @model.ticketId 'TICKET'}}</strong>
-            <span>{{if @model.status @model.status 'backlog'}}</span>
+            <strong>{{if @model.issueId @model.issueId 'ISSUE'}}</strong>
+            <span
+              class='status status-{{if @model.status @model.status "backlog"}}'
+            >{{if @model.status @model.status 'backlog'}}</span>
           </div>
-          <h1>{{if @model.summary @model.summary 'Untitled Ticket'}}</h1>
+          <h1>{{if @model.summary @model.summary 'Untitled Issue'}}</h1>
         </header>
         {{#if @model.project}}
           <section>
             <h2>Project</h2>
-            <@fields.project />
+            <div class='linked-card'>
+              <@fields.project @format='embedded' />
+            </div>
           </section>
         {{/if}}
         {{#if @model.description}}
@@ -329,22 +407,22 @@ export class Ticket extends CardDef {
             <@fields.acceptanceCriteria />
           </section>
         {{/if}}
-        {{#if @model.agentNotes}}
-          <section>
-            <h2>Agent Notes</h2>
-            <@fields.agentNotes />
-          </section>
-        {{/if}}
         {{#if @model.relatedKnowledge.length}}
           <section>
             <h2>Related Knowledge</h2>
             <@fields.relatedKnowledge />
           </section>
         {{/if}}
-        {{#if @model.relatedTickets.length}}
+        {{#if @model.blockedBy.length}}
           <section>
-            <h2>Related Tickets</h2>
-            <@fields.relatedTickets />
+            <h2>Blocked By</h2>
+            <@fields.blockedBy />
+          </section>
+        {{/if}}
+        {{#if @model.comments.length}}
+          <section class='comments-section'>
+            <h3>Comments</h3>
+            <@fields.comments />
           </section>
         {{/if}}
       </article>
@@ -354,10 +432,45 @@ export class Ticket extends CardDef {
           display: grid;
           gap: 1rem;
         }
+        .linked-card {
+          margin-bottom: 0.5rem;
+        }
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-done {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-in_progress {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-backlog {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-blocked {
+          color: var(--boxel-red, #dc2626);
+          background: #fef2f2;
+        }
+        .comments-section {
+          margin-top: 16px;
+        }
+        .comments-section h3 {
+          font-size: var(--boxel-font-size);
+          font-weight: 600;
+          margin-bottom: 8px;
         }
       </style>
     </template>
@@ -371,28 +484,24 @@ export class Project extends CardDef {
   @field projectCode = contains(StringField);
   @field projectName = contains(StringField);
   @field projectStatus = contains(ProjectStatusField);
-  @field deadline = contains(DateField);
   @field objective = contains(TextAreaField);
   @field scope = contains(MarkdownField);
   @field technicalContext = contains(MarkdownField);
-  @field tickets = linksToMany(() => Ticket, {
+  @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
         on: {
           // @ts-ignore this is not a CJS file, import.meta is allowed
           module: new URL('./darkfactory', import.meta.url).href,
-          name: 'Ticket',
+          name: 'Issue',
         },
         eq: { 'project.id': '$this.id' },
       },
     },
   });
   @field knowledgeBase = linksToMany(() => KnowledgeArticle);
-  @field teamAgents = linksToMany(() => AgentProfile);
   @field successCriteria = contains(MarkdownField);
-  @field risks = contains(MarkdownField);
   @field testArtifactsRealmUrl = contains(StringField);
-  @field createdAt = contains(DateTimeField);
 
   @field title = contains(StringField, {
     computeVia: function (this: Project) {
@@ -411,11 +520,13 @@ export class Project extends CardDef {
               @model.projectCode
               'PROJECT'
             }}</strong>
-          <span>{{if
-              @model.projectStatus
-              @model.projectStatus
-              'planning'
-            }}</span>
+          <span
+            class='status status-{{if
+                @model.projectStatus
+                @model.projectStatus
+                "planning"
+              }}'
+          >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
         </div>
         <div>{{if
             @model.projectName
@@ -437,8 +548,36 @@ export class Project extends CardDef {
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
           font-size: 0.8rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-active {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-planning {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-completed {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-on_hold {
+          color: var(--boxel-orange, #ea580c);
+          background: #fff7ed;
+        }
+        .status-archived {
+          color: var(--boxel-400, #9ca3af);
+          background: #f3f4f6;
         }
       </style>
     </template>
@@ -456,11 +595,13 @@ export class Project extends CardDef {
                 @model.projectCode
                 'PROJECT'
               }}</strong>
-            <span>{{if
-                @model.projectStatus
-                @model.projectStatus
-                'planning'
-              }}</span>
+            <span
+              class='status status-{{if
+                  @model.projectStatus
+                  @model.projectStatus
+                  "planning"
+                }}'
+            >{{if @model.projectStatus @model.projectStatus 'planning'}}</span>
           </div>
           <h1>{{if
               @model.projectName
@@ -492,16 +633,10 @@ export class Project extends CardDef {
             <@fields.successCriteria />
           </section>
         {{/if}}
-        {{#if @model.risks}}
+        {{#if @model.issues.length}}
           <section>
-            <h2>Risks</h2>
-            <@fields.risks />
-          </section>
-        {{/if}}
-        {{#if @model.tickets.length}}
-          <section>
-            <h2>Tickets</h2>
-            <@fields.tickets />
+            <h2>Issues</h2>
+            <@fields.issues />
           </section>
         {{/if}}
         {{#if @model.knowledgeBase.length}}
@@ -520,7 +655,35 @@ export class Project extends CardDef {
         .row {
           display: flex;
           justify-content: space-between;
+          align-items: center;
           gap: 0.75rem;
+        }
+        .status {
+          font-size: 0.75rem;
+          text-transform: uppercase;
+          font-weight: 600;
+          padding: 0.125rem 0.5rem;
+          border-radius: 0.25rem;
+        }
+        .status-active {
+          color: var(--boxel-blue, #2563eb);
+          background: #eff6ff;
+        }
+        .status-planning {
+          color: var(--boxel-400, #9ca3af);
+          background: #f9fafb;
+        }
+        .status-completed {
+          color: var(--boxel-green, #16a34a);
+          background: #f0fdf4;
+        }
+        .status-on_hold {
+          color: var(--boxel-orange, #ea580c);
+          background: #fff7ed;
+        }
+        .status-archived {
+          color: var(--boxel-400, #9ca3af);
+          background: #f3f4f6;
         }
       </style>
     </template>

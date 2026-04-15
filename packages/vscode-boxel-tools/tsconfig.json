@@ -1,8 +1,10 @@
 {
   "compilerOptions": {
     "strictNullChecks": true,
-    "module": "Node16",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
+    "allowImportingTsExtensions": true,
     "target": "ES2022",
     "outDir": "out",
     "baseUrl": ".",

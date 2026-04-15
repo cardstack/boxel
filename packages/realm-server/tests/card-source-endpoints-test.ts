@@ -897,6 +897,11 @@ module(basename(__filename), function () {
                     cardInfo,
                   },
                   relationships: {
+                    'cardInfo.cardThumbnail': {
+                      links: {
+                        self: null,
+                      },
+                    },
                     'cardInfo.theme': {
                       links: {
                         self: null,

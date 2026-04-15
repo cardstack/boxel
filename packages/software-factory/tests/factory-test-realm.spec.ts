@@ -6,12 +6,8 @@ import {
   createTestRun,
   executeTestRunFromRealm,
   type TestRunRealmOptions,
-} from '../scripts/lib/factory-test-realm';
-import {
-  readFile,
-  waitForRealmFile,
-  writeFile,
-} from '../scripts/lib/realm-operations';
+} from '../src/factory-test-realm';
+import { readFile, waitForRealmFile, writeFile } from '../src/realm-operations';
 
 const fixtureRealmDir = resolve(
   process.cwd(),
@@ -115,7 +111,7 @@ test.describe('factory-test-realm e2e', () => {
     });
 
     // Handle assertions
-    expect(handle.testRunId).toContain('Test Runs/hello-e2e');
+    expect(handle.testRunId).toContain('Validations/test_hello-e2e');
     expect(handle.status).toBe('passed');
     expect(handle.errorMessage).toBeUndefined();
 
@@ -182,7 +178,7 @@ test.describe('factory-test-realm e2e', () => {
     });
 
     // Handle assertions
-    expect(handle.testRunId).toContain('Test Runs/hello-fail');
+    expect(handle.testRunId).toContain('Validations/test_hello-fail');
     expect(handle.status).toBe('failed');
 
     // Read the TestRun card back and verify its persisted state
@@ -215,7 +211,7 @@ test.describe('factory-test-realm e2e', () => {
 
   test('error path: unreachable realm returns error immediately', async () => {
     let options: TestRunRealmOptions = {
-      testRealmUrl: 'http://localhost:1/',
+      targetRealmUrl: 'http://localhost:1/',
       testResultsModuleUrl: 'http://localhost:1/software-factory/test-results',
       fetch: globalThis.fetch,
     };

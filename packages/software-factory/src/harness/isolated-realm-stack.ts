@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -14,12 +15,12 @@ import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import fsExtra from 'fs-extra';
 import { spawn } from 'node:child_process';
+import { matchesSourceRealmGlob } from './shared';
 
 import {
   baseRealmDir,
   baseRealmURLFor,
   captureProcessLogs,
-  CONFIGURED_PRERENDER_URL,
   createProcessExitPromise,
   DEFAULT_MATRIX_SERVER_USERNAME,
   DEFAULT_PG_HOST,
@@ -27,7 +28,6 @@ import {
   DEFAULT_PG_PORT,
   DEFAULT_PG_USER,
   DEFAULT_REALM_LOG_LEVELS,
-  DEFAULT_REALM_SERVER_PORT,
   findAvailablePort,
   FIXTURE_SOURCE_REALM_URL_PLACEHOLDER,
   FULL_INDEX_REALM_STARTUP_TIMEOUT_MS,
@@ -250,12 +250,25 @@ function copyRealmFixture(
   realmDir: string,
   destination: string,
   sourceRealmURL: URL,
+  options?: { fileFilter?: (relativePath: string) => boolean },
 ): void {
-  copySync(realmDir, destination, {
+  // Resolve symlinks so copySync sees the real directory, not the symlink itself.
+  let resolvedDir = realpathSync(realmDir);
+  copySync(resolvedDir, destination, {
     preserveTimestamps: true,
     filter(src) {
-      let relativePath = relative(realmDir, src).replace(/\\/g, '/');
-      return relativePath === '' || !shouldIgnoreFixturePath(relativePath);
+      let relativePath = relative(resolvedDir, src).replace(/\\/g, '/');
+      if (relativePath !== '' && shouldIgnoreFixturePath(relativePath)) {
+        return false;
+      }
+      if (
+        relativePath !== '' &&
+        options?.fileFilter &&
+        !options.fileFilter(relativePath)
+      ) {
+        return false;
+      }
+      return true;
     },
   });
   rewriteFixtureSourceModuleUrls(destination, sourceRealmURL);
@@ -277,6 +290,8 @@ export async function startIsolatedRealmStack({
   fullIndexOnStartup,
   additionalRealms,
   workerManagerPort: explicitWorkerManagerPort,
+  realmServerPort: explicitRealmServerPort,
+  prerenderURL: explicitPrerenderURL,
 }: {
   realmDir: string;
   realmURL: URL;
@@ -290,17 +305,33 @@ export async function startIsolatedRealmStack({
    *  picking one dynamically. This lets callers know the port upfront (e.g.
    *  for progress monitoring via /_indexing-status). */
   workerManagerPort?: number;
+  /** When provided, the realm-server will listen on this port instead of
+   *  picking one dynamically. */
+  realmServerPort?: number;
+  /** When provided, reuse this existing prerender server URL instead of
+   *  starting a new one. The Playwright harness keeps prerender alive for
+   *  the lifetime of a testWorker and passes its URL here. */
+  prerenderURL?: string;
 }): Promise<RunningFactoryStack> {
   let rootDir = mkdtempSync(join(tmpdir(), 'software-factory-realms-'));
+  // Create a filtered copy of the source realm — only card definitions
+  // (via SOURCE_REALM_GLOB), not instance data like wiki briefs or documents.
+  let filteredSourceRealmDir = join(rootDir, 'source-realm');
+  copyRealmFixture(
+    sourceRealmDir,
+    filteredSourceRealmDir,
+    new URL('https://placeholder/'),
+    { fileFilter: matchesSourceRealmGlob },
+  );
   let testRealmDir = join(rootDir, 'test');
   let workerManagerMetadataFile = join(rootDir, 'worker-manager.runtime.json');
   let realmServerMetadataFile = join(rootDir, 'realm-server.runtime.json');
   let actualWorkerManagerPort =
     explicitWorkerManagerPort ?? (await findAvailablePort());
   let actualRealmServerPort =
-    DEFAULT_REALM_SERVER_PORT === 0
-      ? await findAvailablePort()
-      : DEFAULT_REALM_SERVER_PORT;
+    explicitRealmServerPort && explicitRealmServerPort !== 0
+      ? explicitRealmServerPort
+      : await findAvailablePort();
   let actualRealmServerURL = withPort(realmServerURL, actualRealmServerPort);
   let actualRealmPath = realmRelativePath(realmURL, realmServerURL);
   let actualRealmURL = realmURLWithinServer(
@@ -360,12 +391,12 @@ export async function startIsolatedRealmStack({
   // lifetime of a Playwright testWorker even though the realm stack itself is
   // recreated per test. When provided, reuse that long-lived prerender URL so
   // we only restart realm-server and worker-manager here.
-  let prerender = CONFIGURED_PRERENDER_URL
+  let prerender = explicitPrerenderURL
     ? undefined
     : await startHarnessPrerenderServer({
         boxelHostURL: realmServerURL.href.replace(/\/$/, ''),
       });
-  let prerenderURL = CONFIGURED_PRERENDER_URL?.href ?? prerender?.url;
+  let prerenderURL = explicitPrerenderURL ?? prerender?.url;
   if (!prerenderURL) {
     throw new Error(
       'Unable to determine prerender URL for isolated realm stack',
@@ -479,7 +510,7 @@ export async function startIsolatedRealmStack({
     `--fromUrl=${publicBaseRealmURL.href}`,
     `--toUrl=${actualBaseRealmURL.href}`,
     '--username=software_factory_realm',
-    `--path=${sourceRealmDir}`,
+    `--path=${filteredSourceRealmDir}`,
     `--fromUrl=${sourceRealmURL.href}`,
     `--toUrl=${actualSourceRealmURL.href}`,
     '--username=test_realm',

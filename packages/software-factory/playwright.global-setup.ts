@@ -20,10 +20,6 @@ const fallbackRealmDir = resolve(
   packageRoot,
   'test-fixtures/darkfactory-adopter',
 );
-const testSourceRealmDir = resolve(
-  packageRoot,
-  'test-fixtures/public-software-factory-source',
-);
 const bootstrapTargetRealmDir = resolve(
   packageRoot,
   'test-fixtures/bootstrap-target',
@@ -200,7 +196,6 @@ async function prepareTemplatesForRealms(
       ...process.env,
       SOFTWARE_FACTORY_CONTEXT: JSON.stringify(context),
       SOFTWARE_FACTORY_METADATA_FILE: metadataFile,
-      SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
     },
   });
 
@@ -274,7 +269,6 @@ export default async function globalSetup() {
         ...process.env,
         NODE_NO_WARNINGS: '1',
         SOFTWARE_FACTORY_SUPPORT_METADATA_FILE: metadataFile,
-        SOFTWARE_FACTORY_SOURCE_REALM_DIR: testSourceRealmDir,
       },
     },
   );
@@ -300,12 +294,7 @@ export default async function globalSetup() {
   );
 
   let preparedRealmDirs = [
-    ...new Set([
-      realmDir,
-      bootstrapTargetRealmDir,
-      testRealmRunnerDir,
-      testSourceRealmDir,
-    ]),
+    ...new Set([realmDir, bootstrapTargetRealmDir, testRealmRunnerDir]),
   ];
   let preparedTemplates = await prepareTemplatesForRealms(
     preparedRealmDirs,

@@ -1920,7 +1920,7 @@ module(basename(__filename), function () {
                     return {
                       filter: {
                         on: {
-                          module: 'https://cardstack.com/base/file-api',
+                          module: 'https://cardstack.com/base/card-api',
                           name: 'FileDef',
                         },
                         eq: {

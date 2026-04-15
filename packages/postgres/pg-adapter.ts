@@ -151,10 +151,34 @@ export class PgAdapter implements DBAdapter {
       let { rows } = await client.query(sql);
       return rows;
     };
+    let released = false;
     try {
       return await fn(query);
-    } finally {
+    } catch (e) {
+      // Clean up any in-progress transaction before returning the client to
+      // the pool. Without this, a connection left in a dirty transaction
+      // state will cause "SET TRANSACTION ISOLATION LEVEL must be called
+      // before any query" errors for the next caller that picks it up.
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        // ROLLBACK failed — the connection is in an unrecoverable state.
+        // Destroy it instead of returning it to the pool.
+        log.error(
+          'ROLLBACK failed during connection cleanup, destroying client: %s',
+          rollbackError,
+        );
+        client.release(true);
+        released = true;
+        throw e;
+      }
       client.release();
+      released = true;
+      throw e;
+    } finally {
+      if (!released) {
+        client.release();
+      }
     }
   }
 

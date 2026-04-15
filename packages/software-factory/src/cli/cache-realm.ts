@@ -1,3 +1,6 @@
+// This should be first
+import '../setup-logger';
+
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
@@ -7,9 +10,21 @@ import {
 } from '../harness';
 import { isFactorySupportContext } from '../harness/shared';
 import { readSupportContext } from '../runtime-metadata';
+import { logger } from '../logger';
+
+let log = logger('cache-realm');
+
+const KNOWN_FLAGS = new Set(['--force']);
 
 async function main(): Promise<void> {
+  let flags = process.argv.slice(2).filter((arg) => arg.startsWith('--'));
+  let unknownFlags = flags.filter((f) => !KNOWN_FLAGS.has(f));
+  if (unknownFlags.length > 0) {
+    log.warn(`unknown flag(s): ${unknownFlags.join(', ')}`);
+  }
+  let forceRebuild = flags.includes('--force');
   let args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
+
   let realmDirs = [
     ...new Set(
       (args.length > 0 ? args : ['test-fixtures/darkfactory-adopter']).map(
@@ -38,13 +53,13 @@ async function main(): Promise<void> {
       try {
         let response = await fetch(hostURL);
         if (!response.ok) {
-          console.warn(
+          log.warn(
             `Stale support context: hostURL ${hostURL} returned ${response.status}, ignoring cached context`,
           );
           supportContext = undefined;
         }
       } catch {
-        console.warn(
+        log.warn(
           `Stale support context: hostURL ${hostURL} is not reachable, ignoring cached context`,
         );
         supportContext = undefined;
@@ -60,13 +75,13 @@ async function main(): Promise<void> {
       try {
         let response = await fetch(`${matrixURL}/_matrix/client/versions`);
         if (!response.ok) {
-          console.warn(
+          log.warn(
             `Stale support context: matrixURL ${matrixURL} returned ${response.status}, ignoring cached context`,
           );
           supportContext = undefined;
         }
       } catch {
-        console.warn(
+        log.warn(
           `Stale support context: matrixURL ${matrixURL} is not reachable, ignoring cached context`,
         );
         supportContext = undefined;
@@ -86,6 +101,7 @@ async function main(): Promise<void> {
 
     let result = await ensureCombinedFactoryRealmTemplate(fixtures, {
       context: supportContext,
+      forceRebuild,
     });
 
     payload = {
@@ -114,6 +130,7 @@ async function main(): Promise<void> {
     let template = await ensureFactoryRealmTemplate({
       realmDir: realmDirs[0],
       context: supportContext,
+      forceRebuild,
     });
 
     payload = {
@@ -147,10 +164,22 @@ async function main(): Promise<void> {
       JSON.stringify(payload, null, 2),
     );
   }
-  console.log(JSON.stringify(payload, null, 2));
+
+  // Print a concise summary instead of the full JSON blob.
+  let status = payload.cacheHit ? 'cache hit' : 'built';
+  log.info(
+    `${status}: ${payload.templateDatabaseName} (${payload.preparedTemplates.length} realm(s))`,
+  );
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+main()
+  .catch((error: unknown) => {
+    log.error(String(error));
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // Lingering handles (fetch keep-alive sockets, pg pool idle) can prevent
+    // the event loop from draining. Schedule a deferred exit so stdout/stderr
+    // have time to flush before the process terminates.
+    setTimeout(() => process.exit(process.exitCode ?? 0), 100).unref();
+  });

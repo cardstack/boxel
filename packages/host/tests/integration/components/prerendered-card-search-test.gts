@@ -464,7 +464,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     let query: Query = {
       filter: {
         on: {
-          module: `${baseRealm.url}file-api`,
+          module: `${baseRealm.url}card-api`,
           name: 'FileDef',
         },
         eq: {

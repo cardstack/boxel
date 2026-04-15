@@ -1,13 +1,16 @@
 import {
   type DBAdapter,
   MINIMUM_AI_CREDITS_TO_CONTINUE,
+  logger,
 } from '@cardstack/runtime-common';
+import * as Sentry from '@sentry/node';
 import {
   validateAICredits,
-  extractGenerationIdFromResponse,
-  saveUsageCost as saveUsageCostFromBilling,
   spendUsageCost as spendUsageCostFromBilling,
+  fetchGenerationCostWithBackoff,
 } from '@cardstack/billing/ai-billing';
+
+const log = logger('credit-strategies');
 
 export interface CreditStrategy {
   name: string;
@@ -23,11 +26,6 @@ export interface CreditStrategy {
     dbAdapter: DBAdapter,
     matrixUserId: string,
     response: any,
-  ): Promise<void>;
-  spendUsageCost(
-    dbAdapter: DBAdapter,
-    matrixUserId: string,
-    costInUsd: number,
   ): Promise<void>;
 }
 
@@ -58,23 +56,37 @@ export class OpenRouterCreditStrategy implements CreditStrategy {
     matrixUserId: string,
     response: any,
   ): Promise<void> {
-    const generationId = extractGenerationIdFromResponse(response);
+    const costInUsd = response?.usage?.cost;
+    if (
+      typeof costInUsd === 'number' &&
+      Number.isFinite(costInUsd) &&
+      costInUsd > 0
+    ) {
+      await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
+      return;
+    }
+
+    const generationId = response?.id;
     if (generationId) {
-      await saveUsageCostFromBilling(
-        dbAdapter,
-        matrixUserId,
+      log.info(
+        `No inline cost for user ${matrixUserId}, falling back to generation cost API (generationId: ${generationId})`,
+      );
+      const fetchedCost = await fetchGenerationCostWithBackoff(
         generationId,
         this.openRouterApiKey,
       );
+      if (fetchedCost !== null) {
+        await spendUsageCostFromBilling(dbAdapter, matrixUserId, fetchedCost);
+      } else {
+        const message = `Failed to fetch generation cost for user ${matrixUserId} (generationId: ${generationId}), credit deduction skipped`;
+        log.error(message);
+        Sentry.captureMessage(message, 'error');
+      }
+    } else {
+      log.warn(
+        `No usage cost and no generation ID in response for user ${matrixUserId}, skipping credit deduction`,
+      );
     }
-  }
-
-  async spendUsageCost(
-    dbAdapter: DBAdapter,
-    matrixUserId: string,
-    costInUsd: number,
-  ): Promise<void> {
-    await spendUsageCostFromBilling(dbAdapter, matrixUserId, costInUsd);
   }
 }
 
@@ -93,14 +105,6 @@ export class NoCreditStrategy implements CreditStrategy {
     _dbAdapter: DBAdapter,
     _matrixUserId: string,
     _response: any,
-  ): Promise<void> {
-    // No-op for no-credit strategy
-  }
-
-  async spendUsageCost(
-    _dbAdapter: DBAdapter,
-    _matrixUserId: string,
-    _costInUsd: number,
   ): Promise<void> {
     // No-op for no-credit strategy
   }

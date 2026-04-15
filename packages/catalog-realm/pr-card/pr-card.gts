@@ -166,6 +166,13 @@ class IsolatedTemplate extends Component<typeof PrCard> {
     return buildCiGroups(this.ciItems);
   }
 
+  get ciIsLoading() {
+    return (
+      this.checkRunEventData?.isLoading ||
+      this.checkSuiteEventData?.isLoading
+    ) ?? false;
+  }
+
   // ── Reviews ──
   get latestReviewByReviewer() {
     return buildLatestReviewByReviewer(this.prReviewEventData?.instances ?? []);
@@ -266,7 +273,7 @@ class IsolatedTemplate extends Component<typeof PrCard> {
       {{! ── Body ── }}
       <div class='pr-body'>
         <section class='pr-status-columns'>
-          <CiSection @ciGroups={{this.ciGroups}} />
+          <CiSection @ciGroups={{this.ciGroups}} @isLoading={{this.ciIsLoading}} />
           <hr class='status-divider' />
           <ReviewSection
             @reviewState={{this.latestReviewState}}

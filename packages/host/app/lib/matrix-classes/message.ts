@@ -3,8 +3,8 @@ import { cached, tracked } from '@glimmer/tracking';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
+import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import {
   parseHtmlContent,
