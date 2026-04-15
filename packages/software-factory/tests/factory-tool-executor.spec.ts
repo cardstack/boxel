@@ -555,4 +555,3 @@ test.describe('realm-search on a private realm', () => {
     expect(unauthorizedOutput.status).toBe(403);
   });
 });
-

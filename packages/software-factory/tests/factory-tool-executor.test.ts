@@ -600,7 +600,6 @@ module('factory-tool-executor > auth header propagation', function () {
       'no Authorization header sent',
     );
   });
-
 });
 
 // ---------------------------------------------------------------------------

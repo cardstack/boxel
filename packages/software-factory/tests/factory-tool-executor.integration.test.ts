@@ -315,7 +315,6 @@ module('factory-tool-executor integration > realm-api requests', function () {
       await stopServer(server);
     }
   });
-
 });
 
 // ---------------------------------------------------------------------------
