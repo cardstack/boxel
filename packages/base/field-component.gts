@@ -541,6 +541,11 @@ function defaultFieldFormats(containingFormat: Format): FieldFormats {
       return { fieldDef: 'atom', cardDef: 'atom' };
     case 'head':
       return { fieldDef: 'head', cardDef: 'head' };
+    case 'markdown':
+      // Recurse in the same format: `<@fields.x />` inside a markdown template
+      // should delegate to the child's markdown template, not embedded/fitted
+      // HTML, so the composed output is uniformly markdown text.
+      return { fieldDef: 'markdown', cardDef: 'markdown' };
     default:
       return { fieldDef: 'embedded', cardDef: 'fitted' };
   }
