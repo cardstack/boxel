@@ -1,5 +1,4 @@
-import { BoxelCLIClient } from '@cardstack/boxel-cli/src/lib/boxel-cli-client';
-import { getProfileManager } from '@cardstack/boxel-cli/src/lib/profile-manager';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
@@ -68,15 +67,16 @@ async function createRealm(
 ): Promise<CreateRealmResult> {
   let realmName = extractEndpointFromRealmUrl(resolution.url);
 
-  let active = getProfileManager().getActiveProfile();
+  let client = new BoxelCLIClient();
+  let active = client.getActiveProfile();
   if (active) {
-    let activeServerUrl = ensureTrailingSlash(active.profile.realmServerUrl);
+    let activeServerUrl = ensureTrailingSlash(active.realmServerUrl);
     if (activeServerUrl !== resolution.serverUrl) {
       throw new FactoryEntrypointUsageError(
         `Active Boxel profile realm server "${activeServerUrl}" does not match --realm-server-url "${resolution.serverUrl}"`,
       );
     }
-    let activeUsername = getMatrixUsername(active.id);
+    let activeUsername = getMatrixUsername(active.matrixId);
     if (activeUsername !== resolution.ownerUsername) {
       throw new FactoryEntrypointUsageError(
         `Active Boxel profile user "${activeUsername}" does not match MATRIX_USERNAME "${resolution.ownerUsername}"`,
@@ -84,7 +84,6 @@ async function createRealm(
     }
   }
 
-  let client = new BoxelCLIClient();
   let result = await client.createRealm({ realmName, displayName: realmName });
 
   return {

@@ -1,7 +1,7 @@
 // This should be first
 import '../setup-logger';
 
-import { BoxelCLIClient } from '@cardstack/boxel-cli/src/lib/boxel-cli-client';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
 
 import {
   FactoryEntrypointUsageError,

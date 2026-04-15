@@ -46,6 +46,19 @@ export class BoxelCLIClient {
     }
   }
 
+  /**
+   * Returns the active profile's identifying info, or null if no profile
+   * is active. Intended for callers that need to validate profile state.
+   */
+  getActiveProfile(): { matrixId: string; realmServerUrl: string } | null {
+    let active = this.pm.getActiveProfile();
+    if (!active) return null;
+    return {
+      matrixId: active.id,
+      realmServerUrl: active.profile.realmServerUrl,
+    };
+  }
+
   async createRealm(options: CreateRealmOptions): Promise<CreateRealmResult> {
     let result = await coreCreateRealm(options.realmName, options.displayName, {
       background: options.backgroundURL,
