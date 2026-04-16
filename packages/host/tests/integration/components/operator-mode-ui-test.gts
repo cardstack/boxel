@@ -14,7 +14,7 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import SearchPanel from '@cardstack/host/components/card-search/panel';
+import { TypeSummariesResource } from '@cardstack/host/resources/type-summaries';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import { percySnapshot, testRealmURL } from '../../helpers';
@@ -1432,8 +1432,8 @@ module('Integration | operator-mode | ui', function (hooks) {
 
   test('selected types are preserved after clearing type search when selection is beyond first page', async function (assert) {
     // Use a small page size so selected types may not be in the first page
-    let originalPageSize = SearchPanel.PAGE_SIZE;
-    SearchPanel.PAGE_SIZE = 3;
+    let originalPageSize = TypeSummariesResource.PAGE_SIZE;
+    TypeSummariesResource.PAGE_SIZE = 3;
 
     try {
       ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
@@ -1481,14 +1481,14 @@ module('Integration | operator-mode | ui', function (hooks) {
           'Pet selection is preserved even when it is beyond the first page of results',
         );
     } finally {
-      SearchPanel.PAGE_SIZE = originalPageSize;
+      TypeSummariesResource.PAGE_SIZE = originalPageSize;
     }
   });
 
   test('type picker total count reflects API total, not loaded options count', async function (assert) {
     // Use a small page size so only some types are loaded initially
-    let originalPageSize = SearchPanel.PAGE_SIZE;
-    SearchPanel.PAGE_SIZE = 3;
+    let originalPageSize = TypeSummariesResource.PAGE_SIZE;
+    TypeSummariesResource.PAGE_SIZE = 3;
 
     try {
       ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
@@ -1519,7 +1519,7 @@ module('Integration | operator-mode | ui', function (hooks) {
           'select-all shows total count from API, not loaded options count',
         );
     } finally {
-      SearchPanel.PAGE_SIZE = originalPageSize;
+      TypeSummariesResource.PAGE_SIZE = originalPageSize;
     }
   });
 });

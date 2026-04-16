@@ -46,7 +46,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import type RealmService from '../../services/realm';
 import type RealmServerService from '../../services/realm-server';
 import type StoreService from '../../services/store';
-import type { NewCardArgs } from '../card-search/utils';
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
 interface Signature {
   Args: {};

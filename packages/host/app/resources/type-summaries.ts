@@ -11,17 +11,16 @@ import { Resource } from 'ember-modify-based-class-resource';
 import {
   type Filter,
   type ResolvedCodeRef,
-  baseCardRef,
-  baseFieldRef,
-  baseRef,
   codeRefFromInternalKey,
   internalKeyFor,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import {
+  getBaseFilterTypeKeys,
   getFilterTypeRefs,
-} from '../components/card-search/utils';
+  ROOT_TYPE_KEYS,
+} from '../utils/card-search/type-filter';
 
 import type RealmServerService from '../services/realm-server';
 
@@ -47,12 +46,6 @@ export interface TypeSummariesArgs {
     owner: Owner;
   };
 }
-
-const ROOT_TYPE_KEYS = new Set([
-  internalKeyFor(baseCardRef, undefined),
-  internalKeyFor(baseFieldRef, undefined),
-  internalKeyFor(baseRef, undefined),
-]);
 
 export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   @service declare private realmServer: RealmServerService;
@@ -131,21 +124,14 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   }
 
   get hasNonRootBaseFilter(): boolean {
-    return this.baseFilterCodeRefs !== undefined;
-  }
-
-  get selectedTypeIds(): string[] {
-    return this._selected.map((ref) => internalKeyFor(ref, undefined));
+    return getBaseFilterTypeKeys(this.#baseFilter) !== undefined;
   }
 
   // -- Public methods --
 
   onSearchChange(term: string): void {
     this._typeSearchKey = term;
-    this.fetchTypeSummariesTask.perform(
-      this.#previousRealmURLs ?? [],
-      term,
-    );
+    this.fetchTypeSummariesTask.perform(this.#previousRealmURLs ?? [], term);
   }
 
   onLoadMore(): void {
@@ -163,28 +149,6 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   }
 
   // -- Private computed --
-
-  private get baseFilterCodeRefs(): Set<string> | undefined {
-    const typeRefs = getFilterTypeRefs(this.#baseFilter);
-    if (!typeRefs || typeRefs.length === 0) {
-      return undefined;
-    }
-    const refs = new Set<string>();
-    for (const { ref, negated } of typeRefs) {
-      if (!negated && isResolvedCodeRef(ref)) {
-        refs.add(internalKeyFor(ref, undefined));
-      }
-    }
-    if (refs.size === 0) return undefined;
-
-    // CardDef/FieldDef are root types — all card types inherit from them,
-    // so filtering by them would incorrectly show zero results. Skip.
-    if ([...refs].every((r) => ROOT_TYPE_KEYS.has(r))) {
-      return undefined;
-    }
-
-    return refs;
-  }
 
   // -- Private tasks --
 
@@ -303,7 +267,7 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
   // -- Type filter computation --
 
   private recomputeTypeFilter(): void {
-    const allowedCodeRefs = this.baseFilterCodeRefs;
+    const allowedCodeRefs = getBaseFilterTypeKeys(this.#baseFilter);
     const optionsById = new Map<string, TypeOption>();
 
     for (const item of this._typeSummariesData) {

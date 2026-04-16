@@ -24,8 +24,8 @@ import type {
   RecentsSection,
   SearchSheetSection,
   UrlSection,
-} from './search-content';
-import type { NewCardArgs } from './utils';
+} from '@cardstack/host/utils/card-search/sections';
+import type { NewCardArgs } from '@cardstack/host/utils/card-search/types';
 
 interface Signature {
   Element: HTMLElement;

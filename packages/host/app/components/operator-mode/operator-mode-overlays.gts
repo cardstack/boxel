@@ -48,7 +48,7 @@ import type {
 
 import { detectStackItemTypeForTarget } from '../../lib/stack-item';
 
-import { removeFileExtension } from '../card-search/utils';
+import { removeFileExtension } from '@cardstack/host/utils/card-search/types';
 import { knownFileMetaUrls } from '../prerendered-card-search';
 
 import Overlays from './overlays';

@@ -24,8 +24,6 @@ export interface TypeFilter {
   disableSelectAll: boolean;
   /** Whether to skip type-based filtering on recent cards */
   skipTypeFiltering: boolean;
-  /** Internal key IDs of selected types, for building search queries */
-  selectedTypeIds: string[];
 }
 
 interface Signature {

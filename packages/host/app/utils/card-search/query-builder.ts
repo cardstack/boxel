@@ -3,34 +3,19 @@ import type {
   Filter,
   Query,
   ResolvedCodeRef,
-  TypeRefResult,
 } from '@cardstack/runtime-common';
 import {
   codeRefFromInternalKey,
-  getTypeRefsFromFilter,
-  identifyCard,
   isAnyFilter,
-  isBaseDef,
   isCardTypeFilter,
   isEveryFilter,
   isNotFilter,
-  isResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { SortOption } from '@cardstack/host/components/card-search/constants';
 
-import type { SortOption } from './constants';
-
-export interface NewCardArgs {
-  ref: CodeRef;
-  relativeTo: string | undefined;
-  realmURL: string;
-}
-
-export function removeFileExtension(cardId: string | undefined) {
-  return cardId?.replace(/\.[^/.]+$/, '');
-}
+import { isSearchKeyEmpty, isURLSearchKey } from './url';
 
 export function shouldSkipSearchQuery(
   searchKey: string,
@@ -40,71 +25,6 @@ export function shouldSkipSearchQuery(
     return isURLSearchKey(searchKey);
   }
   return isSearchKeyEmpty(searchKey) || isURLSearchKey(searchKey);
-}
-
-function isSearchKeyEmpty(searchKey: string): boolean {
-  return (searchKey?.trim() ?? '') === '';
-}
-
-function isURLSearchKey(searchKey: string): boolean {
-  try {
-    new URL(searchKey);
-    return true;
-  } catch (_e) {
-    return false;
-  }
-}
-
-export function cardMatchesTypeRef(card: CardDef, typeRef: CodeRef): boolean {
-  if (!isResolvedCodeRef(typeRef)) {
-    return false;
-  }
-  let cls: unknown = card.constructor;
-  while (cls && isBaseDef(cls)) {
-    const ref = identifyCard(cls);
-    if (
-      ref &&
-      isResolvedCodeRef(ref) &&
-      ref.module === typeRef.module &&
-      ref.name === typeRef.name
-    ) {
-      return true;
-    }
-    cls = Reflect.getPrototypeOf(cls as object);
-  }
-  return false;
-}
-
-export function getFilterTypeRefs(
-  baseFilter: Filter | undefined,
-): TypeRefResult[] | undefined {
-  if (baseFilter) {
-    return getTypeRefsFromFilter(baseFilter);
-  }
-  return undefined;
-}
-
-export function filterCardsByTypeRefs(
-  cards: CardDef[],
-  typeRefs: TypeRefResult[] | undefined,
-): CardDef[] {
-  if (!typeRefs) {
-    return cards;
-  }
-  const positiveRefs = typeRefs.filter((r) => !r.negated).map((r) => r.ref);
-  const negatedRefs = typeRefs.filter((r) => r.negated).map((r) => r.ref);
-  let filtered = cards;
-  if (positiveRefs.length > 0) {
-    filtered = filtered.filter((c) =>
-      positiveRefs.some((ref) => cardMatchesTypeRef(c, ref)),
-    );
-  }
-  if (negatedRefs.length > 0) {
-    filtered = filtered.filter(
-      (c) => !negatedRefs.some((ref) => cardMatchesTypeRef(c, ref)),
-    );
-  }
-  return filtered;
 }
 
 // Removes CardTypeFilter nodes from a filter tree.

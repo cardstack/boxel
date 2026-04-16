@@ -28,6 +28,10 @@ import {
 } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import {
+  isURLSearchKey,
+  resolveSearchKeyAsURL,
+} from '@cardstack/host/utils/card-search/url';
 
 import SearchPanel from '../card-search/panel';
 
@@ -124,12 +128,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get searchKeyIsURL() {
-    try {
-      new URL(this.searchKey);
-      return true;
-    } catch (_e) {
-      return false;
-    }
+    return isURLSearchKey(this.searchKey);
   }
 
   @action
@@ -203,15 +202,10 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   private get searchKeyAsURL() {
-    if (!this.searchKeyIsURL) {
-      return undefined;
-    }
-    let cardURL = this.searchKey;
-
-    let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
-      (u) => u === cardURL + '/',
+    return resolveSearchKeyAsURL(
+      this.searchKey,
+      this.realmServer.availableRealmURLs,
     );
-    return maybeIndexCardURL ?? cardURL;
   }
 
   // note that this is a card that is eligible for garbage collection

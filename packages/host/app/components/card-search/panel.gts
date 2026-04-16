@@ -4,17 +4,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import {
-  type Filter,
-  type ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { type Filter, type ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import type { RealmFilter } from '@cardstack/host/components/realm-picker';
 import type { TypeFilter } from '@cardstack/host/components/type-picker';
-import {
-  getTypeSummaries,
-  TypeSummariesResource,
-} from '@cardstack/host/resources/type-summaries';
+import { getTypeSummaries } from '@cardstack/host/resources/type-summaries';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { SORT_OPTIONS, type SortOption } from './constants';
@@ -34,10 +28,7 @@ interface Signature {
   };
   Blocks: {
     default: [
-      WithBoundArgs<
-        typeof SearchBar,
-        'value' | 'realmFilter' | 'typeFilter'
-      >,
+      WithBoundArgs<typeof SearchBar, 'value' | 'realmFilter' | 'typeFilter'>,
       WithBoundArgs<
         typeof SearchContent,
         | 'searchKey'
@@ -59,23 +50,11 @@ export default class SearchPanel extends Component<Signature> {
     this.args.initialSelectedRealms ?? [];
   @tracked private activeSort: SortOption = SORT_OPTIONS[0];
 
-  // Re-export for tests that override PAGE_SIZE
-  static get PAGE_SIZE() {
-    return TypeSummariesResource.PAGE_SIZE;
-  }
-  static set PAGE_SIZE(v: number) {
-    TypeSummariesResource.PAGE_SIZE = v;
-  }
-
-  private typeSummaries = getTypeSummaries(
-    this,
-    getOwner(this)!,
-    () => ({
-      realmURLs: this.selectedRealmURLs,
-      baseFilter: this.args.baseFilter,
-      initialSelectedTypes: this.args.initialSelectedTypes,
-    }),
-  );
+  private typeSummaries = getTypeSummaries(this, getOwner(this)!, () => ({
+    realmURLs: this.selectedRealmURLs,
+    baseFilter: this.args.baseFilter,
+    initialSelectedTypes: this.args.initialSelectedTypes,
+  }));
 
   private get initialFocusedSectionId(): string | null {
     let realmURLs = this.args.initialSelectedRealms;
@@ -116,7 +95,6 @@ export default class SearchPanel extends Component<Signature> {
       totalCount: ts.totalCount,
       disableSelectAll: ts.hasNonRootBaseFilter,
       skipTypeFiltering: ts.hasNonRootBaseFilter,
-      selectedTypeIds: ts.selectedTypeIds,
     };
   }
 
