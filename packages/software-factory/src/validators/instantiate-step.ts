@@ -170,7 +170,10 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         ));
   }
 
-  async run(targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationStepResult> {
     // Step 1: Discover specs in the realm
     let specInfos: SpecInfo[];
     try {
@@ -241,14 +244,18 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       : undefined;
 
     let seq: number;
-    try {
-      let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
-      seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
-    } catch (err) {
-      log.warn(
-        `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      seq = this.lastSequenceNumber + 1;
+    if (iteration != null) {
+      seq = iteration;
+    } else {
+      try {
+        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
+      } catch (err) {
+        log.warn(
+          `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        seq = this.lastSequenceNumber + 1;
+      }
     }
 
     let instantiateResultId: string;

@@ -207,7 +207,10 @@ export class ParseValidationStep implements ValidationStepRunner {
       config.runGlintCheckFn ?? ((files) => runGlintCheck(files));
   }
 
-  async run(targetRealmUrl: string): Promise<ValidationStepResult> {
+  async run(
+    targetRealmUrl: string,
+    iteration?: number,
+  ): Promise<ValidationStepResult> {
     // Step 1: Discover files to validate
     let gtsFiles: string[];
     let jsonExampleUrls: string[];
@@ -249,14 +252,18 @@ export class ParseValidationStep implements ValidationStepRunner {
       : undefined;
 
     let seq: number;
-    try {
-      let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
-      seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
-    } catch (err) {
-      log.warn(
-        `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
-      );
-      seq = this.lastSequenceNumber + 1;
+    if (iteration != null) {
+      seq = iteration;
+    } else {
+      try {
+        let realmSeq = await this.getNextSeqFn(slug, targetRealmUrl);
+        seq = Math.max(realmSeq, this.lastSequenceNumber + 1);
+      } catch (err) {
+        log.warn(
+          `Failed to resolve sequence number, using floor: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        seq = this.lastSequenceNumber + 1;
+      }
     }
 
     let parseResultId: string;
