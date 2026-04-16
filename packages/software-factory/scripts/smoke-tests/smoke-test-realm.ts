@@ -319,14 +319,24 @@ async function main() {
     'software-factory/lint-result',
     realmServerUrl,
   ).href;
+  let evalResultsModuleUrl = new URL(
+    'software-factory/eval-result',
+    realmServerUrl,
+  ).href;
 
   let pipeline = createDefaultPipeline({
     authorization,
+    // In this smoke test `authorization` starts as the server token (line 198)
+    // and is later narrowed to a realm-scoped JWT for realm API calls. The
+    // pipeline's `serverToken` must remain the original server-scoped token so
+    // that _run-command (prerenderer) calls succeed.
+    serverToken,
     fetch: fetchImpl,
     realmServerUrl,
     hostAppUrl: realmServerUrl,
     testResultsModuleUrl,
     lintResultsModuleUrl,
+    evalResultsModuleUrl,
   });
 
   let validationResults = await pipeline.validate(targetRealmUrl);
