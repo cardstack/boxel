@@ -26,6 +26,6 @@ jobs:
         run: mise run build:ui
         env:
           SKIP_ICONS_BUILD: ${{ steps.icons-cache.outputs.cache-hit }}
-      - name: Run picker arrow key tests
+      - name: Run full test suite
         working-directory: packages/boxel-ui/test-app
-        run: pnpm test:ember --filter "Arrow"
+        run: pnpm test
