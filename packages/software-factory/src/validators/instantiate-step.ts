@@ -89,7 +89,7 @@ export interface InstantiateValidationDetails {
   cardsChecked: number;
   cardsWithErrors: number;
   cards: {
-    specId: string;
+    instanceId: string;
     cardName: string;
     error: string;
     stackTrace?: string;
@@ -305,23 +305,26 @@ export class InstantiateValidationStep implements ValidationStepRunner {
         }),
       );
 
+      let normalizedRealmUrl = ensureTrailingSlash(targetRealmUrl);
       for (let i = 0; i < settled.length; i++) {
         let outcome = settled[i];
-        let hasExample = !!exampleInstances[i].data;
+        let exampleUrl = exampleInstances[i].url;
+        let instanceId = exampleUrl
+          ? new URL(exampleUrl, normalizedRealmUrl).href
+          : '';
+        let codeRef = { module: spec.moduleUrl, name: spec.cardName };
 
         if (outcome.status === 'fulfilled') {
           let result = outcome.value;
           allCardResults.push({
-            specId: spec.specId,
-            moduleUrl: spec.moduleUrl,
-            cardName: spec.cardName,
-            hasExample,
+            codeRef,
+            instanceId,
             error: result.error ?? '',
             stackTrace: result.stackTrace,
           });
           if (!result.passed) {
             failedCards.push({
-              specId: spec.specId,
+              instanceId,
               cardName: spec.cardName,
               error: result.error ?? 'Card instantiation failed',
               stackTrace: result.stackTrace,
@@ -331,14 +334,12 @@ export class InstantiateValidationStep implements ValidationStepRunner {
           let message = `Instantiate failed: ${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}`;
           log.warn(`Error instantiating ${spec.cardName}: ${message}`);
           allCardResults.push({
-            specId: spec.specId,
-            moduleUrl: spec.moduleUrl,
-            cardName: spec.cardName,
-            hasExample,
+            codeRef,
+            instanceId,
             error: message,
           });
           failedCards.push({
-            specId: spec.specId,
+            instanceId,
             cardName: spec.cardName,
             error: message,
           });
@@ -380,8 +381,8 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     };
 
     let errors = failedCards.map((c) => ({
-      file: c.specId,
-      message: `${c.cardName}: ${c.error}`,
+      file: c.instanceId,
+      message: `${c.cardName} (${c.instanceId}): ${c.error}`,
     }));
 
     return {
@@ -418,7 +419,7 @@ export class InstantiateValidationStep implements ValidationStepRunner {
     ];
 
     for (let card of details.cards) {
-      lines.push(`  ${card.cardName}: ${card.error}`);
+      lines.push(`  ${card.cardName} (${card.instanceId}): ${card.error}`);
     }
 
     return lines.join('\n');

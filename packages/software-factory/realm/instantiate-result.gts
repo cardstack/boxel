@@ -6,12 +6,15 @@ import {
   contains,
   containsMany,
   linksTo,
+  realmURL,
+  relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
+import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
+import { maybeRelativeURL, maybeURL } from '@cardstack/runtime-common/url';
 import { Project, Issue } from './darkfactory';
 
 export const InstantiateResultStatusField = enumField(StringField, {
@@ -26,15 +29,29 @@ export const InstantiateResultStatusField = enumField(StringField, {
 export class InstantiateCardEntry extends FieldDef {
   static displayName = 'Instantiate Card Entry';
 
-  @field specId = contains(StringField);
-  @field moduleUrl = contains(StringField);
-  @field cardName = contains(StringField);
-  @field hasExample = contains(BooleanField);
+  @field codeRef = contains(CodeRefField);
+  @field instanceId = contains(StringField);
   @field error = contains(StringField);
   @field stackTrace = contains(StringField);
 
   get hasError() {
     return !!this.error;
+  }
+
+  get instancePath() {
+    if (!this.instanceId) {
+      return '(no instance)';
+    }
+    let instanceURL = maybeURL(this.instanceId);
+    if (!instanceURL) {
+      return this.instanceId;
+    }
+    let cardRealmURL = (this as any)[realmURL]
+      ? maybeURL((this as any)[realmURL])
+      : undefined;
+    let base =
+      cardRealmURL ?? maybeURL((this as any)[relativeTo]) ?? instanceURL;
+    return maybeRelativeURL(instanceURL, base, cardRealmURL);
   }
 
   static embedded = class Embedded extends Component<
@@ -47,7 +64,7 @@ export class InstantiateCardEntry extends FieldDef {
         {{else}}
           <span class='status-icon pass-icon'>✓</span>
         {{/if}}
-        <span class='card-name'>{{@model.cardName}}</span>
+        <span class='instance-path'>{{@model.instancePath}}</span>
         {{#if @model.error}}
           <span class='card-error'>{{@model.error}}</span>
         {{/if}}
@@ -72,7 +89,7 @@ export class InstantiateCardEntry extends FieldDef {
         .pass-icon {
           color: var(--boxel-green, #16a34a);
         }
-        .card-name {
+        .instance-path {
           color: var(--muted-foreground);
           font-family: monospace;
           font-size: 0.8rem;
@@ -295,7 +312,7 @@ export class InstantiateResult extends CardDef {
                 class='card-group {{if cardResult.hasError "card-has-errors"}}'
               >
                 <div class='card-group-header'>
-                  <span class='card-group-name'>{{cardResult.cardName}}</span>
+                  <span class='card-group-name'>{{cardResult.instancePath}}</span>
                   {{#if cardResult.hasError}}
                     <span class='card-group-status has-errors'>error</span>
                   {{else}}

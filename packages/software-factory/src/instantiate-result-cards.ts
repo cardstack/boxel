@@ -7,10 +7,8 @@ import { readFile, writeFile } from './realm-operations';
 // ---------------------------------------------------------------------------
 
 export interface InstantiateCardEntryData {
-  specId: string;
-  moduleUrl: string;
-  cardName: string;
-  hasExample: boolean;
+  codeRef: { module: string; name: string };
+  instanceId: string;
   error: string;
   stackTrace?: string;
 }
