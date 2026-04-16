@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "User Contributed",
-      "color": "#c3fc33",
+      "name": "Ai",
+      "color": "#F97316",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": "Content created and submitted by community members rather than the official Cardstack team. Quality and support may vary.",
+        "name": "AI",
+        "summary": "Cards and apps that use artificial intelligence or machine learning, including LLM-powered features, smart automation, and AI-assisted workflows.",
         "cardThumbnailURL": null
       }
     },

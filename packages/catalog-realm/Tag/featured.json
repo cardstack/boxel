@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "name": "Tag",
+        "module": "../catalog-app/listing/tag"
+      }
+    },
+    "attributes": {
+      "name": "featured",
+      "color": "#F97316",
+      "cardInfo": {
+        "name": "featured",
+        "summary": "Curated and highlighted listings selected by the catalog team as top picks.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

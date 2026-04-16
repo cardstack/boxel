@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Bundled",
-      "color": "#0069f9",
+      "name": "skill",
+      "color": "#10B981",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": "Cards or apps that are packaged together as a curated set, combining multiple related components into a single installable bundle.",
+        "name": "skill",
+        "summary": "Cards and apps that teach, demonstrate, or practice specific AI skills, capabilities, and techniques.",
         "cardThumbnailURL": null
       }
     },

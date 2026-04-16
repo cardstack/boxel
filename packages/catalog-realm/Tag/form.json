@@ -1,20 +1,20 @@
 {
   "data": {
+    "type": "card",
     "meta": {
       "adoptsFrom": {
         "name": "Tag",
         "module": "../catalog-app/listing/tag"
       }
     },
-    "type": "card",
     "attributes": {
-      "name": "Theme",
-      "color": "#ff009d",
+      "name": "form",
+      "color": "#10B981",
       "cardInfo": {
-        "notes": null,
-        "name": null,
-        "summary": "Visual themes and styling cards that customize the appearance and color scheme of the Boxel workspace or other cards.",
-        "cardThumbnailURL": null
+        "name": "form",
+        "summary": "Data entry forms, surveys, intake forms, and structured input collection cards.",
+        "cardThumbnailURL": null,
+        "notes": null
       }
     },
     "relationships": {

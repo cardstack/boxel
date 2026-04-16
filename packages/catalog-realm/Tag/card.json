@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "name": "Tag",
+        "module": "../catalog-app/listing/tag"
+      }
+    },
+    "attributes": {
+      "name": "card",
+      "cardInfo": {
+        "name": "card",
+        "summary": "Simple single-purpose cards that display or capture one focused piece of information.",
+        "cardThumbnailURL": null,
+        "notes": null
+      },
+      "color": "#10B981"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

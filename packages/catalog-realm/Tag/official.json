@@ -2,12 +2,12 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Game",
-      "color": "#37eb77",
+      "name": "Official",
+      "color": "#F97316",
       "cardInfo": {
         "notes": null,
-        "name": null,
-        "summary": "Cards and apps for gaming, game tracking, scoreboards, turn management, or any interactive game-related experience.",
+        "name": "Official",
+        "summary": "Cards and apps officially created and maintained by the Cardstack team. Guaranteed quality, ongoing support, and compatibility with the latest platform updates.",
         "cardThumbnailURL": null
       }
     },

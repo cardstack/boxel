@@ -3,14 +3,25 @@
     "type": "card",
     "attributes": {
       "name": "Proposal",
-      "color": "#A66DFA",
-      "cardDescription": null,
-      "cardThumbnailURL": null
+      "color": null,
+      "cardInfo": {
+        "notes": null,
+        "name": "Proposal",
+        "summary": "Proposal documents, client pitches, project proposals, business proposals, and contract proposals.",
+        "cardThumbnailURL": null
+      }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../tag",
+        "module": "../catalog-app/listing/tag",
         "name": "Tag"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
       }
     }
   }

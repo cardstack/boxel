@@ -1,20 +1,20 @@
 {
   "data": {
+    "type": "card",
     "meta": {
       "adoptsFrom": {
         "name": "Tag",
         "module": "../catalog-app/listing/tag"
       }
     },
-    "type": "card",
     "attributes": {
-      "name": "Poster",
-      "color": "#ff7f00",
+      "name": "planner",
+      "color": "#10B981",
       "cardInfo": {
-        "notes": null,
-        "name": "",
-        "summary": "Cards designed for creating posters, flyers, promotional visuals, or any print-ready or display-ready graphical layouts.",
-        "cardThumbnailURL": null
+        "name": "planner",
+        "summary": "Meal planners, project planners, schedule cards, and anything focused on planning ahead.",
+        "cardThumbnailURL": null,
+        "notes": null
       }
     },
     "relationships": {

@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "name": "Tag",
+        "module": "../catalog-app/listing/tag"
+      }
+    },
+    "attributes": {
+      "name": "community",
+      "color": "#F97316",
+      "cardInfo": {
+        "name": "community",
+        "summary": "Created and shared by the community. A friendly complement to the user-contributed tag.",
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}
