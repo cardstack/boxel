@@ -14,7 +14,9 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import Modifier from 'ember-modifier';
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 
 import { Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -22,6 +24,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import LinkOffIcon from '@cardstack/boxel-icons/link-off';
 
 import {
+  CardContextName,
   cardTypeName,
   extractCardReferenceUrls,
   isCardErrorJSONAPI,
@@ -34,7 +37,7 @@ import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 type CardSlotFormat = 'atom' | 'embedded' | 'fitted' | 'isolated';
 
@@ -86,8 +89,25 @@ interface Signature {
   };
 }
 
+// Fallback when no CardContext is provided (e.g. in tests without operator-mode)
+const DEFAULT_CARD_CONTEXT: CardContext = {
+  cardComponentModifier: class NoOpModifier extends Modifier<any> {
+    modify() {}
+  },
+  actions: undefined,
+  commandContext: undefined,
+  getCard: () => {},
+  getCards: () => {},
+  getCardCollection: () => {},
+};
+
 export default class RenderedMarkdown extends Component<Signature> {
   @service declare private store: StoreService;
+  @consume(CardContextName) declare private dynamicCardContext: CardContext;
+
+  private get cardContext(): CardContext {
+    return { ...DEFAULT_CARD_CONTEXT, ...this.dynamicCardContext };
+  }
 
   @tracked renderSlots: RenderSlot[] = [];
   @tracked private loadedCards = new Map<string, CardDef>();
@@ -300,6 +320,12 @@ export default class RenderedMarkdown extends Component<Signature> {
             <span
               class='markdown-bfm-card-slot markdown-bfm-card-slot--inline'
               data-test-markdown-bfm-inline-card
+              {{this.cardContext.cardComponentModifier
+                card=slot.card
+                format='data'
+                fieldType=undefined
+                fieldName=undefined
+              }}
             >
               <CardRenderer
                 @card={{slot.card}}
@@ -313,6 +339,12 @@ export default class RenderedMarkdown extends Component<Signature> {
                 {{if slot.style "markdown-bfm-card-slot--fitted"}}'
               style={{slot.style}}
               data-test-markdown-bfm-block-card
+              {{this.cardContext.cardComponentModifier
+                card=slot.card
+                format='data'
+                fieldType=undefined
+                fieldName=undefined
+              }}
             >
               <CardRenderer
                 @card={{slot.card}}
