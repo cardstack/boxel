@@ -117,17 +117,32 @@ export interface ParseValidationDetails {
  */
 const PARSEABLE_EXTENSIONS = ['.gts', '.gjs', '.ts'];
 
-/** Absolute path to the monorepo's packages/ directory. */
+/**
+ * Monorepo layout assumptions: the software-factory package lives at
+ * `packages/software-factory` alongside `packages/base`, `packages/host`,
+ * and `packages/boxel-ui`. These paths are used to construct the tsconfig
+ * path mappings for ember-tsc. If the deployment model changes (e.g.,
+ * packages are published independently), these will need to be
+ * reconfigured — likely via config injection rather than hardcoded paths.
+ */
 const PACKAGES_PATH = resolve(__dirname, '..', '..', '..');
-
-/** Absolute path to the monorepo's packages/base directory. */
 const BASE_PKG_PATH = join(PACKAGES_PATH, 'base');
-
-/** Absolute path to the host package (for test helper path mappings). */
 const HOST_PKG_PATH = join(PACKAGES_PATH, 'host');
 
-/** Absolute path to the software-factory package's node_modules. */
-const NODE_MODULES_PATH = resolve(__dirname, '..', '..', 'node_modules');
+/**
+ * Absolute path to the host package's node_modules. We symlink this (not
+ * software-factory's node_modules) because the host has all the Ember/Glimmer
+ * type declarations that realm .gts files import from (@ember/helper,
+ * @ember/modifier, @glimmer/tracking, @cardstack/boxel-ui, etc.). These
+ * modules are shimmed at runtime by the host app and have type declarations
+ * resolved through ember-source's stable types in the host's dependency tree.
+ *
+ * NOTE: This assumes the software-factory package is co-located with the host
+ * package in the monorepo. If we move to a different deployment model where
+ * these packages are separated, the node_modules path and the tsconfig path
+ * mappings below will need to be reconfigured.
+ */
+const NODE_MODULES_PATH = join(HOST_PKG_PATH, 'node_modules');
 
 /** Cached tsconfig content — doesn't change between runs. */
 let cachedTsconfigContent: string | undefined;
@@ -370,60 +385,73 @@ export class ParseValidationStep implements ValidationStepRunner {
       }
     }
 
-    // 3b: Parse JSON example files
+    // 3b: Parse JSON example files in parallel
     // readFile returns `.json` files as `document` (parsed object) not `content`
     // (raw string), since the realm API parses JSON before returning. When a
     // `document` is present, JSON syntax is already validated — we only need to
     // check card document structure. When raw `content` is present (e.g., from
     // mocks), we parse it ourselves.
-    for (let jsonUrl of jsonExampleUrls) {
-      try {
-        let readResult = await this.readFileFn(
-          targetRealmUrl,
-          jsonUrl,
-          fetchOpts,
-        );
-        if (!readResult.ok) {
-          let message = `Could not read ${jsonUrl}: ${readResult.error ?? 'read failed'}`;
-          log.warn(message);
-          allFileResults.push({
-            file: jsonUrl,
-            errors: [{ file: jsonUrl, line: 0, column: 0, message }],
-          });
-          allErrors.push({ file: jsonUrl, line: 0, message });
-          continue;
-        }
+    if (jsonExampleUrls.length > 0) {
+      let jsonSettled = await Promise.allSettled(
+        jsonExampleUrls.map(async (jsonUrl) => {
+          let readResult = await this.readFileFn(
+            targetRealmUrl,
+            jsonUrl,
+            fetchOpts,
+          );
+          if (!readResult.ok) {
+            return {
+              file: jsonUrl,
+              errors: [
+                {
+                  file: jsonUrl,
+                  line: 0,
+                  column: 0,
+                  message: `Could not read ${jsonUrl}: ${readResult.error ?? 'read failed'}`,
+                },
+              ] as ParseErrorData[],
+            };
+          }
 
-        let errors: ParseErrorData[];
-        if (readResult.document) {
-          // Realm returned a parsed document — JSON is valid, validate structure
-          errors = validateCardDocumentStructure(jsonUrl, readResult.document);
-        } else if (readResult.content != null) {
-          // Raw content (from mocks or non-standard readFile) — full parse + validate
-          errors = parseJsonFile(jsonUrl, readResult.content);
+          let errors: ParseErrorData[];
+          if (readResult.document) {
+            errors = validateCardDocumentStructure(
+              jsonUrl,
+              readResult.document,
+            );
+          } else if (readResult.content != null) {
+            errors = parseJsonFile(jsonUrl, readResult.content);
+          } else {
+            errors = [
+              {
+                file: jsonUrl,
+                line: 0,
+                column: 0,
+                message: `Could not read ${jsonUrl}: no content or document`,
+              },
+            ];
+          }
+          return { file: jsonUrl, errors };
+        }),
+      );
+
+      for (let i = 0; i < jsonSettled.length; i++) {
+        let outcome = jsonSettled[i];
+        let jsonUrl = jsonExampleUrls[i];
+        if (outcome.status === 'fulfilled') {
+          allFileResults.push(outcome.value);
+          for (let e of outcome.value.errors) {
+            allErrors.push({ file: e.file, line: e.line, message: e.message });
+          }
         } else {
-          let message = `Could not read ${jsonUrl}: no content or document`;
-          log.warn(message);
+          let message = `Parse failed: ${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}`;
+          log.warn(`Error parsing ${jsonUrl}: ${message}`);
           allFileResults.push({
             file: jsonUrl,
             errors: [{ file: jsonUrl, line: 0, column: 0, message }],
           });
           allErrors.push({ file: jsonUrl, line: 0, message });
-          continue;
         }
-
-        allFileResults.push({ file: jsonUrl, errors });
-        for (let e of errors) {
-          allErrors.push({ file: e.file, line: e.line, message: e.message });
-        }
-      } catch (err) {
-        let message = `Parse failed: ${err instanceof Error ? err.message : String(err)}`;
-        log.warn(`Error parsing ${jsonUrl}: ${message}`);
-        allFileResults.push({
-          file: jsonUrl,
-          errors: [{ file: jsonUrl, line: 0, column: 0, message }],
-        });
-        allErrors.push({ file: jsonUrl, line: 0, message });
       }
     }
 
@@ -681,7 +709,7 @@ async function runGlintCheck(
           noUnusedParameters: false,
           // qunit-dom augments QUnit's Assert type with .dom() — loaded
           // globally in test setup, so we include it as a type reference
-          types: ['qunit-dom'],
+          types: ['qunit-dom', '@cardstack/local-types'],
           paths: {
             'https://cardstack.com/base/*': [`${BASE_PKG_PATH}/*`],
             // Host test helpers — target realm test files import from these
@@ -690,6 +718,12 @@ async function runGlintCheck(
             '@cardstack/boxel-host/commands/*': [
               `${HOST_PKG_PATH}/app/commands/*`,
             ],
+            '@cardstack/boxel-ui/*': [
+              `${join(PACKAGES_PATH, 'boxel-ui', 'addon', 'src')}/*`,
+            ],
+            // Fallback: host's types/ directory provides type stubs for
+            // addons that don't ship their own declarations
+            '*': [`${HOST_PKG_PATH}/types/*`],
           },
         },
         include: ['**/*.ts', '**/*.gts', '**/*.gjs'],
