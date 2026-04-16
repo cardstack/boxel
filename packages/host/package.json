@@ -191,8 +191,9 @@
     "turndown": "^7.2.4",
     "typescript": "catalog:",
     "uuid": "catalog:",
-    "vite": "^7.2.7",
-    "wait-for-localhost-cli": "catalog:"
+    "vite": "^8.0.8",
+    "wait-for-localhost-cli": "catalog:",
+    "@glint/ember-tsc": "catalog:"
   },
   "dependencies": {
     "ember-modify-based-class-resource": "catalog:",
