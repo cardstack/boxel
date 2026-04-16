@@ -209,6 +209,7 @@ module('ValidationPipeline', function () {
       testResultsModuleUrl: 'https://example.test/test-results',
       lintResultsModuleUrl: 'https://example.test/lint-result',
       evalResultsModuleUrl: 'https://example.test/eval-result',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
       // Inject a fetchFilenames that returns no files so the test, lint,
       // and eval steps return "nothing to validate" without hitting a real realm
       fetchFilenames: async () => ({ filenames: [] }),

@@ -429,6 +429,19 @@ export class EvaluateModuleResult extends CardDef {
   @field deps = containsMany(StringField);
 }
 
+export class InstantiateCardInput extends CardDef {
+  @field moduleUrl = contains(StringField);
+  @field cardName = contains(StringField);
+  @field realmUrl = contains(StringField);
+  @field instanceData = contains(StringField);
+}
+
+export class InstantiateCardResult extends CardDef {
+  @field passed = contains(BooleanField);
+  @field error = contains(StringField);
+  @field stackTrace = contains(StringField);
+}
+
 export class JsonCard extends CardDef {
   @field json = contains(JsonField);
 }

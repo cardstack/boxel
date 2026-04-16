@@ -19,10 +19,12 @@ import { NoOpStepRunner } from './noop-step';
 import { TestValidationStep } from './test-step';
 import { LintValidationStep } from './lint-step';
 import { EvalValidationStep } from './eval-step';
+import { InstantiateValidationStep } from './instantiate-step';
 
 import type { TestValidationStepConfig } from './test-step';
 import type { LintValidationStepConfig } from './lint-step';
 import type { EvalValidationStepConfig } from './eval-step';
+import type { InstantiateValidationStepConfig } from './instantiate-step';
 
 import { logger } from '../logger';
 
@@ -153,6 +155,7 @@ export interface ValidationPipelineConfig {
   testResultsModuleUrl: string;
   lintResultsModuleUrl: string;
   evalResultsModuleUrl: string;
+  instantiateResultsModuleUrl: string;
   issueId?: string;
   /** Injected for testing — passed through to TestValidationStep, LintValidationStep, and EvalValidationStep. */
   fetchFilenames?: TestValidationStepConfig['fetchFilenames'];
@@ -194,11 +197,20 @@ export function createDefaultPipeline(
     fetchFilenames: config.fetchFilenames,
   };
 
+  let instantiateConfig: InstantiateValidationStepConfig = {
+    authorization: config.authorization,
+    serverToken: config.serverToken,
+    fetch: config.fetch,
+    realmServerUrl: config.realmServerUrl,
+    instantiateResultsModuleUrl: config.instantiateResultsModuleUrl,
+    issueId: config.issueId,
+  };
+
   return new ValidationPipeline([
     new NoOpStepRunner('parse'),
     new LintValidationStep(lintConfig),
     new EvalValidationStep(evalConfig),
-    new NoOpStepRunner('instantiate'),
+    new InstantiateValidationStep(instantiateConfig),
     new TestValidationStep(testConfig),
   ]);
 }
