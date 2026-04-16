@@ -47,7 +47,7 @@ module('factory-entrypoint', function (hooks) {
     cleanupProfile = undefined;
   });
 
-  function setupHassanProfile() {
+  function useTestProfile() {
     cleanupProfile = installTestProfile({
       username: 'hassan',
       matrixUrl: 'https://matrix.example.test/',
@@ -161,7 +161,7 @@ module('factory-entrypoint', function (hooks) {
   });
 
   test('runFactoryEntrypoint creates seed issue and loads brief data', async function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let summary = await runFactoryEntrypoint(
       {
@@ -231,7 +231,7 @@ module('factory-entrypoint', function (hooks) {
   });
 
   test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory module', async function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let capturedDarkfactoryModuleUrl: string | undefined;
 

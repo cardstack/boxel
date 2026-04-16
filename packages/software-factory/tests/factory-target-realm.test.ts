@@ -22,7 +22,7 @@ module('factory-target-realm', function (hooks) {
     cleanupProfile = undefined;
   });
 
-  function setupHassanProfile() {
+  function useTestProfile() {
     cleanupProfile = installTestProfile({
       username: 'hassan',
       matrixUrl: 'https://matrix.example.test/',
@@ -32,7 +32,7 @@ module('factory-target-realm', function (hooks) {
   }
 
   test('resolveFactoryTargetRealm resolves owner from active profile', function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -49,7 +49,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('resolveFactoryTargetRealm accepts an explicit realm server URL override', function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl: 'https://realms.example.test/boxel/hassan/personal/',
@@ -63,7 +63,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('resolveFactoryTargetRealm rejects when target realm URL is missing', function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     assert.throws(
       () =>
@@ -123,7 +123,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm creates the realm through the API', async function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -148,7 +148,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm reports when the realm already exists', async function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -168,7 +168,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm uses the canonical realm URL returned by create-realm', async function (assert) {
-    setupHassanProfile();
+    useTestProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl: 'https://realms.example.test/typed-by-user/personal/',
