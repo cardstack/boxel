@@ -190,9 +190,47 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       };
     }
 
-    // Step 2: Create the InstantiateResult card (status: running).
-    // Always create the artifact for consistency with other validation steps,
-    // even when there's nothing to validate.
+    // Check if there's anything to validate before creating artifacts
+    if (specInfos.length === 0) {
+      let hasModules = false;
+      try {
+        let filesResult = await this.fetchFilenamesFn(targetRealmUrl, {
+          authorization: this.config.authorization,
+          fetch: this.config.fetch,
+        });
+        hasModules = (filesResult.filenames ?? []).some(
+          (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
+        );
+      } catch {
+        // If we can't check filenames, treat as nothing to validate
+      }
+
+      if (!hasModules) {
+        // Truly nothing to validate (e.g., bootstrap) — no artifact
+        log.info('No Spec cards or card modules found — nothing to validate');
+        return { step: 'instantiate', passed: true, files: [], errors: [] };
+      }
+
+      // Modules exist but no specs — fail with actionable message
+      log.info('Card modules exist but no Spec cards found — failing');
+      return {
+        step: 'instantiate',
+        passed: false,
+        files: [],
+        errors: [
+          {
+            message:
+              'Card modules (.gts) exist but no Spec cards were found. Each entrypoint card needs a Catalog Spec with linkedExamples for instantiation validation.',
+          },
+        ],
+      };
+    }
+
+    log.info(
+      `Found ${specInfos.length} spec(s): ${specInfos.map((s) => s.cardName).join(', ')}`,
+    );
+
+    // Step 2: Create the InstantiateResult card (status: running)
     let slug = this.config.issueId
       ? deriveIssueSlug(this.config.issueId)
       : 'validation';
@@ -241,66 +279,6 @@ export class InstantiateValidationStep implements ValidationStepRunner {
       );
       instantiateResultId = `Validations/instantiate_${slug}-${seq}`;
     }
-
-    // Handle empty specs — complete artifact with appropriate status
-    if (specInfos.length === 0) {
-      let hasModules = false;
-      try {
-        let filesResult = await this.fetchFilenamesFn(targetRealmUrl, {
-          authorization: this.config.authorization,
-          fetch: this.config.fetch,
-        });
-        hasModules = (filesResult.filenames ?? []).some(
-          (f) => f.endsWith('.gts') && !f.endsWith('.test.gts'),
-        );
-      } catch {
-        // If we can't check filenames, treat as nothing to validate
-      }
-
-      let passed = !hasModules;
-      let errorMessage = hasModules
-        ? 'Card modules (.gts) exist but no Spec cards were found. Each entrypoint card needs a Catalog Spec with linkedExamples for instantiation validation.'
-        : undefined;
-
-      if (artifactCreated) {
-        await completeInstantiateResult(
-          instantiateResultId,
-          {
-            status: passed ? 'passed' : 'failed',
-            durationMs: 0,
-            cardResults: [],
-            errorMessage,
-          },
-          {
-            targetRealmUrl,
-            authorization: this.config.authorization,
-            fetch: this.config.fetch,
-          },
-        );
-      }
-
-      log.info(
-        hasModules
-          ? 'Card modules exist but no Spec cards found — failing'
-          : 'No Spec cards or card modules found — nothing to validate',
-      );
-      return {
-        step: 'instantiate',
-        passed,
-        files: [],
-        errors: errorMessage ? [{ message: errorMessage }] : [],
-        details: {
-          instantiateResultId,
-          cardsChecked: 0,
-          cardsWithErrors: 0,
-          cards: [],
-        } as unknown as Record<string, unknown>,
-      };
-    }
-
-    log.info(
-      `Found ${specInfos.length} spec(s): ${specInfos.map((s) => s.cardName).join(', ')}`,
-    );
 
     // Step 3: Instantiate each spec's card via sandbox (_run-command → host command)
     let startedAt = Date.now();
