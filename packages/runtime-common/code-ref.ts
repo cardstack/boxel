@@ -172,7 +172,7 @@ export function codeRefWithAbsoluteURL(
       if (opts?.trimExecutableExtension) {
         moduleURL = trimExecutableExtension(moduleURL);
       }
-      return { ...ref, module: moduleURL.href };
+      return { ...ref, module: moduleURL.href as RealmResourceIdentifier };
     } catch {
       return { ...ref };
     }
@@ -244,10 +244,17 @@ export function identifyCard(
   }
   visited.add(card);
 
-  let ref = Loader.identify(card);
-  if (ref) {
+  let identified = Loader.identify(card);
+  if (identified) {
+    let ref = {
+      ...identified,
+      module: identified.module as RealmResourceIdentifier,
+    };
     return maybeRelativeURL
-      ? { ...ref, module: maybeRelativeURL(ref.module) }
+      ? {
+          ...ref,
+          module: maybeRelativeURL(ref.module) as RealmResourceIdentifier,
+        }
       : ref;
   }
 
@@ -483,8 +490,8 @@ function isRelativePath(moduleId: unknown): moduleId is string {
 }
 
 type VisitModuleDep = (
-  moduleURL: string,
-  setModuleURL: (newURL: string) => void,
+  moduleURL: RealmResourceIdentifier,
+  setModuleURL: (newURL: RealmResourceIdentifier) => void,
 ) => void;
 
 function visitCodeRef(codeRef: CodeRef, visit: VisitModuleDep): void {

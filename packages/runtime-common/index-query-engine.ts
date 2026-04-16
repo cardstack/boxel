@@ -2,6 +2,7 @@ import type * as JSONTypes from 'json-typescript';
 import flatten from 'lodash/flatten';
 import stringify from 'safe-stable-stringify';
 import type { ResolvedCodeRef } from './index';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import {
   type CardResource,
   type CodeRef,
@@ -675,7 +676,7 @@ export class IndexQueryEngine {
             module: card.used_render_type.substring(
               0,
               moduleNameSeparatorIndex,
-            ),
+            ) as RealmResourceIdentifier,
             name: card.used_render_type.substring(moduleNameSeparatorIndex + 1),
           };
         }

@@ -14,6 +14,7 @@ import {
   resolveCardReference,
   unresolveCardReference,
   isRegisteredPrefix,
+  type RealmResourceIdentifier,
 } from './card-reference-resolver';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
@@ -709,7 +710,7 @@ export function codeRefFromInternalKey(
     return;
   }
   return {
-    module: internalKey.slice(0, lastSlash),
+    module: internalKey.slice(0, lastSlash) as RealmResourceIdentifier,
     name: internalKey.slice(lastSlash + 1),
   };
 }
