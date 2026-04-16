@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 import type {
@@ -26,15 +24,16 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import AuthedFetchCommand from './authed-fetch';
+import CanReadRealmCommand from './can-read-realm';
 import CreateSpecCommand from './create-specs';
+import GetCatalogRealmUrlsCommand from './get-catalog-realm-urls';
+import GetCardCommand from './get-card';
+import GetRealmOfUrlCommand from './get-realm-of-url';
 import OneShotLlmRequestCommand from './one-shot-llm-request';
 import SearchAndChooseCommand from './search-and-choose';
 import { SearchCardsByTypeAndTitleCommand } from './search-cards';
-
-import type NetworkService from '../services/network';
-import type RealmService from '../services/realm';
-import type RealmServerService from '../services/realm-server';
-import type StoreService from '../services/store';
+import StoreAddCommand from './store-add';
 
 type ListingType = 'card' | 'skill' | 'theme' | 'field';
 
@@ -52,18 +51,14 @@ export default class ListingCreateCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingCreateInput,
   typeof BaseCommandModule.ListingCreateResult
 > {
-  @service declare private store: StoreService;
-  @service declare private network: NetworkService;
-  @service declare private realm: RealmService;
-  @service declare private realmServer: RealmServerService;
-
   static actionVerb = 'Create';
   description = 'Create a catalog listing for an example card';
 
-  get catalogRealm() {
-    return this.realmServer.catalogRealmURLs.find((realm) =>
-      realm.endsWith('/catalog/'),
-    );
+  private async getCatalogRealm(): Promise<string | undefined> {
+    const { urls } = await new GetCatalogRealmUrlsCommand(
+      this.commandContext,
+    ).execute(undefined);
+    return urls.find((realm: string) => realm.endsWith('/catalog/'));
   }
 
   async getInputType() {
@@ -74,7 +69,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
 
   requireInputFields = ['codeRef', 'targetRealm'];
 
-  private sanitizeModuleList(modulesToCreate: Iterable<string>) {
+  private async sanitizeModuleList(
+    modulesToCreate: Iterable<string>,
+  ): Promise<string[]> {
     // Normalize to extensionless URLs before deduplication so that e.g.
     // "https://…/foo.gts" and "https://…/foo" don't produce separate entries.
     const seen = new Map<string, string>(); // normalized → original
@@ -85,30 +82,39 @@ export default class ListingCreateCommand extends HostBaseCommand<
       }
     }
     let uniqueModules = Array.from(seen.values());
-    return uniqueModules.filter((dep) => {
-      // Exclude scoped CSS requests
-      if (isScopedCSSRequest(dep)) {
-        return false;
-      }
-      // Exclude known global/package/icon sources
-      if (
-        [
-          'https://cardstack.com',
-          'https://packages',
-          'https://boxel-icons.boxel.ai',
-        ].some((urlStem) => dep.startsWith(urlStem))
-      ) {
-        return false;
-      }
 
-      // Only allow modulesToCreate that belong to a realm we can read
-      const url = new URL(dep);
-      const realmURL = this.realm.realmOfURL(url);
-      if (!realmURL) {
-        return false;
-      }
-      return this.realm.canRead(realmURL.href);
-    });
+    const results = await Promise.all(
+      uniqueModules.map(async (dep) => {
+        // Exclude scoped CSS requests
+        if (isScopedCSSRequest(dep)) {
+          return null;
+        }
+        // Exclude known global/package/icon sources
+        if (
+          [
+            'https://cardstack.com',
+            'https://packages',
+            'https://boxel-icons.boxel.ai',
+          ].some((urlStem) => dep.startsWith(urlStem))
+        ) {
+          return null;
+        }
+
+        // Only allow modulesToCreate that belong to a realm we can read
+        const { realmUrl } = await new GetRealmOfUrlCommand(
+          this.commandContext,
+        ).execute({ url: dep });
+        if (!realmUrl) {
+          return null;
+        }
+        const { canRead } = await new CanReadRealmCommand(
+          this.commandContext,
+        ).execute({ realmUrl });
+        return canRead ? dep : null;
+      }),
+    );
+
+    return results.filter((dep): dep is string => dep !== null);
   }
 
   protected async run(
@@ -127,6 +133,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     }
 
     let listingType = await this.guessListingType(codeRef);
+    const catalogRealm = await this.getCatalogRealm();
 
     let relationships: Record<string, { links: { self: string } }> = {};
     if (openCardIds && openCardIds.length > 0) {
@@ -141,13 +148,16 @@ export default class ListingCreateCommand extends HostBaseCommand<
         relationships,
         meta: {
           adoptsFrom: {
-            module: `${this.catalogRealm}catalog-app/listing/listing`,
+            module: `${catalogRealm}catalog-app/listing/listing`,
             name: listingSubClass[listingType],
           },
         },
       },
     };
-    const listing = await this.store.add(listingDoc, { realm: targetRealm });
+    const listing = await new StoreAddCommand(this.commandContext).execute({
+      document: listingDoc,
+      realm: targetRealm,
+    });
 
     const commandModule = await this.loadCommandModule();
     const listingCard = listing as CardAPI.CardDef;
@@ -229,41 +239,39 @@ export default class ListingCreateCommand extends HostBaseCommand<
     moduleUrl: string, // the module URL of the card type being listed
     codeRef: ResolvedCodeRef, // the specific export being listed
   ): Promise<Spec[]> {
-    const resourceRealm =
-      this.realm.realmOfURL(new URL(resourceUrl))?.href ?? targetRealm;
-    const url = `${resourceRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
-    const response = await this.network.authedFetch(url, {
-      headers: { Accept: SupportedMimeType.JSONAPI },
-    });
+    const { realmUrl: resourceRealmUrl } = await new GetRealmOfUrlCommand(
+      this.commandContext,
+    ).execute({ url: resourceUrl });
+    const resourceRealm = resourceRealmUrl || targetRealm;
+    const depUrl = `${resourceRealm}_dependencies?url=${encodeURIComponent(resourceUrl)}`;
+    const { ok, body: jsonApiResponse } = await new AuthedFetchCommand(
+      this.commandContext,
+    ).execute({ url: depUrl, acceptHeader: SupportedMimeType.JSONAPI });
 
-    if (!response.ok) {
+    if (!ok) {
       console.warn('Failed to fetch dependencies for specs');
       (listing as any).specs = [];
       return [];
     }
-
-    const jsonApiResponse = (await response.json()) as {
-      data?: Array<{
-        type: string;
-        id: string;
-        attributes?: {
-          dependencies?: string[];
-        };
-      }>;
-    };
 
     // Collect all modules (main + dependencies). Deduplication happens in sanitizeModuleList().
     // The _dependencies endpoint excludes the queried resource itself, so we
     // explicitly include the module URL to ensure a spec is created for it.
     const modulesToCreate: string[] = [moduleUrl];
 
-    jsonApiResponse.data?.forEach((entry) => {
+    (
+      jsonApiResponse as {
+        data?: Array<{
+          attributes?: { dependencies?: string[] };
+        }>;
+      }
+    ).data?.forEach((entry) => {
       if (entry.attributes?.dependencies) {
         modulesToCreate.push(...entry.attributes.dependencies);
       }
     });
 
-    const sanitizedModules = this.sanitizeModuleList(modulesToCreate);
+    const sanitizedModules = await this.sanitizeModuleList(modulesToCreate);
 
     // Create specs for all unique modules
     const uniqueSpecsById = new Map<string, Spec>();
@@ -400,7 +408,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
       await Promise.all(
         openCardIds.map(async (openCardId) => {
           try {
-            const instance = await this.store.get<CardAPI.CardDef>(openCardId);
+            const instance = await new GetCardCommand(
+              this.commandContext,
+            ).execute({ cardId: openCardId });
             if (isCardInstance(instance)) {
               addCard(instance as CardAPI.CardDef);
             } else {
@@ -483,9 +493,10 @@ export default class ListingCreateCommand extends HostBaseCommand<
   }
 
   private async autoLinkLicense(listing: CardAPI.CardDef) {
+    const catalogRealm = await this.getCatalogRealm();
     const selected = await this.chooseCards({
       candidateTypeCodeRef: {
-        module: `${this.catalogRealm}catalog-app/listing/license`,
+        module: `${catalogRealm}catalog-app/listing/license`,
         name: 'License',
       } as ResolvedCodeRef,
     });
@@ -496,10 +507,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
     listing: CardAPI.CardDef,
     codeRef: ResolvedCodeRef,
   ) {
+    const catalogRealm = await this.getCatalogRealm();
     const selected = await this.chooseCards(
       {
         candidateTypeCodeRef: {
-          module: `${this.catalogRealm}catalog-app/listing/tag`,
+          module: `${catalogRealm}catalog-app/listing/tag`,
           name: 'Tag',
         } as ResolvedCodeRef,
         sourceContextCodeRef: codeRef,
@@ -521,10 +533,11 @@ export default class ListingCreateCommand extends HostBaseCommand<
     listing: CardAPI.CardDef,
     codeRef: ResolvedCodeRef,
   ) {
+    const catalogRealm = await this.getCatalogRealm();
     const selected = await this.chooseCards(
       {
         candidateTypeCodeRef: {
-          module: `${this.catalogRealm}catalog-app/listing/category`,
+          module: `${catalogRealm}catalog-app/listing/category`,
           name: 'Category',
         } as ResolvedCodeRef,
         sourceContextCodeRef: codeRef,

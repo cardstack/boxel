@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 import { isCardInstance, SupportedMimeType } from '@cardstack/runtime-common';
@@ -11,18 +9,15 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import AuthedFetchCommand from './authed-fetch';
+import CanReadRealmCommand from './can-read-realm';
 import CreateSpecCommand from './create-specs';
-
-import type NetworkService from '../services/network';
-import type RealmService from '../services/realm';
+import GetRealmOfUrlCommand from './get-realm-of-url';
 
 export default class ListingUpdateSpecsCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingUpdateSpecsInput,
   typeof BaseCommandModule.ListingUpdateSpecsResult
 > {
-  @service declare private network: NetworkService;
-  @service declare private realm: RealmService;
-
   static actionVerb = 'Update';
   description = 'Update listing specs based on example dependencies';
   requireInputFields = ['listing'];
@@ -33,31 +28,38 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
     return ListingUpdateSpecsInput;
   }
 
-  private sanitizeDeps(deps: string[]) {
-    return deps.filter((dep) => {
-      if (isScopedCSSRequest(dep)) {
-        return false;
-      }
-      if (
-        [
-          'https://cardstack.com',
-          'https://packages',
-          'https://boxel-icons.boxel.ai',
-        ].some((urlStem) => dep.startsWith(urlStem))
-      ) {
-        return false;
-      }
-      try {
-        const url = new URL(dep);
-        const realmURL = this.realm.realmOfURL(url);
-        if (!realmURL) {
-          return false;
+  private async sanitizeDeps(deps: string[]): Promise<string[]> {
+    const results = await Promise.all(
+      deps.map(async (dep) => {
+        if (isScopedCSSRequest(dep)) {
+          return null;
         }
-        return this.realm.canRead(realmURL.href);
-      } catch {
-        return false;
-      }
-    });
+        if (
+          [
+            'https://cardstack.com',
+            'https://packages',
+            'https://boxel-icons.boxel.ai',
+          ].some((urlStem) => dep.startsWith(urlStem))
+        ) {
+          return null;
+        }
+        try {
+          const { realmUrl } = await new GetRealmOfUrlCommand(
+            this.commandContext,
+          ).execute({ url: dep });
+          if (!realmUrl) {
+            return null;
+          }
+          const { canRead } = await new CanReadRealmCommand(
+            this.commandContext,
+          ).execute({ realmUrl });
+          return canRead ? dep : null;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    return results.filter((dep): dep is string => dep !== null);
   }
 
   protected async run(
@@ -82,28 +84,25 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
       throw new Error('No example found in listing to derive specs from');
     }
 
-    const response = await this.network.authedFetch(
-      `${targetRealm}_dependencies?url=${encodeURIComponent(exampleId)}`,
-      { headers: { Accept: SupportedMimeType.JSONAPI } },
-    );
-    if (!response.ok) {
+    const { ok, body: jsonApiResponse } = await new AuthedFetchCommand(
+      this.commandContext,
+    ).execute({
+      url: `${targetRealm}_dependencies?url=${encodeURIComponent(exampleId)}`,
+      acceptHeader: SupportedMimeType.JSONAPI,
+    });
+    if (!ok) {
       throw new Error('Failed to fetch dependencies for listing');
     }
 
-    const jsonApiResponse = (await response.json()) as {
-      data?: Array<{
-        type: string;
-        id: string;
-        attributes?: {
-          dependencies?: string[];
-        };
-      }>;
-    };
-
     // Extract dependencies from all entries in the JSONAPI response
     const deps: string[] = [];
-    if (jsonApiResponse.data && Array.isArray(jsonApiResponse.data)) {
-      for (const entry of jsonApiResponse.data) {
+    const responseData = (
+      jsonApiResponse as {
+        data?: Array<{ attributes?: { dependencies?: string[] } }>;
+      }
+    ).data;
+    if (responseData && Array.isArray(responseData)) {
+      for (const entry of responseData) {
         if (
           entry.attributes?.dependencies &&
           Array.isArray(entry.attributes.dependencies)
@@ -113,7 +112,7 @@ export default class ListingUpdateSpecsCommand extends HostBaseCommand<
       }
     }
 
-    const sanitizedDeps = this.sanitizeDeps(deps);
+    const sanitizedDeps = await this.sanitizeDeps(deps);
     const commandModule = await this.loadCommandModule();
     if (!sanitizedDeps.length) {
       (listing as any).specs = [];

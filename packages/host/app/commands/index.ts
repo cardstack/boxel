@@ -7,6 +7,8 @@ import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-bl
 import * as AskAiCommandModule from './ask-ai';
 import * as CreateListingPRRequestCommandModule from './bot-requests/create-listing-pr-request';
 import * as SendBotTriggerEventCommandModule from './bot-requests/send-bot-trigger-event';
+import * as AuthedFetchCommandModule from './authed-fetch';
+import * as CanReadRealmCommandModule from './can-read-realm';
 import * as CancelIndexingJobCommandModule from './cancel-indexing-job';
 import * as CheckCorrectnessCommandModule from './check-correctness';
 import * as CopyAndEditCommandModule from './copy-and-edit';
@@ -18,14 +20,20 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecCommandModule from './create-specs';
 import * as CreateSubmissionWorkflowCommandModule from './create-submission-workflow';
+import * as ExecuteAtomicOperationsCommandModule from './execute-atomic-operations';
+import * as FetchCardJsonCommandModule from './fetch-card-json';
 import * as FullReindexRealmCommandModule from './full-reindex-realm';
 import * as GenerateExampleCardsCommandModule from './generate-example-cards';
 import * as GenerateReadmeSpecCommandModule from './generate-readme-spec';
 import * as GenerateThemeExampleCommandModule from './generate-theme-example';
 import * as GetAllRealmMetasCommandModule from './get-all-realm-metas';
+import * as GetAvailableRealmUrlsCommandModule from './get-available-realm-urls';
 import * as GetCardCommandModule from './get-card';
+import * as GetCatalogRealmUrlsCommandModule from './get-catalog-realm-urls';
 import * as GetCardTypeSchemaCommandModule from './get-card-type-schema';
+import * as GetDefaultWritableRealmCommandModule from './get-default-writable-realm';
 import * as GetEventsFromRoomCommandModule from './get-events-from-room';
+import * as GetRealmOfUrlCommandModule from './get-realm-of-url';
 import * as GetUserSystemCardCommandModule from './get-user-system-card';
 import * as InvalidateRealmUrlsCommandModule from './invalidate-realm-urls';
 import * as InviteUserToRoomCommandModule from './invite-user-to-room';
@@ -47,6 +55,7 @@ import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
 import * as PatchFieldsCommandModule from './patch-fields';
 import * as PatchThemeCommandModule from './patch-theme';
+import * as PersistModuleInspectorViewCommandModule from './persist-module-inspector-view';
 import * as PopulateWithSampleDataCommandModule from './populate-with-sample-data';
 import * as PreviewFormatCommandModule from './preview-format';
 import * as ReadCardForAiAssistantCommandModule from './read-card-for-ai-assistant';
@@ -56,6 +65,7 @@ import * as ReadTextFileCommandModule from './read-text-file';
 import * as RegisterBotCommandModule from './register-bot';
 import * as ReindexRealmCommandModule from './reindex-realm';
 import * as SaveCardCommandModule from './save-card';
+import * as StoreAddCommandModule from './store-add';
 import * as SearchAndChooseCommandModule from './search-and-choose';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SearchGoogleImagesCommandModule from './search-google-images';
@@ -87,6 +97,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/ask-ai',
     AskAiCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/authed-fetch',
+    AuthedFetchCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/apply-markdown-edit',
@@ -135,6 +149,14 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/generate-theme-example',
     GenerateThemeExampleCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/execute-atomic-operations',
+    ExecuteAtomicOperationsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/fetch-card-json',
+    FetchCardJsonCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/full-reindex-realm',
@@ -211,6 +233,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-theme',
     PatchThemeCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/persist-module-inspector-view',
+    PersistModuleInspectorViewCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/preview-format',
@@ -369,6 +395,30 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     GetAllRealmMetasCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-available-realm-urls',
+    GetAvailableRealmUrlsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-catalog-realm-urls',
+    GetCatalogRealmUrlsCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/can-read-realm',
+    CanReadRealmCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-default-writable-realm',
+    GetDefaultWritableRealmCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/get-realm-of-url',
+    GetRealmOfUrlCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/store-add',
+    StoreAddCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/get-user-system-card',
     GetUserSystemCardCommandModule,
   );
@@ -400,14 +450,22 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   CopyCardToStackCommandModule.default,
   CopyFileToRealmCommandModule.default,
   CopySourceCommandModule.default,
+  AuthedFetchCommandModule.default,
+  CanReadRealmCommandModule.default,
   CreateAIAssistantRoomCommandModule.default,
   CopyAndEditCommandModule.default,
   CreateSpecCommandModule.default,
+  ExecuteAtomicOperationsCommandModule.default,
+  FetchCardJsonCommandModule.default,
   FullReindexRealmCommandModule.default,
   GenerateExampleCardsCommandModule.default,
   GenerateReadmeSpecCommandModule.default,
   GetAllRealmMetasCommandModule.default,
+  GetAvailableRealmUrlsCommandModule.default,
+  GetDefaultWritableRealmCommandModule.default,
+  GetCatalogRealmUrlsCommandModule.default,
   GetCardCommandModule.default,
+  GetRealmOfUrlCommandModule.default,
   GetCardTypeSchemaCommandModule.default,
   GetUserSystemCardCommandModule.default,
   GetEventsFromRoomCommandModule.default,
@@ -434,6 +492,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   PatchCodeCommandModule.default,
   PatchFieldsCommandModule.default,
   PatchThemeCommandModule.default,
+  PersistModuleInspectorViewCommandModule.default,
   PopulateWithSampleDataCommandModule.default,
   PreviewFormatCommandModule.default,
   ReadCardForAiAssistantCommandModule.default,
@@ -443,6 +502,7 @@ export const HostCommandClasses: (typeof HostBaseCommand<any, any>)[] = [
   RegisterBotCommandModule.default,
   ReindexRealmCommandModule.default,
   SaveCardCommandModule.default,
+  StoreAddCommandModule.default,
   SerializeCardCommandModule.default,
   SearchAndChooseCommandModule.default,
   SearchCardsCommandModule.SearchCardsByQueryCommand,

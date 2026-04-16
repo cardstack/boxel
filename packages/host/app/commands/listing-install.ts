@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import type {
   ListingPathResolver,
   ModuleResource,
@@ -13,15 +11,9 @@ import {
   planInstanceInstall,
   PlanBuilder,
   extractRelationshipIds,
-  isCardInstance,
-  isSingleCardDocument,
   type Relationship,
 } from '@cardstack/runtime-common';
 import { logger } from '@cardstack/runtime-common';
-import type {
-  AtomicOperation,
-  AtomicOperationResult,
-} from '@cardstack/runtime-common/atomic-document';
 import type { CopyInstanceMeta } from '@cardstack/runtime-common/catalog';
 import type { CopyModuleMeta } from '@cardstack/runtime-common/catalog';
 
@@ -30,9 +22,13 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type CardService from '../services/card-service';
-import type RealmServerService from '../services/realm-server';
-import type StoreService from '../services/store';
+import ExecuteAtomicOperationsCommand from './execute-atomic-operations';
+import FetchCardJsonCommand from './fetch-card-json';
+import GetAvailableRealmUrlsCommand from './get-available-realm-urls';
+import GetCardCommand from './get-card';
+import ReadSourceCommand from './read-source';
+import SerializeCardCommand from './serialize-card';
+
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 const log = logger('catalog:install');
@@ -41,10 +37,6 @@ export default class ListingInstallCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput,
   typeof BaseCommandModule.ListingInstallResult
 > {
-  @service declare private realmServer: RealmServerService;
-  @service declare private cardService: CardService;
-  @service declare private store: StoreService;
-
   description =
     'Install catalog listing with bringing them to code mode, and then remixing them via AI';
 
@@ -59,11 +51,13 @@ export default class ListingInstallCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<BaseCommandModule.ListingInstallResult> {
-    let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
 
     let realmUrl = new RealmPaths(new URL(realm)).url;
 
+    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+      this.commandContext,
+    ).execute(undefined);
     if (!realmUrls.includes(realmUrl)) {
       throw new Error(`Invalid realm: ${realmUrl}`);
     }
@@ -107,62 +101,45 @@ export default class ListingInstallCommand extends HostBaseCommand<
     let sourceOperations = await Promise.all(
       plan.modulesToInstall.map(async (moduleMeta: CopyModuleMeta) => {
         let { sourceModule, targetModule } = moduleMeta;
-        let res = await this.cardService.getSource(new URL(sourceModule));
+        let { content } = await new ReadSourceCommand(
+          this.commandContext,
+        ).execute({ path: sourceModule });
         let moduleResource: ModuleResource = {
           type: 'source',
-          attributes: { content: res.content },
+          attributes: { content },
           meta: {},
         };
         let href = targetModule + '.gts';
-        return {
-          op: 'add' as const,
-          href,
-          data: moduleResource,
-        };
+        return { op: 'add' as const, href, data: moduleResource };
       }),
     );
+
     let instanceOperations = await Promise.all(
       plan.instancesCopy.map(async (copyInstanceMeta: CopyInstanceMeta) => {
         let { sourceCard } = copyInstanceMeta;
-        let doc = await this.cardService.fetchJSON(sourceCard.id);
-        if (!isSingleCardDocument(doc)) {
+        let { document: doc } = await new FetchCardJsonCommand(
+          this.commandContext,
+        ).execute({ url: sourceCard.id });
+        if (!doc || !('data' in doc)) {
           throw new Error('We are only expecting single documents returned');
         }
-        delete doc.data.id;
-        delete doc.included;
-        let cardResource: LooseCardResource = doc?.data;
+        delete (doc as any).data.id;
+        delete (doc as any).included;
+        let cardResource: LooseCardResource = (doc as any).data as LooseCardResource;
         let href = join(realmUrl, copyInstanceMeta.lid) + '.json';
-        return {
-          op: 'add' as const,
-          href,
-          data: cardResource,
-        };
+        return { op: 'add' as const, href, data: cardResource };
       }),
     );
 
-    let operations: AtomicOperation[] = [
-      ...sourceOperations,
-      ...instanceOperations,
-    ];
+    const operations = [...sourceOperations, ...instanceOperations];
 
-    let results = await this.cardService.executeAtomicOperations(
-      operations,
-      new URL(realmUrl),
+    const { results: atomicResults } = await new ExecuteAtomicOperationsCommand(
+      this.commandContext,
+    ).execute({ realmUrl, operations });
+
+    let writtenFiles = (atomicResults as Array<Record<string, any>>).map(
+      (r) => r.data?.id,
     );
-
-    let atomicResults: AtomicOperationResult[] | undefined =
-      results['atomic:results'];
-    if (!Array.isArray(atomicResults)) {
-      let detail = (results as { errors?: Array<{ detail?: string }> })
-        .errors?.[0]?.detail;
-      if (detail?.includes('filter refers to a nonexistent type')) {
-        throw new Error(
-          'Please click "Update Specs" on the listing and make sure all specs are linked.',
-        );
-      }
-      throw new Error(detail);
-    }
-    let writtenFiles = atomicResults.map((r) => r.data.id);
     log.debug('=== Final Results ===');
     log.debug(JSON.stringify(writtenFiles, null, 2));
 
@@ -193,23 +170,17 @@ export default class ListingInstallCommand extends HostBaseCommand<
       }
       visited.add(id);
 
-      let cachedInstance = this.store.peek(id);
-      let relationships: Record<string, Relationship | Relationship[]> = {};
-      let baseUrl = id;
-      let instance = isCardInstance(cachedInstance)
-        ? cachedInstance
-        : await this.store.get(id);
-      if (!isCardInstance(instance)) {
-        throw new Error(`Expected card instance for ${id}`);
-      }
+      let instance = (await new GetCardCommand(this.commandContext).execute({
+        cardId: id,
+      })) as CardDef;
       instancesById.set(instance.id ?? id, instance);
-      let serialized = await this.cardService.serializeCard(instance, {
-        omitQueryFields: true,
-      });
-      if (serialized.data.id) {
-        baseUrl = serialized.data.id;
-      }
-      relationships = serialized.data.relationships ?? {};
+
+      let { json: serialized } = await new SerializeCardCommand(
+        this.commandContext,
+      ).execute({ cardId: id });
+      let baseUrl: string = (serialized as any)?.data?.id ?? id;
+      let relationships: Record<string, Relationship | Relationship[]> =
+        (serialized as any)?.data?.relationships ?? {};
 
       let entries = Object.entries(relationships);
       log.debug(`Relationships for ${id}:`);

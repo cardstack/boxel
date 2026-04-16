@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import {
   cardIdToURL,
   codeRefWithAbsoluteURL,
@@ -17,16 +15,14 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import HostBaseCommand from '../lib/host-base-command';
 
 import CopyCardToRealmCommand from './copy-card';
+import GetAvailableRealmUrlsCommand from './get-available-realm-urls';
 import SaveCardCommand from './save-card';
 
-import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class ListingUseCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
 > {
-  @service declare private realmServer: RealmServerService;
-
   description = 'Catalog listing use command';
 
   async getInputType() {
@@ -40,7 +36,6 @@ export default class ListingUseCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
-    let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
 
     const listing = listingInput as Listing;
@@ -48,6 +43,9 @@ export default class ListingUseCommand extends HostBaseCommand<
     let realmUrl = new RealmPaths(new URL(realm)).url;
 
     // Make sure realm is valid
+    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+      this.commandContext,
+    ).execute(undefined);
     if (!realmUrls.includes(realmUrl)) {
       throw new Error(`Invalid realm: ${realmUrl}`);
     }

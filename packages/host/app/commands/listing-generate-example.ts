@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import { resolveAdoptsFrom } from '@cardstack/runtime-common/code-ref';
 import { realmURL } from '@cardstack/runtime-common/constants';
 
@@ -9,15 +7,12 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 import HostBaseCommand from '../lib/host-base-command';
 
 import { GenerateExampleCardsOneShotCommand } from './generate-example-cards';
-
-import type RealmService from '../services/realm';
+import GetDefaultWritableRealmCommand from './get-default-writable-realm';
 
 export default class ListingGenerateExampleCommand extends HostBaseCommand<
   typeof BaseCommandModule.GenerateListingExampleInput,
   typeof BaseCommandModule.CreateInstanceResult
 > {
-  @service declare private realm: RealmService;
-
   static actionVerb = 'Generate Example';
   description = 'Generate a new example card for the listing and link it.';
 
@@ -49,11 +44,16 @@ export default class ListingGenerateExampleCommand extends HostBaseCommand<
       );
     }
 
+    const { realmPath: defaultWritableRealmPath } =
+      await new GetDefaultWritableRealmCommand(this.commandContext).execute(
+        undefined,
+      );
     const targetRealm =
       input.realm ||
       (referenceExample as any)[realmURL]?.href ||
       listing[realmURL]?.href ||
-      this.realm.defaultWritableRealm?.path;
+      defaultWritableRealmPath ||
+      undefined;
 
     const generator = new GenerateExampleCardsOneShotCommand(
       this.commandContext,

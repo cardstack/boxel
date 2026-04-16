@@ -1,5 +1,3 @@
-import { service } from '@ember/service';
-
 import {
   isResolvedCodeRef,
   RealmPaths,
@@ -14,20 +12,18 @@ import HostBaseCommand from '../lib/host-base-command';
 import { skillCardURL, devSkillId, envSkillId } from '../lib/utils';
 
 import UseAiAssistantCommand from './ai-assistant';
+import GetAvailableRealmUrlsCommand from './get-available-realm-urls';
 import ListingInstallCommand from './listing-install';
+import PersistModuleInspectorViewCommand from './persist-module-inspector-view';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
 
-import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type RealmServerService from '../services/realm-server';
 import type { Listing } from '@cardstack/catalog/catalog-app/listing/listing';
 
 export default class RemixCommand extends HostBaseCommand<
   typeof BaseCommandModule.ListingInstallInput
 > {
-  @service declare private operatorModeStateService: OperatorModeStateService;
-  @service declare private realmServer: RealmServerService;
 
   static actionVerb = 'Remix';
 
@@ -80,9 +76,11 @@ export default class RemixCommand extends HostBaseCommand<
           },
         );
 
-        this.operatorModeStateService.persistModuleInspectorView(
-          codePath + '.gts',
-          'preview',
+        await new PersistModuleInspectorViewCommand(this.commandContext).execute(
+          {
+            codePath: codePath + '.gts',
+            moduleInspectorView: 'preview',
+          },
         );
       }
 
@@ -112,11 +110,13 @@ export default class RemixCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.ListingInstallInput,
   ): Promise<undefined> {
-    let realmUrls = this.realmServer.availableRealmURLs;
     let { realm, listing: listingInput } = input;
     let realmUrl = new RealmPaths(new URL(realm)).url;
 
     // Make sure realm is valid
+    let { urls: realmUrls } = await new GetAvailableRealmUrlsCommand(
+      this.commandContext,
+    ).execute(undefined);
     if (!realmUrls.includes(realmUrl)) {
       throw new Error(`Invalid realm: ${realmUrl}`);
     }
