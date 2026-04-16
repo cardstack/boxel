@@ -20,13 +20,14 @@ import {
 } from './constants';
 import { CardError } from './error';
 import { cardIdToURL } from './card-reference-resolver';
+import type { RealmResourceIdentifier } from './card-reference-resolver';
 import type { LooseCardResource, FileMetaResource } from './index';
 import { trimExecutableExtension } from './index';
 import { resolveCardReference } from './card-reference-resolver';
 import type { RuntimeDependencyTrackingContext } from './dependency-tracker';
 
 export type ResolvedCodeRef = {
-  module: string;
+  module: RealmResourceIdentifier;
   name: string;
 };
 

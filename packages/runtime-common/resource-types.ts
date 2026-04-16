@@ -1,6 +1,10 @@
 import type { RealmInfo } from './realm';
 import { type CodeRef, isCodeRef, moduleFrom } from './code-ref';
 import { resolveCardReference } from './card-reference-resolver';
+import type {
+  RealmResourceIdentifier,
+  RealmIdentifier,
+} from './card-reference-resolver';
 import type { Query } from './query';
 
 // Metadata for a query-based linksTo/linksToMany field on a FileDef subclass,
@@ -31,8 +35,8 @@ export interface ModuleResource {
 }
 
 //cards
-export type Saved = string;
-export type Unsaved = string | undefined;
+export type Saved = RealmResourceIdentifier;
+export type Unsaved = RealmResourceIdentifier | undefined;
 export interface Meta {
   adoptsFrom: CodeRef;
   fields?: CardFields;
@@ -69,12 +73,12 @@ export type CardResourceMeta = Meta & {
   lastModified?: number;
   resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
-  realmURL?: string;
+  realmURL?: RealmIdentifier;
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
   realmInfo?: RealmInfo;
-  realmURL?: string;
+  realmURL?: RealmIdentifier;
   queryFieldDefs?: Record<string, QueryFieldMeta>;
 };
 
