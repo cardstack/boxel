@@ -112,7 +112,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
 
   private scrollSummaryItemIntoView(id: string) {
     const el = document.querySelector(
-      `.picker-before-options__option[data-test-boxel-picker-summary-item="${id}"]`,
+      `[data-boxel-picker-summary-item="${id}"]`,
     );
     if (el instanceof HTMLElement) {
       el.scrollIntoView({ block: 'nearest' });
@@ -257,6 +257,7 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
             @isHighlighted={{eq this.summaryHighlightId item.id}}
             @select={{@select}}
             class='picker-before-options__option'
+            data-boxel-picker-summary-item={{item.id}}
             data-test-boxel-picker-summary-item={{item.id}}
           />
         {{/each}}

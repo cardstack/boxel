@@ -167,6 +167,7 @@ export default class CreateFileModal extends Component<Signature> {
             )
           }}
           data-test-ready={{this.isReady}}
+          data-create-file-modal
           data-test-create-file-modal
         >
           <:content>
@@ -221,6 +222,7 @@ export default class CreateFileModal extends Component<Signature> {
                 {{#if (eq this.fileType.id 'text-file')}}
                   <FieldContainer @label='File Name' @tag='label' class='field'>
                     <BoxelInput
+                      data-text-file-name-field
                       data-test-text-file-name-field
                       placeholder='notes'
                       @value={{this.fileName}}
@@ -655,9 +657,9 @@ export default class CreateFileModal extends Component<Signature> {
       case 'field-definition':
       case 'file-definition':
       case 'duplicate-instance':
-        return '.create-file-modal .realm-dropdown-trigger';
+        return '[data-create-file-modal] [data-realm-dropdown-trigger]';
       case 'text-file':
-        return '.create-file-modal [data-test-text-file-name-field]';
+        return '[data-create-file-modal] [data-text-file-name-field]';
       default:
         return false;
     }

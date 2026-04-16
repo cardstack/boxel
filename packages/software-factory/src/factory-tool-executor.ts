@@ -3,13 +3,14 @@ import { resolve } from 'node:path';
 
 import type { ToolResult } from './factory-agent';
 import type { ToolRegistry } from './factory-tool-registry';
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import {
   ensureTrailingSlash,
   readFile,
   writeFile,
   deleteFile,
   searchRealm,
-  createRealm,
   getServerSession,
   getRealmScopedAuth,
 } from './realm-operations';
@@ -486,31 +487,36 @@ export class ToolExecutor {
         }
 
         case 'realm-create': {
-          let name = String(toolArgs['name']);
-          let endpoint = String(toolArgs['endpoint']);
-          let matrixAuth =
-            this.config.matrixUrl &&
-            this.config.matrixAccessToken &&
-            this.config.matrixUserId
-              ? {
-                  userId: this.config.matrixUserId,
-                  accessToken: this.config.matrixAccessToken,
-                  matrixUrl: this.config.matrixUrl,
-                }
-              : undefined;
-          let result = await createRealm(String(toolArgs['realm-server-url']), {
-            name,
-            endpoint,
-            iconURL: toolArgs['iconURL'] as string | undefined,
-            backgroundURL: toolArgs['backgroundURL'] as string | undefined,
-            authorization: authorization ?? '',
-            fetch: fetchImpl,
-            matrixAuth,
-          });
-          ok = result.created;
-          output = ok
-            ? { data: { id: result.realmUrl } }
-            : { error: result.error };
+          let displayName = String(toolArgs['name']);
+          let realmName = String(toolArgs['endpoint']);
+          let requestedServerUrl = ensureTrailingSlash(
+            String(toolArgs['realm-server-url']),
+          );
+          try {
+            let client = new BoxelCLIClient();
+            let active = client.getActiveProfile();
+            if (
+              active &&
+              ensureTrailingSlash(active.realmServerUrl) !== requestedServerUrl
+            ) {
+              throw new Error(
+                `realm-create cannot target "${requestedServerUrl}": active Boxel profile realm server is "${ensureTrailingSlash(active.realmServerUrl)}".`,
+              );
+            }
+            let result = await client.createRealm({
+              realmName,
+              displayName,
+              iconURL: toolArgs['iconURL'] as string | undefined,
+              backgroundURL: toolArgs['backgroundURL'] as string | undefined,
+            });
+            ok = true;
+            output = { data: { id: result.realmUrl } };
+          } catch (error) {
+            ok = false;
+            output = {
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
           break;
         }
 

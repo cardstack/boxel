@@ -30,13 +30,11 @@
 // This should be first
 import '../../src/setup-logger';
 
+import { BoxelCLIClient } from '@cardstack/boxel-cli/api';
+
 import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
-import {
-  createRealm,
-  getRealmScopedAuth,
-  writeFile,
-} from '../../src/realm-operations';
+import { getRealmScopedAuth, writeFile } from '../../src/realm-operations';
 import { createDefaultPipeline } from '../../src/validators/validation-pipeline';
 import type { TestValidationDetails } from '../../src/validators/test-step';
 
@@ -205,23 +203,22 @@ async function main() {
 
   let realmDisplayName = realmEndpoint.replace(/-/g, ' ');
   log.info(`  Creating realm: ${realmEndpoint}...`);
-  let createResult = await createRealm(realmServerUrl, {
-    name: realmDisplayName,
-    endpoint: realmEndpoint,
-    authorization: authorization ?? '',
-    matrixAuth: {
-      userId: matrixAuth.userId,
-      accessToken: matrixAuth.accessToken,
-      matrixUrl: matrixAuth.credentials.matrixUrl,
-    },
-  });
-
-  if (createResult.created) {
-    log.info(`  Created: ${createResult.realmUrl}\n`);
-  } else if (createResult.error?.includes('already exists')) {
-    log.info(`  Realm already exists.\n`);
-  } else {
-    log.error(`  Failed to create realm: ${createResult.error}`);
+  await BoxelCLIClient.ensureProfile({ realmServerUrl });
+  try {
+    let client = new BoxelCLIClient();
+    let createResult = await client.createRealm({
+      realmName: realmEndpoint,
+      displayName: realmDisplayName,
+    });
+    if (createResult.created) {
+      log.info(`  Created: ${createResult.realmUrl}\n`);
+    } else {
+      log.info(`  Realm already exists: ${createResult.realmUrl}\n`);
+    }
+  } catch (err) {
+    log.error(
+      `  Failed to create realm: ${err instanceof Error ? err.message : String(err)}`,
+    );
     process.exit(1);
   }
 

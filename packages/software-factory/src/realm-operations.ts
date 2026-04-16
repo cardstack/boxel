@@ -8,19 +8,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { logger } from './logger';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import {
-  iconURLFor,
-  getRandomBackgroundURL,
-} from '@cardstack/runtime-common/realm-display-defaults';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
 
 export { SupportedMimeType };
-
-let log = logger('realm-operations');
 
 export function ensureTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
@@ -586,113 +578,6 @@ export async function cancelAllIndexingJobs(
 }
 
 // ---------------------------------------------------------------------------
-// Realm Creation
-// ---------------------------------------------------------------------------
-
-/**
- * Create a new realm on the realm server via `_create-realm`.
- * Returns the canonical realm URL on success.
- *
- * When `matrixAuth` is provided, the new realm URL is automatically
- * added to the user's Matrix account data so it appears in their
- * workspace list in Boxel.
- */
-export async function createRealm(
-  realmServerUrl: string,
-  options: {
-    name: string;
-    endpoint: string;
-    iconURL?: string;
-    backgroundURL?: string;
-    authorization: string;
-    fetch?: typeof globalThis.fetch;
-    matrixAuth?: {
-      userId: string;
-      accessToken: string;
-      matrixUrl: string;
-    };
-  },
-): Promise<{ realmUrl: string; created: boolean; error?: string }> {
-  let fetchImpl = options.fetch ?? globalThis.fetch;
-  let normalizedUrl = ensureTrailingSlash(realmServerUrl);
-
-  let headers: Record<string, string> = {
-    Accept: SupportedMimeType.JSONAPI,
-    'Content-Type': SupportedMimeType.JSONAPI,
-    Authorization: options.authorization,
-  };
-
-  let attributes: Record<string, unknown> = {
-    name: options.name,
-    endpoint: options.endpoint,
-    iconURL: options.iconURL ?? iconURLFor(options.name),
-    backgroundURL: options.backgroundURL ?? getRandomBackgroundURL(),
-  };
-
-  try {
-    let response = await fetchImpl(`${normalizedUrl}_create-realm`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        data: { type: 'realm', attributes },
-      }),
-    });
-
-    let matrixAuth = options.matrixAuth;
-
-    if (response.ok) {
-      let result = (await response.json()) as { data?: { id?: string } };
-      let realmUrl = result.data?.id ?? '';
-
-      if (realmUrl && matrixAuth) {
-        await addRealmToMatrixAccountData(
-          matrixAuth,
-          ensureTrailingSlash(realmUrl),
-          fetchImpl,
-        );
-      }
-
-      return { realmUrl, created: true };
-    }
-
-    let body: string;
-    try {
-      body = await response.text();
-    } catch {
-      body = 'server returned a non-serialized object body';
-    }
-    if (body.includes('[object Object]')) {
-      body = 'server returned a non-serialized object body';
-    }
-
-    // When the realm already exists, ensure it's still registered in the
-    // user's Matrix account data so it appears in the Boxel dashboard.
-    if (body.includes('already exists') && matrixAuth) {
-      let urlMatch = body.match(/'(https?:\/\/[^']+)'/);
-      if (urlMatch) {
-        await addRealmToMatrixAccountData(
-          matrixAuth,
-          ensureTrailingSlash(urlMatch[1]),
-          fetchImpl,
-        );
-      }
-    }
-
-    return {
-      realmUrl: '',
-      created: false,
-      error: `HTTP ${response.status}: ${body.slice(0, 300)}`,
-    };
-  } catch (err) {
-    return {
-      realmUrl: '',
-      created: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Realm Authentication
 // ---------------------------------------------------------------------------
 
@@ -799,61 +684,6 @@ export async function waitForRealmFile(
   }
 
   return false;
-}
-
-// ---------------------------------------------------------------------------
-// Matrix Account Data
-// ---------------------------------------------------------------------------
-
-/**
- * Add a realm URL to the user's Matrix account data so it shows up
- * in their Boxel workspace list.
- */
-async function addRealmToMatrixAccountData(
-  matrixAuth: { userId: string; accessToken: string; matrixUrl: string },
-  realmUrl: string,
-  fetchImpl: typeof globalThis.fetch,
-): Promise<void> {
-  let accountDataUrl = new URL(
-    `_matrix/client/v3/user/${encodeURIComponent(matrixAuth.userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
-    matrixAuth.matrixUrl,
-  ).href;
-
-  let existingRealms: string[] = [];
-  try {
-    let getResponse = await fetchImpl(accountDataUrl, {
-      headers: { Authorization: `Bearer ${matrixAuth.accessToken}` },
-    });
-    if (getResponse.ok) {
-      let data = (await getResponse.json()) as { realms?: string[] };
-      existingRealms = Array.isArray(data.realms) ? [...data.realms] : [];
-    }
-  } catch {
-    // Best-effort — if we can't read existing realms, start fresh
-  }
-
-  if (!existingRealms.includes(realmUrl)) {
-    existingRealms.push(realmUrl);
-    try {
-      let putResponse = await fetchImpl(accountDataUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': SupportedMimeType.JSON,
-          Authorization: `Bearer ${matrixAuth.accessToken}`,
-        },
-        body: JSON.stringify({ realms: existingRealms }),
-      });
-      if (!putResponse.ok) {
-        log.warn(
-          `Warning: failed to update Matrix account data for realm ${realmUrl}: HTTP ${putResponse.status}`,
-        );
-      }
-    } catch (err) {
-      log.warn(
-        `Warning: failed to update Matrix account data for realm ${realmUrl}: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------

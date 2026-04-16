@@ -55,6 +55,7 @@ export async function loadRealmTests(application) {
     baseRealm,
     universalEmberTestSupport,
     emberOwner,
+    hostConfigEnvironment,
   ] = await Promise.all([
     import('@cardstack/host/tests/helpers'),
     import('@cardstack/host/tests/helpers/mock-matrix'),
@@ -64,6 +65,7 @@ export async function loadRealmTests(application) {
     import('@cardstack/host/tests/helpers/base-realm'),
     import('@universal-ember/test-support'),
     import('@ember/owner'),
+    import('@cardstack/host/config/environment'),
   ]);
 
   const loaderInstance = application.buildInstance({
@@ -84,6 +86,13 @@ export async function loadRealmTests(application) {
   loader.shimModule('@cardstack/host/tests/helpers/base-realm', baseRealm);
   loader.shimModule('@universal-ember/test-support', universalEmberTestSupport);
   loader.shimModule('@ember/owner', emberOwner);
+  loader.shimModule('@cardstack/host/config/environment', {
+    ...hostConfigEnvironment,
+    default: {
+      ...(hostConfigEnvironment.default ?? {}),
+      resolvedCatalogRealmURL: realmURL,
+    },
+  });
 
   const testModules = await discoverTestModules(realmURL);
 
@@ -103,8 +112,17 @@ export async function loadRealmTests(application) {
       let mod;
       try {
         mod = await loader.import(moduleURL);
-      } catch {
-        // skip files that fail to import (e.g. cards with unresolvable deps)
+      } catch (err) {
+        const message = err?.stack ?? err?.message ?? String(err);
+        // Log to CI stdout so the failure is visible in the job log as well as
+        // the junit report.
+        console.error(`[live-test] Failed to import ${moduleURL}:\n${message}`);
+        const failureModuleName = `Live Tests | Failed import: ${moduleURL}`;
+        QUnit.module(failureModuleName, function () {
+          QUnit.test('module failed to import', function (assert) {
+            assert.ok(false, `Failed to import ${moduleURL}: ${message}`);
+          });
+        });
         continue;
       }
       if (typeof mod.runTests === 'function') {
