@@ -85,6 +85,7 @@ export class ListingPathResolver {
   private targetRealmPath: RealmPaths;
   private sourceRealmPath: RealmPaths;
   private targetDirectoryPath: RealmPaths;
+  private foreignRealmPaths: RealmPaths[] = [];
 
   constructor(targetRealm: string, listing: Listing, installDirId?: string) {
     this.targetRealmPath = new RealmPaths(new URL(targetRealm));
@@ -107,11 +108,33 @@ export class ListingPathResolver {
     );
   }
 
+  addKnownRealmURL(url: URL): void {
+    let realmPath = new RealmPaths(url);
+    if (
+      realmPath.url !== this.sourceRealmPath.url &&
+      !this.foreignRealmPaths.some((p) => p.url === realmPath.url)
+    ) {
+      this.foreignRealmPaths.push(realmPath);
+    }
+  }
+
   local(href: string): LocalPath {
-    let local = this.sourceRealmPath.local(
-      new URL(href, this.sourceRealmPath.url),
+    let url = new URL(href, this.sourceRealmPath.url);
+    if (this.sourceRealmPath.inRealm(url)) {
+      return this.sourceRealmPath.local(url);
+    }
+    // Try known foreign realm paths (longest URL first to handle nested realms)
+    let sorted = [...this.foreignRealmPaths].sort(
+      (a, b) => b.url.length - a.url.length,
     );
-    return local;
+    for (let foreignPath of sorted) {
+      if (foreignPath.inRealm(url)) {
+        return foreignPath.local(url);
+      }
+    }
+    // Fallback: strip only the origin, preserving full path for safety
+    let path = decodeURI(url.pathname).replace(/^\//, '').replace(/\/+$/, '');
+    return path;
   }
 
   targetLid(href: string): string {
@@ -133,7 +156,7 @@ type PlanBuilderStep = (
 export class PlanBuilder {
   private steps: PlanBuilderStep[] = [];
   private log = logger('catalog:plan');
-  private resolver: ListingPathResolver;
+  resolver: ListingPathResolver;
 
   constructor(realmUrl: string, listing: Listing) {
     this.resolver = new ListingPathResolver(realmUrl, listing);
