@@ -12,10 +12,11 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import {
   getRealmServerRoute,
   registerDefaultRoutes,
+  resetCatalogRealmURL,
   setCatalogRealmURL,
 } from './routes';
 
-export { setCatalogRealmURL };
+export { resetCatalogRealmURL, setCatalogRealmURL };
 
 import type { EnsureSessionRoom, RealmServerMockState } from './types';
 

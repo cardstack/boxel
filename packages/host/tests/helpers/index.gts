@@ -85,6 +85,7 @@ export {
 export { createJWT, testRealmSecretSeed } from './test-auth';
 export {
   registerRealmAuthSessionRoomEnsurer,
+  resetCatalogRealmURL,
   setupAuthEndpoints,
   setCatalogRealmURL,
 } from './realm-server-mock';

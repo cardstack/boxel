@@ -32,10 +32,22 @@ import type { RealmServerMockRoute, RealmServerMockState } from './types';
 
 const TEST_MATRIX_USER = '@testuser:localhost';
 
+// Module-level override for the /_catalog-realms mock endpoint. Tests that
+// pretend a local test realm *is* the catalog (e.g. catalog-app-browse) need
+// the realm-server mock to return their test realm URL instead of the real
+// ENV.resolvedCatalogRealmURL. Because the mock route handler is registered
+// once at module load time and shared across all tests in a run, this must be
+// module-level mutable state rather than per-test instance state. Always pair
+// setCatalogRealmURL with resetCatalogRealmURL in afterEach to avoid leaking
+// overrides between test modules.
 let catalogRealmURLOverrides: string[] = [];
 
 export function setCatalogRealmURL(...urls: string[]) {
   catalogRealmURLOverrides = urls.map(ensureTrailingSlash);
+}
+
+export function resetCatalogRealmURL() {
+  catalogRealmURLOverrides = [];
 }
 
 type SearchableRealm = {

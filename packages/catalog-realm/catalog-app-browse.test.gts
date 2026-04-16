@@ -22,6 +22,7 @@ import {
   setupAcceptanceTestRealm,
   SYSTEM_CARD_FIXTURE_CONTENTS,
   visitOperatorMode,
+  resetCatalogRealmURL,
   setCatalogRealmURL,
 } from '@cardstack/host/tests/helpers';
 import { setupMockMatrix } from '@cardstack/host/tests/helpers/mock-matrix';
@@ -97,6 +98,10 @@ module('Acceptance | Catalog | catalog app - browse tests', function (hooks) {
         ...makeDestinationRealmContents(),
       },
     });
+  });
+
+  hooks.afterEach(function () {
+    resetCatalogRealmURL();
   });
 
   /**
