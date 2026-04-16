@@ -627,6 +627,7 @@ export default class RenderRoute extends Route<Model> {
       !modelState ||
       modelState.isReady ||
       modelState.readyWatchdogStarted ||
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- prerender render-loop timing
       typeof requestAnimationFrame !== 'function'
     ) {
       return;
@@ -647,9 +648,9 @@ export default class RenderRoute extends Route<Model> {
         void this.#settleModelAfterRenderSafely(model);
         return;
       }
-      requestAnimationFrame(tick);
+      requestAnimationFrame(tick); // eslint-disable-line @cardstack/boxel/no-raf-for-state -- prerender render-loop timing
     };
-    requestAnimationFrame(tick);
+    requestAnimationFrame(tick); // eslint-disable-line @cardstack/boxel/no-raf-for-state -- prerender render-loop timing
   }
 
   async #settleModelAfterRender(model: Model): Promise<void> {
@@ -730,6 +731,7 @@ export default class RenderRoute extends Route<Model> {
   }
 
   async #waitForNextRenderFrame(): Promise<void> {
+    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- prerender render-loop timing
     if (typeof requestAnimationFrame !== 'function') {
       await Promise.resolve();
       return;
@@ -744,6 +746,7 @@ export default class RenderRoute extends Route<Model> {
       return;
     }
     await new Promise<void>((resolve) =>
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- needs actual paint callback for render timing
       requestAnimationFrame(() => resolve()),
     );
   }

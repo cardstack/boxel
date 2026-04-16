@@ -162,6 +162,7 @@ module('Integration | codemirror-context', function (hooks) {
       });
 
       // Wait for requestAnimationFrame-based target notification
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 
@@ -206,6 +207,7 @@ module('Integration | codemirror-context', function (hooks) {
       });
 
       // Wait for requestAnimationFrame-based target notification
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 
@@ -249,6 +251,7 @@ module('Integration | codemirror-context', function (hooks) {
       });
 
       // Wait for requestAnimationFrame-based target notification
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 
@@ -284,6 +287,7 @@ module('Integration | codemirror-context', function (hooks) {
         parent: element,
       });
 
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 
@@ -526,6 +530,7 @@ module('Integration | codemirror-context', function (hooks) {
       );
 
       // Wait for target notification
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 
@@ -572,6 +577,7 @@ module('Integration | codemirror-context', function (hooks) {
         parent: element,
       });
 
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 
@@ -687,6 +693,7 @@ module('Integration | codemirror-context', function (hooks) {
         parent: element,
       });
 
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- waiting for rAF-based codemirror widget notification
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await settled();
 

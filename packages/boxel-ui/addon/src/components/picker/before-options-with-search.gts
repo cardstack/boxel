@@ -207,7 +207,12 @@ export default class PickerBeforeOptionsWithSearch extends Component<BeforeOptio
           let indextoActivate = select.selected
             ? currentIdx + 1
             : currentIdx - 1;
-          scheduleOnce('afterRender', this, this.activateAtIndex, indextoActivate);
+          scheduleOnce(
+            'afterRender',
+            this,
+            this.activateAtIndex,
+            indextoActivate,
+          );
         }
         break;
       }

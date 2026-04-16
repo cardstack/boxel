@@ -134,8 +134,10 @@ export class LivePrerenderedSearchResource extends Resource<Args> {
       if (stablePasses >= requiredStablePasses) {
         return;
       }
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- prerender stability-check timing
       if (typeof requestAnimationFrame === 'function') {
         await new Promise<void>((resolve) =>
+          // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- prerender stability-check timing
           requestAnimationFrame(() => resolve()),
         );
       } else {
