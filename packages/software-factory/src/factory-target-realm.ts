@@ -295,7 +295,7 @@ function resolveRealmServerUrl(
   }
 
   throw new FactoryEntrypointUsageError(
-    'Cannot determine the realm server URL. Pass --realm-server-url or configure an active Boxel profile.',
+    'No active Boxel profile found. Run `boxel profile add` to configure one, or pass --realm-server-url explicitly.',
   );
 }
 
