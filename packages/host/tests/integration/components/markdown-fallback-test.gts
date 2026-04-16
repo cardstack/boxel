@@ -239,4 +239,34 @@ module('Integration | markdown-fallback', function (hooks) {
       .dom('[data-markdown-fallback-source]')
       .exists('hidden source container is present for the modifier to read');
   });
+
+  test('default fallback strips style and script elements from markdown output', async function (assert) {
+    class StyledCard extends CardDef {
+      static isolated = class extends Component<typeof this> {
+        <template>
+          <style>
+            .foo { color: red; }
+          </style>
+          <p>visible content</p>
+        </template>
+      };
+    }
+
+    let card = new StyledCard();
+    await renderAndConvert(loader, card);
+
+    let md = readMarkdownOutput();
+    assert.true(
+      md.includes('visible content'),
+      `expected visible content in: ${md}`,
+    );
+    assert.false(
+      md.includes('.foo'),
+      `CSS should be stripped from markdown: ${md}`,
+    );
+    assert.false(
+      md.includes('color: red'),
+      `CSS rules should be stripped from markdown: ${md}`,
+    );
+  });
 });

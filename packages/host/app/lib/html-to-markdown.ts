@@ -27,6 +27,7 @@ function getConverter(): TurndownService {
       linkStyle: 'inlined',
     });
     converter.use(gfm); // tables, strikethrough, task lists, autolinks
+    converter.remove(['style', 'script']); // strip embedded CSS/JS from card HTML
   }
   return converter;
 }
