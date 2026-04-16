@@ -130,7 +130,7 @@ class RealmPusher extends RealmSyncBase {
 
     const manifest = await loadManifest(this.options.localDir);
     const newManifest: SyncManifest = {
-      realmUrl: this.options.realmUrl,
+      realmUrl: this.normalizedRealmUrl,
       files: {},
       remoteMtimes: {},
     };
@@ -141,7 +141,7 @@ class RealmPusher extends RealmSyncBase {
     const canGoIncremental =
       !this.pushOptions.force &&
       manifest !== null &&
-      manifest.realmUrl === this.options.realmUrl;
+      manifest.realmUrl === this.normalizedRealmUrl;
 
     if (!canGoIncremental) {
       if (this.pushOptions.force) {

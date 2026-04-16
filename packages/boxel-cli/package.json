@@ -29,7 +29,8 @@
     "@aws-crypto/sha256-js": "catalog:",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7",
-    "ignore": "catalog:"
+    "ignore": "catalog:",
+    "p-limit": "^7.3.0"
   },
   "devDependencies": {
     "@cardstack/local-types": "workspace:*",

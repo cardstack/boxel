@@ -2,6 +2,7 @@ import type { ProfileManager } from './profile-manager';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import ignoreModule from 'ignore';
+import pLimit from 'p-limit';
 
 const ignore = (ignoreModule as any).default || ignoreModule;
 type Ignore = ReturnType<typeof ignoreModule>;
@@ -35,9 +36,16 @@ export interface SyncOptions {
   dryRun?: boolean;
 }
 
+const REMOTE_CONCURRENCY = 10;
+
+// Directories that should always be skipped during local file traversal,
+// regardless of .gitignore / .boxelignore content.
+const ALWAYS_IGNORED_DIRS = new Set(['node_modules']);
+
 export abstract class RealmSyncBase {
   protected normalizedRealmUrl: string;
   private ignoreCache = new Map<string, Promise<Ignore>>();
+  protected remoteLimit = pLimit(REMOTE_CONCURRENCY);
 
   constructor(
     protected options: SyncOptions,
@@ -119,7 +127,7 @@ export abstract class RealmSyncBase {
       if (data.data && data.data.relationships) {
         const entries = Object.entries(data.data.relationships);
         const subResults = await Promise.all(
-          entries.map(async ([name, info]) => {
+          entries.map(([name, info]) => {
             const entry = info as { meta: { kind: string } };
             const isFile = entry.meta.kind === 'file';
             const entryPath = dir ? path.posix.join(dir, name) : name;
@@ -132,8 +140,10 @@ export abstract class RealmSyncBase {
               }
               return [] as Array<[string, boolean]>;
             } else {
-              const subdirFiles = await this.getRemoteFileList(entryPath);
-              return Array.from(subdirFiles.entries());
+              return this.remoteLimit(async () => {
+                const subdirFiles = await this.getRemoteFileList(entryPath);
+                return Array.from(subdirFiles.entries());
+              });
             }
           }),
         );
@@ -249,6 +259,10 @@ export abstract class RealmSyncBase {
           ? path.posix.join(dir, entry.name)
           : entry.name;
 
+        if (entry.isDirectory() && ALWAYS_IGNORED_DIRS.has(entry.name)) {
+          return [] as Array<[string, { path: string; mtime: number }]>;
+        }
+
         if (await this.shouldIgnoreFile(relativePath, fullPath)) {
           return [] as Array<[string, { path: string; mtime: number }]>;
         }
@@ -294,6 +308,10 @@ export abstract class RealmSyncBase {
         const relativePath = dir
           ? path.posix.join(dir, entry.name)
           : entry.name;
+
+        if (entry.isDirectory() && ALWAYS_IGNORED_DIRS.has(entry.name)) {
+          return [] as Array<[string, string]>;
+        }
 
         if (await this.shouldIgnoreFile(relativePath, fullPath)) {
           return [] as Array<[string, string]>;

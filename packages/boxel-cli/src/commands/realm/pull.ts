@@ -92,17 +92,19 @@ class RealmPuller extends RealmSyncBase {
     }
 
     const downloadResults = await Promise.all(
-      Array.from(remoteFiles.keys()).map(async (relativePath) => {
-        try {
-          const localPath = path.join(this.options.localDir, relativePath);
-          await this.downloadFile(relativePath, localPath);
-          return relativePath;
-        } catch (error) {
-          this.hasError = true;
-          console.error(`Error downloading ${relativePath}:`, error);
-          return null;
-        }
-      }),
+      Array.from(remoteFiles.keys()).map((relativePath) =>
+        this.remoteLimit(async () => {
+          try {
+            const localPath = path.join(this.options.localDir, relativePath);
+            await this.downloadFile(relativePath, localPath);
+            return relativePath;
+          } catch (error) {
+            this.hasError = true;
+            console.error(`Error downloading ${relativePath}:`, error);
+            return null;
+          }
+        }),
+      ),
     );
     const downloadedFiles = downloadResults.filter(
       (f): f is string => f !== null,
