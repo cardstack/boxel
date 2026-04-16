@@ -60,7 +60,7 @@ function getConverter(): TurndownService {
     // multiline `[\n  Contact](url)` which is broken markdown.  Collapse it.
     converter.addRule('compactLinks', {
       filter: 'a',
-      replacement(_content, node, options) {
+      replacement(_content, node, _options) {
         let href = (node as HTMLAnchorElement).getAttribute('href');
         if (!href) {
           return _content;

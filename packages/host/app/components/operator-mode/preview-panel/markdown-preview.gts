@@ -12,9 +12,9 @@ import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 
-import RenderedMarkdown from './rendered-markdown';
-
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
+import RenderedMarkdown from './rendered-markdown';
 
 type ViewMode = 'source' | 'rendered';
 
@@ -59,7 +59,7 @@ export default class MarkdownPreview extends Component<Signature> {
 
   private get cardReferenceBaseUrl(): string | undefined {
     return 'id' in this.args.card
-      ? (this.args.card?.id as string | undefined) ?? undefined
+      ? ((this.args.card?.id as string | undefined) ?? undefined)
       : undefined;
   }
 
@@ -103,10 +103,7 @@ export default class MarkdownPreview extends Component<Signature> {
           data-test-markdown-source
         >{{this.capturedMarkdown}}</pre>
       {{else}}
-        <div
-          class='markdown-rendered'
-          data-test-markdown-rendered
-        >
+        <div class='markdown-rendered' data-test-markdown-rendered>
           <RenderedMarkdown
             @content={{this.capturedMarkdown}}
             @cardReferenceBaseUrl={{this.cardReferenceBaseUrl}}

@@ -146,7 +146,13 @@ export default class PlaygroundPanel extends Component<Signature> {
     return moduleId;
   });
 
-  private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit', 'markdown'];
+  private fieldFormats: Format[] = [
+    'embedded',
+    'fitted',
+    'atom',
+    'edit',
+    'markdown',
+  ];
   private fileDefFormats: Format[] = ['isolated', 'embedded', 'fitted', 'atom'];
   #creationError = false;
   #currentModuleId: string | undefined;

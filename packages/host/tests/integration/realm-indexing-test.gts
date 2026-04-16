@@ -1812,6 +1812,8 @@ module(`Integration | realm indexing`, function (hooks) {
           data-boxel-card-container
           data-test-boxel-card-container
           style
+          data-boxel-card-id="http://test-realm/test/germaine"
+          data-boxel-card-format="embedded"
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="embedded"
           data-test-field-component-card> <h1> Fancy Person Embedded Card: Germaine - hot pink </h1> </div>`,
@@ -1839,6 +1841,8 @@ module(`Integration | realm indexing`, function (hooks) {
         data-boxel-card-container
         data-test-boxel-card-container
         style
+        data-boxel-card-id="http://test-realm/test/germaine"
+        data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card> <h1> Person Embedded Card: Germaine </h1> </div>`),
@@ -1856,6 +1860,8 @@ module(`Integration | realm indexing`, function (hooks) {
         data-boxel-card-container
         data-test-boxel-card-container
         style
+        data-boxel-card-id="http://test-realm/test/germaine"
+        data-boxel-card-format="embedded"
         data-test-card="http://test-realm/test/germaine"
         data-test-card-format="embedded"
         data-test-field-component-card>
@@ -1951,6 +1957,8 @@ module(`Integration | realm indexing`, function (hooks) {
           data-boxel-card-container
           data-test-boxel-card-container
           style
+          data-boxel-card-id="http://test-realm/test/germaine"
+          data-boxel-card-format="fitted"
           data-test-card="http://test-realm/test/germaine"
           data-test-card-format="fitted"
           data-test-field-component-card> <h1> Fancy Person Fitted Card: Germaine - hot pink </h1> </div>`,
@@ -1978,6 +1986,8 @@ module(`Integration | realm indexing`, function (hooks) {
       data-boxel-card-container
       data-test-boxel-card-container
       style
+      data-boxel-card-id="http://test-realm/test/germaine"
+      data-boxel-card-format="fitted"
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="fitted"
       data-test-field-component-card> <h1> Person Fitted Card: Germaine </h1> </div>`),
@@ -1995,6 +2005,8 @@ module(`Integration | realm indexing`, function (hooks) {
       data-boxel-card-container
       data-test-boxel-card-container
       style
+      data-boxel-card-id="http://test-realm/test/germaine"
+      data-boxel-card-format="embedded"
       data-test-card="http://test-realm/test/germaine"
       data-test-card-format="embedded"
       data-test-field-component-card>

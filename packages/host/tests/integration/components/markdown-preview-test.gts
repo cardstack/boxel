@@ -1,5 +1,5 @@
-import { click, settled, waitFor } from '@ember/test-helpers';
 import Service from '@ember/service';
+import { click, settled, waitFor } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
@@ -10,8 +10,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import MarkdownPreview from '@cardstack/host/components/operator-mode/preview-panel/markdown-preview';
-
-import type { Format } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
@@ -161,9 +159,7 @@ module('Integration | markdown-preview', function (hooks) {
     assert
       .dom('[data-test-markdown-view="source"]')
       .hasAttribute('aria-pressed', 'true', 'source button is pressed again');
-    assert
-      .dom('[data-test-markdown-source]')
-      .exists('source view is restored');
+    assert.dom('[data-test-markdown-source]').exists('source view is restored');
     assert
       .dom('[data-test-markdown-rendered]')
       .doesNotExist('rendered view is hidden again');
@@ -176,9 +172,12 @@ module('Integration | markdown-preview', function (hooks) {
     class TestCard extends CardDef {
       @field title = contains(StringField);
       static markdown = class extends Component<typeof this> {
-        <template># {{@model.title}}
+        <template>
+          #
+          {{@model.title}}
 
-Some **bold** text.</template>
+          Some **bold** text.
+        </template>
       };
     }
 
@@ -214,9 +213,12 @@ Some **bold** text.</template>
     class TestCard extends CardDef {
       @field title = contains(StringField);
       static markdown = class extends Component<typeof this> {
-        <template># {{@model.title}}
+        <template>
+          #
+          {{@model.title}}
 
-Some **bold** text.</template>
+          Some **bold** text.
+        </template>
       };
     }
 

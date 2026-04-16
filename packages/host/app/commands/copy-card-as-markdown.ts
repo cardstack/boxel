@@ -26,9 +26,7 @@ export default class CopyCardAsMarkdownCommand extends HostBaseCommand<
 
   requireInputFields = ['cardId'];
 
-  protected async run(
-    input: BaseCommandModule.CardIdCard,
-  ): Promise<undefined> {
+  protected async run(input: BaseCommandModule.CardIdCard): Promise<undefined> {
     let response = await this.network.authedFetch(input.cardId, {
       headers: { Accept: SupportedMimeType.Markdown },
     });

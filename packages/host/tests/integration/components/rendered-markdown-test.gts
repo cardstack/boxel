@@ -1,5 +1,5 @@
-import { settled, waitFor, waitUntil } from '@ember/test-helpers';
 import Service from '@ember/service';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 
@@ -27,9 +27,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -40,14 +38,11 @@ module('Integration | rendered-markdown', function (hooks) {
   });
 
   test('renders lists correctly', async function (assert) {
-    let content =
-      '- alpha\n- beta\n\n1. one\n2. two';
+    let content = '- alpha\n- beta\n\n1. one\n2. two';
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -59,14 +54,11 @@ module('Integration | rendered-markdown', function (hooks) {
   });
 
   test('renders links and code', async function (assert) {
-    let content =
-      'Visit [example](https://example.com) and use `npm install`.';
+    let content = 'Visit [example](https://example.com) and use `npm install`.';
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -79,14 +71,11 @@ module('Integration | rendered-markdown', function (hooks) {
   });
 
   test('wraps tables in scrollable wrapper', async function (assert) {
-    let content =
-      '| Col A | Col B |\n| --- | --- |\n| 1 | 2 |';
+    let content = '| Col A | Col B |\n| --- | --- |\n| 1 | 2 |';
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -105,9 +94,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -116,9 +103,7 @@ module('Integration | rendered-markdown', function (hooks) {
       .dom('.markdown-content [data-boxel-bfm-inline-ref]')
       .exists('inline BFM placeholder element is created');
     assert
-      .dom(
-        `.markdown-content [data-boxel-bfm-inline-ref="${cardUrl}"]`,
-      )
+      .dom(`.markdown-content [data-boxel-bfm-inline-ref="${cardUrl}"]`)
       .exists('placeholder has correct card URL in data attribute');
     assert
       .dom(
@@ -133,9 +118,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -144,9 +127,7 @@ module('Integration | rendered-markdown', function (hooks) {
       .dom('.markdown-content [data-boxel-bfm-block-ref]')
       .exists('block BFM placeholder element is created');
     assert
-      .dom(
-        `.markdown-content [data-boxel-bfm-block-ref="${cardUrl}"]`,
-      )
+      .dom(`.markdown-content [data-boxel-bfm-block-ref="${cardUrl}"]`)
       .exists('placeholder has correct card URL in data attribute');
     assert
       .dom(
@@ -163,9 +144,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -191,9 +170,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -203,9 +180,8 @@ module('Integration | rendered-markdown', function (hooks) {
     // unresolved fallback path.
     await waitUntil(
       () =>
-        document.querySelector(
-          '[data-test-markdown-bfm-unresolved-inline]',
-        ) !== null,
+        document.querySelector('[data-test-markdown-bfm-unresolved-inline]') !==
+        null,
       { timeout: 5000, timeoutMessage: 'unresolved pill did not appear' },
     );
 
@@ -227,18 +203,15 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
 
     await waitUntil(
       () =>
-        document.querySelector(
-          '[data-test-markdown-bfm-unresolved-block]',
-        ) !== null,
+        document.querySelector('[data-test-markdown-bfm-unresolved-block]') !==
+        null,
       { timeout: 5000, timeoutMessage: 'unresolved block pill did not appear' },
     );
 
@@ -260,9 +233,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -287,9 +258,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();
@@ -309,9 +278,7 @@ module('Integration | rendered-markdown', function (hooks) {
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
-        <template>
-          <RenderedMarkdown @content={{content}} />
-        </template>
+        <template><RenderedMarkdown @content={{content}} /></template>
       },
     );
     await settled();

@@ -278,8 +278,10 @@ module('Integration | markdown-fallback', function (hooks) {
     class StyledCard extends CardDef {
       static isolated = class extends Component<typeof this> {
         <template>
-          <style>
-            .foo { color: red; }
+          <style scoped>
+            .foo {
+              color: red;
+            }
           </style>
           <p>visible content</p>
         </template>
