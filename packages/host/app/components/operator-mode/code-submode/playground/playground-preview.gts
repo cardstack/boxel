@@ -86,7 +86,9 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
       commodo consequat.</div>
   {{else if (eq @format 'markdown')}}
-    <MarkdownPreview @card={{@card}} />
+    <CardContainer>
+      <MarkdownPreview @card={{@card}} />
+    </CardContainer>
   {{else if (eq @format 'fitted')}}
     <FittedFormatGallery
       @card={{@card}}
