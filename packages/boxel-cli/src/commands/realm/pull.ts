@@ -17,6 +17,7 @@ interface PullOptions extends SyncOptions {
 
 class RealmPuller extends RealmSyncBase {
   hasError = false;
+  downloadedFiles: string[] = [];
 
   constructor(
     private pullOptions: PullOptions,
@@ -106,7 +107,7 @@ class RealmPuller extends RealmSyncBase {
         }),
       ),
     );
-    const downloadedFiles = downloadResults.filter(
+    this.downloadedFiles = downloadResults.filter(
       (f): f is string => f !== null,
     );
 
@@ -138,10 +139,10 @@ class RealmPuller extends RealmSyncBase {
 
     if (
       !this.options.dryRun &&
-      downloadedFiles.length + deletedFiles.length > 0
+      this.downloadedFiles.length + deletedFiles.length > 0
     ) {
       const pullChanges: CheckpointChange[] = [
-        ...downloadedFiles.map((f) => ({
+        ...this.downloadedFiles.map((f) => ({
           file: f,
           status: 'modified' as const,
         })),
@@ -230,5 +231,48 @@ export async function pullCommand(
   } catch (error) {
     console.error('Pull failed:', error);
     process.exit(1);
+  }
+}
+
+export async function pull(
+  realmUrl: string,
+  localDir: string,
+  options: PullCommandOptions,
+): Promise<{ files: string[]; error?: string }> {
+  let pm = options.profileManager ?? getProfileManager();
+  let active = pm.getActiveProfile();
+  if (!active) {
+    return {
+      files: [],
+      error: 'No active profile. Run `boxel profile add` to create one.',
+    };
+  }
+
+  try {
+    const puller = new RealmPuller(
+      {
+        realmUrl,
+        localDir,
+        deleteLocal: options.delete,
+      },
+      pm,
+    );
+
+    await puller.sync();
+
+    if (puller.hasError) {
+      return {
+        files: puller.downloadedFiles.sort(),
+        error:
+          'Pull completed with errors. Some files may not have been downloaded.',
+      };
+    }
+
+    return { files: puller.downloadedFiles.sort() };
+  } catch (error) {
+    return {
+      files: [],
+      error: `Pull failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
 }

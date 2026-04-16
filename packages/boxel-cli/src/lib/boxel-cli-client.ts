@@ -1,4 +1,5 @@
 import { createRealm as coreCreateRealm } from '../commands/realm/create';
+import { pull as realmPull } from '../commands/realm/pull';
 import { getProfileManager, type ProfileManager } from './profile-manager';
 
 export interface CreateRealmOptions {
@@ -19,6 +20,17 @@ export interface CreateRealmResult {
   // Callers should not manage tokens directly — this is transitional glue
   // until the factory uses BoxelCLIClient for all realm operations.
   authorization: string;
+}
+
+export interface PullOptions {
+  /** Delete local files that don't exist in the realm (default: false). */
+  delete?: boolean;
+}
+
+export interface PullResult {
+  /** Relative file paths that were downloaded. */
+  files: string[];
+  error?: string;
 }
 
 export class BoxelCLIClient {
@@ -57,6 +69,17 @@ export class BoxelCLIClient {
       matrixId: active.id,
       realmServerUrl: active.profile.realmServerUrl,
     };
+  }
+
+  async pull(
+    realmUrl: string,
+    localDir: string,
+    options?: PullOptions,
+  ): Promise<PullResult> {
+    return realmPull(realmUrl, localDir, {
+      delete: options?.delete,
+      profileManager: this.pm,
+    });
   }
 
   async createRealm(options: CreateRealmOptions): Promise<CreateRealmResult> {
