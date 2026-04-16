@@ -655,7 +655,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     assert.dom(customEdit).doesNotExist();
 
     await click('[data-test-more-options-button]');
-    await click('[data-test-boxel-menu-item-text="Toggle Custom View"]');
+    await click('[data-test-boxel-menu-item-text="Toggle Standard View"]');
     assert.dom(customEdit).exists('custom edit template is restored');
 
     await click('[data-test-more-options-button]');
@@ -685,7 +685,7 @@ module('Integration | operator-mode | basics', function (hooks) {
     assert.dom(customIsolated).doesNotExist();
 
     await click('[data-test-more-options-button]');
-    await click('[data-test-boxel-menu-item-text="Toggle Custom View"]');
+    await click('[data-test-boxel-menu-item-text="Toggle Standard View"]');
     assert.dom(customIsolated).exists('custom isolated template is restored');
 
     await click('[data-test-more-options-button]');

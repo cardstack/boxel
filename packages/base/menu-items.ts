@@ -59,19 +59,13 @@ function makeToggleTemplateItem(
   useBaseTemplate: boolean | undefined,
   action: (useBaseTemplate: boolean) => void,
 ): MenuItemOptions {
-  return useBaseTemplate
-    ? {
-        label: 'Toggle Custom View',
-        action: () => action(false),
-        icon: Eye,
-        disabled: !card.id,
-      }
-    : {
-        label: 'Toggle Standard View',
-        action: () => action(true),
-        icon: Eye,
-        disabled: !card.id,
-      };
+  return {
+    label: 'Toggle Standard View',
+    action: () => action(!useBaseTemplate),
+    icon: Eye,
+    checked: !!useBaseTemplate,
+    disabled: !card.id,
+  };
 }
 
 export function getDefaultCardMenuItems(
