@@ -182,7 +182,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
       const responseData = await result.response.json();
       oneShotLogger.debug('raw llm response meta', {
         status: result.response.status,
-        model: input.llmModel || 'anthropic/claude-3-haiku',
+        model: input.llmModel || 'anthropic/claude-haiku-4.5',
         usage: responseData.usage || null,
       });
       const output = responseData.choices?.[0]?.message?.content || null;

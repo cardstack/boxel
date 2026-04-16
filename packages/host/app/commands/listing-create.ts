@@ -153,7 +153,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
     const listingCard = listing as CardAPI.CardDef;
     const firstOpenCardId = openCardIds?.[0];
 
-    const backgroundWork = Promise.all([
+    const backgroundWork = Promise.allSettled([
       this.autoPatchName(listingCard, codeRef),
       this.autoPatchSummary(listingCard, codeRef),
       this.autoLinkTag(listingCard, codeRef),
@@ -167,8 +167,24 @@ export default class ListingCreateCommand extends HostBaseCommand<
         codeRef.module,
         codeRef,
       ),
-    ]).catch((error) => {
-      console.warn('Background autopatch failed:', error);
+    ]).then((results) => {
+      const names = [
+        'autoPatchName',
+        'autoPatchSummary',
+        'autoLinkTag',
+        'autoLinkCategory',
+        'autoLinkLicense',
+        'autoLinkExample',
+        'linkSpecs',
+      ];
+      results.forEach((result, i) => {
+        if (result.status === 'rejected') {
+          console.warn(
+            `Background autopatch failed [${names[i]}]:`,
+            result.reason,
+          );
+        }
+      });
     });
 
     const { ListingCreateResult } = commandModule;
@@ -508,10 +524,9 @@ export default class ListingCreateCommand extends HostBaseCommand<
         max: 1,
         additionalSystemPrompt:
           'You are selecting from an existing list of catalog tags. ' +
-          "Choose the single best tag that describes the card's subject matter, use case, or domain. " +
-          'Prefer a specific descriptive tag over a broad organizational bucket. ' +
-          'Only select ids from the provided options. ' +
-          'Return [] if no tag clearly fits.',
+          "Choose the most specific descriptive tags that describes the card's subject matter, use case, or domain. " +
+          'If no tag clearly fits the subject matter, select a Source/Origin tag as a fallback (From tag pools). ' +
+          'Return [] only if no appropriate tag exists.',
       },
     );
     (listing as any).tags = selected;
@@ -533,9 +548,7 @@ export default class ListingCreateCommand extends HostBaseCommand<
         max: 1,
         additionalSystemPrompt:
           'You are selecting from an existing list of catalog categories. ' +
-          "Choose the single best high-level category that matches the card's main purpose. " +
-          'Prefer broad organizing categories over keyword-style tags. ' +
-          'Only select ids from the provided options. ' +
+          "Choose the most specific descriptive category that matches the card's main purpose. " +
           'Return [] if no category clearly fits.',
       },
     );
