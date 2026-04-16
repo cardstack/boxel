@@ -188,7 +188,7 @@
     "tracked-built-ins": "catalog:",
     "typescript": "catalog:",
     "uuid": "catalog:",
-    "vite": "^7.2.7",
+    "vite": "^8.0.8",
     "wait-for-localhost-cli": "catalog:",
     "@glint/ember-tsc": "catalog:"
   },
