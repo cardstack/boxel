@@ -660,6 +660,23 @@ module(basename(__filename), function () {
       let result = vn.resolveImport('@test/realm/card-api');
       assert.strictEqual(result, 'http://localhost:8000/realm/card-api');
     });
+
+    test('knownRealms returns registered realm identifiers', function (assert) {
+      let realms = vn.knownRealms();
+      assert.true(
+        realms.includes('@test/realm/' as any),
+        'contains the registered realm',
+      );
+    });
+
+    test('knownRealms reflects multiple registrations', function (assert) {
+      vn.addRealmMapping('@test/other/', 'http://localhost:9000/other/');
+      let realms = vn.knownRealms();
+      assert.strictEqual(realms.length, 2);
+      assert.true(realms.includes('@test/realm/' as any));
+      assert.true(realms.includes('@test/other/' as any));
+      unregisterCardReferencePrefix('@test/other/');
+    });
   });
 
   module('VirtualNetwork.fetch with RRI', function (hooks) {

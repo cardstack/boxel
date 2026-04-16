@@ -1,6 +1,9 @@
 import { RealmPaths, ensureTrailingSlash } from './paths';
 import { baseRealm, isNode } from './index';
-import { registerCardReferencePrefix } from './card-reference-resolver';
+import {
+  registerCardReferencePrefix,
+  type RealmIdentifier,
+} from './card-reference-resolver';
 import type { ModuleDescriptor } from './package-shim-handler';
 import {
   PackageShimHandler,
@@ -80,6 +83,10 @@ export class VirtualNetwork {
       (rest) => new URL(rest, normalizedTarget).href,
     );
     registerCardReferencePrefix(normalizedId, normalizedTarget);
+  }
+
+  knownRealms(): RealmIdentifier[] {
+    return [...this.realmMappings.keys()] as RealmIdentifier[];
   }
 
   private nativeFetch: typeof globalThis.fetch;
