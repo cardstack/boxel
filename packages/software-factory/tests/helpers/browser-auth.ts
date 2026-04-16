@@ -41,7 +41,6 @@ function getSupportRealmServerURL(): string | undefined {
 const defaultMatrixUrl = ensureTrailingSlash(
   process.env.SOFTWARE_FACTORY_BROWSER_MATRIX_URL ??
     getSupportMatrixURL() ??
-    process.env.MATRIX_URL ??
     'http://localhost:8008/',
 );
 const defaultUsername =

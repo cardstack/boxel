@@ -12,7 +12,7 @@
  *
  * Prerequisites:
  *   - Docker running, `mise run dev-all` (realm server, host app, Synapse, etc.)
- *   - MATRIX_URL, MATRIX_USERNAME, MATRIX_PASSWORD environment variables
+ *   - Active Boxel profile (`boxel profile add`)
  *   - OPENROUTER_API_KEY for the LLM agent
  *
  * Usage:
@@ -28,7 +28,7 @@ import '../../src/setup-logger';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { getRealmServerToken, matrixLogin } from '../../src/boxel';
+import { getActiveProfile, getRealmServerToken, matrixLogin } from '../../src/boxel';
 import { inferDarkfactoryModuleUrl } from '../../src/factory-seed';
 import { logger } from '../../src/logger';
 import {
@@ -671,25 +671,25 @@ async function scenario3(
 
 async function main(): Promise<void> {
   let { scenario, debug, briefUrl } = parseArgs();
-  let username = process.env.MATRIX_USERNAME;
 
-  if (!username) {
+  let profile;
+  try {
+    profile = getActiveProfile();
+  } catch {
     log.error(
-      'MATRIX_USERNAME is required. Set MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD.',
+      'No active Boxel profile found. Run `boxel profile add` to configure one.',
     );
     process.exit(1);
   }
+
+  let username = profile.username;
 
   if (!process.env.OPENROUTER_API_KEY) {
     log.error('OPENROUTER_API_KEY is required for the LLM agent.');
     process.exit(1);
   }
 
-  if (!process.env.MATRIX_URL) {
-    process.env.MATRIX_URL = 'http://localhost:8008';
-  }
-
-  let realmServerUrl = process.env.REALM_SERVER_URL ?? 'http://localhost:4201/';
+  let realmServerUrl = profile.realmServerUrl;
   if (!realmServerUrl.endsWith('/')) {
     realmServerUrl += '/';
   }

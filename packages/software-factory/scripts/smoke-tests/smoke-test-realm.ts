@@ -17,20 +17,16 @@
  *
  * Prerequisites:
  *
- *   Realm server authentication -- one of:
- *     a. Active Boxel CLI profile (`boxel profile add` then `boxel profile switch`)
- *     b. Environment variables: MATRIX_URL, MATRIX_USERNAME, MATRIX_PASSWORD
+ *   Active Boxel CLI profile (`boxel profile add`)
  *
  * Usage:
- *   MATRIX_URL=http://localhost:8008 MATRIX_USERNAME=<user> MATRIX_PASSWORD=<pass> \
- *   pnpm smoke:test-realm -- \
- *     --target-realm-url <realm-url>
+ *   pnpm smoke:test-realm -- --target-realm-url <realm-url>
  */
 
 // This should be first
 import '../../src/setup-logger';
 
-import { getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
+import { getActiveProfile, getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
 import { logger } from '../../src/logger';
 import {
   createRealm,
@@ -144,15 +140,18 @@ async function main() {
   let args = parseArgs(process.argv.slice(2));
   let targetRealmUrl = (args['target-realm-url'] as string) ?? '';
 
+  let profile;
+  try {
+    profile = getActiveProfile();
+  } catch {
+    log.error(
+      'No active Boxel profile found. Run `boxel profile add` to configure one.',
+    );
+    process.exit(1);
+  }
+
   if (!targetRealmUrl) {
-    let username = process.env.MATRIX_USERNAME;
-    if (!username) {
-      log.error('Usage: pnpm smoke:test-realm -- --target-realm-url <url>');
-      log.error(
-        '\nRequires MATRIX_USERNAME and MATRIX_PASSWORD environment variables.',
-      );
-      process.exit(1);
-    }
+    let username = profile.username;
     targetRealmUrl = `http://localhost:4201/${username}/smoke-test-realm/`;
     log.info(
       `No --target-realm-url specified, using default: ${targetRealmUrl}\n`,
@@ -175,14 +174,6 @@ async function main() {
   // The endpoint for _create-realm is just the realm name (not username/realm).
   // The username is determined from the JWT. Extract just the last segment.
   let realmEndpoint = realmPath.split('/').pop() ?? realmPath;
-
-  // Set defaults for the auth chain
-  if (!process.env.MATRIX_URL) {
-    process.env.MATRIX_URL = 'http://localhost:8008';
-  }
-  if (!process.env.REALM_SERVER_URL) {
-    process.env.REALM_SERVER_URL = realmServerUrl;
-  }
 
   log.info('=== Factory Test Realm Smoke Test (QUnit) ===\n');
   log.info(`Target realm: ${targetRealmUrl}`);

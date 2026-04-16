@@ -220,24 +220,19 @@ function resolveRealmServerProfile(
   ownerUsername: string,
   serverUrl: string,
 ): ActiveBoxelProfile {
-  let envProfile = buildEnvRealmServerProfile(ownerUsername, serverUrl);
-  if (envProfile) {
-    return envProfile;
-  }
-
   let profile: ActiveBoxelProfile;
 
   try {
     profile = getActiveProfile();
   } catch {
     throw new FactoryEntrypointUsageError(
-      `Target realm bootstrap needs Matrix auth for ${serverUrl}. Configure MATRIX_URL, MATRIX_USERNAME, and MATRIX_PASSWORD or use a matching active Boxel profile.`,
+      `Target realm bootstrap needs Matrix auth for ${serverUrl}. Run \`boxel profile add\` to configure a profile.`,
     );
   }
 
   if (getMatrixUsername(profile.username) !== ownerUsername) {
     throw new FactoryEntrypointUsageError(
-      `Active Boxel profile user "${getMatrixUsername(profile.username)}" does not match MATRIX_USERNAME "${ownerUsername}"`,
+      `Active Boxel profile user "${getMatrixUsername(profile.username)}" does not match target realm owner "${ownerUsername}"`,
     );
   }
 
@@ -252,57 +247,15 @@ function resolveRealmServerProfile(
   return profile;
 }
 
-function buildEnvRealmServerProfile(
-  ownerUsername: string,
-  serverUrl: string,
-): ActiveBoxelProfile | undefined {
-  let matrixUrl = normalizeOptionalString(process.env.MATRIX_URL);
-  let envUsername = normalizeOptionalString(process.env.MATRIX_USERNAME);
-  let matrixPassword = normalizeOptionalString(process.env.MATRIX_PASSWORD);
-
-  if (!matrixPassword) {
-    return undefined;
-  }
-
-  if (!matrixUrl) {
-    throw new FactoryEntrypointUsageError(
-      'MATRIX_URL is required for target realm creation when using environment auth',
-    );
-  }
-
-  if (!envUsername) {
-    throw new FactoryEntrypointUsageError(
-      'MATRIX_USERNAME is required for target realm creation when using environment auth',
-    );
-  }
-
-  let normalizedUsername = getMatrixUsername(envUsername);
-
-  if (normalizedUsername !== ownerUsername) {
-    throw new FactoryEntrypointUsageError(
-      `MATRIX_USERNAME "${normalizedUsername}" does not match target realm owner "${ownerUsername}"`,
-    );
-  }
-
-  return {
-    profileId: null,
-    username: normalizedUsername,
-    matrixUrl: ensureTrailingSlash(matrixUrl),
-    realmServerUrl: serverUrl,
-    password: matrixPassword,
-  };
-}
-
 function resolveTargetRealmOwner(): string {
-  let envUsername = normalizeOptionalString(process.env.MATRIX_USERNAME);
-
-  if (!envUsername) {
+  try {
+    let profile = getActiveProfile();
+    return getMatrixUsername(profile.username);
+  } catch {
     throw new FactoryEntrypointUsageError(
-      'Cannot determine the target realm owner. Set MATRIX_USERNAME before running factory:go.',
+      'Cannot determine the target realm owner. Run `boxel profile add` to configure a profile.',
     );
   }
-
-  return getMatrixUsername(envUsername);
 }
 
 function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
@@ -315,8 +268,6 @@ function resolveTargetRealmUrl(explicitTargetRealmUrl: string | null): string {
   return normalizeUrl(explicitTargetRealmUrl, '--target-realm-url');
 }
 
-const DEFAULT_REALM_SERVER_URL = 'http://localhost:4201/';
-
 function resolveRealmServerUrl(
   explicitRealmServerUrl: string | null,
   _targetRealmUrl: string,
@@ -325,7 +276,16 @@ function resolveRealmServerUrl(
     return normalizeUrl(explicitRealmServerUrl, '--realm-server-url');
   }
 
-  return DEFAULT_REALM_SERVER_URL;
+  try {
+    let profile = getActiveProfile();
+    return ensureTrailingSlash(profile.realmServerUrl);
+  } catch {
+    // No profile — fall through to error
+  }
+
+  throw new FactoryEntrypointUsageError(
+    'Cannot determine the realm server URL. Pass --realm-server-url or configure an active Boxel profile.',
+  );
 }
 
 function extractEndpointFromRealmUrl(targetRealmUrl: string): string {
@@ -366,13 +326,3 @@ function normalizeCreatedRealmUrl(
   return normalizeUrl(createdRealmId, 'realm server response data.id');
 }
 
-function normalizeOptionalString(
-  value: string | undefined,
-): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-
-  let trimmed = value.trim();
-  return trimmed === '' ? undefined : trimmed;
-}

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { AddressInfo } from 'node:net';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -90,9 +91,7 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         cwd: packageRoot,
         env: {
           ...process.env,
-          MATRIX_USERNAME: targetUsername,
-          MATRIX_PASSWORD: targetPassword,
-          MATRIX_URL: matrixURL,
+          HOME: createTempProfileHome(targetUsername, targetPassword, matrixURL, realmServerURL),
         },
         timeoutMs: 120_000,
       },
@@ -145,3 +144,27 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
     );
   }
 });
+
+function createTempProfileHome(
+  username: string,
+  password: string,
+  matrixUrl: string,
+  realmServerUrl: string,
+): string {
+  let tempHome = mkdtempSync(join(tmpdir(), 'boxel-test-'));
+  let boxelCliDir = join(tempHome, '.boxel-cli');
+  mkdirSync(boxelCliDir, { recursive: true });
+
+  let profileId = `@${username}:localhost`;
+  writeFileSync(
+    join(boxelCliDir, 'profiles.json'),
+    JSON.stringify({
+      profiles: {
+        [profileId]: { matrixUrl, realmServerUrl, password },
+      },
+      activeProfile: profileId,
+    }),
+  );
+
+  return tempHome;
+}

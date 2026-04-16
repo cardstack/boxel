@@ -13,6 +13,7 @@ import {
 import type { FactoryBrief } from '../src/factory-brief';
 import type { FactoryTargetRealmBootstrapResult } from '../src/factory-target-realm';
 import type { SeedIssueResult } from '../src/factory-seed';
+import { installTestProfile } from './helpers/test-profile';
 
 const briefUrl =
   'https://briefs.example.test/software-factory/Wiki/sticky-note';
@@ -39,11 +40,21 @@ const mockSeedResult: SeedIssueResult = {
 };
 
 module('factory-entrypoint', function (hooks) {
-  let originalMatrixUsername = process.env.MATRIX_USERNAME;
+  let cleanupProfile: (() => void) | undefined;
 
   hooks.afterEach(function () {
-    process.env.MATRIX_USERNAME = originalMatrixUsername;
+    cleanupProfile?.();
+    cleanupProfile = undefined;
   });
+
+  function setupHassanProfile() {
+    cleanupProfile = installTestProfile({
+      username: 'hassan',
+      matrixUrl: 'https://matrix.example.test/',
+      realmServerUrl: 'https://realms.example.test/',
+      password: 'secret',
+    });
+  }
 
   test('parseFactoryEntrypointArgs accepts required inputs', function (assert) {
     let options = parseFactoryEntrypointArgs([
@@ -142,14 +153,13 @@ module('factory-entrypoint', function (hooks) {
     assert.true(/--realm-server-url <url>/.test(usage));
     assert.true(/--no-retry-blocked/.test(usage));
     assert.true(/--help/.test(usage));
-    assert.true(/MATRIX_USERNAME is required/.test(usage));
-    assert.true(/For public briefs, no auth setup is needed./.test(usage));
-    assert.true(/MATRIX_URL \+ MATRIX_USERNAME \+ MATRIX_PASSWORD/.test(usage));
+    assert.true(/active Boxel profile/.test(usage));
+    assert.true(/For public briefs, no further auth setup is needed./.test(usage));
     assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 
   test('runFactoryEntrypoint creates seed issue and loads brief data', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
 
     let summary = await runFactoryEntrypoint(
       {
@@ -219,7 +229,7 @@ module('factory-entrypoint', function (hooks) {
   });
 
   test('runFactoryEntrypoint uses the resolved realm server URL for darkfactory module', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
 
     let capturedDarkfactoryModuleUrl: string | undefined;
 

@@ -7,28 +7,31 @@ import {
   bootstrapFactoryTargetRealm,
   resolveFactoryTargetRealm,
 } from '../src/factory-target-realm';
+import { installTestProfile } from './helpers/test-profile';
 
 const targetRealmUrl = 'https://realms.example.test/hassan/personal/';
 
 module('factory-target-realm', function (hooks) {
-  let originalHome = process.env.HOME;
-  let originalMatrixUsername = process.env.MATRIX_USERNAME;
-  let originalMatrixUrl = process.env.MATRIX_URL;
-  let originalMatrixPassword = process.env.MATRIX_PASSWORD;
-  let originalRealmServerUrl = process.env.REALM_SERVER_URL;
+  let cleanupProfile: (() => void) | undefined;
   let originalFetch = globalThis.fetch;
 
   hooks.afterEach(function () {
-    restoreEnv('HOME', originalHome);
-    restoreEnv('MATRIX_USERNAME', originalMatrixUsername);
-    restoreEnv('MATRIX_URL', originalMatrixUrl);
-    restoreEnv('MATRIX_PASSWORD', originalMatrixPassword);
-    restoreEnv('REALM_SERVER_URL', originalRealmServerUrl);
+    cleanupProfile?.();
+    cleanupProfile = undefined;
     globalThis.fetch = originalFetch;
   });
 
-  test('resolveFactoryTargetRealm uses MATRIX_USERNAME and explicit target URL', function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+  function setupHassanProfile() {
+    cleanupProfile = installTestProfile({
+      username: 'hassan',
+      matrixUrl: 'https://matrix.example.test/',
+      realmServerUrl: 'https://realms.example.test/',
+      password: 'secret',
+    });
+  }
+
+  test('resolveFactoryTargetRealm resolves owner from active profile', function (assert) {
+    setupHassanProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -38,14 +41,14 @@ module('factory-target-realm', function (hooks) {
     assert.strictEqual(resolution.url, targetRealmUrl);
     assert.strictEqual(
       resolution.serverUrl,
-      'http://localhost:4201/',
-      'defaults to localhost when --realm-server-url is not provided',
+      'https://realms.example.test/',
+      'defaults to active profile realmServerUrl when --realm-server-url is not provided',
     );
     assert.strictEqual(resolution.ownerUsername, 'hassan');
   });
 
   test('resolveFactoryTargetRealm accepts an explicit realm server URL override', function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl: 'https://realms.example.test/boxel/hassan/personal/',
@@ -59,7 +62,7 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('resolveFactoryTargetRealm rejects when target realm URL is missing', function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
 
     assert.throws(
       () =>
@@ -73,8 +76,20 @@ module('factory-target-realm', function (hooks) {
     );
   });
 
-  test('resolveFactoryTargetRealm rejects when MATRIX_USERNAME is missing', function (assert) {
-    delete process.env.MATRIX_USERNAME;
+  test('resolveFactoryTargetRealm rejects when no active profile is configured', function (assert) {
+    cleanupProfile = installTestProfile({
+      username: 'nobody',
+      matrixUrl: 'https://matrix.example.test/',
+      realmServerUrl: 'https://realms.example.test/',
+      password: 'secret',
+    });
+    // Overwrite with an empty profiles file to simulate no profile
+    let { writeFileSync } = require('node:fs');
+    let { join } = require('node:path');
+    writeFileSync(
+      join(process.env.HOME!, '.boxel-cli', 'profiles.json'),
+      JSON.stringify({ profiles: {}, activeProfile: null }),
+    );
 
     assert.throws(
       () =>
@@ -84,12 +99,14 @@ module('factory-target-realm', function (hooks) {
         }),
       (error: unknown) =>
         error instanceof FactoryEntrypointUsageError &&
-        error.message.includes('Set MATRIX_USERNAME'),
+        (error.message.includes('boxel profile add') ||
+          error.message.includes('active Boxel profile')),
     );
   });
 
   test('bootstrapFactoryTargetRealm creates the realm through the API', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
+
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
       realmServerUrl: null,
@@ -113,7 +130,8 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm reports when the realm already exists', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
+
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
       realmServerUrl: null,
@@ -132,7 +150,8 @@ module('factory-target-realm', function (hooks) {
   });
 
   test('bootstrapFactoryTargetRealm uses the canonical realm URL returned by create-realm', async function (assert) {
-    process.env.MATRIX_USERNAME = 'hassan';
+    setupHassanProfile();
+
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl: 'https://realms.example.test/typed-by-user/personal/',
       realmServerUrl: null,
@@ -156,9 +175,7 @@ module('factory-target-realm', function (hooks) {
   test('bootstrapFactoryTargetRealm sends the realm-server JWT to create-realm', async function (assert) {
     assert.expect(17);
 
-    process.env.MATRIX_URL = 'https://matrix.example.test/';
-    process.env.MATRIX_USERNAME = 'hassan';
-    process.env.MATRIX_PASSWORD = 'secret';
+    setupHassanProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -327,9 +344,7 @@ module('factory-target-realm', function (hooks) {
   test('bootstrapFactoryTargetRealm does not surface non-serialized response objects as [object Object]', async function (assert) {
     assert.expect(2);
 
-    process.env.MATRIX_URL = 'https://matrix.example.test/';
-    process.env.MATRIX_USERNAME = 'hassan';
-    process.env.MATRIX_PASSWORD = 'secret';
+    setupHassanProfile();
 
     let resolution = resolveFactoryTargetRealm({
       targetRealmUrl,
@@ -404,11 +419,3 @@ module('factory-target-realm', function (hooks) {
     );
   });
 });
-
-function restoreEnv(name: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[name];
-  } else {
-    process.env[name] = value;
-  }
-}
