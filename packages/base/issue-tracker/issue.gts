@@ -17,15 +17,37 @@ import DateField from '../date';
 import MarkdownField from '../markdown';
 
 import { FieldContainer, Pill } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { dasherize } from '@cardstack/boxel-ui/helpers';
 
-export const issueStatusOptions = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'review', label: 'In Review' },
-  { value: 'done', label: 'Done' },
+export const issueStatusLabels = [
+  'Backlog',
+  'In Progress',
+  'Blocked',
+  'In Review',
+  'Done',
 ];
+
+export const issuePriorityLabels = ['Low', 'Medium', 'High', 'Critical'];
+
+export const issueTypeLabels = [
+  'Bootstrap',
+  'Feature',
+  'Bug',
+  'Task',
+  'Research',
+  'Infrastructure',
+];
+
+function buildIssueOptions(labels: string[]) {
+  return labels.map((label) => ({
+    value: dasherize(label),
+    label,
+  }));
+}
+
+export const issueStatusOptions = buildIssueOptions(issueStatusLabels);
+export const issuePriorityOptions = buildIssueOptions(issuePriorityLabels);
+export const issueTypeOptions = buildIssueOptions(issueTypeLabels);
 
 export const projectStatusOptions = [
   { value: 'planning', label: 'Planning' },
@@ -33,23 +55,6 @@ export const projectStatusOptions = [
   { value: 'on_hold', label: 'On Hold' },
   { value: 'completed', label: 'Completed' },
   { value: 'archived', label: 'Archived' },
-];
-
-export const issuePriorityOptions = [
-  { value: 'unset', label: 'Unset' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'critical', label: 'Critical' },
-];
-
-export const issueTypeOptions = [
-  { value: 'unset', label: 'Unset' },
-  { value: 'task', label: 'Task' },
-  { value: 'feature', label: 'Feature' },
-  { value: 'bug', label: 'Bug' },
-  { value: 'research', label: 'Research' },
-  { value: 'infrastructure', label: 'Infrastructure' },
 ];
 
 class IssueOptionField extends FieldDef {
@@ -83,40 +88,36 @@ class IssueOptionField extends FieldDef {
   };
 }
 
-function cloneIssueOptions(options: { value: string; label: string }[]) {
-  return options.map((option) => new IssueOptionField(option));
-}
-
 const IssueStatusField = enumField(StringField, {
   options: function (this: any) {
-    const opts = this.project?.statusOptions;
+    const opts = this.project?.issueStatusOptions;
     return opts?.length ? opts : issueStatusOptions;
   },
 });
 
 const IssuePriorityField = enumField(StringField, {
   options: function (this: any) {
-    const opts = this.project?.priorityOptions;
+    const opts = this.project?.issuePriorityOptions;
     return opts?.length ? opts : issuePriorityOptions;
   },
 });
 
 const IssueTypeField = enumField(StringField, {
   options: function (this: any) {
-    const opts = this.project?.typeOptions;
+    const opts = this.project?.issueTypeOptions;
     return opts?.length ? opts : issueTypeOptions;
   },
 });
 
 function getStatusVariant(statusId?: string) {
   switch (statusId) {
-    case 'in_progress':
+    case 'in-progress':
     case 'active':
       return 'primary';
     case 'blocked':
     case 'on_hold':
       return 'destructive';
-    case 'review':
+    case 'in-review':
     case 'completed':
       return 'accent';
     case 'done':
@@ -130,32 +131,28 @@ function getStatusVariant(statusId?: string) {
 export class Issue extends CardDef {
   static displayName = 'Issue';
 
-  @field ticketId = contains(StringField);
-  @field title = contains(StringField);
+  @field issueId = contains(StringField);
+  @field summary = contains(StringField);
   @field description = contains(MarkdownField);
+  @field issueType = contains(IssueTypeField);
   @field status = contains(IssueStatusField);
   @field computedStatus = contains(IssueStatusField, {
     computeVia: function (this: Issue) {
-      return this.status;
-    },
-  });
-  @field ticketType = contains(IssueTypeField);
-  @field computedTicketType = contains(IssueTypeField, {
-    computeVia: function (this: Issue) {
-      return this.ticketType;
+      if (this.status) {
+        return this.status;
+      }
+      return (
+        this.project?.issueStatusOptions?.[0]?.value ??
+        issueStatusOptions[0]?.value
+      );
     },
   });
   @field priority = contains(IssuePriorityField);
-  @field computedPriority = contains(IssuePriorityField, {
-    computeVia: function (this: Issue) {
-      return this.priority;
-    },
-  });
   @field statusBoardOrder = contains(NumberField);
   @field priorityBoardOrder = contains(NumberField);
-  @field ticketTypeBoardOrder = contains(NumberField);
-  @field relatedTickets = linksToMany(() => Issue);
+  @field issueTypeBoardOrder = contains(NumberField);
   @field project = linksTo(() => Project);
+  @field relatedTickets = linksToMany(() => Issue);
 
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: Issue) {
@@ -180,7 +177,7 @@ export class Issue extends CardDef {
     computeVia: function (this: Issue) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
-        : (this.title ?? 'Untitled Issue');
+        : (this.summary ?? 'Untitled Issue');
     },
   });
 
@@ -189,21 +186,23 @@ export class Issue extends CardDef {
       <div class='ticket-card compact'>
         <div class='row'>
           <div>
-            {{#if @model.ticketId}}
-              <Pill @size='extra-small' @variant='secondary'>
-                <@fields.ticketId />
+            <Pill @size='extra-small' @variant='secondary'>
+              {{#if @model.issueId}}
+                <@fields.issueId />
+              {{else}}
+                Issue
+              {{/if}}
+            </Pill>
+            {{#if @model.issueType}}
+              <Pill @size='extra-small' @variant='default'>
+                <@fields.issueType @format='atom' />
               </Pill>
             {{/if}}
-            {{#unless (eq @model.computedTicketType 'unset')}}
+            {{#if @model.priority}}
               <Pill @size='extra-small' @variant='default'>
-                <@fields.computedTicketType @format='atom' />
+                <@fields.priority @format='atom' />
               </Pill>
-            {{/unless}}
-            {{#unless (eq @model.computedPriority 'unset')}}
-              <Pill @size='extra-small' @variant='default'>
-                <@fields.computedPriority @format='atom' />
-              </Pill>
-            {{/unless}}
+            {{/if}}
           </div>
           <Pill
             @size='extra-small'
@@ -239,34 +238,64 @@ export class Issue extends CardDef {
       <div class='issue-edit'>
         <div class='meta-row'>
           <div class='meta-cell'>
-            <FieldContainer @label='Ticket ID' @vertical={{true}}>
-              <@fields.ticketId />
-            </FieldContainer>
-          </div>
-          <div class='meta-cell'>
-            <FieldContainer @label='Status' @vertical={{true}}>
-              <@fields.status />
-            </FieldContainer>
-          </div>
-          <div class='meta-cell'>
-            <FieldContainer @label='Type' @vertical={{true}}>
-              <@fields.ticketType />
-            </FieldContainer>
-          </div>
-          <div class='meta-cell'>
-            <FieldContainer @label='Priority' @vertical={{true}}>
-              <@fields.priority />
+            <FieldContainer @label='Issue ID'>
+              <@fields.issueId />
             </FieldContainer>
           </div>
         </div>
 
         <FieldContainer @label='Title' @vertical={{true}}>
-          <@fields.title />
+          <@fields.summary />
         </FieldContainer>
 
         <FieldContainer @label='Description' @vertical={{true}}>
           <@fields.description />
         </FieldContainer>
+
+        <section class='options-section'>
+          <div class='options-section-header'>
+            <h2 class='section-title'>Issue Configuration</h2>
+            <p class='section-copy'>
+              Set the issue status, type, and priority using the options
+              available in this project.
+            </p>
+          </div>
+          <div class='options-row'>
+            <div class='option-panel'>
+              <div class='option-panel-header'>
+                <h3 class='option-title'>Status</h3>
+                <p class='option-copy'>
+                  Controls the current workflow state for this issue.
+                </p>
+              </div>
+              <FieldContainer @label='Status' @vertical={{true}}>
+                <@fields.status />
+              </FieldContainer>
+            </div>
+            <div class='option-panel'>
+              <div class='option-panel-header'>
+                <h3 class='option-title'>Type</h3>
+                <p class='option-copy'>
+                  Classifies the issue as work like feature, bug, or research.
+                </p>
+              </div>
+              <FieldContainer @label='Type' @vertical={{true}}>
+                <@fields.issueType />
+              </FieldContainer>
+            </div>
+            <div class='option-panel'>
+              <div class='option-panel-header'>
+                <h3 class='option-title'>Priority</h3>
+                <p class='option-copy'>
+                  Indicates the urgency or importance of this issue.
+                </p>
+              </div>
+              <FieldContainer @label='Priority' @vertical={{true}}>
+                <@fields.priority />
+              </FieldContainer>
+            </div>
+          </div>
+        </section>
 
         <div class='bottom-row'>
           <div class='bottom-cell'>
@@ -289,8 +318,63 @@ export class Issue extends CardDef {
         }
         .meta-row {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: 1fr;
           gap: var(--boxel-sp);
+        }
+        .options-section {
+          display: grid;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp-lg);
+          background: var(--card, var(--boxel-light));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius-lg);
+        }
+        .options-section-header {
+          display: grid;
+          gap: var(--boxel-sp-2xs);
+        }
+        .section-title {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .section-copy {
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.5;
+          color: var(--muted-foreground, var(--boxel-600));
+        }
+        .options-row {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: var(--boxel-sp);
+        }
+        .option-panel {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+          min-width: 0;
+          padding: var(--boxel-sp);
+          background: var(--muted, var(--boxel-100));
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius);
+          box-shadow: inset 0 1px 0 rgb(from var(--card, white) r g b / 0.35);
+        }
+        .option-panel-header {
+          display: grid;
+          gap: var(--boxel-sp-3xs);
+        }
+        .option-title {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          color: var(--foreground, var(--boxel-dark));
+        }
+        .option-copy {
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          line-height: 1.45;
+          color: var(--muted-foreground, var(--boxel-600));
         }
         .bottom-row {
           display: grid;
@@ -301,6 +385,11 @@ export class Issue extends CardDef {
         .bottom-cell {
           min-width: 0;
         }
+        @media (max-width: 60rem) {
+          .options-row {
+            grid-template-columns: 1fr;
+          }
+        }
       </style>
     </template>
   };
@@ -310,35 +399,43 @@ export class Issue extends CardDef {
       <article class='issue'>
         <header class='issue-header'>
           <div class='issue-pills'>
-            {{#if @model.ticketId}}
+            <div>
               <Pill @size='extra-small' @variant='secondary'>
-                <@fields.ticketId />
+                {{#if @model.issueId}}
+                  <@fields.issueId />
+                {{else}}
+                  Issue
+                {{/if}}
               </Pill>
-            {{/if}}
+              {{#if @model.issueType}}
+                <Pill @size='extra-small' @variant='default'>
+                  <@fields.issueType @format='atom' />
+                </Pill>
+              {{/if}}
+              {{#if @model.priority}}
+                <Pill @size='extra-small' @variant='default'>
+                  <@fields.priority @format='atom' />
+                </Pill>
+              {{/if}}
+            </div>
             <Pill
               @size='extra-small'
               @variant={{getStatusVariant @model.computedStatus}}
             >
               <@fields.computedStatus @format='atom' />
             </Pill>
-            {{#unless (eq @model.computedTicketType 'unset')}}
-              <Pill @size='extra-small' @variant='default'>
-                <@fields.computedTicketType @format='atom' />
-              </Pill>
-            {{/unless}}
-            {{#unless (eq @model.computedPriority 'unset')}}
-              <Pill @size='extra-small' @variant='default'>
-                <@fields.computedPriority @format='atom' />
-              </Pill>
-            {{/unless}}
           </div>
           <h1 class='issue-title'><@fields.cardTitle /></h1>
-          {{#if @model.project}}
-            <div class='issue-project'>
+
+          <div class='issue-project'>
+            {{#if @model.project}}
               <span class='dim-label'>Project</span>
               <@fields.project @format='atom' />
-            </div>
-          {{/if}}
+            {{else}}
+              <em class='dim-label'>No Project</em>
+            {{/if}}
+          </div>
+
         </header>
 
         <section class='issue-body'>
@@ -373,6 +470,7 @@ export class Issue extends CardDef {
         .issue-pills {
           display: flex;
           flex-wrap: wrap;
+          justify-content: space-between;
           gap: var(--boxel-sp-xs);
         }
         .issue-title {
@@ -423,20 +521,48 @@ export class Project extends CardDef {
   static prefersWideFormat = true;
 
   @field projectCode = contains(StringField);
+  @field projectName = contains(StringField);
   @field projectStatus = contains(
-    enumField(StringField, {
-      options: function (this: any) {
-        const opts = this.statusOptions;
-        return opts?.length ? opts : projectStatusOptions;
-      },
-    }),
+    enumField(StringField, { options: projectStatusOptions }),
   );
-  @field title = contains(StringField);
   @field description = contains(MarkdownField);
   @field dueDate = contains(DateField);
-  @field priorityOptions = containsMany(IssueOptionField);
-  @field statusOptions = containsMany(IssueOptionField);
-  @field typeOptions = containsMany(IssueOptionField);
+  @field issuePriorityLabels = containsMany(StringField);
+  @field issuePriorityOptions = containsMany(IssueOptionField, {
+    computeVia: function (this: Project) {
+      return this.issuePriorityLabels?.map(
+        (l) =>
+          new IssueOptionField({
+            value: dasherize(l),
+            label: l,
+          }),
+      );
+    },
+  });
+  @field issueStatusLabels = containsMany(StringField);
+  @field issueStatusOptions = containsMany(IssueOptionField, {
+    computeVia: function (this: Project) {
+      return this.issueStatusLabels?.map(
+        (l) =>
+          new IssueOptionField({
+            value: dasherize(l),
+            label: l,
+          }),
+      );
+    },
+  });
+  @field issueTypeLabels = containsMany(StringField);
+  @field issueTypeOptions = containsMany(IssueOptionField, {
+    computeVia: function (this: Project) {
+      return this.issueTypeLabels?.map(
+        (l) =>
+          new IssueOptionField({
+            value: dasherize(l),
+            label: l,
+          }),
+      );
+    },
+  });
   @field issues = linksToMany(() => Issue, {
     query: {
       filter: {
@@ -453,7 +579,7 @@ export class Project extends CardDef {
     computeVia: function (this: Project) {
       return this.cardInfo.name?.trim()?.length
         ? this.cardInfo.name
-        : (this.title ?? 'Untitled Project');
+        : (this.projectName ?? 'Untitled Project');
     },
   });
 
@@ -464,14 +590,14 @@ export class Project extends CardDef {
         let model = this.args.model as Project | undefined;
         if (!model) return;
 
-        if (!model.priorityOptions?.length) {
-          model.priorityOptions = cloneIssueOptions(issuePriorityOptions) as any;
+        if (!model.issuePriorityLabels?.length) {
+          model.issuePriorityLabels = issuePriorityLabels;
         }
-        if (!model.statusOptions?.length) {
-          model.statusOptions = cloneIssueOptions(projectStatusOptions) as any;
+        if (!model.issueStatusLabels?.length) {
+          model.issueStatusLabels = issueStatusLabels;
         }
-        if (!model.typeOptions?.length) {
-          model.typeOptions = cloneIssueOptions(issueTypeOptions) as any;
+        if (!model.issueTypeLabels?.length) {
+          model.issueTypeLabels = issueTypeLabels;
         }
       });
     }
@@ -479,8 +605,8 @@ export class Project extends CardDef {
     <template>
       <div class='project-edit'>
         <div class='row'>
-          <FieldContainer @label='Title' @vertical={{true}}>
-            <@fields.title />
+          <FieldContainer @label='Project Name' @vertical={{true}}>
+            <@fields.projectName />
           </FieldContainer>
           <FieldContainer @label='Project Code' @vertical={{true}}>
             <@fields.projectCode />
@@ -497,17 +623,20 @@ export class Project extends CardDef {
         <FieldContainer @label='Description' @vertical={{true}}>
           <@fields.description />
         </FieldContainer>
-        <div class='options-row'>
-          <FieldContainer @label='Priority Options' @vertical={{true}}>
-            <@fields.priorityOptions />
-          </FieldContainer>
-          <FieldContainer @label='Status Options' @vertical={{true}}>
-            <@fields.statusOptions />
-          </FieldContainer>
-          <FieldContainer @label='Type Options' @vertical={{true}}>
-            <@fields.typeOptions />
+        <div class='row'>
+          <FieldContainer @label='Theme' @vertical={{true}}>
+            <@fields.cardInfo.theme />
           </FieldContainer>
         </div>
+
+        Issue Status Labels:
+        <@fields.issueStatusLabels />
+
+        Issue Priority Labels:
+        <@fields.issuePriorityLabels />
+
+        Issue Type Labels:
+        <@fields.issueTypeLabels />
       </div>
       <style scoped>
         .project-edit {

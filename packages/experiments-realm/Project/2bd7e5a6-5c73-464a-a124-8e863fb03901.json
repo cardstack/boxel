@@ -10,40 +10,40 @@
     "attributes": {
       "dueDate": null,
       "cardInfo": {
-        "name": "Project 1",
+        "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "description": null,
-      "projectCode": "PCS",
-      "projectName": "Project 1",
-      "projectStatus": null,
+      "description": "Prove the public software-factory tracker module can be adopted by an external realm.",
+      "projectCode": "DFX",
+      "projectName": "DarkFactory Adoption Harness",
+      "projectStatus": "active",
+      "issueStatusLabels": [
+        "Backlog",
+        "In Progress",
+        "In Review",
+        "Done"
+      ],
+      "issuePriorityLabels": [
+        "Low",
+        "Medium",
+        "High",
+        "Critical"
+      ],
       "issueTypeLabels": [
+        "Bootstrap",
         "Feature",
         "Bug",
         "Task",
         "Research",
         "Infrastructure"
-      ],
-      "issueStatusLabels": [
-        "Backlog",
-        "In Progress",
-        "In Review",
-        "Done",
-        "Canceled"
-      ],
-      "issuePriorityLabels": [
-        "Medium",
-        "High",
-        "Critical",
-        "Low"
       ]
     },
     "relationships": {
       "cardInfo.theme": {
         "links": {
-          "self": "../BrandGuide/1fc32354-8201-4f79-b400-c7c94b507174"
+          "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
         }
       },
       "cardInfo.cardThumbnail": {

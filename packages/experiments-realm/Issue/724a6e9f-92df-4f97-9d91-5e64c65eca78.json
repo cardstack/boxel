@@ -8,21 +8,21 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
-      "status": "review",
+      "status": null,
+      "issueId": null,
+      "summary": "Test2",
       "cardInfo": {
-        "name": "Issue 5",
+        "name": null,
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
       "priority": null,
-      "ticketId": "cs-5",
-      "ticketType": null,
+      "issueType": null,
       "description": null,
-      "statusBoardOrder": 2,
-      "priorityBoardOrder": 2,
-      "ticketTypeBoardOrder": 5
+      "statusBoardOrder": null,
+      "priorityBoardOrder": null,
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {

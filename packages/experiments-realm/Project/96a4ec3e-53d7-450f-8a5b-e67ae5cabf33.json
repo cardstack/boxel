@@ -8,7 +8,6 @@
     },
     "type": "card",
     "attributes": {
-      "title": "Personal Project",
       "dueDate": null,
       "cardInfo": {
         "name": null,
@@ -18,18 +17,28 @@
       },
       "description": null,
       "projectCode": "BN",
-      "typeOptions": [],
       "projectStatus": null,
-      "statusOptions": [],
-      "priorityOptions": [
-        {
-          "value": "low",
-          "label": "Low"
-        },
-        {
-          "value": "high",
-          "label": "High"
-        }
+      "projectName": null,
+      "issuePriorityLabels": [
+        "Low",
+        "Medium",
+        "High",
+        "Critical"
+      ],
+      "issueStatusLabels": [
+        "Backlog",
+        "In Progress",
+        "Blocked",
+        "In Review",
+        "Done"
+      ],
+      "issueTypeLabels": [
+        "Bootstrap",
+        "Feature",
+        "Bug",
+        "Task",
+        "Research",
+        "Infrastructure"
       ]
     },
     "relationships": {

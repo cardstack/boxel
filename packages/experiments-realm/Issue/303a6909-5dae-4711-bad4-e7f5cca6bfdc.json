@@ -8,21 +8,21 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
       "status": "backlog",
+      "issueId": null,
+      "summary": "Issue 6",
       "cardInfo": {
         "name": "Issue 6",
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "priority": "critical",
-      "ticketId": "cs-6",
-      "ticketType": "feature",
+      "priority": "low",
+      "issueType": "feature",
       "description": null,
       "statusBoardOrder": 1,
       "priorityBoardOrder": 1,
-      "ticketTypeBoardOrder": 1
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {

@@ -1,0 +1,84 @@
+{
+  "data": {
+    "meta": {
+      "adoptsFrom": {
+        "name": "KanbanBoard",
+        "module": "https://cardstack.com/base/issue-tracker/kanban-board"
+      }
+    },
+    "type": "card",
+    "attributes": {
+      "title": "DarkFactory Kanban",
+      "groupBy": "status",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      },
+      "hideEmptyColumns": false,
+      "typeColumnConfig": [
+        {
+          "key": "bootstrap",
+          "label": null,
+          "color": "#6a9a76",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        }
+      ],
+      "statusColumnConfig": [
+        {
+          "key": "backlog",
+          "label": null,
+          "color": "#1f1f23",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "in-progress",
+          "label": null,
+          "color": "#64f26e",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "in-review",
+          "label": null,
+          "color": "#64eff2",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        },
+        {
+          "key": "done",
+          "label": null,
+          "color": "#6669f4",
+          "wipLimit": null,
+          "collapsed": false,
+          "sortOrder": null
+        }
+      ],
+      "priorityColumnConfig": []
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/2bd7e5a6-5c73-464a-a124-8e863fb03901"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      }
+    }
+  }
+}

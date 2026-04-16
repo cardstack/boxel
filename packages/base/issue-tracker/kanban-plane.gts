@@ -47,8 +47,13 @@ export class KanbanPlane extends Component<{
   columnCardCount = (colIndex: number): number =>
     colCount(colIndex, this.args.placements);
 
-  isColumnVisible = (colIndex: number): boolean => {
-    if (!this.args.hideEmpty) return true;
+  isColumnVisible = (column: KanbanColumnField, colIndex: number): boolean => {
+    if (column.collapsed) {
+      return false;
+    }
+    if (!this.args.hideEmpty) {
+      return true;
+    }
     return this.columnCardCount(colIndex) > 0;
   };
 
@@ -164,7 +169,7 @@ export class KanbanPlane extends Component<{
       tabindex='0'
     >
       {{#each this.args.columns as |column colIdx|}}
-        {{#if (this.isColumnVisible colIdx)}}
+        {{#if (this.isColumnVisible column colIdx)}}
           <div
             class='column
               {{if (this.isTargetColumn colIdx) "is-target"}}

@@ -8,8 +8,9 @@
     },
     "type": "card",
     "attributes": {
-      "title": "N400 Application",
-      "status": null,
+      "status": "in-progress",
+      "issueId": "DF-1",
+      "summary": "Verify public DarkFactory adoption",
       "cardInfo": {
         "name": null,
         "notes": null,
@@ -17,17 +18,16 @@
         "cardThumbnailURL": null
       },
       "priority": "high",
-      "ticketId": null,
-      "ticketType": null,
-      "description": null,
+      "issueType": "task",
+      "description": "Render tracker cards from an adopter realm using the public software-factory module URL.",
       "statusBoardOrder": 1,
       "priorityBoardOrder": 1,
-      "ticketTypeBoardOrder": null
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {
         "links": {
-          "self": "../Project/96a4ec3e-53d7-450f-8a5b-e67ae5cabf33"
+          "self": "../Project/2bd7e5a6-5c73-464a-a124-8e863fb03901"
         }
       },
       "cardInfo.theme": {

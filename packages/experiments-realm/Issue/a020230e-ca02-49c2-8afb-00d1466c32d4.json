@@ -8,21 +8,21 @@
     },
     "type": "card",
     "attributes": {
-      "title": null,
-      "status": "in_progress",
+      "status": "in-progress",
+      "issueId": null,
+      "summary": null,
       "cardInfo": {
         "name": "Issue 8",
         "notes": null,
         "summary": null,
         "cardThumbnailURL": null
       },
-      "priority": "unset",
-      "ticketId": null,
-      "ticketType": "task",
+      "priority": "medium",
+      "issueType": null,
       "description": null,
       "statusBoardOrder": 3,
       "priorityBoardOrder": 3,
-      "ticketTypeBoardOrder": 1
+      "issueTypeBoardOrder": null
     },
     "relationships": {
       "project": {

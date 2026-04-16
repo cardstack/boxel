@@ -12,13 +12,19 @@ import {
   CSSField,
   CssImportField,
 } from '../card-api';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+import {
+  ContextButton,
+  FieldContainer,
+  SortDropdown,
+  Switch,
+} from '@cardstack/boxel-ui/components';
 import StringField from '../string';
 import BooleanField from '../boolean';
 import enumField from '../enum';
 import { tracked } from '@glimmer/tracking';
 import { fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import KanbanIcon from '@cardstack/boxel-icons/columns-3';
 
 import { KanbanColumnField } from './kanban-column';
@@ -36,7 +42,7 @@ import {
 const defaultColumnOptions: {
   value: string;
   label: string;
-  fieldName: string; // field to read for column matching (may be computed)
+  fieldName: string; // field to read for column matching
   writeFieldName: string; // field to write when dragging across columns (must be stored)
   orderField: string;
   options: { value: string; label: string }[];
@@ -52,7 +58,7 @@ const defaultColumnOptions: {
   {
     value: 'priority',
     label: 'Priority',
-    fieldName: 'computedPriority',
+    fieldName: 'priority',
     writeFieldName: 'priority',
     orderField: 'priorityBoardOrder',
     options: issuePriorityOptions,
@@ -60,7 +66,7 @@ const defaultColumnOptions: {
   {
     value: 'ticketType',
     label: 'Type',
-    fieldName: 'computedTicketType',
+    fieldName: 'issueType',
     writeFieldName: 'ticketType',
     orderField: 'ticketTypeBoardOrder',
     options: issueTypeOptions,
@@ -156,6 +162,42 @@ class Isolated extends Component<typeof KanbanBoard> {
   get cardCount(): number {
     return this.args.model?.cards?.length ?? 0;
   }
+
+  get groupByOptions(): { displayName: string; sort: string }[] {
+    return defaultColumnOptions.map(({ value, label }) => ({
+      displayName: label,
+      sort: value,
+    }));
+  }
+
+  get selectedGroupByOption():
+    | { displayName: string; sort: string }
+    | undefined {
+    let groupBy = (this.args.model as any)?.groupBy ?? 'status';
+    return (
+      this.groupByOptions.find((option) => option.sort === groupBy) ?? undefined
+    );
+  }
+
+  onGroupByChange = (option: { displayName: string; sort: string }): void => {
+    let model = this.args.model as any;
+    if (!model || model.groupBy === option.sort) {
+      return;
+    }
+    model.groupBy = option.sort;
+  };
+
+  get hideEmptyColumns(): boolean {
+    return Boolean((this.args.model as any)?.hideEmptyColumns);
+  }
+
+  toggleHideEmptyColumns = (): void => {
+    let model = this.args.model as any;
+    if (!model) {
+      return;
+    }
+    model.hideEmptyColumns = !this.hideEmptyColumns;
+  };
 
   // ── Persistence ──────────────────────────────────────────────────
 
@@ -261,29 +303,54 @@ class Isolated extends Component<typeof KanbanBoard> {
     <div class='kanban-surface'>
       <header class='kanban-toolbar'>
         <div class='toolbar-left'>
-          <h2 class='kanban-title'>
-            <svg
-              width='18'
-              height='18'
-              viewBox='0 0 24 24'
-              fill='none'
-              stroke='currentColor'
-              stroke-width='2'
-            >
-              <rect x='3' y='3' width='5' height='18' rx='1' />
-              <rect x='10' y='3' width='5' height='12' rx='1' />
-              <rect x='17' y='3' width='5' height='15' rx='1' />
-            </svg>
-            <@fields.cardTitle />
-          </h2>
+          <div class='kanban-heading'>
+            <h2 class='kanban-title'>
+              <svg
+                width='18'
+                height='18'
+                viewBox='0 0 24 24'
+                fill='none'
+                stroke='currentColor'
+                stroke-width='2'
+              >
+                <rect x='3' y='3' width='5' height='18' rx='1' />
+                <rect x='10' y='3' width='5' height='12' rx='1' />
+                <rect x='17' y='3' width='5' height='15' rx='1' />
+              </svg>
+              <@fields.cardTitle />
+            </h2>
+            {{#if @model.project}}
+              <div class='kanban-project'>
+                <span class='dim-label'>Project</span>
+                <@fields.project @format='atom' />
+              </div>
+            {{/if}}
+          </div>
           <span class='card-count'>{{this.cardCount}} cards</span>
         </div>
         <div class='toolbar-right'>
-          <button
-            type='button'
-            class='settings-btn {{if this.showSettings "is-active"}}'
+          <div class='column-visibility-toggle'>
+            <span class='group-by-label'>Hide empty</span>
+            <Switch
+              @isEnabled={{this.hideEmptyColumns}}
+              @onChange={{this.toggleHideEmptyColumns}}
+              @label='Hide empty columns'
+            />
+          </div>
+          <div class='group-by-picker'>
+            <SortDropdown
+              @options={{this.groupByOptions}}
+              @selectedOption={{this.selectedGroupByOption}}
+              @onSelect={{this.onGroupByChange}}
+            />
+          </div>
+          <ContextButton
+            class='settings-button'
+            @label='Toggle column settings'
+            @icon='context-menu-vertical'
+            @variant='ghost'
             {{on 'click' this.toggleSettings}}
-          >⚙</button>
+          />
         </div>
       </header>
 
@@ -378,62 +445,97 @@ class Isolated extends Component<typeof KanbanBoard> {
 
     <style scoped>
       .kanban-surface {
+        --kanban-surface-bg: var(--background, var(--boxel-200));
+        --kanban-card-bg: var(--card, var(--boxel-light));
+        --kanban-foreground: var(--foreground, var(--boxel-dark));
+        --kanban-muted-bg: var(--muted, var(--boxel-100));
+        --kanban-muted-foreground: var(--muted-foreground, var(--boxel-500));
+        --kanban-border-color: var(--border, var(--boxel-border-color));
+
         display: flex;
         flex-direction: column;
         height: 100%;
         min-height: 100%;
-        background: #eceef1;
-        color: #1e293b;
+        background: var(--kanban-surface-bg);
+        color: var(--kanban-foreground);
       }
       .kanban-toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 16px;
-        border-bottom: 1px solid #e2e8f0;
-        background: #fff;
+        padding: 0.625rem 1rem;
+        border-bottom: 1px solid var(--kanban-border-color);
+        background: var(--kanban-card-bg);
         flex-shrink: 0;
       }
       .toolbar-left {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 0.5rem;
+      }
+      .kanban-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
       }
       .toolbar-right {
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 0.375rem;
+      }
+      .group-by-picker {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 11rem;
+      }
+      .column-visibility-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .group-by-label {
+        font-size: 0.75rem;
+        color: var(--kanban-muted-foreground);
+        white-space: nowrap;
+      }
+      .group-by-picker :deep(.sort-options-label) {
+        color: var(--kanban-muted-foreground);
+        font-size: 0.75rem;
+      }
+      .group-by-picker :deep(.sort-button) {
+        min-width: 8rem;
       }
       .kanban-title {
         display: flex;
         align-items: center;
-        gap: 6px;
-        font-size: 14px;
+        gap: 0.375rem;
+        font-size: 0.875rem;
         font-weight: 600;
         margin: 0;
         letter-spacing: -0.01em;
       }
+      .kanban-project {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+      }
+      .dim-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--kanban-muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
       .card-count {
-        font-size: 12px;
-        color: #94a3b8;
-        padding: 2px 8px;
-        background: #f1f5f9;
+        font-size: 0.75rem;
+        color: var(--kanban-muted-foreground);
+        padding: 0.125rem 0.5rem;
+        background: var(--kanban-muted-bg);
         border-radius: 4px;
       }
-      .settings-btn {
-        padding: 3px 8px;
-        font-size: 14px;
-        line-height: 1;
-        background: transparent;
-        border: 1px solid var(--border, #e2e8f0);
-        border-radius: 4px;
-        cursor: pointer;
-        color: var(--muted-foreground, #64748b);
-      }
-      .settings-btn.is-active {
-        background: var(--muted, #f1f5f9);
-        border-color: var(--border, #cbd5e1);
-        color: var(--foreground, #1e293b);
+      .settings-button {
+        color: var(--kanban-muted-foreground);
       }
       .kanban-main {
         flex: 1;
@@ -463,35 +565,35 @@ class Isolated extends Component<typeof KanbanBoard> {
         align-items: center;
         justify-content: center;
         height: 100%;
-        font-size: 12px;
-        color: #94a3b8;
+        font-size: 0.75rem;
+        color: var(--kanban-muted-foreground);
       }
       /* ── Settings panel ── */
       .settings-panel {
-        width: 240px;
+        width: 15rem;
         flex-shrink: 0;
-        background: var(--card, #fff);
-        border-left: 1px solid var(--border, #e2e8f0);
+        background: var(--kanban-card-bg);
+        border-left: 1px solid var(--kanban-border-color);
         display: flex;
         flex-direction: column;
         overflow-y: auto;
       }
       .settings-header {
-        padding: 8px 12px;
-        border-bottom: 1px solid var(--border, #e2e8f0);
-        font-size: 11px;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--kanban-border-color);
+        font-size: 0.6875rem;
         font-weight: 600;
         letter-spacing: 0.05em;
         text-transform: uppercase;
-        color: var(--muted-foreground, #64748b);
+        color: var(--kanban-muted-foreground);
         flex-shrink: 0;
       }
       .settings-row {
-        padding: 10px 12px;
-        border-bottom: 1px solid var(--border, #f1f5f9);
+        padding: 0.625rem 0.75rem;
+        border-bottom: 1px solid var(--kanban-border-color);
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        gap: 0.375rem;
       }
       .settings-top {
         display: flex;
@@ -499,59 +601,59 @@ class Isolated extends Component<typeof KanbanBoard> {
         justify-content: space-between;
       }
       .settings-name {
-        font-size: 13px;
+        font-size: 0.8125rem;
         font-weight: 600;
-        color: var(--foreground, #1e293b);
+        color: var(--kanban-foreground);
       }
       .settings-order {
         display: flex;
-        gap: 2px;
+        gap: 0.125rem;
       }
       .order-btn {
-        padding: 1px 5px;
-        font-size: 11px;
+        padding: 0.0625rem 0.3125rem;
+        font-size: 0.6875rem;
         line-height: 1.4;
-        background: var(--muted, #f1f5f9);
-        border: 1px solid var(--border, #e2e8f0);
+        background: var(--kanban-muted-bg);
+        border: 1px solid var(--kanban-border-color);
         border-radius: 3px;
         cursor: pointer;
-        color: var(--foreground, #1e293b);
+        color: var(--kanban-foreground);
       }
       .order-btn:hover {
-        background: var(--border, #e2e8f0);
+        background: var(--kanban-border-color);
       }
       .settings-controls {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 0.625rem;
         flex-wrap: wrap;
       }
       .settings-field {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 0.25rem;
         cursor: pointer;
       }
       .field-label {
-        font-size: 11px;
-        color: var(--muted-foreground, #64748b);
+        font-size: 0.6875rem;
+        color: var(--kanban-muted-foreground);
       }
       .color-input {
-        width: 24px;
-        height: 18px;
+        width: 1.5rem;
+        height: 1.125rem;
         padding: 0;
-        border: 1px solid var(--border, #e2e8f0);
+        border: 1px solid var(--kanban-border-color);
         border-radius: 3px;
         cursor: pointer;
       }
       .wip-input {
-        width: 44px;
-        padding: 2px 4px;
-        font-size: 11px;
-        border: 1px solid var(--border, #e2e8f0);
+        width: 2.75rem;
+        padding: 0.125rem 0.25rem;
+        font-size: 0.6875rem;
+        border: 1px solid var(--kanban-border-color);
         border-radius: 3px;
-        background: var(--muted, #f8fafc);
-        color: var(--foreground, #1e293b);
+        background: var(--kanban-muted-bg);
+        color: var(--kanban-foreground);
       }
     </style>
   </template>
@@ -590,22 +692,24 @@ export class KanbanBoard extends CardDef {
         defaultColumnOptions[0]!;
       const projectOptions =
         source.value === 'priority'
-          ? (this.project?.priorityOptions as
+          ? (this.project?.issuePriorityOptions as
               | { value: string; label: string }[]
               | undefined)
-          : source.value === 'status'
-            ? (this.project?.statusOptions as
+          : source.value === 'ticketType'
+            ? (this.project?.issueTypeOptions as
                 | { value: string; label: string }[]
                 | undefined)
-            : null;
+            : source.value === 'status'
+              ? (this.project?.issueStatusOptions as
+                  | { value: string; label: string }[]
+                  | undefined)
+              : null;
       const options = projectOptions?.length ? projectOptions : source.options;
-      const config = ((
-        source.value === 'ticketType'
-          ? this.typeColumnConfig
-          : source.value === 'priority'
-            ? this.priorityColumnConfig
-            : this.statusColumnConfig
-      ) ?? []) as KanbanColumnField[];
+      const config = ((source.value === 'ticketType'
+        ? this.typeColumnConfig
+        : source.value === 'priority'
+          ? this.priorityColumnConfig
+          : this.statusColumnConfig) ?? []) as KanbanColumnField[];
       return options
         .map((o, i) => {
           const stored = config.find((c) => c.key === o.value);
@@ -623,7 +727,12 @@ export class KanbanBoard extends CardDef {
   });
   @field cardTitle = contains(StringField, {
     computeVia: function (this: KanbanBoard) {
-      return this.cardInfo?.name ?? this.title ?? 'Untitled Kanban';
+      return (
+        this.cardInfo?.name ??
+        this.title ??
+        this.project?.cardTitle ??
+        'Untitled Kanban'
+      );
     },
   });
   // TODO: better way to inherit project theme
@@ -725,6 +834,8 @@ export class KanbanBoard extends CardDef {
     get cardCount(): number {
       return this.args.model?.cards?.length ?? 0;
     }
+    laneStyle = (color: string | null | undefined) =>
+      htmlSafe(`border-top-color: ${color ?? 'var(--border)'};`);
 
     <template>
       <div class='fitted-kanban'>
@@ -749,14 +860,7 @@ export class KanbanBoard extends CardDef {
         </div>
         <div class='fitted-lanes'>
           {{#each @model.columns as |col|}}
-            <div
-              class='mini-lane'
-              style='border-top-color: {{if
-                col.color
-                col.color
-                "var(--border)"
-              }}'
-            ></div>
+            <div class='mini-lane' style={{this.laneStyle col.color}}></div>
           {{/each}}
         </div>
         <span class='fitted-meta'>{{this.cardCount}}
@@ -766,20 +870,24 @@ export class KanbanBoard extends CardDef {
       </div>
       <style scoped>
         .fitted-kanban {
+          --kanban-card-bg: var(--card, var(--boxel-light));
+          --kanban-muted-bg: var(--muted, var(--boxel-100));
+          --kanban-muted-foreground: var(--muted-foreground, var(--boxel-500));
+
           container-type: size;
           width: 100%;
           height: 100%;
           display: flex;
           flex-direction: column;
-          gap: 4px;
-          padding: 8px;
-          background: var(--card, #fff);
+          gap: 0.25rem;
+          padding: 0.5rem;
+          background: var(--kanban-card-bg);
           overflow: hidden;
         }
         .fitted-header {
           display: flex;
           align-items: center;
-          gap: 4px;
+          gap: 0.25rem;
           flex-shrink: 0;
         }
         .fitted-title {
@@ -791,19 +899,19 @@ export class KanbanBoard extends CardDef {
         }
         .fitted-lanes {
           display: flex;
-          gap: 3px;
+          gap: 0.1875rem;
           flex: 1;
           min-height: 0;
         }
         .mini-lane {
           flex: 1;
-          background: var(--muted, #f1f5f9);
+          background: var(--kanban-muted-bg);
           border-radius: 2px;
           border-top: 2px solid;
         }
         .fitted-meta {
-          font-size: 10px;
-          color: var(--muted-foreground, #94a3b8);
+          font-size: 0.625rem;
+          color: var(--kanban-muted-foreground);
           flex-shrink: 0;
         }
         @container (max-height: 80px) {
@@ -846,11 +954,7 @@ export class KanbanBoard extends CardDef {
           /><rect x='17' y='3' width='5' height='15' rx='1' />
         </svg>
         <div class='embedded-info'>
-          <span class='embedded-title'>{{if
-              @model.title
-              @model.title
-              'Kanban'
-            }}</span>
+          <span class='embedded-title'><@fields.cardTitle /></span>
           <span class='embedded-meta'>{{this.cardCount}}
             cards &middot;
             {{this.colCount}}
@@ -859,14 +963,19 @@ export class KanbanBoard extends CardDef {
       </div>
       <style scoped>
         .embedded-kanban {
+          --kanban-card-bg: var(--card, var(--boxel-light));
+          --kanban-foreground: var(--foreground, var(--boxel-dark));
+          --kanban-muted-foreground: var(--muted-foreground, var(--boxel-500));
+          --kanban-border-color: var(--border, var(--boxel-border-color));
+
           display: flex;
           align-items: center;
-          gap: 8px;
-          padding: 8px 12px;
-          background: var(--card, #fff);
-          border: 1px solid var(--border, #e2e8f0);
+          gap: 0.5rem;
+          padding: 0.5rem 0.75rem;
+          background: var(--kanban-card-bg);
+          border: 1px solid var(--kanban-border-color);
           border-radius: 6px;
-          color: var(--muted-foreground, #94a3b8);
+          color: var(--kanban-muted-foreground);
         }
         .embedded-info {
           display: flex;
@@ -875,7 +984,7 @@ export class KanbanBoard extends CardDef {
         .embedded-title {
           font-size: 0.875rem;
           font-weight: 600;
-          color: var(--foreground, #0f172a);
+          color: var(--kanban-foreground);
         }
         .embedded-meta {
           font-size: 0.75rem;
