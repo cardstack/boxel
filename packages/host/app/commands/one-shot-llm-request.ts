@@ -167,7 +167,7 @@ export default class OneShotLlmRequestCommand extends HostBaseCommand<
         url: 'https://openrouter.ai/api/v1/chat/completions',
         method: 'POST',
         requestBody: JSON.stringify({
-          model: input.llmModel || 'anthropic/claude-3-haiku',
+          model: input.llmModel || 'anthropic/claude-haiku-4.5',
           messages: generationMessages,
           stream: false,
         }),

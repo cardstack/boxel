@@ -154,10 +154,22 @@ export default class SearchAndChooseCommand extends HostBaseCommand<
     try {
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed)) return [];
-      return parsed.filter(
-        (v): v is number =>
-          typeof v === 'number' && Number.isInteger(v) && v > 0,
-      );
+      return parsed
+        .map((v) => {
+          // Accept either a number or a string representation of a positive integer
+          if (typeof v === 'number' && Number.isInteger(v) && v > 0) {
+            return v;
+          }
+          if (typeof v === 'string') {
+            const num = parseInt(v, 10);
+            // Verify the entire string was consumed (no partial parsing like "1.5" -> 1)
+            if (Number.isInteger(num) && num > 0 && String(num) === v.trim()) {
+              return num;
+            }
+          }
+          return null;
+        })
+        .filter((v): v is number => v !== null);
     } catch {
       return [];
     }
