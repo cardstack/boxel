@@ -132,7 +132,6 @@ export default class CardCatalogModal extends Component<Signature> {
               <:header>
                 <Bar
                   class='card-catalog-search'
-                  @value={{state.searchKey}}
                   @onInput={{this.setSearchKey}}
                   @placeholder='Search for a card or enter card URL'
                   @pickerDestination='card-catalog-picker-wormhole'

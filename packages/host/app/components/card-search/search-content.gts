@@ -1,4 +1,6 @@
+import { isDestroyed, isDestroying } from '@ember/destroyable';
 import { action } from '@ember/object';
+import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -8,27 +10,27 @@ import { consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
 
-import type { PickerOption } from '@cardstack/boxel-ui/components';
-
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CodeRef,
   type Filter,
   type getCard,
+  type getCardCollection,
+  CardContextName,
   GetCardContextName,
+  GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
-import { cardTypeDisplayName } from '@cardstack/runtime-common/helpers/card-type-display-name';
-
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
-import type { PrerenderedSearchResource } from '@cardstack/host/resources/prerendered-search';
+import { getPrerenderedSearch } from '@cardstack/host/resources/prerendered-search';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentCards from '@cardstack/host/services/recent-cards-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   SECTION_DISPLAY_LIMIT_FOCUSED,
@@ -43,7 +45,16 @@ import SearchResultSection from './search-result-section';
 
 import type { PrerenderedCard } from '../prerendered-card-search';
 
-import type { NewCardArgs } from './utils';
+import type { RealmFilter } from '@cardstack/host/components/realm-picker';
+import type { TypeFilter } from '@cardstack/host/components/type-picker';
+import {
+  buildSearchQuery,
+  cardMatchesTypeRef,
+  filterCardsByTypeRefs,
+  getFilterTypeRefs,
+  shouldSkipSearchQuery,
+  type NewCardArgs,
+} from './utils';
 import type { NamedArgs } from 'ember-modifier';
 
 interface ScrollToFocusedSectionSignature {
@@ -136,24 +147,21 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     searchKey: string;
-    selectedRealmURLs: string[];
+    realmFilter: RealmFilter;
+    typeFilter: TypeFilter;
+    baseFilter?: Filter;
     isCompact: boolean;
     handleSelect: (selection: string | NewCardArgs) => void;
     selectedCards?: (string | NewCardArgs)[];
     multiSelect?: boolean;
     onSelectAll?: (cards: string[]) => void;
     onDeselectAll?: () => void;
-    baseFilter?: Filter;
-    skipTypeFiltering?: boolean;
     offerToCreate?: {
       ref: CodeRef;
       relativeTo: URL | undefined;
     };
     onSubmit?: (selection: string | NewCardArgs) => void;
     showHeader?: boolean;
-    selectedCardTypes?: PickerOption[];
-    filteredRecentCards?: CardDef[];
-    searchResource: PrerenderedSearchResource;
     activeSort: SortOption;
     onSortChange: (sort: SortOption) => void;
     initialFocusedSection?: string | null;
@@ -161,11 +169,15 @@ interface Signature {
   Blocks: {};
 }
 
+const OWNER_DESTROYED_ERROR = 'OWNER_DESTROYED_ERROR';
+
 export default class SearchContent extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
   @service declare store: StoreService;
+  @service('recent-cards-service')
+  declare private recentCardsService: RecentCards;
 
   @tracked activeViewId = 'grid';
   /** Section id when focused: 'realm:<url>' or 'recents'. Null = no focus */
@@ -174,6 +186,71 @@ export default class SearchContent extends Component<Signature> {
   @tracked displayedCountBySection: Record<string, number> = {};
 
   @consume(GetCardContextName) declare private getCard: getCard;
+  @consume(CardContextName) declare private cardContext:
+    | CardContext
+    | undefined;
+  @consume(GetCardCollectionContextName)
+  declare private getCardCollection: getCardCollection;
+
+  // -- Internal resources (moved from SearchPanel) --
+
+  private get cardComponentModifier() {
+    if (isDestroying(this) || isDestroyed(this)) {
+      return undefined;
+    }
+    try {
+      return this.cardContext?.cardComponentModifier;
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes(OWNER_DESTROYED_ERROR)
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
+  }
+
+  private searchResource = getPrerenderedSearch(this, getOwner(this)!, () => {
+    // Consume selectedTypeIds outside the ternary so the tracking
+    // dependency is always established, even when the query is skipped.
+    const selectedTypeIds = this.args.typeFilter.selectedTypeIds;
+    return {
+      query: shouldSkipSearchQuery(this.args.searchKey, this.args.baseFilter)
+        ? undefined
+        : buildSearchQuery(
+            this.args.searchKey,
+            this.args.activeSort,
+            this.args.baseFilter,
+            selectedTypeIds,
+          ),
+      format: 'fitted' as const,
+      realms: this.args.realmFilter.selectedURLs,
+      isLive: true,
+      cardComponentModifier: this.cardComponentModifier,
+    };
+  });
+
+  @cached
+  private get recentCardCollection(): ReturnType<getCardCollection> {
+    return this.getCardCollection(
+      this,
+      () => this.recentCardsService.recentCardIds,
+    );
+  }
+
+  private get filteredRecentCards(): CardDef[] {
+    const cards =
+      (this.recentCardCollection?.cards?.filter(Boolean) as
+        | CardDef[]
+        | undefined) ?? [];
+    const realmURLs = this.args.realmFilter.selectedURLs;
+    const realmFiltered = cards.filter(
+      (c) => c.id && realmURLs.some((url) => c.id.startsWith(url)),
+    );
+    const typeRefs = getFilterTypeRefs(this.args.baseFilter);
+    return filterCardsByTypeRefs(realmFiltered, typeRefs);
+  }
 
   @cached
   private get cardResource(): ReturnType<getCard> {
@@ -235,8 +312,8 @@ export default class SearchContent extends Component<Signature> {
 
   private get realms() {
     const urls =
-      this.args.selectedRealmURLs.length > 0
-        ? this.args.selectedRealmURLs
+      this.args.realmFilter.selectedURLs.length > 0
+        ? this.args.realmFilter.selectedURLs
         : this.realmServer.availableRealmURLs;
     return urls ?? [];
   }
@@ -246,7 +323,7 @@ export default class SearchContent extends Component<Signature> {
       return '';
     }
 
-    if (this.args.searchResource.isLoading) {
+    if (this.searchResource.isLoading) {
       return 'Searching…';
     }
 
@@ -259,7 +336,7 @@ export default class SearchContent extends Component<Signature> {
     }
 
     // Query search results
-    const total = this.args.searchResource.meta.page?.total ?? 0;
+    const total = this.searchResource.meta.page?.total ?? 0;
     const realms = this.realms;
 
     // Default: all results across all realms
@@ -267,21 +344,17 @@ export default class SearchContent extends Component<Signature> {
   }
 
   private get sortedRecentCards(): CardDef[] {
-    let cards = [...(this.args.filteredRecentCards ?? [])];
+    let cards = [...(this.filteredRecentCards ?? [])];
 
     // Apply type picker filter (from TypePicker selection).
     // Skip when baseFilter has a non-root type — the server already
     // constrains results via the adoption chain, and recent cards are
     // pre-filtered by filterCardsByTypeRefs which handles subtypes.
-    if (!this.args.skipTypeFiltering) {
-      const pickerSelectedTypeNames = new Set(
-        (this.args.selectedCardTypes ?? [])
-          .filter((opt) => opt.type !== 'select-all')
-          .map((opt) => opt.label),
-      );
-      if (pickerSelectedTypeNames.size > 0) {
+    if (!this.args.typeFilter.skipTypeFiltering) {
+      const selectedTypes = this.args.typeFilter.selected;
+      if (selectedTypes.length > 0) {
         cards = cards.filter((card) =>
-          pickerSelectedTypeNames.has(cardTypeDisplayName(card)),
+          selectedTypes.some((ref) => cardMatchesTypeRef(card, ref)),
         );
       }
     }
@@ -426,7 +499,7 @@ export default class SearchContent extends Component<Signature> {
       return null;
     }
 
-    const cards = this.args.searchResource.instances;
+    const cards = this.searchResource.instances;
     const byRealm = new Map<string, PrerenderedCard[]>();
 
     for (const card of cards) {
@@ -530,7 +603,7 @@ export default class SearchContent extends Component<Signature> {
   private get allCards(): string[] {
     const urls: string[] = [];
     // Cards from search results (realm sections) - respects type filter
-    for (const card of this.args.searchResource.instances) {
+    for (const card of this.searchResource.instances) {
       if (card.url) {
         urls.push(card.url.replace(/\.json$/, ''));
       }
@@ -551,7 +624,7 @@ export default class SearchContent extends Component<Signature> {
   private get hasNoResults(): boolean {
     return (
       this.sections.length === 0 &&
-      !this.args.searchResource.isLoading &&
+      !this.searchResource.isLoading &&
       !this.shouldSkipQuery
     );
   }

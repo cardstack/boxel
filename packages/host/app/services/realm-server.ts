@@ -367,7 +367,8 @@ export default class RealmServerService extends Service {
     [realmUrl: string]: string;
   }) {
     if (!this.client) {
-      throw new Error(`Cannot check joined rooms without matrix client`);
+      console.warn(`Cannot check joined rooms without matrix client`);
+      return;
     }
     let { joined_rooms } = await this.client.getJoinedRooms();
     let joinedRoomSet = new Set(joined_rooms ?? []);
@@ -686,7 +687,8 @@ export default class RealmServerService extends Service {
 
   private loginTask = task(async () => {
     if (!this.client) {
-      throw new Error(`Cannot login to realm server without matrix client`);
+      console.warn(`Cannot login to realm server without matrix client`);
+      return;
     }
     try {
       let realmAuthClient = new RealmAuthClient(

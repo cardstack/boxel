@@ -175,8 +175,15 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onSearch?.(searchKey);
   }
 
-  @action private handleRealmChange(_selectedRealms: URL[]) {
+  @tracked private selectedRealmURLs: URL[] = [];
+
+  @action private handleRealmChange(selectedRealms: URL[]) {
+    this.selectedRealmURLs = selectedRealms;
     this.args.onFilterChange?.();
+  }
+
+  private get joinedSelectedRealmURLs(): string {
+    return this.selectedRealmURLs.map((u) => u.href).join(',');
   }
 
   @action private handleTypeChange(_selectedTypes: ResolvedCodeRef[]) {
@@ -274,11 +281,10 @@ export default class SearchSheet extends Component<Signature> {
           @initialSelectedTypes={{this.initialSelectedTypes}}
           @onRealmChange={{this.handleRealmChange}}
           @onTypeChange={{this.handleTypeChange}}
-          as |Bar Content joinedRealmURLs|
+          as |Bar Content|
         >
           <Bar
             class='search-sheet__search-input-group'
-            @value={{this.searchKey}}
             @placeholder={{this.placeholderText}}
             @state={{this.inputValidationState}}
             @bottomTreatment={{this.inputBottomTreatment}}
@@ -287,7 +293,7 @@ export default class SearchSheet extends Component<Signature> {
             @onKeyDown={{this.onSearchInputKeyDown}}
             @onInputInsertion={{@onInputInsertion}}
             @autocomplete='off'
-            data-test-search-realms={{joinedRealmURLs}}
+            data-test-search-realms={{this.joinedSelectedRealmURLs}}
           />
           <Content
             class='search-sheet__content'
