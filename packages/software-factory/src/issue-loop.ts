@@ -108,7 +108,7 @@ export interface IssueLoopConfig {
   createValidator: (issueId: string) => Validator;
   targetRealmUrl: string;
   briefUrl?: string;
-  /** Maximum inner-loop iterations per issue. Default: 5. */
+  /** Maximum inner-loop iterations per issue. Default: 8. */
   maxIterationsPerIssue?: number;
   /** Maximum outer-loop cycles (safety guard). Default: 50. */
   maxOuterCycles?: number;
