@@ -9,6 +9,8 @@
   },
   "files": [
     "dist/**/*",
+    "src/**/*.ts",
+    "api.ts",
     "README.md"
   ],
   "engines": {

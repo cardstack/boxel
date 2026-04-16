@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { module, test } from 'qunit';
 
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
@@ -241,9 +242,11 @@ module('factory-entrypoint integration', function () {
           encoding: 'utf8',
           env: {
             ...process.env,
+            HOME: mkdtempSync(join(tmpdir(), 'boxel-test-')),
             MATRIX_USERNAME: 'hassan',
             MATRIX_PASSWORD: 'secret',
             MATRIX_URL: origin,
+            REALM_SERVER_URL: `${origin}/`,
           },
         },
       );
