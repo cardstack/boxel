@@ -627,7 +627,6 @@ export default class RenderRoute extends Route<Model> {
       !modelState ||
       modelState.isReady ||
       modelState.readyWatchdogStarted ||
-      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- prerender render-loop timing
       typeof requestAnimationFrame !== 'function'
     ) {
       return;
@@ -731,7 +730,6 @@ export default class RenderRoute extends Route<Model> {
   }
 
   async #waitForNextRenderFrame(): Promise<void> {
-    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- prerender render-loop timing
     if (typeof requestAnimationFrame !== 'function') {
       await Promise.resolve();
       return;
