@@ -19,9 +19,15 @@ import {
   saveManifest,
   pathExists,
 } from '../../lib/sync-manifest';
-import * as fs from 'fs/promises';
 import * as path from 'path';
-import { FG_GREEN, FG_YELLOW, FG_RED, FG_CYAN, DIM, RESET } from '../../lib/colors';
+import {
+  FG_GREEN,
+  FG_YELLOW,
+  FG_RED,
+  FG_CYAN,
+  DIM,
+  RESET,
+} from '../../lib/colors';
 
 type SideStatus = 'unchanged' | 'changed' | 'added' | 'deleted';
 type SyncAction =
@@ -94,10 +100,7 @@ class RealmSyncer extends RealmSyncBase {
     console.log(`Found ${localFiles.size} local files`);
     console.log(`Found ${remoteMtimes.size} remote files`);
 
-    if (
-      manifest &&
-      manifest.realmUrl !== this.normalizedRealmUrl
-    ) {
+    if (manifest && manifest.realmUrl !== this.normalizedRealmUrl) {
       console.warn(
         `${FG_YELLOW}Warning:${RESET} Manifest realm URL (${manifest.realmUrl}) differs from target (${this.normalizedRealmUrl}). Treating as first sync.`,
       );
@@ -189,7 +192,11 @@ class RealmSyncer extends RealmSyncBase {
     // Resolve conflicts
     const skippedConflicts: string[] = [];
     for (const c of conflicts) {
-      const resolved = this.resolveConflict(c, localFilesWithMtimes, remoteMtimes);
+      const resolved = this.resolveConflict(
+        c,
+        localFilesWithMtimes,
+        remoteMtimes,
+      );
       switch (resolved) {
         case 'push':
           toPush.push(c.relativePath);
@@ -241,10 +248,7 @@ class RealmSyncer extends RealmSyncBase {
       console.log(`  ${DIM}Unchanged: ${noopCount} file(s)${RESET}`);
 
     const totalOps =
-      toPush.length +
-      toPull.length +
-      toPushDelete.length +
-      toPullDelete.length;
+      toPush.length + toPull.length + toPushDelete.length + toPullDelete.length;
 
     if (totalOps === 0) {
       console.log('\nEverything is up to date');
@@ -596,7 +600,9 @@ export interface SyncCommandOptions {
 export function registerSyncCommand(realm: Command): void {
   realm
     .command('sync')
-    .description('Bidirectional sync between a local directory and a Boxel realm')
+    .description(
+      'Bidirectional sync between a local directory and a Boxel realm',
+    )
     .argument('<local-dir>', 'The local directory to sync')
     .argument(
       '<realm-url>',

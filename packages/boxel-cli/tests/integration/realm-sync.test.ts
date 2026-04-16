@@ -361,7 +361,11 @@ describe('realm sync (integration)', () => {
     let localDir = makeLocalDir();
 
     writeLocalFile(localDir, 'local-only.gts', 'export const lo = 1;\n');
-    await writeRemoteFile(realmUrl, 'remote-only.gts', 'export const ro = 1;\n');
+    await writeRemoteFile(
+      realmUrl,
+      'remote-only.gts',
+      'export const ro = 1;\n',
+    );
 
     await syncCommand(localDir, realmUrl, {
       preferLocal: true,
@@ -465,7 +469,11 @@ describe('realm sync (integration)', () => {
 
     // Write same-named file to both sides without a prior sync
     writeLocalFile(localDir, 'overlap.gts', 'export const v = "local";\n');
-    await writeRemoteFile(realmUrl, 'overlap.gts', 'export const v = "remote";\n');
+    await writeRemoteFile(
+      realmUrl,
+      'overlap.gts',
+      'export const v = "remote";\n',
+    );
 
     await syncCommand(localDir, realmUrl, {
       preferLocal: true,
