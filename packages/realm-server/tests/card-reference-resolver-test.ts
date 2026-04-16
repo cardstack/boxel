@@ -735,10 +735,7 @@ module(basename(__filename), function () {
 
     test('@cardstack/base/card-api resolves through full fetch chain', async function (assert) {
       let baseVN = new VirtualNetwork();
-      baseVN.addRealmMapping(
-        '@cardstack/base/',
-        'http://localhost:4201/base/',
-      );
+      baseVN.addRealmMapping('@cardstack/base/', 'http://localhost:4201/base/');
       let interceptedUrl: string | undefined;
       baseVN.mount(async (req: Request) => {
         interceptedUrl = req.url;
@@ -747,10 +744,7 @@ module(basename(__filename), function () {
 
       let response = await baseVN.fetch('@cardstack/base/card-api');
       assert.strictEqual(response.status, 200);
-      assert.strictEqual(
-        interceptedUrl,
-        'http://localhost:4201/base/card-api',
-      );
+      assert.strictEqual(interceptedUrl, 'http://localhost:4201/base/card-api');
       unregisterCardReferencePrefix('@cardstack/base/');
     });
   });
