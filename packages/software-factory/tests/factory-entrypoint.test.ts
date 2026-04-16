@@ -154,7 +154,9 @@ module('factory-entrypoint', function (hooks) {
     assert.true(/--no-retry-blocked/.test(usage));
     assert.true(/--help/.test(usage));
     assert.true(/active Boxel profile/.test(usage));
-    assert.true(/For public briefs, no further auth setup is needed./.test(usage));
+    assert.true(
+      /For public briefs, no further auth setup is needed./.test(usage),
+    );
     assert.false(/REALM_SECRET_SEED/.test(usage));
   });
 

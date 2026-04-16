@@ -91,7 +91,12 @@ test('factory:go creates a target realm and bootstraps project artifacts end-to-
         cwd: packageRoot,
         env: {
           ...process.env,
-          HOME: createTempProfileHome(targetUsername, targetPassword, matrixURL, realmServerURL),
+          HOME: createTempProfileHome(
+            targetUsername,
+            targetPassword,
+            matrixURL,
+            realmServerURL,
+          ),
         },
         timeoutMs: 120_000,
       },

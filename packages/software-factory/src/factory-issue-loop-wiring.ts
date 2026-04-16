@@ -315,8 +315,8 @@ async function resolveAuth(config: IssueLoopWiringConfig): Promise<{
   } catch (error) {
     throw new Error(
       `Matrix login failed. Ensure an active Boxel profile is configured (run \`boxel profile add\`).\n${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 

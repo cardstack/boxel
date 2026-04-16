@@ -26,7 +26,12 @@
 // This should be first
 import '../../src/setup-logger';
 
-import { getActiveProfile, getRealmServerToken, matrixLogin, parseArgs } from '../../src/boxel';
+import {
+  getActiveProfile,
+  getRealmServerToken,
+  matrixLogin,
+  parseArgs,
+} from '../../src/boxel';
 import { logger } from '../../src/logger';
 import {
   createRealm,

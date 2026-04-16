@@ -325,4 +325,3 @@ function normalizeCreatedRealmUrl(
 
   return normalizeUrl(createdRealmId, 'realm server response data.id');
 }
-

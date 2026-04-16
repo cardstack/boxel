@@ -394,9 +394,7 @@ module('factory-entrypoint integration', function () {
       );
 
       assert.strictEqual(result.status, 1);
-      assert.true(
-        /boxel profile add/.test(result.stderr),
-      );
+      assert.true(/boxel profile add/.test(result.stderr));
     } finally {
       await new Promise<void>((resolvePromise, reject) =>
         server.close((error) => (error ? reject(error) : resolvePromise())),

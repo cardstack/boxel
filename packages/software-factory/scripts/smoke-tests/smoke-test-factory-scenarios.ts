@@ -28,7 +28,11 @@ import '../../src/setup-logger';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
-import { getActiveProfile, getRealmServerToken, matrixLogin } from '../../src/boxel';
+import {
+  getActiveProfile,
+  getRealmServerToken,
+  matrixLogin,
+} from '../../src/boxel';
 import { inferDarkfactoryModuleUrl } from '../../src/factory-seed';
 import { logger } from '../../src/logger';
 import {
