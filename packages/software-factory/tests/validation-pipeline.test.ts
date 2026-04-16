@@ -13,6 +13,7 @@ import {
 } from '../src/issue-loop';
 
 import { NoOpStepRunner } from '../src/validators/noop-step';
+import { InstantiateValidationStep } from '../src/validators/instantiate-step';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -295,5 +296,119 @@ module('NoOpStepRunner', function () {
     };
 
     assert.strictEqual(runner.formatForContext(result), '');
+  });
+});
+
+module('InstantiateValidationStep', function () {
+  test('passes when no specs and no modules exist', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({ specs: [] }),
+      fetchFilenames: async () => ({ filenames: [] }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.true(result.passed, 'passes when nothing to validate');
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test('fails when modules exist but no specs found', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({ specs: [] }),
+      fetchFilenames: async () => ({
+        filenames: ['my-card.gts', 'my-card.test.gts'],
+      }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.false(result.passed, 'fails when modules exist but no specs');
+    assert.true(result.errors.length > 0, 'has error message');
+    assert.true(
+      result.errors[0].message.includes('no Spec cards were found'),
+      'error mentions missing specs',
+    );
+  });
+
+  test('test files alone do not trigger missing-spec failure', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({ specs: [] }),
+      fetchFilenames: async () => ({
+        filenames: ['my-card.test.gts'],
+      }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.true(result.passed, 'passes when only test files exist');
+  });
+
+  test('passes when spec with examples all instantiate successfully', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({
+        specs: [
+          {
+            specId: 'Spec/my-card',
+            moduleUrl: 'https://example.test/realm/my-card',
+            cardName: 'MyCard',
+            exampleUrls: ['MyCard/example-1'],
+          },
+        ],
+      }),
+      instantiateCardFn: async () => ({ passed: true }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.true(result.passed, 'passes when instantiation succeeds');
+    assert.strictEqual(result.errors.length, 0);
+  });
+
+  test('fails when an example fails instantiation', async function (assert) {
+    let step = new InstantiateValidationStep({
+      realmServerUrl: 'https://example.test/',
+      instantiateResultsModuleUrl: 'https://example.test/instantiate-result',
+      searchSpecsFn: async () => ({
+        specs: [
+          {
+            specId: 'Spec/my-card',
+            moduleUrl: 'https://example.test/realm/my-card',
+            cardName: 'MyCard',
+            exampleUrls: ['MyCard/example-1'],
+          },
+        ],
+      }),
+      instantiateCardFn: async () => ({
+        passed: false,
+        error: 'Expected array for field value tags',
+      }),
+      getNextSequenceNumber: async () => 1,
+    });
+
+    let result = await step.run('https://example.test/realm/');
+
+    assert.strictEqual(result.step, 'instantiate');
+    assert.false(result.passed, 'fails when instantiation fails');
+    assert.true(result.errors.length > 0, 'has errors');
+    assert.true(
+      result.errors[0].message.includes('Expected array for field value'),
+      'error message propagated',
+    );
   });
 });
