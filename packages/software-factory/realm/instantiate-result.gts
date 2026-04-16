@@ -13,6 +13,7 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
 import enumField from 'https://cardstack.com/base/enum';
+import { RealmPaths } from '@cardstack/runtime-common';
 import { Project, Issue } from './darkfactory';
 
 export const InstantiateResultStatusField = enumField(StringField, {
@@ -43,14 +44,11 @@ export class InstantiateCardEntry extends FieldDef {
     let cardRealmURLString = (this as any)[realmURL];
     if (cardRealmURLString) {
       try {
-        let realmBase = cardRealmURLString.endsWith('/')
-          ? cardRealmURLString
-          : `${cardRealmURLString}/`;
-        if (this.instanceId.startsWith(realmBase)) {
-          return this.instanceId.slice(realmBase.length);
-        }
+        return new RealmPaths(new URL(cardRealmURLString)).local(
+          new URL(this.instanceId),
+        );
       } catch {
-        // fall through
+        // instance URL is invalid or outside the realm — fall through
       }
     }
     return this.instanceId;
@@ -314,7 +312,9 @@ export class InstantiateResult extends CardDef {
                 class='card-group {{if cardResult.hasError "card-has-errors"}}'
               >
                 <div class='card-group-header'>
-                  <span class='card-group-name'>{{cardResult.instancePath}}</span>
+                  <span
+                    class='card-group-name'
+                  >{{cardResult.instancePath}}</span>
                   {{#if cardResult.hasError}}
                     <span class='card-group-status has-errors'>error</span>
                   {{else}}
