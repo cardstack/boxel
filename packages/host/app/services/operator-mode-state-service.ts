@@ -102,6 +102,7 @@ interface CardItem {
   id: string;
   format: 'isolated' | 'edit' | 'head';
   type?: StackItemType;
+  useBaseTemplate?: boolean;
 }
 
 export type FileView = 'inspector' | 'browser';
@@ -412,6 +413,20 @@ export default class OperatorModeStateService extends Service {
 
     this._state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
+  }
+
+  findCardInStackSafe(
+    card: CardDef | string,
+    stackIndex: number,
+  ): StackItem | undefined {
+    try {
+      return this.findCardInStack(card, stackIndex);
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Could not find card')) {
+        return undefined;
+      }
+      throw err;
+    }
   }
 
   findCardInStack(card: CardDef | string, stackIndex: number): StackItem {
@@ -931,6 +946,7 @@ export default class OperatorModeStateService extends Service {
               id: instance?.id ?? item.id,
               format: item.format,
               type: item.type === 'card' ? undefined : item.type,
+              useBaseTemplate: item.useBaseTemplate ?? undefined,
             });
           }
         }
@@ -1015,6 +1031,7 @@ export default class OperatorModeStateService extends Service {
             format,
             stackIndex,
             type: item.type,
+            useBaseTemplate: item.useBaseTemplate,
           }),
         );
       }

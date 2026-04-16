@@ -4,10 +4,13 @@ import GlimmerComponent from '@glimmer/component';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { Deferred } from '@cardstack/runtime-common';
+import { Deferred, localId } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import type StoreService from '@cardstack/host/services/store';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   percySnapshot,
@@ -689,5 +692,75 @@ module('Integration | operator-mode | basics', function (hooks) {
     assert
       .dom('[data-test-boxel-menu-item-text="Toggle Standard View"]')
       .exists('Toggle Standard View is offered again');
+  });
+
+  test('clicking Edit updates an unsaved local-id-backed stack item in place', async function (assert) {
+    let store = getService('store') as StoreService;
+    let { Person } = (await ctx.loader.import(`${testRealmURL}person`)) as {
+      Person: new (...args: unknown[]) => CardDef;
+    };
+    let instance = new Person({ firstName: 'Unsaved Person' });
+    await store.add(instance, { doNotPersist: true, realm: testRealmURL });
+
+    ctx.operatorModeStateService.restore({
+      stacks: [[{ id: instance[localId], format: 'isolated' }]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+    assert.dom('[data-test-person]').hasText('Unsaved Person');
+
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-stack-card-index]').exists({ count: 1 });
+    assert.dom('[data-test-field="firstName"] input').exists();
+    assert.strictEqual(
+      ctx.operatorModeStateService.state.stacks[0][0].id,
+      instance[localId],
+      'the same local-id-backed stack item is retained',
+    );
+    assert.strictEqual(
+      ctx.operatorModeStateService.state.stacks[0][0].format,
+      'edit',
+      'the existing stack item switches to edit mode',
+    );
+  });
+
+  test('can toggle isolated template in place when the stack stores a saved card by local id', async function (assert) {
+    const cardId = `${testRealmURL}PublishingPacket/story`;
+    const customIsolated = '[data-test-pubpacket-isolated]';
+    const baseIsolated = '[data-test-base-template="isolated"]';
+    let store = getService('store') as StoreService;
+    let packet = (await store.get(cardId)) as CardDef;
+
+    ctx.operatorModeStateService.restore({
+      stacks: [[{ id: packet[localId], format: 'isolated' }]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    assert.dom('[data-test-stack-card]').exists({ count: 1 });
+    assert.dom(customIsolated).exists('custom isolated template is shown');
+    assert.dom(baseIsolated).doesNotExist();
+
+    await click('[data-test-more-options-button]');
+    await click('[data-test-boxel-menu-item-text="Toggle Standard View"]');
+    assert.dom('[data-test-stack-card]').exists({ count: 1 });
+    assert.dom(baseIsolated).exists('switched to base isolated template');
+    assert.dom(customIsolated).doesNotExist();
+    assert.strictEqual(
+      ctx.operatorModeStateService.state.stacks[0][0].id,
+      packet[localId],
+      'the stack item keeps its local id',
+    );
+    assert.true(
+      Boolean(ctx.operatorModeStateService.state.stacks[0][0].useBaseTemplate),
+      'the existing stack item toggles to the base template',
+    );
   });
 });

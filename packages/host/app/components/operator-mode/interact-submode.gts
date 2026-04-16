@@ -213,6 +213,31 @@ export default class InteractSubmode extends Component {
       // common when invoked from template {{on}} modifier
       format = 'isolated';
     }
+    // When toggling the isolated template for a card already on the stack,
+    // replace the existing item in-place rather than pushing a new one.
+    // Two separate checks are needed:
+    //   1. CardDef instances (including local-id-only cards with no .id yet) —
+    //      findCardInStackSafe matches by instance identity or local id.
+    //   2. String/URL inputs — matched below by resolved cardId after the
+    //      CardDef branch is skipped.
+    if (
+      format === 'isolated' &&
+      !(typeof cardOrURL === 'string' || cardOrURL instanceof URL) &&
+      this.stacks[stackIndex]
+    ) {
+      let item = this.operatorModeStateService.findCardInStackSafe(
+        cardOrURL,
+        stackIndex,
+      );
+      if (item) {
+        this.operatorModeStateService.viewCardOnStack(
+          stackIndex,
+          cardOrURL,
+          opts,
+        );
+        return;
+      }
+    }
     let cardId =
       typeof cardOrURL === 'string'
         ? cardOrURL
@@ -222,16 +247,14 @@ export default class InteractSubmode extends Component {
     if (!cardId) {
       return;
     }
-    // When toggling the isolated template for a card already on the stack,
-    // replace the existing item in-place rather than pushing a new one.
-    if (format === 'isolated' && opts?.useBaseTemplate !== undefined) {
+    if (format === 'isolated') {
       let stack = this.stacks[stackIndex];
       let isOnStack = stack?.some((item) => item.id === cardId);
       if (isOnStack) {
         this.operatorModeStateService.viewCardOnStack(
           stackIndex,
           cardOrURL as CardDef,
-          { useBaseTemplate: opts.useBaseTemplate },
+          opts,
         );
         return;
       }
@@ -279,9 +302,10 @@ export default class InteractSubmode extends Component {
     card: CardDef,
     opts?: { useBaseTemplate?: boolean },
   ): void => {
-    let stack = this.stacks[stackIndex];
-    let isOnStack = stack?.some((item) => item.id === card.id);
-    if (isOnStack) {
+    let item =
+      this.stacks[stackIndex] &&
+      this.operatorModeStateService.findCardInStackSafe(card, stackIndex);
+    if (item) {
       this.operatorModeStateService.editCardOnStack(stackIndex, card, opts);
     } else {
       this.viewCard(stackIndex, card, 'edit', opts);

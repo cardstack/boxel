@@ -28,7 +28,6 @@ import { resolveAdoptsFrom } from '@cardstack/runtime-common';
 import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import Eye from '@cardstack/boxel-icons/eye';
-import FormIcon from '@cardstack/boxel-icons/forms';
 import LinkIcon from '@cardstack/boxel-icons/link';
 import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 import Wand from '@cardstack/boxel-icons/wand';
@@ -70,7 +69,7 @@ function makeToggleTemplateItem(
     : {
         label: 'Toggle Standard View',
         action: () => action(true),
-        icon: FormIcon,
+        icon: Eye,
         disabled: !card.id,
       };
 }
