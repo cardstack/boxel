@@ -318,6 +318,8 @@ export function getBoxComponent(
                             fieldName=field.name
                           }}
                           style={{getThemeStyles card}}
+                          data-boxel-card-id={{card.id}}
+                          data-boxel-card-format={{effectiveFormats.cardDef}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card

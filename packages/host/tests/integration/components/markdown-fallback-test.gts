@@ -303,4 +303,98 @@ module('Integration | markdown-fallback', function (hooks) {
       `CSS rules should be stripped from markdown: ${md}`,
     );
   });
+
+  test('atom-format card container converts to inline :card directive', async function (assert) {
+    const cardId = 'http://example.com/author/1';
+    class WithAtomCard extends CardDef {
+      static isolated = class extends Component<typeof this> {
+        <template>
+          <p>Written by
+            <div
+              class='boxel-card-container atom-format'
+              data-boxel-card-id={{cardId}}
+              data-boxel-card-format='atom'
+            >
+              <span>Author Name</span>
+            </div>
+          </p>
+        </template>
+      };
+    }
+
+    let card = new WithAtomCard();
+    await renderAndConvert(loader, card);
+    let md = readMarkdownOutput();
+
+    assert.true(
+      md.includes(`:card[${cardId}]`),
+      `expected inline :card directive in: ${md}`,
+    );
+    assert.false(
+      md.includes('Author Name'),
+      `card container inner content should not appear in: ${md}`,
+    );
+  });
+
+  test('embedded-format card container converts to block ::card directive', async function (assert) {
+    const cardId = 'http://example.com/article/42';
+    class WithEmbeddedCard extends CardDef {
+      static isolated = class extends Component<typeof this> {
+        <template>
+          <h1>Summary</h1>
+          <div
+            class='boxel-card-container embedded-format'
+            data-boxel-card-id={{cardId}}
+            data-boxel-card-format='embedded'
+          >
+            <h2>Embedded Article Title</h2>
+            <p>Some preview text</p>
+          </div>
+        </template>
+      };
+    }
+
+    let card = new WithEmbeddedCard();
+    await renderAndConvert(loader, card);
+    let md = readMarkdownOutput();
+
+    assert.true(
+      md.includes(`::card[${cardId}]`),
+      `expected block ::card directive in: ${md}`,
+    );
+    assert.false(
+      md.includes('Embedded Article Title'),
+      `card container inner content should not appear in: ${md}`,
+    );
+  });
+
+  test('fitted-format card container converts to block ::card directive', async function (assert) {
+    const cardId = 'http://example.com/person/7';
+    class WithFittedCard extends CardDef {
+      static isolated = class extends Component<typeof this> {
+        <template>
+          <div
+            class='boxel-card-container fitted-format'
+            data-boxel-card-id={{cardId}}
+            data-boxel-card-format='fitted'
+          >
+            <span>Person Name</span>
+          </div>
+        </template>
+      };
+    }
+
+    let card = new WithFittedCard();
+    await renderAndConvert(loader, card);
+    let md = readMarkdownOutput();
+
+    assert.true(
+      md.includes(`::card[${cardId}]`),
+      `expected block ::card directive in: ${md}`,
+    );
+    assert.false(
+      md.includes('Person Name'),
+      `card container inner content should not appear in: ${md}`,
+    );
+  });
 });

@@ -29,6 +29,32 @@ function getConverter(): TurndownService {
     converter.use(gfm); // tables, strikethrough, task lists, autolinks
     converter.remove(['style', 'script']); // strip embedded CSS/JS from card HTML
 
+    // Embedded card containers should become card references rather than having
+    // their full HTML content inlined into the markdown.  Atom-format cards
+    // use the inline directive `:card[id]`; other formats (fitted, embedded)
+    // use the block directive `::card[id]`.
+    converter.addRule('cardContainer', {
+      filter(node) {
+        return (
+          node.nodeType === Node.ELEMENT_NODE &&
+          (node as HTMLElement).hasAttribute('data-boxel-card-id')
+        );
+      },
+      replacement(_content, node) {
+        let cardId = (node as HTMLElement).getAttribute('data-boxel-card-id');
+        if (!cardId) {
+          return _content;
+        }
+        let format = (node as HTMLElement).getAttribute(
+          'data-boxel-card-format',
+        );
+        if (format === 'atom') {
+          return `:card[${cardId}]`;
+        }
+        return `::card[${cardId}]`;
+      },
+    });
+
     // Card HTML often wraps link text in nested elements (icons, spans) with
     // whitespace between them.  Turndown preserves that whitespace, producing
     // multiline `[\n  Contact](url)` which is broken markdown.  Collapse it.
