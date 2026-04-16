@@ -349,8 +349,12 @@ export default class RenderedMarkdown extends Component<Signature> {
     {{/each}}
 
     {{! Styles below are mirrored from packages/base/default-templates/markdown.gts
-        to keep the rendered preview visually consistent with .md file rendering. }}
+        to keep the rendered preview visually consistent with .md file rendering.
+        Wrapped in @layer baseComponent so that unlayered card-specific styles
+        (from CardContainer, card templates, etc.) automatically take precedence
+        over these generic markdown typography rules. }}
     <style scoped>
+      @layer baseComponent {
       .markdown-content {
         --md-border: var(--border, var(--boxel-border-color));
         --md-muted: var(--muted, var(--boxel-100));
@@ -680,6 +684,7 @@ export default class RenderedMarkdown extends Component<Signature> {
         display: block;
         margin: var(--boxel-sp-xxxs) 0;
       }
+      } /* end @layer baseComponent */
     </style>
   </template>
 }
